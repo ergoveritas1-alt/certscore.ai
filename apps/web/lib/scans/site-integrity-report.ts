@@ -2,6 +2,7 @@ import { siteIntegrityScoreEffectSchema, siteIntegrityScoreDescription } from ".
 import { z } from "zod";
 import { SITE_INTEGRITY_FINDING_ID, SITE_INTEGRITY_COPY, siteIntegrityProjectionSchema } from "@certscore/contracts";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
+import { SITE_INTEGRITY_REMEDIATION_TEXT } from "./site-integrity-remediation";
 
 export const siteIntegrityReportFindingSchema = z.object({
   findingId: z.literal(SITE_INTEGRITY_FINDING_ID), title: z.string(), description: z.string(),
@@ -68,7 +69,7 @@ export function selectSiteIntegrityFinding(findings: UnifiedFindingDisplayPacket
   if (!evidence.success) return null;
   return { findingId: SITE_INTEGRITY_FINDING_ID, severity: finding.severity, title: finding.title, description: finding.summary,
     scoreEffects: (finding.scoreEffects ?? []).flatMap(effect => { const parsed = siteIntegrityScoreEffectSchema.safeParse(effect); return parsed.success ? [parsed.data] : []; }),
-    summary: SITE_INTEGRITY_COPY.summary, action: SITE_INTEGRITY_COPY.action, evidence: evidence.data };
+    summary: SITE_INTEGRITY_COPY.summary, action: SITE_INTEGRITY_REMEDIATION_TEXT, evidence: evidence.data };
 }
 
 /** A policy-eligible, already unified review finding. No regulatory or score inference. */

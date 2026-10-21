@@ -1,3 +1,6 @@
+import { SITE_INTEGRITY_REMEDIATION, SITE_INTEGRITY_REMEDIATION_TEXT } from "./site-integrity-remediation";
+import { webmasterRemediation, webmasterRemediationText } from "./webmaster-remediation";
+
 export type ReviewFindingBestPracticeLink = {
   label: string;
   title: string;
@@ -36,6 +39,13 @@ const DEFAULT_REVIEW_FINDING_PRESENTATION: ReviewFindingPresentation = {
 };
 
 const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
+  {
+    base: {
+      suggestedFix: SITE_INTEGRITY_REMEDIATION_TEXT,
+      whyThisMatters: SITE_INTEGRITY_REMEDIATION.whyThisMatters,
+    },
+    matches: [/site_integrity_hidden_outbound_links|hidden outbound links/i],
+  },
   {
     base: {
       suggestedFix:
@@ -923,7 +933,7 @@ function formatVendorList(vendors: string[]) {
   if (distinct.length === 2) {
     return `${distinct[0]} and ${distinct[1]}`;
   }
-  return `${distinct.slice(0, 3).join(", ")}, and other observed vendors`;
+  return distinct.length <= 4 ? `${distinct.slice(0, -1).join(", ")}, and ${distinct.at(-1)}` : `${distinct.slice(0, 3).join(", ")}, and other observed vendors`;
 }
 
 function getPolicyExtractionStatus(evidence: Record<string, unknown> | null | undefined) {
@@ -1620,13 +1630,13 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
           ? `The automated scan retained runtime artifacts associated with ${vendorList}. That is stronger evidence than a generic detector hit, but the behavior should still be reviewed directly before treating it as a confirmed disclosure or consent failure.`
           : `The automated scan retained runtime vendor provenance for ${vendorList}. This should be reviewed directly for disclosure, consent gating, and masking controls.`;
       presentation.suggestedFix =
-        `Verify whether ${vendorList} is intentionally deployed on the scanned surface. If so, confirm that the behavior is disclosed clearly and that the integration is consent-gated where required.`;
+        `Review the ${vendorList} integrations on the scanned page. Check disclosure, consent gating, field masking, and capture exclusions for each integration.`;
       presentation.confidenceScore = replayEvidence.runtimeEvidenceArtifacts.length > 0 ? "0.85" : "0.75";
     } else if (replayEvidence.runtimeEvidenceArtifacts.length === 0 || negativeEvidenceFlags.has("no_direct_runtime_replay_artifact_observed")) {
       presentation.whyThisMatters =
         "The automated scan retained only indirect signals that may correspond to session replay tooling. Those indirect signals should not be treated as a confirmed replay deployment without direct runtime review.";
       presentation.suggestedFix =
-        "Audit the retained detector output and confirm whether a specific replay vendor, script, object, or endpoint was actually present before escalating this finding.";
+        "Verify whether replay tooling is active on this page. If present, review consent gating, field masking, and the pages where collection is enabled.";
       presentation.confidenceScore = "0.45";
     }
   }
@@ -1984,9 +1994,11 @@ export function getReviewFindingPresentation(input: string | ReviewFindingPresen
   const haystack = buildFindingPresentationHaystack(normalizedInput);
   const siblingHaystack = (normalizedInput.siblingFindingKeysOrTitles ?? []).join(" ");
   const config = REVIEW_FINDING_PRESENTATION_RULES.find((rule) => rule.matches.some((pattern) => pattern.test(haystack)));
+  const plan = webmasterRemediation(normalizedInput.keyOrTitle);
   if (!config) {
     return {
       ...DEFAULT_REVIEW_FINDING_PRESENTATION,
+      ...(plan ? { suggestedFix: webmasterRemediationText(plan) } : {}),
       confidenceScore: computeConfidenceScore({
         evidence: normalizedInput.evidence ?? null,
         haystack,
@@ -1995,11 +2007,12 @@ export function getReviewFindingPresentation(input: string | ReviewFindingPresen
     };
   }
 
-  return buildPresentationFromConfig(config, {
+  const presentation = buildPresentationFromConfig(config, {
     evidence: normalizedInput.evidence ?? null,
     haystack,
     siblingHaystack
   });
+  return plan ? { ...presentation, suggestedFix: webmasterRemediationText(plan) } : presentation;
 }
 
 export function getReviewFindingNextStep(input: string | ReviewFindingPresentationInput) {

@@ -225,6 +225,20 @@ test("hash-only sanitized network evidence does not create direct runtime uplift
   assert.ok(packet?.evidence?.flags?.includes("sanitized_network_evidence_hashed"));
 });
 
+test("canonical replay presentation consumes normalized entity provenance without changing the finding", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [{ title: "Session replay runtime detected", description: "Observed replay vendor artifacts.", observedValue: "Yes", severity: "high", sourceType: "signal", signalKey: "privacy.session_replay_runtime_detected", signalSource: "snapshot_signal",
+      fallbackEvidence: { signalKey: "privacy.session_replay_runtime_detected", signalValue: true, session_replay_runtime_vendors: ["Microsoft Clarity"], runtimeEvidenceArtifacts: ["vendor:Microsoft Clarity|host:clarity.ms|source:script_signature"] } }],
+    validationFindings: [], validationFindingLookup: new Map(),
+  });
+  const finding = packets.find(packet => packet.unifiedFindingId === "session_replay_observed");
+  assert.ok(finding);
+  assert.match(finding.presentation.whyThisMatters, /Microsoft Clarity/);
+  assert.doesNotMatch(finding.presentation.whyThisMatters, /only indirect/);
+  assert.doesNotMatch(finding.presentation.suggestedFix, /detector output/);
+  assert.equal(finding.severity, "high");
+});
+
 test("blocking overlay evidence stays contextual with retained consent controls", () => {
   const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
@@ -2347,7 +2361,8 @@ test("keeps strong corroborated findings surfaced with a confidence rationale", 
 
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.match(packet?.presentationDecision.confidenceRationale ?? "", /high confidence/i);
-  assert.match(packet?.presentation.suggestedFix ?? "", /block non-essential trackers/i);
+  assert.match(packet?.presentation.suggestedFix ?? "", /default optional loaders and storage writers to off/i);
+  assert.match(packet?.presentation.suggestedFix ?? "", /Initiator stack.*confirmed category state.*confirmed Reject.*confirmed Accept/s);
 });
 
 test("keeps pre-consent tracking audit-only when concrete runtime vendors and URLs are not retained", () => {

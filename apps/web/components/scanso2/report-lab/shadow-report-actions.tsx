@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ReportPdfDownloadLink } from "../../scans/report-pdf-download-link";
 import { useReportPdfAccess } from "../../scans/report-lab/shadow-report-actions";
 
 type ShadowReportActionsProps = {
@@ -52,14 +53,14 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
           <span>Email report</span>
           <span aria-hidden="true" className="text-zinc-400">@</span>
         </a>
-        {canExportPdf ? <a
+        {canExportPdf ? <ReportPdfDownloadLink
           className={menuItemClass}
           download
           href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=pdf&reviewFocus=gdpr_eprivacy${fullSite ? "&scope=full-site" : ""}`}
         >
           <span>{fullSite ? "Download full-site PDF" : "Download PDF report"}</span>
           <span aria-hidden="true" className="text-zinc-400">↓</span>
-        </a> : null}
+        </ReportPdfDownloadLink> : null}
         <a
           className={menuItemClass}
           download

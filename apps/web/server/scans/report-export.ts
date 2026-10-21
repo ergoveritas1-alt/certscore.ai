@@ -361,13 +361,15 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
     scan: {
       id: scanRecord.scan.id,
       domainHostname: scanRecord.scan.domainHostname,
+      requestedUrl: assessment?.scan.requestedUrl ?? null,
       status: scanRecord.scan.status,
       scanType: scanRecord.scan.scanType,
       scanFrom: scanRecord.scan.scanFromValue,
       createdAt: scanRecord.scan.createdAt,
       startedAt: scanRecord.scan.startedAt,
       completedAt: scanRecord.scan.completedAt,
-      durationMs: scanRecord.scan.durationMs,
+      durationMs: scanRecord.scan.durationMs ?? (scanRecord.scan.startedAt && scanRecord.scan.completedAt
+        ? Math.max(0, new Date(scanRecord.scan.completedAt).getTime() - new Date(scanRecord.scan.startedAt).getTime()) : null),
       pagesRequested: scanRecord.scan.pagesRequested,
       pagesScanned: scanRecord.scan.pagesScanned,
     },

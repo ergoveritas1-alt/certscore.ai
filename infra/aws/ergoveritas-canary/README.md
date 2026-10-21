@@ -1,4 +1,56 @@
-# ErgoVeritas test 2 privacy and accessibility canary
+# ErgoVeritas privacy and accessibility canaries
+
+## Test 1 PDF showcase
+
+`test1.html` retains the original first-layer controls, six cookie signatures,
+six initial tracker requests, canvas/audio fingerprinting and intentionally
+ineffective Reject behavior. Its linked `test1-privacy-policy.html` describes
+that behavior, rather than claiming effective consent enforcement. The existing
+owned/synthetic disclosure stays in place. No report evidence or scoring rules
+are overridden.
+
+The policy provides six independently testable transparency topics: controller
+contact, purposes, legal basis, recipients, retention and rights. Together with
+policy availability these yield seven Observed rows out of eleven. Transfer,
+supervisory-authority and automated-decision disclosures are deliberately omitted. A reserved
+example contact is explicitly non-deliverable; no DPO appointment is claimed.
+Observed disclosure text is not verification of legal adequacy or real rights
+fulfilment. Local canonical concern-policy/checklist tests assert the six topic rows;
+publication still needs a fresh scan to establish the actual report result.
+
+The page also has three deliberate, rendered WCAG defects (`image-alt`, `label`
+and `button-name`), plus a five-field enquiry form requesting name, email,
+telephone, postal code and message. Fields are empty and for invented data only.
+The preview does not read or serialize values. A submit guard and independent
+`form-action 'none'` CSP prevent submission, including direct native submission
+with JavaScript disabled. The existing analytics runtime must not receive form
+values. No CRM, email, authentication or payment integration is added.
+
+One off-screen outbound link targets reserved `promotion.example`. It is not
+automatically followed. The existing integrity capture must retain its domain,
+concealment method and code proof; the fixture does not assert compromise.
+
+Validation:
+
+```bash
+pnpm --filter @certscore/scan-core exec tsx --tsconfig ../../tsconfig.base.json --test src/ergoveritas-test1-canary.test.ts
+pnpm exec tsx --tsconfig tsconfig.base.json --test apps/web/lib/scans/ergoveritas-test1-transparency.test.ts
+bash scripts/deploy-ergoveritas-test1-canary.sh
+```
+
+The last command is a dry run. After owner authorization, use an isolated clean,
+committed checkout and `--apply`. The helper verifies the existing AWS account,
+S3 region/versioning, CloudFront origin and unchanged shared runtime, uploads
+only the policy and starting page, invalidates only those paths and verifies
+both public hosts byte-for-byte. It prints the previous starting-page S3 version
+for rollback. It does not deploy CertScore.ai or any scanner.
+
+Estimated incremental static serving/storage at current canary traffic is below
+$0.10/month; no service, scheduled scan, browser lane or model call is added.
+One-time publication/verification is estimated below $0.05. A requested fresh
+scan uses the existing canonical pipeline and ordinary bounded review budget.
+
+## Test 2 privacy choices
 
 `test2.html` is an owned, synthetic scanner fixture for GPC, Do Not Sell/Share,
 privacy choices, cookie settings, and notice evidence. It keeps the existing

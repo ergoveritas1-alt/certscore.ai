@@ -12,9 +12,9 @@ test("DPO guidance separates applicability and designation", () => {
 });
 test("runtime guidance preserves evidence limits and defines scenario-specific retests", () => {
   const storage = checklistRemediation({ rowId: "pre_consent_cookies_storage", status: "Gap observed" })!;
-  assert.match(storage.steps.join(" "), /directly observed write from snapshot presence/);
+  assert.match(storage.steps.join(" "), /storage writers.*cookie.*does not prevent a request/s);
   assert.match(storage.steps.join(" "), /fresh session.*Reject.*Accept/);
   const replay = checklistRemediation({ rowId: "session_replay_fingerprinting_review", status: "Needs review" })!;
-  assert.match(replay.steps.join(" "), /field masking/);
+  assert.match(replay.steps.join(" "), /mask inputs.*staging/);
   assert.equal(checklistRemediation({ rowId: "session_replay_fingerprinting_review", status: "Not observed" })?.kind, "none");
 });

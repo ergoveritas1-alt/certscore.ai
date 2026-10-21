@@ -4,6 +4,9 @@ import { reportTechnicalEvidenceFixture } from "./report-appendix-evidence.fixtu
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import type { PersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
 import { buildReportAppendixEvidence } from "./report-export-evidence";
+import { completedActionProjection } from "../../lib/scans/test-fixtures/action-execution-projection";
+import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
+import { consentControlAssessmentSchema, postRefusalReportProjectionSchema } from "@certscore/contracts";
 
 const canonical = () => ({ checklistRows: [], ownerUnifiedFindings: [], normalizedConcerns: [] }) as unknown as PersistedCanonicalReportProjection;
 
@@ -25,6 +28,33 @@ test("appendix evidence preserves verified CMS and form destinations without cre
     assert.equal(failed.cmsSecurity, null, mutation);
     assert.equal(failed.formDestinations, null, mutation);
   }
+});
+
+test("PDF refusal timing references the canonical source packet and never exposes an in-flight request as post-confirmation timing", () => {
+  const projection = canonical();
+  projection.checklistRows = [{ id: "post_reject_tracking_reduction", criticalEvidence: { retainedEvidence: {
+    afterRejectScoringAssessment: { sourcePacketSha256: "a".repeat(64) },
+  } } }] as unknown as PersistedCanonicalReportProjection["checklistRows"];
+  const refusal = postRefusalReportProjectionSchema.parse({ ...completedActionProjection("reject"),
+    postRefusalActivity: [{ activityType: "network_request", category: "analytics", consentState: "post_reject", msAfterReject: 71,
+      nonEssential: true, requestId: "request-1", vendor: "Example", url: "https://metrics.example.test/collect" }],
+    scoringEvidence: { version: "post_reject_scoring_evidence.v1", preActionStorage: [], postActionStorage: [], storageWrites: [],
+      requests: [{ requestId: "request-1", sanitizedUrl: "https://metrics.example.test/collect", vendor: "Example", resourceType: "fetch",
+        startedAtMs: 171, inFlightAtRefusalRegistration: false, msOffsetFromRefusal: 71, nonEssential: true, purpose: "analytics" }] },
+  });
+  const scan = { scan: { id: "scan-1" }, runtimeArtifacts: { postRefusalEvidenceProjection: refusal } } as unknown as ScanDetailResponse;
+  const assessment = consentControlAssessmentSchema.parse(observedControlAssessment);
+  assert.deepEqual(buildReportAppendixEvidence(scan, projection, assessment).rejectTiming?.networkRequests,
+    [{ url: "https://metrics.example.test/collect", vendor: "Example", millisecondsAfterConfirmation: 71 }]);
+  refusal.scoringEvidence!.requests[0]!.inFlightAtRefusalRegistration = true;
+  const limited = buildReportAppendixEvidence(scan, projection, assessment).rejectTiming!;
+  assert.equal(limited.inFlightExclusionVerified, false);
+  assert.deepEqual(limited.networkRequests, []);
+  refusal.packetSha256 = "b".repeat(64);
+  assert.equal(buildReportAppendixEvidence(scan, projection, assessment).rejectTiming, undefined);
+  refusal.packetSha256 = "a".repeat(64);
+  assessment.scan.scanId = "another-scan";
+  assert.equal(buildReportAppendixEvidence(scan, projection, assessment).rejectTiming, undefined);
 });
 
 test("appendix evidence selects canonical certificate and policy facts, subchecks and correction guidance", () => {

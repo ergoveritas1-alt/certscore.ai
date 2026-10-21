@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAssessmentHighlights } from "../../lib/scans/assessment-highlights";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
+import { accessibilityAuditFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
 import { pdfSiteAssessment, pdfSummaryTopics } from "./report-pdf-summary";
 import type { CanonicalReportExport } from "./report-export";
 
@@ -37,16 +38,16 @@ test("PDF summary never turns missing findings or unusable control visits into a
 test("each topic uses its own retained evidence visual and unavailable inventories remain unavailable", () => {
   const report = reportFixture();
   const snapshots = pdfSummaryTopics(report);
-  assert.deepEqual(snapshots.map(topic => topic.visual.kind), ["choices", "bars", "matrix", "flow", "checks", "network", "certificate", "columns"]);
-  assert.deepEqual(snapshots.map(topic => topic.findings.length), [0, 0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(snapshots.map(topic => topic.visual.kind), ["choices", "bars", "matrix", "flow", "transport", "services", "columns"]);
+  assert.deepEqual(snapshots.map(topic => topic.findings.length), [0, 0, 0, 0, 0, 0, 0]);
   report.appendix.cookieAndTrackerInventory.presentationStatus = "insufficient_evidence";
   const limited = pdfSummaryTopics(report);
   for (const id of ["storage", "external"]) {
     const graphic = limited.find(topic => topic.id === id)!.visual;
     assert.ok("unavailable" in graphic && graphic.unavailable);
   }
-  const tls = limited.find(topic => topic.id === "tls")!.visual;
-  assert.ok(tls.kind === "certificate" && tls.status === "Unavailable");
+  const security = limited.find(topic => topic.id === "security")!.visual;
+  assert.ok(security.kind === "transport" && security.checks.find(check => check.label === "HTTPS certificate")?.status === "Unavailable");
 });
 
 
@@ -58,4 +59,67 @@ test("policy visual counts every retained disclosure, including review rows at t
   assert.equal(policy.observed, 39);
   assert.equal(policy.review, 1);
   assert.equal(policy.other, 0);
+});
+
+test("the PDF assessment leads with projected gaps rather than a lower-confidence supporting storage review", () => {
+  const report = reportFixture();
+  report.gdprEprivacyReview!.rows = [
+    { id: "pre_consent_cookies_storage", label: "Storage", status: "Review signal", rationale: "Cookie essentiality remains unresolved." },
+    { id: "pre_consent_third_party_tracking", label: "Tracking", status: "Gap observed", rationale: "Tracking-classified requests were observed before consent: Example Analytics. The first retained qualifying request was Example Analytics at 1.15s after scan start." },
+    { id: "post_reject_tracking_reduction", label: "After Reject", status: "Gap observed", rationale: "Eligible non-essential tracking activity was observed after the refusal confirmation during the measured post-Reject window." },
+    { id: "privacy_notice_availability", label: "Privacy notice", status: "Gap observed", rationale: "No reachable policy was found in the completed discovery." },
+  ] as NonNullable<CanonicalReportExport["gdprEprivacyReview"]>["rows"];
+  report.appendix.evidenceDossier = { checklistDetails: [] } as unknown as CanonicalReportExport["appendix"]["evidenceDossier"];
+  const before = structuredClone(report);
+  const text = pdfSiteAssessment(report);
+  assert.match(text, /^Requests from Example Analytics were observed before a consent choice/);
+  assert.match(text, /after Reject was confirmed/);
+  assert.match(text, /No reachable privacy notice/);
+  assert.doesNotMatch(text, /Cookie essentiality|deduction|recovery|needs work/i);
+  assert.deepEqual(report, before);
+  report.gdprEprivacyReview!.rows = [report.gdprEprivacyReview!.rows[0]!];
+  assert.match(pdfSiteAssessment(report), /remains unresolved/);
+  assert.doesNotMatch(pdfSiteAssessment(report), /No priority issues/);
+});
+
+test("accessibility zero results require a completed audit and corroborating rule evidence", () => {
+  const report = reportFixture();
+  report.accessibilityAudit = { status: "completed", failedRuleCount: 0, reviewRuleCount: 0 } as CanonicalReportExport["accessibilityAudit"];
+  report.accessibilityEvidence = { violations: [], reviewItems: [], rulesEvaluated: ["rule-1", "rule-2"] } as unknown as CanonicalReportExport["accessibilityEvidence"];
+  const visual = pdfSummaryTopics(report).find(topic => topic.id === "accessibility")!.visual;
+  assert.ok(visual.kind === "columns" && !visual.unavailable && visual.rules === 2 && visual.reviewItems === 0);
+  report.accessibilityEvidence = null;
+  const missing = pdfSummaryTopics(report).find(topic => topic.id === "accessibility")!.visual;
+  assert.ok(missing.kind === "columns" && missing.unavailable);
+});
+
+test("CMP summary names the provider and each observed control without asserting action confirmation", () => {
+  const report = reportFixture();
+  report.appendix.evidenceDossier = { cmp: { provider: "OneTrust" }, checklistDetails: [] } as unknown as CanonicalReportExport["appendix"]["evidenceDossier"];
+  report.gdprEprivacyReview!.rows = [{ id: "post_reject_tracking_reduction", status: "Gap observed" }] as NonNullable<CanonicalReportExport["gdprEprivacyReview"]>["rows"];
+  const before = structuredClone(report);
+  const visual = pdfSummaryTopics(report).find(topic => topic.id === "consent")!.visual;
+  assert.ok(visual.kind === "choices");
+  assert.equal(visual.provider, "OneTrust");
+  assert.deepEqual(visual.choices, [{ label: "Accept", status: "Observed" }, { label: "Reject", status: "Observed" }, { label: "Options", status: "Observed" }]);
+  assert.equal(visual.caption, "After Reject: activity observed");
+  assert.doesNotMatch(JSON.stringify(visual), /confirmed|registered|succeeded/i);
+  assert.deepEqual(report, before);
+});
+
+test("ADA/WCAG summary gives measured failures, nodes and named barriers instead of a disclaimer", () => {
+  const report = reportFixture();
+  const audit = accessibilityAuditFixture();
+  audit.violations = audit.violations.filter(rule => rule.ruleId !== "color-contrast");
+  report.accessibilityEvidence = audit;
+  report.accessibilityAudit = { status: "completed", failedRuleCount: 3, affectedNodeCount: 3, reviewRuleCount: 0 } as CanonicalReportExport["accessibilityAudit"];
+  const before = structuredClone(report);
+  const visual = pdfSummaryTopics(report).find(topic => topic.id === "accessibility")!.visual;
+  assert.ok(visual.kind === "columns" && !visual.unavailable);
+  assert.equal(visual.failures, 3);
+  assert.equal(visual.nodes, 3);
+  assert.deepEqual(visual.issues, ["Image text alternatives", "Form field labels", "Button names"]);
+  assert.equal(visual.caption, "4 rules checked / 0 review items");
+  assert.doesNotMatch(visual.caption, /manual audit|Automated check only/);
+  assert.deepEqual(report, before);
 });

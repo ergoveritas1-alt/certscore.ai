@@ -834,7 +834,10 @@ test("PDF appendix exports all bound CMP detail and preserves shared action repo
   assert.deepEqual(report.projection.unifiedFindings, []);
   assert.equal(report.score.value, null);
   const pdf = renderCanonicalReportPdf(report).toString("latin1");
-  assert.ok(pdf.indexOf("retained_cookie_100") < pdf.indexOf("Appendix B:"));
+  const streams = [...pdf.matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => match[1]!);
+  const cookiePage = streams.findIndex(stream => stream.includes("retained_cookie_100"));
+  const storagePage = streams.findIndex(stream => stream.includes("(Appendix B: Cookies and similar technologies) Tj"));
+  assert.ok(cookiePage >= 0 && storagePage > cookiePage);
   assert.doesNotMatch(pdf, /deduction|point penalty|scoring withheld/i);
   fixture.assessment.controls.reject.state = "unknown";
   fixture.assessment.assessmentStatus = "limited";

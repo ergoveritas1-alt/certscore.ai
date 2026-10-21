@@ -1684,6 +1684,17 @@ test("deriveGdprEprivacyCoverageChecklist maps Article 13 disclosure findings in
   assert.equal(byId(items, "automated_decision_making_profiling_disclosure").status, "Not confirmed");
 });
 
+test("review-level replay preserves verified pre-consent timing without becoming a gap", () => {
+  const finding = makeFinding("session_replay_observed", "Session replay observed", "surface", [], {
+    entities: { session_replay_runtime_vendors: ["Microsoft Clarity"], sessionReplayEvidenceSummary: [JSON.stringify({ preConsentObserved: true, consentStates: ["pre_consent"], collectionEndpointObserved: true })] },
+  });
+  const items = deriveGdprEprivacyCoverageChecklist({ coverageLimited: false, scanCompleted: true, unifiedFindings: [finding] });
+  const row = byId(items, "session_replay_fingerprinting_review");
+  assert.equal(row.status, "Review signal");
+  assert.match(row.explanation, /observed before a recorded consent action/);
+  assert.doesNotMatch(row.explanation, /not observed pre-consent/);
+});
+
 test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session replay as observed", () => {
   const outcome = makeCoverageOutcome({
     evidenceRefs: [

@@ -4,6 +4,7 @@ import { CMS_SECURITY_FINDING_ID, cmsSecurityProjectionSchema, type CmsSecurityP
 import { CALIFORNIA_PRIVACY_REVIEW_IDS, readCaliforniaPrivacyReviewFromConsent, type CaliforniaPrivacyReview } from "@certscore/contracts";
 import { SITE_INTEGRITY_FINDING_ID, siteIntegrityProjectionSchema, type SiteIntegrityProjection } from "@certscore/contracts";
 import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
+import { webmasterRemediation, webmasterRemediationText } from "./webmaster-remediation";
 import { readGpcActivityComparison } from "./gpc-activity-comparison";
 import {
   type MergedSignalRecord,
@@ -6203,11 +6204,13 @@ function buildPresentationCopy(
   }
   if (["post_refusal_non_essential_activity", "post_reject_click_tracking"].includes(packet.unifiedFindingId)) {
     const narrative = afterRejectScoringNarrative(readAfterRejectScoringAssessment(packet.concernContext?.afterRejectScoringAssessment));
-    if (narrative) return { ...base, suggestedFix: narrative.suggestedFix, whyThisMatters: narrative.whyThisMatters,
+    const plan = webmasterRemediation("post-refusal-review");
+    if (narrative) return { ...base, suggestedFix: plan ? webmasterRemediationText(plan) : narrative.suggestedFix, whyThisMatters: narrative.whyThisMatters,
       ...(packet.unifiedFindingId === "post_refusal_non_essential_activity" ? { findingName: narrative.title } : {}) };
   }
   const override = UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES[packet.unifiedFindingId];
-  return override ? { ...base, ...override } : base;
+  const plan = webmasterRemediation(packet.unifiedFindingId);
+  return { ...base, ...override, ...(plan ? { suggestedFix: webmasterRemediationText(plan) } : {}) };
 }
 
 function isCoverageThin(summary?: UnifiedFindingCoverageSummary) {
@@ -6394,6 +6397,8 @@ function buildCanonicalPresentationInput(
   return {
     evidence: packet.evidence?.pageUrls ?? [],
     fallbackEvidence: {
+      ...(packet.evidence?.entities ?? {}),
+      ...(packet.evidence?.counts ?? {}),
       ...(packet.evidence ?? {}),
       normalizedConcernAssertionLevels: packet.concernContext?.assertionLevels ?? [],
       normalizedConcernMaxAssertionLevel:
@@ -6416,7 +6421,7 @@ function buildCanonicalPresentationInput(
 function buildCanonicalPresentationSiblingInput(packet: UnifiedFindingPacket) {
   return {
     evidence: packet.evidence?.pageUrls ?? [],
-    fallbackEvidence: packet.evidence ?? null,
+    fallbackEvidence: packet.evidence ? { ...packet.evidence.entities, ...packet.evidence.counts, ...packet.evidence } : null,
     linkedValidationFinding: null,
     observedValue: packet.summary,
     severity: packet.severity,

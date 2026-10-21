@@ -52,7 +52,15 @@ test("white-label PDF export authenticates and uses only the viewer workspace br
   state.logo = true; state.failLogo = true;
   assert.equal((await request()).status, 409);
   state.failLogo = false;
-  const response = await request();
+  const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  let response: Response;
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    response = await request();
+  } finally {
+    if (originalAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+    else process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
+  }
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "private, no-store");
   assert.match(response.headers.get("content-disposition")!, /report-example.test.pdf/);
@@ -60,6 +68,11 @@ test("white-label PDF export authenticates and uses only the viewer workspace br
   assert.equal(state.rendered[0].brandName, "Viewer Agency");
   assert.equal(state.rendered[0].brandLogo.body.toString(), "logo");
   assert.equal(state.rendered[0].headerTheme, "white");
+  assert.equal(state.rendered[0].appUrl, "http://localhost:3000");
+  assert.equal(state.rendered[0].timeZone, "UTC");
+  assert.equal((await request("format=pdf&timeZone=America%2FLos_Angeles")).status, 200);
+  assert.equal(state.rendered.at(-1).timeZone, "America/Los_Angeles");
+  assert.equal((await request("format=pdf&timeZone=unknown%2Fzone")).status, 400);
   assert.ok(state.settings.every((id: string) => id === "viewer-workspace"));
   state.theme = "black";
   assert.equal((await request("format=pdf")).status, 200);

@@ -7,6 +7,8 @@ import { getVisualEvidenceArtifacts } from "../../../../../lib/scans/visual-evid
 import { buildCanonicalReportExport } from "../../../../../server/scans/report-export";
 import { buildTrackingWorkpaper, renderTrackingWorkpaperCsv } from "../../../../../server/scans/tracking-workpaper";
 import { renderCanonicalReportPdf } from "../../../../../server/scans/report-export-pdf";
+import { UnsafeReportPdfContentError } from "../../../../../server/scans/report-pdf-public-safety";
+import { pdfTimeZone } from "../../../../../server/scans/report-pdf-time";
 import { loadPersistedScanReportProjection } from "../../../../../server/scans/scan-report-projection";
 import { getPublicScanStatusProjection } from "../../../../../server/scans/scan-status-projection";
 import { loadVisualEvidenceObject } from "../../../../../server/scans/visual-evidence-object";
@@ -50,6 +52,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (!/^[a-f0-9-]{36}$/i.test(scanId)) return error(400, "Invalid scan ID.");
   const format = request.nextUrl.searchParams.get("format") ?? "json";
   if (format !== "json" && format !== "pdf" && format !== "csv") return error(400, "Format must be json, pdf or csv.");
+  const timeZone = pdfTimeZone(request.nextUrl.searchParams.get("timeZone"));
+  if (format === "pdf" && !timeZone) return error(400, "Invalid report time zone.");
   const branding = request.nextUrl.searchParams.get("branding");
   if (branding !== null && branding !== "workspace") return error(400, "Invalid report branding.");
   if (branding && format !== "pdf") return error(400, "Workspace branding is available for PDF exports.");
@@ -113,7 +117,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
           key: visualArtifact.key,
         })
       : null;
-    return new NextResponse(renderCanonicalReportPdf(report, { brandLogo, brandName: workspaceBrand?.name, headerTheme, visualEvidence }), {
+    let pdf: ReturnType<typeof renderCanonicalReportPdf>;
+    try {
+      pdf = renderCanonicalReportPdf(report, { appUrl: process.env.NEXT_PUBLIC_APP_URL, brandLogo, brandName: workspaceBrand?.name, headerTheme, visualEvidence, timeZone: timeZone ?? "UTC" });
+    } catch (failure) {
+      if (failure instanceof UnsafeReportPdfContentError) return error(422, "This report contains internal infrastructure details and cannot be exported as a PDF.");
+      throw failure;
+    }
+    return new NextResponse(pdf, {
       headers: {
         "Cache-Control": "private, no-store",
         "Content-Disposition": `attachment; filename="${workspaceBrand ? "report" : "certscore"}-${safeHost}.pdf"`,

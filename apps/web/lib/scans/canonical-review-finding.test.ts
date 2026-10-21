@@ -378,7 +378,7 @@ test("uses summarized pre-consent evidence from supporting signals without requi
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /captured representative pre-consent requests|Yandex, Viqeo, AdRiver/i
+    /captured representative pre-consent requests|Yandex, Viqeo, and AdRiver/i
   );
   assert.match(
     presentation.suggestedFix,
@@ -2014,7 +2014,7 @@ test("uses session-replay copy and moderate confidence for detector-backed repla
   );
   assert.match(
     presentation.suggestedFix,
-    /confirm whether a specific replay vendor|before escalating this finding/i
+    /Verify whether replay tooling is active|field masking/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "FTC");
   assert.equal(presentation.confidenceScore, "0.45");
@@ -2105,7 +2105,7 @@ test("uses direct runtime vendor provenance copy for session replay without arti
 
   assert.match(presentation.whyThisMatters, /runtime vendor provenance for Microsoft Clarity/i);
   assert.doesNotMatch(presentation.whyThisMatters, /only indirect signals/i);
-  assert.match(presentation.suggestedFix, /Verify whether Microsoft Clarity is intentionally deployed/i);
+  assert.match(presentation.suggestedFix, /Review the Microsoft Clarity integrations/);
   assert.equal(presentation.confidenceScore, "0.75");
 });
 
@@ -2142,7 +2142,7 @@ test("uses vendor-specific runtime session-replay copy and elevated confidence",
   );
   assert.match(
     presentation.suggestedFix,
-    /Verify whether FullStory is intentionally deployed|confirm that the behavior is disclosed clearly|consent-gated/i
+    /Review the FullStory integrations|consent gating|field masking/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "FTC");
   assert.equal(presentation.confidenceScore, "0.85");

@@ -5,16 +5,17 @@ import { isGdprTransparencyReportRowId } from "../../lib/scans/gdpr-transparency
 import type { CanonicalReportExport } from "./report-export";
 
 export const PDF_REPORT_TOPICS = [
-  { id: "consent", title: "Consent management" },
+  { id: "consent", title: "CMP and consent" },
   { id: "storage", title: "Cookies and similar technologies", subtitle: "Cookies, local storage and session storage" },
   { id: "policy", title: "Privacy policy" },
   { id: "forms", title: "Forms" },
   { id: "security", title: "Webserver security" },
   { id: "external", title: "External services / domains" },
-  { id: "tls", title: "TLS" },
   { id: "accessibility", title: "ADA/WCAG" },
 ] as const;
-export type PdfReportTopic = typeof PDF_REPORT_TOPICS[number]["id"];
+export type PdfReportTopic = typeof PDF_REPORT_TOPICS[number]["id"] | "tls";
+
+export function pdfDisplayTopic(topic: PdfReportTopic | null) { return topic === "tls" ? "security" : topic; }
 
 const rowTopics: Record<string, PdfReportTopic> = {
   cookie_policy_present: "policy", privacy_policy_present: "policy", california_rights_disclosure_not_observed: "policy", post_refusal_non_essential_activity: "consent",
@@ -81,8 +82,8 @@ export function pdfTopicForFinding(finding: Record<string, unknown>): PdfReportT
 export function pdfTopicOverview(report: CanonicalReportExport) {
   const findings = pdfNarrativeFindings(report);
   return PDF_REPORT_TOPICS.map(topic => {
-    const rows = (report.gdprEprivacyReview?.rows ?? []).filter(row => pdfTopicForRow(row.id) === topic.id);
-    const selected = findings.filter(finding => pdfTopicForFinding(finding) === topic.id);
+    const rows = (report.gdprEprivacyReview?.rows ?? []).filter(row => pdfDisplayTopic(pdfTopicForRow(row.id)) === topic.id);
+    const selected = findings.filter(finding => pdfDisplayTopic(pdfTopicForFinding(finding)) === topic.id);
     let detail = rows.length ? `${rows.length} checklist rows retained` : "Evidence unavailable";
     if (topic.id === "storage") detail = `${report.appendix.cookieAndTrackerInventory.summary.cookieRows} cookies; ${report.appendix.cookieAndTrackerInventory.summary.storageRows ?? 0} local/session storage rows`;
     if (topic.id === "external") detail = `${report.appendix.cookieAndTrackerInventory.summary.trackerRows} service / tracker rows retained`;

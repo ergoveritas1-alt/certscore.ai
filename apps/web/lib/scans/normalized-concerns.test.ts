@@ -163,6 +163,17 @@ function makeConsentOptionsAssessment(input: {
   });
 }
 
+test("runtime markers remain evidence entities rather than becoming policy quotations", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    title: "Pre-consent tracking detected", description: "Observed runtime tracking evidence.", observedValue: "Yes", severity: "high", sourceType: "signal", signalSource: "snapshot_signal", signalKey: "privacy.preconsent_tracking_detected",
+    fallbackEvidence: { signalKey: "privacy.preconsent_tracking_detected", supportingSignals: ["privacy.preconsent_tracking_detected"], observedHosts: ["www.google-analytics.com"], runtimeEvidenceArtifacts: ["before_consent:true"] },
+  });
+  assert.ok(concern);
+  assert.deepEqual(concern.evidenceBundle.policySnippets, []);
+  assert.ok(JSON.stringify(concern.evidenceBundle.entities).includes("privacy.preconsent_tracking_detected"));
+  assert.ok(JSON.stringify(concern.evidenceBundle.entities).includes("www.google-analytics.com"));
+});
+
 test("normalizes complete dismiss-only A/R/O states without promoting them as findings", () => {
   const assessment = makeConsentOptionsAssessment({
     firstLayer: [{ actionType: "other", intent: "dismiss", label: "Close" }]

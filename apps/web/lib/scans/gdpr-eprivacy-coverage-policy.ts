@@ -6617,7 +6617,7 @@ function derivePostRejectOutcomeFromEvidence(input: GdprEprivacyCoveragePolicyIn
       refusalSignalContradictsAction && !hasConcretePostRejectActivityEvidence
         ? "A reject action was confirmed, but the retained post-refusal TCF consent state still encoded granted purposes. This contradiction is independent of network activity."
         : hasConcretePostRejectActivityEvidence
-        ? "A reject action and post-reject comparison window were retained, and eligible non-essential tracking activity persisted after reject."
+        ? "Eligible non-essential tracking activity was observed after the refusal confirmation during the measured post-Reject window."
         : "A reject action and post-reject comparison window were retained, and post-reject non-essential activity was observed, but CertScore.ai did not retain enough canonical detail to project a post-reject persistence gap.",
       reductionEvidenceRefs,
       {

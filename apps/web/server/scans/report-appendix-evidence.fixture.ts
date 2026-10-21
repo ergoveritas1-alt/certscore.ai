@@ -23,3 +23,23 @@ export function reportTechnicalEvidenceFixture(scanId: string) {
   const forms = formDestinationProjectionSchema.parse({ contractVersion: "certscore.form-destination-projection.v1", scanId, verificationStatus: "verified", sourceHash: "b".repeat(64), trace: { contractVersion: "certscore.form-destination-trace.v1", mode: "passive", events: [{ evidenceRef: "form_trace:event:0", kind: "input", observedAtMs: 100, documentUrl: "https://example.test/", documentToken: "doc-1", formIndex: 0, actionUrl: "https://example.test/contact", actionDomain: "example.test", fields: [{ evidenceRef: "form_trace:field:0:0", name: "email", category: "email", personal: true }] }], requests: [{ evidenceRef: "form_trace:request:0", networkRequestId: "request-1", eventRef: "form_trace:event:0", observedAtMs: 200, url: "https://metrics.example.test/collect", domain: "metrics.example.test", method: "POST", party: "third_party", outsideDeclaredDestination: true, status: "response_observed", relation: "temporal_only", matches: [] }], coverage: { truncated: false, unsupportedPayloads: 1, scope: "main_document_existing_window", activeSubmission: false } } });
   return { cms, forms };
 }
+
+export function reportVisualEvidenceFixture(scanId: string, screenshotSha256: string) {
+  return consentControlAssessmentSchema.parse({
+    ...structuredClone(observedControlAssessment), artifactVersion: "2.2",
+    scan: { ...observedControlAssessment.scan, scanId },
+    document: { ...observedControlAssessment.document, canonicalDocumentToken: "doc-token", observedDocumentTokens: ["doc-token"] },
+    visualEvidence: { status: "available", artifactRefs: ["screenshot"], reasonCodes: [] },
+    provenance: { ...observedControlAssessment.provenance, contractVersion: "2.2" },
+    controls: Object.fromEntries(Object.entries(observedControlAssessment.controls).map(([intent, control]) => [intent, {
+      ...control, inspection: { policy: "control_specific_inspection.v1", status: "complete", evidenceRefs: ["ConsentControlGeometryEvidence.json"] },
+    }])),
+    evidence: ["accept", "reject"].map(intent => ({ evidenceId: `candidate-${intent}`, intent, label: intent, locale: "en",
+      layer: "first_layer", visible: true, actionable: true, observedAtMs: 10, documentId: "doc-1", documentToken: "doc-token",
+      channels: ["geometry"], artifactRefs: ["screenshot"], classifier: null })),
+    visualComparison: { version: "consent_control_visual_comparison.v1", documentToken: "doc-token", screenshotArtifactRef: "screenshot",
+      screenshotSha256, imageWidth: 1000, imageHeight: 800, captureSkewMs: 5,
+      accept: { candidateId: "candidate-accept", bounds: [600, 250, 140, 40], fillContrast: 2, outerEmphasisFraction: 0.1, backgroundUniformity: 1, interiorUniformity: 1 },
+      reject: { candidateId: "candidate-reject", bounds: [200, 250, 160, 40], fillContrast: 2, outerEmphasisFraction: 0.1, backgroundUniformity: 1, interiorUniformity: 1 } },
+  });
+}

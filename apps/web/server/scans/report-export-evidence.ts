@@ -1,4 +1,4 @@
-import { cmsSecurityProjectionSchema, formDestinationProjectionSchema, type ConsentControlAssessment } from "@certscore/contracts";
+import { cmsSecurityProjectionSchema, formDestinationProjectionSchema, postRefusalReportProjectionSchema, type ConsentControlAssessment } from "@certscore/contracts";
 import { getCorrectionGuidance } from "../../lib/scans/checklist-correction-guidance";
 import { projectCmpAudit } from "../../lib/scans/cmp-audit-projection";
 import { retainedConsentVendor } from "../../lib/scans/retained-consent-vendor";
@@ -20,6 +20,21 @@ export function buildReportAppendixEvidence(scan: ScanDetailResponse, canonical:
     checklistRows: canonical.checklistRows, unifiedFindings: canonical.ownerUnifiedFindings, normalizedConcerns: canonical.normalizedConcerns });
   const cms = cmsSecurityProjectionSchema.safeParse(scan.runtimeArtifacts?.cmsSecurity);
   const forms = formDestinationProjectionSchema.safeParse(scan.runtimeArtifacts?.formDestinations);
+  const refusal = postRefusalReportProjectionSchema.safeParse(scan.runtimeArtifacts?.postRefusalEvidenceProjection);
+  const canonicalRefusal = object(canonical.checklistRows.find(row => row.id === "post_reject_tracking_reduction")?.criticalEvidence?.retainedEvidence);
+  const sourceHash = object(canonicalRefusal.afterRejectScoringAssessment).sourcePacketSha256;
+  const refusalProjection = refusal.success && refusal.data.packetSha256 && refusal.data.packetSha256 === sourceHash && assessment?.scan.scanId === scan.scan.id ? refusal.data : null;
+  const eligibleRequestIds = refusalProjection?.postRefusalActivity.filter(row => row.activityType === "network_request").map(row => row.requestId).filter((id): id is string => Boolean(id)) ?? [];
+  const eligibleRequests = refusalProjection?.scoringEvidence?.requests.filter(request => eligibleRequestIds.includes(request.requestId)) ?? [];
+  const rejectTiming = refusalProjection ? { inFlightExclusionVerified: eligibleRequestIds.length > 0 && eligibleRequests.length === new Set(eligibleRequestIds).size &&
+    eligibleRequests.every(request => !request.inFlightAtRefusalRegistration && typeof request.msOffsetFromRefusal === "number" && request.msOffsetFromRefusal >= 0),
+    windowMs: refusalProjection.observationWindowMs,
+    networkRequestCount: refusalProjection.postRefusalActivity.filter(row => row.activityType === "network_request").length,
+    storageWriteCount: refusalProjection.postRefusalActivity.filter(row => row.activityType === "storage_write").length,
+    networkRequests: eligibleRequests.filter(request => !request.inFlightAtRefusalRegistration && typeof request.msOffsetFromRefusal === "number" && request.msOffsetFromRefusal >= 0)
+      .map(request => ({ url: request.sanitizedUrl, vendor: request.vendor ?? null, millisecondsAfterConfirmation: request.msOffsetFromRefusal! })),
+    registrationTimeIsUpperBound: refusalProjection.limitations.includes("registration_timestamp_is_observation_upper_bound"),
+  } : null;
   const checklistDetails = hydrateChecklistPolicyEvidence(canonical.checklistRows, canonical.evidenceIndex).map(row => {
     const retained = object(row.criticalEvidence?.retainedEvidence);
     const facts: Array<{ label: string; value: string }> = [];
@@ -29,10 +44,14 @@ export function buildReportAppendixEvidence(scan: ScanDetailResponse, canonical:
         ? ["tlsProbeAttempted", "validTlsCertificate", "tlsProbeErrorCategory", "tlsProbeErrorMessage"]
         : row.id === "transport_security_form_transport"
           ? ["formTransportCount", "formInventoryState", "insecureFormTransportObserved"]
-          : ["finalUrl", "finalScheme", "pageHttpsObserved", "httpProbeAttempted", "httpProbeStatus", "httpProbeFinalScheme", "httpProbeFinalUrl", "httpProbeOutcome", "httpRedirectsToHttps", "httpProbeErrorCategory", "httpProbeErrorMessage", "mixedContentObserved", "mixedContentObservedCount"];
+          : row.id === "transport_security_https_delivery" ? ["finalUrl", "finalScheme", "pageHttpsObserved"]
+            : row.id === "transport_security_http_redirect" ? ["httpProbeAttempted", "httpProbeStatus", "httpProbeFinalScheme", "httpProbeFinalUrl", "httpProbeOutcome", "httpRedirectsToHttps", "httpProbeErrorCategory", "httpProbeErrorMessage"]
+              : ["mixedContentObserved", "mixedContentObservedCount"];
       for (const key of fields) add(key, retained[key]);
       const arrays = row.id === "transport_security_tls_certificate" ? ["tlsCertificateObservations"]
-        : row.id === "transport_security_form_transport" ? ["insecureFormTransports"] : ["httpProbeRedirectChain", "sampledPageUrls", "mixedContentSamples"];
+        : row.id === "transport_security_form_transport" ? ["insecureFormTransports"]
+          : row.id === "transport_security_http_redirect" ? ["httpProbeRedirectChain"]
+            : row.id === "transport_security_mixed_content" ? ["mixedContentSamples"] : ["sampledPageUrls"];
       for (const key of arrays) for (const [index, value] of (Array.isArray(retained[key]) ? retained[key] as unknown[] : []).entries()) {
         if (scalar(value) !== null) add(`${key} ${index + 1}`, value);
         else for (const field of ["inputUrl", "subject", "issuer", "validFrom", "validTo", "validCertificate", "chainCertificateCount", "url", "pageUrl", "hostname", "resourceType", "disposition", "evidenceSource", "formId", "method", "actionUrl", "actionScheme", "insecureTransportObserved"])
@@ -60,7 +79,7 @@ export function buildReportAppendixEvidence(scan: ScanDetailResponse, canonical:
       explanation: row.explanation, note: row.note, correctionSteps: getCorrectionGuidance(JSON.stringify({ checklistItemId: row.id, status: row.status, assessmentStatus: row.assessmentStatus, evidenceState: row.evidenceState, coverageArea: row.label, retainedEvidence: retained })).steps, evidenceRefs: strings(row.evidenceRefs), facts,
       subchecks: (row.subchecks ?? []).map(check => ({ id: check.id, label: check.label, status: check.status, note: check.note, evidenceRefs: strings(check.evidenceRefs) })) };
   });
-  return { cmp: { provider: vendor, audit: cmpAudit }, checklistDetails,
+  return { cmp: { provider: vendor, audit: cmpAudit }, checklistDetails, ...(rejectTiming ? { rejectTiming } : {}),
     cmsSecurity: cms.success && cms.data.scanId === scan.scan.id ? cms.data : null,
     formDestinations: forms.success && forms.data.scanId === scan.scan.id ? forms.data : null };
 }

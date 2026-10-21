@@ -1,3 +1,5 @@
+import { webmasterRemediation } from "./webmaster-remediation";
+
 /** Shared guidance for canonical checklist results; never infers findings from raw evidence. */
 export type ChecklistRemediation = { kind: "none" | "steps"; message?: string; steps: string[] };
 export function readChecklistRemediation(value: unknown): ChecklistRemediation | null {
@@ -67,11 +69,13 @@ const runtimeChecks: Record<string, string[]> = {
 };
 export function checklistRemediation(input: { rowId: string; status: string }): ChecklistRemediation | null {
   const subject = consentChecks[input.rowId] ?? policyChecks[input.rowId];
-  if (!subject && !runtimeChecks[input.rowId]) return null;
+  const plan = webmasterRemediation(input.rowId);
+  if (!subject && !runtimeChecks[input.rowId] && !plan) return null;
   if (["Observed", "Not observed", "Not applicable", "Out of scope"].includes(input.status)) {
     return { kind: "none", message: "No remediation is established by this check alone. Retain its evidence and reassess after relevant changes.", steps: [] };
   }
   const confirmedGap = input.status === "Gap observed";
+  if (plan && (input.rowId !== "privacy_notice_availability" || confirmedGap)) return { kind: "steps", steps: [...plan.steps, `Re-test: ${plan.verification}`] };
   if (input.rowId === "privacy_notice_availability" && confirmedGap) return { kind: "steps", steps: [
     "Publish a privacy policy explaining the site's personal-data practices.",
     "Link the policy clearly from footer navigation and collection forms, and verify the page loads publicly.",

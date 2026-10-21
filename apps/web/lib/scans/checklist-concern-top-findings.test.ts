@@ -210,7 +210,9 @@ test("completed policy absence flows through coverage policy and checklist to th
   const first = findings[0]!;
   assert.equal(first.id, "regulatory_gap__gdpr_eprivacy__privacy_notice_availability");
   assert.equal(first.label, "Privacy policy not found");
-  assert.match(first.remediation, /Publish a privacy policy/);
+  assert.match(first.remediation, /repair its link or public access/);
+  assert.match(first.remediation, /Publish readable public HTML at a stable URL/);
+  assert.match(first.remediation, /fresh signed-out browser/);
   assert.deepEqual(first.evidenceDetails?.policyEvidenceDetails?.retainedEvidence,
     privacyRow.criticalEvidence.retainedEvidence);
   assert.ok(first.defaultSurfacePriority > findings[1]!.defaultSurfacePriority);

@@ -465,6 +465,15 @@ function StandardDomainScanForm({
   const [scanFrom, setScanFrom] = useState<ScanFrom>(allowedDefaultScanFrom);
   const [heroPlaceholder, setHeroPlaceholder] = useState(HERO_IDLE_PLACEHOLDER);
   const [recentScanReusedFromUrl, setRecentScanReusedFromUrl] = useState(false);
+  useEffect(() => {
+    if (requestSource !== "homepage") return;
+    const target = new URLSearchParams(window.location.search).get("url");
+    if (!target || target.length > 2048) return;
+    try {
+      const parsed = new URL(target);
+      if (["http:", "https:"].includes(parsed.protocol) && !parsed.username && !parsed.password) setDomain(parsed.href);
+    } catch {}
+  }, [requestSource]);
   const staticPlaceholder = inputPlaceholder ?? HERO_IDLE_PLACEHOLDER;
   const isSubmittingRef = useRef(false);
   const submissionProgressValueRef = useRef(0);

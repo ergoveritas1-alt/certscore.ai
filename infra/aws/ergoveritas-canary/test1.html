@@ -1,0 +1,83 @@
+<!-- CANARY TEST PAGE — intentional non-compliance for scanner validation — see /test-environment-notice -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta http-equiv="Content-Security-Policy" content="form-action 'none'; base-uri 'self'">
+  <title>CertScore.ai review canary — test 1</title>
+  <style>
+    body{font:16px/1.5 system-ui,sans-serif;max-width:860px;margin:32px auto;padding:0 24px;color:#172b44;background:#f5f8fb}
+    h1,h2{line-height:1.2}a{color:#075985}section{margin:24px 0;padding:22px;background:#fff;border:1px solid #cbd5e1;border-radius:12px}
+    .banner{border:2px solid #334155}.banner button,button{margin:8px 8px 0 0;padding:10px 14px;font:inherit}
+    .fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.field{display:flex;flex-direction:column;gap:5px}
+    input:not([type=checkbox]),textarea{font:inherit;padding:10px;border:1px solid #64748b;border-radius:4px;min-width:0}.wide{grid-column:1/-1}
+    .sample-image{width:160px;height:56px}.icon-control{min-width:44px;min-height:44px}.fine{font-size:14px}footer{margin:28px 0}
+    @media(max-width:600px){.fields{grid-template-columns:1fr}body{padding:0 16px}}
+  </style>
+</head>
+<body>
+  <main data-certscore-canary="openai-review-test1">
+    <h1>Privacy preflight canary — test 1</h1>
+    <p>Owned synthetic fixture with six cookie signatures, six tracker requests, canvas/audio fingerprinting, session-replay endpoints, and a deterministic Reject observation.</p>
+    <section class="banner" id="onetrust-banner-sdk" role="dialog" aria-label="Cookie choices">
+      <strong>Cookie choices</strong><br>
+      <button id="onetrust-reject-all-handler">Reject optional cookies</button><button id="onetrust-pc-btn-handler">Manage choices</button><button id="onetrust-accept-btn-handler">Accept all cookies</button>
+      <p id="canary-consent-status" role="status" aria-live="polite"></p>
+    </section>
+    <section aria-labelledby="scenario-heading">
+      <h2 id="scenario-heading">A realistic report-review scenario</h2>
+      <p>This page combines positive privacy disclosures with deliberately failing controls and accessibility examples. A linked policy describes the actual test behavior rather than claiming that optional tracking is successfully blocked.</p>
+      <p><a href="/test1-privacy-policy.html">Privacy Policy for this test page</a></p>
+      <p>The illustration and icon control below intentionally lack accessible names. The enquiry form also contains an unlabelled email field. These are rendered WCAG test defects, not pre-written report findings.</p>
+      <img id="test1-missing-alt" class="sample-image" width="160" height="56" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='56'%3E%3Crect width='160' height='56' fill='%23075985'/%3E%3Ctext x='14' y='34' fill='white' font-size='18'%3EDemo services%3C/text%3E%3C/svg%3E">
+      <button id="test1-unnamed-button" class="icon-control" type="button"><svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 20 20"><path d="M4 10h12M10 4l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
+      <p id="test1-preview-status" role="status"></p>
+    </section>
+    <section aria-labelledby="enquiry-heading">
+      <h2 id="enquiry-heading">Demo service enquiry</h2>
+      <p id="enquiry-demo-notice">Use invented details only. This inert form demonstrates personal-information field detection. No form submission, email, CRM request, or backend collection is enabled.</p>
+      <form id="test1-demo-enquiry" aria-label="Demo service enquiry" aria-describedby="enquiry-demo-notice" action="/test1-demo-submit" method="post" autocomplete="off">
+        <div class="fields">
+          <div class="field"><label for="test1-full-name">Full name</label><input id="test1-full-name" name="full_name" type="text"></div>
+          <div class="field"><span>Email address (intentional missing label)</span><input id="test1-email" name="email" type="email"></div>
+          <div class="field"><label for="test1-phone">Phone number</label><input id="test1-phone" name="phone" type="tel"></div>
+          <div class="field"><label for="test1-postcode">Postal code</label><input id="test1-postcode" name="postal_code" type="text"></div>
+          <div class="field wide"><label for="test1-message">Your enquiry</label><textarea id="test1-message" name="message" rows="3"></textarea></div>
+        </div>
+        <p class="fine">These personal data fields model an enquiry, but their values stay in this document until it is closed or reloaded. The <a href="/test1-privacy-policy.html#demo-form">Privacy Policy</a> explains the form and the separate test tracking activity.</p>
+        <button id="test1-preview-enquiry" type="button">Preview enquiry (no submission)</button>
+        <p id="test1-form-status" role="status"></p>
+      </form>
+    </section>
+    <div id="test1-concealed-link" style="position:absolute;left:-9999px;top:-9999px"><a href="https://promotion.example/">Synthetic outbound promotion</a></div>
+  </main>
+  <footer><a href="/test1-privacy-policy.html">Privacy Policy</a> · <a href="/test-environment-notice">Test environment notice</a></footer>
+  <script>
+    document.getElementById("test1-demo-enquiry").addEventListener("submit", function (event) { event.preventDefault(); });
+    document.getElementById("test1-preview-enquiry").addEventListener("click", function () {
+      document.getElementById("test1-form-status").textContent = "Demo only: no values have been sent or saved.";
+    });
+    document.getElementById("test1-unnamed-button").addEventListener("click", function () {
+      document.getElementById("test1-preview-status").textContent = "Demo icon activated; no navigation or request was made.";
+    });
+    window.__CERTSCORE_REVIEW_CANARY__ = {
+      id: "test1",
+      controls: "direct",
+      postRefusal: "reject_ignored",
+      fingerprint: "canvas_audio",
+      cookies: ["_ga_TEST1", "_gid", "_fbp", "_clck", "_hjSessionUser_100001", "fs_uid"],
+      trackers: [
+        "https://www.google-analytics.com/g/collect?v=2&tid=G-TEST000001&cid=certscore-test1&en=page_view",
+        "https://www.facebook.com/tr?id=000000000000001&ev=PageView&noscript=1",
+        "https://www.clarity.ms/collect?tid=certscore-test1",
+        "https://static.hotjar.com/c/hotjar-100001.js?sv=7",
+        "https://rs.fullstory.com/s/fs.js?certscore=test1",
+        "https://api.segment.io/v1/track?certscore=test1"
+      ]
+    };
+  </script>
+  <script src="/certscore-review-canary.js"></script>
+</body>
+</html>

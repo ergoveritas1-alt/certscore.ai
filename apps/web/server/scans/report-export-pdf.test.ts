@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 import { accessibilityAuditFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
-import { reportCmpEvidenceFixture, reportTechnicalEvidenceFixture } from "./report-appendix-evidence.fixture";
+import { reportCmpEvidenceFixture, reportTechnicalEvidenceFixture, reportVisualEvidenceFixture } from "./report-appendix-evidence.fixture";
+import { createHash } from "node:crypto";
 import { projectCmpAudit } from "../../lib/scans/cmp-audit-projection";
 import { appendixEvidenceLines } from "./report-pdf-appendices";
 import { renderCanonicalReportPdf } from "./report-export-pdf";
 import { PDF_REPORT_TOPICS, pdfTopicForFinding, pdfTopicForRow } from "./report-pdf-topics";
+import { pdfPublicWords } from "./report-pdf-reader";
 import type { CanonicalReportExport } from "./report-export";
 
 const visiblePdfText = (source: string) => [...source.matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)].map(match => match[1]!.replace(/\\([\\()])/g, "$1")).join(" ");
@@ -245,23 +247,33 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
   assert.match(pdf.toString("latin1"), /Executive summary/);
   const pdfText = pdf.toString("latin1");
   const streams = [...pdfText.matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => match[1]!);
+  assert.doesNotMatch(pdfText, /What we tested|\(tested\)|tested-context/);
+  assert.match(visiblePdfText(streams[1]!), /Top issues/);
+  assert.doesNotMatch(visiblePdfText(streams[0]!), /Other \/ unavailable|Starting-page score: this exact page|Score covers the observed website pages|Not a legal certification|Choice-path results and timing/);
+  assert.doesNotMatch(streams[0]!, /124 139 Td \(To review\) Tj/);
+  assert.match(visiblePdfText(streams.slice(1).join("\n")), /Observed evidence only\./);
   for (const [index, topic] of PDF_REPORT_TOPICS.entries()) {
     assert.ok(visiblePdfText(streams[0]!).includes(topic.title), `Page 1 must include ${topic.title}`);
     const heading = `Appendix ${String.fromCharCode(65 + index)}: ${topic.title}`;
     assert.equal(streams.filter(stream => stream.includes(`(${heading}) Tj`)).length, 1);
+    const chapterStream = streams.find(stream => stream.includes(`(${heading}) Tj`))!;
+    assert.match(chapterStream, /50 782 Td/, "Each appendix starts at the top of a new page");
     assert.ok(streams.findIndex(stream => stream.includes(heading)) > 0);
     assert.ok(pdfText.includes(`/Dest (${topic.id})`));
     if (index) assert.ok(pdfText.indexOf(heading) > pdfText.indexOf(`Appendix ${String.fromCharCode(64 + index)}:`));
   }
   assert.doesNotMatch(streams[0]!, /Appendix A:|No forms found|Controller\/contact disclosure/);
-  assert.match(streams[0]!, /GDPR\/ePrivacy findings posture/);
+  assert.match(streams[0]!, /Region: Ireland/);
   assert.equal(pdfText.match(/Valid SSL\/TLS certificate/g)?.length, 1);
-  assert.equal(pdfText.slice(pdfText.indexOf("Appendix G: TLS")).match(/TLS certificate review/g)?.length, 1);
-  assert.ok(pdfText.indexOf("Appendix G: TLS") < pdfText.indexOf("Valid SSL/TLS certificate"));
+  assert.equal(pdfText.match(/\(1\. TLS certificate review - Finding\)/g)?.length, 1);
+  assert.ok(pdfText.indexOf("Appendix E: Webserver security") < pdfText.indexOf("Valid SSL/TLS certificate"));
+  assert.doesNotMatch(pdfText, /Appendix [A-Z]: TLS/);
   assert.match(pdfText, /\/Subtype \/Link/);
   assert.match(pdfText, /\/S \/URI/);
   assert.match(streams[0]!, /CertScore.ai score/);
-  assert.match(streams[0]!, /Findings by severity/);
+  assert.match(streams[0]!, /Top issues/);
+  assert.doesNotMatch(streams[0]!, /\([A-H]\) Tj|First third-party request|Reject confirmed/);
+  assert.doesNotMatch(pdfText, /\(Overview\) Tj|\(Plan\) Tj|\(Workpaper\) Tj/);
   assert.match(streams[0]!, /Topic evidence at a glance/);
   assert.match(streams[0]!, /Site assessment/);
   assert.doesNotMatch(streams[0]!, /Findings by topic|\(Topics\)|\(Findings\)/);
@@ -297,12 +309,19 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
     visualEvidence: { body: jpegWithSof, contentType: "image/jpeg" },
   }).toString("latin1");
   assert.match(pdfWithVisualEvidence, /Captured page evidence/);
-  assert.match(pdfWithVisualEvidence, /Captured page evidence - full capture/);
+  assert.doesNotMatch(pdfWithVisualEvidence, /Full captured page segment/);
   assert.match(pdfWithVisualEvidence, /\/Subtype \/Image/);
   assert.match(pdfWithVisualEvidence, /\/Im1 Do/);
   assert.match(pdfWithVisualEvidence, /\/Logo Do/);
 
   const sharp = (await import("sharp")).default;
+  const screenshot = await sharp({ create: { width: 1000, height: 800, channels: 3, background: "#ffffff" } }).png().toBuffer();
+  const visualReport = structuredClone(report);
+  visualReport.consentControlAssessment = reportVisualEvidenceFixture(report.scan.id, createHash("sha256").update(screenshot).digest("hex"));
+  const focusedPdf = renderCanonicalReportPdf(visualReport, { visualEvidence: { body: screenshot, contentType: "image/png" } }).toString("latin1");
+  assert.equal((focusedPdf.match(/\/Im1 Do/g) ?? []).length, 2, "Keep the full capture alongside its magnified control detail");
+  assert.match(focusedPdf, /0.55 0.30 0.63 RG 1.5 w/);
+  assert.match(visiblePdfText(focusedPdf), /Boxes mark observed Accept and Reject controls/);
   const logo = await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="160"><rect x="8" y="8" width="144" height="144" rx="30" fill="#0284c7"/><path d="M40 100L80 40L120 100Z" fill="white"/><text x="175" y="100" font-size="45" font-family="Helvetica" fill="#0f172a">Northstar</text></svg>')).png().toBuffer();
   const brandedPdf = renderCanonicalReportPdf(report, {
     brandName: "Northstar Research (Client Reports)",
@@ -325,6 +344,16 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
   assert.match(brandedText, /Executive summary/);
   assert.match(brandedText, /Accept control: Observed/);
   const richReport = structuredClone(report);
+  const localPdf = renderCanonicalReportPdf(report, { appUrl: "http://localhost:3000" }).toString("latin1");
+  assert.doesNotMatch(localPdf, /localhost|s3:\/\/|local-parity/);
+  assert.match(localPdf, /Download the technical workpaper/);
+  assert.doesNotMatch(localPdf, /https:\/\/certscore\.ai\/api\/scans\//);
+  assert.match(renderCanonicalReportPdf(report).toString("latin1"), /https:\/\/certscore\.ai\/api\/scans\//);
+  for (const internal of ["http://localhost:3000/private", "s3://scan-artifacts/private", "http://192.168.1.2/private", "v2-dag-lambda/local-parity/private", `${"Unbroken-prefix".repeat(80)}local-parity`]) {
+    const unsafe = structuredClone(report);
+    unsafe.notice = internal;
+    assert.throws(() => renderCanonicalReportPdf(unsafe), /internal infrastructure/);
+  }
   const cmpFixture = reportCmpEvidenceFixture(report.scan.id);
   richReport.consentControlAssessment = cmpFixture.assessment;
   const cmpAudit = projectCmpAudit({ scanId: report.scan.id, consentControlAssessment: cmpFixture.assessment, consentVendor: "OneTrust", normalizedConcerns: cmpFixture.normalizedConcerns });
@@ -343,7 +372,7 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
     { unifiedFindingId: "semantic_labeling_accessibility_issue", severity: "critical", details: { family: "accessibility" }, title: "Accessible names require review" },
   ] as unknown as CanonicalReportExport["projection"]["unifiedFindings"];
   const longCellReport = structuredClone(richReport);
-  longCellReport.appendix.evidenceDossier.checklistDetails[1]!.facts[0]!.value = "Retained clause repeated for long-cell verification. ".repeat(400) + "FINAL_RETAINED_CLAUSE";
+  longCellReport.appendix.evidenceDossier.checklistDetails[0]!.facts[0]!.value = "Retained clause repeated for long-cell verification. ".repeat(400) + "FINAL_RETAINED_CLAUSE";
   const longCellPdf = renderCanonicalReportPdf(longCellReport);
   assert.ok(longCellPdf.toString("latin1").includes("FINAL_RETAINED_CLAUSE"), "Long table cells must continue without losing their final evidence");
   const dashboards = appendixEvidenceLines(richReport, { text: () => [], heading: text => ({ text }) });
@@ -358,35 +387,40 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
   const summaryStream = [...richText.matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => match[1]!).find(stream => stream.includes("Executive summary"))!;
   assert.match(summaryStream, /Priority finding 1/);
   assert.doesNotMatch(summaryStream, /Appendix A:/);
-  assert.equal((summaryStream.match(/\(5\) Tj/g) ?? []).length, 1, "The finding total appears only once, in the doughnut");
-  assert.match(richText.slice(richText.indexOf("Appendix H: ADA/WCAG")), /Automated rule evidence: image-alt/);
+  assert.match(summaryStream, /distinct observations/);
+  assert.match(richText.slice(richText.indexOf("Appendix G: ADA/WCAG")), /Automated rule evidence: image-alt/);
   assert.match(richText, /\(#image-alt\)/);
   assert.match(richText, /https:\/\/dequeuniversity.com/);
   assert.doesNotMatch(richText, /deduction|scoring withheld|point penalty/i);
   for (const [index, topic] of PDF_REPORT_TOPICS.entries()) {
     const from = richText.indexOf(`Appendix ${String.fromCharCode(65 + index)}:`);
-    const to = index < 7 ? richText.indexOf(`Appendix ${String.fromCharCode(66 + index)}:`) : richText.length;
+    const to = index < PDF_REPORT_TOPICS.length - 1 ? richText.indexOf(`Appendix ${String.fromCharCode(66 + index)}:`) : richText.length;
     const appendix = richText.slice(from, to);
-    const stages = ["01 Topic overview", "02 Fixes and verification", "03 Detailed evidence", "04 Sources and workpaper"];
-    assert.ok(stages.every(stage => appendix.includes(stage)), `${topic.id}: consistent structure`);
-    assert.deepEqual(stages.map(stage => appendix.indexOf(stage)), stages.map(stage => appendix.indexOf(stage)).sort((a, b) => a - b));
+    assert.ok(appendix.includes("Detailed evidence"), `${topic.id}: evidence remains present without navigation buttons`);
     if (appendix.includes("Where to investigate")) {
       for (const label of ["What to change / review", "How to verify", "Evidence / workpaper references"])
         assert.ok(appendix.includes(label), `${topic.id}: ${label}`);
     }
   }
+  assert.equal((richText.match(/\(Sources and workpaper\) Tj/g) ?? []).length, 1, "All appendices share one workpaper section instead of duplicating it");
   const consentAppendix = richText.slice(richText.indexOf("Appendix A:"), richText.indexOf("Appendix B:"));
   for (const row of cmpAudit.rows) assert.ok(consentAppendix.includes(row.label.slice(0, 30)), row.id);
   for (const retained of ["OneTrust", "retained_cookie_100", "Audience measurement", "Analytics consent", "metrics.example.test/collect"]) assert.ok(consentAppendix.includes(retained), retained);
   assert.ok((consentAppendix.match(/CMP-stated purpose/g)?.length ?? 0) > 1, "Long inventories repeat column headers on continued pages");
-  assert.ok(richText.includes("Appendix A: Consent management \\(continued\\)"));
-  assert.match(richText.slice(richText.indexOf("Appendix G:")), /Example Certificate Authority/);
-  assert.doesNotMatch(richText.slice(0, richText.indexOf("Appendix G:")), /Example Certificate Authority/);
+  assert.ok(richText.includes("Appendix A: CMP and consent \\(continued\\)"));
+  assert.match(richText.slice(richText.indexOf("Appendix E:")), /Example Certificate Authority/);
+  assert.doesNotMatch(richText.slice(0, richText.indexOf("Appendix E:")), /Example Certificate Authority/);
   const richVisibleText = [...richText.matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)].map(match => match[1]!.replace(/\\([\\()])/g, "$1")).join(" ");
+  const normalizedText = (text: string) => pdfPublicWords(text).replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const renderedEvidence = normalizedText(richVisibleText);
+  const evidenceLines = appendixEvidenceLines(richReport, { text: text => [{ text: String(text) }], heading: text => ({ text }) });
+  for (const lines of Object.values(evidenceLines)) for (const line of lines) for (const cell of line.cells ?? []) for (const text of cell) {
+    assert.ok(renderedEvidence.includes(normalizedText(text)), `Compact layout must preserve every evidence table cell: ${text}`);
+  }
   assert.ok(richVisibleText.includes("Timing association only"));
   assert.doesNotMatch(richText, /Exact field-value match|undefined/);
   assert.ok(richVisibleText.includes("Drupal") && richVisibleText.includes("7.98"));
-  assert.equal((richText.match(/retained checks:/g) ?? []).length, 3, "Only topics with retained checklist rows show a checklist status strip");
+  assert.equal((richText.match(/checks:/g) ?? []).length, 3, "CMP, policy and consolidated transport each show one checklist status strip");
   assert.doesNotMatch(richText, /No checklist rows retained for this topic/);
   assert.match(richText, /\/PageMode \/UseOutlines/);
   for (const topic of PDF_REPORT_TOPICS) for (const section of ["overview", "fixes", "evidence", "sources"])

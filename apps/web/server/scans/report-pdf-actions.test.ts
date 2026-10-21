@@ -48,7 +48,9 @@ test("automated accessibility issues get concrete repairs while manual-review it
   const actions = pdfAppendixActions(report).accessibility;
   assert.match(actions.find(action => action.id === "image-alt")!.steps.join(" "), /alt attribute.*decorative/);
   assert.match(actions.find(action => action.id === "label")!.steps.join(" "), /for attribute.*unique id/);
-  assert.match(actions.find(action => action.id === "button-name")!.steps.join(" "), /accessible name.*keyboard/);
+  const buttonAction = actions.find(action => action.id === "button-name")!;
+  assert.match(buttonAction.steps.join(" "), /accessible name.*actual action/);
+  assert.match(buttonAction.verification!, /Tab to the button.*Enter\/Space activation in staging/);
   assert.match(actions.find(action => action.id === "color-contrast")!.steps.join(" "), /CSS.*measured and required ratios/);
   assert.deepEqual(report, before);
   report.accessibilityEvidence.reviewItems = report.accessibilityEvidence.violations;

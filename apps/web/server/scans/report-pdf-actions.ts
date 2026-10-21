@@ -5,7 +5,8 @@ import { CERT_SCORE_FINDING_REGISTRY } from "../../lib/scans/finding-registry";
 import { cmpCorrectionSteps } from "../../lib/scans/cmp-correction-steps";
 import { CMS_CORRECTION_STEPS, evidenceHeaderStatus } from "../../lib/scans/detailed-evidence-presentation";
 import { checklistRemediation } from "../../lib/scans/checklist-remediation";
-import { accessibilityCorrectionGuidance } from "../../lib/scans/accessibility-correction-guidance";
+import { accessibilityCorrectionGuidance, accessibilityRemediationVerification } from "../../lib/scans/accessibility-correction-guidance";
+import { webmasterRemediation } from "../../lib/scans/webmaster-remediation";
 
 export type PdfAction = {
   id: string;
@@ -50,15 +51,17 @@ export function pdfAppendixActions(report: CanonicalReportExport): Record<PdfRep
     const packet = object(finding.evidence);
     const entities = pdfFindingLocations(object(packet.entities));
     const registry = ids.map(id => CERT_SCORE_FINDING_REGISTRY[id]).find(Boolean);
+    const plan = ids.map(id => webmasterRemediation(id)).find(Boolean);
     const guidance = ids.map(rowId => checklistRemediation({ rowId, status: "Review signal" })).find(item => item?.steps.length);
     sections[pdfTopicForFinding(finding) ?? "policy"].push({
       id: ids[0] ?? "finding", title: string(presentation.findingName ?? finding.title) || ids[0] || "Finding",
       status: string(finding.severity) || "Review", explanation: string(presentation.findingDescription ?? presentation.description ?? finding.summary),
       finding,
       affected: unique([string(finding.primaryPageUrl), ...strings(packet.pageUrls), ...strings(packet.sourceUrls), ...entities]),
-      steps: matching.some(row => row.correctionSteps?.length) ? unique(matching.flatMap(row => row.correctionSteps ?? []))
+      steps: plan ? [...plan.steps] : matching.some(row => row.correctionSteps?.length) ? unique(matching.flatMap(row => row.correctionSteps ?? []))
         : guidance?.steps ?? unique([string(presentation.suggestedFix), registry?.remediation ?? ""]),
       references: unique([ids[0] ?? "", ...strings(packet.evidenceRefs), ...matching.flatMap(row => row.evidenceRefs)]),
+      ...(plan ? { verification: plan.verification } : {}),
     });
   }
   for (const row of details) {
@@ -99,7 +102,7 @@ export function pdfAppendixActions(report: CanonicalReportExport): Record<PdfRep
       ...(node.colorContrast ? [`Contrast: measured ${node.colorContrast.contrastRatio ?? "Not retained"}; required ${node.colorContrast.requiredContrastRatio ?? "Not retained"}. Foreground ${node.colorContrast.foregroundColor ?? "Not retained"}; background ${node.colorContrast.backgroundColor ?? "Not retained"}.`] : []),
     ]),
     steps: guidance?.steps ?? [`Locate the listed elements in the page template or component. Review the retained rule guidance: ${rule.help}.`, "Confirm the issue in context before changing the component, then apply the verified correction to its affected instances."],
-    verification: `Rerun ${rule.ruleId} on the listed selectors and check that each retained failure is resolved. Complete the manual checks in the topic verification checklist.`,
+    verification: guidance ? accessibilityRemediationVerification(rule.ruleId) : `Rerun ${rule.ruleId} on the listed selectors and check that each retained failure is resolved. Complete the manual checks in the topic verification checklist.`,
     references: [rule.ruleId], guidanceUrl: rule.helpUrl, additionalGuidanceUrl: guidance?.reference,
   });
   }

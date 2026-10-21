@@ -1,4 +1,5 @@
 import React from "react";
+import { ReportPdfDownloadLink } from "../scans/report-pdf-download-link";
 
 type ReportDownloadActionsProps = { scanId: string; canExportPdf?: boolean };
 
@@ -34,7 +35,7 @@ function JsonDownloadIcon() {
 export function ReportDownloadActions({ scanId, canExportPdf = false }: ReportDownloadActionsProps) {
   return (
     <div className="flex flex-wrap items-center gap-2" aria-label="Download report">
-      {canExportPdf ? <a
+      {canExportPdf ? <ReportPdfDownloadLink
         aria-label="Download report (PDF)"
         className={iconLinkClass}
         download
@@ -43,7 +44,7 @@ export function ReportDownloadActions({ scanId, canExportPdf = false }: ReportDo
       >
         <PdfIcon />
         <IconTooltip label="Download report (PDF)" />
-      </a> : null}
+      </ReportPdfDownloadLink> : null}
       <a
         aria-label="Download JSON report"
         className={iconLinkClass}

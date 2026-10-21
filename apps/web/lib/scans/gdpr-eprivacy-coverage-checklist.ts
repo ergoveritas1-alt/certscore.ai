@@ -1669,6 +1669,12 @@ function hasSessionReplayFindingPreConsentEvidence(findings: UnifiedFindingDispl
   return findings.some((finding) => {
     const entities = finding.evidence?.entities ?? {};
     return (
+      getStringArrayEntity(entities.sessionReplayEvidenceSummary).some(value => {
+        try {
+          const summary = JSON.parse(value) as Record<string, unknown>;
+          return summary && typeof summary === "object" && sessionReplayEvidenceHasPreConsentSignal(summary);
+        } catch { return false; }
+      }) ||
       getStringArrayEntity(entities.consentStates).some((value) => /pre[_ -]?consent/i.test(value)) ||
       getStringArrayEntity(entities.runtimePhase).some((value) => /pre[_ -]?consent/i.test(value)) ||
       (finding.evidence?.flags ?? []).some((value) => /pre[_ -]?consent/i.test(value))
@@ -2121,7 +2127,6 @@ function specializeSessionReplayChecklistRow(input: {
   ];
   const vendorPhrase = formatVendorPhrase(vendors);
   const preConsentObserved =
-    (input.status === "Gap observed" || input.coverageOutcome?.status === "Gap observed") &&
     (
       sessionReplayEvidenceHasPreConsentSignal(outcomeEvidence) ||
       hasSessionReplayFindingPreConsentEvidence(input.findings)
@@ -2158,7 +2163,7 @@ function specializeSessionReplayChecklistRow(input: {
   }
 
   if (input.coverageOutcome?.status === "Observed" && postConsentOrNotPreConsent) {
-    const timingPhrase = sessionReplayEvidenceHasPostConsentSignal(outcomeEvidence)
+    const timingPhrase = preConsentObserved ? "observed before a recorded consent action" : sessionReplayEvidenceHasPostConsentSignal(outcomeEvidence)
       ? "observed after the pre-consent phase"
       : "not observed pre-consent in retained evidence";
     return {
@@ -2170,7 +2175,7 @@ function specializeSessionReplayChecklistRow(input: {
   }
 
   if (input.status === "Observed" || input.status === "Review signal" || postConsentOrNotPreConsent) {
-    const timingPhrase = sessionReplayEvidenceHasPostConsentSignal(outcomeEvidence)
+    const timingPhrase = preConsentObserved ? "observed before a recorded consent action" : sessionReplayEvidenceHasPostConsentSignal(outcomeEvidence)
       ? "observed after the pre-consent phase"
       : "not observed pre-consent in retained evidence";
     return {
@@ -2440,7 +2445,7 @@ function specializeChecklistRow(input: {
           ? "A reject action was confirmed, eligible non-essential activity was retained after refusal, and the post-refusal TCF consent state still encoded granted purposes."
           : "A reject action was confirmed, but the retained post-refusal TCF consent state still encoded granted purposes. This contradiction is independent of network activity."
         : input.coverageOutcome?.limitation ??
-          "A reject action and post-reject comparison window were retained, and eligible non-essential activity persisted after refusal.",
+          "Eligible non-essential activity was observed after the refusal confirmation during the measured post-Reject window.",
       label: input.definition.label,
       status: "Gap observed" as const
     };

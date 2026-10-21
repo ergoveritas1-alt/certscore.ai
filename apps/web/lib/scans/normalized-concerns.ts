@@ -962,7 +962,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       }
     }
     if (evidence.mismatchRationale) {
-      policySnippets.add(truncatePolicySnippet(evidence.mismatchRationale));
+      runtimeArtifacts.add(evidence.mismatchRationale);
     }
     const unmatchedEntryCount = Math.max(evidence.unmatchedRuntimeVendors.length, evidence.unmatchedRuntimeDomains.length);
     if (unmatchedEntryCount > 0 && evidence.mismatchRationale.trim().length > 0) {
@@ -1468,13 +1468,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
-    for (const entry of stringValues.slice(0, 5)) {
-      if (/policy|disclosure|summary|snippet/i.test(key)) {
-        policySnippets.add(entry);
-      } else {
-        policySnippets.add(entry);
-      }
-    }
+    addEntity(entities, key, stringValues);
   }
 
   return {
