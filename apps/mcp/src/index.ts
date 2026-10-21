@@ -50,6 +50,11 @@ function transportRequestId(req: IncomingMessage) {
 }
 const requestCredential = new AsyncLocalStorage<string>();
 
+function applyPublicSecurityHeaders(res: ServerResponse) {
+  res.setHeader("Strict-Transport-Security", "max-age=31536000");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+}
+
 function installSseKeepalive(res: ServerResponse) {
   const keepalive = setInterval(() => {
     if (res.writableEnded || res.destroyed) {
@@ -769,6 +774,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
 }
 
 const server = createServer(async (req, res) => {
+  applyPublicSecurityHeaders(res);
   const url = requestUrl(req);
   if (url.pathname === "/.well-known/openai-apps-challenge" && req.method === "GET") {
     const body = OPENAI_APPS_CHALLENGE_TOKEN;

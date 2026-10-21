@@ -448,6 +448,73 @@ test("policySurfaceScanner warms an observed privacy link before guessed policy 
   }
 });
 
+test("policySurfaceScanner retains a prefetched observed policy when raw page HTML is noisy", async () => {
+  const requestedPaths: string[] = [];
+  const policyText = Array.from({ length: 14 }, () =>
+    "SITS is the data controller and explains its purposes and legal bases for processing personal data. " +
+    "The policy identifies recipients, retention criteria, international transfers, privacy rights, and the privacy contact channel."
+  ).join(" ");
+  const noisyScript = "window.__themeConfig={component:'navigation',variant:'desktop'};".repeat(4_000);
+  const noisyPolicyHtml = `<!doctype html><html><head><script>${noisyScript}</script></head><body><main><h1>Privacy Policy</h1><p>${policyText}</p></main></body></html>`;
+  assert.equal(assessPolicyTextQuality(noisyPolicyHtml).usable, false);
+  assert.equal(assessPolicyTextQuality(resolvePrefetchedPolicyVisibleText(noisyPolicyHtml)).usable, true);
+  const server = createServer((request, response) => {
+    requestedPaths.push(request.url ?? "");
+    if (request.url === "/") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html><body><footer><a href='/en/privacy-policy/'>Data privacy</a></footer></body></html>");
+      return;
+    }
+    if (request.url === "/en/privacy-policy/") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(noisyPolicyHtml);
+      return;
+    }
+    setTimeout(() => {
+      if (!response.headersSent) {
+        response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+      }
+      response.end("Not found");
+    }, 3_000);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-noisy-prefetch-"));
+  try {
+    const startedAt = Date.now();
+    const result = await policySurfaceScanner({
+      url: `${baseUrl}/`,
+      normalizedUrl: `${baseUrl}/`,
+      scanStartedAtMs: startedAt,
+      internalBudgetMs: 6_000,
+      absoluteDeadlineAtMs: startedAt + 6_000,
+      discoveryMode: "fast",
+      artifactWriter: await createArtifactWriter(tempRoot),
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      policySurfaceSeeds: [
+        { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: `${baseUrl}/privacy-notice` },
+        { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: `${baseUrl}/privacy-policy` },
+        { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: `${baseUrl}/legal/privacy` },
+        { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: `${baseUrl}/privacy` },
+      ],
+    });
+    const retained = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/en/privacy-policy/` &&
+      observation.status === "fetched"
+    );
+
+    assert.ok(retained, JSON.stringify({ requestedPaths, observations: result.policySurfaceObservations }, null, 2));
+    assert.equal(retained.documentEvaluationState, "usable");
+  } finally {
+    server.close();
+    await once(server, "close");
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("substantive Slovenian policy text survives consent-shell exclusion", async () => {
   const substantiveText = Array.from({ length: 18 }, () => [
     "Upravljavec osebnih podatkov objavlja kontaktne podatke upravljavca in pooblaščene osebe za varstvo podatkov.",

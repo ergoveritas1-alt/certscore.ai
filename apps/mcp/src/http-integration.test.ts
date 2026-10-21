@@ -36,6 +36,11 @@ async function waitForHealth(url: string, child: ChildProcess) {
   throw new Error("Timed out waiting for MCP HTTP test server.");
 }
 
+function assertPublicSecurityHeaders(response: Response) {
+  assert.equal(response.headers.get("strict-transport-security"), "max-age=31536000");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+}
+
 type McpRequestObservation = Record<string, unknown> & {
   event: "mcp_http.request_observed";
 };
@@ -359,17 +364,27 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     await waitForHealth(origin, child);
     const challenge = await fetch(`${origin}/.well-known/openai-apps-challenge`);
     assert.equal(challenge.status, 200);
+    assertPublicSecurityHeaders(challenge);
     assert.match(challenge.headers.get("content-type") ?? "", /^text\/plain(?:;|$)/i);
     assert.equal(await challenge.text(), "RVujVoFeQNvwzz4Upt8IPh_f2Xm3qf2Uqa_-tr3VTeQ");
     assert.equal(challenge.headers.get("mcp-session-id"), null);
     assert.equal(challenge.headers.get("www-authenticate"), null);
 
-    const health = await fetch(`${origin}/healthz`).then((response) => response.json());
+    const healthResponse = await fetch(`${origin}/healthz`);
+    assertPublicSecurityHeaders(healthResponse);
+    const health = await healthResponse.json();
     assert.equal(health.anonymousEndpoint, `${origin}/mcp/anonymous`);
     assert.equal(health.lightEndpoint, `${origin}/mcp/light`);
     assert.equal(health.microsoftEndpoint, `${origin}/mcp/microsoft`);
     const rootMetadata = await fetch(`${origin}/.well-known/oauth-protected-resource`);
     assert.equal(rootMetadata.status, 404);
+    assertPublicSecurityHeaders(rootMetadata);
+    const preflight = await fetch(`${origin}/mcp/light`, {
+      method: "OPTIONS",
+      headers: { origin: "https://allowed.example" }
+    });
+    assert.equal(preflight.status, 204);
+    assertPublicSecurityHeaders(preflight);
     const pathMetadata = await fetch(`${origin}/.well-known/oauth-protected-resource/mcp`).then((response) => response.json());
     assert.deepEqual(pathMetadata.authorization_servers, ["https://certscore.ai"]);
     assert.equal(pathMetadata.resource, `${origin}/mcp`);
@@ -591,6 +606,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
       })
     });
     assert.equal(observedInitialize.status, 200);
+    assertPublicSecurityHeaders(observedInitialize);
     assert.match(observedInitialize.headers.get("content-type") ?? "", /^text\/event-stream/);
     const observedSessionId = observedInitialize.headers.get("mcp-session-id");
     assert.ok(observedSessionId);

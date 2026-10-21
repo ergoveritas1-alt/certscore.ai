@@ -1284,7 +1284,10 @@ export async function policySurfaceScanner(
       if(candidate.deterministicSurfaceType!=="privacy_policy" || isCommonPathFallbackCandidate(candidate))return null;
       const promise=policyDocumentFetchCaches.direct.get(policyDocumentFetchCacheKey(candidate.normalizedUrl));
       const fetched=await promise?.catch(()=>undefined);
-      return fetched?.ok && assessPolicyTextQuality(fetched.text).usable?candidate:null;
+      const visibleText = fetched?.ok
+        ? resolvePrefetchedPolicyVisibleText(fetched.text)
+        : "";
+      return fetched?.ok && assessPolicyTextQuality(visibleText).usable?candidate:null;
     }))).filter((candidate):candidate is PolicySurfaceCandidate=>candidate!==null);
     if(warmedPrimaryCandidates.length) {
       const limit=rankedCandidates.every(isCommonPathFallbackCandidate)?MAX_COMMON_PATH_CANDIDATES_TO_FETCH:policyFetchLimit(input);
