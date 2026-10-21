@@ -1,3 +1,4 @@
+import { AFTER_REJECT_SCORING_POLICY, assessAfterRejectScoring, readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { postRefusalReportProjectionSchema } from "@certscore/contracts";
 import { readChoicePathExecution } from "./choice-path-execution";
 import { assessRejectClickTracking, readRejectClickTrackingAssessment } from "./reject-click-tracking-policy";
@@ -5,11 +6,12 @@ import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage
 
 /** Metadata only: preserve the capture belonging to an existing assessed review. */
 export function retainedRejectClickCapture(assessmentValue: unknown, projectionValue: unknown) {
-  const assessment = readRejectClickTrackingAssessment(assessmentValue);
+  const current=readAfterRejectScoringAssessment(assessmentValue);
+  const assessment = current?.policyVersion===AFTER_REJECT_SCORING_POLICY?current:readRejectClickTrackingAssessment(assessmentValue);
   const projection = postRefusalReportProjectionSchema.safeParse(projectionValue);
   if (!assessment || !projection.success || !projection.data.afterActionCapture ||
     projection.data.packetSha256 !== assessment.sourcePacketSha256) return null;
-  const checked = assessRejectClickTracking(projection.data);
+  const checked = current?.policyVersion===AFTER_REJECT_SCORING_POLICY?assessAfterRejectScoring(projection.data):assessRejectClickTracking(projection.data);
   if (!checked || JSON.stringify(checked) !== JSON.stringify(assessment)) return null;
   return {
     reportEvidenceProjectionPolicy: "retained_reject_click_capture.v1",
@@ -28,7 +30,7 @@ export function preserveRetainedRejectClickCapture(
     if (row.id !== "post_reject_tracking_reduction" || row.status !== "Review signal") return row;
     const retained = row.criticalEvidence?.retainedEvidence;
     if (!retained || retained.afterActionCapture !== undefined) return row;
-    const capture = retainedRejectClickCapture(retained.rejectClickTrackingAssessment, projectionValue);
+    const capture = retainedRejectClickCapture(retained.afterRejectScoringAssessment ?? retained.rejectClickTrackingAssessment, projectionValue);
     if (!capture) return row;
     return { ...row, criticalEvidence: { ...row.criticalEvidence,
       retainedEvidence: { ...retained, ...capture } } };

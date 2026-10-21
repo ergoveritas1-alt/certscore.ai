@@ -6292,6 +6292,15 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
 }
 
 function derivePostRejectOutcomeFromEvidence(input: GdprEprivacyCoveragePolicyInput) {
+  const presenceConcern=(input.normalizedConcerns??[]).find(concern=>concern.originKey===REJECT_CLICK_TRACKING_SIGNAL &&
+    concern.originType==="runtime_artifact" && concern.promotionEligibility==="eligible" && concern.externalSurfacingEligibility==="eligible" &&
+    readAfterRejectScoringAssessment(concern.evidenceBundle.rawEvidence?.afterRejectScoringAssessment)?.policyVersion==="after_reject_nonessential_presence.v1");
+  const presence=readAfterRejectScoringAssessment(presenceConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment);
+  if (presence && presence.deductionPoints>0) return makeOutcome("post_reject_tracking_reduction","Review signal",
+    `${presence.cookieRefs?.length??0} classified non-essential cookie(s) and ${presence.requestIds.length} non-essential service request(s) were observed after the Reject control was clicked. Cookie presence does not establish active use or verify refusal registration.`,
+    [`Evidence: post-refusal-packet:sha256:${presence.sourcePacketSha256}`],{retainedEvidence:{...retainedRejectClickCapture(presence,input.runtimeArtifacts?.postRefusalEvidenceProjection),afterRejectScoringAssessment:presence,
+      normalizedConcernKey:presenceConcern!.canonicalConcernKey,scoreEffect:"canonical_reject_presence_policy",
+      rejectClickVerified:true,rejectInteractionConfirmed:presence.registration==="confirmed",refusalRegistrationStatus:presence.registration,storagePresenceDoesNotEstablishActiveUse:true}});
   // A separately verified action session may differ from the passive inventory.
   // Only the already eligible canonical concern can select this scored review.
   const clickConcern = (input.normalizedConcerns ?? []).find((concern) =>

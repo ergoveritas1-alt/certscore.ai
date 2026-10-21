@@ -9,6 +9,8 @@ export const detailedEvidenceCountsSchema = z.object({
 export const detailedEvidenceRowSchema = z.object({
   id: ref, title: text, summary: text.nullable(), status: z.string().max(80), displayStatus: z.string().max(80),
   description: text.optional(),
+  afterRejectObservations: z.array(z.object({entity:text.nullable(),vendor:text.nullable(),kind:z.enum(["cookie_snapshot","service_request"]),
+    name:ref,hostname:ref.nullable(),purpose:z.string().max(80),msAfterClick:count,evidenceRef:ref}).strict()).max(288).optional(),
   // Retained checklist references can include policy excerpt text. Keep these
   // intact; the page serializer chunks long strings without shortening them.
   correctionSteps: z.array(text).max(30), evidenceRefs: z.array(z.string().max(8192)).max(200),

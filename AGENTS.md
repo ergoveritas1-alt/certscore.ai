@@ -65,6 +65,27 @@ older flat-15 scoring instructions below for new materializations. See
 authorized. Estimated extra retained JSON storage is below $0.50/month at
 100,000 scans and 30-day retention; no new browser work or model call.
 
+## Canonical Reject presence scoring — October 21, 2026
+
+The owner requires every completed authorized Reject path with retained,
+canonically classified non-essential cookies and/or services to receive one
+15/20/23/25/27/28/29/30-point family total for 1–8+ distinct canonical non-essential entities (30-point cap). Deduplicate each entity across cookies and services. Unattributed positive evidence supports the initial 15 only; it cannot add entity increments. Use
+`after_reject_nonessential_presence.v1` / GDPR-ePrivacy v22, overall v13 and
+full-site v12. Cookie persistence and classified service requests qualify;
+identifier matching and semantic refusal registration are not prerequisites.
+This supersedes the earlier measurement/performance tiers and storage-presence
+neutrality for new Reject scoring, while preserving historical policy versions.
+
+Keep original source/control/document verification, bounded path completion,
+request ancestry and positive cookie snapshot proof. Unknown/essential evidence,
+failed or changed-target captures and missing proof remain neutral. Presence is
+not proof of active use, consent registration or a legal violation. Use the
+persisted typed assessment -> normalized concern -> concern policy -> unified
+finding/checklist -> score pipeline. Preserve first-layer reportability and
+customer reports without deduction explanations. No deployment or historical
+report rewrite is authorized. See
+`docs/certscore-v2/reject-nonessential-presence-policy.md`.
+
 ## Cost-change approval
 
 Any change that can increase recurring infrastructure cost, per-request or

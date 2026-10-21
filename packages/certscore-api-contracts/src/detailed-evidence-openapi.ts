@@ -79,6 +79,82 @@ export const detailedEvidenceOpenApiSchemas = {
         "type": "string",
         "maxLength": 4000
       },
+      "afterRejectObservations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "entity",
+            "vendor",
+            "kind",
+            "name",
+            "hostname",
+            "purpose",
+            "msAfterClick",
+            "evidenceRef"
+          ],
+          "properties": {
+            "entity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "vendor": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "cookie_snapshot",
+                "service_request"
+              ]
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 2048
+            },
+            "hostname": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "purpose": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "msAfterClick": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "evidenceRef": {
+              "type": "string",
+              "maxLength": 2048
+            }
+          }
+        },
+        "maxItems": 288
+      },
       "correctionSteps": {
         "type": "array",
         "items": {
@@ -269,6 +345,82 @@ export const detailedEvidenceOpenApiSchemas = {
             "description": {
               "type": "string",
               "maxLength": 4000
+            },
+            "afterRejectObservations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "entity",
+                  "vendor",
+                  "kind",
+                  "name",
+                  "hostname",
+                  "purpose",
+                  "msAfterClick",
+                  "evidenceRef"
+                ],
+                "properties": {
+                  "entity": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "vendor": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "cookie_snapshot",
+                      "service_request"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "hostname": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "msAfterClick": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "evidenceRef": {
+                    "type": "string",
+                    "maxLength": 2048
+                  }
+                }
+              },
+              "maxItems": 288
             },
             "correctionSteps": {
               "type": "array",
@@ -483,6 +635,82 @@ export const detailedEvidenceOpenApiSchemas = {
                   "description": {
                     "type": "string",
                     "maxLength": 4000
+                  },
+                  "afterRejectObservations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "entity",
+                        "vendor",
+                        "kind",
+                        "name",
+                        "hostname",
+                        "purpose",
+                        "msAfterClick",
+                        "evidenceRef"
+                      ],
+                      "properties": {
+                        "entity": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "vendor": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "cookie_snapshot",
+                            "service_request"
+                          ]
+                        },
+                        "name": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "hostname": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 2048
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "purpose": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "msAfterClick": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "evidenceRef": {
+                          "type": "string",
+                          "maxLength": 2048
+                        }
+                      }
+                    },
+                    "maxItems": 288
                   },
                   "correctionSteps": {
                     "type": "array",

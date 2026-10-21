@@ -1,4 +1,6 @@
-# After-Reject measurement scoring tiers
+# Historical After-Reject measurement scoring tiers
+
+Current new-materialization policy: [Canonical non-essential presence after Reject](reject-nonessential-presence-policy.md). The owner superseded these tiers on October 21, 2026; retain this document for historical v1/v2 interpretation.
 
 Owner-approved local implementation, October 14, 2026. Deployment is not authorized by this change. Historical reports, evidence and article content remain intact.
 

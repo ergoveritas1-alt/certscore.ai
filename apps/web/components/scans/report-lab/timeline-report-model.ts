@@ -328,9 +328,9 @@ function mapChecklistRow(item: GdprEprivacyCoverageChecklistItem, capturedAt: st
   const persistenceOnly = item.id === "post_reject_tracking_reduction" &&
     isPersistenceOnlyRejectEvidence(retainedEvidence);
   const title = item.id === "post_reject_tracking_reduction"
-    ? persistenceOnly
+    ? describePostRejectFinding(retainedEvidence)?.title ?? (persistenceOnly
       ? "Same non-essential identifier remained stored after Reject"
-      : "Non-essential activity after confirmed Reject"
+      : "Non-essential activity after confirmed Reject")
     : item.label;
   return {
     canonicalEvidenceJson: JSON.stringify(evidenceJson, (_key, value) => typeof value === "bigint" ? value.toString() : value, 2),

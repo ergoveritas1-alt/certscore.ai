@@ -11,6 +11,7 @@ import { buildSiteIntegrityScoreEffects } from "./site-integrity-score-policy";
 import { buildAccessibilityScoreEffects, buildFocusAccessibilityScoreEffects } from "./accessibility-score-policy";
 import { qualifiesSiteIntegrityReview, SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
 import { readRejectClickTrackingAssessment, REJECT_CLICK_TRACKING_FINDING, REJECT_CLICK_TRACKING_SIGNAL } from "./reject-click-tracking-policy";
+import { AFTER_REJECT_SCORING_POLICY } from "./after-reject-scoring-policy";
 import type {
   NormalizedConcern,
   NormalizedConcernAssertionLevel,
@@ -2700,7 +2701,10 @@ export function deriveConcernPolicy(input: {
 
   if (suggestedUnifiedFindingId === REJECT_CLICK_TRACKING_FINDING || input.concern.originKey === REJECT_CLICK_TRACKING_SIGNAL) {
     const assessment = readRejectClickTrackingAssessment(input.rawEvidence?.rejectClickTrackingAssessment);
-    if (assessment && input.concern.originType === "runtime_artifact") {
+    const presence=readAfterRejectScoringAssessment(input.rawEvidence?.afterRejectScoringAssessment);
+    const observedPresence=presence?.policyVersion===AFTER_REJECT_SCORING_POLICY && presence.deductionPoints>0 &&
+      (!!presence.cookieRefs?.length || presence.requestIds.length>0);
+    if ((assessment || observedPresence) && input.concern.originType === "runtime_artifact") {
       return {
         allowedNarrativeTier: "strong",
         externalSurfacingEligibility: "eligible",

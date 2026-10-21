@@ -49,6 +49,7 @@ export function deriveCanonicalOverallScoreExplanationForReport(input: {
     scoreVersion: input.scorePolicyVersion === "gdpr-eprivacy-posture.v18" ? "overall-posture.v8"
       : input.scorePolicyVersion === "gdpr-eprivacy-posture.v19" ? "overall-posture.v9"
       : input.scorePolicyVersion === "gdpr-eprivacy-posture.v20" ? "overall-posture.v11"
+      : input.scorePolicyVersion === "gdpr-eprivacy-posture.v21" ? "overall-posture.v12"
       : CANONICAL_OVERALL_SCORE_VERSION,
     policyVersion: input.scorePolicyVersion ?? SCORING_POLICY_VERSION, deductions };
 }

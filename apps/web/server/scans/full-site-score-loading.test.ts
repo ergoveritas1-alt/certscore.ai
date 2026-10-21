@@ -56,6 +56,12 @@ test("completed crawls persist permanent page limitations but never persist fail
     const preserved = await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: { sourceHash: historicalKey, score: historical } } }, [home, failed]);
     assert.deepEqual(preserved, historical, "source-bound historical scores keep their original twelve-point amount");
     assert.equal(globals.scoreWrites.length, 1, "historical read does not rewrite or recapture evidence");
+    const previous={...historical,version:"full-site-distinct-findings.v11"};
+    const previousKey=createHash("sha256").update(JSON.stringify([previous.version,"site-priority-review.v19","gdpr-eprivacy-posture.v21",globals.snapshotHash,
+      crawl.configuration_hash,[home,failed].map(page=>[page.id,page.status,undefined])])).digest("hex");
+    assert.deepEqual(await loadFullSiteScore({...crawl,policy_json:{fullSiteScore:{sourceHash:previousKey,score:previous}}},[home,failed]),previous,
+      "the immediate previous version stays source-bound and is not silently repriced");
+    assert.equal(globals.scoreWrites.length,1);
     const gpcPriority = { id: "gpc_response", rank: 1, title: "GPC response", summary: "Historical response", status: "Partial concern", evidence: [], evidenceJson: {}, correctionSteps: [], pages: [] };
     const neutralGpc = await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: { sourceHash: historicalKey, score: { ...historical, priorityReview: [gpcPriority] } } } }, [home, failed]);
     assert.equal(neutralGpc.value, 88, "suppressing a neutral historical GPC result preserves unrelated scoring");

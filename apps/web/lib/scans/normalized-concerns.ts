@@ -1,4 +1,4 @@
-import { afterRejectScoringNarrative, retainedAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
+import { AFTER_REJECT_SCORING_POLICY, afterRejectScoringNarrative, retainedAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { assessConsentProminenceMateriality } from "./consent-prominence-materiality";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { readAccessibilityAudit, readPreferenceAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-evidence";
@@ -4056,6 +4056,18 @@ function buildRejectClickTrackingConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext
 ) {
+  const scoring=retainedAfterRejectScoringAssessment(runtimeArtifacts);
+  if (scoring?.policyVersion===AFTER_REJECT_SCORING_POLICY && scoring.deductionPoints>0 &&
+    (scoring.cookieRefs?.length || scoring.requestIds.length)) {
+    const narrative=afterRejectScoringNarrative(scoring)!;
+    const refs=[`post-refusal-packet:sha256:${scoring.sourcePacketSha256}`,
+      ...scoring.requestIds.map(id=>`request:${id}`),...(scoring.cookieRefs??[]).map(row=>`cookie:${row.name}@${row.hostname??""}`)];
+    return [buildConcernFromSharedInput({categoryId:"enforcement_outcomes_after_user_choice",description:narrative.description,
+      domainContext,evidence:refs,observedValue:`${scoring.cookieRefs?.length??0} non-essential cookie(s); ${scoring.requestIds.length} non-essential service request(s)`,
+      originKey:REJECT_CLICK_TRACKING_SIGNAL,originType:"runtime_artifact",rawEvidence:{afterRejectScoringAssessment:scoring,
+        runtimeEvidenceArtifacts:refs,storagePresenceDoesNotEstablishActiveUse:true},severity:"medium",signalKey:REJECT_CLICK_TRACKING_SIGNAL,
+      signalLabel:narrative.title,signalSource:"runtime_artifact_signal",sourceType:"signal",title:narrative.title})];
+  }
   const assessment = readRejectClickTrackingAssessment(runtimeArtifacts?.rejectClickTrackingAssessment);
   if (!assessment) return [];
   const retained = assessRejectClickTracking(runtimeArtifacts?.postRefusalEvidenceProjection);
@@ -4115,6 +4127,8 @@ function buildPostRefusalObservationConcerns(
     ...persistedStorageRows.map((row) => getStringValue(row.vendor))
   ]);
   const scoringAssessment = retainedAfterRejectScoringAssessment(runtimeArtifacts);
+  const presenceProjected=scoringAssessment?.policyVersion===AFTER_REJECT_SCORING_POLICY && scoringAssessment.deductionPoints>0 &&
+    (!!scoringAssessment.cookieRefs?.length || scoringAssessment.requestIds.length>0);
   const narrative = afterRejectScoringNarrative(scoringAssessment);
   const commonEvidence = {
     afterRejectScoringAssessment: scoringAssessment,
@@ -4140,7 +4154,7 @@ function buildPostRefusalObservationConcerns(
   };
 
   return [
-    ...(activityRows.length > 0
+    ...(activityRows.length > 0 && !presenceProjected
       ? [buildConcernFromSharedInput({
           categoryId: "enforcement_outcomes_after_user_choice",
           description: narrative?.description ??
@@ -4163,7 +4177,7 @@ function buildPostRefusalObservationConcerns(
           title: narrative?.title ?? "Non-essential activity continued after refusal"
         })]
       : []),
-    ...(persistedStorageRows.length > 0
+    ...(persistedStorageRows.length > 0 && !presenceProjected
       ? [buildConcernFromSharedInput({
           categoryId: "enforcement_outcomes_after_user_choice",
           description:

@@ -1,46 +1,35 @@
-import { z } from "zod";
 import { isCanonicalGoogleAnalyticsCollectionUrl } from "@certscore/vendor-resolver";
 import { assessGoogleConsentModeRequest, postRefusalReportProjectionSchema, readBoundMeasurementRequestEvidence } from "@certscore/contracts";
 import { assessRejectClickTracking } from "./reject-click-tracking-policy";
 import { POST_REJECT_SCORING_TIERS } from "./scoring-policy";
+import { rejectEntityPoints, retainedRejectEntityEvidence } from "./reject-presence-entities";
+import { retainedRejectPresence } from "./reject-presence-evidence";
 
-export const AFTER_REJECT_SCORING_POLICY = "after_reject_measurement_tiers.v2" as const;
-export const LEGACY_AFTER_REJECT_SCORING_POLICY = "after_reject_measurement_tiers.v1" as const;
-const schema = z.object({
-  policyVersion: z.enum([AFTER_REJECT_SCORING_POLICY, LEGACY_AFTER_REJECT_SCORING_POLICY]),
-  sourcePacketSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
-  registration: z.enum(["confirmed", "unconfirmed", "unknown"]),
-  tier: z.enum(["high_risk", "measurement", "performance_only", "review"]),
-  deductionPoints: z.union([z.literal(0), z.literal(5), z.literal(15)]),
-  requestIds: z.array(z.string().min(1).max(120)).max(192),
-  reasons: z.array(z.enum(["verified_optional_activity", "verified_contradiction", "storage_denied_measurement",
-    "verified_performance_only", "registration_unconfirmed", "source_proof_incomplete", "purpose_or_identifier_unverified",
-    "storage_coverage_incomplete", "no_eligible_activity", "verified_reject_click"])).min(1).max(12),
-}).strict().superRefine((value, ctx) => {
-  if (value.deductionPoints !== POST_REJECT_SCORING_TIERS[value.tier] ||
-    value.policyVersion === LEGACY_AFTER_REJECT_SCORING_POLICY && value.reasons.includes("verified_reject_click") ||
-    value.tier !== "review" && (!value.sourcePacketSha256 ||
-      value.registration !== "confirmed" && !(value.policyVersion === AFTER_REJECT_SCORING_POLICY && value.registration === "unconfirmed" && value.reasons.includes("verified_reject_click") && value.requestIds.length > 0)) ||
-    value.tier === "high_risk" && !value.reasons.some(reason => ["verified_optional_activity", "verified_contradiction"].includes(reason)) ||
-    value.tier === "measurement" && !value.reasons.includes("storage_denied_measurement") ||
-    value.tier === "performance_only" && !value.reasons.includes("verified_performance_only") ||
-    new Set(value.requestIds).size !== value.requestIds.length) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "After-Reject tier must retain its matching evidence and approved deduction." });
-  }
-});
-export type AfterRejectScoringAssessment = z.infer<typeof schema>;
-export function readAfterRejectScoringAssessment(value: unknown): AfterRejectScoringAssessment | null {
-  const parsed = schema.safeParse(value); return parsed.success ? parsed.data : null;
-}
+export { AFTER_REJECT_SCORING_POLICY, REGISTRATION_INDEPENDENT_AFTER_REJECT_SCORING_POLICY, LEGACY_AFTER_REJECT_SCORING_POLICY,
+  readAfterRejectScoringAssessment, type AfterRejectScoringAssessment } from "./after-reject-scoring-contract";
+import { afterRejectScoringAssessmentSchema as schema, AFTER_REJECT_SCORING_POLICY, REGISTRATION_INDEPENDENT_AFTER_REJECT_SCORING_POLICY, LEGACY_AFTER_REJECT_SCORING_POLICY,
+  readAfterRejectScoringAssessment, type AfterRejectScoringAssessment } from "./after-reject-scoring-contract";
 
 /** WC01 interpretation of the verified original packet projection, prior to persistence. */
 export function assessAfterRejectScoring(value: unknown, policyVersion: AfterRejectScoringAssessment["policyVersion"] = AFTER_REJECT_SCORING_POLICY): AfterRejectScoringAssessment | null {
   const parsed = postRefusalReportProjectionSchema.safeParse(value);
   if (!parsed.success) return null;
   const p = parsed.data;
+  if (policyVersion===AFTER_REJECT_SCORING_POLICY) {
+    const presence=retainedRejectPresence(p), positive=!!presence && (presence.cookies.length>0 || presence.requestIds.length>0);
+    const contradiction=!!presence?.confirmed && p.contradictionObserved;
+    const entityEvidence=presence?retainedRejectEntityEvidence(p,presence):{resolverVersion:"unavailable",entities:[],observations:[]};
+    return schema.parse({policyVersion,sourcePacketSha256:p.packetSha256??null,
+      registration:presence?.confirmed?"confirmed":p.registrationStatus==="unconfirmed"?"unconfirmed":"unknown",
+      tier:positive||contradiction?"high_risk":"review",deductionPoints:rejectEntityPoints(entityEvidence.entities.map(row=>row.entityId),positive||contradiction),entityEvidence,
+      requestIds:presence?.requestIds??[],cookieRefs:presence?.cookies??[],
+      reasons:[...(positive?["verified_optional_activity"]:contradiction?["verified_contradiction"]:[presence?"no_eligible_activity":"source_proof_incomplete"]),
+        ...(presence?.cookies.length?["nonessential_cookies_after_reject"]:[]),...(presence?.requestIds.length?["nonessential_services_after_reject"]:[]),
+        ...(presence&&!presence.confirmed?["verified_reject_click"]:[])]});
+  }
   const confirmed = p.productionProjectable && p.refusalExercised && p.registrationStatus === "confirmed" &&
     p.decisionEvidence?.basis === "verified_state" && p.decisionEvidence.decision === "denied";
-  const click = !confirmed && policyVersion === AFTER_REJECT_SCORING_POLICY && p.interactionDiagnostics?.click.outcome === "completed"
+  const click = !confirmed && policyVersion === REGISTRATION_INDEPENDENT_AFTER_REJECT_SCORING_POLICY && p.interactionDiagnostics?.click.outcome === "completed"
     ? assessRejectClickTracking(p) : null;
   const source = p.packetSha256 ?? null;
   const finish = (tier: AfterRejectScoringAssessment["tier"], reasons: AfterRejectScoringAssessment["reasons"], requestIds: string[] = []) => schema.parse({
@@ -137,6 +126,18 @@ export function retainedAfterRejectScoringAssessment(runtime: Record<string, unk
 
 /** Canonical narrative for an already-admitted observation, never a new finding. */
 export function afterRejectScoringNarrative(assessment: AfterRejectScoringAssessment | null | undefined) {
+  if (assessment?.policyVersion===AFTER_REJECT_SCORING_POLICY && assessment.deductionPoints>0 &&
+    (assessment.cookieRefs?.length || assessment.requestIds.length)) return {
+    title:"Non-essential cookies or services after Reject",
+    description:"Classified non-essential cookies or service requests were observed after the Reject control was clicked.",
+    suggestedFix:"Review the retained cookies and service requests, align them with the visitor’s Reject choice, and retest the path.",
+    whyThisMatters:"The retained evidence describes cookies or services present after Reject. Cookie presence alone does not establish active use, and the click does not establish that refusal registered.",
+  };
+  if (assessment?.policyVersion===AFTER_REJECT_SCORING_POLICY && assessment.tier==="review") return {
+    title:"After Reject observation for review",description:"The retained capture does not establish classified non-essential cookies or services on a completed Reject path.",
+    suggestedFix:"Review the retained action and capture evidence and retest unresolved observations.",
+    whyThisMatters:"Limited or absent evidence does not establish that the visitor’s Reject choice was honored.",
+  };
   if (!assessment || assessment.tier === "high_risk") return null;
   if (assessment.tier === "performance_only") return {
     title: "Performance measurement after Reject",

@@ -1,4 +1,5 @@
 "use client";
+import { projectRejectPresenceDetails, factualCustomerEvidence } from "../../lib/scans/reject-presence-details";
 import React, { type ReactNode } from "react";
 import { EvidenceStatusBadge, type EvidenceBadgeTone } from "./evidence-status-badge";
 import type { SitePriorityFinding } from "../../lib/scans/full-site-priority-review";
@@ -38,7 +39,7 @@ export function StatusBadge({ status, priority }: { status: ShadowEvidenceStatus
 export function JsonEvidence({ value }: { value: Record<string, unknown> }) {
   return (
     <pre className="max-h-64 overflow-auto rounded-md bg-zinc-950 p-3 text-[0.68rem] leading-5 text-zinc-100">
-      {JSON.stringify(value, null, 2)}
+      {JSON.stringify(factualCustomerEvidence(value), null, 2)}
     </pre>
   );
 }
@@ -71,15 +72,34 @@ export function EvidenceTools({
   showCorrections?: boolean;
   recommendedFixes?: ReactNode;
 }) {
+  const observations = projectRejectPresenceDetails(evidenceJson);
+  let factualJson = canonicalEvidenceJson;
+  if (canonicalEvidenceJson) {
+    try { factualJson = JSON.stringify(factualCustomerEvidence(JSON.parse(canonicalEvidenceJson))); } catch { /* Preserve malformed historical diagnostics. */ }
+  }
   const steps = correctionSteps.filter(step => step.trim().length > 0);
   const hasCorrections = showCorrections && (canonicalEvidenceJson
     ? hasRegulatoryChecklistCorrectionSteps(canonicalEvidenceJson) : steps.length > 0);
   return (
     <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-3">
+      {observations.length ? <div className="w-full min-w-0 space-y-2" data-reject-entity-observations>
+        <p className="text-xs text-zinc-600">Non-essential entities and observations after the Reject click. Cookie times describe snapshot presence; request times describe request start.</p>
+        <div className="max-h-96 overflow-auto"><table className="w-full text-left text-xs">
+          <caption className="sr-only">Non-essential observations after Reject</caption>
+          <thead><tr>{["Entity / service", "Evidence", "Purpose", "After Reject click"].map(label => <th key={label} scope="col" className="p-2 align-top">{label}</th>)}</tr></thead>
+          <tbody>{observations.map((row, index) => <tr key={`${row.evidenceRef}:${index}`} className="border-t border-zinc-200">
+            <td className="p-2 align-top">{row.entity ?? "Entity not attributed"}{row.vendor ? <span className="block text-zinc-500">{row.vendor}</span> : null}</td>
+            <td className="max-w-sm break-all p-2 align-top">{row.kind === "cookie_snapshot" ? "Cookie: " : "Request: "}{row.name}{row.hostname ? <span className="block text-zinc-500">{row.hostname}</span> : null}<span className="block text-zinc-500">{row.evidenceRef}</span></td>
+            <td className="p-2 align-top">{row.purpose.replace(/_/g, " ")}</td>
+            <td className="whitespace-nowrap p-2 align-top">{row.kind === "cookie_snapshot" ? "Snapshot" : "Request start"} +{row.msAfterClick} ms</td>
+          </tr>)}</tbody>
+        </table></div>
+        <p className="text-xs text-zinc-500">Cookie presence does not establish a new write or active use. Clicking Reject does not by itself verify refusal registration.</p>
+      </div> : null}
       {recommendedFixes ? <EvidenceToolDisclosure label="Recommended fixes">{recommendedFixes}</EvidenceToolDisclosure> : null}
       <EvidenceToolDisclosure label="JSON evidence">
         {canonicalEvidenceJson ? (
-          <RegulatoryChecklistEvidenceDetails evidenceRefs={evidenceRefs} jsonPayload={canonicalEvidenceJson} />
+          <RegulatoryChecklistEvidenceDetails evidenceRefs={evidenceRefs} jsonPayload={factualJson!} />
         ) : (
           <JsonEvidence value={evidenceJson} />
         )}
@@ -87,7 +107,7 @@ export function EvidenceTools({
       {hasCorrections && (canonicalEvidenceJson ? (
         <EvidenceToolDisclosure label="Correction steps">
           <div className="[&>details]:!mt-0 [&>details]:!border-0 [&>details]:!bg-transparent [&>details>summary]:hidden">
-            <RegulatoryChecklistCorrectionSteps defaultOpen jsonPayload={canonicalEvidenceJson} />
+            <RegulatoryChecklistCorrectionSteps defaultOpen jsonPayload={factualJson!} />
           </div>
         </EvidenceToolDisclosure>
       ) : (

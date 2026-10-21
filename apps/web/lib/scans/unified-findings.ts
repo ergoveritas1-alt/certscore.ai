@@ -1,4 +1,4 @@
-import { afterRejectScoringNarrative, readAfterRejectScoringAssessment, type AfterRejectScoringAssessment } from "./after-reject-scoring-policy";
+import { AFTER_REJECT_SCORING_POLICY, afterRejectScoringNarrative, readAfterRejectScoringAssessment, type AfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { FORM_DESTINATION_FINDING_ID, formDestinationProjectionSchema, type FormDestinationProjection } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, cmsSecurityProjectionSchema, type CmsSecurityProjection } from "@certscore/contracts";
 import { CALIFORNIA_PRIVACY_REVIEW_IDS, readCaliforniaPrivacyReviewFromConsent, type CaliforniaPrivacyReview } from "@certscore/contracts";
@@ -6203,7 +6203,10 @@ function buildPresentationCopy(
     };
   }
   if (["post_refusal_non_essential_activity", "post_reject_click_tracking"].includes(packet.unifiedFindingId)) {
-    const narrative = afterRejectScoringNarrative(readAfterRejectScoringAssessment(packet.concernContext?.afterRejectScoringAssessment));
+    const assessment=readAfterRejectScoringAssessment(packet.concernContext?.afterRejectScoringAssessment);
+    const narrative = afterRejectScoringNarrative(assessment);
+    if (narrative && assessment?.policyVersion===AFTER_REJECT_SCORING_POLICY)
+      return {...base,findingName:narrative.title,suggestedFix:narrative.suggestedFix,whyThisMatters:narrative.whyThisMatters};
     const plan = webmasterRemediation("post-refusal-review");
     if (narrative) return { ...base, suggestedFix: plan ? webmasterRemediationText(plan) : narrative.suggestedFix, whyThisMatters: narrative.whyThisMatters,
       ...(packet.unifiedFindingId === "post_refusal_non_essential_activity" ? { findingName: narrative.title } : {}) };
@@ -6895,9 +6898,10 @@ function createInitialUnifiedFindingPacket(
   definition: NonNullable<ReturnType<typeof getReportUnifiedFinding>>,
   candidate: ConcernBackedUnifiedFindingCandidate
 ): UnifiedFindingPacket {
+  const scoring=readAfterRejectScoringAssessment(candidate.normalizedConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment);
   return {
     unifiedFindingId: definition.id,
-    title: definition.id === "post_refusal_non_essential_activity"
+    title: definition.id === "post_refusal_non_essential_activity" || definition.id === "post_reject_click_tracking" && scoring?.policyVersion===AFTER_REJECT_SCORING_POLICY
       ? afterRejectScoringNarrative(readAfterRejectScoringAssessment(candidate.normalizedConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment))?.title ?? definition.label
       : definition.label,
     severity: candidate.severity,

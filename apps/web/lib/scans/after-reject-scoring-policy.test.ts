@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { afterRejectProjection, afterRejectClickProjection } from "./test-fixtures/after-reject-scoring";
-import { assessAfterRejectScoring, retainedAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
-import { buildPostRefusalRuntimeProjection } from "./post-refusal-runtime-projection";
+import { assessAfterRejectScoring as assessVersionedAfterRejectScoring, retainedAfterRejectScoringAssessment, REGISTRATION_INDEPENDENT_AFTER_REJECT_SCORING_POLICY } from "./after-reject-scoring-policy";
+import { buildPostRefusalRuntimeProjection as buildCurrentPostRefusalRuntimeProjection } from "./post-refusal-runtime-projection";
 import { buildNormalizedConcerns } from "./normalized-concerns";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
@@ -10,6 +10,11 @@ import { deriveGdprEprivacyDeductionBreakdown, deriveRegulatoryCoverageScore } f
 import { createHash } from "node:crypto";
 import { inspectMeasurementRequest } from "@certscore/vendor-resolver";
 import { postRefusalReportProjectionSchema, type MeasurementStoredIdentifier } from "@certscore/contracts";
+
+// Retained historical tier contracts remain v1/v2; current presence policy has its own suite.
+const assessAfterRejectScoring=(value:unknown, version:Parameters<typeof assessVersionedAfterRejectScoring>[1]=REGISTRATION_INDEPENDENT_AFTER_REJECT_SCORING_POLICY)=>assessVersionedAfterRejectScoring(value,version);
+const buildPostRefusalRuntimeProjection=(value:Parameters<typeof buildCurrentPostRefusalRuntimeProjection>[0])=>({
+  ...buildCurrentPostRefusalRuntimeProjection(value),afterRejectScoringAssessment:assessAfterRejectScoring(value)});
 
 function project(projection: ReturnType<typeof afterRejectProjection>) {
   const runtimeArtifacts = buildPostRefusalRuntimeProjection(projection);

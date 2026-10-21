@@ -342,7 +342,7 @@ test("legacy post-refusal evidence retains observations but lacks the new tier p
   assert.equal(score.score, 100);
 });
 
-test("Instana retains bounded activity as review when new tier proof is missing", () => {
+test("Instana service presence qualifies without measurement proof on a completed Reject path", () => {
   const url = "https://eum-blue-saas.instana.io/";
   const vendor = resolveCanonicalVendor({ type: "request", url }).observation;
   assert.equal(vendor?.purpose, "performance_monitoring");
@@ -371,8 +371,8 @@ test("Instana retains bounded activity as review when new tier proof is missing"
   }));
   assert.equal(unconfirmed.reportProjection.registrationStatus, "unconfirmed");
   assert.deepEqual(unconfirmed.reportProjection.postRefusalActivity, []);
-  assert.deepEqual(unconfirmed.normalizedConcerns, []);
-  assert.deepEqual(unconfirmed.candidates, []);
+  assert.ok(unconfirmed.normalizedConcerns.some(row=>row.originKey==="privacy.post_reject_click_tracking"));
+  assert.equal(deriveRegulatoryCoverageScore({framework:"gdpr_eprivacy",rows:[unconfirmed.postRejectRow]}).score,85);
 });
 
 test("legacy TCF contradiction remains visible without acquiring new tier proof", () => {
@@ -647,7 +647,7 @@ test("late refusal confirmation preserves the original Reject-click tracking fin
   assert.equal(result.reportProjection.postRefusalActivity.length, 0);
 });
 
-test("verified generic Reject click retains a score-neutral review under the new tiers", () => {
+test("verified generic Reject click receives the canonical non-essential service presence effect", () => {
   const result = projectCanonical(unverifiedRejectClickPacket());
   assert.equal(result.reportProjection.registrationStatus, "unconfirmed");
   assert.equal(result.reportProjection.refusalExercised, false);
@@ -657,25 +657,25 @@ test("verified generic Reject click retains a score-neutral review under the new
   assert.equal(result.normalizedConcerns[0]?.suggestedUnifiedFindingId, "post_reject_click_tracking");
   assert.equal(result.candidates.length, 1);
   assert.equal(result.postRejectRow.assessmentStatus, "review_signal");
-  assert.equal(result.postRejectRow.label, "Tracking after Reject click");
-  assert.match(result.postRejectRow.note, /tracking request\(s\) began after the Reject control was clicked/);
-  assert.match(result.postRejectRow.note, /Refusal registration was not confirmed/);
+  assert.equal(result.postRejectRow.label, "Non-essential cookies or services after Reject");
+  assert.match(result.postRejectRow.note, /non-essential service request\(s\) were observed after the Reject control was clicked/);
+  assert.match(result.postRejectRow.note, /does not.*verify refusal registration/);
   assert.doesNotMatch(result.postRejectRow.note, /What tracking activity|confirmed Reject/);
-  assert.match(JSON.stringify(result.postRejectRow), /tracking request\(s\) began after the Reject control was clicked/);
+  assert.match(JSON.stringify(result.postRejectRow), /non-essential service request\(s\) were observed after the Reject control was clicked/);
   assert.match(JSON.stringify(result.postRejectRow), /"refusalRegistrationStatus":"unconfirmed"/);
   const score = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [result.postRejectRow] });
-  assert.equal(score.score, 100);
+  assert.equal(score.score, 85);
   assert.equal(score.scoreVersion, SCORING_POLICY_VERSION);
   const retained = result.postRejectRow.criticalEvidence?.retainedEvidence as Record<string, unknown>;
   assert.equal(retained.rejectInteractionConfirmed, false);
   assert.ok("rejectClickTrackingAssessment" in result.runtimeArtifacts);
-  assert.deepEqual(retained.rejectClickTrackingAssessment, result.runtimeArtifacts.rejectClickTrackingAssessment);
+  assert.equal((retained.afterRejectScoringAssessment as {deductionPoints:number}).deductionPoints,15);
   assert.equal(result.runtimeArtifacts.rejectClickTrackingAssessment?.sourcePacketSha256, "b".repeat(64));
   const displays = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: result.runtimeArtifacts,
     reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
   const display = displays.find((row) => row.unifiedFindingId === "post_reject_click_tracking");
   assert.equal(display?.presentationDecision.status, "surface", JSON.stringify(display?.presentationDecision));
-  assert.match(JSON.stringify(display), /Tracking after Reject click/);
+  assert.match(JSON.stringify(display), /Non-essential cookies or services after Reject/);
   const record = { scan: { id: "scan-1", status: "completed" },
     snapshot: { score_version: CANONICAL_OVERALL_SCORE_VERSION },
     runtimeArtifacts: { ...result.runtimeArtifacts, consentControlAssessment: observedControlAssessment },
@@ -683,15 +683,15 @@ test("verified generic Reject click retains a score-neutral review under the new
       derivedContext: {}, collectionSurfaceAssessment: null, legacyScoreAssessmentInput: { scanId: "scan-1" },
       normalizedConcerns: result.normalizedConcerns, globalUnifiedFindings: displays, ownerUnifiedFindings: displays, topFindingIds: [] },
   } as unknown as ScanDetailResponse;
-  const explanation = projectScanScoreExplanation(record, 100)!;
-  assert.equal(explanation.totalPolicyDeductionPoints, 0);
-  assert.deepEqual(explanation.deductions, []);
-  assert.equal(deriveGdprEprivacyDeductionBreakdown([result.postRejectRow], "gdpr-eprivacy-posture.v19")[0]?.deductionPoints, 15,
-    "the historical unconfirmed-click policy remains available only for historical explanations");
+  const explanation = projectScanScoreExplanation(record, 85)!;
+  assert.equal(explanation.totalPolicyDeductionPoints, 15);
+  assert.equal(explanation.deductions.length,1);
+  assert.equal(deriveGdprEprivacyDeductionBreakdown([result.postRejectRow], "gdpr-eprivacy-posture.v21").length,0,
+    "a new presence assessment cannot be silently applied to a historical score version");
 
   const existing = { assessmentStatus: "gap_observed", evidenceState: "observed", id: "transport_security_http_redirect",
     criticalEvidence: { retainedEvidence: { httpProbeOutcome: "plaintext_response_served", httpProbeStatus: 200 } }, status: "Gap observed" };
-  assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [existing, result.postRejectRow] }).score, 98);
+  assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [existing, result.postRejectRow] }).score, 83);
   const confirmed = { ...result.postRejectRow, assessmentStatus: "gap_observed", status: "Gap observed",
     criticalEvidence: { retainedEvidence: { afterRejectScoringAssessment: highRiskAfterRejectAssessment(), rejectInteractionConfirmed: true, scoreEffect: "canonical_post_refusal_policy" } } };
   assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [confirmed, result.postRejectRow] }).score, 85);
@@ -882,7 +882,7 @@ test("Reject click review retains its bounded capture through policy, historical
   assert.equal(card.execution?.clickCompleted, true);
   assert.equal(card.registrationConfirmed, false);
   assert.equal(card.state, "review_signal");
-  assert.match(card.note!, /tracking request\(s\) began after the Reject control was clicked/);
+  assert.match(card.note!, /non-essential service request\(s\) were observed after the Reject control was clicked/);
   assert.match(card.note!, /after-click observation/);
   assert.equal(deriveRegulatoryCoverageScore({framework:"gdpr_eprivacy",rows:[repaired]}).score,
     deriveRegulatoryCoverageScore({framework:"gdpr_eprivacy",rows:[historicalRow]}).score);

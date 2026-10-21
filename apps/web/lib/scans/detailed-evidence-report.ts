@@ -1,3 +1,4 @@
+import { projectRejectPresenceDetails } from "./reject-presence-details";
 import {
   detailedEvidenceReportSchema, publicCmpAuditSchema, publicCmsSecuritySchema,
   type DetailedEvidenceReport, type DetailedEvidenceRow, type DetailedEvidenceSection,
@@ -64,8 +65,10 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
   function rowDisplay(row: ShadowEvidenceRow, field: string, sharedEvidence?: SharedEvidenceLink, policy = false): DetailedEvidenceRow {
     const summary = policy ? policyFindingSummary({ ...row, hasSupportingEvidence: Boolean(row.policyEvidence?.sections.length) }) : row.summary;
     const copy = detailedEvidenceCopy({ ...row, id: evidenceRowAnchor(row.id), summary });
+    const observations=projectRejectPresenceDetails(row.evidenceJson);
     return {
       id: row.id, title: copy.title, summary: copy.summary ?? null, status: row.status, displayStatus: row.status,
+      ...(observations.length?{afterRejectObservations:observations}:{}),
       correctionSteps: row.canonicalEvidenceJson ? getCorrectionGuidance(row.canonicalEvidenceJson).steps : row.correctionSteps.filter(step => step.trim().length > 0), evidenceRefs: row.evidenceRefs ?? [], evidenceTarget: evidenceRowAnchor(row.id),
       source: { field, rowId: row.id }, ...(sharedEvidence ? { sharedEvidence } : {}),
     };

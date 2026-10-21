@@ -381,8 +381,9 @@ export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow, policyVe
     return 0;
   }
   if (row.id === "post_reject_tracking_reduction") {
-    if (policyVersion === SCORING_POLICY_VERSION || policyVersion === "gdpr-eprivacy-posture.v20") {
+    if (policyVersion === SCORING_POLICY_VERSION || policyVersion === "gdpr-eprivacy-posture.v21" || policyVersion === "gdpr-eprivacy-posture.v20") {
       const assessment = readAfterRejectScoringAssessment(retained.afterRejectScoringAssessment);
+      if (policyVersion!==SCORING_POLICY_VERSION && assessment?.policyVersion==="after_reject_nonessential_presence.v1") return 0;
       if (policyVersion === "gdpr-eprivacy-posture.v20" && assessment?.registration !== "confirmed") return 0;
       return ["gap_observed", "review_signal"].includes(row.assessmentStatus) ? assessment?.deductionPoints ?? 0 : 0;
     }
@@ -465,13 +466,13 @@ export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow
       policyDeductionPoints: deduction,
       decisionVerification: row.id !== "post_reject_tracking_reduction" ? "not_applicable" as const
         : retained.rejectInteractionConfirmed === true || retained.refusalExercised === true ? "confirmed" as const
-        : readRejectClickTrackingAssessment(retained.rejectClickTrackingAssessment) ? "unconfirmed" as const : "unknown" as const,
+        : readAfterRejectScoringAssessment(retained.afterRejectScoringAssessment)?.registration === "unconfirmed" || readRejectClickTrackingAssessment(retained.rejectClickTrackingAssessment) ? "unconfirmed" as const : "unknown" as const,
     });
     familyRules.set(policy.family, rules);
     familyDeductions.set(
       policy.family,
       Math.min(
-        GDPR_EPRIVACY_FAMILY_DEDUCTION_CAPS[policy.family]!,
+        policy.family === "post_refusal_enforcement" && policyVersion !== SCORING_POLICY_VERSION ? 15 : GDPR_EPRIVACY_FAMILY_DEDUCTION_CAPS[policy.family]!,
         policy.family === "post_refusal_enforcement"
           ? Math.max(familyDeductions.get(policy.family) ?? 0, deduction)
           : (familyDeductions.get(policy.family) ?? 0) + deduction

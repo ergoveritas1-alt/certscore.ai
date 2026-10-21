@@ -5,9 +5,9 @@ The owner-approved September 6, 2026 scoring table is defined in
 this registry directly. Change the registry rather than copying policy numbers
 into report components or documentation.
 
-Local versions: `gdpr-eprivacy-posture.v21`, `overall-posture.v12`, and
-`full-site-distinct-findings.v11`. These changes have not been deployed. The California GPC evidence policy remains v1;
-its existing eligible 15-point effect is unchanged.
+Local versions: `gdpr-eprivacy-posture.v22`, `overall-posture.v13`, and
+`full-site-distinct-findings.v12`. These changes have not been deployed.
+The separately approved California recipient scoring policy is unchanged.
 
 The score starts at 100, subtracts eligible deductions after shared family caps,
 and stops at 0. Insufficient evidence can withhold a score; it does not imply a
@@ -35,15 +35,17 @@ and fingerprinting use 6, 4, and 1 for each additional identity. Sensitive runti
 cap. Replay identities use canonical vendor/product names; fingerprinting uses
 hosts. Storage retains exact storage identity; tracking uses canonical vendors.
 
-Decline/Reject deducts 12, within the 22-point consent-control cap. Eligible
-post-Reject activity uses the owner-approved local 15/5/0 tiers. Verified optional
-advertising, identifier-based tracking, replay, writes or a consent contradiction
-receive 15; qualified storage-denied analytics measurement receives 5; verified
-performance-only measurement and insufficient-evidence review receive 0. Only
-the strongest supported effect applies within the existing 15-point family cap.
-The new version requires a source-bound typed assessment; raw status flags cannot
-create a deduction. A completed authorized Reject click with eligible directly observed post-click requests can qualify without semantic refusal verification; registration remains unconfirmed. The original packet, complete bounded capture, zero drops, post-click ancestry and purpose-specific proof remain required. Historical v18/v19 click-tracking weights and v20 registration-gated assessments remain unchanged.
-See [after-Reject evidence and scoring](certscore-v2/after-reject-measurement-tiers-policy.md). Legacy privacy-checklist accessibility, choice-quality, withdrawal and
+Decline/Reject deducts 12, within the 22-point consent-control cap. A completed,
+authorized Reject path with classified non-essential cookie/service presence uses
+15/20/23/25/27/28/29/30 points for 1–8+ distinct canonical entities, capped at 30.
+Count each entity once across cookies and services. Unknown ownership supports
+the initial 15 but no extra increments. Refusal confirmation and identifier
+matching are not prerequisites; retained packet, control/document binding,
+post-click timing and bounded capture proof remain required. See
+[canonical Reject presence](certscore-v2/reject-nonessential-presence-policy.md).
+Historical v20/v21 assessments retain their original 15/5/0 tiers and cap of 15;
+v18/v19 retain their original interpretation.
+ Legacy privacy-checklist accessibility, choice-quality, withdrawal and
 cross-border rows have no direct deduction;
 the underlying findings/checklist evidence remains available.
 
@@ -232,3 +234,14 @@ Manual review evidence is retained separately, without injecting it into scanner
 findings or adding a second semantic-category charge. No full scanner reruns
 were required. Central contact export/persistence costs are estimated below
 $0.05 in one-off AWS usage; recurring increase is $0/month.
+
+## October 21, 2026 canonical Reject presence rule
+
+New CertScore.ai materializations use 15/20/23/25/27/28/29/30 points for 1–8+ distinct canonical non-essential entities, capped at 30, when a completed,
+authorized Reject path retains classified non-essential cookies and/or services.
+Cookie persistence and service requests qualify without an identifier match or
+semantic refusal confirmation. Use `after_reject_nonessential_presence.v1`,
+GDPR/ePrivacy v22, overall v13 and full-site v12 through the canonical persisted
+assessment, normalized concern, concern-policy and unified checklist flow.
+Historical scores retain their original policy. See
+[the canonical policy](certscore-v2/reject-nonessential-presence-policy.md).

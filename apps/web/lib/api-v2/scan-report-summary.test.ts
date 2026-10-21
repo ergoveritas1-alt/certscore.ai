@@ -1,3 +1,4 @@
+import { assessAfterRejectScoring, REGISTRATION_INDEPENDENT_AFTER_REJECT_SCORING_POLICY } from "../scans/after-reject-scoring-policy";
 import { buildPostRefusalRuntimeProjection } from "../scans/post-refusal-runtime-projection";
 import { buildNormalizedConcerns } from "../scans/normalized-concerns";
 import { afterRejectProjection, afterRejectClickProjection, highRiskAfterRejectAssessment } from "../scans/test-fixtures/after-reject-scoring";
@@ -358,12 +359,14 @@ test("historical v9 explanation keeps the prior fifteen-point Reject policy", ()
 });
 
 
-test("new measurement and performance tiers agree across report, API, status and exported evidence", () => {
+test("historical measurement and performance tiers agree across report, API, status and exported evidence", () => {
   for (const [profile, score, registration] of [["measurement", 95, "confirmed"], ["performance", 100, "confirmed"],
     ["advertising", 85, "unconfirmed"], ["measurement", 95, "unconfirmed"], ["performance", 100, "unconfirmed"]] as const) {
     const scan = fixture();
     const projection = registration === "confirmed" ? afterRejectProjection(profile) : afterRejectClickProjection(profile);
-    const runtimeArtifacts = buildPostRefusalRuntimeProjection(projection);
+    const runtimeArtifacts = {...buildPostRefusalRuntimeProjection(projection),
+      afterRejectScoringAssessment: assessAfterRejectScoring(projection, REGISTRATION_INDEPENDENT_AFTER_REJECT_SCORING_POLICY)};
+    scan.snapshot!.score_version="overall-posture.v12";
     scan.runtimeArtifacts = { ...runtimeArtifacts, consentControlAssessment: observedControlAssessment };
     const normalizedConcerns = buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] });
     const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ runtimeArtifacts, normalizedConcerns, scanCompleted: true, coverageLimited: false });
@@ -405,4 +408,30 @@ test("new measurement and performance tiers agree across report, API, status and
     assert.doesNotMatch([finding.presentation.findingName, finding.presentation.whyThisMatters, finding.presentation.suggestedFix].join(" "), /deduction|point(?:s)? deducted/i);
     assert.doesNotMatch(finding?.presentation.suggestedFix ?? "", /Update the reject path so confirmed refusal suppresses/);
   }
+});
+
+
+test("current Reject presence yields the same score through persisted findings, report, API, status and export",()=>{
+ for(const mode of ["cookie_only","opaque_service"] as const){
+  const scan=fixture(),projection=afterRejectClickProjection("measurement");
+  if(mode==="cookie_only"){
+   projection.scoringEvidence!.requests=[];projection.afterActionRequests=[];projection.afterActionCapture!.requestIds=[];projection.afterActionCapture!.requestAncestry=[];
+   const cookie={storageType:"cookie" as const,name:"_ga",hostname:"example.test",valueHash:"a".repeat(64),purpose:"analytics" as const,nonEssential:true};
+   projection.scoringEvidence!.preActionStorage=[cookie];projection.scoringEvidence!.postActionStorage=[cookie];projection.afterActionStorage=[cookie];
+  }else{projection.scoringEvidence!.requests[0]!.measurementEvidence=undefined;projection.afterActionRequests![0]!.measurementEvidence=undefined;}
+  const runtimeArtifacts={...buildPostRefusalRuntimeProjection(projection),consentControlAssessment:observedControlAssessment};
+  scan.runtimeArtifacts=runtimeArtifacts;
+  const normalizedConcerns=buildNormalizedConcerns({runtimeArtifacts,reviewFindingCandidates:[],validationFindings:[]});
+  const findings=buildUnifiedFindingDisplayPackets({runtimeArtifacts,reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+  const outcomes=deriveGdprEprivacyCoveragePolicyOutcomes({runtimeArtifacts,normalizedConcerns,scanCompleted:true,coverageLimited:false});
+  const canonical=getPersistedCanonicalReportProjection(scan)!;
+  canonical.checklistRows=deriveGdprEprivacyCoverageChecklist({coverageOutcomes:outcomes,projectedFindings:[],unifiedFindings:findings,scanCompleted:true,coverageLimited:false}).filter(r=>r.id==="post_reject_tracking_reduction");
+  canonical.normalizedConcerns=normalizedConcerns;canonical.globalUnifiedFindings=findings;canonical.ownerUnifiedFindings=findings;
+  Object.assign(scan,{canonicalReportProjection:canonical});scan.snapshot!.certscore_overall=85;
+  const api=buildApiV2ScanResource(scan),status=buildApiV2ScanStatus(scan,{canonicalScan:api}),report=buildTimelineReportModel(scan);
+  assert.equal(api.score,85);assert.equal(status.score,85);assert.equal(report.score.value,85);
+  assert.equal(api.scoreExplanation?.policyVersion,"gdpr-eprivacy-posture.v22");assert.equal(api.scoreExplanation?.totalPolicyDeductionPoints,15);
+  assert.ok(findings.some(f=>f.presentation.findingName==="Non-essential cookies or services after Reject"));
+  assert.doesNotMatch(canonical.checklistRows.map(r=>[r.label,r.explanation,r.note,r.limitation].join(" ")).join(" "),/deduction|points deducted|identifier.*required/i);
+ }
 });

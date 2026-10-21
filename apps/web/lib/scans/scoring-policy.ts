@@ -1,8 +1,13 @@
 
 /** Owner-approved September 6/17 and October 10/11, 2026. Shared by scoring and review UI. */
-export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v21";
-export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v11";
-export type GdprEprivacyScoringPolicyVersion = typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v20" | "gdpr-eprivacy-posture.v19" | "gdpr-eprivacy-posture.v18";
+export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v22";
+export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v12";
+export type GdprEprivacyScoringPolicyVersion = typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v21" | "gdpr-eprivacy-posture.v20" | "gdpr-eprivacy-posture.v19" | "gdpr-eprivacy-posture.v18";
+export const POST_REJECT_ENTITY_TOTALS = [0, 15, 20, 23, 25, 27, 28, 29, 30] as const;
+/** Initial effect includes the first entity; unknown ownership cannot add increments. */
+export function postRejectEntityPoints(entityIds: readonly string[], supported: boolean) {
+  return POST_REJECT_ENTITY_TOTALS[Math.min(8, Math.max(new Set(entityIds).size, supported ? 1 : 0))]!;
+}
 export const POST_REJECT_SCORING_TIERS = { high_risk: 15, measurement: 5, performance_only: 0, review: 0 } as const;
 export const SCORE_FLOOR = 0;
 export const SCORE_BASE = 100;
@@ -10,7 +15,7 @@ export const SCORING_FAMILIES = {
   pre_consent_storage: { label: "Storage", cap: 40 },
   pre_consent_tracking: { label: "Tracking", cap: 40 },
   consent_controls: { label: "Consent controls", cap: 22 },
-  post_refusal_enforcement: { label: "Post-refusal", cap: 15 },
+  post_refusal_enforcement: { label: "Post-refusal", cap: POST_REJECT_ENTITY_TOTALS[8] },
   sensitive_runtime: { label: "Sensitive runtime", cap: 25 },
   tracking_technology: { label: "Fingerprinting", cap: 25 },
   embedded_third_party: { label: "Embeds", cap: 20 },
@@ -24,6 +29,7 @@ export type ScoringRule = {
   id: string; anchor: string; label: string; family: keyof typeof SCORING_FAMILIES;
   siteWide: boolean; points: number;
   tiers?: typeof POST_REJECT_SCORING_TIERS;
+  entityTotals?: readonly number[];
   identity?: { first: number; second: number; subsequentEach: number; unit: string };
 };
 export const SCORING_RULES: readonly ScoringRule[] = [
@@ -31,7 +37,7 @@ export const SCORING_RULES: readonly ScoringRule[] = [
   {"id": "pre_consent_cookies_storage", "anchor": "storage", "label": "Pre-consent cookies / storage", "family": "pre_consent_storage", "siteWide": true, "points": 8, "identity": {"first": 8, "second": 4, "subsequentEach": 2, "unit": "identity"}},
   {"id": "pre_consent_third_party_tracking", "anchor": "tracking", "label": "Pre-consent tracking", "family": "pre_consent_tracking", "siteWide": true, "points": 8, "identity": {"first": 8, "second": 4, "subsequentEach": 2, "unit": "vendor"}},
   {"id": "reject_all_path_availability", "anchor": "decline", "label": "Decline / Reject path", "family": "consent_controls", "siteWide": false, "points": 12},
-  {"id": "post_reject_tracking_reduction", "anchor": "post-reject", "label": "Post-Reject activity", "family": "post_refusal_enforcement", "siteWide": false, "points": 15, tiers: POST_REJECT_SCORING_TIERS},
+  {"id": "post_reject_tracking_reduction", "anchor": "post-reject", "label": "Non-essential cookies or services after Reject", "family": "post_refusal_enforcement", "siteWide": false, "points": POST_REJECT_SCORING_TIERS.high_risk, entityTotals: POST_REJECT_ENTITY_TOTALS.slice(1)},
   {"id": "session_replay_fingerprinting_review", "anchor": "replay", "label": "Session replay", "family": "sensitive_runtime", "siteWide": true, "points": 6, "identity": {"first": 6, "second": 4, "subsequentEach": 1, "unit": "identity"}},
   {"id": "sensitive_surfaces_third_party_tracking", "anchor": "sensitive", "label": "Sensitive surfaces with third-party tracking", "family": "sensitive_runtime", "siteWide": true, "points": 12},
   {"id": "device_identification_fingerprinting_signal_observed", "anchor": "fingerprinting", "label": "Fingerprinting", "family": "tracking_technology", "siteWide": true, "points": 6, "identity": {"first": 6, "second": 4, "subsequentEach": 1, "unit": "identity"}},
@@ -54,6 +60,7 @@ export const SCORING_RULES: readonly ScoringRule[] = [
  ];
 export const SCORING_RULE_BY_ID = new Map(SCORING_RULES.map(rule => [rule.id, rule]));
 export function scoringRuleDescription(rule: ScoringRule) {
+  if (rule.entityTotals) return `Distinct non-essential entities: ${rule.entityTotals.join(" / ")} (1–8+, capped at 30)`;
   if (rule.tiers) return `Optional tracking: ${rule.tiers.high_risk} · storage-denied measurement: ${rule.tiers.measurement} · verified performance or unresolved review: ${rule.tiers.performance_only}`;
   const identity = rule.identity;
   return identity ? `First ${identity.unit}: ${identity.first} · second: ${identity.second} · each additional: ${identity.subsequentEach}` : String(rule.points);

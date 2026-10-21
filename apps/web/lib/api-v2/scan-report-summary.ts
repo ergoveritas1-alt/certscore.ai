@@ -39,14 +39,14 @@ export function projectScanFormsSummary(scan: ScanDetailResponse) {
 export function projectScanScoreExplanation(scan: ScanDetailResponse, score: number | null) {
   const persistedScoreVersion = scan.snapshot?.score_version;
   if (score === null || scan.scan.status !== "completed" || projectScanReportNoGo(scan) ||
-    typeof persistedScoreVersion !== "string" || ![CANONICAL_OVERALL_SCORE_VERSION, "overall-posture.v11", "overall-posture.v10", "overall-posture.v9", "overall-posture.v8"].includes(persistedScoreVersion)) return null;
+    typeof persistedScoreVersion !== "string" || ![CANONICAL_OVERALL_SCORE_VERSION, "overall-posture.v12", "overall-posture.v11", "overall-posture.v10", "overall-posture.v9", "overall-posture.v8"].includes(persistedScoreVersion)) return null;
   const canonical = getPersistedCanonicalReportProjection(scan);
   if (!canonical) return null;
   const explanation = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: scan,
     checklistRows: canonical.checklistRows, unifiedFindings: canonical.globalUnifiedFindings,
     ...(persistedScoreVersion === "overall-posture.v8" ? { scorePolicyVersion: "gdpr-eprivacy-posture.v18" as const }
       : persistedScoreVersion === "overall-posture.v9" ? { scorePolicyVersion: "gdpr-eprivacy-posture.v19" as const }
-      : ["overall-posture.v10", "overall-posture.v11"].includes(persistedScoreVersion) ? { scorePolicyVersion: "gdpr-eprivacy-posture.v20" as const } : {}) });
+      : ["overall-posture.v10", "overall-posture.v11"].includes(persistedScoreVersion) ? { scorePolicyVersion: "gdpr-eprivacy-posture.v20" as const } : persistedScoreVersion === "overall-posture.v12" ? { scorePolicyVersion: "gdpr-eprivacy-posture.v21" as const } : {}) });
   // Never reinterpret a historical score with a different current policy.
   if (!explanation || explanation.score !== score) return null;
   const checklistFindings = buildChecklistConcernTopFindings(canonical.checklistRows);
