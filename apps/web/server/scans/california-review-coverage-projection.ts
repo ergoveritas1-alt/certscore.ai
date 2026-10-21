@@ -27,9 +27,14 @@ export function projectCaliforniaReviewCoverage(bundle: CanonicalEvidenceBundle,
     return surface?.surfaceType!=="terms" && !(surface && excludedSupplement(surface)) && !(surface?.discoveryMethod==="guessed_common_path" &&
       surface.linkObservationState!=="observed" && surface.documentFetchState==="failed" && [404,410].includes(surface.httpStatus??0));
   });
-  const documents = scopedDocuments.filter(document => document.artifactVerificationStatus === "verified" &&
+  const documents = scopedDocuments.filter(document => {
+    const surface = bundle.policySurfaceObservations.find(row => row.observationId === document.observationId);
+    // Complete extraction of a navigation/error shell cannot establish policy absence.
+    return Boolean(surface) && surface?.governingPolicyBodyAssessment?.state !== "insufficient" &&
+    surface?.governingPolicySelection?.state !== "ineligible" && document.artifactVerificationStatus === "verified" &&
     document.documentFetchState === "fetched" && document.documentEvaluationState === "usable" && document.documentRole === "policy_document" &&
-    ["target_controller","first_party_brand"].includes(document.targetRelationship) && document.artifactSha256 && document.retainedTextSha256)
+    ["target_controller","first_party_brand"].includes(document.targetRelationship) && document.artifactSha256 && document.retainedTextSha256;
+  })
     .slice(0,8).flatMap(document => {
       const text = evidence?.texts.find(row => row.observationId === document.observationId)?.text;
       if (!text || text.length > 160_000 || text.length !== document.retainedTextChars ||
@@ -110,7 +115,8 @@ export function projectCaliforniaReviewCoverage(bundle: CanonicalEvidenceBundle,
     brokenChoice ? "A visible named privacy-choice destination returned a verified HTTP 404 or 410 response." :
     noSaleClaim ? "Policy declares no sale/sharing; no mandatory page-link obligation is inferred. The declaration is not independently verified." :
     "Named-choice inspection and verified opt-out observation are separate; absent labels or an untested control do not prove an ineffective opt-out.",
-    [...assessment.controls.map(control=>control.evidenceRef),...refs]);
+    [...(choiceComplete ? ["CanonicalEvidenceBundle.json#policySurfaceInspection.privacyChoiceInspection"] : []),
+      ...assessment.controls.map(control=>control.evidenceRef),...refs]);
   const sourceDocuments = documents.map(({evidenceRef,url,sha256,complete})=>({evidenceRef,url,sha256,complete}));
   const captureCoverage = {policyTextComplete:Boolean(policyComplete),choiceInventoryComplete:Boolean(choiceComplete),collectionInventoryComplete:Boolean(inventory)};
   return californiaCoverageSchema.parse({contractVersion:captureBasedPolicy ? "certscore.california-review-coverage.v2" : "certscore.california-review-coverage.v1",postureBasis:"assuming_ccpa_applies",

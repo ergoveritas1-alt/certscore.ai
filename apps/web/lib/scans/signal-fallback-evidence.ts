@@ -1,4 +1,5 @@
 import type { KeyPageFetchQuality } from "@website-signal-risk-scanner/shared";
+import { policyTextEvidenceProjectionSchema } from "@certscore/contracts";
 import {
   isMeaningfulPolicyText,
   normalizePolicySnippet,
@@ -541,6 +542,7 @@ function getAffiliatePolicyFallbackSnippet(row: NormalizedPolicyRow | null) {
 export function buildSnapshotDisclosureFallbackEvidence(input: {
   keyPageDiscoverySummary?: unknown;
   policyEnrichment?: Array<Record<string, unknown>>;
+  policySurfaceSummary?: unknown;
   relatedSignals?: Array<{ key: string; value: unknown }>;
   signalKey: string;
   signalLabel: string;
@@ -769,10 +771,31 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
   const reanchoredDoNotSellPageUrls = shouldReanchorGuessedDoNotSellToPolicyPage ? [genericHumanPolicyPageUrl] : effectiveGenericPageUrls;
   const reanchoredDoNotSellSourceUrls = shouldReanchorGuessedDoNotSellToPolicyPage ? [genericHumanPolicyPageUrl] : effectiveGenericSourceUrls;
 
+  // Canonical scoped policy evidence supersedes legacy discovery/enrichment.
+  // A vendor policy must never be the witness for the target's own notice.
+  const policySummary = input.policySurfaceSummary && typeof input.policySurfaceSummary === "object"
+    ? input.policySurfaceSummary as Record<string, unknown> : null;
+  const projection = policyTextEvidenceProjectionSchema.safeParse(policySummary?.policyTextEvidenceProjection ?? policySummary?.policy_text_evidence_projection);
+  const scopedPrivacy = isPrivacySurfaceSignal && projection.success && projection.data.sourceBundle.verificationStatus === "verified";
+  const ownedDocuments = projection.success ? projection.data.documents.filter(document =>
+    ["target_controller", "first_party_brand"].includes(document.targetRelationship) &&
+    document.artifactVerificationStatus === "verified" && document.documentRole === "policy_document" &&
+    document.documentFetchState === "fetched" && document.documentEvaluationState === "usable") : [];
+  const scopedPrivacyUrls = scopedPrivacy ? uniqueStrings([
+    ...ownedDocuments.map(document => document.finalUrl ?? document.requestedUrl),
+    ...(Array.isArray(policySummary?.discoveredPrivacyPolicyDetails) ? policySummary.discoveredPrivacyPolicyDetails.flatMap((value: unknown) => {
+      if (!value || typeof value !== "object") return [];
+      const detail = value as Record<string, unknown>;
+      return detail.linkObservationState === "observed" && !["service_provider", "unrelated"].includes(String(detail.targetRelationship)) && typeof detail.url === "string" ? [detail.url] : [];
+    }) : []),
+  ]) : [];
+  const scopedPrivacySnippets = scopedPrivacy && ownedDocuments.length > 0 && policySummary?.privacyPolicyPresent === true && typeof policySummary.retainedPrivacyPolicyTextExcerpt === "string"
+    ? normalizePolicySnippetList([policySummary.retainedPrivacyPolicyTextExcerpt]) : [];
+
   return {
     affiliateDisclosurePresent: input.snapshot?.affiliate_disclosure_present === true,
     contactPagePresent: input.snapshot?.contact_page_present === true,
-    fetchQuality:
+    fetchQuality: scopedPrivacy ? scopedPrivacySnippets.length > 0 ? "verified_content" as const : "thin_content" as const :
       (!reanchoredCookieSignalToPolicyEvidence ? explicitFetchQuality : null) ??
       getFetchQualityFromEvidence({
         attemptedUrls,
@@ -795,17 +818,17 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
       ),
     keyPageStopReason: stopReasons[0] ?? null,
     keyPageTitleRecords: successfulTitleRecords,
-    pageUrls: preferredDoNotSellPageUrls.length > 0 ? preferredDoNotSellPageUrls : reanchoredDoNotSellPageUrls,
-    policySnippets: preferredDoNotSellSnippets.length > 0 ? preferredDoNotSellSnippets : genericPolicySnippets,
+    pageUrls: scopedPrivacy ? scopedPrivacyUrls : preferredDoNotSellPageUrls.length > 0 ? preferredDoNotSellPageUrls : reanchoredDoNotSellPageUrls,
+    policySnippets: scopedPrivacy ? scopedPrivacySnippets : preferredDoNotSellSnippets.length > 0 ? preferredDoNotSellSnippets : genericPolicySnippets,
     doNotSellLinkPresent: input.snapshot?.do_not_sell_link_present === true,
     privacyPolicyPresent: input.snapshot?.privacy_policy_present === true,
     signalKey: input.signalKey,
     signalLabel: input.signalLabel,
     signalValue: input.signalValue,
-    sourceUrls: preferredDoNotSellSourceUrls.length > 0 ? preferredDoNotSellSourceUrls : reanchoredDoNotSellSourceUrls,
+    sourceUrls: scopedPrivacy ? scopedPrivacyUrls : preferredDoNotSellSourceUrls.length > 0 ? preferredDoNotSellSourceUrls : reanchoredDoNotSellSourceUrls,
     termsOfServicePresent: input.snapshot?.terms_of_service_present === true,
     policySummaryShort:
-      genericPolicySnippets.length === 0 && effectiveGenericPolicyRow ? getPolicySummaryShort(effectiveGenericPolicyRow) : null
+      !scopedPrivacy && genericPolicySnippets.length === 0 && effectiveGenericPolicyRow ? getPolicySummaryShort(effectiveGenericPolicyRow) : null
   };
 }
 

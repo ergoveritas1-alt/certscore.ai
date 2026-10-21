@@ -675,7 +675,7 @@ test("supplement topic provenance remains bound to the selected retained policy 
   const supplementUrl = "https://caltech.example/general-data-protection-regulation-notice";
   const signal = makeGdprTransparencyArticle13Signal({
     disclosureType: "legal_basis",
-    evidenceText: "Under the GDPR, Example Institute is required to have a legal basis for collecting personally identifiable information.",
+    evidenceText: "Under the GDPR, Example Institute relies on consent as a legal basis for collecting personally identifiable information.",
     matchedLocale: "en",
     matchedTerm: "legal basis for collecting personally identifiable information",
     selectedPolicySectionUrl: supplementUrl,
@@ -924,7 +924,7 @@ test("verified complete-policy absence projects neutral GDPR Transparency no-mat
 
 test("invariant-verified Mini evidence wins a checklist tie against deterministic placeholder evidence", () => {
   const miniExcerpt =
-    "When you provide your information to us, we will only use it for the purposes for which it is provided.";
+    "We use your personal information to answer support enquiries and provide the services you request.";
   const runtimeArtifacts = {
     policyDisclosureSummary: {
       article13DisclosureSignals: [

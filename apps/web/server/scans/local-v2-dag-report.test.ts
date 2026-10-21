@@ -175,6 +175,34 @@ async function loadLocalV2DagReport() {
   };
 }
 
+test("relative policy links retain their observed provider origin and cannot inherit target ownership", async () => {
+  const {dedupePolicySurfaces, summarizePolicySurfaces} = await loadLocalV2DagReport();
+  const observations = [
+    {observationId: "vendor", surfaceType: "privacy_policy", url: "https://vendor.test/privacy", normalizedUrl: "https://vendor.test/privacy", status: "fetched", confidence: 0.98, linkObservationState: "observed", targetRelationship: "service_provider"},
+    {observationId: "translation", parentObservationId: "vendor", parentSurfaceUrl: "https://vendor.test/privacy", linkSourcePageUrl: "https://vendor.test/privacy", traversalDepth: 1,
+      surfaceType: "privacy_policy", url: "/fr/privacy", status: "observed", confidence: 0.98, linkObservationState: "observed", linkText: "Français", boundedTextExcerptIds: ["provider-link"]},
+  ] as CanonicalEvidenceBundle["policySurfaceObservations"];
+  const rows = dedupePolicySurfaces(observations, "https://target.test/");
+  assert.equal(rows.find(row => row.surface.observationId === "translation")?.pageUrl, "https://vendor.test/fr/privacy");
+  const summary = summarizePolicySurfaces(rows, "target.test", {discoveredPolicySurfaces: observations, privacyPolicyObserved: true});
+  assert.equal(summary.privacyNoticeAvailabilityObserved, false);
+  assert.deepEqual(summary.discoveredPrivacyPolicyUrls, []);
+});
+
+test("owned short-policy positive topics survive without authorizing missing-disclosure conclusions", async () => {
+  const {dedupePolicySurfaces, summarizePolicySurfaces} = await loadLocalV2DagReport();
+  const text = "Privacy policy. We use your personal information to answer support enquiries and provide requested services. ".repeat(12);
+  const signal = {disclosureType: "processing_purposes", status: "observed", evidenceText: "We use your personal information to answer support enquiries and provide requested services.", confidence: 0.95, source: "deterministic"};
+  const surface = {observationId: "short-policy", surfaceType: "privacy_policy", url: "https://example.test/privacy", normalizedUrl: "https://example.test/privacy", status: "fetched", confidence: 0.98,
+    targetRelationship: "target_controller", documentRole: "policy_document", documentEvaluationState: "usable", textExcerpt: text, article13DisclosureSignals: [signal],
+    governingPolicyBodyAssessment: {contractVersion: "governing_policy_body_assessment.v1", state: "insufficient", documentTextChars: text.length, canonicalContextTermCount: 3,
+      evidenceBoundObservedTopicCount: 1, substantiveDisclosureSignalCount: 1, reasonCodes: ["policy_text_below_substantive_minimum", "evidence_bound_policy_topic_retained"]}} as CanonicalEvidenceBundle["policySurfaceObservations"][number];
+  const summary = summarizePolicySurfaces(dedupePolicySurfaces([surface], "https://example.test/"), "example.test");
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.ok(summary.article13DisclosureTypesObserved.includes("processing_purposes"));
+  assert.ok(summary.article13CoverageAssessments.every(row => row.status !== "not_observed_with_sufficient_coverage"));
+});
+
 test("fingerprinting projection requires retained API access plus a pre-consent device-data transmission", async () => {
   const { summarizeFingerprintingEvidence } = await loadLocalV2DagReport();
   const bundle = {
@@ -284,7 +312,7 @@ test("CollectionSurfaceAssessment v1 preserves verified provenance and fails clo
   const bundle = {
     collectionSurfaceInventory: inventory,
     scanId: "scan-1",
-    scanLaneRuns: [{ laneId: "runtime_evidence", executionOutcome: "completed" }],
+    scanLaneRuns: [{ laneId: "runtime_evidence", executionOutcome: "completed", accessOutcome: "representative_page" }],
   } as unknown as CanonicalEvidenceBundle;
   const observed = deriveCollectionSurfaceAssessment({
     bundle,
@@ -296,6 +324,14 @@ test("CollectionSurfaceAssessment v1 preserves verified provenance and fails clo
   assert.match(observed.sourceHash ?? "", /^[a-f0-9]{64}$/);
   assert.equal(observed.sourceLane, "runtime_evidence");
   assert.equal(observed.forms.length, 1);
+
+  for (const accessOutcome of ["bot_challenge", "access_denied", "navigation_failed"]) {
+    const unavailable = deriveCollectionSurfaceAssessment({ bundle: { ...bundle, scanLaneRuns: [{laneId: "runtime_evidence", executionOutcome: "completed", accessOutcome}] } as unknown as CanonicalEvidenceBundle,
+      canonicalDocumentUrl: "https://example.com/contact", scanId: "scan-1" });
+    assert.equal(unavailable.assessmentStatus, "not_testable");
+    assert.deepEqual(unavailable.forms, []);
+    assert.ok(unavailable.limitationKeys.includes("collection_surface_representative_access_unavailable"));
+  }
 
   for (const reason of ["document_still_loading", "document_settle_incomplete"]) {
     const incompleteInventory = { ...inventory, forms: [], coverage: { ...inventory.coverage, status: "limited" as const, candidateFormCount: 0, retainedFormCount: 0, candidateFieldCount: 0, retainedFieldCount: 0, inspectedFormCandidateCount: 0, inspectedFieldCandidateCount: 0, reasonCodes: [reason] } };
@@ -1479,6 +1515,7 @@ test("localized consent settings shells remain discovered but project as fetched
   assert.deepEqual(summary.article13DisclosureTypesObserved, []);
   assert.deepEqual(summary.observedTopics, []);
   assert.deepEqual(summary.discoveredPrivacyPolicyDetails, [{
+    targetRelationship: "unknown",
     documentEvaluationState: "insufficient",
     documentFetchState: "fetched",
     fetchFailureReason: "consent_settings_shell",
@@ -3330,7 +3367,7 @@ test("summarizePolicySurfaces retains CNN's general WBD policy when its text men
         {
           disclosureType: "legal_basis",
           status: "observed",
-          evidenceText: "We explain the lawful basis on which we rely to process personal information.",
+          evidenceText: "We rely on consent as the lawful basis to process personal information.",
           confidence: 0.9,
           source: "deterministic"
         }
@@ -3424,7 +3461,7 @@ test("summarizePolicySurfaces prefers general privacy notices over cookie-specif
       status: "fetched",
       fetchable: true,
       confidence: 0.9,
-      textExcerpt: "Privacy Policy. The data controller can be contacted through our privacy contact. We describe why we process personal data and the legal basis for processing personal data. We disclose service providers that process personal data, rights, and international transfers of personal data.",
+      textExcerpt: "Privacy Policy. The data controller can be contacted through our privacy contact. We process personal data to provide requested services and rely on consent as the legal basis for that processing. We disclose service providers that process personal data, rights, and international transfers of personal data.",
       observedTopics: [
         "controller_contact",
         "processing_purposes",
@@ -3444,7 +3481,7 @@ test("summarizePolicySurfaces prefers general privacy notices over cookie-specif
         {
           disclosureType: "legal_basis",
           status: "observed",
-          evidenceText: "We describe the legal basis for processing personal data.",
+          evidenceText: "We rely on consent as the legal basis for processing personal data.",
           confidence: 0.88,
           source: "deterministic"
         }
@@ -4006,7 +4043,7 @@ test("summarizePolicySurfaces rejects script/config text as Article 13 policy ev
 
   const summary = summarizePolicySurfaces(surfaces, "example.test");
 
-  assert.equal(summary.privacyPolicyPresent, true);
+  assert.equal(summary.privacyPolicyPresent, false);
   assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "low_quality_extracted_code_or_config");
   assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, "privacy_policy_text_extracted_code_or_config");
   assert.deepEqual(summary.article13DisclosureSignals, []);

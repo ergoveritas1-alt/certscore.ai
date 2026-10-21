@@ -3025,6 +3025,8 @@ const SCAN_NO_GO_CHARACTER_CHALLENGE_SHELL_PATTERN =
   /^enter the characters seen in the image below:\s*download audio captcha\s+answer\s+submit[.!\s]*$/i;
 const SCAN_NO_GO_CAPACITY_HOLDING_PREFIX_PATTERN =
   /^sit tight[.!]?\s+we(?:'|’)ve got our hands full[^.]{0,160}\.\s*this page will automatically refresh and bring you into the website as soon as we can handle it\./i;
+const SCAN_NO_GO_CLIENT_CHALLENGE_SHELL_PATTERN =
+  /^oops,? something went wrong[.!]?\s+please check your connection, disable any ad blockers, or try using a different browser[.!\s]*$/i;
 
 function classifyScanNoGoText(text: string): ClassifiedNoGoPageState | null {
   const normalized = text.replace(/\s+/g, " ").trim();
@@ -3032,6 +3034,9 @@ function classifyScanNoGoText(text: string): ClassifiedNoGoPageState | null {
     return null;
   }
   const evidenceText = boundedScanNoGoText(normalized) ?? normalized;
+  if (SCAN_NO_GO_CLIENT_CHALLENGE_SHELL_PATTERN.test(normalized)) {
+    return { confidence: 0.95, evidenceText, hardTerminal: true, reasonCode: "captcha_or_challenge", visualPageState: "captcha_or_challenge" };
+  }
   if (SCAN_NO_GO_CHARACTER_CHALLENGE_SHELL_PATTERN.test(normalized)) {
     return { confidence: 0.95, evidenceText, hardTerminal: true, reasonCode: "captcha_or_challenge", visualPageState: "captcha_or_challenge" };
   }

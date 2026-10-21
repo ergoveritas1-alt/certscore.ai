@@ -13,6 +13,34 @@ function assess(fixture=californiaCoverageFixture()) {
   const packets=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),runtimeArtifacts:{consentControlAssessment:parent}});
   return {child,packets,score:deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:packets})};
 }
+test("insufficient retained policy bodies cannot prove California rights absence", () => {
+  for (const text of ["BOS - Internet Banking - Unavailable. Please try again later.", "Privacy policy Navigation Contact Products Solutions Careers Privacy policy"]) {
+    const f = californiaCoverageFixture(text);
+    f.bundle.policySurfaceInspection!.californiaReviewPolicy = "california-privacy-review.v10";
+    for (const surface of f.bundle.policySurfaceObservations) {
+      surface.documentLanguage = "en";
+      surface.governingPolicyBodyAssessment = { contractVersion: "governing_policy_body_assessment.v1", state: "insufficient", canonicalContextTermCount: 0,
+        documentTextChars: text.length, evidenceBoundObservedTopicCount: 0, substantiveDisclosureSignalCount: 0, reasonCodes: ["policy_body_substance_insufficient"] };
+    }
+    const { child, score, packets } = assess(f);
+    assert.ok(child?.contractVersion === "certscore.california-privacy-review.v10");
+    assert.equal(child.disclosureInspection, undefined);
+    assert.deepEqual(score.deductions, []);
+    assert.ok(!packets.some(packet => packet.unifiedFindingId === "california_privacy_rights_not_disclosed"));
+  }
+});
+
+test("completed zero-choice inspection retains provenance without a policy document", () => {
+  const f = californiaCoverageFixture();
+  f.bundle.policySurfaceInspection!.californiaReviewPolicy = "california-privacy-review.v10";
+  f.bundle.policySurfaceObservations = [];
+  f.policyEvidence.projection.documents = [];
+  f.policyEvidence.texts = [];
+  const { child } = assess(f);
+  assert.ok(child, "Optional California child must survive strict validation");
+  assert.equal(californiaPrivacyReviewSchema.safeParse(child).success, true);
+  assert.match(JSON.stringify(child), /CanonicalEvidenceBundle\.json#policySurfaceInspection\.privacyChoiceInspection/);
+});
 test("nonmaterial translations and unrelated links do not invalidate verified governing text; missing CA supplements still limit",()=>{
  const f=californiaCoverageFixture();const parent=f.bundle.policySurfaceObservations[0]!;
  for(const [i,label,path]of [[0,"Deutsch","/de/privacy-policy"],[1,"Modern Slavery Statement","/privacy-pages/uk/modern-slavery-statement"],[2,"UK Editorial Complaints Policy","/privacy-pages/uk/complaints/policy"]] as const)

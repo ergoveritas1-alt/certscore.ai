@@ -1,0 +1,43 @@
+{
+  "product": "CertScore.ai MCP Light",
+  "verifiedAt": "2026-10-21T18:11:19.273662+00:00",
+  "server": "ai.certscore/mcp-light",
+  "version": "0.2.30",
+  "endpoint": "https://mcp.certscore.ai/mcp/light",
+  "transport": "streamable-http",
+  "authenticationRequiredForClients": false,
+  "publisherAuthentication": "HTTP domain verification renewed using existing local Ed25519 key and existing certscore.ai well-known proof",
+  "publisherPermission": {
+    "action": "publish",
+    "resource": "ai.certscore/*"
+  },
+  "registryStatus": "active",
+  "isLatest": true,
+  "registryPublishedAt": "2026-10-21T18:09:23.715441Z",
+  "verification": {
+    "manifestValidation": "mcp-publisher validate packages/certscore-mcp/server-light.json: passed",
+    "publication": "mcp-publisher publish packages/certscore-mcp/server-light.json: succeeded",
+    "latestRecord": "https://registry.modelcontextprotocol.io/v0.1/servers/ai.certscore%2Fmcp-light/versions/latest",
+    "exactVersionRecord": "https://registry.modelcontextprotocol.io/v0.1/servers/ai.certscore%2Fmcp-light/versions/0.2.30",
+    "hostedVersion": "0.2.30",
+    "tools": [
+      "certscore_get_report_evidence_page",
+      "certscore_get_scan_bundle",
+      "certscore_get_scan_status",
+      "certscore_scan_site"
+    ],
+    "rawResponses": "artifacts/mcp-registry-publication-20261021/"
+  },
+  "smithery": {
+    "listing": "https://smithery.ai/servers/ben-qe1c/certscore-ai",
+    "releaseLine": "Hosted MCP release: 0.2.30 (verified October 21, 2026).",
+    "publicDescriptionVerified": true,
+    "change": "Replaced only release version and verification date in existing description",
+    "screenshot": "artifacts/mcp-registry-publication-20261021/smithery-updated.jpg"
+  },
+  "dnsChanges": false,
+  "runtimeDeployment": false,
+  "newScans": 0,
+  "estimatedRecurringIncrementalUsdPerMonth": 0,
+  "credentialHandling": "Existing private key and renewed publisher token remain outside repository and are excluded from receipt"
+}

@@ -405,6 +405,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("options", "set preferences"),
     contextual("options", "set up the collection", { requiresConsentContext: true }),
     ...direct("options", "cookie settings"),
+    { phrase: "cookies settings", intent: "options", strength: "direct", observationOnly: true },
     ...direct("options", "privacy settings"),
     { phrase: "individual preferences", intent: "options", strength: "contextual", requiresConsentContext: true, observationOnly: true },
     contextual("options", "preferences", { requiresConsentContext: true }),

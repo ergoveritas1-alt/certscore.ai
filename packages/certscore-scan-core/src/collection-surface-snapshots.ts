@@ -120,6 +120,22 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
           while (root && controls.some(el => !root!.contains(el))) root = root.parentElement;
         }
         if (!root) return null;
+        // Small inline forms often place their heading/notice next to the form.
+        // Include one bounded local container, never a page-wide ancestor. All
+        // controls in the expanded crop still receive the same masks and the
+        // container is rebound after pixel capture before review.
+        const formBounds = root.getBoundingClientRect();
+        const parent = root.parentElement;
+        if (formBounds.width > 0 && formBounds.height > 0 && parent &&
+            !["BODY", "HTML"].includes(parent.tagName)) {
+          const context = Array.from(parent.children).some(child => child !== root &&
+            child.matches('label, p, small, h1, h2, h3, h4, [role="note"]') &&
+            Boolean(child.textContent?.trim()));
+          const parentBounds = parent.getBoundingClientRect();
+          if (context && parent.querySelectorAll('form, [role="form"]').length <= 1 &&
+              parentBounds.height <= Math.min(maxCropHeight, formBounds.height + 192) &&
+              parentBounds.width <= Math.max(formBounds.width, 640) + 64) root = parent;
+        }
         const originalZoom = (root as HTMLElement).style.getPropertyValue("zoom");
         const originalZoomPriority = (root as HTMLElement).style.getPropertyPriority("zoom");
         const originalSizeStyles = ["width", "min-width", "max-width"].map(property => ({ property,

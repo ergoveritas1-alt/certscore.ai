@@ -2502,6 +2502,7 @@ export function buildReviewFindings(input: {
             : /commerce\.affiliate_disclosure_present|disclosure\.key_page_discovery_unresolved_after_bounded_search|disclosure\.privacy_policy_present|disclosure\.terms_of_service_present|disclosure\.cookie_policy_present|disclosure\.contact_page_present|privacy\.do_not_sell_link_present/i.test(item.key)
               ? buildSnapshotDisclosureFallbackEvidence({
                   keyPageDiscoverySummary: input.runtimeArtifacts?.key_page_discovery_summary ?? null,
+                  policySurfaceSummary: input.runtimeArtifacts?.policyDisclosureSummary ?? input.runtimeArtifacts?.policy_disclosure_summary,
                   policyEnrichment: input.policyEnrichment ?? [],
                   relatedSignals: (input.allSignals ?? input.sectionItems).map((signalLike) => ({
                     key: signalLike.key,

@@ -35,6 +35,7 @@ import { getDomain as getTldtsDomain } from "tldts";
 import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   assessArticle13PolicyTextQuality,
+  looksLikeArticle13CodeOrConfigText,
   classifyConsentControlLabel,
   consentSessionAccessLimited,
   hasUnresolvedConsentDecision,
@@ -867,7 +868,8 @@ function canonicalPolicySurfaceUrl(surface: LocalV2PolicySurface, fallbackBaseUr
   }
 
   try {
-    const parsed = fallbackBaseUrl ? new URL(rawUrl, fallbackBaseUrl) : new URL(rawUrl);
+    const observedSourceUrl = firstString(surface.linkSourcePageUrl, surface.parentSurfaceUrl, fallbackBaseUrl);
+    const parsed = observedSourceUrl ? new URL(rawUrl, observedSourceUrl) : new URL(rawUrl);
     const semanticFragment = /^(?:privacy-policy|cookie-policy|cookies-policy|terms-of-use|terms-and-conditions|terms-of-service)$/i.test(
       parsed.hash.replace(/^#/, "")
     ) ? parsed.hash.toLowerCase() : "";
@@ -903,8 +905,17 @@ function hasSubstantivePolicySurfaceEvidence(surface: LocalV2PolicySurface) {
 }
 
 function isEvaluatedPrivacyPolicySurface(surface: LocalV2PolicySurface) {
+  // Preserve the producer's retained positive topics on a short or imperfectly
+  // labelled owned document. This never grants complete absence coverage:
+  // California eligibility separately requires the substantive governing body.
+  const retainedPositivePolicy = surface.documentRole === "policy_document" &&
+    ["target_controller", "first_party_brand"].includes(surface.targetRelationship ?? "") &&
+    (surface.governingPolicyBodyAssessment?.evidenceBoundObservedTopicCount ?? 0) > 0 &&
+    surface.governingPolicyBodyAssessment?.reasonCodes.includes("evidence_bound_policy_topic_retained");
   return surface.surfaceType === "privacy_policy" &&
-    !(surface.documentRole === "unknown" && surface.governingPolicyBodyAssessment?.state === "insufficient") &&
+    (surface.governingPolicyBodyAssessment?.state !== "insufficient" || retainedPositivePolicy) &&
+    surface.governingPolicySelection?.state !== "ineligible" &&
+    !looksLikeArticle13CodeOrConfigText(surface.textExcerpt ?? "") &&
     surface.documentRole !== "policy_index" && (
     surface.documentEvaluationState === "usable" ||
     ((surface.status === undefined || ["fetched", "observed"].includes(surface.status)) &&
@@ -983,7 +994,8 @@ export function dedupePolicySurfaces(surfaces: readonly LocalV2PolicySurface[], 
     let sourcePageUrl = pageUrl;
     if (rawPageUrl) {
       try {
-        sourcePageUrl = (fallbackBaseUrl ? new URL(rawPageUrl, fallbackBaseUrl) : new URL(rawPageUrl)).toString();
+        const observedSourceUrl = firstString(surface.linkSourcePageUrl, surface.parentSurfaceUrl, fallbackBaseUrl);
+        sourcePageUrl = (observedSourceUrl ? new URL(rawPageUrl, observedSourceUrl) : new URL(rawPageUrl)).toString();
       } catch {
         sourcePageUrl = rawPageUrl;
       }
@@ -2963,17 +2975,25 @@ export function summarizePolicySurfaces(
       }
       return true;
     });
+  const hasExcludedPolicyAncestor = (surface: LocalV2PolicySurface) => {
+    if (surface.targetRelationship && surface.targetRelationship !== "unknown") return false;
+    const parent = (options.discoveredPolicySurfaces ?? []).find(row => row.observationId === surface.parentObservationId);
+    return Boolean(parent && ["service_provider", "unrelated"].includes(parent.targetRelationship ?? ""));
+  };
   const targetRelevantDiscoveredPrivacySurfaces = discoveredPrivacySurfaces.filter((surface) =>
+    !hasExcludedPolicyAncestor(surface) &&
     !isGenericThirdPartyPrivacySurface({
       pageUrl: canonicalPolicySurfaceUrl(surface, null),
       surface,
     }, rootDomain, { homepageNoGo: options.homepageNoGo === true })
   );
   const evaluatedPrivacySurfaces = privacySurfaces.filter((row) =>
+    !hasExcludedPolicyAncestor(row.surface) &&
     isEvaluatedPrivacyPolicySurface(row.surface) &&
     !isGenericThirdPartyPrivacySurface(row, rootDomain, { homepageNoGo: options.homepageNoGo === true })
   );
   const retainedTargetPrivacySurfaces = privacySurfaces.filter((row) =>
+    !hasExcludedPolicyAncestor(row.surface) &&
     !isGenericThirdPartyPrivacySurface(row, rootDomain, { homepageNoGo: options.homepageNoGo === true })
   ).sort((left, right) =>
     Number(isEvaluatedPrivacyPolicySurface(right.surface)) -
@@ -3095,6 +3115,15 @@ export function summarizePolicySurfaces(
     typeKeys: ["disclosureType"]
   });
   const discardedArticle13DisclosureSignals = [
+    ...retainedTargetPrivacySurfaces.filter(row => looksLikeArticle13CodeOrConfigText(row.surface.textExcerpt ?? ""))
+      .flatMap(row => (row.surface.article13DisclosureSignals ?? []).map(signal => ({
+        confidence: signal.confidence,
+        disclosureType: signal.disclosureType,
+        evidenceText: firstString(signal.evidenceText),
+        rejectReason: "code_or_non_policy_excerpt" as const,
+        source: signal.source,
+        surfaceUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
+      }))),
     ...article13Surfaces.flatMap((row) =>
       (row.surface.discardedArticle13DisclosureSignals ?? []).map((signal) => ({
         confidence: signal.confidence,
@@ -3129,7 +3158,7 @@ export function summarizePolicySurfaces(
   );
   const policyTextExtractionHealth = buildPolicyTextExtractionHealth(
     retainedTargetPrivacySurfaces,
-    text,
+    text || retainedTargetPrivacySurfaces.map(row => readPolicySurfaceTextArtifact(row.surface, options.policyTextEvidenceContext)).filter(Boolean).join("\n"),
     processingErrorObserved,
     policyPrimaryLanguage,
     options.primaryLanguage,
@@ -3148,6 +3177,7 @@ export function summarizePolicySurfaces(
     "supervisory_authority",
   ] as const;
   const completeOwnedPolicyDocuments = policyTextEvidenceProjection.documents.filter((document) =>
+    retainedTargetPrivacySurfaces.find(row => row.surface.observationId === document.observationId)?.surface.governingPolicyBodyAssessment?.state !== "insufficient" &&
     document.extractionStatus === "complete" &&
     document.artifactVerificationStatus === "verified" &&
     document.documentRole === "policy_document" &&
@@ -3268,6 +3298,7 @@ export function summarizePolicySurfaces(
     .map((surface) => firstString(surface.status))
     .filter(Boolean));
   const discoveredPrivacyPolicyDetails = targetRelevantDiscoveredPrivacySurfaces.map((surface) => ({
+    targetRelationship: surface.targetRelationship ?? "unknown",
     documentEvaluationState: surface.documentEvaluationState ?? "not_attempted",
     documentFetchState: surface.documentFetchState ?? (
       surface.status === "fetched" ? "fetched" :
@@ -3512,7 +3543,8 @@ export function summarizePolicySurfaces(
     policy_text_evidence_projection: policyTextEvidenceProjection,
     privacyPolicyPresent: article13Surfaces.length > 0,
     privacyNoticeAvailabilityObserved:
-      options.privacyPolicyObserved === true || article13Surfaces.length > 0,
+      article13Surfaces.length > 0 || (options.privacyPolicyObserved === true &&
+        targetRelevantDiscoveredPrivacySurfaces.some(surface => surface.linkObservationState === "observed")),
     privacyPolicyDiscovered: targetRelevantDiscoveredPrivacySurfaces.length > 0 || article13Surfaces.length > 0,
     privacyPolicyEvaluationState,
     privacyPolicyEvidencePaths,
@@ -4126,6 +4158,10 @@ export function deriveCollectionSurfaceAssessment(input: {
   const sourceHash = createHash("sha256").update(JSON.stringify(inventory)).digest("hex");
   const laneFailed = runtimeLane?.executionOutcome === "failed";
   const laneUnverified = scanLaneRuns.length > 0 && !runtimeLane;
+  const representativeAccessUnavailable = runtimeLane
+    ? runtimeLane.accessOutcome !== "representative_page" || runtimeLane.challengeDetected === true
+    : input.bundle.scanNoGoAssessment?.decision === "no_go" ||
+      input.bundle.scanEvidenceLaneAssessment?.lanes.homepageRuntime === "unusable";
   const scanIdentityMismatch = input.bundle.scanId !== input.scanId;
   const documentMismatch = Boolean(
     input.canonicalDocumentUrl &&
@@ -4135,11 +4171,12 @@ export function deriveCollectionSurfaceAssessment(input: {
     ...inventory.coverage.reasonCodes,
     laneFailed ? "runtime_evidence_lane_failed" : null,
     laneUnverified ? "runtime_evidence_lane_unverified" : null,
+    representativeAccessUnavailable ? "collection_surface_representative_access_unavailable" : null,
     scanIdentityMismatch ? "collection_surface_scan_identity_mismatch" : null,
     documentMismatch ? "collection_surface_document_mismatch" : null,
   ].filter((value): value is string => Boolean(value))).slice(0, 12);
   const assessmentStatus: CollectionSurfaceAssessment["assessmentStatus"] =
-    inventory.coverage.status === "failed" || laneFailed || laneUnverified || scanIdentityMismatch || documentMismatch
+    inventory.coverage.status === "failed" || laneFailed || laneUnverified || representativeAccessUnavailable || scanIdentityMismatch || documentMismatch
       ? "not_testable"
       : inventory.coverage.status === "limited"
         ? "limited"

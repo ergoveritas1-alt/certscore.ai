@@ -11,6 +11,20 @@ import {
   type GdprTransparencyTopic,
 } from "./index.js";
 
+test("French purpose lists, named processors and a CNIL complaint route retain their own witnesses", () => {
+  const clauses = [
+    ["processing_purposes", "Pourquoi et sur quelle base traitons-nous vos données ? Pour répondre à vos demandes de contact et organiser un rendez-vous avec nos équipes."],
+    ["recipients_or_vendor_categories", "Dans ce cadre, certaines données peuvent être transmises aux sous-traitants suivants : Sirdata (gestion du consentement) et les partenaires listés dans notre outil de gestion du consentement."],
+    ["supervisory_authority", "Si vous estimez que vos droits ne sont pas respectés, vous pouvez adresser une réclamation à la CNIL : 3 place de Fontenoy, Paris."],
+  ] as const;
+  for (const [topic, text] of clauses) {
+    const result = classifyGdprTransparencyTopics({ section: { body: text }, localeHints: ["fr"] });
+    const match = result.matches.find(row => row.topic === topic);
+    assert.ok(match, topic);
+    assert.ok(text.includes(match.evidenceExcerpt), topic);
+  }
+});
+
 test("policy entity decoding preserves German text and handles malformed code points", () => {
   assert.equal(decodeCommonHtmlEntities("&Auml; &uuml; &szlig; &sect; &bdquo;Text&ldquo;"), "Ä ü ß § „Text\"");
   assert.equal(decodeCommonHtmlEntities("&#99999999;"), "&#99999999;");

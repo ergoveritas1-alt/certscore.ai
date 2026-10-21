@@ -461,6 +461,9 @@ function canonicalSlugMatchesUrl(normalizedUrl: string, slug: string): boolean {
 export function normalizePrivacySurfaceText(value: string | null | undefined): string {
   return (value ?? "")
     .normalize("NFKC")
+    .normalize("NFD")
+    .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
+    .normalize("NFC")
     .replace(/[‘’´`]/g, "'")
     .replace(/[“”]/g, "\"")
     .replace(/[\u00a0\t\r\n]+/g, " ")
@@ -510,6 +513,10 @@ function phraseScore(
   }
   const exact = normalizedLabel === phrase;
   const labelMatch = !exact && phrase.length >= 5 && paddedIncludes(normalizedLabel, phrase);
+  // Bare cookie nouns are useful exact navigation labels. Embedded inside a
+  // product label (for example Protein Cookies) they establish no policy scope.
+  // Specific and multilingual governance phrases retain their own matching.
+  if (/^cookies?$/.test(phrase) && !exact) return 0;
   if (!exact && !labelMatch) {
     return 0;
   }

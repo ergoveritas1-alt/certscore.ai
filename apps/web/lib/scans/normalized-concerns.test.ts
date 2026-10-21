@@ -2140,6 +2140,21 @@ function makeApprovedGdprTransparencyArticle13Signal(
   };
 }
 
+test("previously approved cross-topic witnesses become ambiguous without creating absence concerns", () => {
+  for (const [disclosureType, evidenceText] of [
+    ["legal_basis", "GDPR requires a lawful basis for processing personal data."],
+    ["recipients_or_vendor_categories", "We receive Personal Information from third-party retailers and service providers."],
+    ["data_subject_rights", "Under the DMCA we reserve the right to delete Content that infringes copyright."],
+  ]) {
+    const concerns = buildNormalizedConcerns({reviewFindingCandidates: [], validationFindings: [], runtimeArtifacts: {
+      policyDisclosureSummary: makeGdprTransparencyPolicyDisclosureSummary({signals: [makeApprovedGdprTransparencyArticle13Signal({disclosureType, evidenceText, matchedLocale: "en"})]})}});
+    const concern = concerns.find(row => row.originKey === `gdpr_transparency.article13.${disclosureType}`);
+    assert.equal(concern?.evidenceBundle.rawEvidence?.gdprTransparencyArticle13ConcernState, "ambiguous");
+    assert.notEqual(concern?.regulatoryChecklistEligibility, "observed");
+    assert.ok(!concern?.scoreEffects?.length);
+  }
+});
+
 test("verified row-specific policy absence creates neutral GDPR Transparency no-match concerns", () => {
   const assessment = (topic: string) => ({
     assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
@@ -2866,6 +2881,17 @@ test("Mini observed labels cannot bypass deterministic topic invariants", () => 
     concerns.some((concern) => concern.originKey.startsWith("gdpr_transparency.article13.")),
     false,
   );
+});
+
+test("cached semantic rows select a relevant alternate excerpt instead of a cross-topic witness", () => {
+  const realRights = "You have the right to request access, correction and deletion of your personal data.";
+  const concerns = buildNormalizedConcerns({reviewFindingCandidates: [], validationFindings: [], runtimeArtifacts: {
+    policyModelReviewArtifact: makeProductionPolicyModelReviewArtifact({rows: [{topic: "data_subject_rights", status: "observed", confidence: 0.96,
+      sourceDocumentIds: ["policy-1"], sourceUrls: ["https://example.com/privacy"],
+      evidenceExcerpts: ["We reserve the right to delete Content that infringes copyright under the DMCA.", realRights], conflictingExcerpts: [],
+      reasonCodes: ["policy_review_invariants_applied_v1"], rationale: "Retained source includes both terms and privacy clauses."}]})}});
+  const concern = concerns.find(row => row.originKey === "gdpr_transparency.article13.data_subject_rights");
+  assert.deepEqual(concern?.evidenceBundle.rawEvidence?.policySnippets, [realRights]);
 });
 
 test("Mini topic guards preserve explicit multilingual and punctuation-heavy evidence", () => {

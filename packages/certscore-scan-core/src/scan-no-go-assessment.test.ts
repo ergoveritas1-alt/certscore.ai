@@ -22,6 +22,12 @@ import {
   shouldAttemptScreenshotOnlyFallback,
 } from "./index.js";
 
+test("a complete connection/adblock error shell is a challenge, while quoted article text remains usable", () => {
+  const shell = "Oops, something went wrong. Please check your connection, disable any ad blockers, or try using a different browser.";
+  assert.equal(buildScanNoGoAssessment(scanEvidence({text: shell, finalMainDocumentStatus: 200, screenshots: []}))?.scanNoGoAssessment.decision, "no_go");
+  assert.notEqual(buildScanNoGoAssessment(scanEvidence({text: `Troubleshooting guide. A browser may display: ${shell} Our article explains how to fix this message and browse products.`, finalMainDocumentStatus: 200, screenshots: []}))?.scanNoGoAssessment.decision, "no_go");
+});
+
 test("overlong retained policy identities do not invalidate the compact lane summary", () => {
   const policy = usablePolicySurface();
   policy.url = `https://example.test/privacy?state=${"x".repeat(850)}`;

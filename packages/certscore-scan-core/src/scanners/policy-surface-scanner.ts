@@ -10,6 +10,7 @@ import {
   decodeCommonHtmlEntities,
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   assessArticle13PolicyTextQuality,
+  looksLikeArticle13CodeOrConfigText,
   canonicalPolicyDocumentBrandRelationship,
   classifyConsentSurfaceText,
   classifyConsentControlLabel,
@@ -6584,14 +6585,15 @@ export function assessGoverningPolicyBodyEvidence(input: {
   const retainedPrivacyTitle = retainedTitleClassification.surfaceType === "privacy_policy" &&
     retainedTitleClassification.matchStrength === "direct";
   const visitorScopeExcluded = retainedPolicyExplicitlyExcludesWebsiteVisitors(input.text);
-  const state = !visitorScopeExcluded && targetOwned &&
+  const codeOrMarkup = looksLikeArticle13CodeOrConfigText(input.text);
+  const state = !codeOrMarkup && !visitorScopeExcluded && targetOwned &&
       exactPolicyCandidate &&
       textCoverageComplete &&
       minimumBodyRetained &&
       input.documentSubstance.matchesExpectedSurface &&
       substantiveEvidence
     ? "substantive" as const
-    : !visitorScopeExcluded && retainedPrivacyTitle && exactPolicyCandidate &&
+    : !codeOrMarkup && !visitorScopeExcluded && retainedPrivacyTitle && exactPolicyCandidate &&
         textCoverageComplete &&
         minimumBodyRetained &&
         input.documentSubstance.reasonCode === "multilingual_policy_reviewable" &&
@@ -6610,6 +6612,7 @@ export function assessGoverningPolicyBodyEvidence(input: {
     substantiveDisclosureSignalCount: input.substantiveDisclosureSignalCount,
     reasonCodes: uniqueStrings([
       ...(visitorScopeExcluded ? ["policy_body_explicitly_excludes_website_visitors"] : []),
+      ...(codeOrMarkup ? ["policy_body_code_or_markup"] : []),
       targetOwned ? "policy_body_target_owned" : "policy_body_target_ownership_unverified",
       exactPolicyCandidate ? "exact_privacy_policy_candidate" : "privacy_candidate_not_exact",
       textCoverageComplete ? "complete_policy_text_retention" : "policy_text_retention_incomplete",

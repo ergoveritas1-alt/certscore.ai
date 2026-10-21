@@ -46,7 +46,16 @@ export function summarizeGpcImpactCohort(rows: ReturnType<typeof assessGpcCohort
       verifiedDelivery: rate(required.filter(r => r.observation.delivery.httpHeaderRetained && r.observation.delivery.mainNavigatorReadbackRetained).length, required.length),
       completionOnPositivelyVerifiedAccessiblePages: rate(accessible.filter(r => r.observation.status === "complete").length, accessible.length),
       matchedWindowCoverage: rate(measured.length, required.length),
-      windows: Object.fromEntries([250, 500, 1000].map(ms => {
+      // Operational calibration only. Short or missing comparisons never
+      // change independently verified positive collection or scoring policy.
+      pairedWindowCoverage: {
+        measuredPairs: measured.length,
+        belowThreeSeconds: measured.filter(r => r.impact.durationMs! < 3000).length,
+        threeToFiveSeconds: measured.filter(r => r.impact.durationMs! >= 3000 && r.impact.durationMs! < 5000).length,
+        atLeastFiveSeconds: measured.filter(r => r.impact.durationMs! >= 5000).length,
+        unavailable: required.length - measured.length,
+      },
+      windows: Object.fromEntries([...new Set([250, 500, 1000, ...measured.map(r => r.impact.durationMs!)])].sort((a,b) => a-b).map(ms => {
         const group = measured.filter(r => r.impact.durationMs === ms);
         return [ms, { pairs: group.length, activity: Object.fromEntries((["trackers", "advertisingMarketing", "analyticsReplay"] as const).map(key => {
           const active = group.filter(r => r.impact.activity![key].baselineCount > 0);

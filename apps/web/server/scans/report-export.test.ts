@@ -577,8 +577,13 @@ test("source-bound short policy and separate provider evidence preserve canonica
     if(mode==="provider_only")assert.equal(ownership.targetRelationship,"service_provider");
     if(mode==="partial_target")f.policyEvidence.projection.documents.forEach(document=>{document.documentTextCoverage.status="truncated";});
     const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
-    if(mode==="provider_only")assert.equal(child,null,"No target-owned governing evidence means no usable California assessment");
-    else assert.ok(child,mode);
+    assert.ok(child,mode);
+    if(mode==="provider_only") {
+      assert.equal(child.disclosureInspection,undefined,"A provider policy cannot prove target disclosure presence or absence");
+      assert.deepEqual(child.reviewCoverage?.sourceDocuments,[]);
+      assert.equal(child.reviewCoverage?.captureCoverage?.policyTextComplete,false);
+      assert.ok(child.inspection,"Independently verified target choice inspection remains retained");
+    }
     const initial=deriveConsentControlAssessment({scan:{scanId:record.scan.id,finalUrl:CA_FIXTURE_URL}});
     if(child)initial.californiaPrivacyReview=child;
     const parent=consentControlAssessmentSchema.parse(JSON.parse(JSON.stringify(initial)));

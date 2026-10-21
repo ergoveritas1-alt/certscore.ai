@@ -16,6 +16,31 @@ import {
   type Article13DisclosureRejectionMode,
 } from "./article13-disclosure-rejection";
 
+test("cross-topic retained witnesses stay ineligible across producer, report and multilingual gates", () => {
+  const cases = [
+    ["data_subject_rights", "We respect others' intellectual property rights, and we reserve the right to delete Content alleged to infringe copyright under the DMCA."],
+    ["international_transfers", "Please confirm such external websites which are the link destinations as for how the personal data is to be processed in such websites. The Company shall assume no responsibility whatsoever for the entry of the personal data outside its website."],
+    ["recipients_or_vendor_categories", "We receive Personal Information from third-party retailers and vehicle-service providers in connection with vehicle sales, leases, and repairs."],
+    ["recipients_or_vendor_categories", "GDPR and data protection laws in Europe distinguish between organizations that process personal data for their own purposes (known as controllers) and organizations that process personal data on behalf of other organizations (known as processors)."],
+    ["legal_basis", "GDPR and data protection laws in Europe require a lawful basis for processing personal data."],
+    ["legal_basis", "We can process your personal data for more than one legal basis, depending on the specific purpose for which we use your data."],
+    ["processing_purposes", "We collect Personal Data about you when you provide such information directly to us, when third parties such as our business partners or service providers provide us with Personal Data about you, or when Personal Data about you is automatically collected in connection with your use of our Service."],
+    ["processing_purposes", "Upon written request, we may provide your personal information and information about the ways in which that information is being used."],
+    ["automated_decision_making_or_profiling", "Profiling means any form of automated processing of personal data consisting of the use of personal data to evaluate certain personal aspects relating to a natural person."],
+    ["controller_contact", "FAQ Basiswissen Kontakt für Ihre Fragen Weitere Informationen Datenschutz Navigation und Hilfe"],
+  ] as const;
+  for (const [topic, text] of cases) for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const)
+    assert.notEqual(article13DisclosureRejectReason(text, topic, {mode}), null, `${topic}: ${mode}: ${text}`);
+});
+
+test("raw HTML application shells never become a policy topic witness", () => {
+  const html = '<!DOCTYPE html><html><script>var config = {privacy: "personal data controller retention"};</script><body id="react-root"></body></html>';
+  for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+    assert.equal(article13DisclosureRejectReason(html, "processing_purposes", {mode}), "code_or_non_policy_excerpt");
+    assert.notEqual(article13DisclosureRejectReason("When you provide your information to us, we will only use it for the purposes for which it is provided.", "processing_purposes", {mode}), null);
+  }
+});
+
 test("data-specific storage duration and form deletion criteria survive every shared gate", () => {
   for (const text of [
     "The storage period of the data in Matomo is set at 6 months.",

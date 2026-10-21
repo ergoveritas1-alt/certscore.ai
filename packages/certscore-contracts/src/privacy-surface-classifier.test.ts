@@ -7,6 +7,14 @@ import {
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
 
+test("cookie product categories do not become cookie policy surfaces", () => {
+  for (const label of ["Protein Cookies", "Chocolate Cookies", "Buy cookies"]) {
+    assert.equal(classifyPrivacySurface({linkText: label, url: "https://shop.test/category/protein-cookies"}).surfaceType, "unknown", label);
+  }
+  assert.equal(classifyPrivacySurface({linkText: "Cookies"}).surfaceType, "cookie_policy");
+  assert.equal(classifyPrivacySurface({linkText: "Cookie-Richtlinie"}).surfaceType, "cookie_policy");
+});
+
 test("classifies canonical privacy-policy surfaces across supported locales", () => {
   const examples = [
     ["Privacy policy", "en"],

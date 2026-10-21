@@ -10,6 +10,21 @@ import {
   shouldExitStablePartialConsentGate,
 } from "./scanners/pre-consent-runtime-scanner";
 
+test("English plural and Polish Settings controls retain same-session typed Options evidence", async () => {
+  const browser = await chromium.launch({headless: true});
+  try {
+    const page = await browser.newPage({viewport: {width: 1366, height: 900}});
+    await page.route("**/*", route => route.fulfill({status: 200, contentType: "text/html", body: "<!doctype html><body></body>"}));
+    await page.goto("https://consent-fixture.test/");
+    for (const [language, label, context] of [["en", "Cookies Settings", "We use cookies. Choose your preferences."], ["pl", "USTAWIENIA ZAAWANSOWANE", "Używamy plików cookie. Prywatność i dane osobowe."]] as const) {
+      await page.setContent(`<html lang="${language}"><body><section role="dialog" aria-label="Cookie choices" style="position:fixed;bottom:0;background:white;padding:20px"><p>${context}</p><button>Accept all</button><button>${label}</button></section></body></html>`);
+      const geometry = await captureConsentControlGeometry(page, {screenshotArtifactRef: "fixture.png"});
+      assert.equal(geometry.summary.firstLayerOptions, true, JSON.stringify(geometry.candidates));
+      assert.ok(geometry.candidates.some(candidate => candidate.actionType === "manage_preferences"));
+    }
+  } finally {await browser.close();}
+});
+
 test("quoted privacy control resolves inspection while the gate independently requires retained geometry", async () => {
   const browser = await chromium.launch({ headless: true });
   try {

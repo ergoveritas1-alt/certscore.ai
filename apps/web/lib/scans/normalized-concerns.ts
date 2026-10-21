@@ -13,6 +13,7 @@ import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
 import { assessRejectClickTracking, readRejectClickTrackingAssessment, REJECT_CLICK_TRACKING_SIGNAL } from "./reject-click-tracking-policy";
 import {
   classifyGdprTransparencyTopics,
+  article13CrossTopicRejectReason,
   collectionSurfaceAssessmentSchema,
   consentControlAssessmentSchema,
   projectConsentVisualProminence,
@@ -22,6 +23,7 @@ import {
   hasStaleLegalFrameworkReference,
   hasSubstantiveProcessingPurposesEvidence,
   isDataSubjectRightsDisclosureEvidenceUsable,
+  isArticle13DisclosureEvidenceUsable,
   hasUnsupportedGenericPrivacyContact,
   policyModelReviewArtifactSchema,
   gpcResponseAssessmentSchema,
@@ -2692,11 +2694,12 @@ function buildGdprTransparencyArticle13Concerns(
         classifyGdprTransparencyTopics({ text: evidenceText ?? "" }).matches.some((match) => match.topic === "dpo_contact");
       const controllerContactConfirmed = topic !== "controller_contact" ||
         !hasUnsupportedGenericPrivacyContact(evidenceText ?? "");
+      const crossTopicWitness = article13CrossTopicRejectReason(evidenceText ?? "", topic);
       const extractedState = getGdprTransparencyArticle13ConcernState(signal);
       const state =
         extractedState === "sufficient" && (!evidenceText || !sourceUrl)
           ? "ambiguous"
-          : (!processingPurposesEvidenceSubstantive || !dpoDesignationConfirmed || !controllerContactConfirmed) && extractedState === "sufficient"
+          : (!processingPurposesEvidenceSubstantive || !dpoDesignationConfirmed || !controllerContactConfirmed || crossTopicWitness !== null) && extractedState === "sufficient"
           ? "ambiguous"
           : extractedState;
       const evidence = uniqueStrings([evidenceText, sourceUrl]);
@@ -2995,9 +2998,11 @@ function buildGdprTransparencyModelReviewConcerns(
 
     // Revalidate cached semantic rows using the same rights-passage contract
     // as the producer. Keep the original artifact intact for internal audit.
-    const evidenceText = topic === "data_subject_rights"
-      ? row.evidenceExcerpts.find(excerpt => isDataSubjectRightsDisclosureEvidenceUsable(excerpt)) ?? null
-      : row.evidenceExcerpts[0] ?? null;
+    const evidenceText = row.evidenceExcerpts.find(excerpt =>
+      !modelReviewEvidenceMatchesKnownCrossTopicFalsePositive(topic, excerpt) &&
+      (topic === "data_subject_rights" ? isDataSubjectRightsDisclosureEvidenceUsable(excerpt) :
+        isArticle13DisclosureEvidenceUsable(excerpt, topic, { mode: "retained_report" }) ||
+        isArticle13DisclosureEvidenceUsable(excerpt, topic, { mode: "multilingual_classifier" }))) ?? null;
     const sourceUrl = row.sourceUrls[0] ?? null;
     if (!evidenceText || modelReviewEvidenceMatchesKnownCrossTopicFalsePositive(topic, evidenceText)) {
       return [];

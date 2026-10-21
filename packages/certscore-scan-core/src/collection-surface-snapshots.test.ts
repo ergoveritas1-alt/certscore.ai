@@ -5,6 +5,28 @@ import sharp from "sharp";
 import { buildCollectionSurfaceInventory } from "./collection-surface-inventory";
 import { captureCollectionSurfaceSnapshots, FORM_SNAPSHOT_BUDGET_MS } from "./collection-surface-snapshots";
 
+test("a bounded adjacent label and notice survive a short form crop while values stay masked", async () => {
+  const browser = await chromium.launch({headless: true});
+  const page = await browser.newPage({viewport: {width: 1280, height: 900}});
+  try {
+    await page.setContent('<section style="width:500px"><label for="mail">Newsletter email</label><form style="height:34px;margin:0"><input id="mail" type="email" value="private@example.test" style="width:480px;height:28px"></form><p>Read our privacy notice before subscribing.</p></section>');
+    const inventory = buildCollectionSurfaceInventory({pageUrl: page.url(), inspectedFieldCandidateCount: 1, candidateScanTruncated: false,
+      rows: [{groupKey: "form", structure: "native_form", elementType: "input", inputType: "email", label: "Newsletter email", required: false, disabled: false, readOnly: false, domOrder: 0}]}, Date.now());
+    const images = await captureCollectionSurfaceSnapshots(page, inventory, async ({bytes}) => {
+      assert.ok((await sharp(bytes).metadata()).height! > 60, "crop retains the nearby notice and label");
+      const pixels = await sharp(bytes).removeAlpha().raw().toBuffer({resolveWithObject: true});
+      const offset = (30 * pixels.info.width + 100) * pixels.info.channels;
+      assert.ok(Math.abs(pixels.data[offset]! - 148) < 8 && Math.abs(pixels.data[offset + 1]! - 163) < 8 && Math.abs(pixels.data[offset + 2]! - 184) < 8,
+        "expanded context must retain the neutral mask over the populated field");
+      return {safeForDisplay: true};
+    });
+    assert.equal(images[0]?.status, "available");
+    assert.equal(await page.locator("input").inputValue(), "private@example.test");
+    assert.equal(await page.locator("[data-certscore-form-capture]").count(), 0);
+    assert.equal(inventory.forms[0]?.fields[0]?.label, "Newsletter email");
+  } finally {await browser.close();}
+});
+
 test("fully masked form crops retain fields without publishing an empty image or blocking a useful second form", async () => {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();

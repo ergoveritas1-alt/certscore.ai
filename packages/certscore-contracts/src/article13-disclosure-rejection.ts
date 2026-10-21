@@ -194,9 +194,10 @@ export function hasSubstantiveRetentionEvidence(value: string) {
   // Retention tables state the lifecycle in their header, not in every cell.
   const retentionTableRow = /\b(?:retention|storage period)\s*:\s*(?:normally\s+)?(?:up to\s+)?\d+\s*(?:days?|weeks?|months?|years?)\b/i.test(text) &&
     /\b(?:data|records?|consent choice|correspondence|logs?|responses?|identifiers?)\b/i.test(text);
+  const accountLifecycle = /\b(?:personal data|personal information|account (?:data|information))\b.{0,100}\bfor the duration of (?:your |the |an )?account\b.{0,120}\b(?:delete|erase|anonymi[sz]e)\b.{0,60}\bafter (?:account )?closure\b/i.test(text);
   return text.split(/(?<=[.!?])\s+/u).some((sentence) =>
     dataContext.test(sentence) && lifecycleAction.test(sentence) && periodOrCriterion.test(sentence)
-  ) || explicitStoragePeriod || completedPurpose || retentionTableRow ||
+  ) || explicitStoragePeriod || completedPurpose || retentionTableRow || accountLifecycle ||
     /\b(?:do not|does not|don['’]t|will not|won['’]t) keep (?:your )?(?:personal )?(?:data|information) (?:any )?longer than (?:is )?(?:necessary|required)\b/i.test(text) ||
     /\bkeep information for as long as we need (?:it )?to (?:fulfil|fulfill) the purpose\b/i.test(text);
 }
@@ -220,6 +221,37 @@ function hasSubstantivePrivacyContactPoint(value: string) {
   );
 }
 
+/** Reject known cross-topic witnesses before any producer/legacy mode can
+ * credit them. A rejected witness is uncertainty, never a missing disclosure. */
+export function article13CrossTopicRejectReason(value: string, topic: Article13DisclosureType | string | undefined): Article13DisclosureRejectReason | null {
+  const text = normalizeArticle13Whitespace(value);
+  const explicitBasis = /\b(?:art(?:icle)?\.?\s*6|consent|contract(?:ual)?|legal obligations?|legitimate interests?|public (?:task|interest)|vital interests?|consentimiento|contrato|obligaci[oó]n legal|inter[eé]s leg[ií]timo)\b/i;
+  const outbound = /\b(?:we|the company|the controller)\s+(?:(?:may|will|also)\s+){0,2}(?:share|disclose|send|transfer|provide|give)\b[^.!?]{0,160}\b(?:data|information)\b|\b(?:data|information)\b[^.!?]{0,100}\b(?:is|are|may be|will be)\s+(?:shared|disclosed|transferred|provided)\b/i;
+  const actualPurpose = /\b(?:we|the company|the controller)\s+(?:(?:may|will|also)\s+){0,2}(?:use|process|collect|store)\b[^.!?]{0,100}\b(?:data|information|details|email address)\b[^.!?]{0,80}\b(?:to|for)\s+(?:(?:the|our|your)\s+)?(?:provid\w*|deliver\w*|operat\w*|maintain\w*|improv\w*|respond\w*|answer\w*|fulfil\w*|protect\w*|prevent\w*|detect\w*|measur\w*|analy[sz]\w*|verif\w*|send\w*|administ\w*|manag\w*|support\w*|authenticat\w*)\b|\b(?:personal data|personal information|your data|your information)\b[^.!?]{0,80}\b(?:is|are|will be)\s+(?:used|processed|collected)\s+to\s+(?:provide|respond|deliver|manage|improve|protect|prevent)\b/i;
+  const listedPurpose = /\bfollowing purposes\s*:\s*(?:to\s+)?(?:register|manage|confirm|validate|activate|provide|respond|send|protect|prevent)\b/i.test(text);
+  if (topic === "processing_purposes" && !actualPurpose.test(text) && !listedPurpose &&
+      /\b(?:this (?:privacy )?(?:policy|notice) (?:explains|describes|sets out)|business purposes|we collect[^.!?]{0,120}when you provide|information directly to us|to achieve.{0,30}purposes|shall not be regarded as recipients|data minimi[sz]ation|directly from you|information (?:you (?:provide|give)|provided (?:directly|by you))|(?:collect|receive)(?:d|s)?[^.!?]{0,100}\bfrom\b|personal (?:data|information) (?:means|is any|can be used)|(?:right|request)[^.!?]{0,80}(?:how we use|uses of)|data subject[^.!?]{0,100}entitled|upon written request|information about the ways in which|information regarding whether|necessary for (?:the )?(?:performance|execution) of (?:a |the )?contract)\b/i.test(text)) return "insufficient_row_specific_terms";
+  if (topic === "legal_basis" && !explicitBasis.test(text) &&
+      /\b(?:legal bas(?:is|es)|lawful basis|require[^.!?]{0,80}basis|basis[^.!?]{0,80}processing)\b/i.test(text)) return "insufficient_row_specific_terms";
+  if (topic === "legal_basis" && /\b(?:derecho|derechos|retirar|revocar)\b/i.test(text) &&
+      !/\b(?:base(?:s)? (?:jur[ií]dica|legal)|fundamento|art[ií]culo\s*6|basad[oa]|se basa|sobre la base)\b/i.test(text)) return "insufficient_row_specific_terms";
+  if (topic === "recipients_or_vendor_categories" && !outbound.test(text) &&
+      /\b(?:we receive|we collect|directly from you|information (?:we receive|collected from)|known as ["“]?(?:controllers|processors)|distinguish between organizations|(?:recipient|processor|controller) (?:means|is defined))\b/i.test(text)) return "insufficient_row_specific_terms";
+  if (topic === "international_transfers" && /\b(?:external websites|link destinations|no responsibility|not responsible)\b/i.test(text) &&
+      !/\b(?:international|cross-border|transfers?|countries|country|jurisdictions?|eea|european union|united states|adequacy|standard contractual)\b/i.test(text)) return "insufficient_row_specific_terms";
+  if (topic === "data_subject_rights" && /\b(?:dmca|copyright|intellectual property)\b/i.test(text) &&
+      !/\b(?:personal data|personal information|your data|your information)\b/i.test(text)) return "insufficient_row_specific_terms";
+  if (topic === "automated_decision_making_or_profiling" &&
+      /\bautomated decision making\s*(?:&|and)\s*profiling\b/i.test(text) &&
+      (text.match(/\b(?:how we use|lawful basis|legal rights|sharing and disclosing|cross border|cookie policy|indirectly collected)\b/gi) ?? []).length >= 4 &&
+      !/\bwe\s+(?:do|use|perform|make|employ|carry)\b/i.test(text)) return "table_of_contents_only";
+  if (topic === "automated_decision_making_or_profiling" && /\bprofiling (?:means|is defined as)\b/i.test(text) &&
+      !/\b(?:we|the company|the controller)\b[^.!?]{0,120}\b(?:use|perform|carry out|do not use|does not use)\b/i.test(text)) return "insufficient_row_specific_terms";
+  if (topic === "controller_contact" && /\b(?:another data controller|other data controllers?|faq|basiswissen)\b/i.test(text) &&
+      !/(?:[\w.+-]+@[\w.-]+\.[a-z]{2,}|\+?\d[\d ()-]{7,}\d|(?:controller is|responsible controller|verantwortlich[^.!?]{0,80}(?:gmbh|universit|stra[ßs]e)))/i.test(text)) return "insufficient_row_specific_terms";
+  return null;
+}
+
 export function article13DisclosureRejectReason(
   value: string,
   disclosureType: Article13DisclosureType | string | undefined,
@@ -227,6 +259,14 @@ export function article13DisclosureRejectReason(
 ): Article13DisclosureRejectReason | null {
   const mode = options.mode ?? "scan_core";
   const text = normalizeArticle13Whitespace(value);
+  const crossTopicReason = article13CrossTopicRejectReason(text, disclosureType);
+  if (crossTopicReason) {
+    if (looksLikeArticle13CodeOrConfigText(text)) return "code_or_non_policy_excerpt";
+    if (looksLikeArticle13PageChrome(text, {mode})) return "page_chrome_or_navigation";
+    if (looksLikeArticle13TableOfContents(text, {mode})) return "table_of_contents_only";
+    return crossTopicReason;
+  }
+  if (/^(?:<!doctype\s+html\b|<html(?:\s|>))/i.test(text)) return "code_or_non_policy_excerpt";
   // Compact scripts can express a complete, narrowly matched practice in fewer
   // characters. Keep the general quality floor for every other disclosure.
   if (text.length < 35 && !(disclosureType === "automated_decision_making_or_profiling" &&
@@ -365,6 +405,7 @@ export function isGenericArticle13StorageNotRetentionEvidence(value: string) {
 
 export function looksLikeArticle13CodeOrConfigText(value: string) {
   const text = normalizeArticle13Whitespace(value);
+  if (/^(?:<!doctype\s+html\b|<html(?:\s|>))/i.test(text)) return true;
   const codeSignalCount = [
     /this\.gbar_/i,
     /\bCONFIG:\s*\[\[\[/,

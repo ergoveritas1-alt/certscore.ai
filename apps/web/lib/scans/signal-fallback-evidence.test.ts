@@ -8,6 +8,24 @@ import {
   isChildContextSignalKey
 } from "./signal-fallback-evidence";
 
+test("verified target policy discovery cannot inherit a service provider's fetched text", () => {
+  const summary = {
+    policyTextEvidenceProjection: { contractVersion: "certscore.policy-text-evidence-projection.v1", generatedAt: "2026-10-21T00:00:00Z", scanId: "scan",
+      sourceBundle: { schemaVersion: "v1", verificationStatus: "verified", sha256: "a".repeat(64) }, projectionStatus: "verified_partial", documents: [] },
+    privacyPolicyPresent: false,
+    discoveredPrivacyPolicyDetails: [{url: "https://example.test/privacy", linkObservationState: "observed", targetRelationship: "target_controller"},
+      {url: "https://vendor.test/privacy", linkObservationState: "observed", targetRelationship: "service_provider"}],
+  };
+  const result = buildSnapshotDisclosureFallbackEvidence({signalKey: "disclosure.privacy_policy_present", signalLabel: "Privacy policy", signalValue: true,
+    snapshot: {privacy_policy_present: true}, policySurfaceSummary: summary,
+    policyEnrichment: [{pageType: "privacy_policy", pageUrl: "https://vendor.test/privacy", summaryShort: "Vendor privacy notice. We collect personal data for our services."}]});
+  assert.deepEqual(result.pageUrls, ["https://example.test/privacy"]);
+  assert.deepEqual(result.sourceUrls, ["https://example.test/privacy"]);
+  assert.deepEqual(result.policySnippets, []);
+  assert.equal(result.policySummaryShort, null);
+  assert.equal(result.fetchQuality, "thin_content");
+});
+
 test("recognizes child-context signal keys including privacy disclosure contradiction key", () => {
   assert.equal(
     isChildContextSignalKey("privacy.children_privacy_context_without_supporting_disclosure"),

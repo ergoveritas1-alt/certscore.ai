@@ -12,6 +12,11 @@ import {
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
 
+test("plural Cookies Settings is an observation-only Options label", () => {
+  assert.equal(classifyConsentControlLabel({ label: "Cookies Settings", hasConsentContext: true, usage: "observation" }).intent, "options");
+  assert.equal(classifyConsentControlLabel({ label: "Cookies Settings", hasConsentContext: true, usage: "action" }).intent, "unknown");
+});
+
 test("quoted statutory privacy label is an exact, context-bound observation only", () => {
   for (const label of ['"Do Not Sell My Personal Information"', '“Do Not Sell My Personal Information”']) {
     const result = classifyConsentControlLabel({ label, hasConsentContext: true, usage: "observation" });

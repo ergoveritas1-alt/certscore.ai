@@ -3435,7 +3435,7 @@ function policyDocumentHtml(pathname: string): string | undefined {
     },
     "/policies/article13-en": {
       title: "Privacy Policy",
-      body: "The data controller provides a privacy contact and our data protection officer. We explain the purposes of processing personal data, the legal basis for processing personal data, categories of recipients of personal data, the retention period for personal data, your right to access your personal data, international transfers of personal data, the right to lodge a complaint with a supervisory authority, and automated decision-making using personal data.",
+      body: "The data controller provides a privacy contact and our data protection officer. We rely on consent as the legal basis for processing personal data. We explain the purposes of processing personal data, categories of recipients of personal data, the retention period for personal data, your right to access your personal data, international transfers of personal data, the right to lodge a complaint with a supervisory authority, and automated decision-making using personal data.",
     },
     "/policies/article13-de": {
       title: "Datenschutzerklärung",
