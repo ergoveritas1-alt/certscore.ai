@@ -13,7 +13,7 @@
       "title": "Your data can outlast your account by years",
       "description": "Privacy-policy wording from 5,000 website reports shows how long companies say they keep information, what you can ask them to delete, and where your data may go.",
       "datePublished": "2026-10-16",
-      "dateModified": "2026-10-16",
+      "dateModified": "2026-10-21",
       "file": "privacy-policy-transparency-study-2026.html"
     }
   ],
@@ -46,6 +46,11 @@
     {
       "path": "/insights/assets/privacy-policy-evidence-social-2026.png",
       "file": "assets/privacy-policy-evidence-social-2026.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "/insights/assets/privacy-policy-study-social-84-2026.png",
+      "file": "assets/privacy-policy-study-social-84-2026.png",
       "contentType": "image/png"
     }
   ]
