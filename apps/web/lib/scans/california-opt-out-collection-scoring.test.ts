@@ -229,3 +229,25 @@ test('verified Google matching and Amazon identity endpoints enter the canonical
  const support=observed('collection',['https://cm.g.doubleclick.net/partnerpixels?gpp=fixture','https://s.amazon-adsystem.com/iu30','https://c.amazon-adsystem.com/aax2/apstag.js']);
  assert.equal(deriveCaliforniaGpcResponsePolicy(support).deductionPoints,0);
 });
+
+test("GPT ad calls and Lotame profile mapping reach the canonical California score without support downloads", () => {
+ const urls=["https://securepubads.g.doubleclick.net/gampad/ads?iu=fixture", "https://bcp.crwdcntrl.net/6/map?xcid=fixture",
+  "https://securepubads.g.doubleclick.net/pagead/managed/dict/m202610200101/gpt", "https://pagead2.googlesyndication.com/ccm/collect"];
+ const a=observed("collection",urls);
+ assert.deepEqual(a.observation.requests.advertisingCollectionEvidenceIds,["collection-0","collection-1"]);
+ assert.equal(deriveCaliforniaGpcResponsePolicy(a).recipientIds?.length,2);
+ assert.equal(deriveCaliforniaGpcResponsePolicy(a).deductionPoints,25);
+ const persisted=gpcResponseAssessmentSchema.parse(JSON.parse(JSON.stringify(a)));
+ assert.ok(persisted.contractVersion === "certscore.gpc-response-assessment.v3");
+ assert.ok(apiV2GpcResponseSchema.safeParse(publicGpcResponse(persisted,25)).success);
+ const f=californiaCoverageFixture();f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v10";
+ f.bundle.scanId=a.observation.scanId!;f.policyEvidence.projection.scanId=f.bundle.scanId;
+ f.bundle.policySurfaceObservations.forEach(row=>{row.documentLanguage="en";});
+ const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+ const parent=deriveConsentControlAssessment({scan:{scanId:f.bundle.scanId,finalUrl:CA_FIXTURE_URL}});parent.californiaPrivacyReview=child;
+ const packets=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),runtimeArtifacts:{consentControlAssessment:parent,gpcResponseAssessment:persisted}});
+ assert.equal(buildCanonicalGpcResponseProjection(packets)?.californiaDeductionPoints,25);
+ const score=deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:packets});
+ assert.equal(score.score,75);assert.equal(score.deductions.length,1);
+ assert.equal(deriveCaliforniaGpcResponsePolicy(observed("no_response",urls)).deductionPoints,0);
+});

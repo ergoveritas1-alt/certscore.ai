@@ -48,7 +48,12 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
   const retained = new Map(session?.requests.map(r => [r.eventId, r]));
   const classified = (result.documentBound && result.delivery.httpHeaderRetained ? bundle?.networkEvents ?? [] : []).filter(event => {
     const request = retained.get(event.eventId);
-    const matches = new Set((vendors.get(event.eventId) ?? []).map(v => `${v.vendor}|${v.product}|${v.purpose}`));
+    // Historical inventories can retain overlapping services belonging to the
+    // same recipient. Product naming is not a recipient/purpose conflict.
+    // Keep distinct entities, vendors and purposes fail-closed, and still
+    // require unambiguous current endpoint attribution below for collection.
+    const matches = new Set((vendors.get(event.eventId) ?? []).map(v =>
+      `${v.registryAttribution?.entityId ?? v.entity}|${v.vendor}|${v.purpose}`));
     return matches.size === 1 && eventCounts.get(event.eventId) === 1 && request?.secGpc === "1" &&
       request.urlSha256 === gpcDocumentHash(event.requestUrl) && request.timestampMs === event.timestampMs &&
       event.timestampMs >= session!.mainDocument!.committedAtMs && event.timestampMs <= session!.captureEndedAtMs;
@@ -60,7 +65,9 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
     if (status === undefined || status < 200 || status >= 400) return false;
     const resolved=resolveCanonicalVendor({type:"request",url:event.requestUrl,sourceScanner:"gpc_observation",matchSource:"network_request"}).observation;
     const qualified = resolved && resolved.confidence >= 0.9 && ["advertising","marketing"].includes(resolved.purpose) &&
-      resolved.registryAttribution?.matchKind === "endpoint";
+      resolved.registryAttribution?.matchKind === "endpoint" &&
+      (vendors.get(event.eventId) ?? []).every(v =>
+        v.registryAttribution?.entityId === resolved.registryAttribution!.entityId && v.purpose === resolved.purpose);
     if (qualified) collectionRecipients.set(event.eventId, { evidenceId:event.eventId, entityId:resolved.registryAttribution!.entityId, label:resolved.entity, observedAtMs:event.timestampMs });
     return qualified;
   });

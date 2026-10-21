@@ -43,3 +43,14 @@ test('Google matching pixels and Amazon identity/bid collectors receive narrow e
   assert.notEqual(v?.registryAttribution?.matchKind,'endpoint',url);
  }
 });
+
+test("GPT dictionary downloads and consent telemetry cannot become advertising collection", () => {
+  for (const url of [
+    "https://securepubads.g.doubleclick.net/pagead/managed/dict/m202610200101/gpt",
+    "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+    "https://pagead2.googlesyndication.com/ccm/collect",
+    "https://ad.doubleclick.net/ccm/s/collect",
+  ]) assert.equal(isCanonicalAdvertisingCollectionCandidate(url, "fetch"), false, url);
+  assert.equal(isCanonicalAdvertisingCollectionCandidate("https://securepubads.g.doubleclick.net/gampad/ads?iu=fixture", "fetch"), true);
+  assert.equal(isCanonicalAdvertisingCollectionCandidate("https://bcp.crwdcntrl.net/6/map?xcid=fixture", "xhr"), true);
+});

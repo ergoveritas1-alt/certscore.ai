@@ -33,7 +33,7 @@ export {
 
 export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-18-collection-roles-v6";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-21-collection-roles-v7";
 export const COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-15-v3";
 
 export type VendorResolverEvidenceType =
@@ -762,9 +762,11 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "advertising", "audience_segmentation"],
     confidence: 0.93,
     hostPatterns: [/\.crwdcntrl\.net$/i, /\.lotame\.com$/i],
-    urlPatterns: [/\/lt\//i, /\/pixel/i],
+    urlPatterns: [/\/lt\//i, /\/pixel/i, /^https:\/\/bcp\.crwdcntrl\.net\/6\/(?:map|data)(?:[?#]|$)/i],
     cookiePatterns: [/^lotame_/i],
     basisLabel: "lotame_endpoint_or_cookie",
+    review: { reviewedAt: "2026-10-21", reviewer: "Codex primary-source endpoint review; not human calibration",
+      sourceUrls: ["https://my.lotame.com/t/35hxvnl/lt-js-post-implementation-validation", "https://tags.crwdcntrl.net/lt/c/16589/sync.min.js"] },
   },
   {
     identity: {"entityId":"ent_de92c9928c81","vendorId":"ven_6ce27e0da583","serviceId":"svc_57692cc931af"},
@@ -1935,6 +1937,8 @@ const rules: VendorRule[] = [
     hostPatterns: [/^securepubads\.g\.doubleclick\.net$/i, /^www\.googletagservices\.com$/i],
     urlPatterns: [/\/tag\/js\/gpt\.js\b/i, /\/gampad\//i],
     basisLabel: "google_publisher_tag_endpoint",
+    review: { reviewedAt: "2026-10-21", reviewer: "Codex primary-source endpoint review; not human calibration",
+      sourceUrls: ["https://support.google.com/admanager/answer/10358597?hl=en"] },
   },
   {
     identity: {"entityId":"ent_7509263a9ab6","vendorId":"ven_b460db2a4c04","serviceId":"svc_a6bdbb4fc8f8"},
@@ -1989,7 +1993,9 @@ const rules: VendorRule[] = [
     confidence: 0.96,
     // pagead2.googlesyndication.com is owned by the canonical AdSense rule above.
     // Keeping it here produces two product identities for the same endpoint.
-    hostPatterns: [/(?:^|\.)doubleclick\.net$/i],
+    // GPT owns this exact ad-server host. Keeping it in the generic rule
+    // creates two equally specific services for one observed ad request.
+    hostPatterns: [/^(?!securepubads\.g\.doubleclick\.net$)(?:[a-z0-9-]+\.)*doubleclick\.net$/i],
     urlPatterns: [
       /\/pagead\//i,
       /\/gampad\//i,

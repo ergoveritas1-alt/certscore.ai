@@ -67,6 +67,29 @@ test("equally strong conflicting service matches remain ambiguous, not highest-c
   assert.deepEqual(resolveCanonicalVendor(input), { status: "ambiguous", observation: null });
 });
 
+test("Google Publisher Tag owns its ad server without a duplicate DoubleClick service", () => {
+  for (const path of ["/gampad/ads?iu=fixture", "/gampad/ad?iu=fixture", "/tag/js/gpt.js"]) {
+    const input = { type: "request" as const, url: `https://securepubads.g.doubleclick.net${path}` };
+    assert.equal(resolveVendorObservations([input]).length, 1, path);
+    const result = resolveCanonicalVendor(input);
+    assert.equal(result.status, "resolved", path);
+    assert.equal(result.observation?.product, "Google Publisher Tag");
+    assert.equal(result.observation?.registryAttribution?.matchKind, "endpoint");
+  }
+  assert.equal(resolveCanonicalVendor({ type: "request", url: "https://cm.g.doubleclick.net/pixel?google_nid=fixture" }).observation?.product, "Google Ads / DoubleClick");
+});
+
+test("Lotame profile mapping uses an exact collector endpoint, not generic host ownership", () => {
+  for (const endpoint of ["map", "data"]) {
+    const result = resolveCanonicalVendor({ type: "request", url: `https://bcp.crwdcntrl.net/6/${endpoint}?xcid=fixture` });
+    assert.equal(result.observation?.product, "Lotame");
+    assert.equal(result.observation?.registryAttribution?.matchKind, "endpoint");
+  }
+  for (const url of ["https://bcp.crwdcntrl.net/6/mapping", "https://bcp.crwdcntrl.net/7/map", "https://other.crwdcntrl.net/6/map", "https://bcp.crwdcntrl.net.example.test/6/map", "https://example.test/?url=https://bcp.crwdcntrl.net/6/map"]) {
+    assert.notEqual(resolveCanonicalVendor({ type: "request", url }).observation?.registryAttribution?.matchKind, "endpoint", url);
+  }
+});
+
 test("URL authority cannot be overridden by an unrelated supplied hostname", () => {
   assert.equal(resolveCanonicalVendor({ type: "request", url: "https://example.com/app.js", hostname: "bat.bing.com" }).status, "unrecognized");
   assert.equal(resolveCanonicalVendor({ type: "request", url: "https://bat.bing.com/action/0", hostname: "example.com" }).observation?.product, "Microsoft Advertising / Bing UET");

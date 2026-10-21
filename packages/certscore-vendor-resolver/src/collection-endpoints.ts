@@ -1,6 +1,6 @@
 /** Versioned resource-role classification, independent of vendor ownership,
  * recipient identity and legal interpretation. Raw support contacts stay retained. */
-export const COLLECTION_ENDPOINT_POLICY_VERSION = "canonical_collection_endpoint.v4";
+export const COLLECTION_ENDPOINT_POLICY_VERSION = "canonical_collection_endpoint.v5";
 
 export function classifyCanonicalCollectionEndpoint(
   url: string,
@@ -11,6 +11,15 @@ export function classifyCanonicalCollectionEndpoint(
   if (!["https:", "http:"].includes(parsed.protocol)) return { observed: false };
   const hostname = parsed.hostname;
   const path = parsed.pathname;
+  // GPT dictionaries are supporting resources even when delivered without a
+  // .js suffix. A successful download does not establish visitor collection.
+  if (hostname === "securepubads.g.doubleclick.net" && /^\/pagead\/managed\/dict(?:\/|$)/i.test(path)) {
+    return { observed: false, category: "vendor_configuration" };
+  }
+  if (["www.google.com", "google.com", "pagead2.googlesyndication.com", "ad.doubleclick.net"].includes(hostname) &&
+      /^\/ccm\/(?:s\/)?collect\/?$/i.test(path)) {
+    return { observed: true, category: "google_consent_or_tag_support" };
+  }
   if (hostname === "pagead2.googlesyndication.com" && /^\/pagead\/gen_204\/?$/i.test(path)) {
     return { observed: true, category: "advertising_measurement_support" };
   }
