@@ -23,7 +23,7 @@ test("compact name accounting is independent of descriptions and never reads coo
   assert.equal(cmpInventoryManifestSchema.safeParse({...manifest,sourceRecordCount:1}).success,false);
 });
 
-test("passive control checkpoint survives expiry before secondary work; drift invalidates publication",async()=>{
+test("atomic passive controls and link checkpoint survives expiry; drift invalidates publication",async()=>{
   const browser=await chromium.launch({headless:true});
   try {
     const page=await browser.newPage();await page.setContent('<div id="onetrust-banner-sdk"><label><input type="checkbox">Analytics</label><button>Manage options</button></div>');
@@ -32,7 +32,8 @@ test("passive control checkpoint survives expiry before secondary work; drift in
       isCurrent:()=>allowed,onCheckpoint:(packet:any)=>{checkpoints.push(packet);allowed=false;}};
     const retained=await captureCmpBasicEvidence(input);
     assert.equal(checkpoints.length,1);assert.deepEqual(retained?.controls.map(c=>c.label),["Analytics"]);
-    assert.ok(retained?.captureProgress?.controlsAtMs!==undefined);assert.equal(retained?.captureProgress?.privacyLinksAtMs,undefined);
+    assert.ok(retained?.captureProgress?.controlsAtMs!==undefined);assert.ok(retained?.captureProgress?.privacyLinksAtMs!==undefined);
+    assert.deepEqual(retained?.privacyLinks,[],"The same atomic read retained an empty visible link inventory");
     assert.deepEqual(retained?.declarations,[]);cmpBasicEvidenceSchema.parse(retained);
     allowed=true;let reads=0;
     assert.equal(await captureCmpBasicEvidence({...input,readBinding:()=>({url:page.url(),token:++reads===1?"old":"new"})}),undefined);

@@ -310,7 +310,7 @@ export type ConsentControlAssessmentInput = {
   };
 };
 
-const PROJECTOR_VERSION = "2.2.3";
+const PROJECTOR_VERSION = "2.2.4";
 const DEFAULT_REQUIRED_CHANNELS: ConsentControlAssessmentChannel[] = ["dom_inventory", "geometry"];
 
 function unique<T>(values: T[]) {

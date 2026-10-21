@@ -1,4 +1,5 @@
 import { hasBoundCmpPreferenceDocument } from "@certscore/contracts";
+import { ZodError } from "zod";
 import { projectVisibleCmpInventory, projectLoadedCmpInventory, completeConfiguredCmpNames, verifiedMainFrameVisualCapture } from "@certscore/contracts";
 import { createHash } from "node:crypto";
 import { possibleCmpCookieTemplate, cmpBasicEvidenceSchema, type CmpPreferencesEvidence, verifyConsentControlInspection, projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, cmpAuditAssessmentSchema, cmpCookieExpiryEvidenceSchema, cmpAuditCriterionSchema, cmpPreferencesEvidenceSchema, type CanonicalEvidenceBundle, type CmpAuditAssessment, type ExtendedCmpCriterion } from "@certscore/contracts";
@@ -58,6 +59,10 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
   if (expiries.length) rows.find(row => row.id === "duration")!.inventory = { expiries };
   applyChoiceActivity(bundle, set, rows, observations.filter(capture => capture.networkCompleted));
   applyInventoryFacts(bundle, evidence, { controlsUsable, declarationsUsable, privacyUsable, usable }, rows, set, observations);
+  if (declarationsUsable && evidence.configuredCategories?.length && rows.find(row=>row.id==="categories")!.status!=="observed") {
+    set("categories","partially_assessed",`${evidence.configuredCategories.length} categories named in the CMP configuration. Selectable category controls were not verified.`);
+    rows.find(row=>row.id==="categories")!.inventory={categories:evidence.configuredCategories.map(name=>({name,checked:null}))};
+  }
   applyActionLimitations(bundle, rows);
   applyVisualLimitations(bundle, rows, geometry);
   const failedPreference = evidence.status !== "completed" && evidence.support.state !== "unsupported" && evidence.support.reason !== "bounded_visible_preference_inspection";
@@ -68,8 +73,9 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
       detail: preferenceInspectionDetail(evidence), evidenceRefs: ["CmpPreferencesEvidencePacket.json"],
       limitation: { group: "preferences", code: evidence.support.reason } });
   }
-  return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v14", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
+  const version = rows.some(row => row.cookieComparison?.unnamedCookieRefs?.length) ? "cmp_audit_assessment.v7" : "cmp_audit_assessment.v6";
+  return cmpAuditAssessmentSchema.parse({ version, scanId: bundle.scanId,
+    sourceSha256: createHash("sha256").update(JSON.stringify({ version, cookieComparisonPolicy: "cookie_name_comparison_details.v4", inventoryEvidencePolicy: "cmp_inventory_tables.v14", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
 }
 
@@ -503,7 +509,15 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
     // registration. Complete-inventory Review eligibility remains unchanged.
     const acceptedCookies = !complete ? observedCookies.filter(cookie => cookie.name.length > 0 && cookie.name.length <= 160) : (accepted && accept ? accept.storage.postAction.filter(item => item.storageType === "cookie") : []);
     const omittedAfterAcceptCookieCount = !complete ? observedCookies.length - acceptedCookies.length : 0;
-    const captured = new Set([...(bundle.cookieEvents ?? []).map(cookie => cookie.cookieName), ...acceptedCookies.map(item => item.name)]);
+    const unnamedCookieRefs = [
+      ...(bundle.cookieEvents ?? []).flatMap((cookie, index) => cookie.cookieName === "" ? [`CanonicalEvidenceBundle.json#cookieEvents.${index}`] : []),
+      ...observedCookies.flatMap(cookie => {
+        if (cookie.name !== "" || !cookie.identityHash) return [];
+        const index = accept?.storage.postAction.findIndex(item => item.storageType === "cookie" && item.name === "" && item.identityHash === cookie.identityHash) ?? -1;
+        return index >= 0 ? [`CanonicalEvidenceBundle.json#postAcceptEvidence.storage.postAction.${index}`] : [];
+      }),
+    ].slice(0, 100);
+    const captured = new Set([...(bundle.cookieEvents ?? []).map(cookie => cookie.cookieName), ...acceptedCookies.map(item => item.name)].filter(name => name.length > 0 && name.length <= 160));
     const comparable = comparablePatterns.length > 0;
     const snapshots = bundle.cookieSnapshots?.filter(snapshot => snapshot.consentStateAtTime === "pre_consent");
     const independentlyBoundSnapshots=boundCookieSnapshot(bundle);
@@ -512,7 +526,7 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
       Boolean(independentlyBoundSnapshots?.length) && bundle.scanLaneRuns?.some(lane=>lane.laneId==="runtime_evidence" && lane.accessOutcome==="representative_page" && !lane.challengeDetected));
     const partialSnapshots=independentlyBoundSnapshots?.length ? independentlyBoundSnapshots : annotatedSnapshot ? undefined : partialCookieSnapshot(bundle);
     if (comparable && partialSnapshots) {
-      const names=[...new Set(partialSnapshots.flatMap(snapshot=>snapshot.cookies.map(cookie=>cookie.name)))];
+      const names=[...new Set(partialSnapshots.flatMap(snapshot=>snapshot.cookies.map(cookie=>cookie.name)).filter(name=>name.length > 0 && name.length <= 160))];
       const patterns=[...new Set(comparablePatterns.map(row=>row.name))];
       const matched=patterns.filter(pattern=>names.some(name=>matchesCookieDeclaration(pattern,name)));
       set("declared_not_found","partially_assessed",`${matched.length} of ${patterns.length} retained declaration patterns matched the saved pre-consent cookie snapshot. Page loading did not settle; a complete comparison was not assessed.`,["CmpPreferencesEvidencePacket.json","CanonicalEvidenceBundle.json"]);
@@ -538,9 +552,9 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
       return { name, matchedPattern, ...(template ? { possibleTemplateMatch: { pattern: template, basis: "ga4_placeholder.v1" as const } } : {}), ...(expiry ? { observedExpiry: expiry } : {}) };
     });
     const missing = cookieMatches.filter(row => row.matchedPattern === null).map(row => row.name);
-    if (comparable && captured.size > 0 && cookieCaptureUsable) {
+    if (comparable && (captured.size > 0 || unnamedCookieRefs.length > 0) && cookieCaptureUsable) {
       const possible = cookieMatches.filter(row => row.possibleTemplateMatch).length;
-      set("found_not_declared", !complete ? "partially_assessed" : missing.length ? "review" : "not_observed",
+      set("found_not_declared", !complete || (!missing.length && unnamedCookieRefs.length) ? "partially_assessed" : missing.length ? "review" : "not_observed",
         !complete ? `${cookieMatches.length - missing.length} of ${captured.size} cookie names matched captured declarations; ${possible ? `${possible} possible template match${possible === 1 ? "" : "es"}; ` : ""}${missing.length - possible} had no match in this partial list.${omittedAfterAcceptCookieCount ? ` ${omittedAfterAcceptCookieCount} after-click cookie entries had no comparable saved name.` : ""}`
           : missing.length ? `${missing.length} observed cookie names did not match ${new Set(evidence.declarations.map(row => row.name)).size} retained CMP declaration patterns.`
           : "All captured cookie names matched the complete configured CMP declarations.", ["CmpPreferencesEvidencePacket.json", "CanonicalEvidenceBundle.json"]);
@@ -552,7 +566,8 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
       row.cookieComparison = { declarationPatternCount: new Set(comparablePatterns.map(row => row.name)).size,
         observedCookieNameCount: captured.size, unmatchedNameCount: missing.length, ...(possible ? { possibleTemplateNameCount: possible } : {}), ...(omittedAfterAcceptCookieCount ? { omittedAfterAcceptCookieCount } : {}), unmatchedNames: boundedCookieNames(missing),
         allUnmatchedOnlyAfterAccept: missing.length > 0 && missing.every(name => acceptedNames.has(name) && !baselineNames.has(name)),
-        declarationInventoryComplete: complete };
+        declarationInventoryComplete: complete, ...(unnamedCookieRefs.length ? { unnamedCookieRefs } : {}) };
+      if (unnamedCookieRefs.length) row.detail += " Unnamed cookie observations were retained separately from cookie-name matching.";
     }
   }
 
@@ -562,6 +577,23 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
  * binding. They may fill missing checks, never overwrite a deeper assessment or
  * manufacture completeness from an optional worker outcome. */
 export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geometry?: Record<string, unknown> | null): CmpAuditAssessment | undefined {
+  try {
+    return deriveVerifiedCmpAuditAssessment(bundle, geometry);
+  } catch (error) {
+    if (!(error instanceof ZodError)) throw error;
+    // Optional detail must not prevent the independently verified consent,
+    // runtime, policy and action evidence from reaching one terminal result.
+    const issues = error.issues.slice(0, 8).map(issue => ({ code: issue.code, path: issue.path.join(".").slice(0, 240) }));
+    console.warn(JSON.stringify({ event: "cmp_audit.projection_limited", scanId: bundle.scanId, issues }));
+    return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
+      sourceSha256: createHash("sha256").update(JSON.stringify({ policy: "cmp_optional_projection_isolation.v1", bundle, geometry, issues })).digest("hex"),
+      support: { state: "unknown", provider: null, recipeVersion: null, reason: "cmp_audit_projection_invalid" },
+      rows: [...cmpAuditCriterionSchema.options, "implementation", "prominence"].map(id => ({ id, status: "not_assessed", detail: "Evidence was not retained for this check.", evidenceRefs: [] })),
+    });
+  }
+}
+
+function deriveVerifiedCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geometry?: Record<string, unknown> | null): CmpAuditAssessment | undefined {
   // Validate action completion once and reuse it across both retained CMP sources.
   const captures = retainedChoiceCaptures(bundle);
   const observations = captures.filter(capture => capture.storageCompleted);

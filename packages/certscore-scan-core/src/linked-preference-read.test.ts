@@ -5,7 +5,7 @@ import {once} from 'node:events';
 import {runCmpPreferencesObserver} from './cmp-preferences-observer';
 import {cmpPreferencesEvidenceSchema,hasBoundCmpPreferenceDocument} from '@certscore/contracts';
 
-test('one observed linked privacy page is read without changing choices or submitting its form', {timeout:25000},async()=>{
+test('passive CMP capture never follows a linked preference page or submits its form', {timeout:25000},async()=>{
  let mode='valid';const hits:string[]=[];
  const server=createServer(async(req,res)=>{hits.push(`${req.method} ${req.url}`);res.setHeader('Content-Type','text/html');
   if(req.url==='/settings'){
@@ -21,16 +21,15 @@ test('one observed linked privacy page is read without changing choices or submi
    hits.length=0;
    const packet=await runCmpPreferencesObserver({parentDispatchSha256:'a'.repeat(64),config:{policyVersion:'bounded_cmp_preferences.v1',computeBudgetPolicy:'coverage_25_gb_seconds.v1',enabled:true,scanId:'linked-'+mode,exactTargetUrl:base+'/'}});
    assert.equal(packet.action.count,0);assert.equal(packet.action.opened,false);assert.equal(hits.some(hit=>hit.startsWith('POST')||hit.includes('/save')||hit.includes('/unexpected')),false,JSON.stringify(hits));
-   if(['valid','delayed','delayed_controls'].includes(mode)){
-    assert.equal(packet.status,'completed',JSON.stringify(packet));assert.equal(packet.finalUrl,base+'/settings');assert.equal(hasBoundCmpPreferenceDocument(packet),true);
-    assert.equal(packet.controls.length,2);assert.ok(packet.controls.every(control=>control.enabled));assert.deepEqual(packet.controls.map(c=>c.checked),[true,false]);assert.equal(packet.controls.every(c=>c.kind==='unclassified'),true);
-    assert.equal(packet.controlInventoryComplete,false);assert.equal(packet.linkedPreferenceNavigation?.sourceUrl,base+'/');assert.equal(packet.checkpoints?.controlsSurface,'preferences');
-    assert.equal(cmpPreferencesEvidenceSchema.safeParse({...packet,action:{...packet.action,count:1}}).success,false);
-   }else{
-    assert.equal(packet.controls.length,0,mode);assert.equal(packet.linkedPreferenceNavigation,undefined,mode);
-    if(mode==='blocked')assert.equal(packet.support.reason,'preference_page_access_limited');
-    if(!['redirect','blocked'].includes(mode))assert.equal(hits.some(hit=>hit.includes('/settings')),false,mode);
-   }
+   assert.equal(packet.status,'limited',JSON.stringify(packet));
+   assert.equal(packet.finalUrl,base+'/');assert.equal(hasBoundCmpPreferenceDocument(packet),true);
+   assert.equal(packet.captureMode,'passive_cmp_inventory.v1');
+   assert.equal(packet.controls.length,0);assert.equal(packet.controlInventoryComplete,false);
+   assert.equal(packet.linkedPreferenceNavigation,undefined);
+   assert.equal(packet.checkpoints?.controlsSurface,'first_layer');
+   assert.equal(hits.some(hit=>hit.includes('/settings')||hit.includes('/another')||hit.includes('/privacy')),false,JSON.stringify(hits));
+   assert.equal(cmpPreferencesEvidenceSchema.safeParse({...packet,action:{...packet.action,count:1}}).success,false);
+
   }
  }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });

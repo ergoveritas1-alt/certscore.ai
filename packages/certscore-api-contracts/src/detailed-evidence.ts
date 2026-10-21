@@ -80,7 +80,7 @@ export const publicCmpAuditSchema = z.object({
         }).strict().refine(row => (!row.possibleTemplateMatch || row.matchedPattern === null) && (!row.observedExpiry || (row.observedExpiry.name === row.name && row.observedExpiry.visit === "Accept" && row.observedIn.includes("after_accept"))), "Cookie details require consistent match and capture provenance")).max(100).optional(),
       }).strict().optional(),
       cookieComparison: z.object({ declarationPatternCount: count, observedCookieNameCount: count, unmatchedNameCount: count, possibleTemplateNameCount: count.optional(), omittedAfterAcceptCookieCount: z.number().int().positive().optional(),
-        unmatchedNames: z.array(z.string().max(160)).max(100), allUnmatchedOnlyAfterAccept: z.boolean(), declarationInventoryComplete: z.boolean().optional() }).strict().optional(),
+        unmatchedNames: z.array(z.string().max(160)).max(100), unnamedCookieRefs: z.array(z.string().min(1).max(240)).max(100).optional(), allUnmatchedOnlyAfterAccept: z.boolean(), declarationInventoryComplete: z.boolean().optional() }).strict().optional(),
     }).strict().optional(),
   }).strict()).length(13),
 }).strict().superRefine((audit, context) => {

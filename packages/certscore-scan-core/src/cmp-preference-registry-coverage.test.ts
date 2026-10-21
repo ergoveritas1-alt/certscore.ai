@@ -4,7 +4,7 @@ import {createServer} from 'node:http';
 import {runCmpPreferencesObserver} from './cmp-preferences-observer.js';
 import {classifyConsentControlLabel} from '@certscore/contracts';
 
-for(const kind of ['anthropic','axeptio'] as const) test(`${kind} preference recipe binds the same panel, opens once and never saves`,async()=>{
+for(const kind of ['anthropic','axeptio'] as const) test(`${kind} passive capture never opens a registered panel or saves`,async()=>{
   let mode='valid',clicks=0,saves=0;
   const server=createServer((req,res)=>{
     if(req.url==='/opened'){clicks++;res.end();return;}
@@ -24,13 +24,13 @@ for(const kind of ['anthropic','axeptio'] as const) test(`${kind} preference rec
     for(mode of ['valid','wrong-label','replace']){
       clicks=0;saves=0;
       const packet=await runCmpPreferencesObserver({parentDispatchSha256:'a'.repeat(64),config:{policyVersion:'bounded_cmp_preferences.v1',enabled:true,scanId:kind+'-'+mode,exactTargetUrl:`http://127.0.0.1:${a.port}/`}});
-      assert.equal(saves,0);assert.ok(clicks<=1);
-      if(mode==='valid'){
-        assert.equal(packet.action.opened,true,JSON.stringify(packet));assert.equal(clicks,1);
-        assert.equal(packet.controls.length,1);
-        assert.equal(packet.controls[0]?.kind,kind==='anthropic'?'category':'service');
-        assert.ok(!packet.controls.some(c=>c.label==='Axeptio consent'));
-      }else{assert.equal(packet.action.opened,false,JSON.stringify(packet));if(mode==='wrong-label')assert.equal(clicks,0);}
+      assert.equal(saves,0);assert.equal(clicks,0);
+      assert.equal(packet.captureMode,'passive_cmp_inventory.v1');
+      assert.equal(packet.action.count,0);assert.equal(packet.action.opened,false);
+      assert.equal(packet.controlInventoryComplete,false);
+      assert.equal(packet.controls.length,0,'Hidden panel controls are not visible inventory');
+      assert.equal(packet.linkedPreferenceNavigation,undefined);
+
     }
   }finally{if(memory===undefined)delete process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE;else process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE=memory;await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
@@ -42,7 +42,7 @@ test('Axeptio title is observation-only, exact and never an Accept/Reject action
  assert.notEqual(classifyConsentControlLabel({...input,title:'Close cookie settings',usage:'action'}).intent,'reject');
 });
 
-test('an unidentified CMP returns verified basic checkpoints before the optional lane is cancelled', {timeout:12000}, async()=>{
+test('an unidentified CMP stays limited without claiming an inventory or following links', {timeout:12000}, async()=>{
  const server=createServer((_req,res)=>{res.setHeader('Content-Type','text/html');res.end('<main>Public page</main><div style="height:2000px"></div><a href="https://example.test/privacy-policy">Privacy policy</a>');});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const a=server.address();assert.ok(a&&typeof a!=='string');
  const memory=process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE;process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE='3008';
@@ -51,9 +51,9 @@ test('an unidentified CMP returns verified basic checkpoints before the optional
   const packet=await runCmpPreferencesObserver({parentDispatchSha256:'a'.repeat(64),config:{policyVersion:'bounded_cmp_preferences.v1',enabled:true,scanId:'unknown-cmp',exactTargetUrl:`http://127.0.0.1:${a.port}/`}});
   assert.ok(Date.now()-start<10500);
   assert.equal(packet.status,'limited');
-  assert.equal(packet.support.reason,'cmp_not_identified_after_bounded_readiness');
+  assert.equal(packet.support.reason,'cmp_not_identified');
   assert.equal(packet.action.count,0);assert.equal(packet.controlInventoryComplete,false);
-  assert.equal(packet.privacyLinks[0]?.hitTargetBeforeAction,true,JSON.stringify(packet));
-  assert.equal(packet.checkpoints?.privacyLinks,true);
+  assert.equal(packet.privacyLinks.length,0);
+  assert.equal(packet.checkpoints?.privacyLinks,false);
  }finally{if(memory===undefined)delete process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE;else process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE=memory;await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });

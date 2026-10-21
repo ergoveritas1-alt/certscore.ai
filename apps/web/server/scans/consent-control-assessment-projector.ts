@@ -314,12 +314,21 @@ function verifiedConsentLaneDocument(bundle: CanonicalEvidenceBundle, rawGeometr
   if (consentSessionAccessLimited(bundle, rawGeometry)) return null;
   const lane = bundle.scanLaneRuns?.find((run) => run.laneId === "consent_proof");
   const lanes = bundle.scanEvidenceLaneAssessment ?? bundle.scan_evidence_lane_assessment;
-  if (lane?.executionOutcome !== "success") return null;
-  const access = rawGeometry?.access as { status?: string; httpStatus?: number } | undefined;
   const latest = [...(bundle.consentUiObservations ?? [])].sort((a, b) => b.observedAtMs - a.observedAtMs)[0];
+  const representativeDegraded=lane?.executionOutcome==="degraded" && lane.accessOutcome==="representative_page" && !lane.challengeDetected &&
+    latest?.likelyPresent===true && latest.captureStatus==="observed" &&
+    verifyConsentControlInspection(rawGeometry?.controlInspection,rawGeometry?.candidates)?.structuralCoverage==="complete" &&
+    Array.isArray(rawGeometry?.candidates) && rawGeometry.candidates.some((candidate:unknown)=>{
+      if(!candidate || typeof candidate!=="object")return false;
+      const row=candidate as Record<string,unknown>;
+      return row.layer==="first_layer" && ["accept_all","reject_all","manage_preferences"].includes(String(row.actionType)) &&
+        ["covered","confirmed_visible"].includes(String(row.decisionStatus));
+    });
+  if (lane?.executionOutcome !== "success" && !representativeDegraded) return null;
+  const access = rawGeometry?.access as { status?: string; httpStatus?: number } | undefined;
   const retainedPositive = latest?.captureStatus === "observed" && latest.controls.some(control => isConsentControlInteractionEligible(control) && control.visible === true && ["accept_all", "reject_all", "manage_preferences"].includes(control.actionType) &&
     (control.tagName !== "ax-node" || control.visibilityEvidence === "box_model_verified" && control.consentContextEvidence === "local_surface"));
-  if (lanes?.lanes.consent !== "usable" && !(lanes?.lanes.consent === "limited" && retainedPositive &&
+  if (lanes?.lanes.consent !== "usable" && !(lanes?.lanes.consent === "limited" && (retainedPositive || representativeDegraded) &&
     access?.status === "loaded" && typeof access.httpStatus === "number" && access.httpStatus < 400)) return null;
   const finalUrl = retainedDocumentUrl(typeof rawGeometry?.pageUrl === "string" ? rawGeometry.pageUrl : null);
   const geometryUrl = normalizedDocumentId(finalUrl);

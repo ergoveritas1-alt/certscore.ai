@@ -1588,14 +1588,14 @@ test("runtime loading stays scoped while the materializer preserves consent docu
     for (const action of ["accept", "reject", "options"] as const) {
       assert.equal(result.controls[action].state, mismatch ? "unknown" : "not_observed", action);
     }
-    assert.equal(result.provenance.projectorVersion, "2.2.3");
+    assert.equal(result.provenance.projectorVersion, "2.2.4");
     assert.deepEqual(b.runtimeCoverage!.limitationKeys, ["runtime_page_inventory_document_loading"]);
   }
 });
 
 test("new materialization preserves legacy classifier provenance rather than inventing a registry version", () => {
   const result = deriveMaterializedConsentControlAssessment({ bundle: bundle([{ actionType: "accept_all", label: "Accept", visible: true }]), noGo: false });
-  assert.equal(result.provenance.projectorVersion, "2.2.3");
+  assert.equal(result.provenance.projectorVersion, "2.2.4");
   assert.equal(result.evidence[0]?.classifier?.registryVersion, "consent-control-label-registry");
 });
 
@@ -1738,5 +1738,33 @@ test("a static privacy heading cannot become opt-out evidence while real consent
     assert.equal(result.controls.options.state,"observed");
     assert.notEqual(result.controls.privacyOptOut.state,"observed",tagName);
     assert.ok(!result.evidence.some(row=>row.label==="Privacy choices"));
+  }
+});
+
+test("a degraded representative positive consent capture preserves its verified primary document, without admitting failed or empty visits",async()=>{
+  const {consentVisualFixture,visualFixtureStartMs}=await import("../../../../packages/certscore-scan-core/src/test-fixtures/consent-visual-comparison");
+  const fixture=await consentVisualFixture("equal"),g=fixture.geometry;
+  const make=()=>{
+    const b=bundle([], {url:g.pageUrl});b.startedAt=new Date(visualFixtureStartMs).toISOString();b.completedAt=new Date(visualFixtureStartMs+10000).toISOString();
+    Object.assign(b.domSnapshots[0]!,{url:g.pageUrl,documentIdentity:g.documentIdentity,artifactId:"dom_text_pre_consent"});
+    Object.assign(b.consentUiObservations[0]!,{documentIdentity:g.documentIdentity,documentUrl:g.pageUrl,likelyPresent:true,captureStatus:"observed"});
+    b.domSnapshots.push({...b.domSnapshots[0]!,artifactId:"dom_text_pre_consent_recovery",url:"https://example.test/unbound-recovery",documentIdentity:undefined,capturedAtMs:9000});
+    b.scanLaneRuns=[{laneId:"consent_proof",executionOutcome:"degraded",accessOutcome:"representative_page",challengeDetected:false}] as CanonicalEvidenceBundle["scanLaneRuns"];
+    b.scanEvidenceLaneAssessment={lanes:{consent:"limited"}} as CanonicalEvidenceBundle["scanEvidenceLaneAssessment"];
+    return b;
+  };
+  const geometry={...g,access:{status:"loaded",httpStatus:200}} as unknown as Record<string,unknown>;
+  const original=make();const saved=structuredClone(original);
+  const result=deriveMaterializedConsentControlAssessment({bundle:original,consentControlGeometryEvidence:geometry,noGo:false,finalUrl:"https://example.test/unbound-recovery"});
+  assert.equal(result.document.identityStatus,"matched");assert.equal(result.scan.finalUrl,g.pageUrl);assert.deepEqual(original,saved);
+  for(const mode of ["failed","challenge","empty","token","inspection"]){
+    const b=make(),raw=structuredClone(geometry);
+    if(mode==="failed")b.scanLaneRuns![0]!.executionOutcome="failed";
+    if(mode==="challenge")b.scanLaneRuns![0]!.challengeDetected=true;
+    if(mode==="empty"){b.consentUiObservations[0]!.likelyPresent=false;b.consentUiObservations[0]!.captureStatus="no_evidence";}
+    if(mode==="token")b.consentUiObservations[0]!.documentIdentity={source:"cdp_loader_id",token:"wrong-document"};
+    if(mode==="inspection")raw.controlInspection=undefined;
+    const negative=deriveMaterializedConsentControlAssessment({bundle:b,consentControlGeometryEvidence:raw,noGo:false,finalUrl:"https://example.test/unbound-recovery"});
+    assert.notEqual(negative.scan.finalUrl,g.pageUrl,JSON.stringify({mode,document:negative.document,scan:negative.scan}));assert.equal(negative.controls.reject.state,"unknown",mode);
   }
 });

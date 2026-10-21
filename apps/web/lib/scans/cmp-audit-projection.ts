@@ -197,7 +197,7 @@ export function projectCmpAudit(input: {
     for (const [id, label] of Object.entries(legacyLabels)) set(id as CmpAuditCriterionId, { label });
   }
   if (audit?.version === "cmp_audit_assessment.v2") set("services", { label: "Individual service checkboxes or toggles observed" });
-  if (audit && !["cmp_audit_assessment.v4", "cmp_audit_assessment.v5", "cmp_audit_assessment.v6"].includes(audit.version)) {
+  if (audit && !["cmp_audit_assessment.v4", "cmp_audit_assessment.v5", "cmp_audit_assessment.v6", "cmp_audit_assessment.v7"].includes(audit.version)) {
     set("privacy_access", { label: "Privacy policy accessible without interacting with cookie banner" });
     set("implementation", { label: "Settings are technically implemented correctly" });
   }
@@ -209,7 +209,7 @@ export function projectCmpAudit(input: {
       cmpAuditRowsEqual(concern.evidenceBundle.rawEvidence?.cmpAuditRow, row));
     // Shared first-layer reportability also applies to these narrower tables.
     // Independent action evidence remains retained without overriding passive A/R/O.
-    const inventory = audit.version === "cmp_audit_assessment.v6" && row.inventory ? {
+    const inventory = ["cmp_audit_assessment.v6", "cmp_audit_assessment.v7"].includes(audit.version) && row.inventory ? {
       ...row.inventory,
       ...(row.inventory.choiceActivity ? { choiceActivity: row.inventory.choiceActivity.filter(activity => controlReport?.controls[activity.action] === "observed") } : {}),
       ...(row.inventory.expiries ? { expiries: row.inventory.expiries.filter(cookie => cookie.visit === "Before choice" || controlReport?.controls[cookie.visit === "Accept" ? "accept" : "reject"] === "observed") } : {}),
@@ -224,7 +224,7 @@ export function projectCmpAudit(input: {
     const restrictedChoiceScope = inventory?.choiceActivity?.length !== row.inventory?.choiceActivity?.length || inventory?.consentStorage?.length !== row.inventory?.consentStorage?.length;
     // Policy-evaluated review findings take precedence over coverage results.
     if (row.id === "implementation" && (contradiction || afterReject)) {
-      if (concern && audit.version === "cmp_audit_assessment.v6" && inventory?.choiceActivity) {
+      if (concern && ["cmp_audit_assessment.v6", "cmp_audit_assessment.v7"].includes(audit.version) && inventory?.choiceActivity) {
         const existing = rows.find(item => item.id === "implementation")!;
         existing.supportingEvidence = { ...existing.supportingEvidence, inventory };
       }
@@ -239,7 +239,7 @@ export function projectCmpAudit(input: {
         : restrictedDurationScope ? "CMP cookie expiry was captured; see retained evidence."
         : restrictedExpiryScope ? "CMP cookie descriptions were captured; see retained evidence."
         : restrictedChoiceScope ? row.id === "consent_record" ? "Browser consent records were captured; see retained evidence." : "Activity checks completed; see retained evidence."
-        : ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6"].includes(audit.version) && row.id === "duration" && row.inventory?.expiries?.length
+        : ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6", "cmp_audit_assessment.v7"].includes(audit.version) && row.id === "duration" && row.inventory?.expiries?.length
         ? "CMP cookie expiry was captured. Time remaining is shown below."
         : row.id === "duration" && row.inventory?.expiries?.length
         ? "Consent-cookie expiry was captured. Long-term behavior was not tested."
@@ -249,7 +249,7 @@ export function projectCmpAudit(input: {
       ...((row.cookieComparison || inventory) ? { supportingEvidence: { ...(row.cookieComparison && !restrictedCookieScope ? { cookieComparison: row.cookieComparison } : {}), ...(inventory ? { inventory } : {}) } } : {}) });
   }
 
-  if (audit && ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6"].includes(audit.version)) {
+  if (audit && ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6", "cmp_audit_assessment.v7"].includes(audit.version)) {
     set("duration", { label: "CMP cookie expiry" });
     set("found_not_declared", { label: "Unmatched cookie names" });
     set("implementation", { label: "Activity after Accept / Reject" });
@@ -264,7 +264,7 @@ export function projectCmpAudit(input: {
     }
   }
 
-  if (audit?.version === "cmp_audit_assessment.v6") {
+  if (audit && ["cmp_audit_assessment.v6", "cmp_audit_assessment.v7"].includes(audit.version)) {
     set("consent_record", { label: "Consent storage observed" });
     set("implementation", { label: "Activity after Accept / Reject" });
   }
@@ -283,8 +283,8 @@ export function projectCmpAudit(input: {
       row.deductionPoints = family.deductionPoints;
     }
   }
-  return { version: audit?.version === "cmp_audit_assessment.v6" ? "cmp_audit_report.v3" : audit?.version === "cmp_audit_assessment.v5" ? "cmp_audit_report.v2" : CMP_AUDIT_REPORT_VERSION,
-    ...(audit && ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6"].includes(audit.version) ? { limitationGroups: cmpLimitationGroups(rows) } : {}), scope: "starting_page", scanId: input.scanId,
+  return { version: audit && ["cmp_audit_assessment.v6", "cmp_audit_assessment.v7"].includes(audit.version) ? "cmp_audit_report.v3" : audit?.version === "cmp_audit_assessment.v5" ? "cmp_audit_report.v2" : CMP_AUDIT_REPORT_VERSION,
+    ...(audit && ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6", "cmp_audit_assessment.v7"].includes(audit.version) ? { limitationGroups: cmpLimitationGroups(rows) } : {}), scope: "starting_page", scanId: input.scanId,
     assessmentSourceHash: assessment?.provenance.sourceHash ?? null, ...(audit ? { inspectionSupport: audit.support } : {}), rows,
     experience: projectCmpExperience({ assessment, controls: controlReport?.controls ?? null,
       explicitCustom: explicitlyCustomConsentVendor(input.consentVendor),

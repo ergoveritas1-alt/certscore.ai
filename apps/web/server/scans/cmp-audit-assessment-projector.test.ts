@@ -7,6 +7,7 @@ import { observedControlAssessment } from "../../lib/scans/test-fixtures/observe
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { projectCmpAudit } from "../../lib/scans/cmp-audit-projection";
 import { withCanonicalConsentAssessmentSnapshot, withPersistedFirstLayerConsentEvidence } from "./scan-report-consent-projection";
+import { publicCmpAuditSchema } from "../../../../packages/certscore-api-contracts/src/detailed-evidence";
 
 function bundle() {
   const url = "https://example.com/";
@@ -15,6 +16,26 @@ function bundle() {
     cmpPreferencesEvidence: cmpPreferencesEvidenceSchema.parse({ contractVersion: "certscore.cmp-preferences-evidence.v1", policyVersion: "bounded_cmp_preferences.v1", scanId: "scan-1", parentDispatchSha256: "a".repeat(64), targetUrl: url, finalUrl: url, documentToken: "loader-1", startedAt: "2026-10-13T00:00:00.000Z", completedAt: "2026-10-13T00:00:02.000Z", status: "completed", support: { state: "partial", provider: "OneTrust", recipeVersion: "bounded_cmp_preferences.v1", reason: "bounded_visible_preference_inspection" }, action: { count: 1, intent: "options", label: "Manage options", opened: true }, controls: [{ label: "Analytics", kind: "category", enabled: true, checked: false }], controlInventoryComplete: true, privacyLinks: [{ url: `${url}privacy`, hitTargetBeforeAction: true }], declarations: [{ name: "_ga", purpose: "Audience measurement", duration: "1 day", source: "cmp_visible_inventory" }], declarationInventoryComplete: false, limitations: [] })
   } as unknown as CanonicalEvidenceBundle;
 }
+
+test("unnamed observed cookies retain neutral source references without entering name comparisons", () => {
+  const input = bundle();
+  input.cookieEvents = [{ cookieName: "" }, { cookieName: "_ga" }] as CanonicalEvidenceBundle["cookieEvents"];
+  const original = structuredClone(input);
+  const audit = deriveCmpAuditAssessment(input)!;
+  const row = audit.rows.find(row => row.id === "found_not_declared")!;
+  assert.equal(audit.version, "cmp_audit_assessment.v7");
+  assert.deepEqual(row.cookieComparison?.unnamedCookieRefs, ["CanonicalEvidenceBundle.json#cookieEvents.0"]);
+  assert.equal(row.cookieComparison?.observedCookieNameCount, 1);
+  assert.ok(!row.cookieComparison?.unmatchedNames.includes(""));
+  assert.ok(!row.inventory?.cookies?.some(cookie => cookie.name === ""));
+  assert.deepEqual(input, original);
+  const assessment = consentControlAssessmentSchema.parse({...observedControlAssessment, cmpAudit: audit});
+  const concerns = buildNormalizedConcerns({runtimeArtifacts: {consentControlAssessment: assessment}, reviewFindingCandidates: [], validationFindings: []});
+  const projected = projectCmpAudit({scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns});
+  assert.equal(projected.version, "cmp_audit_report.v3");
+  assert.deepEqual(projected.rows.find(row => row.id === "found_not_declared")?.supportingEvidence?.cookieComparison?.unnamedCookieRefs, row.cookieComparison?.unnamedCookieRefs);
+  assert.equal(publicCmpAuditSchema.safeParse(projected).success, true);
+});
 
 test("verified cookie snapshot coverage is independent of unfinished DOM loading and cannot establish broader absence",()=>{
   const input=bundle();input.completedAt="2026-10-13T00:00:10.000Z";
@@ -1029,7 +1050,7 @@ test("v6 CMP tables preserve shared first-layer reportability for an independent
   assert.equal(assessment.controls.accept.state,"unknown");
 });
 
-test("OneTrust service names reach the canonical assessment and report from one bounded local Options visit", {timeout:15000}, async () => {
+test("OneTrust service names reach the canonical assessment and report from one bounded passive visit without Options opening", {timeout:15000}, async () => {
   const {createServer}=await import("node:http");
   const {runCmpPreferencesObserver}=await import("../../../../packages/certscore-scan-core/src/cmp-preferences-observer");
   const actions:string[]=[];
@@ -1061,7 +1082,7 @@ test("OneTrust service names reach the canonical assessment and report from one 
     assert.equal(report.rows.find(row=>row.id==='services')!.status,'Observed');
     assert.deepEqual(report.rows.find(row=>row.id==='services')!.supportingEvidence!.inventory!.services,service.inventory!.services);
     assert.ok(concerns.filter(row=>row.originKey.startsWith('consent.cmp_audit.')).every(row=>!row.scoreEffects?.length));
-    assert.deepEqual(actions,['/action/options']);
+    assert.deepEqual(actions,[]);
     const foreign=structuredClone(input);foreign.cmpPreferencesEvidence!.finalUrl='https://foreign.test/';
     assert.equal(deriveCmpAuditAssessment(foreign),undefined,"A foreign document cannot supply service evidence");
   }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}

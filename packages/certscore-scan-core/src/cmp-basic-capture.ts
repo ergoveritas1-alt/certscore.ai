@@ -3,7 +3,7 @@ import { cmpInventoryScopeSelector, readCmpScopeInventory } from "./cmp-scope-in
 import { cmpBasicEvidenceSchema, projectLoadedCmpInventory, projectSdkCmpServices, type CmpBasicEvidence, type CmpRuntimeObservation, type NetworkEvent, type NetworkResponseEvent } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { Page } from "playwright";
-import { readBorlabsPreferenceInventory, readPreferenceControls, classifyControls } from "./cmp-preferences-observer.js";
+import { readBorlabsPreferenceInventory, readPreferenceControls, classifyControls } from "./cmp-preference-inventory-readers.js";
 import { readCookieYesPreferenceInventory } from "./cookieyes-preference-inventory.js";
 import { readPrivacyLinkAccess, privacyPolicyLinkCandidates } from "./privacy-link-access.js";
 import { readPassiveCookiebotLoadedInventory } from "./cookiebot-loaded-inventory.js";

@@ -1818,6 +1818,14 @@ export const detailedEvidenceOpenApiSchemas = {
                       },
                       "maxItems": 100
                     },
+                    "unnamedCookieRefs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 240
+                      },
+                      "maxItems": 100
+                    },
                     "allUnmatchedOnlyAfterAccept": {
                       "type": "boolean"
                     },

@@ -86,6 +86,17 @@ customer reports without deduction explanations. No deployment or historical
 report rewrite is authorized. See
 `docs/certscore-v2/reject-nonessential-presence-policy.md`.
 
+## Passive CMP details — October 21, 2026
+
+New CMP preference workers must use `passive_cmp_inventory.v1`: no Options/Manage
+clicks, SDK show/open calls, panel expansion, preference navigation, form submission
+or privacy-choice mutation. Preserve the existing worker and absolute compute/time
+allowances. Capture explicit already-loaded inventories and visible first-layer
+facts with independent loader-bound checkpoints. Do not infer completeness,
+absence, visibility or choice registration from a passive capture. Historical
+opening evidence stays historical. See
+`docs/certscore-v2/cmp-passive-inventory-policy-2026-10-21.md`.
+
 ## Cost-change approval
 
 Any change that can increase recurring infrastructure cost, per-request or
