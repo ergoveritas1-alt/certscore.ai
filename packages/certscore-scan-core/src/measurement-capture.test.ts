@@ -28,3 +28,14 @@ test("pre-click measurement floods cannot spend the post-click reservation or in
  const unused=measurementInspectionBudget();let count=0;
  while(unused.available(true)){unused.retained(true);count++;}assert.equal(count,48);
 });
+
+test("Heap and HubSpot cookie components remain bound to exact persistent retained cookies",()=>{
+ for(const [name,value,expected,parameter] of [["_hp2_id.123",encodeURIComponent(JSON.stringify({userId:"987654321",sessionId:"2"})),"987654321","u"],
+  ["hubspotutk","a".repeat(32),"a".repeat(32),"vi"]] as const){
+  const c={...cookie,name,value},r={...row,name,identityHash:identityHash(c),valueHash:sha(value)};
+  const candidates=measurementCookieCandidates({...input,cookies:[c],retainedStorage:[r]});
+  assert.equal(candidates.length,1);assert.equal(candidates[0]?.parameter,parameter);assert.equal(candidates[0]?.identifierSha256,sha(expected));
+  assert.deepEqual(measurementCookieCandidates({...input,cookies:[c],retainedStorage:[{...r,nonEssential:false}]}),[]);
+  assert.deepEqual(measurementCookieCandidates({...input,cookies:[{...c,expires:-1}],retainedStorage:[r]}),[]);
+ }
+});

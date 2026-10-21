@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { vendorRegistryAttributionSchema } from "./vendor-registry-attribution";
 
-export const COOKIE_CLASSIFICATION_VERSION = "certscore.cookie-purpose.v3" as const;
+export const COOKIE_CLASSIFICATION_VERSION = "certscore.cookie-purpose.v4" as const;
 export const cookiePurposeCategorySchema = z.enum([
   "advertising", "analytics", "consent_management", "infrastructure", "marketing",
   "personalization", "security", "session_replay", "tag_management", "unknown",
@@ -9,7 +9,7 @@ export const cookiePurposeCategorySchema = z.enum([
 
 /** Technical classification of an exact observation, not a consent/legal determination. */
 export const cookieClassificationSchema = z.object({
-  version: z.literal(COOKIE_CLASSIFICATION_VERSION),
+  version: z.enum(["certscore.cookie-purpose.v3", COOKIE_CLASSIFICATION_VERSION]),
   cookieName: z.string().max(4096),
   cookieDomain: z.string().max(253).nullable(),
   category: cookiePurposeCategorySchema,

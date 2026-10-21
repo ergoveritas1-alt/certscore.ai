@@ -1,6 +1,7 @@
 import type { MeasurementRequestEvidence, MeasurementStoredIdentifier } from "@certscore/contracts";
 import { COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge } from "./cookie-knowledge-base";
 import { isCanonicalGoogleAnalyticsCollectionUrl, resolveCanonicalVendor } from "./index";
+import { inspectCollectionIdentifier } from "./collection-identifier-inspection";
 
 const MAX_BODY_BYTES = 32_768;
 // Closed protocol fields, not a vendor-wide exemption. Client IDs remain unknown.
@@ -68,7 +69,7 @@ export function inspectMeasurementRequest(input: { url: string; method: string; 
   const ga = isCanonicalGoogleAnalyticsCollectionUrl(input.url);
   // Exact reviewed collection endpoint and canonical service must both match.
   const rum = service?.product === "Cloudflare Web Analytics" && url.hostname === "cloudflareinsights.com" && url.pathname === "/cdn-cgi/rum";
-  if (!ga && !rum) return undefined;
+  if (!ga && !rum) return inspectCollectionIdentifier({ ...input, url });
   const method = ["GET", "POST", "OPTIONS"].includes(input.method) ? input.method as "GET" | "POST" | "OPTIONS" : "other";
   let complete = false;
   let identifierEvidence: MeasurementRequestEvidence["identifierEvidence"] = "unknown";
@@ -103,7 +104,8 @@ export function inspectMeasurementRequest(input: { url: string; method: string; 
         const clientIds = [...new Set(fields.filter(([key, value]) => key === "cid" && value !== "").map(([, value]) => value))];
         if (clientIds.length === 1 && input.hashIdentifier && input.storedIdentifiers?.length) {
           const identifierSha256 = input.hashIdentifier(clientIds[0]!);
-          const matches = (input.storedIdentifiers ?? []).filter(row => row.identifierSha256 === identifierSha256 && row.capturedAtMs <= input.timestampMs);
+          const matches = (input.storedIdentifiers ?? []).filter(row => row.parameter === "cid" && row.cookieName === "_ga" &&
+            row.identifierSha256 === identifierSha256 && row.capturedAtMs <= input.timestampMs);
           if (matches.length === 1) { cookieIdentifierBinding = matches[0]; identifierEvidence = "persistent_observed"; }
         }
         if (identifierEvidence !== "persistent_observed" && complete) identifierEvidence = "not_observed";

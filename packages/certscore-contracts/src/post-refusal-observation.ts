@@ -1,4 +1,5 @@
 import { consentConfirmationDiagnosticsSchema } from "./consent-confirmation-diagnostics";
+import { exactCookieWriteEvidenceSchema } from "./exact-cookie-write-evidence";
 import { cookieClassificationSchema } from "./cookie-classification";
 import { measurementRequestEvidenceSchema, readBoundMeasurementRequestEvidence } from "./measurement-request-evidence";
 import { observedActionSourceProofSchema, validateObservedActionSourceProof } from "./observed-action-source-proof";
@@ -126,6 +127,7 @@ export const postRefusalRegistrationSchema = z.object({
 });
 
 export const postRefusalNetworkRequestSchema = z.object({
+  responseCookieWrites: z.array(exactCookieWriteEvidenceSchema).max(24).optional(),
   responseCookieNamesSet: z.array(z.string().max(180)).max(96).optional(),
   measurementEvidence: measurementRequestEvidenceSchema.optional(),
   method: z.string().min(1).max(16).optional(),
@@ -229,6 +231,7 @@ export const postRefusalStorageItemSchema = z.object({
 });
 
 export const postRefusalStorageWriteBaseSchema = z.object({
+  exactCookieWrite: exactCookieWriteEvidenceSchema.optional(),
   purposeAssessment: actionStoragePurposeAssessmentSchema.optional(),
   storageType: z.enum(["cookie", "local_storage", "session_storage"]),
   name: actionStorageNameSchema,
@@ -245,6 +248,10 @@ export const postRefusalStorageWriteBaseSchema = z.object({
 export const postRefusalStorageWriteSchema = postRefusalStorageWriteBaseSchema.superRefine((item, context) => {
   validateActionStorageName(item, context);
   validateActionCookieClassification(item, context);
+  if (item.exactCookieWrite && (item.storageType !== "cookie" || item.exactCookieWrite.source !== "main_document_setter" ||
+    item.exactCookieWrite.name !== item.name || item.exactCookieWrite.hostname !== item.hostname ||
+    item.exactCookieWrite.observedAtMs !== item.observedAtMs))
+    context.addIssue({code:z.ZodIssueCode.custom,message:"Exact cookie assignment must bind its parent write identity and clock."});
 });
 
 export const postRefusalTcfStateSchema = z.object({
@@ -557,6 +564,10 @@ const postRefusalEvidencePacketBaseSchema = z.object({
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "reject", context);
   validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
   for (const request of packet.network.requests) {
+    if (request.responseCookieWrites?.some(write => write.source !== "response_set_cookie" ||
+      write.observedAtMs < request.startedAtMs || write.observedAtMs > packet.timing.readyAtMs ||
+      !request.responseCookieNamesSet?.includes(write.name)))
+      context.addIssue({code:z.ZodIssueCode.custom,path:["network","requests"],message:"Cookie header evidence must bind the retained request and response clock."});
     if (request.measurementEvidence && !readBoundMeasurementRequestEvidence(request.measurementEvidence, request, {
       targetSha256: packet.actionControlProof?.authorizedTargetSha256,
       actionDispatchedAtMs: packet.refusalRegistration.actionDispatchedAtMs,

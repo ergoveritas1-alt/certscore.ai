@@ -9,6 +9,7 @@ import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-ch
 import { deriveGdprEprivacyDeductionBreakdown, deriveRegulatoryCoverageScore } from "./regulatory-coverage-score";
 import { createHash } from "node:crypto";
 import { inspectMeasurementRequest } from "@certscore/vendor-resolver";
+import { postRefusalReportProjectionSchema, type MeasurementStoredIdentifier } from "@certscore/contracts";
 
 function project(projection: ReturnType<typeof afterRejectProjection>) {
   const runtimeArtifacts = buildPostRefusalRuntimeProjection(projection);
@@ -18,6 +19,34 @@ function project(projection: ReturnType<typeof afterRejectProjection>) {
   const row = checklist.find(row => row.id === "post_reject_tracking_reduction")!;
   return { runtimeArtifacts, normalizedConcerns, row };
 }
+
+test("exact Heap/HubSpot identifiers after an unconfirmed Reject reach canonical deductions; opaque telemetry stays neutral",()=>{
+ for(const [url,parameter,cookieName,value] of [
+  ["https://heapanalytics.com/h?a=123&u=987654321","u","_hp2_id.123","987654321"],
+  ["https://track.hubspot.com/__ptc.gif?vi="+"a".repeat(32),"vi","hubspotutk","a".repeat(32)],
+ ] as const){
+  const p=afterRejectClickProjection("measurement");
+  const binding:MeasurementStoredIdentifier={policyVersion:"measurement_cookie_identifier.v1",parameter,cookieName,
+   source:"pre_action_cookie_snapshot",targetSha256:p.actionControlProof!.authorizedTargetSha256!,hostname:"example.test",
+   identityHash:"e".repeat(64),valueHash:"f".repeat(64),identifierSha256:createHash("sha256").update(value).digest("hex"),
+   capturedAtMs:p.scoringEvidence!.preActionCapturedAtMs!};
+  const request=p.scoringEvidence!.requests[0]!;request.method="GET";request.sanitizedUrl=url.split("?")[0]!;
+  request.hostname=new URL(url).hostname;request.googleConsentMode=undefined;
+  request.measurementEvidence=inspectMeasurementRequest({url,method:"GET",requestId:request.requestId,timestampMs:request.startedAtMs,body:null,
+   storedIdentifiers:[binding],hashIdentifier:v=>createHash("sha256").update(v).digest("hex")});
+  p.afterActionRequests=[structuredClone(request)];
+  p.scoringEvidence!.preActionStorage=[{storageType:"cookie",name:cookieName,hostname:binding.hostname,identityBasis:"cookie_name_domain_path_partition",
+   identityHash:binding.identityHash,valueHash:binding.valueHash,nonEssential:true,expiresAtEpochSeconds:2000,capturedAtEpochSeconds:1000}];
+  const typed=postRefusalReportProjectionSchema.parse(p);
+  assert.equal(assessAfterRejectScoring(typed)?.registration,"unconfirmed");assert.equal(assessAfterRejectScoring(typed)?.deductionPoints,15);
+  const {row,runtimeArtifacts}=project(typed);
+  assert.equal(retainedAfterRejectScoringAssessment(runtimeArtifacts)?.deductionPoints,15);
+  assert.equal(deriveRegulatoryCoverageScore({framework:"gdpr_eprivacy",rows:[row]}).score,85);
+  const neutral=structuredClone(typed);neutral.scoringEvidence!.requests[0]!.measurementEvidence!.cookieIdentifierBinding=undefined;
+  neutral.scoringEvidence!.requests[0]!.measurementEvidence!.identifierEvidence="unknown";neutral.afterActionRequests=[structuredClone(neutral.scoringEvidence!.requests[0]!)];
+  assert.equal(assessAfterRejectScoring(neutral)?.deductionPoints,0);
+ }
+});
 
 test("review-tier customer copy retains the request facts without explaining score eligibility", () => {
   const projection = afterRejectProjection("measurement");

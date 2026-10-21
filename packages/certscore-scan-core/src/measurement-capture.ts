@@ -6,8 +6,8 @@ export type MeasurementCookieCandidate = Omit<MeasurementStoredIdentifier, "capt
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 
 /** Reuses the existing cookie snapshot. No browser/API call and no raw value retained.
- * This closed GA1 cookie layout supports an exact cid-component match only;
- * unknown layouts, scopes, session cookies and unretained identities stay unknown.
+ * Closed GA1, numeric app-scoped Heap JSON and HubSpot GUID layouts support
+ * exact protocol-component matches; other layouts and unretained scopes stay unknown.
  */
 export function measurementCookieCandidates(input: {
   cookies: readonly NormalizedActionCookie[];
@@ -20,17 +20,25 @@ export function measurementCookieCandidates(input: {
   return input.cookies.slice(0, 384).flatMap(cookie => {
     const hostname = cookie.domain.toLowerCase().replace(/^\./, "");
     const path = cookie.path || "/";
-    if (cookie.name !== "_ga" || cookie.partitionKey || cookie.expires === undefined || cookie.expires <= input.nowEpochSeconds ||
+    if (cookie.partitionKey || cookie.expires === undefined || cookie.expires <= input.nowEpochSeconds ||
       !(document.hostname === hostname || cookie.domain.startsWith(".") && document.hostname.endsWith(`.${hostname}`)) ||
       !(document.pathname === path || document.pathname.startsWith(path.endsWith("/") ? path : `${path}/`))) return [];
-    const match = /^GA1\.[1-9][0-9]{0,2}\.([0-9]{1,20}\.[0-9]{1,20})$/.exec(cookie.value);
-    if (!match) return [];
+    let identifier: string | undefined, parameter: MeasurementStoredIdentifier["parameter"] = "cid";
+    if (cookie.name === "_ga") identifier = /^GA1\.[1-9][0-9]{0,2}\.([0-9]{1,20}\.[0-9]{1,20})$/.exec(cookie.value)?.[1];
+    else if (cookie.name === "hubspotutk" && /^[a-f0-9]{32}$/.test(cookie.value)) { identifier = cookie.value; parameter = "vi"; }
+    else if (/^_hp2_id\.[0-9]{1,20}$/.test(cookie.name) && cookie.value.length <= 2048) {
+      try {
+        const value = JSON.parse(decodeURIComponent(cookie.value));
+        if (typeof value?.userId === "string" && /^[0-9]{1,20}$/.test(value.userId)) { identifier = value.userId; parameter = "u"; }
+      } catch { /* Unknown or legacy layouts stay unknown. */ }
+    }
+    if (!identifier) return [];
     const identityHash = input.identityHash(cookie), valueHash = sha(cookie.value);
-    if (!input.retainedStorage.some(row => row.storageType === "cookie" && row.name === "_ga" && row.hostname === hostname &&
+    if (!input.retainedStorage.some(row => row.storageType === "cookie" && row.name === cookie.name && row.hostname === hostname &&
       row.identityHash === identityHash && row.valueHash === valueHash && row.nonEssential)) return [];
-    return [{ policyVersion: "measurement_cookie_identifier.v1" as const, parameter: "cid" as const,
+    return [{ policyVersion: "measurement_cookie_identifier.v1" as const, parameter,
       source: "pre_action_cookie_snapshot" as const, targetSha256: sha(input.normalizedDocumentUrl),
-      cookieName: "_ga" as const, hostname, identityHash, valueHash, identifierSha256: sha(match[1]!) }];
+      cookieName: cookie.name, hostname, identityHash, valueHash, identifierSha256: sha(identifier) }];
   });
 }
 

@@ -2075,3 +2075,39 @@ test("fresh unconfirmed Reject captures Heap and HubSpot collectors while retain
   assert.equal(projection.afterActionCapture?.writeDiagnostics?.diagnosticOnly,true);
  }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 });
+
+test("fresh Reject binds Heap/HubSpot identifiers and exact JavaScript/server cookie facts without raw values",async()=>{
+ const server=createServer((request,response)=>{
+  if(request.url==="/cookie-response"){
+   response.setHeader("Set-Cookie","_ga=server-private-value; Path=/server; Max-Age=86400");response.end("ok");return;
+  }
+  response.setHeader("content-type","text/html");response.end(`<!doctype html>
+  <div id="certscore-fixture-consent-banner"><p>Choose optional cookies</p><button data-certscore-consent-action="reject">Reject all</button><button>Accept all</button></div><script>
+  document.cookie='_hp2_id.123='+encodeURIComponent(JSON.stringify({userId:'987654321',sessionId:'2'}))+'; Path=/; Max-Age=86400';
+  document.cookie='hubspotutk=${"a".repeat(32)}; Path=/; Max-Age=86400';
+  document.querySelector('[data-certscore-consent-action="reject"]').onclick=()=>setTimeout(()=>{
+   document.cookie='_ga=setter-private-value; Path=/; Max-Age=86400';
+   fetch('/cookie-response');
+   fetch('https://heapanalytics.com/h?a=123&u=987654321').catch(()=>{});
+   fetch('https://track.hubspot.com/__ptc.gif?vi=${"a".repeat(32)}').catch(()=>{});
+   fetch('https://monorail-edge.shopifysvc.com/v1/produce',{method:'POST',body:JSON.stringify({schema_id:'opaque',payload:{value:'private-payload'}})}).catch(()=>{});
+  },60);</script>`);
+ });const url=await listenHttpServer(server);
+ try{
+  const packet=await observe(url,{confirmationTimeoutMs:0,observationWindowMs:500});
+  assert.equal(packet.refusalRegistration.status,"unconfirmed");
+  const matched=packet.network.requests.filter(r=>r.measurementEvidence?.cookieIdentifierBinding);
+  assert.equal(matched.length,2);assert.ok(matched.every(r=>r.measurementEvidence?.identifierEvidence==="persistent_observed"));
+  assert.ok(matched.some(r=>r.measurementEvidence?.cookieIdentifierBinding?.cookieName==="_hp2_id.123"));
+  const assignment=packet.afterActionCapture?.storageWrites.find(w=>w.name==="_ga")?.exactCookieWrite;assert.ok(assignment);
+  assert.equal(assignment.acceptance,"not_independently_verified");
+  assert.ok(packet.storage.postAction.some(s=>s.identityHash===assignment.identityHash&&s.valueHash===assignment.valueHash));
+  const response=packet.network.requests.find(r=>r.sanitizedUrl.endsWith('/cookie-response'))?.responseCookieWrites?.[0];assert.ok(response);
+  assert.equal(response.source,"response_set_cookie");assert.notEqual(response.identityHash,assignment.identityHash);
+  assert.ok(packet.storage.postAction.some(s=>s.identityHash===response.identityHash&&s.valueHash===response.valueHash));
+  const projected=projectPostRefusalEvidenceForReport({packet,packetSha256:"b".repeat(64)});
+  assert.equal(projected.afterActionCapture?.storageWrites.find(w=>w.name==="_ga")?.exactCookieWrite?.valueHash,assignment.valueHash);
+  assert.equal(packet.network.requests.find(r=>r.measurementEvidence?.profile==="shopify_mixed_telemetry.v1")?.measurementEvidence?.identifierEvidence,"unknown");
+  assert.doesNotMatch(JSON.stringify(packet),/987654321|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|setter-private-value|server-private-value|private-payload/);
+ }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+});

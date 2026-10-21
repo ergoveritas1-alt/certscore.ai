@@ -1,3 +1,4 @@
+export * from "./exact-cookie-write-evidence";
 import {captureFailureDiagnosticSchema, type CaptureFailureDiagnostic} from "./capture-failure-diagnostic";
 export * from "./capture-failure-diagnostic";
 import {storageReadTraceSchema} from "./storage-read-trace";

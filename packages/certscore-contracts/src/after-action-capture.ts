@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT } from "./consent-action-evidence-policy";
+import { exactCookieWriteEvidenceSchema } from "./exact-cookie-write-evidence";
 
 export const afterActionWriteDiagnosticsSchema = z.object({
   policyVersion: z.literal("after_action_write_diagnostics.v1"),
@@ -42,6 +43,7 @@ export const afterActionCaptureSchema = z.object({
     observedAtMs: z.number().int().nonnegative(),
     nonEssential: z.boolean(),
     vendor: z.string().max(160).optional(),
+    exactCookieWrite: exactCookieWriteEvidenceSchema.optional(),
   }).strict()).max(48),
   requestIds: z.array(z.string().min(1).max(120)).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT),
   // Earliest start in each redirect chain, including ancestors outside retention.
@@ -68,6 +70,10 @@ export const afterActionCaptureSchema = z.object({
   if (capture.writeDiagnostics && (capture.writeDiagnostics.windowRecordsRetained !== capture.storageWrites.length ||
     capture.writeDiagnostics.nonEssentialRecordsRetained !== capture.storageWrites.filter(row => row.nonEssential).length))
     context.addIssue({code:z.ZodIssueCode.custom,message:"Write diagnostics must count the exact retained after-click writes."});
+  if (capture.storageWrites.some(row => row.exactCookieWrite && (row.storageType !== "cookie" ||
+    row.exactCookieWrite.source !== "main_document_setter" || row.exactCookieWrite.name !== row.name ||
+    row.exactCookieWrite.hostname !== row.hostname || row.exactCookieWrite.observedAtMs !== row.observedAtMs)))
+    context.addIssue({code:z.ZodIssueCode.custom,message:"Exact cookie assignments must retain their parent write identity and clock."});
 });
 
 export type AfterActionCapture = z.infer<typeof afterActionCaptureSchema>;

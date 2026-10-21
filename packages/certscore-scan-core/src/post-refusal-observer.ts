@@ -1,5 +1,6 @@
 import { measurementCookieCandidates, measurementInspectionBudget, type MeasurementCookieCandidate } from "./measurement-capture.js";
 import { afterActionWriteDiagnostics } from "./after-action-write-diagnostics.js";
+import { captureExactCookieWrite } from "./exact-cookie-write-capture.js";
 import { confirmationDiagnostics } from "./consent-confirmation-diagnostics.js";
 import { firstVerifiedConsentRead } from "./consent-confirmation-read.js";
 import { installBorlabsDeferredDialogReveal } from "./borlabs-passive-dialog-reveal.js";
@@ -249,12 +250,15 @@ type CapturedRequest = {
   startedAtEpochMs: number;
   completedAtEpochMs?: number;
   responseCookieNamesSet?: string[];
+  responseCookieWrites?: import("@certscore/contracts").ExactCookieWriteEvidence[];
   rootStartedAtEpochMs?: number;
   measurementEvidence?: import("@certscore/contracts").MeasurementRequestEvidence;
   inFlightAtRefusalRegistration: boolean;
 };
 
 type InstrumentedStorageWrite = {
+  cookieAssignment?: string;
+  documentUrl?: string;
   deletion?: boolean;
   value?: string;
   storageType: "cookie" | "local_storage" | "session_storage";
@@ -679,6 +683,7 @@ export async function runPostRefusalObserver(
     }
 
     const measurementBudget = measurementInspectionBudget();
+    const responseCookieBudget = measurementInspectionBudget();
     let mainNavigationRequestCount = 0;
     page.on("framenavigated", frame => { if (actionDispatched && frame === page?.mainFrame()) sourceDocumentChanged = true; });
     page.on("request", (request) => {
@@ -767,8 +772,18 @@ export async function runPostRefusalObserver(
       const captured = [...preRegistrationRequests, ...postRegistrationRequests]
         .find((entry) => entry.requestId === requestId);
       if (!captured) return;
+      const observedAtMs = elapsed(parentScanStartedAtMs);
+      const afterClick = actionDispatched;
       const capture = response.headersArray().then((headers) => {
+        if (timing.observationEndedAtMs !== undefined || effectiveSignal?.aborted) return;
         captured.responseCookieNamesSet = responseCookieNamesFromHeaders(headers);
+        const writes: NonNullable<CapturedRequest["responseCookieWrites"]> = [];
+        for (const header of headers.filter(row => row.name.toLowerCase() === "set-cookie").slice(0,24)) {
+          if (!responseCookieBudget.available(afterClick)) break;
+          const write = captureExactCookieWrite({assignment:header.value,url:response.url(),observedAtMs,source:"response_set_cookie"});
+          if (write) { responseCookieBudget.retained(afterClick); writes.push(write); }
+        }
+        if (writes.length) captured.responseCookieWrites = writes;
       }).catch(() => undefined);
       pendingResponseHeaderCaptures.add(capture);
       void capture.finally(() => pendingResponseHeaderCaptures.delete(capture));
@@ -1569,7 +1584,8 @@ export async function runPostRefusalObserver(
         storageSnapshotRetained: postActionStorage !== undefined,
         storageWriteCoverage: "bounded_main_document_sample",
         storageWrites: retainedWrites.map(row => ({storageType:row.storageType,name:row.name,hostname:row.hostname,
-          observedAtMs:row.observedAtMs,nonEssential:row.nonEssential,vendor:row.vendor})),
+          observedAtMs:row.observedAtMs,nonEssential:row.nonEssential,vendor:row.vendor,
+          ...(row.exactCookieWrite?{exactCookieWrite:row.exactCookieWrite}:{})})),
         requestIds: requests.filter((row) => row.startedAtMs >= actionDispatchedAtMs && row.startedAtMs <= captureEndedAtMs).map((row) => row.requestId),
         requestAncestry: retainedRequests().filter((row) => {
           const startedAtMs = elapsed(parentScanStartedAtMs, row.startedAtEpochMs);
@@ -1897,6 +1913,7 @@ function classifyRequests(
       method: captured.request.method(),
       ...(rootStartedAtMs === undefined || rootStartedAtMs > startedAtMs ? {} : { rootStartedAtMs }),
       ...(captured.measurementEvidence ? { measurementEvidence: { ...captured.measurementEvidence, timestampMs: startedAtMs } } : {}),
+      ...(captured.responseCookieWrites ? {responseCookieWrites:captured.responseCookieWrites} : {}),
       sanitizedUrl: sanitizeUrl(requestUrl),
       ...(googleConsentMode ? { googleConsentMode } : {}),
       ...(hostnameFromUrl(requestUrl) ? { hostname: hostnameFromUrl(requestUrl) } : {}),
@@ -2090,7 +2107,14 @@ export function classifyStorageWrite(
   if (!write.name) return undefined;
   if (write.storageType === "cookie" && (write.deletion || write.value === "")) return undefined;
   const hostname = new URL(targetUrl).hostname;
-  const exactIdentity = resolveInstrumentedWriteStorageIdentity({
+  const exactCookieWrite = write.storageType === "cookie" && write.cookieAssignment && write.documentUrl &&
+    write.documentUrl.split("#",1)[0] === targetUrl.split("#",1)[0]
+    ? captureExactCookieWrite({assignment:write.cookieAssignment,url:write.documentUrl,
+      observedAtMs:elapsed(scanStartedAtMs,write.observedAtEpochMs),source:"main_document_setter"}) : undefined;
+  const matchedCookie = exactCookieWrite && postActionStorage.find(item => item.storageType === "cookie" &&
+    item.name === write.name && item.hostname === exactCookieWrite.hostname && item.identityHash === exactCookieWrite.identityHash &&
+    item.valueHash === exactCookieWrite.valueHash);
+  const exactIdentity = exactCookieWrite ? matchedCookie ? {hostname:matchedCookie.hostname!,identityHash:matchedCookie.identityHash!} : undefined : resolveInstrumentedWriteStorageIdentity({
     hostname,
     name: write.name,
     postActionStorage,
@@ -2099,11 +2123,13 @@ export function classifyStorageWrite(
   // Classification must bind the same domain as the retained cookie identity,
   // including a parent-domain cookie written by a www document.
   const purpose = resolveCanonicalActionStoragePurpose({ storageType: write.storageType, name: write.name,
-    hostname: exactIdentity?.hostname ?? hostname });
+    hostname: exactCookieWrite?.hostname ?? exactIdentity?.hostname ?? hostname });
   return {
     storageType: write.storageType,
     name: write.name.slice(0, 180),
-    hostname: exactIdentity?.hostname ?? hostname,
+    hostname: exactCookieWrite?.hostname ?? exactIdentity?.hostname ?? hostname,
+    ...(exactCookieWrite && exactCookieWrite.name === write.name
+      ? {exactCookieWrite} : {}),
     ...(exactIdentity ? { storageIdentityHash: exactIdentity.identityHash } : {}),
     observedAtMs: elapsed(scanStartedAtMs, write.observedAtEpochMs),
     msOffsetFromRefusal: Math.max(0, elapsed(scanStartedAtMs, write.observedAtEpochMs) - elapsed(scanStartedAtMs, refusalRegisteredAtEpochMs)),
@@ -2428,7 +2454,10 @@ async function installStorageWriteProbe(page: Page): Promise<void> {
           const maxAge = attributes.find((attribute) => attribute.toLowerCase().startsWith("max-age="))?.slice(8);
           const expires = attributes.find((attribute) => attribute.toLowerCase().startsWith("expires="))?.slice(8);
           const deletion = maxAge !== undefined ? Number(maxAge) <= 0 : expires !== undefined && Date.parse(expires) <= Date.now();
-          retain({ storageType: "cookie", name, deletion, value: cookieValue.length <= 2048 ? cookieValue : undefined, observedAtEpochMs: performance.timeOrigin + performance.now() });
+          retain({ storageType: "cookie", name, deletion, value: cookieValue.length <= 2048 ? cookieValue : undefined,
+            cookieAssignment: String(value).length <= 4096 ? String(value) : undefined,
+            documentUrl: location.href.length <= 2048 ? location.href : undefined,
+            observedAtEpochMs: performance.timeOrigin + performance.now() });
           return result;
         },
       });

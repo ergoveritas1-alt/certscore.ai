@@ -36,3 +36,13 @@ test("v2 stored-identifier proof must bind the exact pre-action cookie, target, 
  assert.equal(measurementRequestEvidenceSchema.safeParse({...observation,diagnostics:undefined}).success,false);
  assert.equal(measurementRequestEvidenceSchema.safeParse({...observation,cookieIdentifierBinding:{...proof,rawValue:"private"}}).success,false);
 });
+
+test("new collector profiles cannot assert persistent IDs or telemetry absence without bound proof",()=>{
+ const v3={...evidence,version:"measurement_request_evidence.v3",profile:"heap_collection.v1",requestOrigin:"https://heapanalytics.com",requestPath:"/h",
+  identifierEvidence:"persistent_observed",payloadInspection:"unknown",diagnostics:{policyVersion:"bounded_measurement_inspection.v1",reasons:[],bodyDisposition:"empty"}};
+ assert.equal(measurementRequestEvidenceSchema.safeParse(v3).success,false);
+ assert.equal(measurementRequestEvidenceSchema.safeParse({...v3,identifierEvidence:"unknown"}).success,true);
+ assert.equal(measurementRequestEvidenceSchema.safeParse({...v3,version:"measurement_request_evidence.v2",identifierEvidence:"unknown"}).success,false);
+ assert.equal(measurementRequestEvidenceSchema.safeParse({...v3,profile:"shopify_mixed_telemetry.v1",identifierEvidence:"not_observed"}).success,false);
+ assert.equal(measurementRequestEvidenceSchema.safeParse({...v3,profile:"shopify_mixed_telemetry.v1",identifierEvidence:"unknown",payloadInspection:"complete"}).success,false);
+});
