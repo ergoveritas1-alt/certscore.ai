@@ -33,7 +33,7 @@ export {
 
 export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-21-collection-roles-v7";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-21-collection-roles-v8";
 export const COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-15-v3";
 
 export type VendorResolverEvidenceType =
@@ -210,6 +210,32 @@ interface VendorRule {
 }
 
 const rules: VendorRule[] = [
+  {
+    identity: {"entityId":"ent_ee650e0c5153","vendorId":"ven_bb30cbe2f9b8","serviceId":"svc_c547ec15fa52"},
+    entity: "Heap Inc.", vendor: "Heap", product: "Heap Analytics",
+    purpose: "analytics", servicePurpose: "Analytics",
+    regulatoryRelevance: ["consent", "analytics", "event_tracking"], confidence: 0.99,
+    hostPatterns: [/^heapanalytics\.com$/i],
+    urlPatterns: [/^https:\/\/heapanalytics\.com\/h(?:[?#]|$)/i],
+    requireUrlPatternMatch: true, basisLabel: "heap_v4_event_collection",
+    review: { reviewedAt: "2026-10-21", reviewer: "CertScore.ai deterministic endpoint review",
+      sourceUrls: ["https://docs.contentsquare.com/en/web/content-security-policy/"] },
+  },
+  {
+    identity: {"entityId":"ent_80611da53fde","vendorId":"ven_5e875bc90a36","serviceId":"svc_1959e3b19e29"},
+    entity: "Shopify Inc.", vendor: "Shopify", product: "Shopify Monorail Telemetry",
+    // Monorail also carries operational metrics. A collector URL cannot prove
+    // whether a particular opaque event is optional analytics or essential work.
+    purpose: "unknown", servicePurpose: "Unknown",
+    regulatoryRelevance: ["runtime_telemetry", "purpose_requires_payload_review"], confidence: 0.99,
+    hostPatterns: [/^monorail-edge\.shopifysvc\.com$/i],
+    urlPatterns: [/^https:\/\/monorail-edge\.shopifysvc\.com\/(?:v1\/produce|unstable\/produce_batch)(?:[?#]|$)/i],
+    requireUrlPatternMatch: true, basisLabel: "shopify_monorail_mixed_telemetry",
+    review: { reviewedAt: "2026-10-21", reviewer: "CertScore.ai deterministic endpoint review",
+      sourceUrls: ["https://github.com/Shopify/hydrogen/blob/main/packages/hydrogen-react/src/analytics.ts",
+        "https://github.com/Shopify/shopify-cli/wiki/Monorail-Metrics"] },
+  },
+
   {
     identity: {"entityId":"ent_40ea5a6e6ed8","vendorId":"ven_fbfadd693eb0","serviceId":"svc_87aa1c33c3af"},
     entity: "BST DSGVO Cookie",
@@ -3519,7 +3545,7 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "analytics", "marketing_analytics", "marketing_automation"],
     confidence: 0.96,
     hostPatterns: [/^track(?:-eu1)?\.hubspot\.com$/i],
-    urlPatterns: [/^https:\/\/track(?:-eu1)?\.hubspot\.com\/(?:__ptq|ptq)\.gif(?:\?|$)/i],
+    urlPatterns: [/^https:\/\/track(?:-eu1)?\.hubspot\.com\/(?:__pt[qc]|ptq)\.gif(?:\?|$)/i],
     requireUrlPatternMatch: true,
     basisLabel: "hubspot_ptq_tracking_pixel",
   },

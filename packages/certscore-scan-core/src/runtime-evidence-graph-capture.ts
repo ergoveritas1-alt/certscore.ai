@@ -200,6 +200,7 @@ export async function installRuntimeGraphCapture(page: Page, input: RuntimeGraph
     scriptEvidence: () => scriptEvidence.slice(),
     storageReadTrace: () => finalizedReads,
     confirmAction: (at: number) => builder.confirmAction(at),
+    dispatchAction: (atEpochMs?: number) => builder.dispatchAction(atEpochMs),
     /** Reuse raw in-memory browser snapshots already captured by the owning lane. */
     cookies: (cookies: unknown[]) => guard(() => builder.snapshot(cookies.map((raw) => {
       if (!raw || typeof raw !== "object") return raw;

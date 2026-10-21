@@ -13,7 +13,7 @@ export type ActionDomStorageObservation = import("@certscore/contracts").ActionO
 export async function installActionDomStorageCapture(page: Page, targetUrl: string,
   openSession: () => Promise<CDPSession> = () => page.context().newCDPSession(page)) {
   const startedAtEpochMs = Date.now();
-  const targetOrigin = new URL(targetUrl).origin;
+  let targetOrigin = new URL(targetUrl).origin;
   const rows: ActionDomStorageObservation["rows"] = [];
   let session: CDPSession | undefined, enabled = false, frozen: ActionDomStorageObservation | undefined;
   let observedEvents = 0, invalidEvents = 0, overflowEvents = 0, foreignOriginEvents = 0;
@@ -73,5 +73,24 @@ export async function installActionDomStorageCapture(page: Page, targetUrl: stri
     void session?.detach().catch(() => undefined);
     return frozen;
   };
-  return { finish };
+  return { finish,
+    /** Only the caller's resolved, authorized action target may rebind this
+     * diagnostic. Recompute bounded retained receipts; never guess omitted origins. */
+    bindAuthorizedTarget(url: string): boolean {
+      if (frozen) return false;
+      let origin: string;
+      try { const u = new URL(url); if (!["http:","https:"].includes(u.protocol)) return false; origin = u.origin; }
+      catch { return false; }
+      if (origin === targetOrigin) return true;
+      if (overflowEvents !== 0) return false;
+      targetOrigin = origin;
+      const digest = hash(origin);
+      foreignOriginEvents = 0;
+      for (const row of rows) {
+        row.targetOriginMatch = row.originSha256 === digest;
+        if (!row.targetOriginMatch) foreignOriginEvents++;
+      }
+      return true;
+    },
+  };
 }

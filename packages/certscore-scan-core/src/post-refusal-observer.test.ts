@@ -2033,3 +2033,45 @@ test("fresh unconfirmed Reject captures an exact first-party cid cookie match wi
     assert.doesNotMatch(JSON.stringify(packet),/123456789|987654321|opaque-session/);
   } finally {await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 });
+
+test("unconfirmed Reject retains an eligible write after CMP chatter inside the original readback and row caps",async()=>{
+ const server=createServer((_request,response)=>{response.setHeader("content-type","text/html");response.end(`<!doctype html>
+ <div id="certscore-fixture-consent-banner"><p>Choose optional cookies</p><button data-certscore-consent-action="reject">Reject all</button><button>Accept all</button></div><script>
+ document.querySelector('[data-certscore-consent-action="reject"]').onclick=()=>{
+  for(let i=0;i<60;i++)localStorage.setItem('cmp_chatter_'+i,'value');
+  document.cookie='_fbp=fixture-post-click; Path=/';
+ };</script>`);});const url=await listenHttpServer(server);
+ try{
+  const packet=await observe(url,{confirmationTimeoutMs:0,observationWindowMs:180});
+  assert.equal(packet.refusalRegistration.status,"unconfirmed");
+  assert.equal(packet.afterActionCapture?.storageWrites.length,48);
+  assert.ok(packet.afterActionCapture?.storageWrites.some(row=>row.name==="_fbp"&&row.nonEssential));
+  const d=packet.afterActionCapture?.writeDiagnostics;assert.ok(d);
+  assert.equal(d.diagnosticOnly,true);assert.equal(d.windowRecordsObserved,61);assert.equal(d.windowRecordsRetained,48);
+  assert.equal(d.nonEssentialRecordsRetained,1);assert.equal(d.probeAvailable,true);
+  const projected=projectPostRefusalEvidenceForReport({packet,packetSha256:"b".repeat(64)});
+  assert.deepEqual(projected.afterActionCapture?.writeDiagnostics,d);
+  assert.equal(projected.refusalExercised,false);
+ }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+});
+
+test("fresh unconfirmed Reject captures Heap and HubSpot collectors while retaining Shopify purpose uncertainty",async()=>{
+ const server=createServer((_request,response)=>{response.setHeader("content-type","text/html");response.end(`<!doctype html>
+ <div id="certscore-fixture-consent-banner"><p>Choose optional cookies</p><button data-certscore-consent-action="reject">Reject all</button><button>Accept all</button></div><script>
+ document.querySelector('[data-certscore-consent-action="reject"]').onclick=()=>setTimeout(()=>{
+  fetch('https://heapanalytics.com/h').catch(()=>{});
+  fetch('https://track.hubspot.com/__ptc.gif').catch(()=>{});
+  fetch('https://monorail-edge.shopifysvc.com/v1/produce',{method:'POST',body:'opaque'}).catch(()=>{});
+ },60);</script>`);});const url=await listenHttpServer(server);
+ try{
+  const packet=await observe(url,{scanId:"reject-endpoints-fixture",confirmationTimeoutMs:0,observationWindowMs:400,
+   runtimeGraph:runtimeGraphDispatchSchema.parse({contractVersion:"certscore.runtime-graph-dispatch.v1",scanId:"reject-endpoints-fixture",mode:"project",profile:"bounded_passive_v1"})});
+  assert.equal(packet.refusalRegistration.status,"unconfirmed");assert.equal(packet.runtimeEvidenceGraph?.action?.status,"unconfirmed");
+  const projection=projectPostRefusalEvidenceForReport({packet,packetSha256:"b".repeat(64)});
+  const nonEssential=projection.afterActionRequests?.filter(r=>r.nonEssential).map(r=>r.vendor).sort();
+  assert.deepEqual(nonEssential,["Heap","HubSpot"]);
+  const telemetry=projection.afterActionRequests?.find(r=>r.vendor==="Shopify");
+  assert.equal(telemetry?.purpose,"unknown");assert.equal(telemetry?.nonEssential,false);
+  assert.equal(projection.afterActionCapture?.writeDiagnostics?.diagnosticOnly,true);
+ }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+});

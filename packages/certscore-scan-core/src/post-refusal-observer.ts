@@ -1,4 +1,5 @@
 import { measurementCookieCandidates, measurementInspectionBudget, type MeasurementCookieCandidate } from "./measurement-capture.js";
+import { afterActionWriteDiagnostics } from "./after-action-write-diagnostics.js";
 import { confirmationDiagnostics } from "./consent-confirmation-diagnostics.js";
 import { firstVerifiedConsentRead } from "./consent-confirmation-read.js";
 import { installBorlabsDeferredDialogReveal } from "./borlabs-passive-dialog-reveal.js";
@@ -1433,6 +1434,8 @@ export async function runPostRefusalObserver(
       });
     }
     actionControlProof = proofResolution.proof;
+    if (originDomStorageCapture && !originDomStorageCapture.bindAuthorizedTarget(observationTargetUrl))
+      limitations.push("origin_storage_authorized_target_binding_limited");
     let actionDispatchedAtEpochMs = Date.now();
     let actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
     let clickError: unknown;
@@ -1449,6 +1452,7 @@ export async function runPostRefusalObserver(
           actionDispatchedAtEpochMs = Date.now();
           actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
           actionDispatched = true;
+          graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
           try {input.onLifecycleEvent?.({type: "action_dispatched", atMs: actionDispatchedAtMs});}
           catch {limitations.push("lifecycle_listener_failed");}
         },
@@ -1539,11 +1543,24 @@ export async function runPostRefusalObserver(
       if (!effectiveSignal?.aborted && targetStillAuthorized()) {
         postActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, undefined, (d) => { storageCollectionDiagnostics.postAction = d; }).catch(() => undefined);
       }
-      const capturedWrites = !effectiveSignal?.aborted && targetStillAuthorized()
-        ? await readStorageWrites(page).catch(() => []) : [];
+      const writeCapture = !effectiveSignal?.aborted && targetStillAuthorized()
+        ? await readActionWriteCapture<InstrumentedStorageWrite>(page, "__certscoreReadPostRefusalWrites") : {writes:[],metadata:undefined};
       const captureEndedAtMs = elapsed(parentScanStartedAtMs);
+      const capturedWrites = writeCapture.writes.filter(write => write.observedAtEpochMs > actionDispatchedAtEpochMs &&
+        write.observedAtEpochMs <= parentScanStartedAtMs + captureEndedAtMs);
+      const classifiedWrites = capturedWrites.flatMap(write => {
+        const row = classifyStorageWrite(write, parentScanStartedAtMs, actionDispatchedAtEpochMs, observationTargetUrl, postActionStorage ?? []);
+        return row ? [row] : [];
+      });
+      // Retain classified non-essential writes before CMP/unknown chatter within the same 48-row cap.
+      const retainedWrites = [...classifiedWrites].sort((a,b) => Number(b.nonEssential)-Number(a.nonEssential)).slice(0,48);
       const requests = classifyRequests(retainedRequests(), parentScanStartedAtMs);
       afterActionCapture = {
+        writeDiagnostics: afterActionWriteDiagnostics({metadata:writeCapture.metadata,targetUrl:observationTargetUrl,
+          actionAtEpochMs:actionDispatchedAtEpochMs,observed:capturedWrites.length,retained:retainedWrites.length,
+          nonEssentialObserved:classifiedWrites.filter(row=>row.nonEssential).length,
+          nonEssentialRetained:retainedWrites.filter(row=>row.nonEssential).length,
+          unclassified:capturedWrites.length-classifiedWrites.filter(row=>row.purpose && row.purpose!=="unknown").length}),
         policyVersion: "bounded_after_action_capture.v2", action: "reject",
         activationStatus: interactionDiagnostics.click.outcome === "completed" ? "completed" : "uncertain",
         actionDispatchedAtMs, captureEndedAtMs, requestedWindowMs: observationWindowMs,
@@ -1551,12 +1568,8 @@ export async function runPostRefusalObserver(
         requestsDropped: captureCoverage.requestsDroppedAfterAction,
         storageSnapshotRetained: postActionStorage !== undefined,
         storageWriteCoverage: "bounded_main_document_sample",
-        storageWrites: capturedWrites.filter((write) => write.observedAtEpochMs >= actionDispatchedAtEpochMs)
-          .flatMap((write) => {
-            const row = classifyStorageWrite(write, parentScanStartedAtMs, actionDispatchedAtEpochMs, observationTargetUrl, postActionStorage ?? []);
-            return row ? [{ storageType: row.storageType, name: row.name, hostname: row.hostname,
-              observedAtMs: row.observedAtMs, nonEssential: row.nonEssential, vendor: row.vendor }] : [];
-          }).slice(0, 48),
+        storageWrites: retainedWrites.map(row => ({storageType:row.storageType,name:row.name,hostname:row.hostname,
+          observedAtMs:row.observedAtMs,nonEssential:row.nonEssential,vendor:row.vendor})),
         requestIds: requests.filter((row) => row.startedAtMs >= actionDispatchedAtMs && row.startedAtMs <= captureEndedAtMs).map((row) => row.requestId),
         requestAncestry: retainedRequests().filter((row) => {
           const startedAtMs = elapsed(parentScanStartedAtMs, row.startedAtEpochMs);
@@ -1871,7 +1884,7 @@ function classifyRequests(
 ): PostRefusalNetworkRequest[] {
   return requests.map((captured) => {
     const requestUrl = captured.request.url();
-    const vendor = vendorFor({ type: "request", url: requestUrl });
+    const purpose = classifyPostRefusalRequestPurpose(requestUrl);
     const startedAtMs = elapsed(scanStartedAtMs, captured.startedAtEpochMs);
     const googleConsentMode = captureGoogleConsentModeRequest({ url: requestUrl, requestId: captured.requestId, timestampMs: startedAtMs });
     const rootStartedAtMs = !captured.request.redirectedFrom() ? startedAtMs
@@ -1897,10 +1910,17 @@ function classifyRequests(
         : {}),
       inFlightAtRefusalRegistration: captured.inFlightAtRefusalRegistration,
       ...(msOffsetFromRefusal === undefined ? {} : { msOffsetFromRefusal }),
-      ...(vendor ? { vendor: vendor.vendor, purpose: vendor.purpose } : {}),
-      nonEssential: vendor ? NON_ESSENTIAL_PURPOSES.has(vendor.purpose) : false,
+      ...purpose,
     };
   });
+}
+
+/** Shared producer classification for fresh capture and explicit evidence replays.
+ * Retained packet reads never invoke this or overwrite historical conclusions. */
+export function classifyPostRefusalRequestPurpose(url: string) {
+  const vendor = vendorFor({type:"request",url});
+  return {...(vendor ? {vendor:vendor.vendor,purpose:vendor.purpose} : {}),
+    nonEssential:vendor ? NON_ESSENTIAL_PURPOSES.has(vendor.purpose) : false};
 }
 
 async function captureStorage(

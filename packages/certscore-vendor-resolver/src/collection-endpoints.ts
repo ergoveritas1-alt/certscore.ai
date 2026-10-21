@@ -1,6 +1,6 @@
 /** Versioned resource-role classification, independent of vendor ownership,
  * recipient identity and legal interpretation. Raw support contacts stay retained. */
-export const COLLECTION_ENDPOINT_POLICY_VERSION = "canonical_collection_endpoint.v5";
+export const COLLECTION_ENDPOINT_POLICY_VERSION = "canonical_collection_endpoint.v6";
 
 export function classifyCanonicalCollectionEndpoint(
   url: string,
@@ -11,6 +11,13 @@ export function classifyCanonicalCollectionEndpoint(
   if (!["https:", "http:"].includes(parsed.protocol)) return { observed: false };
   const hostname = parsed.hostname;
   const path = parsed.pathname;
+  if ((hostname === "heapanalytics.com" && path === "/h") ||
+    (/^track(?:-eu1)?\.hubspot\.com$/.test(hostname) && /^\/(?:__pt[qc]|ptq)\.gif$/.test(path))) {
+    return { observed: true, category: "analytics_collection" };
+  }
+  if (hostname === "monorail-edge.shopifysvc.com" && ["/v1/produce", "/unstable/produce_batch"].includes(path)) {
+    return { observed: true, category: "mixed_telemetry" };
+  }
   // GPT dictionaries are supporting resources even when delivered without a
   // .js suffix. A successful download does not establish visitor collection.
   if (hostname === "securepubads.g.doubleclick.net" && /^\/pagead\/managed\/dict(?:\/|$)/i.test(path)) {
@@ -143,5 +150,5 @@ export function classifyCanonicalCollectionEndpoint(
 export function isCanonicalAdvertisingCollectionCandidate(url: string, resourceType?: string): boolean {
   const result = classifyCanonicalCollectionEndpoint(url, resourceType);
   return result.observed && !["google_consent_or_tag_support", "advertising_measurement_support",
-    "security_or_performance_support", "customer_support"].includes(result.category ?? "");
+    "security_or_performance_support", "customer_support", "mixed_telemetry"].includes(result.category ?? "");
 }

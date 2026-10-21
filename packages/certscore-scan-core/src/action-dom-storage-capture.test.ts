@@ -89,3 +89,19 @@ test("real CDP observes setter-bypass mutations and same-origin other-page write
     assert.equal(capture.finish().observedEvents, result.observedEvents);
   } finally { await browser.close(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
+
+test("resolved authorized target rebinding corrects retained origin flags without promoting diagnostic receipts",async()=>{
+ const f=fake(),capture=await installActionDomStorageCapture(f.page,"https://requested.example/",async()=>f.session);
+ f.session.emit("DOMStorage.domStorageItemAdded",added("key","https://resolved.example"));
+ f.session.emit("DOMStorage.domStorageItemAdded",added("other","https://third.example"));
+ assert.equal(capture.bindAuthorizedTarget("https://resolved.example/"),true);
+ f.session.emit("DOMStorage.domStorageItemAdded",added("later","https://resolved.example"));
+ const result=capture.finish();assert.equal(result.foreignOriginEvents,1);assert.deepEqual(result.rows.map(r=>r.targetOriginMatch),[true,false,true]);
+ assert.equal(result.diagnosticOnly,true);assert.ok(result.limitations.includes("source_delivery_not_verified"));
+ assert.ok(actionOriginDomStorageObservationSchema.safeParse(result).success);
+ assert.equal(capture.bindAuthorizedTarget("https://third.example/"),false);
+ const g=fake(),overflow=await installActionDomStorageCapture(g.page,"https://requested.example/",async()=>g.session);
+ for(let i=0;i<65;i++)g.session.emit("DOMStorage.domStorageItemAdded",added(String(i),"https://resolved.example"));
+ assert.equal(overflow.bindAuthorizedTarget("https://resolved.example/"),false,"omitted origins cannot be reconstructed");
+ assert.ok(actionOriginDomStorageObservationSchema.safeParse(overflow.finish()).success);
+});

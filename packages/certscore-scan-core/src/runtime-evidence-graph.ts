@@ -46,6 +46,8 @@ export class RuntimeEvidenceGraphBuilder {
   private clockOffsetMs?: number;
   private final?: RuntimeEvidenceGraph;
   private action?: RuntimeEvidenceGraph["action"];
+  private actionDispatched = false;
+  private actionDispatchedAtMs?: number;
 
   readonly input: Readonly<GraphCaptureIdentity>;
 
@@ -58,8 +60,22 @@ export class RuntimeEvidenceGraphBuilder {
   }
 
   confirmAction(registeredAt: number) {
-    if (!this.frozen && this.action && Number.isFinite(registeredAt) && registeredAt >= Date.parse(this.input.startedAt))
+    if (!this.frozen && this.action && Number.isFinite(registeredAt) && registeredAt >= Date.parse(this.input.startedAt)) {
+      this.dispatchAction(registeredAt);
       this.action = { status: "confirmed", registeredAtMs: registeredAt - Date.parse(this.input.startedAt) };
+    }
+  }
+
+  /** Capacity bookkeeping only; this never confirms a consent decision. */
+  dispatchAction(atEpochMs = Date.now()) {
+    if (!this.frozen && this.input.scenario === "post_reject" && Number.isFinite(atEpochMs) && atEpochMs >= Date.parse(this.input.startedAt)) {
+      this.actionDispatched = true;
+      this.actionDispatchedAtMs ??= atEpochMs - Date.parse(this.input.startedAt);
+    }
+  }
+
+  private captureLimit(limit: number) {
+    return this.input.scenario === "post_reject" && !this.actionDispatched ? Math.floor(limit / 2) : limit;
   }
 
   target(session: string, type: string, url: string) {
@@ -91,7 +107,8 @@ export class RuntimeEvidenceGraphBuilder {
     const old = this.nodes.get(node.id);
     const next = old ? { ...old, ...node } : node;
     const delta = Buffer.byteLength(JSON.stringify(next)) - (old ? Buffer.byteLength(JSON.stringify(old)) : 0);
-    if ((!old && this.nodes.size >= LIMITS.nodes) || this.bytes + delta > LIMITS.bytes - 12_000) {
+    if ((!old && this.nodes.size >= this.captureLimit(LIMITS.nodes)) || this.bytes + delta > this.captureLimit(LIMITS.bytes) - 12_000) {
+      if (!this.actionDispatched && this.input.scenario === "post_reject") this.limit("pre_action_graph_reservation");
       this.droppedNodes += 1; this.limit("graph_node_or_byte_limit"); return undefined;
     }
     this.bytes += delta;
@@ -105,7 +122,7 @@ export class RuntimeEvidenceGraphBuilder {
     const edge = { id: graphIdentity(from, to, relation), from, to, relation, basis, directness };
     if (this.edges.has(edge.id)) return;
     const bytes = Buffer.byteLength(JSON.stringify(edge));
-    if (this.edges.size >= LIMITS.edges || this.bytes + bytes > LIMITS.bytes - 12_000) {
+    if (this.edges.size >= this.captureLimit(LIMITS.edges) || this.bytes + bytes > this.captureLimit(LIMITS.bytes) - 12_000) {
       this.droppedEdges += 1; this.limit("graph_edge_or_byte_limit"); return;
     }
     this.bytes += bytes; this.edges.set(edge.id, edge);
@@ -150,7 +167,7 @@ export class RuntimeEvidenceGraphBuilder {
     if (!this.stacks.has(id)) {
       const value = { id, frames, truncated };
       const size = Buffer.byteLength(JSON.stringify(value));
-      if (this.stacks.size >= LIMITS.stacks || this.bytes + size > LIMITS.bytes - 12_000) {
+      if (this.stacks.size >= this.captureLimit(LIMITS.stacks) || this.bytes + size > this.captureLimit(LIMITS.bytes) - 12_000) {
         this.limit("stack_limit"); return { directScript };
       }
       this.bytes += size; this.stacks.set(id, value);
@@ -200,7 +217,7 @@ export class RuntimeEvidenceGraphBuilder {
     const key = `${session}:${requestId}`;
     let chain = this.chains.get(key);
     if (!chain) {
-      if (this.chains.size >= LIMITS.nodes) { this.limit("request_correlation_limit"); return; }
+      if (this.chains.size >= this.captureLimit(LIMITS.nodes)) { this.limit("request_correlation_limit"); return; }
       chain = { hops: [], requestExtras: [], responseExtras: [] }; this.chains.set(key, chain);
     }
     if (method === "Network.requestWillBeSentExtraInfo" || method === "Network.responseReceivedExtraInfo") {
@@ -383,7 +400,14 @@ export class RuntimeEvidenceGraphBuilder {
     if (this.final) return this.final;
     const started = performance.now();
     let unresolvedRequests = 0;
-    for (const chain of this.chains.values()) {
+    // Final ExtraInfo/cookie correlation spends the same remaining budget on
+    // post-click chains first; pre-click responses cannot consume its reservation.
+    const chains = [...this.chains.values()];
+    if (this.input.scenario === "post_reject" && this.actionDispatchedAtMs !== undefined) {
+      const afterClick = (chain: RequestChain) => chain.hops.some(hop => (this.nodes.get(hop.id)?.observedAtMs ?? -1) > this.actionDispatchedAtMs!);
+      chains.sort((a,b) => Number(afterClick(b))-Number(afterClick(a)));
+    }
+    for (const chain of chains) {
       const expected = chain.hops.filter((hop) => hop.extraExpected === true);
       const extraComplete = expected.length === chain.requestExtras.length && expected.length === chain.responseExtras.length && chain.hops.every((hop) => hop.extraExpected !== undefined);
       if (!extraComplete && (chain.requestExtras.length || chain.responseExtras.length || expected.length)) this.limit("extra_info_pairing_incomplete");

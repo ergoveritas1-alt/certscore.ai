@@ -155,3 +155,24 @@ test("probes preserve native behavior under page tampering, proxies, long identi
     assert.deepEqual(results[1], results[0], "probe-on behavior must equal native probe-off behavior");
   } finally { await browser.close(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
+
+test("Reject graph keeps post-click request and cookie attribution after a pre-click resource flood",{timeout:20000},async()=>{
+ const server=createServer((req,res)=>{
+  if(req.url==="/"){res.setHeader("content-type","text/html");res.end(`<!doctype html><button id="reject">Reject all</button><script>
+   window.ready=false;Promise.all(Array.from({length:200},(_,i)=>fetch('/resource/'+i))).then(()=>window.ready=true);
+   document.querySelector('#reject').onclick=()=>{document.cookie='_fbp=fixture-value; Path=/';fetch('/after-choice');};
+  </script>`);}else res.end("ok");
+ });await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
+ const browser=await chromium.launch({headless:true});
+ try{
+  const context=await browser.newContext(),page=await context.newPage();const address=server.address();assert.ok(address&&typeof address!=="string");
+  const capture=await installRuntimeGraphCapture(page,{scanId:"reject-flood",captureId:"reject-flood",scenario:"post_reject",mode:"project",startedAt:new Date().toISOString()});
+  await page.goto(`http://127.0.0.1:${address.port}/`);await page.waitForFunction(()=> (window as any).ready===true);
+  capture.dispatchAction();const response=page.waitForResponse(r=>r.url().endsWith("/after-choice"));await page.click("#reject");await response;
+  await page.evaluate(()=>document.cookie);const graph=capture.finish();assert.ok(graph);
+  assert.ok(graph.coverage.reasons.includes("pre_action_graph_reservation"));
+  assert.ok(graph.nodes.some(n=>n.kind==="request"&&n.url?.endsWith("/after-choice")));
+  assert.ok(graph.nodes.some(n=>n.kind==="cookie"&&n.name==="_fbp"&&n.operation==="js_set"));
+  assert.equal(graph.action?.status,"unconfirmed");
+ }finally{await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});

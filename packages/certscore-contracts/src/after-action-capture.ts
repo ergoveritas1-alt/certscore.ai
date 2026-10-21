@@ -1,8 +1,30 @@
 import { z } from "zod";
 import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT } from "./consent-action-evidence-policy";
 
+export const afterActionWriteDiagnosticsSchema = z.object({
+  policyVersion: z.literal("after_action_write_diagnostics.v1"),
+  scope: z.literal("main_document_setter_hooks"), diagnosticOnly: z.literal(true),
+  probeAvailable: z.boolean(), documentMatches: z.boolean(), cookieHookHealthy: z.boolean(), storageHookHealthy: z.boolean(),
+  observedLifetimeCount: z.number().int().nonnegative().nullable(),
+  ringEvictedCount: z.number().int().nonnegative().nullable(), readbackOmittedCount: z.number().int().nonnegative().nullable(),
+  windowRecordsObserved: z.number().int().nonnegative(), windowRecordsRetained: z.number().int().nonnegative(),
+  nonEssentialRecordsObserved: z.number().int().nonnegative(), nonEssentialRecordsRetained: z.number().int().nonnegative(),
+  unclassifiedRecordsObserved: z.number().int().nonnegative(),
+}).strict().superRefine((v, ctx) => {
+  if (v.windowRecordsRetained > v.windowRecordsObserved || v.nonEssentialRecordsObserved > v.windowRecordsObserved ||
+    v.nonEssentialRecordsRetained > v.nonEssentialRecordsObserved || v.nonEssentialRecordsRetained > v.windowRecordsRetained ||
+    v.unclassifiedRecordsObserved > v.windowRecordsObserved ||
+    (v.probeAvailable && (v.observedLifetimeCount === null || v.ringEvictedCount === null || v.readbackOmittedCount === null ||
+      v.ringEvictedCount + v.readbackOmittedCount + v.windowRecordsObserved > v.observedLifetimeCount)) ||
+    (!v.probeAvailable && (v.observedLifetimeCount !== null || v.ringEvictedCount !== null || v.readbackOmittedCount !== null ||
+      v.documentMatches || v.cookieHookHealthy || v.storageHookHealthy)))
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"After-click write diagnostics must preserve bounded readback accounting."});
+});
+export type AfterActionWriteDiagnostics = z.infer<typeof afterActionWriteDiagnosticsSchema>;
+
 /** Factual capture after a control action; never a claim of registered consent. */
 export const afterActionCaptureSchema = z.object({
+  writeDiagnostics: afterActionWriteDiagnosticsSchema.optional(),
   policyVersion: z.enum(["bounded_after_action_capture.v1", "bounded_after_action_capture.v2"]),
   action: z.enum(["accept", "reject"]),
   activationStatus: z.enum(["completed", "uncertain"]),
@@ -43,6 +65,9 @@ export const afterActionCaptureSchema = z.object({
     capture.storageWrites.some((write) => write.observedAtMs < capture.actionDispatchedAtMs || write.observedAtMs > capture.captureEndedAtMs)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "After-action capture requires consistent action timing, completion and unique retained request references." });
   }
+  if (capture.writeDiagnostics && (capture.writeDiagnostics.windowRecordsRetained !== capture.storageWrites.length ||
+    capture.writeDiagnostics.nonEssentialRecordsRetained !== capture.storageWrites.filter(row => row.nonEssential).length))
+    context.addIssue({code:z.ZodIssueCode.custom,message:"Write diagnostics must count the exact retained after-click writes."});
 });
 
 export type AfterActionCapture = z.infer<typeof afterActionCaptureSchema>;

@@ -42,3 +42,14 @@ test("expanded capture stays bounded and requires ancestry for every retained re
   assert.equal(afterActionCaptureSchema.safeParse({ ...expanded, requestIds: [...requestIds, "extra"],
     requestAncestry: [...requestAncestry, { requestId: "extra", rootStartedAtMs: 501 }] }).success, false);
 });
+
+test("optional after-click write diagnostics count retained facts without claiming registration or eligibility",()=>{
+ const diagnostics={policyVersion:"after_action_write_diagnostics.v1",scope:"main_document_setter_hooks",diagnosticOnly:true,
+  probeAvailable:true,documentMatches:true,cookieHookHealthy:true,storageHookHealthy:true,observedLifetimeCount:70,ringEvictedCount:0,readbackOmittedCount:0,
+  windowRecordsObserved:60,windowRecordsRetained:0,nonEssentialRecordsObserved:0,nonEssentialRecordsRetained:0,unclassifiedRecordsObserved:60};
+ const parsed=afterActionCaptureSchema.parse({...capture,writeDiagnostics:diagnostics});
+ assert.equal(parsed.writeDiagnostics?.diagnosticOnly,true);
+ assert.equal(afterActionCaptureSchema.safeParse({...capture,writeDiagnostics:{...diagnostics,windowRecordsRetained:1}}).success,false);
+ assert.equal(afterActionCaptureSchema.safeParse({...capture,writeDiagnostics:{...diagnostics,diagnosticOnly:false}}).success,false);
+ assert.equal(afterActionCaptureSchema.parse(capture).writeDiagnostics,undefined,"historical capture must not acquire retrospective diagnostics");
+});

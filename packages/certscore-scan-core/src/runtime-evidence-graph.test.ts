@@ -198,3 +198,24 @@ test("host-only and domain cookies never collapse and deletion cannot confirm su
   assert.equal(snapshots.length, 2); assert.deepEqual(snapshots.map(node => node.cookie?.hostOnly).sort(), [false, true]);
   assert.equal(g.edges.filter(edge => edge.relation === "snapshot_confirms").length, 0);
 });
+
+test("Reject graph reserves existing bytes and correlation slots for dispatch without confirming consent",()=>{
+ const b=make("post_reject");
+ for(let i=0;i<1500;i++){
+  b.handle("main","Network.requestWillBeSent",request(`before-${i}`,`https://site.test/assets/${i}.js`));
+  b.handle("main","Network.responseReceived",response(`before-${i}`));
+  b.handle("main","Network.responseReceivedExtraInfo",resExtra(`before-${i}`,`before_${i}=private; Path=/`));
+ }
+ b.dispatchAction(Date.parse(b.input.startedAt)+400);
+ b.handle("main","Network.requestWillBeSent",{...request("after","https://heapanalytics.com/h"),timestamp:1.5});
+ b.handle("main","Network.responseReceived",{...response("after",true),timestamp:1.6});
+ b.handle("main","Network.responseReceivedExtraInfo",resExtra("after","_fbp=private; Path=/"));
+ const graph=b.finish();
+ assert.ok(graph.nodes.some(node=>node.kind==="request"&&node.requestId==="after"));
+ assert.ok(graph.nodes.some(node=>node.kind==="cookie"&&node.cookie?.name==="_fbp"&&node.operation==="http_set"));
+ assert.equal(graph.action?.status,"unconfirmed");
+ assert.ok(graph.coverage.reasons.includes("pre_action_graph_reservation"));
+ assert.ok(graph.nodes.length<=RUNTIME_EVIDENCE_GRAPH_LIMITS.nodes);
+ assert.ok(Buffer.byteLength(JSON.stringify(graph))<=RUNTIME_EVIDENCE_GRAPH_LIMITS.bytes);
+ assert.ok(runtimeEvidenceGraphSchema.safeParse(graph).success);
+});
