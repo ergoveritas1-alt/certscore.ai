@@ -77,7 +77,14 @@ test("white-label PDF export authenticates and uses only the viewer workspace br
   state.theme = "black";
   assert.equal((await request("format=pdf")).status, 200);
   assert.equal(state.rendered.at(-1).headerTheme, "black");
+  assert.equal(state.rendered.at(-1).brandName, "Viewer Agency");
+  assert.equal(state.rendered.at(-1).brandLogo.body.toString(), "logo");
+  state.logo = false;
+  assert.equal((await request("format=pdf")).status, 200);
   assert.equal(state.rendered.at(-1).brandName, undefined);
+  assert.equal((await request()).status, 409);
+  state.logo = true; state.failLogo = true;
+  assert.equal((await request("format=pdf")).status, 409);
   assert.equal((await request("format=json&branding=workspace")).status, 400);
   assert.equal((await request("format=pdf&branding=other-workspace")).status, 400);
 });

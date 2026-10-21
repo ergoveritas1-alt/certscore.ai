@@ -8,9 +8,9 @@ test("canonical and public GPC activity contracts retain bounded facts and rejec
   const fixture = gpcActivityComparisonFixture();
   for (const schema of [canonical, publicSchema]) {
     assert.deepEqual(schema.parse(fixture), fixture);
-    for (const durationMs of [3000, 5000]) assert.equal(schema.safeParse({ ...fixture, durationMs }).success, true);
+    for (const durationMs of [3000, 5000, 5172, 8500, 15000]) assert.equal(schema.safeParse({ ...fixture, durationMs }).success, true);
     for (const invalid of [
-      { ...fixture, durationMs: 6000 }, { ...fixture, scoreEffect: "deduct" },
+      { ...fixture, durationMs: 0 }, { ...fixture, durationMs: 15001 }, { ...fixture, durationMs: 5000.5 }, { ...fixture, scoreEffect: "deduct" },
       { ...fixture, causedByGpc: "established" }, { ...fixture, legalConclusion: "honored" },
       { ...fixture, activity: { ...fixture.activity, analyticsReplay: { ...fixture.activity.analyticsReplay, baselineRequests: 5001 } } },
       { ...fixture, sourceHashes: { baseline: "missing", gpc: fixture.sourceHashes.gpc } },

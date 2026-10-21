@@ -11,6 +11,106 @@ import {PAIRED_RUNTIME_SETTLE_MAX_MS,waitForLoadingRuntimeDocument} from "./runt
 import {createPassiveEvidenceActivityTracker} from "./passive-evidence-quiet-window";
 import {EventEmitter} from "node:events";
 import type {Page} from "playwright";
+import {createLocalGpcAdaptivePair} from "./local-gpc-adaptive";
+
+test("adaptive peers extend one common interval for both request streams and preserve initial forms",{timeout:20000},async()=>{
+ const server=createServer((_req,res)=>{
+  res.setHeader("Content-Type","text/html");
+  res.end(`<!doctype html><html lang="en"><body><h1>Public information</h1><p>${"Public services information. ".repeat(30)}</p><form id="early"><label for="email">Email</label><input id="email" type="email"></form><script>setTimeout(()=>document.querySelector('#early')?.remove(),3000);for(const wait of (navigator.globalPrivacyControl?[5500]:[4000,6500]))setTimeout(()=>fetch('https://www.facebook.com/tr/?id=fixture&ev=PageView&wait='+wait),wait)</script></body></html>`);
+ });
+ await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
+ const url=`http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/`;
+ const browser=await chromium.launch({headless:true}),root=await mkdtemp(path.join(tmpdir(),"gpc-adaptive-"));
+ const pair=createLocalGpcAdaptivePair({scanId:"adaptive-fixture"});
+ try {
+  const results=await Promise.all([false,true].map(async enabled=>preConsentRuntimeScanner({browser,url,normalizedUrl:url,captureScope:"runtime_evidence",screenshotMode:"never",waitMode:"fast",
+    globalPrivacyControlEnabled:enabled,gpcComparisonMinDurationMs:15000,localGpcAdaptiveParticipant:pair.participant("adaptive-fixture",enabled?"gpc_observation":"runtime_evidence"),scanStartedAtMs:Date.now(),internalBudgetMs:30000,
+    artifactWriter:await createArtifactWriter(path.join(root,String(enabled))),routeFulfillers:[{urlPattern:/^https:\/\/www\.facebook\.com\/tr\//,status:204,body:""}]})));
+  const baseline=results[0]!.gpcImpactCapture!,gpc=results[1]!.gpcImpactCapture!;
+  assert.ok(baseline.adaptiveObservation!.durationMs>=8400&&baseline.adaptiveObservation!.durationMs<9500);
+  assert.equal(baseline.adaptiveObservation!.durationMs,gpc.adaptiveObservation!.durationMs);
+  assert.equal(baseline.adaptiveObservation!.peerDocumentToken,gpc.document!.token);
+  for(const result of results){
+    assert.equal(result.gpcImpactCapture!.localRetention,"local_gpc_complete.v2");
+    assert.deepEqual(result.gpcImpactCapture!.limitationKeys,[]);
+    assert.equal(result.gpcImpactCapture!.windows.at(-1)!.durationMs,result.gpcImpactCapture!.adaptiveObservation!.durationMs);
+    assert.ok(result.collectionSurfaceObservations.length>0);
+  }
+ }finally{await browser.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
+});
+
+test("local fifteen-second diagnostics retain late requests and all four checkpoints in both conditions", {timeout:45000}, async () => {
+ const server=createServer((_req,res)=>{
+  res.setHeader("Content-Type","text/html");
+  res.end(`<!doctype html><html lang="en"><body><h1>Public information</h1><p>${"Public services information. ".repeat(30)}</p><form id="initial"><label for="email">Email</label><input id="email" type="email"></form><script>for(const wait of [6000,9000,13000])setTimeout(()=>{document.querySelector('#initial')?.remove();fetch('https://www.facebook.com/tr/?id=fixture&ev=PageView&wait='+wait)},wait)</script></body></html>`);
+ });
+ await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
+ const url=`http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/`;
+ const browser=await chromium.launch({headless:true}),root=await mkdtemp(path.join(tmpdir(),"gpc-fifteen-second-"));
+ try {
+  for(const enabled of [false,true]) {
+   const result=await preConsentRuntimeScanner({browser,url,normalizedUrl:url,captureScope:"runtime_evidence",screenshotMode:"never",waitMode:"fast",
+    globalPrivacyControlEnabled:enabled,gpcComparisonMinDurationMs:15000,scanStartedAtMs:Date.now(),internalBudgetMs:30000,
+    artifactWriter:await createArtifactWriter(path.join(root,String(enabled))),routeFulfillers:[{urlPattern:/^https:\/\/www\.facebook\.com\/tr\//,status:204,body:""}]});
+   const capture=result.gpcImpactCapture!;
+   assert.deepEqual(capture.windows.slice(-4).map(window=>window.durationMs),[5000,8000,10000,15000]);
+   assert.ok(result.gpcSignalObservation!.capturedAtMs-capture.document!.committedAtMs>=15000);
+   const late=result.networkEvents.filter(event=>event.requestUrl.startsWith("https://www.facebook.com/tr/"));
+   assert.equal(late.length,3);
+   assert.ok(late.every(event=>event.requestHeaders?.secGpc===(enabled?"1":undefined)));
+   assert.ok(result.collectionSurfaceObservations.length>0,"initial form survives later removal");
+   assert.deepEqual(capture.limitationKeys,[]);
+  }
+ } finally {await browser.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
+});
+
+test("local five-second captures preserve initial forms and retain delayed collection in both conditions", {timeout:30000}, async () => {
+ const server=createServer((_req,res)=>{
+  res.setHeader("Content-Type","text/html");
+  res.end(`<!doctype html><html lang="en"><body><h1>Public company information</h1><p>${"Public services and contact information. ".repeat(30)}</p><form id="fixture-form"><label for="email">Email</label><input id="email" type="email" name="email"></form><script>document.cookie='early_fixture=1; path=/';setTimeout(()=>{document.querySelector('#fixture-form').remove();document.cookie='late_fixture=1; path=/';fetch('https://www.facebook.com/tr/?id=fixture&ev=PageView')},3600)</script></body></html>`);
+ });
+ await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
+ const url=`http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/`;
+ const browser=await chromium.launch({headless:true}),root=await mkdtemp(path.join(tmpdir(),"gpc-five-second-"));
+ try {
+  for (const enabled of [false,true]) {
+   const result=await preConsentRuntimeScanner({browser,url,normalizedUrl:url,captureScope:"runtime_evidence",screenshotMode:"never",waitMode:"fast",
+    globalPrivacyControlEnabled:enabled,gpcComparisonMinDurationMs:5000,scanStartedAtMs:Date.now(),internalBudgetMs:15000,
+    artifactWriter:await createArtifactWriter(path.join(root,String(enabled))),
+    routeFulfillers:[{urlPattern:/^https:\/\/www\.facebook\.com\/tr\//,status:204,body:""}]});
+   assert.deepEqual(result.gpcImpactCapture?.windows.map(window=>window.durationMs),[250,500,1000,3000,5000]);
+   assert.ok(result.gpcSignalObservation!.capturedAtMs-result.gpcImpactCapture!.document!.committedAtMs>=5000);
+   const late=result.networkEvents.find(event=>event.requestUrl.startsWith("https://www.facebook.com/tr/"));
+   assert.ok(late);assert.equal(late.requestHeaders?.secGpc,enabled?"1":undefined);
+   assert.ok(result.collectionSurfaceObservations.length>0,"initial form survives removal during the longer observation");
+   assert.ok(result.cookieSnapshots.some(snapshot=>snapshot.cookieNames.includes("early_fixture")));
+   assert.ok(result.cookieSnapshots.some(snapshot=>snapshot.cookieNames.includes("late_fixture")));
+   assert.equal(result.moduleRun.timingBreakdown?.filter(row=>row.label==="GPC signal readback").length,1);
+   assert.equal(result.moduleRun.timingBreakdown?.filter(row=>row.label==="GPC matched observation minimum").length,1);
+  }
+ } finally {
+  await browser.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});
+ }
+});
+
+test("local matched observation still obeys parent cancellation", {timeout:10000}, async () => {
+ const server=createServer((_req,res)=>{res.setHeader("Content-Type","text/html");res.end(`<!doctype html><html lang="en"><body><h1>Public company information</h1><p>${"Public services and contact information. ".repeat(30)}</p></body></html>`);});
+ await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
+ const url=`http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/`;
+ const browser=await chromium.launch({headless:true}),root=await mkdtemp(path.join(tmpdir(),"gpc-five-second-abort-"));
+ const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
+ try {
+  const startedAt=Date.now();
+  await assert.rejects(preConsentRuntimeScanner({browser,url,normalizedUrl:url,captureScope:"runtime_evidence",screenshotMode:"never",waitMode:"fast",
+   globalPrivacyControlEnabled:true,gpcComparisonMinDurationMs:5000,scanStartedAtMs:Date.now(),internalBudgetMs:15000,signal:controller.signal,
+   artifactWriter:await createArtifactWriter(root),onLifecycleCheckpoint:checkpoint=>{
+    if(checkpoint.label==="passive_quiet_gate_started")timer=setTimeout(()=>controller.abort(new Error("fixture parent cancellation")),500);
+   }}),/fixture parent cancellation/);
+  assert.ok(Date.now()-startedAt<5000);
+ } finally {
+  if(timer)clearTimeout(timer);await browser.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});
+ }
+});
 
 test("both passive conditions retain late activity across same-document history updates beyond the initial gate",{timeout:30000},async()=>{
  const timers=new Set<ReturnType<typeof setTimeout>>();
@@ -82,6 +182,7 @@ test("direct collection responses survive stalled asynchronous header reads",{ti
    assert.equal(responses.length,1);assert.equal(responses[0]!.status,204);assert.equal(responses[0]!.metadataCapture,"pending");
    assert.equal(request.requestHeaders?.secGpc,enabled?"1":undefined);
    assert.equal(result.gpcImpactCapture?.quietCheckpoint?.inFlightRequestCount,0);
+   assert.ok(!result.moduleRun.timingBreakdown?.some(row=>row.label==="GPC matched observation minimum"));
   }
  }finally{await browser.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
 });

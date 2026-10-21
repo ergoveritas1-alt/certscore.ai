@@ -21,6 +21,8 @@ export type LocalV2DagLambdaDebugOverrides = {
   actionSearchDeadlineMs?: number;
   consentFlowDeadlineMs?: number;
   lateConsentGateMs?: number;
+  gpcComparisonMinDurationMs?: 5000;
+  gpcComparisonAdaptive?: true;
   preActionObservationMs?: number;
   scenarioConcurrency?: number;
   scenarioResourceMode?: "normal" | "lean" | "cmp_safe";
@@ -33,6 +35,8 @@ export const LOCAL_V2_DAG_LAMBDA_CONSERVATIVE_PRECONSENT_DEFAULTS = {
 } satisfies LocalV2DagLambdaDebugOverrides;
 
 export type LocalV2DagScanEnv = {
+  CERTSCORE_LOCAL_GPC_ADAPTIVE_ENABLED?: string;
+  CERTSCORE_LOCAL_GPC_COMPARISON_5S_ENABLED?: string;
   CERTSCORE_LOCALHOST_FULL_SCAN_QUEUE_ENABLED?: string;
   CERTSCORE_POST_ACCEPT_WORKER_ENABLED?: string;
   CERTSCORE_POST_ACCEPT_WORKER_ROLLOUT_MODE?: string;
@@ -327,7 +331,14 @@ export function applyLocalV2DagScanConfig(
               contractVersion: lambdaConfig.contractVersion,
               dispatchState: "pending_dispatch",
               functionName: lambdaConfig.functionName,
-              debugOverrides: lambdaDebugOverridesForDispatch(options.lambdaDebugOverrides),
+              debugOverrides: {
+                ...lambdaDebugOverridesForDispatch(options.lambdaDebugOverrides),
+                ...(shouldUseLocalV2DagScanTool(env) && lambdaConfig.targetEnvironment === "local" &&
+                  (env ?? process.env).CERTSCORE_LOCAL_GPC_COMPARISON_5S_ENABLED === "1"
+                  ? { gpcComparisonMinDurationMs: 5000 as const } : {}),
+                ...(shouldUseLocalV2DagScanTool(env) && lambdaConfig.targetEnvironment === "local" &&
+                  (env ?? process.env).CERTSCORE_LOCAL_GPC_ADAPTIVE_ENABLED === "1" ? {gpcComparisonAdaptive:true as const} : {}),
+              },
               localOnly: lambdaConfig.targetEnvironment === "local",
               orchestrationMode: lambdaConfig.orchestrationMode,
               ...(lambdaConfig.orchestrationMode === "sharded"

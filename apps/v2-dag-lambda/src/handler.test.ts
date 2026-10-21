@@ -28,7 +28,7 @@ import {
 } from "@certscore/contracts";
 import { buildPreConsentRuntimePreview, buildGpcResponseAssessment } from "@certscore/scan-core";
 import { gpcRuntimeFixture } from "../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime";
-import { PassiveLaneFailure, retainFailedTerminalLaneEvidence } from "./handler";
+import { PassiveLaneFailure, retainFailedTerminalLaneEvidence, localGpcComparisonMinDurationMs, localGpcAdaptiveEnabled } from "./handler";
 import { parseLocalV2DagLambdaResultMessage } from "../../web/server/scans/local-v2-dag-lambda-dispatch";
 import {
   LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS,
@@ -324,6 +324,42 @@ test("GPC worker parsing fails closed without enabled configuration and parent c
     orchestrationMode: "worker",
     workerLane: "gpc_observation",
   })), /exact parent dispatch checksum/);
+});
+
+test("diagnostic observation applies only to explicitly enabled local baseline and GPC workers", () => {
+ for (const duration of [5000, 15000] as const) {
+  for (const workerLane of ["runtime_evidence", "gpc_observation", "consent_proof", "policy_evidence", "accept_observation", "reject_observation"] as const) {
+    for (const targetEnvironment of ["local", "production"] as const) {
+      const expected = targetEnvironment === "local" && ["runtime_evidence", "gpc_observation"].includes(workerLane) ? duration : undefined;
+      const payload = {targetEnvironment, workerLane, debugOverrides: {gpcComparisonMinDurationMs: duration}};
+      assert.equal(localGpcComparisonMinDurationMs(payload), expected);
+      assert.equal(localGpcComparisonMinDurationMs({...payload, debugOverrides: {}}), undefined);
+      assert.equal(localGpcComparisonMinDurationMs({...payload, resourceInventoryCrawl: true}), undefined);
+    }
+  }
+  assert.equal(parseLocalV2DagLambdaDispatchPayload(validPayload({debugOverrides: {gpcComparisonMinDurationMs: duration}})).debugOverrides?.gpcComparisonMinDurationMs, duration);
+ }
+  const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({debugOverrides: {gpcComparisonMinDurationMs: 5000}}));
+  assert.equal(payload.debugOverrides?.gpcComparisonMinDurationMs, 5000);
+  for (const duration of [3000, 6000, 16000, "5000", "15000"]) {
+    const parsed = parseLocalV2DagLambdaDispatchPayload(validPayload({debugOverrides: {gpcComparisonMinDurationMs: duration}}));
+    assert.equal(parsed.debugOverrides?.gpcComparisonMinDurationMs, undefined);
+  }
+});
+
+test("adaptive comparison dispatch is strict and excludes production, action and inventory workers",()=>{
+  for(const workerLane of ["runtime_evidence","gpc_observation","policy_evidence","consent_proof","accept_observation","reject_observation"] as const)
+    for(const targetEnvironment of ["local","production"] as const){
+      const payload={workerLane,targetEnvironment,debugOverrides:{gpcComparisonAdaptive:true as const}};
+      const enabled=targetEnvironment==="local"&&["runtime_evidence","gpc_observation"].includes(workerLane);
+      assert.equal(localGpcAdaptiveEnabled(payload),enabled);
+      assert.equal(localGpcComparisonMinDurationMs(payload),enabled?15000:undefined);
+      assert.equal(localGpcAdaptiveEnabled({...payload,resourceInventoryCrawl:true}),false);
+    }
+  for(const flag of [false,1,"true"]){
+    const parsed=parseLocalV2DagLambdaDispatchPayload(validPayload({debugOverrides:{gpcComparisonAdaptive:flag}}));
+    assert.equal(parsed.debugOverrides?.gpcComparisonAdaptive,undefined);
+  }
 });
 
 test("GPC invocation failure is terminal and neutral without losing the three verified passive outcomes", async () => {

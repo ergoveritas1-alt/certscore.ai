@@ -98,13 +98,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (format === "pdf") {
     const headerTheme = normalizeReportHeaderTheme(workspaceId ? (await getWorkspaceBrandingRecord(workspaceId))?.headerTheme : undefined);
     let workspaceBrand;
-    if (branding === "workspace" && workspaceId) {
+    if (workspaceId) {
       try {
         workspaceBrand = await loadWorkspaceReportLogo(workspaceId);
       } catch {
         return error(409, "The workspace logo could not be loaded. Upload a new logo in Settings and try again.");
       }
-      if (!workspaceBrand) return error(409, "Upload a workspace logo in Settings before downloading a white-label PDF.");
+      if (!workspaceBrand && branding === "workspace") return error(409, "Upload a workspace logo in Settings before downloading a white-label PDF.");
     }
     const brandLogo = workspaceBrand?.image ?? await loadReportBrandLogo(headerTheme);
     const visualArtifact = getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts)

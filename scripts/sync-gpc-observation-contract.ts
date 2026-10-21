@@ -17,7 +17,7 @@ function project(schema: z.ZodTypeAny): { ts: string; json: any } {
   if (schema instanceof z.ZodLiteral) return { ts: JSON.stringify(schema.value), json: { const: schema.value, type: typeof schema.value } };
   if (schema instanceof z.ZodEnum) return { ts: schema.options.map((v: string) => JSON.stringify(v)).join(" | "), json: { type: "string", enum: schema.options } };
   if (schema instanceof z.ZodBoolean) return { ts: "boolean", json: { type: "boolean" } };
-  if (schema instanceof z.ZodNumber) return { ts: "number", json: { type: "integer", minimum: 0, ...(schema.maxValue !== null ? { maximum: schema.maxValue } : {}) } };
+  if (schema instanceof z.ZodNumber) return { ts: "number", json: { type: "integer", minimum: schema.minValue ?? 0, ...(schema.maxValue !== null ? { maximum: schema.maxValue } : {}) } };
   if (schema instanceof z.ZodString) return { ts: "string", json: { type: "string", ...Object.fromEntries(schema._def.checks.flatMap(c => c.kind === "min" ? [["minLength", c.value]] : c.kind === "max" ? [["maxLength", c.value]] : c.kind === "regex" ? [["pattern", c.regex.source]] : [])) } };
   if (schema instanceof z.ZodArray) { const p = project(schema.element); return { ts: `Array<${p.ts}>`, json: { type: "array", items: p.json, ...(schema._def.maxLength ? { maxItems: schema._def.maxLength.value } : {}) } }; }
   if (schema instanceof z.ZodObject) {

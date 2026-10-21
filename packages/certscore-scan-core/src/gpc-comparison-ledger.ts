@@ -10,9 +10,10 @@ export function retainGpcComparisonLedger(bundle:CanonicalEvidenceBundle):GpcImp
   const capture=bundle.gpcImpactCapture;
   if (!capture || capture.comparisonPolicy!=="page_http_signal.v2" || !capture.document || capture.requestLedger) return capture;
   const start=capture.document.committedAtMs;
+  const local = capture.localRetention === "local_gpc_complete.v2";
   for(const window of [...capture.windows].reverse()) {
     const events=bundle.networkEvents.filter(e=>e.timestampMs>=start && e.timestampMs<start+window.durationMs);
-    if(events.length>1000 || events.length!==window.requestCount)continue;
+    if(events.length>(local ? 5000 : 1000) || events.length!==window.requestCount)continue;
     const rows=events.map(e=>{
       const advertising=new Set<string>(),analytics=new Set<string>();let attributionUnknown=false;
       for(const v of bundle.normalizedVendorObservations) {
@@ -27,9 +28,9 @@ export function retainGpcComparisonLedger(bundle:CanonicalEvidenceBundle):GpcImp
         secGpc:e.requestHeaders?.secGpc===undefined?null:e.requestHeaders.secGpc==="1"?"1" as const:"other" as const,
         advertising:[...advertising],analytics:[...analytics],collection:e.collectionEndpointObserved===true,attributionUnknown};
     });
-    if(rows.some(r=>r.advertising.length>8||r.analytics.length>8) || Buffer.byteLength(JSON.stringify(rows))>64*1024 ||
+    if(rows.some(r=>r.advertising.length>8||r.analytics.length>8) || Buffer.byteLength(JSON.stringify(rows))>(local ? 2*1024*1024 : 64*1024) ||
       new Set(rows.map(r=>r.eventId)).size!==rows.length || gpcImpactIdentityHash(rows)!==window.requestSetSha256)continue;
-    return {...capture,requestLedger:{policyVersion:"gpc_compact_requests.v1",rows}};
+    return {...capture,requestLedger:{policyVersion:local ? "gpc_compact_requests.local.v2" : "gpc_compact_requests.v1",rows}};
   }
   return capture;
 }

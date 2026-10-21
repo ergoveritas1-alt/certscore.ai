@@ -9,6 +9,38 @@ import {
   shouldUseLocalV2DagScanTool
 } from "./local-v2-dag-scan-config";
 
+test("adaptive comparison requires an explicit local development flag",()=>{
+  for(const nodeEnv of ["development","production"])for(const targetEnvironment of ["local","production"])for(const flag of [undefined,"0","1"]){
+    const config=applyLocalV2DagScanConfig({} as SharedScanConfig,{
+      NODE_ENV:nodeEnv,NEXT_PUBLIC_APP_URL:"http://localhost:3000",CERTSCORE_LOCAL_GPC_ADAPTIVE_ENABLED:flag,
+      CERTSCORE_V2_DAG_LAMBDA_ENABLED:"true",CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME:"fixture",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL:"https://sqs.eu-west-1.amazonaws.com/123/fixture",CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV:targetEnvironment,
+    },{runViaLambda:true});
+    const lambda=config.execution?.v2DagLambda as {debugOverrides?:{gpcComparisonAdaptive?:true}}|undefined;
+    assert.equal(lambda?.debugOverrides?.gpcComparisonAdaptive,nodeEnv==="development"&&targetEnvironment==="local"&&flag==="1"?true:undefined);
+  }
+});
+
+test("five-second comparison is explicitly local-only and opt-in", () => {
+  for (const nodeEnv of ["development", "production"]) {
+    for (const targetEnvironment of ["local", "production"]) {
+      for (const flag of [undefined, "0", "1"]) {
+        const config = applyLocalV2DagScanConfig({} as SharedScanConfig, {
+          NODE_ENV: nodeEnv, NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+          CERTSCORE_LOCAL_GPC_COMPARISON_5S_ENABLED: flag,
+          CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+          CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "fixture",
+          CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/fixture",
+          CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: targetEnvironment,
+        }, {runViaLambda: true});
+        const lambda = config.execution?.v2DagLambda as {debugOverrides?: {gpcComparisonMinDurationMs?: number}} | undefined;
+        assert.equal(lambda?.debugOverrides?.gpcComparisonMinDurationMs,
+          nodeEnv === "development" && targetEnvironment === "local" && flag === "1" ? 5000 : undefined);
+      }
+    }
+  }
+});
+
 test("queued full-scan config keeps anonymous and organization-owned scanner contract aligned", () => {
   const baseInput = {
     hostname: "example.com",

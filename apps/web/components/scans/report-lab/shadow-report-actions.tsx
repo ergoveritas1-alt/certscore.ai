@@ -24,8 +24,9 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
   const requestedFocus = new URL(reportUrl, "https://certscore.ai").searchParams.get("reviewFocus");
   const focusQuery = requestedFocus === "gdpr_eprivacy" || requestedFocus === "ccpa_cpra" ? `&reviewFocus=${requestedFocus}` : "";
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const pdfHref = `/api/scans/${encodeURIComponent(scanId)}/report-export?format=pdf&reviewFocus=gdpr_eprivacy${fullSite ? "&scope=full-site" : ""}`;
   const emailSubject = `CertScore.ai scan report for ${siteLabel}`;
-  const emailBody = `Review the CertScore.ai scan report for ${siteLabel}:\n\n${new URL(reportUrl, "https://certscore.ai").toString()}`;
+  const emailBody = `Review the CertScore.ai scan report for ${siteLabel}:\n\n${new URL(reportUrl, "https://certscore.ai").toString()}${canExportPdf ? `\n\nDownload the PDF with your workspace header (sign-in and workspace access required):\n${new URL(pdfHref, "https://certscore.ai").toString()}` : ""}`;
 
   async function copyReportLink() {
     try {
@@ -63,7 +64,7 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
         {canExportPdf ? <ReportPdfDownloadLink
           className={menuItemClass}
           download
-          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=pdf&reviewFocus=gdpr_eprivacy${fullSite ? "&scope=full-site" : ""}`}
+          href={pdfHref}
         >
           <span>{fullSite ? "Download full-site PDF" : "Download PDF report"}</span>
           <span aria-hidden="true" className="text-zinc-400">↓</span>
@@ -76,8 +77,6 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
           <span>{fullSite ? "Download full-site JSON" : "Download JSON report"}</span>
           <span aria-hidden="true" className="font-mono text-xs text-zinc-400">{'{}'}</span>
         </a>
-        <a className={menuItemClass} download href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=csv${focusQuery}`}><span>Download tracking CSV{fullSite ? " (starting page)" : ""}</span><span aria-hidden="true">↓</span></a>
-        <a className={menuItemClass} download href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=json&workpaper=tracking${focusQuery}`}><span>Download tracking JSON{fullSite ? " (starting page)" : ""}</span><span aria-hidden="true">↓</span></a>
       </div>
     </details>
   );

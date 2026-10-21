@@ -425,6 +425,8 @@ type LocalV2DagLambdaDebugOverrides = {
   actionSearchDeadlineMs?: number;
   consentFlowDeadlineMs?: number;
   lateConsentGateMs?: number;
+  gpcComparisonMinDurationMs?: 5000 | 15000;
+  gpcComparisonAdaptive?: true;
   expectedConsentScenarios?: ConsentFlowScenario[];
   preActionObservationMs?: number;
   oneTrustHiddenActionMode?: "off" | "diagnostic";
@@ -533,6 +535,7 @@ type ArtifactChainResult = {
 export type LocalV2DagLambdaRuntimeDiagnostics = ReturnType<typeof buildLocalV2DagLambdaRuntimeDiagnostics>;
 
 type HandlerOptions = {
+  localGpcAdaptiveParticipant?: RunScanInput["localGpcAdaptiveParticipant"];
   artifactChainTimeoutMs?: number;
   awsRequestId?: string;
   handlerSafetyTimeoutMs?: number;
@@ -692,6 +695,10 @@ function parseDebugOverrides(value: unknown): LocalV2DagLambdaDebugOverrides | u
   if (lateConsentGateMs !== undefined) {
     overrides.lateConsentGateMs = lateConsentGateMs;
   }
+  if (record.gpcComparisonMinDurationMs === 5000 || record.gpcComparisonMinDurationMs === 15000) {
+    overrides.gpcComparisonMinDurationMs = record.gpcComparisonMinDurationMs;
+  }
+  if (record.gpcComparisonAdaptive === true) overrides.gpcComparisonAdaptive = true;
   const preActionObservationMs = boundedDebugInteger(record.preActionObservationMs, 0, 12_000);
   if (preActionObservationMs !== undefined) {
     overrides.preActionObservationMs = preActionObservationMs;
@@ -1240,6 +1247,7 @@ export function buildLocalV2DagLambdaLaneRun(input: {
 export async function runLocalV2DagLambdaArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
+    localGpcAdaptiveParticipant?: RunScanInput["localGpcAdaptiveParticipant"];
     allowedConsentFlowScenarios?: ConsentFlowScenario[];
     artifactSignal?: AbortSignal;
     allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
@@ -1281,6 +1289,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     () => writeEgressPreflightArtifact(artifactRoot, { allowBrowserFallback: false }),
   );
   const scanBundlePromise = runLocalV2DagLambdaScanBundle(payload, {
+    localGpcAdaptiveParticipant: options.localGpcAdaptiveParticipant,
     allowRuntimeEvidenceFinalizationAfterAbort: options.allowRuntimeEvidenceFinalizationAfterAbort,
     artifactRoot,
     phaseLabelPrefix: options.phaseLabelPrefix,
@@ -1323,9 +1332,22 @@ export async function runLocalV2DagLambdaArtifactChain(
   return artifacts;
 }
 
+export function localGpcComparisonMinDurationMs(payload: Pick<LocalV2DagLambdaDispatchPayload, "targetEnvironment" | "workerLane" | "debugOverrides" | "resourceInventoryCrawl">): 5000 | 15000 | undefined {
+  if (localGpcAdaptiveEnabled(payload)) return 15000;
+  return payload.targetEnvironment === "local" && !payload.resourceInventoryCrawl &&
+    (payload.workerLane === "runtime_evidence" || payload.workerLane === "gpc_observation") &&
+    (payload.debugOverrides?.gpcComparisonMinDurationMs === 5000 || payload.debugOverrides?.gpcComparisonMinDurationMs === 15000) ? payload.debugOverrides.gpcComparisonMinDurationMs : undefined;
+}
+
+export function localGpcAdaptiveEnabled(payload: Pick<LocalV2DagLambdaDispatchPayload, "targetEnvironment" | "workerLane" | "debugOverrides" | "resourceInventoryCrawl">) {
+  return payload.targetEnvironment === "local" && !payload.resourceInventoryCrawl &&
+    (payload.workerLane === "runtime_evidence" || payload.workerLane === "gpc_observation") && payload.debugOverrides?.gpcComparisonAdaptive === true;
+}
+
 async function runLocalV2DagLambdaScanBundle(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
+    localGpcAdaptiveParticipant?: RunScanInput["localGpcAdaptiveParticipant"];
     allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
     artifactRoot: string;
     onScanCoreComplete?: () => void;
@@ -1358,6 +1380,7 @@ async function runLocalV2DagLambdaScanBundle(
             : "combined";
     try {
       const { runScan } = await import("@certscore/scan-core");
+      if (localGpcAdaptiveEnabled(payload) && !options.localGpcAdaptiveParticipant) throw new Error("Adaptive local comparison requires the paired simulator.");
       const bundle = await runScan({
         scanId: payload.scanId,
         resourceInventoryCrawl: payload.resourceInventoryCrawl,
@@ -1367,6 +1390,8 @@ async function runLocalV2DagLambdaScanBundle(
         browserReuseMode: "per_module",
         evidenceLane,
         retainGpcObservation: evidenceLane === "gpc_observation",
+        gpcComparisonMinDurationMs: localGpcComparisonMinDurationMs(payload),
+        localGpcAdaptiveParticipant: localGpcAdaptiveEnabled(payload) ? options.localGpcAdaptiveParticipant : undefined,
         outDir: options.artifactRoot,
         onPreConsentScreenshotCaptured: options.screenshotSafetyReviewCoordinator.schedule,
         formSnapshotReviewer: createFormSnapshotSafetyClassifier(),
@@ -6080,6 +6105,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
             workspaceRoot,
           })
         : runLocalV2DagLambdaArtifactChain(dispatchPayload, {
+            localGpcAdaptiveParticipant: localGpcAdaptiveEnabled(dispatchPayload) ? options.localGpcAdaptiveParticipant : undefined,
             ...runOptions,
             s3Client: options.s3Client,
             workspaceRoot,
@@ -6097,7 +6123,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       payload.workerLane === "accept_observation"
     );
     const consentProofWorker = evidenceWorker && payload.workerLane === "consent_proof";
-    const configuredHandlerSafetyTimeoutMs = options.handlerSafetyTimeoutMs ?? (
+    const comparisonBudgetMs = localGpcComparisonMinDurationMs(payload) ?? 0;
+    const configuredHandlerSafetyTimeoutMs = options.handlerSafetyTimeoutMs ?? (comparisonBudgetMs + (
       Number(process.env.CERTSCORE_V2_DAG_LAMBDA_HANDLER_SAFETY_TIMEOUT_MS) ||
       (evidenceCoordinator
         ? LOCAL_V2_DAG_LAMBDA_SHARDED_HANDLER_SAFETY_TIMEOUT_MS
@@ -6106,13 +6133,13 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
             ? LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_HANDLER_SAFETY_TIMEOUT_MS
             : LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_HANDLER_SAFETY_TIMEOUT_MS
           : LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS)
-    );
+    ));
     handlerSafetyTimeoutMs = Math.max(
       options.handlerSafetyTimeoutMs === undefined ? 5_000 : 10,
       Math.min(configuredHandlerSafetyTimeoutMs, 75_000)
     );
     scannerWorkTimeoutMs = Math.max(10, Math.min(
-      options.scannerWorkTimeoutMs ?? (
+      options.scannerWorkTimeoutMs ?? (comparisonBudgetMs + (
         evidenceCoordinator
           ? 60_000
           : evidenceWorker
@@ -6120,11 +6147,11 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
               ? LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_SCANNER_WORK_TIMEOUT_MS
               : LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS
             : LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS
-      ),
+      )),
       Math.max(10, handlerSafetyTimeoutMs - 7_000)
     ));
     artifactChainTimeoutMs = Math.max(scannerWorkTimeoutMs, Math.min(
-      options.artifactChainTimeoutMs ?? (
+      options.artifactChainTimeoutMs ?? (comparisonBudgetMs + (
         evidenceCoordinator
           ? 70_000
           : evidenceWorker
@@ -6132,7 +6159,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
               ? LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_ARTIFACT_CHAIN_TIMEOUT_MS
               : LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_ARTIFACT_CHAIN_TIMEOUT_MS
             : LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS
-      ),
+      )),
       Math.max(scannerWorkTimeoutMs, handlerSafetyTimeoutMs - 2_000)
     ));
     if (evidenceWorker && payload.workerLane === "sale_sharing_opt_out") {

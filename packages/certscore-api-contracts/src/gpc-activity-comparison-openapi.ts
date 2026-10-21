@@ -39,28 +39,9 @@ export const gpcActivityComparisonOpenApi = {
       "type": "string"
     },
     "durationMs": {
-      "anyOf": [
-        {
-          "const": 250,
-          "type": "number"
-        },
-        {
-          "const": 500,
-          "type": "number"
-        },
-        {
-          "const": 1000,
-          "type": "number"
-        },
-        {
-          "const": 3000,
-          "type": "number"
-        },
-        {
-          "const": 5000,
-          "type": "number"
-        }
-      ]
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 15000
     },
     "sourceHashes": {
       "type": "object",

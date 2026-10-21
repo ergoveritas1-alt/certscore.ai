@@ -72,3 +72,19 @@ test("verified five-second activity remains visible when the independent quiet-p
  assert.doesNotMatch(html,/Comparison incomplete|GPC is honored|deduct|penalt/i);
  assert.equal(measured.assessment.status,'indeterminate');
 });
+
+test("GPC request comparison sits directly in the GPC details before nested comparison evidence",()=>{
+ const measured=structuredClone(projection);
+ measured.activityComparison={contractVersion:'certscore.gpc-activity-comparison.v1',scanId:'fixture',status:'measured',scope:'matched_post_commit_request_window',durationMs:1000,
+   sourceHashes:{baseline:'a'.repeat(64),gpc:'b'.repeat(64)},activity:{advertisingMarketing:{baselineRequests:1,gpcRequests:1,baselineServices:1,gpcServices:1},analyticsReplay:{baselineRequests:5,gpcRequests:5,baselineServices:1,gpcServices:1}},scoreEffect:'none',causedByGpc:'not_established'};
+ measured.assessment.status='no_observable_response';
+ measured.assessment.comparison.comparable=true;
+ const before=structuredClone(measured);
+ const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={measured} california />);
+ assert.equal((html.match(/aria-label="Baseline versus GPC"/g)??[]).length,1);
+ assert.ok(html.indexOf('aria-label="Baseline versus GPC"')<html.indexOf('Comparison with GPC disabled'));
+ assert.match(html,/Requests observed during the first second after each page loaded\./);
+ assert.match(html,/Advertising \/ marketing/);
+ assert.match(html,/Analytics \/ session replay/);
+ assert.deepEqual(measured,before);
+});

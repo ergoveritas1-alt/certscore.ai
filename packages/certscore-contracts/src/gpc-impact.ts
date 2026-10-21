@@ -2,9 +2,10 @@ import { z } from "zod";
 
 const time = z.number().int().nonnegative();
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
-const horizon = z.union([z.literal(250), z.literal(500), z.literal(1000), z.literal(3000), z.literal(5000)]);
+const horizon = z.number().int().min(1).max(15000);
 const compactRequest = z.object({eventId:z.string().min(1).max(160),timestampMs:time,urlSha256:hash,headersVerified:z.boolean(),secGpc:z.enum(["1","other"]).nullable(),advertising:z.array(hash).max(8),analytics:z.array(hash).max(8),collection:z.boolean(),attributionUnknown:z.boolean()}).strict();
 export const GPC_IMPACT_HORIZONS_MS = [250, 500, 1000, 3000, 5000] as const;
+export const GPC_DIAGNOSTIC_HORIZONS_MS = [...GPC_IMPACT_HORIZONS_MS, 8000, 10000, 15000] as const;
 
 /** Producer evidence about complete fixed intervals. It does not assert that GPC
  * caused a change and does not replace the historical quiet-window assessment. */
@@ -18,7 +19,9 @@ export const gpcImpactCaptureSchema = z.object({
   document: z.object({ token: z.string().min(1).max(160), urlSha256: hash,
     committedAtMs: time, secGpc: z.string().max(8).nullable() }).strict().nullable(),
   requestsDropped: time,
-  requestLedger: z.object({policyVersion:z.literal("gpc_compact_requests.v1"),rows:z.array(compactRequest).max(1000)}).strict().optional(),
+  requestLedger: z.object({policyVersion:z.enum(["gpc_compact_requests.v1", "gpc_compact_requests.local.v2"]),rows:z.array(compactRequest).max(5000)}).strict().optional(),
+  localRetention: z.literal("local_gpc_complete.v2").optional(),
+  adaptiveObservation: z.object({contractVersion:z.literal("certscore.local-gpc-adaptive.v1"),minimumMs:z.literal(5000),quietMs:z.literal(2000),maximumMs:z.literal(15000),durationMs:z.number().int().min(5000).max(15000),peerDocumentToken:z.string().min(1).max(160),outcome:z.enum(["quiet","cap"])}).strict().optional(),
   // Optional on historical records. New producers freeze this metadata at the
   // same signal readback; it adds no wait and cannot repair a changed document.
   quietCheckpoint: z.object({
@@ -29,9 +32,17 @@ export const gpcImpactCaptureSchema = z.object({
   retentionStatus: z.enum(["incomplete"]).optional(),
   invalidationReasons: z.array(z.enum(["document_requested_after_commit", "document_recommitted", "commit_binding_mismatch", "same_document_url_changed", "same_document_identity_unverified", "renderer_crash", "unspecified"])).max(7).optional(),
   windows: z.array(z.object({ durationMs: horizon,
-    requestCount: time, requestSetSha256: hash }).strict()).max(5),
+    requestCount: time, requestSetSha256: hash }).strict()).max(8),
   limitationKeys: z.array(z.string().min(1).max(160)).max(16),
 }).strict().superRefine((c, ctx) => {
+  if ((c.requestLedger?.policyVersion === "gpc_compact_requests.v1" && c.requestLedger.rows.length > 1000) ||
+      (c.requestLedger?.policyVersion === "gpc_compact_requests.local.v2" && c.localRetention !== "local_gpc_complete.v2") ||
+      (c.requestLedger && new TextEncoder().encode(JSON.stringify(c.requestLedger.rows)).byteLength > (c.requestLedger.policyVersion === "gpc_compact_requests.local.v2" ? 2 * 1024 * 1024 : 64 * 1024)) ||
+      (c.adaptiveObservation && (!c.document || c.readbackDocumentToken !== c.document.token || c.localRetention !== "local_gpc_complete.v2" ||
+        c.windows.at(-1)?.durationMs !== c.adaptiveObservation.durationMs ||
+        (c.adaptiveObservation.outcome === "cap") !== (c.adaptiveObservation.durationMs === 15000)))) {
+    ctx.addIssue({code:"custom",message:"Local comparison retention and adaptive proof require bounded, document-bound evidence."});
+  }
   if (c.quietCheckpoint && (!c.document || c.readbackDocumentToken !== c.document.token ||
       c.quietCheckpoint.documentToken !== c.document.token ||
       c.quietCheckpoint.signalReadbackAtMs < c.document.committedAtMs ||

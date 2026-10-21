@@ -17,7 +17,6 @@ import { CmsSecurityEvidence } from "../cms-security-evidence";
 import { CmpDetails } from "../cmp-details";
 import { cmpDetailsExperience } from "../../../lib/scans/cmp-audit-projection";
 import { EvidenceJumpLink } from "../evidence-jump-link";
-import { GpcObservedFacts } from "../gpc-observed-facts";
 import { GpcActivityComparison } from "../gpc-activity-comparison";
 import { SiteIntegrityEvidence } from "../site-integrity-evidence";
 import { choicePathExecutionLabel } from "@certscore/contracts";
@@ -65,7 +64,6 @@ import {
 } from "../runtime-observation-sections";
 import { getGdprEprivacyPostureTone } from "../../../lib/scans/regulatory-coverage-score";
 import { ReportPdfAccessProvider, ShadowReportShareMenu } from "./shadow-report-actions";
-import { WorkspaceReportBrand, type WorkspaceReportBranding } from "./workspace-report-brand";
 import { ExpandableExecutiveGrid } from "./expandable-executive-grid";
 import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
 import {
@@ -90,7 +88,6 @@ import {
 
 type ShadowScanReportProps = {
   canExportPdf?: boolean;
-  branding?: WorkspaceReportBranding | null;
   reviewFocus?: unknown;
   fullSiteNotice?: FullSiteScanNoticeData | null;
   allowRestrictedScanOptions?: boolean;
@@ -101,14 +98,6 @@ type ShadowScanReportProps = {
 };
 
 const monoClass = "font-mono tabular-nums";
-
-const GPC_DELTA_ROWS = [
-  ["cookies", "Cookies"],
-  ["webStorage", "Web storage"],
-  ["trackers", "Trackers"],
-  ["advertisingOrMeasurementActivity", "Advertising / measurement"],
-  ["consentOrCmpBehavior", "Consent / CMP"],
-] as const;
 
 export function getGpcSnapshotLabel(status: GpcResponseReportProjection["assessment"]["status"]) {
   return status === "responsive" ? "Response observed" : status === "no_observable_response" ? "No response seen" : "Indeterminate";
@@ -139,29 +128,6 @@ function GpcStatusBadge({ projection }: { projection: GpcResponseReportProjectio
     <span className={`inline-flex items-center rounded-md border px-2 py-1 text-[0.68rem] font-semibold uppercase ${presentation.tone}`}>
       {presentation.label}
     </span>
-  );
-}
-
-function GpcComparisonGrid({ projection }: { projection: GpcResponseReportProjection }) {
-  if (!projection.assessment.comparison.comparable) {
-    return <p className="text-xs leading-5 text-zinc-600">Paired comparison is unverified; missing evidence is not treated as suppressed activity.</p>;
-  }
-  return (
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-zinc-200 bg-zinc-200 sm:grid-cols-4">
-      {GPC_DELTA_ROWS.map(([key, label]) => {
-        const deltas = projection.assessment.comparison.deltas;
-        const delta = key === "webStorage" ? ("webStorage" in deltas ? deltas.webStorage : null) : deltas[key];
-        if (!delta) return null;
-        return (
-          <div className="bg-white px-2.5 py-2" key={key}>
-            <p className="truncate text-[0.62rem] font-semibold uppercase tracking-[0.06em] text-zinc-500" title={label}>{label}</p>
-            <p className={`${monoClass} mt-1 text-xs font-semibold text-zinc-900`}>
-              {delta.baselineCount} <span aria-hidden="true" className="text-zinc-400">→</span> {delta.gpcCount}
-            </p>
-          </div>
-        );
-      })}
-    </div>
   );
 }
 
@@ -572,54 +538,6 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
             <AccessibilitySnapshotContent audit={report.accessibilityAudit} observation={report.accessibilityEvidence} />
           </details>
         ) : null}
-        {GPC_CUSTOMER_RESULTS_ENABLED && !siteOverview && (report.gpcResponse ? (
-          <details className={signalRowClass} data-testid="executive-gpc-snapshot">
-            <summary className={signalSummaryClass}>
-              <span className="text-xs font-medium text-zinc-500">Global Privacy Control (GPC)</span>
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="text-xs font-semibold text-zinc-800">
-                  {gpcSummaryLabel(report.gpcResponse)}
-                </span>
-                <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" />
-              </span>
-            </summary>
-            <div className="mt-3 space-y-2.5">
-              <GpcObservedFacts facts={report.gpcResponse.observedFacts} />
-              <GpcActivityComparison comparison={report.gpcResponse.activityComparison} />
-              <details className="text-xs text-zinc-600">
-                <summary className="cursor-pointer font-semibold">Comparison details</summary>
-              <p className="text-xs leading-5 text-zinc-600">{report.gpcResponse.summary}</p>
-              <p className="text-xs leading-5 text-zinc-600">
-                <span className="font-semibold text-zinc-800">Sec-GPC request evidence:</span> {report.gpcResponse.assessment.comparison.enabledProof.requestsWithSecGpc} retained request{report.gpcResponse.assessment.comparison.enabledProof.requestsWithSecGpc === 1 ? "" : "s"}; main-document browser property: {report.gpcResponse.assessment.comparison.enabledProof.navigatorGlobalPrivacyControl === null ? "unverified" : String(report.gpcResponse.assessment.comparison.enabledProof.navigatorGlobalPrivacyControl)}.
-              </p>
-              {report.gpcResponse.assessment.contractVersion !== "certscore.gpc-response-assessment.v1" ? (
-                <p className="text-xs leading-5 text-zinc-600">Signal delivery: {report.gpcResponse.assessment.comparison.delivery.status}. Comparison coverage: {report.gpcResponse.assessment.comparison.coverage.status}.</p>
-              ) : null}
-              <p className="text-xs leading-5 text-zinc-600"><strong>Site response:</strong> {report.gpcResponse.comparisonHeadline}. {report.gpcResponse.coverageSummary}</p>
-              <GpcComparisonGrid projection={report.gpcResponse} />
-              </details>
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[0.68rem] leading-4 text-zinc-500">
-                <a className="font-semibold text-sky-700 hover:text-sky-900" href="#gpc-evidence">Detailed evidence ↓</a>
-              </div>
-            </div>
-          </details>
-        ) : (
-          <details className={signalRowClass} data-testid="executive-gpc-snapshot">
-            <summary className={signalSummaryClass}>
-              <span className="text-xs font-medium text-zinc-500">Global Privacy Control (GPC)</span>
-              <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-zinc-500">
-                <span>{report.gpcLaneStatus === "unavailable" ? "Result unavailable" : "Not run"}</span>
-                <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" />
-              </span>
-            </summary>
-            <p className="mt-3 text-xs leading-5 text-zinc-600">
-              {report.gpcLaneStatus === "unavailable"
-                ? "The GPC lane was requested, but no verified canonical GPC response reached this report. This is a coverage limitation, not a finding."
-                : "This result predates always-on GPC coverage or did not run through eligible sharded Lambda orchestration."}
-            </p>
-          </details>
-        ))}
-
       </div>
     </div>
   );
@@ -1555,11 +1473,10 @@ export function GpcEvidenceIndexCard({ projection, california = false }: { proje
           </ul>
         </div> : null}
         {projection.observedFacts.length ? <dl className="space-y-2">{projection.observedFacts.filter(row => row.label !== "Activity with GPC").map(row => <div key={row.label}><dt className="font-semibold text-zinc-800">{row.label}</dt><dd>{row.value}</dd></div>)}</dl> : null}
-        {!hasComparison ? <GpcActivityComparison comparison={projection.activityComparison} /> : null}
+        <GpcActivityComparison comparison={projection.activityComparison} />
         {hasComparison ? <DetailedEvidenceFinding title="Comparison with GPC disabled" summary={gpcCardResponse(projection)}
           evidenceJson={evidenceJson} evidenceRefs={projection.evidenceRefs} correctionSteps={[]}>
           <div className="space-y-3 text-xs leading-5 text-zinc-600">
-            <GpcActivityComparison comparison={projection.activityComparison} />
             <details className="group/gpc-comparison border-t border-zinc-200 pt-3">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold [&::-webkit-details-marker]:hidden">
                 How we measured this<DisclosureChevron className="text-zinc-400 group-open/gpc-comparison:rotate-180" />
@@ -1757,7 +1674,6 @@ function VariantBody({
 
 export function ShadowScanReport({
   canExportPdf = false,
-  branding,
   reviewFocus,
   fullSiteNotice,
   allowRestrictedScanOptions,
@@ -1806,7 +1722,6 @@ export function ShadowScanReport({
       <ReportPdfAccessProvider allowed={canExportPdf}>
       <div className="-mx-5 min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950 lg:-mx-10">
         {completionEvent}
-        {branding ? <WorkspaceReportBrand branding={branding} scanId={report.scan.id} fullSite={Boolean(report.fullSite)} /> : null}
         {reportContent}
         {reportDisclaimer}
       </div>

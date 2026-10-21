@@ -3,10 +3,11 @@ import type { GpcActivityComparison as Comparison } from "@certscore/contracts";
 
 export function GpcActivityComparison({ comparison }: { comparison?: Comparison }) {
   if (!comparison) return null;
+  const observationWindow = comparison.durationMs === 1000 ? "second" : comparison.durationMs < 1000 ? `${comparison.durationMs} milliseconds` : `${comparison.durationMs / 1000} seconds`;
   return <section aria-label="Baseline versus GPC" className="overflow-hidden rounded-md border border-zinc-200">
     <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-50 px-3 py-2">
       <h4 className="text-sm font-semibold text-zinc-900">Baseline → GPC</h4>
-      <span className="text-xs text-zinc-600">First {comparison.durationMs >= 3000 ? `${comparison.durationMs / 1000} seconds` : `${comparison.durationMs.toLocaleString("en-US")} ms`} after each document commit</span>
+      <span className="text-xs text-zinc-600">Requests observed during the first {observationWindow} after each page loaded.</span>
     </div>
     <table className="w-full text-left text-xs">
       <thead className="text-zinc-500"><tr><th scope="col" className="px-3 py-2 font-medium">Observed requests</th><th scope="col" className="px-3 py-2 font-medium">Baseline</th><th scope="col" className="px-3 py-2 font-medium">GPC</th></tr></thead>

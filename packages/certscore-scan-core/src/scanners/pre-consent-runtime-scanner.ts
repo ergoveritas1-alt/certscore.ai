@@ -14,6 +14,7 @@ import { installBorlabsDeferredDialogReveal, revealBorlabsDeferredDialog } from 
 import { installFormDestinationTracing } from "../form-destination-trace.js";
 import { SITE_INTEGRITY_LIMITS, siteIntegrityCodeProofSchema, siteIntegrityObservationSchema, type SiteIntegrityObservation } from "@certscore/contracts";
 import { createHash, randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { createProxyDestinationCapture } from "../proxy-destination-capture.js";
 import { captureCollectionSurfaceSnapshots, FORM_SNAPSHOT_BUDGET_MS, type FormSnapshotReviewer } from "../collection-surface-snapshots";
 import { createGpcSignalCapture, installGpcNavigatorSignal } from "../gpc-signal-capture.js";
@@ -257,6 +258,8 @@ export interface PreConsentRuntimeScannerInput {
   /** Local artifact-only evaluation. Not wired to any production dispatch. */
   gpcOptOutPrototype?: { scanId: string };
   gpcImpactScanId?: string;
+  gpcComparisonMinDurationMs?: 5000 | 15000;
+  localGpcAdaptiveParticipant?: import("../local-gpc-adaptive.js").LocalGpcAdaptiveParticipant;
   browser?: Browser;
   browserMode?: "headless" | "headed";
   stubHeavyResources?: boolean;
@@ -653,6 +656,8 @@ export async function preConsentRuntimeScanner(
   const requiredTailReserveMs = requiredAccessibility ? ACCESSIBILITY_AUDIT_BUDGET_MS : 0;
   const passiveEvidenceActivity = createPassiveEvidenceActivityTracker();
   const impactCapture = captureScope === "runtime_evidence" && input.executionProfile !== "inventory_only" ? createGpcImpactCapture({
+    diagnostic15Seconds: input.gpcComparisonMinDurationMs === 15000,
+    adaptive: input.localGpcAdaptiveParticipant,
     expectedEnabled: input.globalPrivacyControlEnabled === true, now: () => elapsed(input.scanStartedAtMs),
     quietSnapshot: () => passiveEvidenceActivity.snapshot(),
   }) : undefined;
@@ -2384,8 +2389,24 @@ export async function preConsentRuntimeScanner(
           : consentUiObservationPromise,
         lateAccessibilityObservationPromise,
         gpcSignalCapture ? recordBoundedTiming(timingBreakdown,
-          "GPC signal readback", "Read actual main/frame values alongside the existing bounded page snapshot; no extra settling.",
-          Math.min(2_500, Math.max(1, remainingModuleBudgetMs())), () => gpcSignalCapture.snapshot({budgetMs: Math.min(2_500, Math.max(1, remainingModuleBudgetMs()))}), () => undefined)
+          "GPC signal readback", input.gpcComparisonMinDurationMs && impactCapture
+            ? "Read actual main/frame values after the local matched observation minimum, while preserving the initial page snapshot."
+            : "Read actual main/frame values alongside the existing bounded page snapshot; no extra settling.",
+          Math.min(2_500 + (impactCapture ? input.gpcComparisonMinDurationMs ?? 0 : 0), Math.max(1, remainingModuleBudgetMs())), async () => {
+            if (input.localGpcAdaptiveParticipant && impactCapture) {
+              await recordTiming(timingBreakdown,"GPC adaptive paired observation","Local matched five-second minimum, two-second request-start quiet, fifteen-second cap.",()=>impactCapture.waitForAdaptive(input.signal));
+            } else if (input.gpcComparisonMinDurationMs && impactCapture) {
+              await recordTiming(timingBreakdown, "GPC matched observation minimum",
+                `Local ${input.gpcComparisonMinDurationMs / 1000}-second matched capture after document commit; initial page inventory runs concurrently and existing checks retain their budgets.`, async () => {
+                  let remainingMs = impactCapture.remainingObservationMs(input.gpcComparisonMinDurationMs!);
+                  while (remainingMs > 0 && remainingModuleBudgetMs() > 2_500) {
+                    await delay(Math.min(remainingMs, remainingModuleBudgetMs() - 2_500), undefined, {signal: input.signal});
+                    remainingMs = impactCapture.remainingObservationMs(input.gpcComparisonMinDurationMs!);
+                  }
+                });
+            }
+            return gpcSignalCapture.snapshot({budgetMs: Math.min(2_500, Math.max(1, remainingModuleBudgetMs()))});
+          }, () => undefined)
           : Promise.resolve(undefined),
       ]),
     );

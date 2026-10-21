@@ -247,9 +247,7 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
     "utf8"
   );
 
-  assert.match(source, /data-testid="executive-gpc-snapshot"/);
-  assert.match(source, /predates always-on GPC coverage/);
-  assert.match(source, /no verified canonical GPC response reached this report/);
+  assert.doesNotMatch(source, /data-testid="executive-gpc-snapshot"/);
   const snapshotSource = source.slice(
     source.indexOf("function SignalSnapshot"),
     source.indexOf("function BenchmarkComparison")
@@ -261,7 +259,6 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   const evidenceDirectorySource = source.slice(source.indexOf("function EvidenceDirectory"));
   const consentPlatformIndex = snapshotSource.indexOf(">Consent platform<");
   const consentControlsIndex = snapshotSource.indexOf(">Consent controls<");
-  const gpcIndex = snapshotSource.indexOf(">Global Privacy Control (GPC)<");
   const transportSecurityIndex = snapshotSource.indexOf(">Transport security<");
   const runtimeIndex = evidenceDirectorySource.indexOf('title={EVIDENCE_SECTION_TITLES.runtime}');
   const gpcCardIndex = evidenceDirectorySource.indexOf("<GpcEvidenceIndexCard");
@@ -271,13 +268,12 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.ok(consentPlatformIndex < consentControlsIndex);
   assert.doesNotMatch(snapshotSource, />Detected integrations</);
   assert.ok(consentControlsIndex < transportSecurityIndex);
-  assert.ok(transportSecurityIndex < gpcIndex);
+  assert.doesNotMatch(snapshotSource, /Global Privacy Control|gpcResponse|gpcLaneStatus/);
   assert.match(snapshotSource, /<VendorBrandLogo label=\{consentVendor\} \/>/);
-  assert.match(snapshotSource, /gpcSummaryLabel\(report\.gpcResponse\)/);
-  assert.match(snapshotSource, /report\.gpcResponse\.coverageSummary/);
   assert.doesNotMatch(snapshotSource, /<GpcStatusBadge/);
+  assert.doesNotMatch(snapshotSource, /<GpcActivityComparison/);
   assert.doesNotMatch(source, /CA −\{report\.gpcResponse\.californiaDeductionPoints\}/);
-  assert.match(source, /href="#gpc-evidence"/);
+  assert.match(source, /id="gpc-evidence"/);
   assert.match(source, /data-testid="gpc-evidence-index-card"/);
   assert.match(gpcEvidenceCardSource, /gpcSummaryLabel\(projection\)/);
   assert.match(gpcEvidenceCardSource, /projection\.coverageSummary/);
@@ -291,9 +287,9 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.ok(transportIndex < gpcCardIndex);
   assert.match(gpcEvidenceCardSource, /title=\{EVIDENCE_SECTION_TITLES\.gpc\}/);
   assert.match(gpcEvidenceCardSource, /<DetailedEvidenceFinding/);
+  assert.equal((gpcEvidenceCardSource.match(/<GpcActivityComparison/g) ?? []).length, 1);
+  assert.ok(gpcEvidenceCardSource.indexOf("<GpcActivityComparison") < gpcEvidenceCardSource.indexOf("<DetailedEvidenceFinding"));
   assert.match(gpcEvidenceCardSource, /evidenceJson=\{evidenceJson\}/);
-  assert.match(source, /"Advertising \/ measurement"/);
-  assert.match(source, /"Consent \/ CMP"/);
   assert.match(modelSource, /buildGpcResponseReportProjection\(canonical\.ownerUnifiedFindings\)/);
   assert.doesNotMatch(source, /GPC violation|GPC not honored/i);
   assert.match(source, /report\.policySurfaceCoverage === "limited"/);

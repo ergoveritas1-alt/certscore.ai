@@ -16,6 +16,27 @@ function setup() {
   return { capture, finish, url: b.url };
 }
 
+test("extended checkpoints require explicit diagnostics and preserve default horizons", () => {
+  for (const diagnostic15Seconds of [false, true]) {
+    const bundle = gpcRuntimeFixture({enabled: true});
+    let now = 0;
+    const capture = createGpcImpactCapture({expectedEnabled: true, now: () => now, diagnostic15Seconds});
+    capture.documentRequested({type: "Document", frameId: "main", loaderId: "loader", request: {url: bundle.url, headers: {"Sec-GPC": "1"}}}, "main");
+    now = 100;
+    capture.documentCommitted({loaderId: "loader", url: bundle.url});
+    capture.bindReadback("loader");
+    assert.equal(capture.remainingObservationMs(15000), 15000);
+    for (const offset of [4999, 5000, 7999, 8000, 9999, 10000, 14999, 15000]) {
+      capture.recordRequest({eventId: `event-${offset}`, timestampMs: 100 + offset, requestUrl: `${bundle.url}?offset=${offset}`});
+    }
+    now = 15101;
+    const result = capture.finish({...bundle.gpcSignalObservation!, capturedAtMs: now});
+    assert.deepEqual(result.windows.map(window => window.durationMs), diagnostic15Seconds ? [250, 500, 1000, 3000, 5000, 8000, 10000, 15000] : [250, 500, 1000, 3000, 5000]);
+    if (diagnostic15Seconds) assert.deepEqual(result.windows.slice(-4).map(window => window.requestCount), [1, 3, 5, 7]);
+    assert.equal(capture.remainingObservationMs(15000), 0);
+  }
+});
+
 test("same-URL history update preserves fixed windows and frozen evidence", () => {
   const { capture, finish, url } = setup();
   capture.navigatedWithinDocument({ url, navigationType: "historyApi" }, "loader");
@@ -27,6 +48,26 @@ test("same-URL history update preserves fixed windows and frozen evidence", () =
   assert.strictEqual(finish(), result);
   const { invalidationReasons: _new, ...legacy } = result;
   assert.deepEqual(gpcImpactCaptureSchema.parse(legacy), legacy, "legacy packets remain unchanged");
+});
+
+test("minimum observation is anchored to the verified commit and stops on invalidation or freeze", () => {
+  const { capture, finish } = setup();
+  assert.equal(capture.remainingObservationMs(5000), 5000);
+  finish();
+  assert.equal(capture.remainingObservationMs(5000), 0);
+  const invalid = setup().capture;
+  invalid.invalidate("renderer_crash");
+  assert.equal(invalid.remainingObservationMs(5000), 0);
+  let now = 0;
+  const fresh = createGpcImpactCapture({ expectedEnabled: false, now: () => now });
+  assert.equal(fresh.remainingObservationMs(5000), 0);
+  fresh.documentRequested({type:"Document",frameId:"main",loaderId:"loader",request:{url:"https://example.com/"}},"main");
+  now = 100;
+  fresh.documentCommitted({loaderId:"loader",url:"https://example.com/"});
+  now = 3100;
+  assert.equal(fresh.remainingObservationMs(5000), 2000);
+  now = 5100;
+  assert.equal(fresh.remainingObservationMs(5000), 0);
 });
 
 test("changed route then return, unknown identity, fragments and recommits stay invalid", () => {

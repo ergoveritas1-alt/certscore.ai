@@ -1,4 +1,6 @@
 import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
+import type { LocalGpcAdaptiveParticipant } from "./local-gpc-adaptive.js";
+export { createLocalGpcAdaptivePair, type LocalGpcAdaptiveParticipant } from "./local-gpc-adaptive.js";
 import { buildScanEvidenceLaneAssessment } from "./scan-evidence-lane-assessment.js";
 import { unavailableAccessibilityAudit } from "./accessibility-audit.js";
 import { ACCESSIBILITY_AUDIT_BUDGET_MS } from "@certscore/contracts";
@@ -256,6 +258,8 @@ export interface RunScanInput {
   formSnapshotReviewer?: FormSnapshotReviewer;
   /** Local diagnostic override; production callers retain the 10s default. */
   lateConsentGateMs?: number;
+  gpcComparisonMinDurationMs?: 5000 | 15000;
+  localGpcAdaptiveParticipant?: LocalGpcAdaptiveParticipant;
   /** Diagnostic-only override that holds otherwise eligible partial consent packets through the 18s audit gate. */
   consentGateAuditHoldout?: boolean;
   preConsentVisualFallbackDeadlineMs?: number;
@@ -494,7 +498,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     preConsentEnabled,
     evidenceLane,
   });
-  const canonicalPreConsentModuleDeadlineMs = Math.max(
+  const comparisonBudgetMs = (evidenceLane === "runtime_evidence" || evidenceLane === "gpc_observation") &&
+    (input.gpcComparisonMinDurationMs === 5000 || input.gpcComparisonMinDurationMs === 15000) && !input.resourceInventoryCrawl ? input.gpcComparisonMinDurationMs : 0;
+  const canonicalPreConsentModuleDeadlineMs = comparisonBudgetMs + Math.max(
     1_000,
     Math.min(input.preConsentModuleDeadlineMs ?? scanProfile.internalBudgetMs, scanProfile.internalBudgetMs),
   );
@@ -569,8 +575,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         url: input.url,
         normalizedUrl,
         scanStartedAtMs: startedAtMs,
-        internalBudgetMs: scanProfile.internalBudgetMs,
+        internalBudgetMs: scanProfile.internalBudgetMs + comparisonBudgetMs,
         accessibilityScanId: accessibilityRequired ? scanId : undefined,
+        gpcComparisonMinDurationMs: comparisonBudgetMs || undefined,
+        localGpcAdaptiveParticipant: comparisonBudgetMs ? input.localGpcAdaptiveParticipant : undefined,
         cmpBasicScanId: evidenceLane === "consent_proof" ? scanId : undefined,
         onPassiveCaptureComplete: accessibilityRequired ? completePassiveCapture : undefined,
         artifactWriter,
@@ -1534,6 +1542,10 @@ export function compactCanonicalEvidenceBundleForRetention(
   // The new graph has a separate hard cap; its bytes must never displace existing retained evidence.
   const coreBytes = (value: CanonicalEvidenceBundle) => {
     const { runtimeEvidenceGraphs: _graphs, runtimeEvidenceGraphDiagnostics: _diagnostics, ...core } = value;
+    if (core.gpcImpactCapture?.localRetention === "local_gpc_complete.v2") {
+      const {requestLedger: _localLedger, ...capture} = core.gpcImpactCapture;
+      core.gpcImpactCapture = capture;
+    }
     const withoutGraph = <T extends { runtimeEvidenceGraph?: unknown; runtimeEvidenceGraphDiagnostics?: unknown }>(packet: T | undefined) => {
       if (!packet) return packet;
       const { runtimeEvidenceGraph: _graph, runtimeEvidenceGraphDiagnostics: _diagnostic, ...facts } = packet;

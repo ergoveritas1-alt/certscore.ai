@@ -70,6 +70,10 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
   if (baseline && gpc && (baseline.region !== gpc.region || baseline.gpcSignalObservation?.contextConfigSha256 !== gpc.gpcSignalObservation?.contextConfigSha256 ||
     baseline.gpcImpactCapture?.document?.urlSha256 !== gpc.gpcImpactCapture?.document?.urlSha256)) limits.push("paired_context_or_document_mismatch");
   const bc = baseline?.gpcImpactCapture, gc = gpc?.gpcImpactCapture;
+  const adaptiveBaseline = bc?.adaptiveObservation, adaptiveGpc = gc?.adaptiveObservation;
+  if ((adaptiveBaseline || adaptiveGpc) && (!adaptiveBaseline || !adaptiveGpc ||
+      adaptiveBaseline.durationMs !== adaptiveGpc.durationMs || adaptiveBaseline.outcome !== adaptiveGpc.outcome ||
+      adaptiveBaseline.peerDocumentToken !== gc?.document?.token || adaptiveGpc.peerDocumentToken !== bc?.document?.token)) limits.push("paired_adaptive_protocol_mismatch");
   const verifiedWindow = (b: CanonicalEvidenceBundle, ms: number) => {
     const c = b.gpcImpactCapture!, w = c.windows.find(w => w.durationMs === ms);
     if (!c.document || !w) return false;
@@ -86,6 +90,7 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
     (!pageHttpOnly || baseline && gpc && verifiedWindow(baseline, w.durationMs) && verifiedWindow(gpc, w.durationMs))) ?? [];
   const horizon = windows.at(-1)?.durationMs;
   if (!horizon) limits.push("common_window_unavailable");
+  if (adaptiveBaseline && horizon !== adaptiveBaseline.durationMs) limits.push("adaptive_full_window_unavailable");
   for (const [label, bundle] of [["baseline", baseline], ["gpc", gpc]] as const) {
     if (!bundle?.gpcImpactCapture?.document || !horizon) continue;
     const ledger=pageHttpOnly?ledgerFor(bundle,horizon):undefined;

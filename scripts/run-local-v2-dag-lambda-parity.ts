@@ -7,6 +7,7 @@ import { saleSharingOptOutDispatchSchema, type SaleSharingOptOutDispatch } from 
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { InvokeCommand } from "@aws-sdk/client-lambda";
+import { createLocalGpcAdaptivePair } from "@certscore/scan-core";
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
   LOCAL_V2_DAG_LAMBDA_AWS_REGIONS,
@@ -133,6 +134,7 @@ class LocalCaptureSqsClient {
 }
 
 class LocalRecursiveLambdaClient {
+  private adaptivePair?: ReturnType<typeof createLocalGpcAdaptivePair>;
   constructor(
     private readonly input: {
       postRefusalWorkerMode: PostRefusalWorkerMode;
@@ -160,7 +162,11 @@ class LocalRecursiveLambdaClient {
         return await rejectWhenAborted(options?.abortSignal);
       }
     }
+    const adaptiveLane = payloadRecord.workerLane === "runtime_evidence" || payloadRecord.workerLane === "gpc_observation" ? payloadRecord.workerLane : undefined;
+    const adaptiveRequested = asRecord(payloadRecord.debugOverrides).gpcComparisonAdaptive === true && payloadRecord.targetEnvironment === "local" && !payloadRecord.resourceInventoryCrawl && adaptiveLane;
+    if (adaptiveRequested && !this.adaptivePair) this.adaptivePair = createLocalGpcAdaptivePair({scanId: String(payloadRecord.scanId)});
     const result = await handler(payload, {
+      localGpcAdaptiveParticipant: adaptiveRequested ? this.adaptivePair!.participant(String(payloadRecord.scanId), adaptiveLane!) : undefined,
       lambdaClient: this,
       s3Client: this.input.s3Client,
       s3GetClient: this.input.s3Client,
