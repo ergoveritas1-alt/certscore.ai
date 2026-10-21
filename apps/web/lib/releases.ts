@@ -59,6 +59,7 @@ const releases: readonly ProductRelease[] = [
   "headline": "Read the privacy-policy wording behind your report",
   "shortDescription": "Find discovered policy pages, inspect retained disclosures and keep the source URL and capture time with your review.",
   "publicationDate": "2026-10-16",
+  "modifiedDate": "2026-10-21",
   "category": "Feature guide",
   "seoTitle": "Privacy policy capture and transparency evidence",
   "metaDescription": "Find privacy policy pages and inspect retained passages, source URLs and capture times across 11 transparency checks in CertScore.ai reports.",
@@ -73,7 +74,7 @@ const releases: readonly ProductRelease[] = [
     "label": "Read the privacy-policy study"
   },
   "body": [
-    "CertScore.ai’s privacy-policy evidence features are available in scan reports. Start in Executive overview and open Policy surfaces to see the pages the scan found. In Detailed evidence, expand Policies & disclosures to review 11 privacy-policy transparency checks, including GDPR-related topics such as legal basis, retention, privacy rights and international transfers.",
+    "CertScore.ai’s privacy-policy evidence features are available in scan reports. Start in Executive overview and open Policy surfaces to see the pages the scan found. In Detailed evidence, expand Policies & disclosures, then Evidence & assessment details, to review 11 privacy-policy transparency checks, including GDPR-related topics such as legal basis, retention, privacy rights and international transfers.",
     "When supporting wording is available, the magnifying glass opens the retained passage with its source URL and capture timestamp. Services & Resources also shows policy-disclosure evidence beside detected services where supported. Connected agents can retrieve retained policy evidence for accessible reports and keep the source text with their explanations.",
     "This guide shows how to use the policy-evidence features available in CertScore.ai reports, alongside a new study of 5,000 archived reports. Report access and usage limits apply; evidence coverage varies with language and the wording retained by each scan."
   ],
@@ -83,7 +84,7 @@ const releases: readonly ProductRelease[] = [
       "heading": "Follow the policy from discovery to passage",
       "steps": [
         "Open Policy surfaces in Executive overview to see the policy pages the scan discovered.",
-        "Follow Detailed evidence and expand Policies & disclosures. Its 11 privacy-policy transparency checks cover availability and ten content topics; the section also has a separate cookie-disclosure check.",
+        "Follow Detailed evidence and expand Policies & disclosures, then open Evidence & assessment details. Its 11 privacy-policy transparency checks cover availability and ten content topics; the section also has a separate cookie-disclosure check.",
         "Use the magnifying glass beside an available disclosure to read its retained passage, source URL and capture timestamp. The viewer shows evidence retained at scan time, rather than a live fetch of the current policy."
       ],
       "image": {
