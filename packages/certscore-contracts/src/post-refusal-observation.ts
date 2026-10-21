@@ -1,3 +1,4 @@
+import { consentConfirmationDiagnosticsSchema } from "./consent-confirmation-diagnostics";
 import { cookieClassificationSchema } from "./cookie-classification";
 import { measurementRequestEvidenceSchema, readBoundMeasurementRequestEvidence } from "./measurement-request-evidence";
 import { observedActionSourceProofSchema, validateObservedActionSourceProof } from "./observed-action-source-proof";
@@ -480,6 +481,7 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
 });
 
 const postRefusalEvidencePacketBaseSchema = z.object({
+  confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
   runtimeEvidenceGraph: packetRuntimeGraphSchema.optional(),
   runtimeEvidenceGraphDiagnostics: z.array(runtimeGraphVerificationDiagnosticSchema).max(1).optional(),
   artifactVersion: z.enum(["certscore.post_refusal_evidence.v1", "certscore.post_refusal_evidence.v2"]),

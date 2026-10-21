@@ -163,7 +163,7 @@ export interface PostAcceptActionRecipe {
       }
     | {
         kind: "cmp_api_consent_state_changed";
-        provider: "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie" | "didomi";
+        provider: "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie" | "didomi" | "cookie_information" | "cookiescript" | "finsweet";
       }
     | {
         kind: "canonical_accept_transition";

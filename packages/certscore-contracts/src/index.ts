@@ -3804,3 +3804,5 @@ export * from "./measurement-request-evidence";
 export * from "./cmp-network-cookie-inventory";
 export * from "./evidence-request-url";
 export * from "./policy-supplement-materiality";
+
+export * from "./consent-confirmation-diagnostics";

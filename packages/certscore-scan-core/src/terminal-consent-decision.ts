@@ -12,6 +12,7 @@ type VerifiedState = {
 /** One read overlaps the final 250 ms of the existing window. A late, aborted,
  * wrong-document or inconclusive result is ignored; capture never awaits it. */
 export function terminalConsentDecisionRead(input: {
+  onOutcome?: (state: "started" | "unverified" | "verified" | "discarded") => void;
   action: "accept" | "reject"; authorizedTargetSha256?: string; parentScanStartedAtMs: number;
   dispatchedAtEpochMs: number; observationWindowMs: number; signal?: AbortSignal;
   targetStillAuthorized: () => boolean; read: () => Promise<VerifiedState | undefined>;
@@ -28,9 +29,11 @@ export function terminalConsentDecisionRead(input: {
     start() {
       if (started || !input.authorizedTargetSha256 || !allowed()) return;
       started = true;
+      input.onOutcome?.("started");
       const readStartedAtMs = relative(Date.now());
       void input.read().then(state => {
-        if (!state || !allowed()) return;
+        if (!allowed()) { input.onOutcome?.("discarded"); return; }
+        if (!state) { input.onOutcome?.("unverified"); return; }
         const now = Date.now();
         const result = terminalConsentDecisionSchema.safeParse({
           policyVersion: "bounded_terminal_consent_decision.v1", action: input.action,
@@ -46,13 +49,18 @@ export function terminalConsentDecisionRead(input: {
           },
         });
         if (result.success) terminal = result.data;
-      }).catch(() => undefined);
+        input.onOutcome?.(result.success ? "verified" : "unverified");
+      }).catch(() => { input.onOutcome?.("unverified"); });
     },
     retained(capture: AfterActionCapture) {
-      if (input.signal?.aborted || !terminal) return undefined;
-      try { if (!input.targetStillAuthorized()) return undefined; } catch { return undefined; }
-      return terminalConsentDecisionBound(terminal, capture,
-        { action: input.action, authorizedTargetSha256: input.authorizedTargetSha256 }, input.action) ? terminal : undefined;
+      if (!terminal) return undefined;
+      if (input.signal?.aborted) { input.onOutcome?.("discarded"); return undefined; }
+      try { if (!input.targetStillAuthorized()) { input.onOutcome?.("discarded"); return undefined; } }
+      catch { input.onOutcome?.("discarded"); return undefined; }
+      const bound = terminalConsentDecisionBound(terminal, capture,
+        { action: input.action, authorizedTargetSha256: input.authorizedTargetSha256 }, input.action);
+      if (!bound) input.onOutcome?.("discarded");
+      return bound ? terminal : undefined;
     },
   };
 }

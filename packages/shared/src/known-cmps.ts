@@ -31,7 +31,7 @@ export type KnownCmpActionConfirmation =
   | { kind: "local_storage_equals"; expectedValue: string; key: string }
   | {
       kind: "cmp_api_consent_state_changed";
-      provider: "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie" | "didomi";
+      provider: "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie" | "didomi" | "cookie_information" | "cookiescript" | "finsweet";
     }
   | {
       kind: "tcf_purposes_or_cmp_cookie_changed";
@@ -183,6 +183,8 @@ export type KnownCmpDefinition = {
   cookieNames?: string[];
   domains: string[];
   domSelectors?: string[];
+  /** Vendor-specific retained selector syntax, avoiding generic attribute values. */
+  domMarkerPatterns?: RegExp[];
   evidenceTreatment: KnownCmpEvidenceTreatment;
   globalNames?: string[];
   /** Read-only loaded configuration identity; never a visible/actionable scope. */
@@ -1111,6 +1113,25 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     urlPatterns: [/iubenda/i]
   },
   {
+    canonicalName: "Finsweet Consent Pro",
+    aliases: ["Finsweet Cookie Consent"],
+    cookieNames: ["fs-consent"], domains: ["consentpro.com"],
+    domSelectors: ['[fs-consent-element="banner"]'],
+    domMarkerPatterns: [/\[fs-consent-element\s*=\s*["']banner["']\]/i],
+    globalNames: ["FinsweetConsentPro"], evidenceTreatment: "cmp_infrastructure",
+    role: "consent management platform", recipeVersion: "v1",
+    interactionDocumentationUrls: ["https://docs.consentpro.com/runtime/api", "https://docs.consentpro.com/runtime/attributes"],
+    rejectConfirmation: {kind: "cmp_api_consent_state_changed", provider: "finsweet"},
+  },
+  {
+    canonicalName: "CookieScript", aliases: ["Cookie-Script"],
+    cookieNames: ["CookieScriptConsent"], domains: ["cookie-script.com"],
+    domSelectors: ["#cookiescript_injected"], globalNames: ["CookieScript"],
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform", recipeVersion: "v1",
+    interactionDocumentationUrls: ["https://help.cookie-script.com/en/articles/30246-custom-functions", "https://help.cookie-script.com/en/articles/30242-custom-events"],
+    rejectConfirmation: {kind: "cmp_api_consent_state_changed", provider: "cookiescript"},
+  },
+  {
     aliases: ["Cookie Information CMP"],
     acceptConfirmation: {
       kind: "tcf_purposes_or_cmp_cookie_changed",
@@ -1367,7 +1388,9 @@ function collectSignalsForDefinition(definition: KnownCmpDefinition, input: Know
 
   for (const selector of uniqueStrings(input.domSelectors ?? [])) {
     const inputTokens = selectorTokens(selector);
-    if ((definition.domSelectors ?? []).some((knownSelector) => {
+    if (definition.domMarkerPatterns
+      ? definition.domMarkerPatterns.some(pattern => textMatches(selector, pattern))
+      : (definition.domSelectors ?? []).some((knownSelector) => {
       const knownTokens = selectorTokens(knownSelector);
       return knownTokens.some((token) => inputTokens.includes(token) || selector.toLowerCase().includes(token));
     })) {

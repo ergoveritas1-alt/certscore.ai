@@ -1,10 +1,12 @@
+import { readDocumentedConsentApi, type DocumentedConsentProvider } from "./documented-consent-api.js";
 import type { Frame, Page } from "playwright";
 import { readDidomiConsentSnapshot } from "./didomi-consent-state.js";
 
-export type CmpApiConsentProvider = "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie" | "didomi";
+export type CmpApiConsentProvider = DocumentedConsentProvider | "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie" | "didomi";
 
 export type CmpApiConsentSnapshot = {
   canonicalState: string;
+  configurationSha256?: string;
   decision: "granted" | "denied" | "mixed" | "unknown";
   eventSequence: number;
   /** Ephemeral event clock for action binding; never a retained state-write timestamp. */
@@ -15,6 +17,7 @@ export async function readCmpApiConsentSnapshot(
   scope: Page | Frame,
   provider: CmpApiConsentProvider,
 ): Promise<CmpApiConsentSnapshot | undefined> {
+  if (provider === "cookie_information" || provider === "cookiescript" || provider === "finsweet") return readDocumentedConsentApi(scope, provider);
   if (provider === "didomi") return readDidomiConsentSnapshot(scope);
   return scope.evaluate(async ({ provider }) => {
     if (provider === "osano" || provider === "hubspot") {
@@ -64,7 +67,11 @@ export async function readCmpApiConsentSnapshot(
         else target._hsp!.push(["addPrivacyConsentListener", handlers.listener]);
       }
       if (provider === "osano") {
-        const live = decoder.decode(target.Osano!.cm!.getConsent!());
+        const value = target.Osano!.cm!.getConsent!();
+        const live = decoder.decode(value);
+        // A first-time visitor can have no decision yet. The listener is still
+        // installed before dispatch; only a fresh complete saved event can confirm.
+        if (value === undefined && tracker.sequence === 0) return {canonicalState: "unregistered", decision: "unknown" as const, eventSequence: 0};
         if (!live || (tracker.sequence > 0 && tracker.state !== live.canonicalState)) return undefined;
         return { ...live, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.observedAtEpochMs };
       }

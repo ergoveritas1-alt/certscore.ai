@@ -62,6 +62,18 @@ test("detects Fides from canonical runtime markers without host inference", () =
   assert.equal(isKnownCmpCookieName("fides_consent_tenant_a"), true);
 });
 
+test("documented confirmation providers require exact vendor markers without adding action selectors", () => {
+  assert.equal(getKnownCmpVendorName({domSelectors:['[fs-consent-element="banner"]']}),"Finsweet Consent Pro");
+  assert.equal(getKnownCmpVendorName({domSelectors:['[data-generic-element="banner"]']}),null);
+  assert.equal(getKnownCmpVendorName({domSelectors:["#cookiescript_injected"]}),"CookieScript");
+  for (const name of ["Finsweet Consent Pro", "CookieScript"]) {
+    const cmp=KNOWN_CMP_REGISTRY.find(row=>row.canonicalName===name)!;
+    assert.equal(cmp.rejectConfirmation?.kind,"cmp_api_consent_state_changed");
+    assert.equal(cmp.rejectControlSelectors,undefined);
+    assert.equal(cmp.acceptControlSelectors,undefined);
+  }
+});
+
 test("Axeptio recognition is passive and does not register an automatic Close action", () => {
   assert.equal(getKnownCmpVendorName({ cookieNames: ["axeptio_cookies"] }), "Axeptio");
   assert.equal(getKnownCmpVendorName({ jsGlobals: ["axeptioSDK"] }), "Axeptio");
