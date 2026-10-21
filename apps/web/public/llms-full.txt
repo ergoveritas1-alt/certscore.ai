@@ -246,7 +246,7 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 ## TypeScript SDK
 
-Status: published. Install `@certscore/sdk@0.2.20` or newer for typed EU and California posture scores on API v2 scan and report-evidence resources, plus existing scan creation and retained evidence support.
+Status: published. Install `@certscore/sdk@0.2.21` or newer for typed EU and California posture scores on API v2 scan and report-evidence resources, including post-Reject entity/timing evidence, GPC recipient evidence, California posture coverage, and CMP inventory details.
 
 Choice-path interpretation:
 
@@ -478,4 +478,4 @@ Detailed Evidence parity: SDK 0.2.16 adds getReportEvidence(scanId, {section}) f
 
 Detailed Evidence fixes: SDK 0.2.17 types California privacy-choice evidence in full and section="policy" exports. MCP 0.2.28 preserves typed full-report evidence, including long GPC proof lists, under the existing byte ceilings. Verified controls, unverified candidates, notice passages and source provenance remain distinct. These updates do not change stored assessments or start scans.
 
-SDK 0.2.20 and MCP 0.2.30 include typed EU and California posture scores with policy version and coverage. Captured observations remain distinct from verified consent or enforcement.
+SDK 0.2.21 and MCP 0.2.30 include typed EU and California posture scores with policy version and coverage. SDK 0.2.21 also types post-Reject entities/timing, GPC recipients, California coverage summaries, and CMP inventory details. Captured observations remain distinct from verified consent or enforcement.

@@ -1,12 +1,12 @@
-# CertScore TypeScript SDK
+# CertScore.ai TypeScript SDK
 
-Official TypeScript/JavaScript SDK for the CertScore public API, Pulse API, and website risk-signal workflows.
+Official TypeScript/JavaScript SDK for the CertScore.ai public API, Pulse API, and website risk-signal workflows.
 
-CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.
+CertScore.ai outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.
 
 ## Status
 
-The SDK is published as `@certscore/sdk` on npm. Use version `0.2.20` or newer for typed EU and California posture scores on API v2 scan and report-evidence resources. See the [npm package](https://www.npmjs.com/package/@certscore/sdk) and [SDK source](https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk).
+The SDK is published as `@certscore/sdk` on npm. Use version `0.2.21` or newer for the deployed post-Reject entity/timing evidence, GPC recipient evidence, California posture coverage, and CMP inventory details. Typed EU and California posture scores are available on API v2 scan and report-evidence resources. See the [npm package](https://www.npmjs.com/package/@certscore/sdk) and [SDK source](https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk).
 
 ```bash
 npm install @certscore/sdk
@@ -173,7 +173,7 @@ Server-side filters are intentionally deferred in the initial version; group or 
 
 ## Async Lifecycle
 
-`scan()` calls `/api/v1/pulse` with `wait=60`. If CertScore returns HTTP 202, the SDK polls the returned `statusUrl` or `nextCheckUrl`. It honors `Retry-After` on pending or throttled responses.
+`scan()` calls `/api/v1/pulse` with `wait=60`. If CertScore.ai returns HTTP 202, the SDK polls the returned `statusUrl` or `nextCheckUrl`. It honors `Retry-After` on pending or throttled responses.
 
 ```ts
 import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
@@ -287,7 +287,7 @@ console.log(job.status, job.jobId, job.scanId, job.statusUrl);
 Example GitHub Actions workflow:
 
 ```yaml
-name: CertScore Pulse
+name: CertScore.ai Pulse
 
 on:
   deployment_status:
@@ -321,7 +321,7 @@ const criticalFindings = (pulse.topFindings ?? []).filter(
 );
 
 if (criticalFindings.length > 0) {
-  console.error("CertScore surfaced critical automated review signals:");
+  console.error("CertScore.ai surfaced critical automated review signals:");
   for (const finding of criticalFindings) {
     console.error(`- ${finding.label ?? finding.id}`);
   }
@@ -331,7 +331,7 @@ if (criticalFindings.length > 0) {
 console.log("No critical automated review signals were surfaced in this Pulse.");
 ```
 
-This CI example fails only on critical automated review signals surfaced by CertScore. It does not make a legal or compliance conclusion. CertScore provides automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.
+This CI example fails only on critical automated review signals surfaced by CertScore.ai. It does not make a legal or compliance conclusion. CertScore.ai provides automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.
 
 ## API Notes
 

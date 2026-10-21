@@ -1,5 +1,12 @@
 # @certscore/sdk
 
+## 0.2.21
+
+- Align CertScore.ai SDK declarations with the deployed API without changing client request behavior.
+- Type post-Reject non-essential entity observations, cookie/service evidence, and milliseconds after the Reject click.
+- Include GPC advertising-collection evidence and canonical recipients, positive-evidence provenance, extended comparison durations, and the California recipient-based score values.
+- Type California posture coverage summaries and versioned policies, CMP privacy-choice inventories and unnamed-cookie references, and optional privacy-control provenance on retained records.
+
 ## 0.2.20
 
 - Type both versioned EU and California posture scores on completed scan resources, status results and reconstructed report evidence.
