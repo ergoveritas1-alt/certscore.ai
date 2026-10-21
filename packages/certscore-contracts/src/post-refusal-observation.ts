@@ -557,7 +557,11 @@ const postRefusalEvidencePacketBaseSchema = z.object({
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "reject", context);
   validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
   for (const request of packet.network.requests) {
-    if (request.measurementEvidence && !readBoundMeasurementRequestEvidence(request.measurementEvidence, request))
+    if (request.measurementEvidence && !readBoundMeasurementRequestEvidence(request.measurementEvidence, request, {
+      targetSha256: packet.actionControlProof?.authorizedTargetSha256,
+      actionDispatchedAtMs: packet.refusalRegistration.actionDispatchedAtMs,
+      preActionCapturedAtMs: packet.storage.preActionCapturedAtMs, preActionStorage: packet.storage.preAction,
+    }))
       context.addIssue({ code: z.ZodIssueCode.custom, path: ["network", "requests"], message: "Measurement metadata must match its original request." });
     if (request.rootStartedAtMs !== undefined && request.rootStartedAtMs > request.startedAtMs)
       context.addIssue({ code: z.ZodIssueCode.custom, path: ["network", "requests"], message: "Request ancestry cannot start after its child." });

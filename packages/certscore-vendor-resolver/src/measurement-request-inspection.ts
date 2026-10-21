@@ -1,4 +1,4 @@
-import type { MeasurementRequestEvidence } from "@certscore/contracts";
+import type { MeasurementRequestEvidence, MeasurementStoredIdentifier } from "@certscore/contracts";
 import { COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge } from "./cookie-knowledge-base";
 import { isCanonicalGoogleAnalyticsCollectionUrl, resolveCanonicalVendor } from "./index";
 
@@ -58,7 +58,8 @@ function rumPayload(value: unknown) {
 
 /** Called only on fresh producer requests, before URL redaction. Raw values never leave this function. */
 export function inspectMeasurementRequest(input: { url: string; method: string; requestId: string; timestampMs: number;
-  body: string | null; headers?: Record<string, string> }): MeasurementRequestEvidence | undefined {
+  body: string | null; headers?: Record<string, string>; storedIdentifiers?: readonly MeasurementStoredIdentifier[];
+  hashIdentifier?: (value: string) => string }): MeasurementRequestEvidence | undefined {
   if (input.url.length > 8192) return undefined;
   let url: URL;
   try { url = new URL(input.url); } catch { return undefined; }
@@ -71,23 +72,56 @@ export function inspectMeasurementRequest(input: { url: string; method: string; 
   const method = ["GET", "POST", "OPTIONS"].includes(input.method) ? input.method as "GET" | "POST" | "OPTIONS" : "other";
   let complete = false;
   let identifierEvidence: MeasurementRequestEvidence["identifierEvidence"] = "unknown";
-  if (input.body === null || input.body.length <= MAX_BODY_BYTES && new TextEncoder().encode(input.body).length <= MAX_BODY_BYTES) {
+  let cookieIdentifierBinding: MeasurementStoredIdentifier | undefined;
+  const reasons = new Set<NonNullable<MeasurementRequestEvidence["diagnostics"]>["reasons"][number]>();
+  const bodyWithinLimit = input.body === null || input.body.length <= MAX_BODY_BYTES && new TextEncoder().encode(input.body).length <= MAX_BODY_BYTES;
+  let bodyDisposition: NonNullable<MeasurementRequestEvidence["diagnostics"]>["bodyDisposition"] = !input.body ? "empty" : bodyWithinLimit ? "inspected" : "limited";
+  if (!bodyWithinLimit) reasons.add("payload_size_limit");
+  if (bodyWithinLimit) {
     if (ga) {
-      const fields = [...url.searchParams];
-      if (input.body && /^[^{}\r\n]*$/.test(input.body)) fields.push(...new URLSearchParams(input.body));
-      const bodySupported = !input.body || !/[{}\r\n]/.test(input.body);
-      complete = bodySupported && fields.length <= 64 && new Set(fields.map(([key]) => key)).size === fields.length && fields.every(([key, value]) => GA_FIELDS.has(key) &&
-        (!["dl", "dr"].includes(key) || unadornedUrl(value)));
+      const query = [...url.searchParams];
+      // Bounded form-encoded event lines. Common query fields apply to each line;
+      // repeated fields within one event remain ambiguous. Never decode JSON as a
+      // browser collect protocol or turn opaque cid/sid into transient IDs.
+      const lines = input.body ? input.body.split(/\r?\n/) : [""];
+      const bodySupported = lines.length <= 8 && lines.every(line => !/[{}\r]/.test(line) && !/%(?![a-f0-9]{2})/i.test(line));
+      const bodyFields = bodySupported ? lines.map(line => [...new URLSearchParams(line)]) : [];
+      const fields = [...query, ...bodyFields.flat()];
+      const withinFieldLimit = fields.length <= 64;
+      if (!bodySupported) { reasons.add("unsupported_payload"); bodyDisposition = "limited"; }
+      if (!withinFieldLimit) reasons.add("field_limit");
+      const events = bodySupported ? bodyFields.map(fields => [...query, ...fields]) : [];
+      const duplicate = events.some(event => new Set(event.map(([key]) => key)).size !== event.length);
+      if (duplicate) reasons.add("duplicate_fields");
+      const opaque = fields.some(([key, value]) => ["cid", "sid"].includes(key) && value !== "");
+      const unsupported = fields.some(([key, value]) => !GA_FIELDS.has(key) && !["cid", "sid"].includes(key) ||
+        ["dl", "dr"].includes(key) && !unadornedUrl(value));
+      if (unsupported) reasons.add("unsupported_fields");
+      complete = bodySupported && withinFieldLimit && !duplicate && !opaque && !unsupported;
       if (fields.some(([key, value]) => /^(?:uid|user_id|device_id|gclid|dclid|fbclid)$/.test(key) && value !== "")) identifierEvidence = "persistent_observed";
-      else if (complete) identifierEvidence = "not_observed";
+      else if (withinFieldLimit && bodySupported && !duplicate) {
+        const clientIds = [...new Set(fields.filter(([key, value]) => key === "cid" && value !== "").map(([, value]) => value))];
+        if (clientIds.length === 1 && input.hashIdentifier && input.storedIdentifiers?.length) {
+          const identifierSha256 = input.hashIdentifier(clientIds[0]!);
+          const matches = (input.storedIdentifiers ?? []).filter(row => row.identifierSha256 === identifierSha256 && row.capturedAtMs <= input.timestampMs);
+          if (matches.length === 1) { cookieIdentifierBinding = matches[0]; identifierEvidence = "persistent_observed"; }
+        }
+        if (identifierEvidence !== "persistent_observed" && complete) identifierEvidence = "not_observed";
+      }
+      if (opaque && (!cookieIdentifierBinding || fields.some(([key, value]) => key === "sid" && value !== ""))) reasons.add("ambiguous_client_identifier");
     } else if (method === "POST" && !url.search && input.body) {
       try { complete = rumPayload(JSON.parse(input.body)); } catch { /* Unknown payload remains review. */ }
       if (complete) identifierEvidence = "not_observed";
-    }
+      else reasons.add("unsupported_payload");
+    } else reasons.add("unsupported_payload");
   }
   const allowedHeaders = /^(?:accept(?:-encoding|-language)?|authorization|cache-control|connection|content-(?:length|type)|cookie|dnt|host|origin|pragma|priority|referer|sec-ch-ua(?:-mobile|-platform)?|sec-fetch-(?:dest|mode|site|user)|sec-gpc|upgrade-insecure-requests|user-agent)$/i;
   if (input.headers && (Object.keys(input.headers).length > 64 || Object.entries(input.headers).some(([key, value]) =>
-    !allowedHeaders.test(key) || value.length > 8192 || key.toLowerCase() === "referer" && !unadornedUrl(value)))) complete = false;
+    !allowedHeaders.test(key) || value.length > 8192 || key.toLowerCase() === "referer" && !unadornedUrl(value)))) { complete = false; reasons.add("unsupported_headers"); }
+  if (!input.headers) reasons.add("headers_unavailable");
+  if (input.body === null && Object.entries(input.headers ?? {}).some(([key, value]) => key.toLowerCase() === "content-length" && value !== "0")) {
+    complete = false; reasons.add("body_unavailable"); bodyDisposition = "limited";
+  }
   const header = (key: string) => !input.headers ? "unknown" as const : Object.entries(input.headers).some(([name, value]) => name.toLowerCase() === key && value.trim() !== "") ? "present" as const : "absent" as const;
   if (!complete && identifierEvidence === "not_observed") identifierEvidence = "unknown";
   const cookieNames = Object.entries(input.headers ?? {}).filter(([key]) => key.toLowerCase() === "cookie")
@@ -96,8 +130,10 @@ export function inspectMeasurementRequest(input: { url: string; method: string; 
     const knowledge = resolveCanonicalCookieKnowledge(name, { purposePolicyVersion: COOKIE_PURPOSE_POLICY, cookieDomain: url.hostname });
     return knowledge.essentiality === "non_essential" && ["analytics", "advertising", "session_replay"].includes(knowledge.category);
   })) identifierEvidence = "persistent_observed";
-  return { version: "measurement_request_evidence.v1", requestId: input.requestId, timestampMs: input.timestampMs,
+  return { version: "measurement_request_evidence.v2", requestId: input.requestId, timestampMs: input.timestampMs,
     requestOrigin: url.origin, requestPath: url.pathname, profile: ga ? "google_analytics_collection.v1" : "cloudflare_rum.v1",
     method, payloadInspection: complete ? "complete" : "unknown", identifierEvidence,
-    cookieHeader: header("cookie"), authorizationHeader: header("authorization") };
+    cookieHeader: header("cookie"), authorizationHeader: header("authorization"),
+    ...(cookieIdentifierBinding ? { cookieIdentifierBinding } : {}),
+    diagnostics: { policyVersion: "bounded_measurement_inspection.v1", reasons: [...reasons], bodyDisposition } };
 }

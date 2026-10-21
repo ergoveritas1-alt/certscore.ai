@@ -99,7 +99,11 @@ export function assessAfterRejectScoring(value: unknown, policyVersion: AfterRej
     if (!request.nonEssential) { uncertain = true; continue; }
     if (["advertising", "session_replay"].includes(request.purpose ?? ""))
       return finish("high_risk", ["verified_optional_activity"], [request.requestId]);
-    const boundInspection = readBoundMeasurementRequestEvidence(request.measurementEvidence, request);
+    const boundInspection = readBoundMeasurementRequestEvidence(request.measurementEvidence, request, {
+      targetSha256: p.actionControlProof?.authorizedTargetSha256,
+      actionDispatchedAtMs: p.scoringEvidence.actionDispatchedAtMs,
+      preActionCapturedAtMs: p.scoringEvidence.preActionCapturedAtMs, preActionStorage: p.scoringEvidence.preActionStorage,
+    });
     const inspection = boundInspection?.profile === "google_analytics_collection.v1" &&
       !isCanonicalGoogleAnalyticsCollectionUrl(request.sanitizedUrl) ? null : boundInspection;
     if (inspection?.identifierEvidence === "persistent_observed")

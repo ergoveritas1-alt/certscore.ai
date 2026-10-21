@@ -2009,3 +2009,27 @@ test("fresh Reject capture retains bounded measurement and identifier inspection
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
+
+test("fresh unconfirmed Reject captures an exact first-party cid cookie match without another read or longer window", async () => {
+  const server=createServer((_request,response)=>{
+    response.setHeader("content-type","text/html; charset=utf-8");
+    response.end(`<!doctype html><div id="certscore-fixture-consent-banner"><p>Choose optional cookies</p><button data-certscore-consent-action="reject">Reject all</button><button>Accept all</button></div><script>
+      document.cookie='_ga=GA1.1.123456789.987654321; Max-Age=86400; Path=/';
+      document.querySelector('[data-certscore-consent-action="reject"]').onclick=()=>{
+        setTimeout(()=>fetch('https://www.google-analytics.com/g/collect?v=2&tid=G-FIXTURE&gcs=G100&cid=123456789.987654321&sid=opaque-session',
+          {method:'POST',body:'en=page_view\\nen=scroll&_s=2'}).catch(()=>{}),80);
+      };</script>`);
+  });
+  const url=await listenHttpServer(server);
+  try {
+    const packet=await observe(url,{observationWindowMs:450,confirmationTimeoutMs:0});
+    assert.equal(packet.refusalRegistration.status,"unconfirmed");
+    assert.equal(packet.afterActionCapture?.requestedWindowMs,450);
+    const row=packet.network.requests.find(row=>row.measurementEvidence?.cookieIdentifierBinding);
+    assert.ok(row);assert.equal(row.measurementEvidence?.identifierEvidence,"persistent_observed");
+    assert.equal(row.measurementEvidence?.cookieIdentifierBinding?.capturedAtMs,packet.storage.preActionCapturedAtMs);
+    const projection=projectPostRefusalEvidenceForReport({packet,packetSha256:"b".repeat(64)});
+    assert.equal(projection.scoringEvidence?.requests.find(r=>r.requestId===row.requestId)?.measurementEvidence?.identifierEvidence,"persistent_observed");
+    assert.doesNotMatch(JSON.stringify(packet),/123456789|987654321|opaque-session/);
+  } finally {await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+});

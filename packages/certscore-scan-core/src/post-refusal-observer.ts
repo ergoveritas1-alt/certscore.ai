@@ -1,3 +1,4 @@
+import { measurementCookieCandidates, measurementInspectionBudget, type MeasurementCookieCandidate } from "./measurement-capture.js";
 import { confirmationDiagnostics } from "./consent-confirmation-diagnostics.js";
 import { firstVerifiedConsentRead } from "./consent-confirmation-read.js";
 import { installBorlabsDeferredDialogReveal } from "./borlabs-passive-dialog-reveal.js";
@@ -444,6 +445,9 @@ export async function runPostRefusalObserver(
     policyVersion: "semantic_consent_registration.v2", decision: "unknown", basis: "unverified",
   };
   const storageCollectionDiagnostics: { preAction?: ActionStorageCollectionDiagnostics; postAction?: ActionStorageCollectionDiagnostics } = {};
+  let measurementCandidates: MeasurementCookieCandidate[] = [];
+  let measurementBaselineAtMs: number | undefined;
+  const retainMeasurementCandidates = (rows: MeasurementCookieCandidate[]) => { measurementCandidates = rows; };
   const captureCoverage = { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 };
   let sourceDocumentChanged = false;
   let sourcePendingAtEnd = 0;
@@ -673,7 +677,7 @@ export async function runPostRefusalObserver(
       });
     }
 
-    let measurementInspections = 0;
+    const measurementBudget = measurementInspectionBudget();
     let mainNavigationRequestCount = 0;
     page.on("framenavigated", frame => { if (actionDispatched && frame === page?.mainFrame()) sourceDocumentChanged = true; });
     page.on("request", (request) => {
@@ -724,17 +728,20 @@ export async function runPostRefusalObserver(
         if (selection.evicted) activeRequestIds.delete(selection.evicted.requestId);
         if (!selection.retained) return;
       } else bucket.push(captured);
-      if (measurementInspections < 48) {
+      if (request.method() !== "OPTIONS" && measurementBudget.available(actionDispatched)) {
         try {
           const body = request.postData();
           const observation = { url: request.url(), method: request.method(), requestId,
-            timestampMs: elapsed(parentScanStartedAtMs, startedAtEpochMs), body: body && body.length > 32768 ? body.slice(0, 32769) : body };
+            timestampMs: elapsed(parentScanStartedAtMs, startedAtEpochMs),
+            hashIdentifier: hashValue,
+            storedIdentifiers: !actionDispatched || measurementBaselineAtMs === undefined ? [] : measurementCandidates.map(row => ({ ...row, capturedAtMs: measurementBaselineAtMs! })), body: body && body.length > 32768 ? body.slice(0, 32769) : body };
           captured.measurementEvidence = inspectMeasurementRequest(observation);
           if (captured.measurementEvidence) {
-            measurementInspections += 1;
+            measurementBudget.retained(actionDispatched);
             // Observe already-issued request metadata inside the existing window.
             // Pending/failed header reads stay unknown; never await them at publication.
             void request.allHeaders().then(headers => {
+              if (timing.observationEndedAtMs !== undefined || effectiveSignal?.aborted) return;
               captured.measurementEvidence = inspectMeasurementRequest({ ...observation, headers });
             }).catch(() => undefined);
           }
@@ -1097,9 +1104,10 @@ export async function runPostRefusalObserver(
     selectedRecipe = resolution.recipe;
     let control = resolution.control;
 
-    let preActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, undefined, (d) => { storageCollectionDiagnostics.preAction = d; });
+    let preActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, undefined, (d) => { storageCollectionDiagnostics.preAction = d; }, retainMeasurementCandidates);
     let preActionCapturedAtEpochMs = Date.now();
     let preActionCapturedAtMs = elapsed(parentScanStartedAtMs, preActionCapturedAtEpochMs);
+    measurementBaselineAtMs = preActionCapturedAtMs;
     if (cancellation()) {
       return await finalize({
         resolverFound: true,
@@ -1258,11 +1266,13 @@ export async function runPostRefusalObserver(
         limitations,
         undefined,
         (d) => { storageCollectionDiagnostics.preAction = d; },
+        retainMeasurementCandidates,
       ).catch(() => undefined);
       if (refreshedPreActionStorage) {
         preActionStorage = refreshedPreActionStorage;
         preActionCapturedAtEpochMs = Date.now();
         preActionCapturedAtMs = elapsed(parentScanStartedAtMs, preActionCapturedAtEpochMs);
+        measurementBaselineAtMs = preActionCapturedAtMs;
       } else {
         limitations.push("pre_action_storage_baseline_refresh_unavailable");
       }
@@ -1358,6 +1368,7 @@ export async function runPostRefusalObserver(
             limitations,
             undefined,
             (d) => { storageCollectionDiagnostics.preAction = d; },
+            retainMeasurementCandidates,
           ).catch(() => undefined);
           if (!refreshedPreActionStorage) {
             throw new Error("pre_action_storage_baseline_refresh_unavailable");
@@ -1365,6 +1376,7 @@ export async function runPostRefusalObserver(
           preActionStorage = refreshedPreActionStorage;
           preActionCapturedAtEpochMs = Date.now();
           preActionCapturedAtMs = elapsed(parentScanStartedAtMs, preActionCapturedAtEpochMs);
+          measurementBaselineAtMs = preActionCapturedAtMs;
           if (selectedRecipe.preActionRequirement) {
             const refreshedPreActionScope = exactSelectorScope(page, selectedRecipe.controlFrameUrl);
             if (
@@ -1898,6 +1910,7 @@ async function captureStorage(
   limitations?: string[],
   onCookies?: (cookies: unknown[]) => void,
   onDiagnostics?: (diagnostics: ActionStorageCollectionDiagnostics) => void,
+  onMeasurementCandidates?: (rows: MeasurementCookieCandidate[]) => void,
 ): Promise<PostRefusalStorageItem[]> {
   const pageStorage = await page.evaluate(() => {
     let localStorage: Array<[string, string]> = [];
@@ -2015,6 +2028,11 @@ async function captureStorage(
     cookies: { ...channel(normalized.cookies.length, normalized.droppedCookies, cookiesAvailable), retainedCount: retainedCount("cookie") },
     localStorage: { ...channel(normalized.localStorage.length, normalized.droppedLocalStorage, pageStorage.localStorageAvailable), retainedCount: retainedCount("local_storage") },
     sessionStorage: { ...channel(normalized.sessionStorage.length, normalized.droppedSessionStorage, pageStorage.sessionStorageAvailable), retainedCount: retainedCount("session_storage") },
+  }));
+  onMeasurementCandidates?.(measurementCookieCandidates({ cookies: normalized.cookies, retainedStorage: retainedItems,
+    normalizedDocumentUrl: normalizeTargetUrl(page.url()), nowEpochSeconds: Date.now() / 1000,
+    identityHash: cookie => postRefusalStorageIdentityHash({ storageType: "cookie", name: cookie.name,
+      hostname: cookie.domain.replace(/^\./, ""), cookiePath: cookie.path, partitionKey: cookie.partitionKey }),
   }));
   return retainedItems;
 }

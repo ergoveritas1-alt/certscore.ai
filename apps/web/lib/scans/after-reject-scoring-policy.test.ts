@@ -7,6 +7,8 @@ import { buildNormalizedConcerns } from "./normalized-concerns";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyDeductionBreakdown, deriveRegulatoryCoverageScore } from "./regulatory-coverage-score";
+import { createHash } from "node:crypto";
+import { inspectMeasurementRequest } from "@certscore/vendor-resolver";
 
 function project(projection: ReturnType<typeof afterRejectProjection>) {
   const runtimeArtifacts = buildPostRefusalRuntimeProjection(projection);
@@ -196,4 +198,26 @@ test("unconfirmed-click scoring uses the full retained requests and charges the 
   assert.equal(runtimeArtifacts.rejectClickTrackingAssessment?.requests.length, 8);
   assert.deepEqual(assessAfterRejectScoring(p)?.requestIds, ["advertising-outside-assessment-sample"]);
   assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [row, row] }).score, 85);
+});
+
+test("request-bound cookie identifier capture reaches the canonical Reject score without registration promotion", () => {
+  const p = afterRejectClickProjection("measurement");
+  const request = p.scoringEvidence!.requests[0]!;
+  const proof = { policyVersion:"measurement_cookie_identifier.v1", parameter:"cid", source:"pre_action_cookie_snapshot",
+    targetSha256:p.actionControlProof!.authorizedTargetSha256!,cookieName:"_ga",hostname:"example.test",
+    identityHash:"a".repeat(64),valueHash:"b".repeat(64),identifierSha256:createHash("sha256").update("123.456").digest("hex"),
+    capturedAtMs:p.scoringEvidence!.preActionCapturedAtMs! } as const;
+  const inspection = inspectMeasurementRequest({url:`${request.sanitizedUrl}&cid=123.456`,method:"POST",body:null,headers:{},
+    requestId:request.requestId,timestampMs:request.startedAtMs,storedIdentifiers:[proof],hashIdentifier:value=>createHash("sha256").update(value).digest("hex")})!;
+  request.measurementEvidence = inspection;
+  p.afterActionRequests![0]!.measurementEvidence = inspection;
+  p.scoringEvidence!.preActionStorage.push({storageType:"cookie",name:"_ga",hostname:proof.hostname,
+    identityBasis:"cookie_name_domain_path_partition",identityHash:proof.identityHash,valueHash:proof.valueHash,
+    nonEssential:true,purpose:"analytics",capturedAtEpochSeconds:1000,expiresAtEpochSeconds:2000});
+  const {row,runtimeArtifacts}=project(p);
+  assert.equal(retainedAfterRejectScoringAssessment(runtimeArtifacts)?.deductionPoints,15);
+  assert.equal(deriveRegulatoryCoverageScore({framework:"gdpr_eprivacy",rows:[row]}).score,85);
+  assert.equal(p.registrationStatus,"unconfirmed");assert.equal(p.decisionEvidence?.decision,"unknown");
+  p.scoringEvidence!.preActionStorage[0]!.valueHash="c".repeat(64);
+  assert.equal(assessAfterRejectScoring(p)?.deductionPoints,0,"a broken cookie binding cannot create a deduction");
 });

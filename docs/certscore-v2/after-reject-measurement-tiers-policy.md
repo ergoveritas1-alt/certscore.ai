@@ -18,6 +18,38 @@ This change performs bounded interpretation of already-retained data. It adds no
 
 ## Evidence and weights
 
+### Bounded measurement capture v2
+
+New producer observations use `measurement_request_evidence.v2`; retained v1
+observations keep their original conclusions. The producer reserves 32 of the
+existing 48 measurement inspections for post-click requests (at most 16 before
+dispatch), with unused pre-click capacity available afterward. The 32 KiB body
+bound, existing lane deadlines and observation windows remain unchanged. Pending
+header reads do not delay publication or mutate a frozen observation.
+
+Inspection supports up to eight form-encoded event lines within the same
+64-field/32 KiB limits, rejects duplicate fields within an event and retains
+bounded reason codes for opaque IDs, unsupported/oversize payloads, unsupported
+headers or unavailable bodies. It retains no query values, bodies or header
+values. An opaque `cid` or `sid` remains unknown; a denied-storage declaration or
+missing cookie does not establish that an identifier is transient.
+
+An exact `cid` match to a persistent `_ga` cookie can establish observed
+persistent-identifier transmission using the already-required pre-action cookie
+snapshot. The closed GA1 component recipe requires one matching hash, correct
+host/domain/path scope, an unexpired non-partitioned cookie and an exact retained
+cookie identity/value hash. New evidence retains the cookie/target/snapshot and
+identifier hash binding. Packet verification and scoring independently validate
+the same source snapshot, clock, lifetime and target. Unknown layouts, ambiguous
+matches, unmatched IDs, stale clocks or missing source rows remain unknown.
+No new cookie read, browser run, lane, API/model call, wait or timeout is added.
+
+This is capture support for the existing persistent-identifier policy, not a
+weight change or a historical evidence upgrade. Unknown storage purposes still
+block the lower measurement/performance tiers. Estimated incremental bounded
+CPU/metadata cost is below $0.50/month at 100,000 scans under existing retention.
+No deployment or report backfill is performed.
+
 | Tier | Deduction | Required evidence |
 | --- | ---: | --- |
 | High risk | 15 | Verified registered refusal and directly eligible advertising/replay, an observed persistent measurement identifier, an eligible optional storage write, or a verified consent-state contradiction. |
