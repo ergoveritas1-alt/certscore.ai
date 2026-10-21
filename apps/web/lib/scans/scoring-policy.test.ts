@@ -8,9 +8,10 @@ test("approved registry has exactly the reviewed rows and caps", () => {
   assert.equal(new Set(SCORING_RULES.map(rule => rule.id)).size, 24);
   assert.equal(SCORING_RULES.find(rule => rule.id === "privacy_notice_availability")?.points, 9);
   assert.deepEqual(Object.fromEntries(Object.entries(SCORING_FAMILIES).map(([id, family]) => [id, family.cap])), {
-    pre_consent_storage: 40, pre_consent_tracking: 40, consent_controls: 22, post_refusal_enforcement: 15,
+    pre_consent_storage: 40, pre_consent_tracking: 40, consent_controls: 22, post_refusal_enforcement: 30,
     sensitive_runtime: 25, tracking_technology: 25, embedded_third_party: 20, policy_transparency: 12, transport_security: 20, gpc: 0, site_integrity: 40, accessibility: 12,
   });
+  assert.deepEqual(SCORING_RULES.find(rule => rule.id === "post_reject_tracking_reduction")?.entityTotals, [15,20,23,25,27,28,29,30]);
   assert.equal(SCORING_RULES.filter(rule => rule.siteWide).length, 16);
   for (const rule of SCORING_RULES.filter(rule => rule.identity)) {
     assert.match(scoringRuleDescription(rule), /First .* · second: [45] · each additional:/);
