@@ -8,7 +8,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 NAME = 'certscore-website-privacy-scan'
 SOURCE = ROOT / 'integrations/muse' / NAME
-OUTPUT = ROOT / 'apps/web/public/resources/certscore-muse-skill-1.0.1.zip'
+OUTPUT = ROOT / 'apps/web/public/resources/certscore-muse-skill-1.0.2.zip'
 FILES = ('SKILL.md', 'skill.yaml', 'scripts/certscore_mcp.py')
 
 

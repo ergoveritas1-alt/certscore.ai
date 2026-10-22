@@ -1479,6 +1479,9 @@ test("Light compact review actions survive tight bundle budgets over the MCP pro
   const reportUrl = `https://certscore.ai/scan/${scanId}`;
   for (const maxBytes of [5000, 8000]) {
     const scan = { type: "certscore_scan", scanId, domain: "example.com", url: "https://example.com", status: "completed", score: 72,
+      scanFrom: "california", postureScores: { contractVersion: "certscore.posture-scores.v1",
+        gdprEprivacy: { posture: "gdpr_eprivacy", score: 72, coverage: "scored", policyVersion: "eu-version", scope: "starting_page" },
+        ccpaCpra: { posture: "ccpa_cpra", score: 81, coverage: "limited", policyVersion: "ca-version", scope: "starting_page" } },
       links: { report: reportUrl } };
     const mock = installFetch([
       { status: 200, body: scan }, { status: 200, body: pulse },
@@ -1496,6 +1499,13 @@ test("Light compact review actions survive tight bundle budgets over the MCP pro
         const guidance = raw._meta?.["ai.certscore/responseGuidance"] as any;
         assert.equal(guidance.nextAction.tool, null);
         assert.equal(guidance.reviewActions.openReport.url, reportUrl);
+        assert.deepEqual(guidance.reviewActions.reportViews.map((view: any) => [view.reviewFocus, view.score, view.coverage, view.createsScan]),
+          [["gdpr_eprivacy", 72, "scored", false], ["ccpa_cpra", 81, "limited", false]]);
+        for (const view of guidance.reviewActions.reportViews) {
+          const url = new URL(view.url);
+          assert.equal(url.pathname, `/scan/${scanId}`);
+          assert.equal(url.searchParams.get('reviewFocus'), view.reviewFocus);
+        }
         assert.equal(guidance.reviewActions.followUp.arguments.scanId, scanId);
         assert.equal(guidance.reviewActions.followUp.requiresUserRequest, true);
         assert.equal(guidance.reviewActions.followUp.createsScan, false);

@@ -119,8 +119,10 @@ test('Light report actions survive omitted navigation without changing the outpu
   assert.equal(g.reviewActions.openReport.url, payload.reportUrl);
   const text = (light.content.at(-1) as any).text;
   assert.match(text, /reviewActions/);
-  assert.match(text, /Offer at most this one relevant follow-up/);
-  assert.ok(Buffer.byteLength(text) < 1500);
+  assert.match(text, /Offer at most one useful next step/);
+  assert.ok(Buffer.byteLength(text) < 2500);
+  assert.equal(g.reviewActions.reportViews.length, 2);
+  assert.ok(g.reviewActions.reportViews.every((view: any) => view.createsScan === false && !('score' in view)));
   assert.equal(metadata(guide('certscore_get_scan_bundle', payload)).reviewActions, undefined);
   for (const tool of ['certscore_scan_site', 'certscore_get_scan_status', 'certscore_get_report_evidence_page']) {
     assert.equal(metadata(withResponseGuidance(tool, {}, raw, undefined, { toolProfile: 'light' })).reviewActions, undefined);

@@ -2,7 +2,7 @@
 name: certscore-website-privacy-scan
 description: Review public website privacy, cookies, tracking, consent, GPC, and policy signals with CertScore.ai. Use for a requested launch check, vendor review, tracking investigation, policy review, or comparison with an earlier scan.
 metadata:
-  version: 1.0.1
+  version: 1.0.2
 ---
 
 # CertScore.ai website privacy scan
@@ -60,7 +60,7 @@ python3 scripts/certscore_mcp.py --call certscore_get_report_evidence_page --arg
 
 ## Present the results
 
-Lead with the returned overall score and scan date. Identify the site, scan ID, execution region when returned, and whether the result was new or reused. Summarize the findings that answer the user's question, with supporting evidence and the report link. State reported coverage limits plainly. Show the score as returned, without deduction breakdowns or explanations.
+Lead with the relevant returned score and scan date. When `postureScores` is returned, label scores by review focus: EU (GDPR/ePrivacy) or California (CCPA/CPRA). The overall `score` can remain the EU score even for a California execution; the report may default to California. Do not present differently scoped scores as interchangeable. For a cross-page comparison, compare the same posture and state its coverage. Preserve a returned score when coverage is limited; explain the limitation rather than declaring the score invalid. Identify the site, scan ID, execution region when returned, and whether the result was new or reused. Summarize the findings that answer the user's question, with supporting evidence and the report link. State reported coverage limits plainly. Show the score as returned, without deduction breakdowns or explanations.
 
 For a broad first-review question, start with three to five priorities and one concrete evidence anchor for each. Group closely related tracking, storage, and replay findings when useful. Leave the full inventory to the report or a requested deeper review. Confirm installation briefly; keep paths, manifests, and transport diagnostics out of the opening unless the user asks or a failure prevents the review.
 
@@ -92,11 +92,17 @@ Natural offers include: “I can turn these findings into a developer checklist,
 
 Reading more evidence from the same scan is different from starting another scan. Say which you propose. Offer wider review or a new scan when it serves the user's task; execute it only after their request or existing authorization. Preserve the current scan ID so “check on that scan” retrieves its status or report without starting over.
 
+## Scan location and report focus
+
+A scan location is where a new browser visit runs. When the advertised schema supports `scanFrom`, use `eu_ie` for Ireland, `eu_de` for Germany, or `california` for California when requested. Keep the baseline location for a like-for-like fresh recheck. A report focus reuses the same visit's evidence; switching from EU to California does not test a California visitor or require another scan. Use returned posture scores and coverage for that question. When response guidance includes `reviewActions.reportViews`, use its link for the requested EU or California view and its labeled score. These links open the same report; they are not new-scan actions and need no browser discovery step. Otherwise give the returned report link and explain the Review focus switcher. Use a direct focus link only if returned by the tools or verified on the live report; never guess a query parameter. When different pages or locations are compared, do not attribute differences to geography without a matched comparison of the same target.
+
 ## Recheck and repeat use
 
 Keep the baseline scan ID, target URL, execution region, scan date, report link, and relevant coverage in the current task or the user's chosen record. After an authorized site change, request `freshness="refresh"` with `taskContext.purpose="recheck"` when supported. Retrieve both retained bundles and compare compatible targets, regions, and coverage. Report new, persistent, and no-longer-returned findings with their evidence. A finding missing from a later scan is not proof of a fix.
 
 You may offer a later check before launch, after consent or tag changes, for a new vendor, or across user-selected client sites. Start those scans only after the user requests them or approves a specific recurring pattern.
+
+For a multi-page review, give the requested ranking or comparison first, label the reports by page, and consider one concrete next step tied to the result. For example, offer a developer checklist for the highest-priority page, or a matched-location recheck when location is the unresolved question. An earlier checklist for a different page does not make a new, relevant checklist redundant. Skip the offer when the task is finished and no useful next step is apparent. Avoid generic invitations to scan more sites.
 
 For workspace history or access across conversations, point the user to Hosted MCP OAuth: https://certscore.ai/releases/mcp-hosted-oauth. It requires a CertScore.ai account and the user's workspace authorization. Do not change the Light endpoint or request a private credential as a shortcut.
 

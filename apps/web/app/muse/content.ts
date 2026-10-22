@@ -39,7 +39,9 @@ export const museGuide = {
   ],
   reuse: "By default, the service reuses a recent result for the same site. Request a fresh scan only when the user asks for one or wants a recheck after a change.",
   reportItems: [
-    ["Score and date", "Lead with the overall score and the scan date."],
+    ["Score and date", "Label EU (GDPR/ePrivacy) and California (CCPA/CPRA) scores clearly, with their coverage and scan date."],
+    ["Review focus", "Open the EU or California report view using the same scan. Changing the view does not run another visit."],
+    ["Scan location", "Ask for Ireland, Germany, or California when you need a new visit from that location."],
     ["Findings and evidence", "Show the findings that matter most, with the evidence for each."],
     ["Coverage and report link", "State any reported coverage limits, such as completed_limited. Always include the report link."],
     ["Scan ID", "Keep the scan ID as the baseline for a later recheck."]
@@ -47,9 +49,9 @@ export const museGuide = {
   reportRule: "Never present a finding as a legal violation or describe a site as compliant or non-compliant. These are observations for human review.",
   rateLimit: "If a call returns rate_limited, tell the user and stop. Do not retry in a loop.",
   skill: "Give Muse the workflow once, then use it for later website reviews. The package includes the skill instructions, a Muse manifest, and a Python helper for connecting when native MCP tools aren't available.",
-  skillDownloadPath: "/resources/certscore-muse-skill-1.0.1.zip",
+  skillDownloadPath: "/resources/certscore-muse-skill-1.0.2.zip",
   skillDownloadLabel: "Download the Muse skill package",
-  skillVersion: "Version 1.0.1 · ZIP · No Python packages to install",
+  skillVersion: "Version 1.0.2 · ZIP · No Python packages to install",
   skillInstallSteps: [
     "Download the ZIP and attach it to a Muse conversation.",
     "Ask Muse to save the contained skill for future website reviews and reuse your existing CertScore.ai connection.",
@@ -58,8 +60,8 @@ export const museGuide = {
   recheckIntro: "Keep the first scan as a baseline. After you change the site, ask Muse for a fresh scan and compare the results.",
   recheckSteps: [
     "Keep the scan ID from the first scan.",
-    "After the site changes, run a fresh scan with purpose recheck.",
-    "Compare findings against the baseline scan ID.",
+    "After the site changes, run a fresh scan with purpose recheck from the same location.",
+    "Compare the same review focus and equivalent coverage against the baseline scan ID.",
     "Report what changed. A finding missing from a later scan is a change to note, not proof of a fix; say so."
   ],
   recheckFlow: [

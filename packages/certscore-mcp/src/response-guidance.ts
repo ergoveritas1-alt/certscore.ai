@@ -89,7 +89,7 @@ export function withResponseGuidance(tool: string, input: unknown, result: CallT
     scanId, status, score: guidance.score, risk: guidance.risk, reportUrl: guidance.reportUrl,
     quotaConsumed: guidance.quotaConsumed, nextAction,
     ...(guidance.pagination ? { pagination: guidance.pagination } : {}),
-    ...(reviewActions ? { reviewActions, reviewInstruction: 'Answer first and include the report link when available. Offer at most this one relevant follow-up; skip repeated or declined offers. Never execute it without the user’s request.' } : {})
+    ...(reviewActions ? { reviewActions, reviewInstruction: 'Answer first and link the relevant report view. Label EU and California scores separately using reportViews; preserve limited coverage and unknown scores. Changing review focus uses the same visit’s evidence, not another scan location. Offer at most one useful next step, adapting the suggested follow-up to the question. Skip repeated or declined offers for the same scan; a checklist for a different priority page may still help. Carry out offered follow-ups only when requested. Never start another scan without the user’s request.' } : {})
   }).filter(([,value]) => value !== null));
   const overview = `CertScore.ai guidance: ${JSON.stringify(compact)}`;
   const explanation = tool === 'certscore_explain_finding'

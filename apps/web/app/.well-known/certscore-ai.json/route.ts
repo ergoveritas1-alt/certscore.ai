@@ -43,7 +43,7 @@ const discoveryDocument = {
     fullGuide: "https://certscore.ai/llms-full.txt",
     museGuide: "https://certscore.ai/muse",
     museGuideMarkdown: "https://certscore.ai/muse.md",
-    museSkillPackage: "https://certscore.ai/resources/certscore-muse-skill-1.0.1.zip",
+    museSkillPackage: "https://certscore.ai/resources/certscore-muse-skill-1.0.2.zip",
     developerHub: "https://certscore.ai/developers",
     scannerSolutions: "https://certscore.ai/solutions",
     sitemap: "https://certscore.ai/sitemap.xml",
