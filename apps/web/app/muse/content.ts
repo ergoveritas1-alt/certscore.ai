@@ -46,8 +46,15 @@ export const museGuide = {
   ],
   reportRule: "Never present a finding as a legal violation or describe a site as compliant or non-compliant. These are observations for human review.",
   rateLimit: "If a call returns rate_limited, tell the user and stop. Do not retry in a loop.",
-  skill: "Save a skill during setup so Muse has the workflow available in later conversations. Include when to scan, the four steps above, how to present results, and how to compare a recheck with an earlier scan.",
-  skillPlaceholder: "[Skill package link to be added.]",
+  skill: "Give Muse the workflow once, then use it for later website reviews. The package includes the skill instructions, a Muse manifest, and a Python helper for connecting when native MCP tools aren't available.",
+  skillDownloadPath: "/resources/certscore-muse-skill-1.0.0.zip",
+  skillDownloadLabel: "Download the Muse skill package",
+  skillVersion: "Version 1.0.0 · ZIP · No dependencies to install",
+  skillInstallSteps: [
+    "Download the ZIP and attach it to a Muse conversation.",
+    "Ask Muse to save the contained skill for future website reviews and reuse your existing CertScore.ai connection.",
+    "When you're ready, ask for a scan. Saving the skill does not start one."
+  ],
   recheckIntro: "Keep the first scan as a baseline. After you change the site, ask Muse for a fresh scan and compare the results.",
   recheckSteps: [
     "Keep the scan ID from the first scan.",
@@ -92,7 +99,8 @@ export function museGuideMarkdown() {
     "### Ask for a scan", `\`\`\`text\n${museGuide.firstAsk}\n\`\`\``,
     "### The four-tool workflow", numbered(museGuide.scanSteps.map((step) => step.text)), museGuide.reuse,
     "### Share the results", pairs(museGuide.reportItems), museGuide.reportRule, museGuide.rateLimit,
-    "## Use CertScore.ai after the first scan", "### Save a skill", museGuide.skill, museGuide.skillPlaceholder,
+    "## Use CertScore.ai after the first scan", "### Save a skill", museGuide.skill,
+    `[${museGuide.skillDownloadLabel}](https://certscore.ai${museGuide.skillDownloadPath})`, museGuide.skillVersion, numbered(museGuide.skillInstallSteps),
     "### Recheck after changes", museGuide.recheckIntro, numbered(museGuide.recheckSteps),
     "### When to scan again", pairs(museGuide.repeatPatterns), museGuide.scanPermission,
     "### Connect to a workspace with Hosted MCP OAuth", museGuide.oauth, `Setup guide: ${museGuide.oauthUrl}`,

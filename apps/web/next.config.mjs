@@ -111,6 +111,14 @@ const nextConfig = {
         ]
       },
       {
+        source: "/resources/certscore-muse-skill-1.0.0.zip",
+        headers: [
+          { key: "Content-Type", value: "application/zip" },
+          { key: "Content-Disposition", value: 'attachment; filename="certscore-muse-skill-1.0.0.zip"' },
+          { key: "X-Robots-Tag", value: "noindex" }
+        ]
+      },
+      {
         source: "/muse",
         headers: [
           {

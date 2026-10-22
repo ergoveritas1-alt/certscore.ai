@@ -1,0 +1,4 @@
+name: certscore_website_privacy_scan
+title: CertScore.ai website privacy scan
+description: Review public website privacy, cookies, tracking, consent, GPC, and policy signals with CertScore.ai. Use for a requested launch check, vendor review, tracking investigation, policy review, or recheck. No account or API key needed.
+include_in_prompt: true

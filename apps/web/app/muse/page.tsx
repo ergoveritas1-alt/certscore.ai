@@ -154,7 +154,19 @@ export default function MusePage() {
 
           <section id="repeat-use" aria-labelledby="repeat-title" className={anchorClass + " space-y-7"}>
             <h2 id="repeat-title" className={sectionTitle}>Use CertScore.ai after the first scan</h2>
-            <Card className="border-slate-200 bg-white"><CardHeader><h3 className="text-xl font-semibold tracking-tight text-slate-900">Save a skill</h3></CardHeader><CardContent className="space-y-3 text-sm leading-7 text-slate-600"><p>{guide.skill}</p><p>{guide.skillPlaceholder}</p></CardContent></Card>
+            <Card className="border-sky-200 bg-white">
+              <CardHeader><h3 id="save-a-skill" className={anchorClass + " text-xl font-semibold tracking-tight text-slate-900"}>Save a skill</h3></CardHeader>
+              <CardContent className="space-y-5 text-sm leading-7 text-slate-600">
+                <p>{guide.skill}</p>
+                <div>
+                  <a href={guide.skillDownloadPath} download className="inline-flex items-center gap-3 rounded-md bg-sky-700 px-5 py-3 font-semibold text-white hover:bg-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-700"><span aria-hidden="true">↓</span>{guide.skillDownloadLabel}<span className="rounded bg-white/15 px-2 text-xs">ZIP</span></a>
+                  <p className="mt-2 text-xs text-slate-500">{guide.skillVersion}</p>
+                </div>
+                <ol className="grid gap-4 sm:grid-cols-3" aria-label="Save the skill in Muse">
+                  {guide.skillInstallSteps.map((step, index) => <li key={step} className="rounded-xl bg-sky-50 p-4"><span aria-hidden="true" className="mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-semibold text-sky-800">{index + 1}</span>{step}</li>)}
+                </ol>
+              </CardContent>
+            </Card>
             <div>
               <h3 className="text-xl font-semibold text-slate-900">Recheck after changes</h3>
               <p className="mt-3 text-sm leading-7 text-slate-600">{guide.recheckIntro}</p>
