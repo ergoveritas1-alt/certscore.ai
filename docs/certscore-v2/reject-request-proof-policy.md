@@ -82,3 +82,39 @@ Primary references for closed LinkedIn identifier selection:
 
 - [LinkedIn Cookie Table](https://www.linkedin.com/legal/l/cookie-table)
 - [LinkedIn Insight Tag identifiers](https://www.linkedin.com/help/linkedin/answer/a520391)
+
+## LinkedIn encoded website-action bodies — October 22, 2026
+
+The owner requested a fix and one fresh Ovid rerun within existing budgets and
+without Options panels. New `bounded_ca_request_proof.v2` supports the reviewed
+LinkedIn `https://px.ads.linkedin.com/wa/` POST envelope: `fmt=g` is canonical
+base64 of gzip JSON, `fmt=b` is canonical base64 JSON and `fmt=a` is JSON. The
+format was traced in the [vendor's published Insight script](https://snap.licdn.com/li.lms-analytics/insight.min.js).
+This is endpoint-specific decoding of already-issued bytes, not request replay.
+
+Both encoded input and decompressed output are capped at the existing 32 KiB.
+The existing 128-field allowance includes nested object members, array elements
+and query fields, with depth capped at eight. Reject malformed/noncanonical
+base64, invalid gzip/UTF-8/JSON, duplicate decoded keys, query/body collisions,
+prototype keys, unknown fields, unreviewed nested structures and expansion beyond
+the cap. Supported closed event shapes cover page visits, dwell metadata and
+click DOM context. DOM strings, publisher IDs, page/request/session IDs and
+`liGiant` are not advertising-identifier evidence. Unreviewed payloads remain
+neutral. The existing MIME, full-header, processing-signal, response, timing and
+source/control/ancestry gates still apply.
+
+The exact root `liFatId` field maps to LinkedIn's existing first-party advertising
+identifier role for this decoded envelope only. Retain its original spelling and
+body source with a value hash; do not relabel DOM values, query aliases or page
+IDs. Root supported processing declarations enter the existing request-local
+qualification and offline GPP checks; restrictions and unresolved state stay
+neutral. Default GPC qualification is unchanged. Preserve historical proof v1
+and source packets without reinterpretation.
+
+Retain only an encoding enum and decoded-body hash in addition to existing proof
+metadata; never retain decoded event text, DOM text, body bytes or raw identifier
+values. Existing request/inspection caps, windows, lanes, header reads, worker
+size, model usage and retention are unchanged. Estimated incremental bounded
+decode CPU and metadata storage is below $0.50/month at 100,000 scans. The
+authorized single Ovid rerun is a one-run cooldown exception; it does not clear
+permanent target holds or add Ovid to rotating target selection.

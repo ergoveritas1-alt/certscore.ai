@@ -8,7 +8,7 @@ import { decodeGppRequest, type GppRequestContext } from "./gpp-request-decoder"
 export const GPC_REQUEST_QUALIFICATION_POLICY = "gpc_sale_sharing_evidence.v2" as const;
 export type GpcRequestQualification = Omit<NonNullable<GpcBoundedObservation["requests"]["advertisingCollectionQualification"]>["rows"][number], "evidenceId">;
 
-export function inspectGpcRequestQualification(rawUrl: string, context: GppRequestContext & { allowLinkedInWa?: boolean; linkedInHeaderIdentifier?: boolean } = {}, bodyFields?: URLSearchParams): GpcRequestQualification {
+export function inspectGpcRequestQualification(rawUrl: string, context: GppRequestContext & { allowLinkedInWa?: boolean; linkedInHeaderIdentifier?: boolean; linkedInWaBodyIdentifier?:boolean } = {}, bodyFields?: URLSearchParams): GpcRequestQualification {
   const result: GpcRequestQualification = { activity: "unresolved", basis: "endpoint_or_identity_unresolved", processingSignals: [], gpp: decodeGppRequest(new URLSearchParams()) };
   let url: URL;
   try { url = new URL(rawUrl); } catch { return result; }
@@ -69,7 +69,7 @@ export function inspectGpcRequestQualification(rawUrl: string, context: GppReque
     identifier("cid", "auid", "gacid", "gclid")) return role("identified_advertising_collection", "google_advertising_conversion_identifier");
   // Generic GPT/AdSense impressions, pagead/id, zrt HTML and configuration
   // downloads do not establish identity transfer or cross-context use.
-  if (host === "px.ads.linkedin.com" && (/^\/collect\/?$/.test(path) || context.allowLinkedInWa === true && /^\/wa\/?$/.test(path)) && (identifier("li_adsId", "li_adsid", "li_fat_id") || context.allowLinkedInWa === true && context.linkedInHeaderIdentifier === true))
+  if (host === "px.ads.linkedin.com" && (/^\/collect\/?$/.test(path) || context.allowLinkedInWa === true && /^\/wa\/?$/.test(path)) && (identifier("li_adsId", "li_adsid", "li_fat_id") || context.allowLinkedInWa === true && (context.linkedInHeaderIdentifier === true || /^\/wa\/?$/.test(path)&&context.linkedInWaBodyIdentifier===true)))
     return role("identified_advertising_collection", "linkedin_ads_identifier");
   if (/^(?:www\.)?facebook\.com$/.test(host) && /^\/tr\/?$/.test(path) && one("id") && one("ev") && identifier("fbp", "fbc", "external_id"))
     return role("identified_advertising_collection", "meta_pixel_identifier");

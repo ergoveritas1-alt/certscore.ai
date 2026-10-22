@@ -4,6 +4,7 @@ import {chromium,type Request} from "playwright";
 import {chromiumLaunchOptions} from "./playwright-runtime";
 import {captureCaliforniaRejectRequest} from "./california-reject-request";
 import {isQualifyingSaleSharingRequest} from "@certscore/contracts";
+import {gzipSync} from "node:zlib";
 test("same Chromium POST Request supplies body and full cookie headers without a public-site visit",async()=>{
  const browser=await chromium.launch(chromiumLaunchOptions({headless:true}));
  try{
@@ -22,5 +23,20 @@ test("same Chromium POST Request supplies body and full cookie headers without a
   assert.ok(proof.proof?.identifiers.some(row=>row.source==="body"));assert.ok(proof.proof?.identifiers.some(row=>row.source==="cookie_header"));
   assert.ok(!JSON.stringify(proof).includes("fixture-body-advertising-id"));assert.ok(!JSON.stringify(proof).includes("fixture-header-advertising-id"));
   assert.equal(routed,2);await context.close();
+ }finally{await browser.close();}
+});
+
+test("same Chromium Request captures LinkedIn gzip/base64 event POST and exact full headers within existing proof limits",async()=>{
+ const browser=await chromium.launch(chromiumLaunchOptions({headless:true}));
+ try{
+  const page=await browser.newPage();let post:Request|undefined;
+  await page.route("**/*",async route=>{if(route.request().method()==="POST")post=route.request();await route.fulfill({status:route.request().method()==="POST"?204:200,contentType:"text/html",body:route.request().method()==="POST"?undefined:"<button>Fixture</button>"});});
+  await page.goto("https://px.ads.linkedin.com/");
+  const body=gzipSync(JSON.stringify({pids:[123],signalType:"CLICK",liFatId:"browser-fixture-ad-id",domAttributes:{tagName:"BUTTON",innerText:"Reject All Cookies"},innerElements:null,elementCrumbsTree:[]})).toString("base64");
+  await page.evaluate(async body=>{await fetch("/wa/?medium=fetch&fmt=g",{method:"POST",headers:{"content-type":"text/plain;charset=UTF-8"},body});},body);
+  assert.ok(post);const response=await post.response();
+  const fact=captureCaliforniaRejectRequest({url:post.url(),method:post.method(),requestId:"encoded-browser",startedAtMs:200,httpStatus:response!.status(),hasBody:true,body:post.postData(),headers:await post.allHeaders()})!;
+  assert.equal(fact.proof?.bodyStatus,"complete");assert.equal(fact.proof?.headersStatus,"complete");assert.equal(fact.proof?.bodyEncoding,"base64_gzip");
+  assert.equal(isQualifyingSaleSharingRequest(fact.qualification),true);assert.ok(!JSON.stringify(fact).includes("browser-fixture-ad-id"));
  }finally{await browser.close();}
 });

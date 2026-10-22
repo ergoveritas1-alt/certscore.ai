@@ -1,8 +1,9 @@
 import {createHash} from "node:crypto";
 import {californiaRejectRequestEvidenceSchema,isQualifyingSaleSharingRequest,type CaliforniaRejectRequestEvidence} from "@certscore/contracts";
 import {resolveCanonicalVendor,inspectGpcRequestQualification,CANONICAL_VENDOR_RESOLVER_VERSION,isCanonicalAdvertisingCollectionCandidate} from "@certscore/vendor-resolver";
-const sha=(value:string)=>createHash("sha256").update(value).digest("hex");
-const identifiers=["li_adsId","li_adsid","li_fat_id","li_sugr","lms_ads","fbp","fbc","external_id","vid","msclkid","cid","auid","gacid","gclid","d_cid","d_cid_ic","d_uuid","vi"] as const;
+import {decodeLinkedInWaBody} from "./linkedin-wa-body";
+const sha=(value:string|Uint8Array)=>createHash("sha256").update(value).digest("hex");
+const identifiers=["li_adsId","li_adsid","li_fat_id","liFatId","li_sugr","lms_ads","fbp","fbc","external_id","vid","msclkid","cid","auid","gacid","gclid","d_cid","d_cid_ic","d_uuid","vi"] as const;
 const fields=new Set([...identifiers,"pid","fmt","time","event_id","conversion_id","url","referrer","page","v","ev","id","tid","en","google_nid","d","p","publisherId","ttd_pid","xcid","rid","gpp","gpp_sid","us_privacy","rdp","npa","ltd","dpo","data_processing_options"]);
 export type CaliforniaRequestInput={url:string;method:string;requestId:string;startedAtMs:number;httpStatus?:number;hasBody:boolean;
  body?:string|null;headers?:Record<string,string>};
@@ -31,7 +32,12 @@ export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
    proof.bodySha256=sha(input.body);
    try {
     const body=input.body.trim();
-    if(body.startsWith("{")){
+    const linkedin=decodeLinkedInWaBody(url,input.method,input.body);
+    if(linkedin){
+     proof.policyVersion="bounded_ca_request_proof.v2";proof.bodyFormat="linkedin_wa_json";
+     proof.bodyEncoding=linkedin.encoding;proof.decodedBodySha256=sha(linkedin.decodedBytes);
+     for(const [key,value]of linkedin.fields)bodyFields.append(key,value);
+    }else if(body.startsWith("{")){
      // Flat JSON only: no nested privacy state or event arrays are guessed.
      // Reject duplicate keys before JSON.parse can discard their first value.
      if(/\\/.test(body))throw Error("unsupported_body");
@@ -47,7 +53,7 @@ export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
     const all=[...url.searchParams,...bodyFields];
     if(all.length>128)throw Error("body_limit");
     if(new Set(all.map(([key])=>key)).size!==all.length)throw Error("duplicate_fields");
-    if([...bodyFields].some(([key])=>!fields.has(key)))throw Error("unsupported_fields");
+    if([...bodyFields].some(([key])=>!fields.has(key)||key==="liFatId"&&proof.bodyFormat!=="linkedin_wa_json"))throw Error("unsupported_fields");
     proof.bodyStatus="complete";
    }catch(error){const code=error instanceof Error?error.message:"";proof.bodyStatus=code==="body_limit"?"limited":"unsupported";
     reason(code==="duplicate_fields"?"duplicate_fields":code==="body_limit"?"body_limit":code==="unsupported_fields"?"unsupported_fields":"unsupported_body");}
@@ -57,7 +63,7 @@ export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
   if(proof.identifiers.length<8 && value.length>=3 && value.length<=2048 && !/^(?:0+|null|undefined|false|true|unknown|none|not.?set|redacted|\[redacted\]|\$.*)$/i.test(value) && !/^0+(?:[-.]+0+)*$/.test(value) && /[a-z1-9]/i.test(value))
    proof.identifiers.push({source,field,valueSha256:sha(value)});
  };
- for(const [key,value]of url.searchParams)if(identifiers.includes(key as never))identifier("query",key as typeof identifiers[number],value);
+ for(const [key,value]of url.searchParams)if(key!=="liFatId"&&identifiers.includes(key as never))identifier("query",key as typeof identifiers[number],value);
  if(proof.bodyStatus==="complete")for(const [key,value]of bodyFields)if(identifiers.includes(key as never))identifier("body",key as typeof identifiers[number],value);
  if(v2 && input.headers){
   const entries=Object.entries(input.headers),lower=entries.map(([name])=>name.toLowerCase());
@@ -92,12 +98,14 @@ export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
  if(v2 && input.hasBody && input.headers && proof.bodyStatus==="complete"){
   const contentType=Object.entries(input.headers).find(([key])=>key.toLowerCase()==="content-type")?.[1]?.split(";")[0]?.trim().toLowerCase();
   if(!contentType || !["application/json","application/x-www-form-urlencoded","text/plain"].includes(contentType) ||
-    contentType==="application/json" && proof.bodyFormat!=="json" ||
-    contentType==="application/x-www-form-urlencoded" && proof.bodyFormat!=="form"){
+    contentType==="application/json" && !["json","linkedin_wa_json"].includes(proof.bodyFormat) ||
+    contentType==="application/x-www-form-urlencoded" && proof.bodyFormat!=="form" ||
+    proof.bodyFormat==="linkedin_wa_json" && contentType!=="text/plain"){
    proof.bodyStatus="unsupported";reason("unsupported_body");
   }
  }
  const qualification=inspectGpcRequestQualification(input.url,{allowLinkedInWa:v2,
+  linkedInWaBodyIdentifier:proof.bodyStatus==="complete"&&proof.bodyFormat==="linkedin_wa_json"&&proof.identifiers.some(id=>id.field==="liFatId"&&id.source==="body"),
   linkedInHeaderIdentifier:proof.headersStatus==="complete" && proof.identifiers.some(id=>id.source==="cookie_header"&&["li_fat_id","li_sugr","lms_ads"].includes(id.field))},v2?bodyFields:undefined);
  if(!v2 && qualification.activity==="unresolved")return null;
  if(v2 && proof.headersStatus!=="complete" && !qualification.processingSignals.includes("privacy_signal_invalid"))qualification.processingSignals.push("privacy_signal_invalid");

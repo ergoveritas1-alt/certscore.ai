@@ -19,6 +19,7 @@ test("bounded California Reject capture preserves request-local qualification wi
 
 import {prioritizeCaliforniaRequests} from "./california-reject-request";
 import {measurementInspectionBudget} from "./measurement-capture";
+import {gzipSync} from "node:zlib";
 const post=(body:string|null,headers:Record<string,string>|undefined={"content-type":"application/x-www-form-urlencoded"})=>
  captureCaliforniaRejectRequest({url:"https://px.ads.linkedin.com/wa/",method:"POST",requestId:"post-1",startedAtMs:200,httpStatus:204,hasBody:body!==null,body,headers})!;
 test("LinkedIn wa bodies and advertising-cookie headers retain closed proof without raw identifiers or security-cookie promotion",()=>{
@@ -75,4 +76,33 @@ test("omitted transport bodies and zero advertising cookies cannot manufacture c
  const compressed=post("li_adsid=private",{"content-type":"application/x-www-form-urlencoded","content-encoding":"gzip"});
  assert.equal(compressed.payload,"uninspected_body");
  assert.equal(isQualifyingSaleSharingRequest(post(null,{cookie:"li_sugr=0000-0000"}).qualification),false);
+});
+
+const waEvent=(extra:Record<string,unknown>={})=>({pids:[123],scriptVersion:1,time:123456,domain:"fixture.test",url:"https://fixture.test/",websiteSignalRequestId:"page-request-id",pageLoadId:"page-id",isTranslated:false,liFatId:null,liGiant:null,misc:{psbState:-4},isLinkedInApp:false,pageTitle:"Fixture",pageInstanceId:"page-instance",signalType:"CLICK",href:"",domAttributes:{tagName:"BUTTON",innerText:"Reject All Cookies",elementValue:null,elementType:null,imageSrc:null},innerElements:null,elementCrumbsTree:[{tagName:"button",nthChild:0,id:"reject",classes:["choice"],attributes:{"data-action":"reject"}}],isFilteredByClient:false,...extra});
+const encodedWa=(json:string,fmt="g",suffix="",headers:Record<string,string>={"content-type":"text/plain;charset=UTF-8"})=>captureCaliforniaRejectRequest({url:`https://px.ads.linkedin.com/wa/?medium=fetch&fmt=${fmt}${suffix}`,method:"POST",requestId:"encoded-wa",startedAtMs:200,httpStatus:204,hasBody:true,body:fmt==="g"?gzipSync(json).toString("base64"):fmt==="b"?Buffer.from(json).toString("base64"):json,headers})!;
+test("LinkedIn encoded click payloads inspect all fields and preserve exact advertising identity spelling",()=>{
+ for(const fmt of ["g","b","a"]){
+  const fact=encodedWa(JSON.stringify(waEvent({liFatId:"fixture-advertising-id",pageTitle:'A "quoted" title'})),fmt);
+  assert.equal(fact.proof?.policyVersion,"bounded_ca_request_proof.v2");assert.equal(fact.proof?.bodyStatus,"complete");
+  assert.equal(fact.proof?.bodyFormat,"linkedin_wa_json");assert.ok(fact.proof?.decodedBodySha256);
+  assert.equal(isQualifyingSaleSharingRequest(fact.qualification),true);
+  assert.deepEqual(fact.proof?.identifiers.map(({field,source})=>({field,source})),[{field:"liFatId",source:"body"}]);
+  assert.ok(!JSON.stringify(fact).includes("fixture-advertising-id"));assert.ok(!JSON.stringify(fact).includes("quoted"));
+ }
+ const neutral=encodedWa(JSON.stringify(waEvent()));assert.equal(neutral.payload,"inspected_body");assert.equal(isQualifyingSaleSharingRequest(neutral.qualification),false,"page/request/DOM/publisher identifiers are not advertising identity");
+ const restricted=encodedWa(JSON.stringify(waEvent({liFatId:"fixture-advertising-id",us_privacy:"1NYN"})));
+ assert.equal(restricted.proof?.bodyStatus,"complete");assert.equal(isQualifyingSaleSharingRequest(restricted.qualification),false);
+ assert.equal(encodedWa(JSON.stringify(waEvent()),"g","",{"content-type":"application/json"}).payload,"uninspected_body");
+});
+test("encoded unknown privacy state, duplicate/escaped keys, malformed streams and inflation limits stay neutral",()=>{
+ for(const json of [JSON.stringify(waEvent({unreviewedConsent:{optOut:true}})),JSON.stringify(waEvent({misc:{psbState:-4,privacy:"restricted"}})),JSON.stringify(waEvent({misc:{psbState:1}})),JSON.stringify(waEvent({npa:1,liFatId:"fixture-advertising-id"})),JSON.stringify(waEvent({liFatId:123})), '{"signalType":"CLICK","liFatId":"one","li\\u0046atId":"two"}',JSON.stringify(waEvent({pageTitle:"x".repeat(32769)})),JSON.stringify(waEvent({elementCrumbsTree:Array(65).fill({tagName:"button",id:"x"})}))]){
+  const fact=encodedWa(json);assert.equal(fact.payload,"uninspected_body");assert.equal(isQualifyingSaleSharingRequest(fact.qualification),false);
+ }
+ assert.equal(encodedWa(JSON.stringify(waEvent({liFatId:"fixture-advertising-id"})),"g","&liFatId=other-id").payload,"uninspected_body");
+ for(const body of ["!notbase64",Buffer.from("not gzip").toString("base64"),gzipSync('{"signalType":"CLICK"').toString("base64")]){
+  const fact=captureCaliforniaRejectRequest({url:"https://px.ads.linkedin.com/wa/?fmt=g",method:"POST",requestId:"invalid",startedAtMs:200,hasBody:true,body,headers:{"content-type":"text/plain"}})!;
+  assert.equal(fact.payload,"uninspected_body");
+ }
+ const old=post("li_adsid=private-id");assert.equal(old.proof?.policyVersion,"bounded_ca_request_proof.v1");
+ assert.equal(californiaRejectRequestEvidenceSchema.safeParse({...old,proof:{...old.proof,bodyEncoding:"base64_gzip"}}).success,false,"v1 proof vocabulary remains unchanged");
 });

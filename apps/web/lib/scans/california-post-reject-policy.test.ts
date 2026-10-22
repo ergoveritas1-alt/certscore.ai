@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {createHash} from "node:crypto";
+import {gzipSync} from "node:zlib";
 import {postRefusalReportProjectionSchema,deriveConsentControlAssessment} from "@certscore/contracts";
 import {captureCaliforniaRejectRequest} from "../../../../packages/certscore-scan-core/src/california-reject-request";
 import {assessCaliforniaPostReject,retainedCaliforniaPostReject} from "./california-post-reject-policy";
@@ -89,5 +90,16 @@ test("v2 POST/body/header proof reaches California scoring and restricted or sec
   const assessment=assessCaliforniaPostReject(p)!;
   assert.equal(assessment.status==="qualified_collection",mode==="body"||mode==="header",mode);
   if(mode==="body"||mode==="header")assert.equal(canonical(p,true).score.score,85,"same recipient across POST Reject and GPC counts once");
+ }
+});
+
+test("decoded LinkedIn POST proof passes canonical assessment and score while neutral and restricted events do not",()=>{
+ for(const mode of ["identified","no_identifier","restricted"]){
+  const p=projection(),row=p.scoringEvidence!.requests[0]!;
+  const body=gzipSync(JSON.stringify({pids:[123],signalType:"CLICK",liFatId:mode==="no_identifier"?null:"fixture-advertising-id",...(mode==="restricted"?{us_privacy:"1NYN"}:{})})).toString("base64");
+  const fact=captureCaliforniaRejectRequest({url:"https://px.ads.linkedin.com/wa/?fmt=g",method:"POST",requestId:row.requestId,startedAtMs:row.startedAtMs,httpStatus:204,hasBody:true,body,headers:{"content-type":"text/plain"}})!;
+  Object.assign(row,{method:"POST",sanitizedUrl:"https://px.ads.linkedin.com/wa/",californiaCollection:fact});p.afterActionRequests=structuredClone(p.scoringEvidence!.requests);
+  assert.equal(fact.payload,"inspected_body");assert.equal(assessCaliforniaPostReject(p)!.status==="qualified_collection",mode==="identified");
+  if(mode==="identified"){assert.equal(canonical(p).score.score,85);assert.equal(canonical(p,true).score.score,85,"shared GPC recipient is deduplicated");}
  }
 });

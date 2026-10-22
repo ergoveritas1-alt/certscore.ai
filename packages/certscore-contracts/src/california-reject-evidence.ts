@@ -9,11 +9,12 @@ export const californiaRejectRequestEvidenceSchema=z.object({
  urlSha256:z.string().regex(/^[a-f0-9]{64}$/),
  httpStatus:z.number().int().min(100).max(599).nullable(),
  payload:z.enum(["no_body","uninspected_body","inspected_body"]),
- proof:z.object({policyVersion:z.literal("bounded_ca_request_proof.v1"),
+ proof:z.object({policyVersion:z.enum(["bounded_ca_request_proof.v1","bounded_ca_request_proof.v2"]),
   bodyStatus:z.enum(["absent","complete","unavailable","unsupported","limited"]),
-  bodyFormat:z.enum(["none","form","json","unknown"]),bodySha256:z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  bodyFormat:z.enum(["none","form","json","linkedin_wa_json","unknown"]),bodySha256:z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  bodyEncoding:z.enum(["identity","base64","base64_gzip"]).optional(),decodedBodySha256:z.string().regex(/^[a-f0-9]{64}$/).optional(),
   headersStatus:z.enum(["complete","unavailable","limited"]),headersSha256:z.string().regex(/^[a-f0-9]{64}$/).nullable(),
-  identifiers:z.array(z.object({source:z.enum(["query","body","cookie_header"]),field:z.enum(["li_adsId","li_adsid","li_fat_id","li_sugr","lms_ads","fbp","fbc","external_id","vid","msclkid","cid","auid","gacid","gclid","d_cid","d_cid_ic","d_uuid","vi"]),valueSha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).max(8),
+  identifiers:z.array(z.object({source:z.enum(["query","body","cookie_header"]),field:z.enum(["li_adsId","li_adsid","li_fat_id","liFatId","li_sugr","lms_ads","fbp","fbc","external_id","vid","msclkid","cid","auid","gacid","gclid","d_cid","d_cid_ic","d_uuid","vi"]),valueSha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).max(8),
   reasons:z.array(z.enum(["body_unavailable","unsupported_body","body_limit","duplicate_fields","unsupported_fields","headers_unavailable","header_limit","ambiguous_cookie","unsupported_privacy_header","cookie_opt_out_unresolved"])).max(10),
  }).strict().optional(),
  entity:z.object({entityId:z.string().regex(/^ent_[a-f0-9]{12}$/),label:z.string().min(1).max(200),resolverVersion:z.string().min(1).max(120)}).strict(),
@@ -22,7 +23,10 @@ export const californiaRejectRequestEvidenceSchema=z.object({
  if((row.contractVersion==="california_reject_request.v2")!==Boolean(row.proof) ||
   row.contractVersion==="california_reject_request.v1" && row.payload==="inspected_body" || row.proof && (
   (row.payload==="inspected_body")!==(row.proof.bodyStatus==="complete") || (row.payload==="no_body")!==(row.proof.bodyStatus==="absent") ||
-  row.proof.bodyStatus==="complete" && !["form","json"].includes(row.proof.bodyFormat) ||
+  row.proof.bodyStatus==="complete" && !["form","json","linkedin_wa_json"].includes(row.proof.bodyFormat) ||
+  row.proof.bodyFormat==="linkedin_wa_json" && (row.proof.policyVersion!=="bounded_ca_request_proof.v2"||!row.proof.bodyEncoding||!row.proof.decodedBodySha256||row.method!=="POST"||row.origin!=="https://px.ads.linkedin.com"||!/^\/wa\/?$/.test(row.path)) ||
+  row.proof.policyVersion==="bounded_ca_request_proof.v1" && (row.proof.bodyEncoding!==undefined||row.proof.decodedBodySha256!==undefined||row.proof.identifiers.some(id=>id.field==="liFatId")) ||
+  row.proof.identifiers.some(id=>id.field==="liFatId"&&(id.source!=="body"||row.proof?.bodyFormat!=="linkedin_wa_json"||row.origin!=="https://px.ads.linkedin.com"||!/^\/wa\/?$/.test(row.path))) ||
   row.proof.bodyStatus==="absent" && (row.proof.bodyFormat!=="none" || row.proof.bodySha256!==null) ||
   row.proof.headersStatus==="complete"&&!row.proof.headersSha256 || row.proof.bodyStatus==="complete"&&!row.proof.bodySha256))
   ctx.addIssue({code:z.ZodIssueCode.custom,message:"California v2 body/header proof must retain consistent dispositions and hashes."});
