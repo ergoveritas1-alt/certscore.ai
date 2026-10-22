@@ -13,7 +13,7 @@ import { retainedGpcObservationSessionSchema, type GpcObservationSession } from 
 const source = (bytes: Uint8Array) => ({ bytes, pointer: { uri: "local-fixture.json", sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") } });
 
 test("fresh browser → retained bytes → completion includes empty, late GPP and SPA observations, without legal conclusions", async t => {
-  for (const scenario of ["absent", "late_usnat", "spa", "long_request", "unready", "flat_usnat", "flat_usca", "ack_truncated", "csp"]) await t.test(scenario, async () => {
+  for (const scenario of ["absent", "late_usnat", "spa", "spa_noop", "long_request", "unready", "flat_usnat", "flat_usca", "ack_truncated", "csp"]) await t.test(scenario, async () => {
     let blockedReceipts = 0;
     const server = createServer((req, res) => {
       if (req.url === "/blocked") blockedReceipts++;
@@ -30,7 +30,7 @@ test("fresh browser → retained bytes → completion includes empty, late GPP a
         ${["late_usnat", "unready"].includes(scenario) ? api : ""}
         ${["flat_usnat", "flat_usca"].includes(scenario) ? "window.__gpp=(command,fn)=>{if(command==='ping')fn({gppVersion:'1.1',cmpStatus:'loaded',signalStatus:'ready',applicableSections:[7],sectionList:[7],parsedSections:{usnat:{Version:1,SaleOptOutNotice:1,SharingOptOutNotice:1,SaleOptOut:1,SharingOptOut:2,Gpc:true,GpcSegmentType:1}}},true)};".replaceAll("[7]", scenario === "flat_usca" ? "[8]" : "[7]").replace("usnat:", scenario === "flat_usca" ? "usca:" : "usnat:") : ""}
         ${scenario === "csp" ? "setTimeout(() => { const s = document.createElement('script'); s.src='/blocked'; document.body.append(s); }, 50);" : ""}
-        ${scenario === "spa" ? "history.replaceState(null,'','/current?route=public');" : ""}
+        ${scenario === "spa" ? "history.replaceState(null,'','/current?route=public');" : scenario === "spa_noop" ? "history.replaceState(null,'',location.href);" : ""}
         ${scenario === "long_request" ? "fetch('/hanging');" : ""}
       </script>${scenario === "ack_truncated" ? '<div id="onetrust-banner-sdk">' + '<div role="status">Public unrelated status</div>'.repeat(40) + '</div>' : ""}</body></html>`);
     });
@@ -47,12 +47,26 @@ test("fresh browser → retained bytes → completion includes empty, late GPP a
       const packet = retainedGpcObservationSessionSchema.parse({ contractVersion: "certscore.retained-gpc-observation-session.v1", gpcArtifactSha256: b.pointer.sha256, session });
       const raw = Buffer.from(JSON.stringify(packet));
       const result = assessGpcObservationCompletion({ scanId: bundle.scanId, bundle: b, session: source(raw) });
-      assert.equal(result.completed, scenario !== "unready", JSON.stringify(result));
+      const complete = scenario !== "unready" && scenario !== "spa";
+      assert.equal(result.completed, complete, JSON.stringify(result));
       const production = buildGpcProductionObservation({ scanId: bundle.scanId, source: b });
-      assert.equal(production.status, scenario === "unready" ? "limited" : "complete", JSON.stringify(production));
+      assert.equal(production.status, complete ? "complete" : scenario === "spa" ? "unavailable" : "limited", JSON.stringify(production));
       assert.equal(production.registration.causedByGpc, "not_established");
       assert.equal(production.scoreEffect, "none");
       assert.equal(production.sourceSha256, b.pointer.sha256);
+      if (scenario === "spa") {
+        assert.equal(session.terminal, "incomplete");
+        assert.equal(session.mainDocument, null, "a changed history URL must not borrow the original request delivery");
+        assert.ok(session.requests.length > 0, "retain the original factual requests");
+        assert.ok(session.limitationKeys.includes("terminal_document_unverified"));
+        assert.ok(session.finalization?.invalidationReasons?.includes("same_document_url_changed"));
+        assert.equal(result.productionProjectable, false);
+        return;
+      }
+      if (scenario === "spa_noop") {
+        assert.equal(session.mainDocument?.requestUrlSha256, session.mainDocument?.documentUrlSha256);
+        assert.equal(session.finalization?.documentUnchanged, true);
+      }
       if (scenario === "csp") {
         assert.equal(blockedReceipts, 0, "blocked request never reaches the local server");
         assert.ok(session.requests.some(r => r.preTransmissionBlock?.reason === "csp"), JSON.stringify(session));
@@ -80,7 +94,6 @@ test("fresh browser → retained bytes → completion includes empty, late GPP a
       if (scenario === "flat_usca") { assert.equal(result.terminalStateKnown, true); assert.equal(session.semanticObservation?.gppDiagnostics?.reason, "ready_usca_flat_object"); }
       if (scenario === "flat_usnat") { assert.equal(result.terminalStateKnown, true); assert.equal(session.semanticObservation?.gppDiagnostics?.reason, "ready_usnat_flat_object"); }
       if (scenario === "ack_truncated") { assert.equal(result.acknowledgmentCaptureComplete, false); assert.equal(result.acknowledgmentObserved, false); }
-      if (scenario === "spa") assert.notEqual(session.mainDocument?.requestUrlSha256, session.mainDocument?.documentUrlSha256);
       if (scenario === "absent") assert.equal(result.terminalStateKnown, false);
       for (const defect of ["checksum", "wrong_bundle", "wrong_loader", "drops", "interval", "navigator", "aborted", "history_hash", "history_time", "limitations", "invented_request", "altered_url", "altered_time", "altered_header"]) {
         const changed = structuredClone(packet);
