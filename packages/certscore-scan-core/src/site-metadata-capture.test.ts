@@ -11,7 +11,7 @@ function fakePage(assets: string[], drift = false) {
     url: () => url,
     evaluate: async (callback: Function, patterns: string[]) => {
       const value = runInNewContext(`(${callback.toString()})(patterns)`, {
-        URL, patterns, location: { origin: "https://cms.example" },
+        URL, patterns, performance, location: { origin: "https://cms.example" },
         document: { title: "Fixture", documentElement: { lang: "en" }, baseURI: url,
           querySelectorAll: (selector: string) => selector.startsWith("meta") ? [element("Drupal 10.4.2")] : assets.map(element),
         },

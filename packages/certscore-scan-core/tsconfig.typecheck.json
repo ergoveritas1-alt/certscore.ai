@@ -5,6 +5,7 @@
     "paths": {
       "@certscore/contracts": ["packages/certscore-contracts/src"],
       "@certscore/vendor-resolver": ["packages/certscore-vendor-resolver/src"],
+      "@certscore/vendor-resolver/property-sale-sharing": ["packages/certscore-vendor-resolver/src/property-sale-sharing.ts"],
       "@certscore/review-engine": ["packages/certscore-review-engine/src"],
       "@website-signal-risk-scanner/shared": ["packages/shared/src"],
       "@website-signal-risk-scanner/web-bot-auth": ["packages/web-bot-auth/src"]

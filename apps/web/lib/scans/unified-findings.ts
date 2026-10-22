@@ -1,3 +1,6 @@
+import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
+import {retainedPotentialRisk,type CaliforniaPotentialRiskAssessment} from "./california-potential-risk-policy";
+import { gpcVendorFindings } from "./choice-vendor-findings";
 import {californiaPostRejectAssessmentSchema,type CaliforniaPostRejectAssessment} from "./california-post-reject-policy";
 import { AFTER_REJECT_SCORING_POLICY, afterRejectScoringNarrative, readAfterRejectScoringAssessment, type AfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { FORM_DESTINATION_FINDING_ID, formDestinationProjectionSchema, type FormDestinationProjection } from "@certscore/contracts";
@@ -162,10 +165,12 @@ export type UnifiedFindingDetails =
       runtimeEvidenceArtifacts?: string[];
       vendors?: string[];
     }
+  | { family:"california_collection_review"; assessments:CaliforniaPotentialRiskAssessment[]; }
   | { family:"california_post_reject";assessment:CaliforniaPostRejectAssessment; }
   | {
       family: "privacy_signal";
       kind: "gpc_response" | "gpp_propagation_inconsistency";
+      vendorFindings?: ReturnType<typeof gpcVendorFindings>;
       activityComparison?: import("@certscore/contracts").GpcActivityComparison;
       assessment: GpcResponseAssessment;
     }
@@ -1756,6 +1761,7 @@ function getBestObservedValue(values: Array<string | null | undefined>) {
 }
 
 function getFindingFamily(id: string): UnifiedFindingDetails["family"] {
+  if(id==="california_collection_review")return "california_collection_review";
   if(id==="california_post_reject_collection")return "california_post_reject";
   if (id === "gpc_response" || id === "gpp_propagation_inconsistency") {
     return "privacy_signal";
@@ -1904,6 +1910,10 @@ function buildUnifiedFindingDetails(input: {
     } satisfies UnifiedFindingDetails;
   }
 
+  if(family === "california_collection_review") {
+    const assessments=retainedPotentialRisk(input.fallbackEvidence);
+    return assessments.length?{family,assessments}:undefined;
+  }
   if(family === "california_post_reject") {
     const a=californiaPostRejectAssessmentSchema.safeParse(input.fallbackEvidence?.californiaPostRejectAssessment);
     return a.success?{family,assessment:a.data}:undefined;
@@ -1919,6 +1929,7 @@ function buildUnifiedFindingDetails(input: {
       family,
       kind: input.findingId === "gpp_propagation_inconsistency" ? "gpp_propagation_inconsistency" : "gpc_response",
       assessment: parsedAssessment.data,
+      ...(input.findingId === "gpc_response" ? {vendorFindings: gpcVendorFindings(parsedAssessment.data)} : {}),
       activityComparison: readGpcActivityComparison(input.fallbackEvidence?.gpcActivityComparison, parsedAssessment.data),
     } satisfies UnifiedFindingDetails;
   }
@@ -5205,6 +5216,9 @@ const PACKETIZED_FINDING_SUPPORT_RULES: PacketizedFindingSupportRule[] = [
           sourceRef.key === "privacy.do_not_sell_link_present"
       )
   },
+  {findingId:"california_collection_review",policyPageType:null,
+    rationale:"Source-bound collection under privacy-choice conditions warrants purpose review.",
+    matchesLegacySource:(packet)=>packet.sourceRefs.some(ref=>ref.kind==="signal"&&ref.source==="runtime_artifact_signal"&&ref.key==="privacy.california_collection_review")},
   {findingId:"california_post_reject_collection",policyPageType:null,
     rationale:"Verified advertising collection after a scope-appropriate Reject click.",
     matchesLegacySource:(packet)=>packet.sourceRefs.some(ref=>ref.kind==="signal"&&ref.source==="runtime_artifact_signal"&&ref.key==="privacy.california_post_reject_collection")},
@@ -5882,6 +5896,7 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Review third-party cookie controls so reject meaningfully reduces non-essential cookie activity after the interaction completes.",
     whyThisMatters: "Persistent third-party cookies after reject can signal that consent controls are not enforcing the promised outcome."
   },
+  california_collection_review: {suggestedFix:"Review effective vendor settings, processing arrangements, sale/sharing purposes and privacy-choice enforcement.",whyThisMatters:"Observed collection under privacy-choice conditions warrants investigation when recipient purpose remains unresolved. It does not establish a legal violation."},
   california_post_reject_collection: {suggestedFix:"Review the recorded advertising recipients and enforce the visitor’s cookie-tracking rejection across those integrations.",whyThisMatters:"Advertising collection after a cookie-tracking rejection can indicate privacy-choice enforcement risk; recipient processing and legal applicability remain unverified."},
   gpp_propagation_inconsistency: {
     suggestedFix: "Review the CMP section inventory and ad adapters so applicable GPP payloads reach the recorded recipients consistently.",
@@ -6226,7 +6241,7 @@ function buildPresentationCopy(
   if (["post_refusal_non_essential_activity", "post_reject_click_tracking"].includes(packet.unifiedFindingId)) {
     const assessment=readAfterRejectScoringAssessment(packet.concernContext?.afterRejectScoringAssessment);
     const narrative = afterRejectScoringNarrative(assessment);
-    if (narrative && assessment?.policyVersion===AFTER_REJECT_SCORING_POLICY)
+    if (narrative && isRejectPresencePolicy(assessment?.policyVersion))
       return {...base,findingName:narrative.title,suggestedFix:narrative.suggestedFix,whyThisMatters:narrative.whyThisMatters};
     const plan = webmasterRemediation("post-refusal-review");
     if (narrative) return { ...base, suggestedFix: plan ? webmasterRemediationText(plan) : narrative.suggestedFix, whyThisMatters: narrative.whyThisMatters,
@@ -6922,7 +6937,7 @@ function createInitialUnifiedFindingPacket(
   const scoring=readAfterRejectScoringAssessment(candidate.normalizedConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment);
   return {
     unifiedFindingId: definition.id,
-    title: definition.id === "post_refusal_non_essential_activity" || definition.id === "post_reject_click_tracking" && scoring?.policyVersion===AFTER_REJECT_SCORING_POLICY
+    title: definition.id === "post_refusal_non_essential_activity" || definition.id === "post_reject_click_tracking" && isRejectPresencePolicy(scoring?.policyVersion)
       ? afterRejectScoringNarrative(readAfterRejectScoringAssessment(candidate.normalizedConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment))?.title ?? definition.label
       : definition.label,
     severity: candidate.severity,

@@ -118,3 +118,7 @@ size, model usage and retention are unchanged. Estimated incremental bounded
 decode CPU and metadata storage is below $0.50/month at 100,000 scans. The
 authorized single Ovid rerun is a one-run cooldown exception; it does not clear
 permanent target holds or add Ovid to rotating target selection.
+
+## October 22 matching identifiers
+
+The owner approved `bounded_ca_request_proof.v3` for LinkedIn root `hem`, Meta pixel `ud[em]`/`ud[ph]` and bounded LinkedIn field dispositions. See [vendor findings and minimum evidence](choice-vendor-findings-policy.md). Existing budgets, raw-value exclusion, historical proof versions and California recipient deduplication remain unchanged. This is local implementation only; no deployment.

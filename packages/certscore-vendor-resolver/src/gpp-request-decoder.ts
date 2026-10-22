@@ -115,6 +115,14 @@ export function decodeGppRequest(q: URLSearchParams, context: GppRequestContext 
   // A payload failing to propagate GPC cannot neutralize independently verified
   // identified collection. This diagnostic alone never creates a deduction.
   if (context.gpcDelivered === true && result.sections.some(section => section.gpc === false)) reason("gpc_delivery_disagrees");
+  return applyGppRequestCmpContext(result,context);
+}
+
+/** Reuse exact-time comparison for already-decoded, hash-bound request proof. */
+export function applyGppRequestCmpContext(input:GpcRequestGpp,context:GppRequestContext):GpcRequestGpp {
+  const result=structuredClone(input);
+  if(result.status!=="decoded")return result;
+  const reason=(code:GpcRequestGpp["reasons"][number])=>{if(!result.reasons.includes(code))result.reasons.push(code);};
   const cmp = context.cmp, selected = result.sections.find(section => section.sectionId === cmp?.sectionId);
   if (cmp && selected && context.requestAtMs !== undefined) {
     if (cmp.capturedAtMs < context.requestAtMs) result.cmpComparison = "earlier_readback";

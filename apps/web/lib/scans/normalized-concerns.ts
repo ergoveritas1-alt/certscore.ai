@@ -1,3 +1,5 @@
+import {retainedPotentialRisk, CA_POTENTIAL_RISK_FINDING} from "./california-potential-risk-policy";
+import { gpcVendorFindingSummary } from "./choice-vendor-findings";
 import {retainedCaliforniaPostReject} from "./california-post-reject-policy";
 import {deriveGppPropagationPolicy} from "./gpp-propagation-policy";
 import { AFTER_REJECT_SCORING_POLICY, afterRejectScoringNarrative, retainedAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
@@ -3783,14 +3785,39 @@ function buildConsentControlInventoryConcerns(
   ];
 }
 
+function buildCaliforniaCollectionReviewConcerns(runtimeArtifacts:Record<string,unknown>|null|undefined,domainContext?:ScanDomainContext) {
+ const assessments=retainedPotentialRisk(runtimeArtifacts);
+ const rows=assessments.flatMap(a=>a.rows.filter(r=>r.treatment==="potential_risk").map(r=>({...r,path:a.path,sourceSha256:a.sourceSha256})));
+ if(!rows.length)return [];
+ const refs=[...new Set(rows.flatMap(r=>[`choice-source:sha256:${r.sourceSha256}`,`request:${r.evidenceId}`]))];
+ const title="Collection under privacy-choice conditions — review recommended";
+ const signalCopy:Record<string,string>={google_npa:"non-personalized ads declared",processing_declarations_not_retained:"processing declarations unavailable",
+  gpp_unresolved:"GPP interpretation unresolved",privacy_signal_invalid:"invalid privacy signal",privacy_signal_conflict:"conflicting privacy signals"};
+ const groups=rows.filter((r,i)=>rows.findIndex(x=>x.entityId===r.entityId&&x.path===r.path)===i);
+ const observations=groups.slice(0,16).map(r=>{
+   const matched=rows.filter(x=>x.entityId===r.entityId&&x.path===r.path),first=Math.min(...matched.map(x=>x.msFromAnchor));
+   const signals=[...new Set(matched.flatMap(x=>x.processingSignals))].map(s=>signalCopy[s]??s.replaceAll("_"," "));
+   return `${r.entity} (${r.purpose}): ${matched.length} retained request${matched.length===1?"":"s"}, first at +${first} ms ${r.path==="gpc"?"from GPC visit start":"after the Reject click"}${signals.length?`; ${signals.join(", ")}`:""}`;
+ });
+ return [buildConcernFromSharedInput({categoryId:"privacy",domainContext,title,
+  description:`${observations.join("; ")}. Collection was observed; the sale/sharing purpose of these specific requests remains unresolved. Review recipient purposes, effective settings, processing arrangements and privacy-choice enforcement. A cookie Reject click does not establish a California sale/sharing opt-out. These observations do not establish a legal violation.`,
+  evidence:refs,observedValue:"observed",originKey:`privacy.${CA_POTENTIAL_RISK_FINDING}`,originType:"runtime_artifact",
+  rawEvidence:{californiaGpcPotentialRiskAssessment:runtimeArtifacts?.californiaGpcPotentialRiskAssessment,
+    californiaRejectPotentialRiskAssessment:runtimeArtifacts?.californiaRejectPotentialRiskAssessment,gpcResponseAssessment:runtimeArtifacts?.gpcResponseAssessment,
+    postRefusalEvidenceProjection:runtimeArtifacts?.postRefusalEvidenceProjection,runtimeEvidenceArtifacts:refs},
+  severity:"low",signalKey:`privacy.${CA_POTENTIAL_RISK_FINDING}`,signalLabel:title,signalSource:"runtime_artifact_signal",sourceType:"signal"})];
+}
+
 function buildCaliforniaPostRejectConcerns(runtimeArtifacts:Record<string,unknown>|null|undefined,domainContext?:ScanDomainContext) {
  const a=retainedCaliforniaPostReject(runtimeArtifacts);if(!a || a.status!=="qualified_collection")return [];
- const refs=[`post-refusal-packet:sha256:${a.sourcePacketSha256}`,...a.requests.filter(r=>r.reason==="qualified_collection").map(r=>`request:${r.requestId}`)];
- return [buildConcernFromSharedInput({categoryId:"privacy",domainContext,title:"Advertising collection after Reject",
-  description:`Qualifying advertising or identity collection was observed after a cookie-tracking rejection: ${a.requests.filter(r=>r.reason==="qualified_collection").map(r=>`${r.entity} at +${r.msAfterClick} ms`).join("; ")}. This observation does not determine legal sale/sharing or recipient use.`,
+ const declared=a.requests.some(r=>r.reason==="qualified_collection"&&r.propertyEvidence);
+ const title=declared?"Sale/sharing-related collection after Reject":"Advertising collection after Reject";
+ const refs=[`post-refusal-packet:sha256:${a.sourcePacketSha256}`,...a.requests.filter(r=>r.reason==="qualified_collection").flatMap(r=>[`request:${r.requestId}`,...(r.propertyEvidence?[`policy-source:sha256:${r.propertyEvidence.sourceBundleSha256}`,`property-declaration:sha256:${r.propertyEvidence.declarationId}`]:[])])];
+ return [buildConcernFromSharedInput({categoryId:"privacy",domainContext,title,
+  description:`${declared?"Identified collection with property-specific sale/sharing or advertising-audience declarations, or independently qualifying advertising/identity collection":"Qualifying advertising or identity collection"} was observed after a cookie-tracking rejection: ${a.requests.filter(r=>r.reason==="qualified_collection").map(r=>`${r.entity} at +${r.msAfterClick} ms`).join("; ")}. This observation does not determine legal sale/sharing or recipient use.`,
   evidence:refs,observedValue:"observed",originKey:"privacy.california_post_reject_collection",originType:"runtime_artifact",
   rawEvidence:{californiaPostRejectAssessment:a,postRefusalEvidenceProjection:runtimeArtifacts?.postRefusalEvidenceProjection,runtimeEvidenceArtifacts:refs},
-  severity:"low",signalKey:"privacy.california_post_reject_collection",signalLabel:"Advertising collection after Reject",signalSource:"runtime_artifact_signal",sourceType:"signal"})];
+  severity:"low",signalKey:"privacy.california_post_reject_collection",signalLabel:title,signalSource:"runtime_artifact_signal",sourceType:"signal"})];
 }
 
 function buildGppPropagationConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined, domainContext?: ScanDomainContext) {
@@ -3827,11 +3854,13 @@ function buildGpcResponseConcerns(
     assessment.comparison.baselineArtifact?.uri ?? "",
     assessment.comparison.gpcArtifact?.uri ?? "",
     ...assessment.comparison.evidenceRefs,
+    ...(assessment.contractVersion==="certscore.gpc-response-assessment.v3" && assessment.observation.requests.propertySaleSharingSource
+      ? [`policy-source:sha256:${assessment.observation.requests.propertySaleSharingSource.sourceBundleSha256}`,...assessment.observation.requests.propertySaleSharingSource.declarations.map(d=>`property-declaration:sha256:${d.declarationId}`)] : []),
   ]).slice(0, 32);
   return [buildConcernFromSharedInput({
     categoryId: "privacy",
     description: assessment.contractVersion === "certscore.gpc-response-assessment.v3"
-      ? `${describeGpcBoundedObservation(assessment.observation)} Paired activity comparison: ${assessment.status.replaceAll("_", " ")}.`
+      ? `${gpcVendorFindingSummary(assessment)} ${describeGpcBoundedObservation(assessment.observation)} Paired activity comparison: ${assessment.status.replaceAll("_", " ")}.`
       : assessment.contractVersion === "certscore.gpc-response-assessment.v2"
       ? assessment.status === "responsive"
         ? "Less canonically classified tracking activity was observed within the matched passive GPC window, with verified signal delivery. This bounded comparison does not establish causation or legal compliance."
@@ -4669,6 +4698,7 @@ export function buildNormalizedConcerns(input: {
     ...buildGpcResponseConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildGppPropagationConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildCaliforniaPostRejectConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildCaliforniaCollectionReviewConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentDismissWithoutRejectConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentVisualProminenceConcerns(input.runtimeArtifacts, input.domainContext),

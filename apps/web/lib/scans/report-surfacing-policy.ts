@@ -283,6 +283,7 @@ const CONSENT_TRACKING_IDS = [
   "gpc_response",
   "gpp_propagation_inconsistency",
   "california_post_reject_collection",
+  "california_collection_review",
   "weak_cookie_security_attributes",
   "cookie_retention_lifetime_review_signal",
   "consent_surface_required_deeper_sweep",
@@ -1835,6 +1836,12 @@ function overrideDecision(
 
 function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   const { packet, decision } = context;
+  if(packet.unifiedFindingId==="california_collection_review") {
+    const eligible=packet.details?.family==="california_collection_review"&&packet.details.assessments.some(a=>a.rows.some(r=>r.treatment==="potential_risk"))&&
+      packet.concernContext?.promotionEligibilities.includes("eligible")&&packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
+    overrideDecision(decision,{state:eligible?"review":"suppressed",lane:eligible?"main":"suppressed",tier:"support",
+      reason:eligible?"Verified collection; sale/sharing purpose requires review.":"Collection review evidence is insufficient.",ruleId:"evidence.context.keep_review"});return;
+  }
   if(packet.unifiedFindingId===CALIFORNIA_POST_REJECT_FINDING) {
     const eligible=packet.details?.family==="california_post_reject"&&packet.details.assessment.status==="qualified_collection"&&
       packet.concernContext?.promotionEligibilities.includes("eligible")&&packet.concernContext?.externalSurfacingEligibilities.includes("eligible");

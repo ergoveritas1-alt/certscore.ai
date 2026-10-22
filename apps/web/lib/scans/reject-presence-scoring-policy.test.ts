@@ -29,6 +29,26 @@ function canonical(p:ReturnType<typeof afterRejectClickProjection>){
  const rows=deriveGdprEprivacyCoverageChecklist({coverageOutcomes,projectedFindings:[],unifiedFindings,scanCompleted:true,coverageLimited:false}).filter(r=>r.id==="post_reject_tracking_reduction");
  return{retained,normalizedConcerns,unifiedFindings,rows};
 }
+test('Hotjar session and user cookies plus its service deduplicate through the persisted EU Reject pipeline',()=>{
+ const p=cookieOnlyAfterReject(),cookie=p.scoringEvidence!.postActionStorage[0]!;
+ const cookies=['_hjSession_1473729','_hjSessionUser_1473729'].map((name,i)=>({...cookie,name,purpose:'unknown' as const,nonEssential:false,identityHash:String(i+1).repeat(64)}));
+ p.scoringEvidence!.postActionStorage=cookies;p.afterActionStorage=structuredClone(cookies);
+ const service=afterRejectClickProjection('measurement');
+ for(const r of [...service.scoringEvidence!.requests,...service.afterActionRequests!]){
+  r.sanitizedUrl='https://events.hotjar.io/';r.hostname='events.hotjar.io';r.vendor='Hotjar';r.purpose='session_replay';r.measurementEvidence=undefined;
+ }
+ p.scoringEvidence!.requests=service.scoringEvidence!.requests;p.afterActionRequests=service.afterActionRequests;
+ p.afterActionCapture!.requestIds=service.afterActionCapture!.requestIds;p.afterActionCapture!.requestAncestry=service.afterActionCapture!.requestAncestry;
+ const result=canonical(postRefusalReportProjectionSchema.parse(p));
+ assert.equal(result.retained.afterRejectScoringAssessment?.entityEvidence?.entities.length,1);
+ assert.equal(result.retained.afterRejectScoringAssessment?.deductionPoints,15);
+ assert.equal(deriveGdprEprivacyDeductionBreakdown(result.rows).reduce((n,r)=>n+r.deductionPoints,0),15);
+ const legacy=structuredClone(p);legacy.scoringEvidence!.requests=[];legacy.afterActionRequests=[];
+ legacy.afterActionCapture!.requestIds=[];legacy.afterActionCapture!.requestAncestry=[];
+ assert.equal(assessAfterRejectScoring(legacy,'after_reject_nonessential_presence.v1')?.deductionPoints,0);
+ const failed=structuredClone(p);failed.interactionDiagnostics!.click.outcome='not_attempted';
+ assert.equal(assessAfterRejectScoring(failed)?.deductionPoints??0,0);
+});
 test("Admin Reject count deduplicates the same eligible entity across cookies and service requests",()=>{
  const p=afterRejectClickProjection("measurement"),cookie=cookieOnlyAfterReject();
  p.scoringEvidence!.preActionStorage=cookie.scoringEvidence!.preActionStorage;
@@ -68,7 +88,7 @@ test("unknown/essential evidence, pre-click facts, missing source and failed pat
   p=>{p.afterActionCapture!.stopReason="target_changed";},p=>{p.captureCoverage!.requestsDroppedAfterAction=1;},
   p=>{p.interactionDiagnostics!.click.outcome="not_attempted";},p=>{p.scoringEvidence!.postActionStorage=[];p.afterActionStorage=[];},
   p=>{p.scoringEvidence!.postActionStorage[0]!.nonEssential=false;p.afterActionStorage![0]!.nonEssential=false;},
-  p=>{p.scoringEvidence!.postActionStorage[0]!.purpose="unknown";p.afterActionStorage![0]!.purpose="unknown";},
+  p=>{p.scoringEvidence!.postActionStorage[0]!.purpose="unknown";p.scoringEvidence!.postActionStorage[0]!.name="unclassified_cookie";p.afterActionStorage=structuredClone(p.scoringEvidence!.postActionStorage);},
   p=>{p.scoringEvidence!.postActionCapturedAtMs=100;},
  ] as Array<(p:ReturnType<typeof cookieOnlyAfterReject>)=>void>){const p=cookieOnlyAfterReject();change(p);assert.equal(assessAfterRejectScoring(p)?.deductionPoints??0,0);}
  const request=afterRejectClickProjection("measurement");request.afterActionCapture!.requestAncestry![0]!.rootStartedAtMs=100;
@@ -130,4 +150,21 @@ test('fresh domain-scoped CreativeCDN cookie classification survives persistence
  assert.ok(result.unifiedFindings.some(f=>f.unifiedFindingId==='post_reject_click_tracking'));
  assert.equal(score.entityEvidence?.observations[0]?.kind,'cookie_snapshot');
  for(const hostname of ['example.test','creativecdn.com.evil.test'])assert.equal(resolveCanonicalActionStoragePurpose({storageType:'cookie',name:'ts',hostname}).nonEssential,false);
+});
+
+test('vendor coverage reclassifies retained unknown cookies without altering source or double-counting one owner',()=>{
+ const p=cookieOnlyAfterReject();
+ p.scoringEvidence!.postActionStorage=['_clck','_clsk','hubspotutk'].map((name,i)=>({...p.scoringEvidence!.postActionStorage[0]!,name,identityHash:String(i+1).repeat(64),purpose:'unknown' as const,nonEssential:false}));
+ p.afterActionStorage=structuredClone(p.scoringEvidence!.postActionStorage);
+ const original=JSON.stringify(p),old=assessAfterRejectScoring(p,'after_reject_nonessential_presence.v1')!,current=assessAfterRejectScoring(p)!;
+ assert.equal(old.deductionPoints,0);assert.equal(current.deductionPoints,20);assert.equal(current.entityEvidence?.entities.length,2);
+ const c=canonical(p);assert.equal(retainedAfterRejectScoringAssessment(c.retained)?.deductionPoints,20);
+ assert.equal(deriveGdprEprivacyDeductionBreakdown(c.rows,'gdpr-eprivacy-posture.v22').length,0,'new evidence interpretation does not rewrite v22');
+ assert.equal(JSON.stringify(p),original);
+});
+test('historical presence assessments retain their evidence semantics and version on read',()=>{
+ const p=cookieOnlyAfterReject(),old=assessAfterRejectScoring(p,'after_reject_nonessential_presence.v1')!;
+ const runtime={postRefusalEvidenceProjection:p,afterRejectScoringAssessment:old};
+ assert.equal(retainedAfterRejectScoringAssessment(runtime)?.policyVersion,'after_reject_nonessential_presence.v1');
+ assert.equal(retainedAfterRejectScoringAssessment(runtime)?.deductionPoints,15);
 });

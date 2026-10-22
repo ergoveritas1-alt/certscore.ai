@@ -2111,6 +2111,8 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     [],
     []
   ),
+  defineReportSignal("runtime_artifact_signal", "privacy.california_collection_review",
+    "Collection under privacy-choice conditions — review recommended", "third_party_network_cookie_surface", [], []),
   defineReportSignal("runtime_artifact_signal", "privacy.california_post_reject_collection",
     "Advertising collection after Reject", "third_party_network_cookie_surface", [], []),
   defineReportSignal("runtime_artifact_signal", "privacy.gpp_propagation_inconsistency",
@@ -3061,6 +3063,11 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "third_party_network_cookie_surface",
     signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.gpc_response" }],
     aliases: ["No observable GPC response"]
+  }),
+  defineReportUnifiedFinding({
+    id:"california_collection_review",label:"Collection under privacy-choice conditions — review recommended",
+    owner:"third_party_network_cookie_surface",
+    signalMappings:[{source:"runtime_artifact_signal",key:"privacy.california_collection_review"}]
   }),
   defineReportUnifiedFinding({
     id:"california_post_reject_collection",label:"Advertising collection after Reject",

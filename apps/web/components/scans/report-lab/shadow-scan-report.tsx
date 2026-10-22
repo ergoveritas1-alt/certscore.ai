@@ -1464,10 +1464,11 @@ export function GpcEvidenceIndexCard({ projection, california = false }: { proje
       <div className="mt-4 space-y-3 text-xs leading-5 text-zinc-600">
         {activity ? <p>{activity}</p> : null}
         {recipients.length ? <div>
-          <p className="font-semibold text-zinc-800">Recipients with verified advertising collection</p>
+          <p className="font-semibold text-zinc-800">Advertising recipients observed with GPC</p>
           <ul className="mt-1 space-y-1">
             {recipients.map(recipient => <li key={recipient.entityId}>
               <span className="font-semibold">{recipient.label}</span> · {recipient.count} collection request{recipient.count === 1 ? "" : "s"}
+              {recipient.identifiedCount > 0 ? <span className="block">{recipient.identifiedCount} identified advertising, audience or synchronization request{recipient.identifiedCount === 1 ? "" : "s"} with GPC enabled</span> : <span className="block">Retained advertising requests for review</span>}
               {recipient.firstMs !== undefined ? <> · {recipient.firstMs === recipient.lastMs ? "observed" : "first observed"} at {(recipient.firstMs / 1000).toFixed(2)} s{recipient.lastMs !== recipient.firstMs ? `; last at ${(recipient.lastMs! / 1000).toFixed(2)} s` : ""} after GPC visit start</> : null}
             </li>)}
           </ul>

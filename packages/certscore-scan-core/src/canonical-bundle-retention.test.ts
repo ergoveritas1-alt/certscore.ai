@@ -13,6 +13,36 @@ import { RuntimeEvidenceGraphBuilder } from "./runtime-evidence-graph.js";
 import { compactCanonicalEvidenceBundleForRetention, summarizeSiteResourceSizes } from "./index.js";
 import { getScanProfile } from "./profiles.js";
 import { gpcImpactRequestSetHash } from "./gpc-impact-capture.js";
+import { resolveVendorObservations } from "@certscore/vendor-resolver";
+
+test("repeated collector traffic cannot evict another recipient's successful request/response pair", () => {
+  const bundle = oversizedGoogleLikeBundle();
+  for (const [i, event] of bundle.networkEvents.entries()) {
+    const meta = i === 90;
+    const url = meta ? "https://www.facebook.com/tr/?id=fixture&ev=PageView" : `https://www.google-analytics.com/g/collect?cid=fixture-${i}`;
+    Object.assign(event, { url, requestUrl: url, hostname: new URL(url).hostname, requestHostname: new URL(url).hostname,
+      collectionEndpointObserved: true, thirdParty: true, firstParty: false, resourceType: "fetch", isMainFrame: false,
+      cookieNamesSent: meta ? [] : ["_ga"], hasIdentifierLikeParameters: !meta });
+    Object.assign(bundle.networkResponseEvents[i]!, { url, responseUrl: url, status: 204, cookieNamesSet: meta ? [] : ["_ga"] });
+  }
+  bundle.normalizedVendorObservations = resolveVendorObservations(bundle.networkEvents.map(e => ({ type: "request" as const,
+    url: e.requestUrl, evidenceId: e.eventId, sourceScanner: "pre_consent_runtime", matchSource: "network_request" as const })));
+  const original = structuredClone(bundle.networkEvents[90]!);
+  const result = compactCanonicalEvidenceBundleForRetention(bundle, 1);
+  assert.ok(result.networkEvents.some(e => e.eventId === original.eventId), "Keep the distinct recipient request");
+  assert.ok(result.networkResponseEvents.some(e => e.requestId === original.requestId && e.status === 204), "Keep its exact observed response");
+  assert.ok(result.networkEvents.length <= 80 && result.networkResponseEvents.length <= 60);
+  assert.deepEqual(bundle.networkEvents[90], original, "Retention cannot mutate the source");
+  for (const mode of ["missing", "failed", "ambiguous"] as const) {
+    const negative = structuredClone(bundle);
+    if (mode === "missing") delete negative.networkResponseEvents[90]!.status;
+    if (mode === "failed") negative.networkResponseEvents[90]!.status = 500;
+    if (mode === "ambiguous") negative.networkResponseEvents.push({ ...negative.networkResponseEvents[90]!, eventId: "duplicate_response", status: 500 });
+    const retained = compactCanonicalEvidenceBundleForRetention(negative, 1);
+    assert.equal(retained.networkEvents.some(e => e.eventId === original.eventId), false, `${mode} response proof cannot elevate a recipient over supported pairs`);
+    for (const response of retained.networkResponseEvents) assert.ok(negative.networkResponseEvents.some(e => e.eventId === response.eventId && e.status === response.status));
+  }
+});
 
 test("retention restores complete small GPC windows without displacing priority evidence", () => {
   const bundle = oversizedGoogleLikeBundle();

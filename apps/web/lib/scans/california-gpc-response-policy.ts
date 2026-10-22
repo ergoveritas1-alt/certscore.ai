@@ -1,7 +1,10 @@
 import { gpcResponseAssessmentSchema, gpcPolicyCollectionEvidenceIds, type GpcResponseAssessment } from "@certscore/contracts";
 import { californiaChoiceEnforcementPoints, type CaliforniaChoiceEnforcementPoints } from "./california-choice-enforcement-policy";
 
-export const CALIFORNIA_GPC_RESPONSE_POLICY_VERSION = "california-gpc-response.v7-gpp" as const;
+const GPP_POLICY_VERSION = "california-gpc-response.v7-gpp" as const;
+const IDENTIFIER_POLICY_VERSION="california-gpc-response.v8-identifiers" as const;
+const QUALIFIED_DISCLOSURE_POLICY_VERSION = "california-gpc-response.v9-qualified-disclosure" as const;
+export const CALIFORNIA_GPC_RESPONSE_POLICY_VERSION = "california-gpc-response.v10-property-bound" as const;
 const PRE_GPP_POLICY_VERSION = "california-gpc-response.v6-sale-sharing" as const;
 const HISTORICAL_RECIPIENT_POLICY_VERSION = "california-gpc-response.v5-recipients" as const;
 export const CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS = 15 as const;
@@ -20,7 +23,7 @@ export type CaliforniaGpcResponsePolicyAssessment = {
     suppressedUnderGpc: string[];
   };
   policyKey: typeof CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY;
-  policyVersion: typeof CALIFORNIA_GPC_RESPONSE_POLICY_VERSION | typeof PRE_GPP_POLICY_VERSION | typeof HISTORICAL_RECIPIENT_POLICY_VERSION | "california-gpc-response.v1";
+  policyVersion: typeof CALIFORNIA_GPC_RESPONSE_POLICY_VERSION | typeof QUALIFIED_DISCLOSURE_POLICY_VERSION | typeof IDENTIFIER_POLICY_VERSION | typeof GPP_POLICY_VERSION | typeof PRE_GPP_POLICY_VERSION | typeof HISTORICAL_RECIPIENT_POLICY_VERSION | "california-gpc-response.v1";
   reasonCode:
     | "gpc_customer_policy_suspended"
     | "verified_gpc_advertising_collection"
@@ -160,7 +163,10 @@ export function deriveCaliforniaGpcResponsePolicy(assessment: unknown): Californ
   const recipientIds = collection ? [...new Set(o!.requests.advertisingCollectionRecipients?.rows
     .filter(row => collectionEvidenceIds.includes(row.evidenceId)).map(row => row.entityId) ?? [])].sort() : [];
   return {policyKey:CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY,
-    policyVersion:o?.requests.advertisingCollectionQualification?.policyVersion === "gpc_sale_sharing_evidence.v2" ? CALIFORNIA_GPC_RESPONSE_POLICY_VERSION :
+    policyVersion:o?.requests.advertisingCollectionQualification?.policyVersion === "gpc_sale_sharing_evidence.v5" ? CALIFORNIA_GPC_RESPONSE_POLICY_VERSION :
+      o?.requests.advertisingCollectionQualification?.policyVersion === "gpc_sale_sharing_evidence.v4" ? QUALIFIED_DISCLOSURE_POLICY_VERSION :
+      o?.requests.advertisingCollectionQualification?.policyVersion === "gpc_sale_sharing_evidence.v3" ? IDENTIFIER_POLICY_VERSION :
+      o?.requests.advertisingCollectionQualification?.policyVersion === "gpc_sale_sharing_evidence.v2" ? GPP_POLICY_VERSION :
       o?.requests.advertisingCollectionQualification ? PRE_GPP_POLICY_VERSION : HISTORICAL_RECIPIENT_POLICY_VERSION,
     recipientIds,
     assessmentStatus:eligible?"review_signal":"needs_evidence",deductionPoints:californiaChoiceEnforcementPoints(recipientIds, eligible),

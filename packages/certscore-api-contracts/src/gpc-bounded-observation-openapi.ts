@@ -250,6 +250,439 @@ export const gpcBoundedObservationOpenApi = {
           "type": "integer",
           "minimum": 0
         },
+        "collectionReview": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "policyVersion",
+            "rows"
+          ],
+          "properties": {
+            "policyVersion": {
+              "const": "gpc_collection_review.v1",
+              "type": "string"
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "evidenceId",
+                  "entityId",
+                  "label",
+                  "observedAtMs",
+                  "purpose",
+                  "httpStatus",
+                  "qualification"
+                ],
+                "properties": {
+                  "evidenceId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "entityId": {
+                    "type": "string",
+                    "pattern": "^ent_[a-f0-9]{12}$"
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "observedAtMs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "enum": [
+                      "analytics",
+                      "advertising",
+                      "marketing",
+                      "session_replay"
+                    ]
+                  },
+                  "httpStatus": {
+                    "type": "integer",
+                    "minimum": 200,
+                    "maximum": 399
+                  },
+                  "qualification": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "activity",
+                      "basis",
+                      "processingSignals"
+                    ],
+                    "properties": {
+                      "policyVersion": {
+                        "type": "string",
+                        "enum": [
+                          "ca_sale_sharing_qualification.v2",
+                          "ca_sale_sharing_qualification.v3"
+                        ]
+                      },
+                      "activity": {
+                        "type": "string",
+                        "enum": [
+                          "identity_sync",
+                          "audience_collection",
+                          "identified_advertising_collection",
+                          "declared_sale_sharing_collection",
+                          "unresolved"
+                        ]
+                      },
+                      "basis": {
+                        "type": "string",
+                        "enum": [
+                          "endpoint_or_identity_unresolved",
+                          "google_advertising_feature_identifier",
+                          "google_cookie_matching",
+                          "google_remarketing_audience",
+                          "google_advertising_conversion_identifier",
+                          "linkedin_hashed_email",
+                          "meta_advanced_matching_identifier",
+                          "linkedin_ads_identifier",
+                          "meta_pixel_identifier",
+                          "tiktok_pixel_identifier",
+                          "pinterest_tag_identifier",
+                          "snap_pixel_identifier",
+                          "reddit_pixel_identifier",
+                          "microsoft_uet_identifier",
+                          "adobe_identity_mapping",
+                          "criteo_first_party_identity",
+                          "amazon_identity_sync",
+                          "pubmatic_cookie_sync",
+                          "trade_desk_identity_mapping",
+                          "lotame_profile_mapping",
+                          "openx_identity_resolution",
+                          "magnite_bid_user_identifier",
+                          "owner_property_sale",
+                          "owner_property_sharing",
+                          "owner_property_audience"
+                        ]
+                      },
+                      "processingSignals": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "google_rdp",
+                            "google_npa",
+                            "google_limited_ads",
+                            "meta_ldu",
+                            "us_privacy_sale_opt_out",
+                            "gpp_unresolved",
+                            "privacy_signal_invalid",
+                            "gpp_opt_out",
+                            "gpp_service_provider",
+                            "privacy_signal_conflict"
+                          ]
+                        },
+                        "maxItems": 10
+                      },
+                      "gpp": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "policyVersion",
+                          "decoderVersion",
+                          "status",
+                          "sectionIds",
+                          "applicableSections",
+                          "sections",
+                          "requestSignals",
+                          "cmpComparison",
+                          "reasons"
+                        ],
+                        "properties": {
+                          "policyVersion": {
+                            "const": "gpp_request_decode.v1",
+                            "type": "string"
+                          },
+                          "decoderVersion": {
+                            "const": "@iabgpp/cmpapi@3.2.0",
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "not_present",
+                              "decoded",
+                              "invalid",
+                              "unsupported",
+                              "limited"
+                            ]
+                          },
+                          "sectionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 63
+                            },
+                            "maxItems": 32
+                          },
+                          "applicableSections": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -1,
+                              "maximum": 63
+                            },
+                            "maxItems": 8
+                          },
+                          "sections": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "sectionId",
+                                "version",
+                                "saleNotice",
+                                "sharingNotice",
+                                "saleOptOut",
+                                "sharingOptOut",
+                                "targetedAdvertisingOptOut",
+                                "serviceProviderMode",
+                                "gpc"
+                              ],
+                              "properties": {
+                                "sectionId": {
+                                  "anyOf": [
+                                    {
+                                      "const": 7,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": 8,
+                                      "type": "number"
+                                    }
+                                  ]
+                                },
+                                "version": {
+                                  "anyOf": [
+                                    {
+                                      "const": 1,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": 2,
+                                      "type": "number"
+                                    }
+                                  ]
+                                },
+                                "saleNotice": {
+                                  "anyOf": [
+                                    {
+                                      "const": 0,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": 1,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": 2,
+                                      "type": "number"
+                                    }
+                                  ]
+                                },
+                                "sharingNotice": {
+                                  "anyOf": [
+                                    {
+                                      "const": 0,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": 1,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": 2,
+                                      "type": "number"
+                                    }
+                                  ]
+                                },
+                                "saleOptOut": {
+                                  "anyOf": [
+                                    {
+                                      "const": 0,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": 1,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": 2,
+                                      "type": "number"
+                                    }
+                                  ]
+                                },
+                                "sharingOptOut": {
+                                  "anyOf": [
+                                    {
+                                      "const": 0,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": 1,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": 2,
+                                      "type": "number"
+                                    }
+                                  ]
+                                },
+                                "targetedAdvertisingOptOut": {
+                                  "anyOf": [
+                                    {
+                                      "anyOf": [
+                                        {
+                                          "const": 0,
+                                          "type": "number"
+                                        },
+                                        {
+                                          "const": 1,
+                                          "type": "number"
+                                        },
+                                        {
+                                          "const": 2,
+                                          "type": "number"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "serviceProviderMode": {
+                                  "anyOf": [
+                                    {
+                                      "const": 0,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": 1,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": 2,
+                                      "type": "number"
+                                    }
+                                  ]
+                                },
+                                "gpc": {
+                                  "anyOf": [
+                                    {
+                                      "type": "boolean"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "maxItems": 2
+                          },
+                          "requestSignals": {
+                            "type": "string",
+                            "enum": [
+                              "not_assessed",
+                              "consistent",
+                              "conflicting"
+                            ]
+                          },
+                          "cmpComparison": {
+                            "type": "string",
+                            "enum": [
+                              "not_compared",
+                              "unavailable",
+                              "earlier_readback",
+                              "later_readback",
+                              "same_time_consistent",
+                              "same_time_conflicting"
+                            ]
+                          },
+                          "reasons": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "input_limit",
+                                "malformed_encoding",
+                                "unsupported_header",
+                                "unsupported_section_version",
+                                "duplicate_privacy_parameters",
+                                "invalid_fields",
+                                "missing_gpp",
+                                "missing_applicable_sections",
+                                "invalid_applicable_sections",
+                                "section_inventory_mismatch",
+                                "applicable_section_missing",
+                                "unsupported_applicable_section",
+                                "noncanonical_encoding",
+                                "us_privacy_conflict",
+                                "section_state_conflict",
+                                "gpc_delivery_disagrees",
+                                "cmp_sale_disagrees",
+                                "cmp_sharing_disagrees",
+                                "cmp_gpc_disagrees"
+                              ]
+                            },
+                            "maxItems": 20
+                          }
+                        }
+                      },
+                      "propertyEvidence": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "policyVersion",
+                          "sourceBundleSha256",
+                          "declarationId",
+                          "propertyIdSha256",
+                          "requestUrlSha256"
+                        ],
+                        "properties": {
+                          "policyVersion": {
+                            "const": "corroborated_property_collection.v1",
+                            "type": "string"
+                          },
+                          "sourceBundleSha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "declarationId": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "propertyIdSha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "requestUrlSha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "maxItems": 32
+            }
+          }
+        },
         "advertisingCollectionCount": {
           "type": "integer",
           "minimum": 0
@@ -373,7 +806,10 @@ export const gpcBoundedObservationOpenApi = {
               "type": "string",
               "enum": [
                 "gpc_sale_sharing_evidence.v1",
-                "gpc_sale_sharing_evidence.v2"
+                "gpc_sale_sharing_evidence.v2",
+                "gpc_sale_sharing_evidence.v3",
+                "gpc_sale_sharing_evidence.v4",
+                "gpc_sale_sharing_evidence.v5"
               ]
             },
             "rows": {
@@ -388,12 +824,20 @@ export const gpcBoundedObservationOpenApi = {
                   "evidenceId"
                 ],
                 "properties": {
+                  "policyVersion": {
+                    "type": "string",
+                    "enum": [
+                      "ca_sale_sharing_qualification.v2",
+                      "ca_sale_sharing_qualification.v3"
+                    ]
+                  },
                   "activity": {
                     "type": "string",
                     "enum": [
                       "identity_sync",
                       "audience_collection",
                       "identified_advertising_collection",
+                      "declared_sale_sharing_collection",
                       "unresolved"
                     ]
                   },
@@ -405,8 +849,14 @@ export const gpcBoundedObservationOpenApi = {
                       "google_cookie_matching",
                       "google_remarketing_audience",
                       "google_advertising_conversion_identifier",
+                      "linkedin_hashed_email",
+                      "meta_advanced_matching_identifier",
                       "linkedin_ads_identifier",
                       "meta_pixel_identifier",
+                      "tiktok_pixel_identifier",
+                      "pinterest_tag_identifier",
+                      "snap_pixel_identifier",
+                      "reddit_pixel_identifier",
                       "microsoft_uet_identifier",
                       "adobe_identity_mapping",
                       "criteo_first_party_identity",
@@ -415,7 +865,10 @@ export const gpcBoundedObservationOpenApi = {
                       "trade_desk_identity_mapping",
                       "lotame_profile_mapping",
                       "openx_identity_resolution",
-                      "magnite_bid_user_identifier"
+                      "magnite_bid_user_identifier",
+                      "owner_property_sale",
+                      "owner_property_sharing",
+                      "owner_property_audience"
                     ]
                   },
                   "processingSignals": {
@@ -695,6 +1148,39 @@ export const gpcBoundedObservationOpenApi = {
                       }
                     }
                   },
+                  "propertyEvidence": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "policyVersion",
+                      "sourceBundleSha256",
+                      "declarationId",
+                      "propertyIdSha256",
+                      "requestUrlSha256"
+                    ],
+                    "properties": {
+                      "policyVersion": {
+                        "const": "corroborated_property_collection.v1",
+                        "type": "string"
+                      },
+                      "sourceBundleSha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "declarationId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "propertyIdSha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "requestUrlSha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    }
+                  },
                   "evidenceId": {
                     "type": "string",
                     "minLength": 1,
@@ -703,6 +1189,99 @@ export const gpcBoundedObservationOpenApi = {
                 }
               },
               "maxItems": 100
+            }
+          }
+        },
+        "propertySaleSharingSource": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contractVersion",
+            "scanId",
+            "targetSha256",
+            "sourceBundleSha256",
+            "declarations"
+          ],
+          "properties": {
+            "contractVersion": {
+              "const": "property_sale_sharing_source.v1",
+              "type": "string"
+            },
+            "scanId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "targetSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "sourceBundleSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "declarations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "declarationId",
+                  "propertyIdSha256",
+                  "entityId",
+                  "basis",
+                  "observationId",
+                  "documentUrlSha256",
+                  "retainedTextSha256",
+                  "clauseSha256",
+                  "clause"
+                ],
+                "properties": {
+                  "declarationId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "propertyIdSha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "entityId": {
+                    "const": "ent_7509263a9ab6",
+                    "type": "string"
+                  },
+                  "basis": {
+                    "type": "string",
+                    "enum": [
+                      "owner_property_sale",
+                      "owner_property_sharing",
+                      "owner_property_audience"
+                    ]
+                  },
+                  "observationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "documentUrlSha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "retainedTextSha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "clauseSha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "clause": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 400
+                  }
+                }
+              },
+              "maxItems": 8
             }
           }
         },

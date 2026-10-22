@@ -2217,17 +2217,21 @@ function coordinatorPostRefusalPacket(scanId: string) {
 async function runCoordinatorFixture(input: {
   scanId: string;
   consentBundle: CanonicalEvidenceBundle;
-  action: "none" | "hang" | "late" | "completed" | "validation_failed";
+  action: "none" | "hang" | "late" | "completed" | "validation_failed" | "completed_during_finalization" | "completed_after_finalization";
   dispatchDelayMs: number;
   actionLane?: "accept" | "reject";
   gpcPair?: { baseline: CanonicalEvidenceBundle; gpc: CanonicalEvidenceBundle };
   preferences?: "complete" | "partial" | "hang" | "wrong_hash" | "wrong_target";
   explicitPreferences?: boolean;
   optOut?: "complete" | "hang" | "wrong_hash" | "wrong_target";
+  invalidActionHash?: boolean;
 }) {
   const artifactRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-coordinator-cutoff-"));
   const actionCalls: string[] = [];
   const workerCalls: string[] = [];
+  const uploads: string[] = [];
+  let finalizationStarted!: () => void;
+  const finalizationRead = new Promise<void>(resolve => { finalizationStarted = resolve; });
   const passiveBundles = new Map<string, CanonicalEvidenceBundle>([
     ["consent_proof", input.consentBundle],
     ["runtime_evidence", canonicalBundleFixture(input.scanId, {
@@ -2279,7 +2283,7 @@ async function runCoordinatorFixture(input: {
       ? { postAcceptObservation: coordinatorPostAcceptConfig(input.dispatchDelayMs) }
       : { postRefusalObservation: coordinatorPostRefusalConfig(input.dispatchDelayMs) }),
   }));
-  const packet = input.action === "completed"
+  const packet = ["completed", "completed_during_finalization", "completed_after_finalization"].includes(input.action)
     ? actionLane === "accept"
       ? coordinatorPostAcceptPacket(input.scanId)
       : coordinatorPostRefusalPacket(input.scanId)
@@ -2337,9 +2341,21 @@ async function runCoordinatorFixture(input: {
           });
         }
         if (input.action === "late") await new Promise((resolve) => setTimeout(resolve, 25));
+        if (input.action === "completed_during_finalization") {
+          await new Promise<void>((resolve, reject) => {
+            options?.abortSignal?.addEventListener("abort", () => reject(new Error("aborted before required artifact read")), {once: true});
+            void finalizationRead.then(resolve);
+          });
+        }
+        // AWS may finish after RequestResponse cancellation. Such a result must
+        // never reopen the frozen outcome or gain a second publication.
+        if (input.action === "completed_after_finalization") {
+          await new Promise<void>(resolve => { options?.abortSignal?.addEventListener("abort", () => resolve(), {once: true}); });
+        }
         if (input.action === "none") throw new Error("action should not have dispatched");
         if (!packet) throw new Error("missing action packet fixture");
-        const uri = [...pointers.values()].find((candidate) => candidate.uri.includes(`${actionLane === "accept" ? "accept" : "reject"}_observation`))!;
+        const original = [...pointers.values()].find((candidate) => candidate.uri.includes(`${actionLane === "accept" ? "accept" : "reject"}_observation`))!;
+        const uri = input.invalidActionHash ? {...original, sha256: "0".repeat(64)} : original;
         const descriptor = actionLane === "accept"
           ? {
               artifactOnly: true,
@@ -2416,10 +2432,16 @@ async function runCoordinatorFixture(input: {
       const uri = `s3://${String(command.input.Bucket)}/${key}`;
       const entry = pointers.get(uri);
       if (!entry) throw new Error(`missing fixture object ${uri}`);
+      if (input.action === "completed_during_finalization" && key.endsWith("/runtime_evidence/CanonicalEvidenceBundle.json")) {
+        finalizationStarted();
+        // This models the already-required GetObject's I/O turn, not a new
+        // coordinator delay or a grace period for the action lane.
+        await new Promise<void>(resolve => setImmediate(resolve));
+      }
       return { Body: entry.body };
     },
   };
-  const s3Client = { async send() { return {}; } };
+  const s3Client = { async send(command: any) { uploads.push(String(command.input.Key)); return {}; } };
   try {
     const result = await runLocalV2DagLambdaShardedArtifactChain(payload, {
       artifactRoot,
@@ -2428,7 +2450,7 @@ async function runCoordinatorFixture(input: {
       s3GetClient,
     });
     const bundle = JSON.parse(await readFile(path.join(artifactRoot, "CanonicalEvidenceBundle.json"))) as Record<string, any>;
-    return { actionCalls, workerCalls, artifactRoot, bundle, result };
+    return { actionCalls, workerCalls, artifactRoot, bundle, result, uploads };
   } catch (error) {
     await rm(artifactRoot, { recursive: true, force: true });
     throw error;
@@ -2546,7 +2568,7 @@ test("ARO coordinator: limited consent cancels an undispatched Reject before the
   }
 });
 
-test("ARO coordinator: an invoked unfinished Reject is canceled at the passive barrier", async () => {
+test("ARO coordinator: an invoked unfinished Reject adds no wait after required passive finalization", async () => {
   const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
   const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
@@ -2563,11 +2585,95 @@ test("ARO coordinator: an invoked unfinished Reject is canceled at the passive b
     assert.equal(outcome.bundle.postRefusalLaneOutcome?.status, "failed");
     assert.equal(outcome.bundle.postRefusalLaneOutcome?.limitationCode, "reject_path_incomplete_at_passive_barrier");
     assert.equal(outcome.result.laneTimingSummary.rejectLaneJoin, "failed");
+    assert.ok(!outcome.result.phaseTimings?.some(row => row.label === "post_refusal_barrier_join"));
   } finally {
     if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]; else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
     if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
   }
 });
+
+test("ARO coordinator: Accept keeps its original cutoff during required finalization", async () => {
+  const priorFlag = process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+  let root: string | undefined;
+  try {
+    const scanId = "accept-original-finalization-cutoff";
+    const outcome = await runCoordinatorFixture({scanId,
+      consentBundle: coordinatorConsentBundle(scanId, {inspectionCompleted: false, limited: true}),
+      action: "completed_during_finalization", actionLane: "accept", dispatchDelayMs: 0});
+    root = outcome.artifactRoot;
+    assert.equal(outcome.bundle.postAcceptLaneOutcome?.status, "failed");
+    assert.equal(outcome.bundle.postAcceptEvidence, undefined);
+    assert.equal(outcome.result.artifactPointers.postAcceptPacketUri, undefined);
+    assert.ok(!outcome.result.phaseTimings?.some(row => row.label === "post_accept_barrier_join"));
+  } finally {
+    if (root) await rm(root, {recursive: true, force: true});
+    if (priorFlag === undefined) delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG]; else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+  }
+});
+
+for (const limited of [false, true]) {
+  test(`ARO coordinator: Reject returned during required finalization survives passive disagreement (limited=${limited})`, async () => {
+    const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
+    const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
+    process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+    let root: string | undefined;
+    try {
+      const scanId = `reject-existing-finalization-${limited}`;
+      const outcome = await runCoordinatorFixture({scanId,
+        consentBundle: coordinatorConsentBundle(scanId, {inspectionCompleted: !limited, limited, rejectControlObserved: false}),
+        action: "completed_during_finalization", actionLane: "reject", dispatchDelayMs: 0});
+      root = outcome.artifactRoot;
+      assert.equal(outcome.actionCalls.length, 1);
+      assert.equal(outcome.bundle.postRefusalLaneOutcome?.status, "joined");
+      assert.equal(outcome.bundle.postRefusalLaneOutcome?.maxTailWaitMs, POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS);
+      assert.ok(outcome.bundle.postRefusalEvidence);
+      assert.ok(outcome.result.artifactMetadata.postRefusalPacketUri?.sha256);
+      assert.ok(!outcome.result.phaseTimings?.some(row => row.label === "post_refusal_barrier_join"), "no await of an unfinished action worker");
+      const mainKey = new URL(outcome.result.artifactPointers.scanArtifactUri!).pathname.slice(1);
+      assert.equal(outcome.uploads.filter(key => key === mainKey).length, 1);
+    } finally {
+      if (root) await rm(root, {recursive: true, force: true});
+      if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]; else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
+      if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+    }
+  });
+}
+
+for (const invalidHash of [false, true]) {
+  test(`ARO coordinator: Reject finalization remains closed for ${invalidHash ? "checksum mismatch" : "a reply after the freeze"}`, async () => {
+    const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
+    const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
+    process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+    let root: string | undefined;
+    try {
+      const scanId = `reject-finalization-closed-${invalidHash}`;
+      const outcome = await runCoordinatorFixture({scanId,
+        consentBundle: coordinatorConsentBundle(scanId, {inspectionCompleted: false, limited: true}),
+        action: invalidHash ? "completed_during_finalization" : "completed_after_finalization",
+        invalidActionHash: invalidHash, actionLane: "reject", dispatchDelayMs: 0});
+      root = outcome.artifactRoot;
+      const before = await readFile(path.join(root, "CanonicalEvidenceBundle.json"));
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert.deepEqual(await readFile(path.join(root, "CanonicalEvidenceBundle.json")), before);
+      assert.equal(outcome.bundle.postRefusalLaneOutcome?.status, "failed");
+      assert.equal(outcome.bundle.postRefusalEvidence, undefined);
+      assert.equal(outcome.result.artifactPointers.postRefusalPacketUri, undefined);
+      assert.ok(!outcome.result.phaseTimings?.some(row => row.label === "post_refusal_barrier_join"));
+      const mainKey = new URL(outcome.result.artifactPointers.scanArtifactUri!).pathname.slice(1);
+      assert.equal(outcome.uploads.filter(key => key === mainKey).length, 1);
+    } finally {
+      if (root) await rm(root, {recursive: true, force: true});
+      if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]; else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
+      if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+    }
+  });
+}
 
 test("ARO coordinator: a completed verified Reject remains joined through final publication", async () => {
   const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];

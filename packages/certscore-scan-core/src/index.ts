@@ -1,4 +1,5 @@
 import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
+import { collectionRecipientPriorities } from "./collection-recipient-retention.js";
 import type { LocalGpcAdaptiveParticipant } from "./local-gpc-adaptive.js";
 export { createLocalGpcAdaptivePair, type LocalGpcAdaptiveParticipant } from "./local-gpc-adaptive.js";
 import { buildScanEvidenceLaneAssessment } from "./scan-evidence-lane-assessment.js";
@@ -1683,10 +1684,13 @@ export function compactCanonicalEvidenceBundleForRetention(
     if (response.requestId && protectedRequestIds.has(response.requestId)) protectedEventIds.add(response.eventId);
     if (response.requestId && navigationRequestIds.has(response.requestId)) navigationEventIds.add(response.eventId);
   }
+  const recipientPriorities = (requestLimit: number, responseLimit: number) => collectionRecipientPriorities(compacted,
+    { requestLimit, responseLimit, navigationEventIds, comparisonWindowEventIds });
+  const recipient140 = recipientPriorities(140, 100), recipient80 = recipientPriorities(80, 60);
   compacted = canonicalEvidenceBundleSchema.parse({
     ...compacted,
-    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 140, protectedEventIds, cmpEventIds, navigationEventIds, comparisonWindowEventIds),
-    networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 100, protectedEventIds, cmpEventIds, navigationEventIds),
+    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 140, protectedEventIds, cmpEventIds, navigationEventIds, comparisonWindowEventIds, recipient140),
+    networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 100, protectedEventIds, cmpEventIds, navigationEventIds, new Set(), recipient140),
     scriptEvents: retainPriorityEvents(compacted.scriptEvents, referencedEventIds, 80),
     iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 60),
     runtimeTimeline: retainPriorityEvents(compacted.runtimeTimeline, referencedEventIds, 80),
@@ -1698,8 +1702,8 @@ export function compactCanonicalEvidenceBundleForRetention(
 
   return finishRetention(canonicalEvidenceBundleSchema.parse({
     ...compacted,
-    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 80, protectedEventIds, cmpEventIds, navigationEventIds, comparisonWindowEventIds),
-    networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 60, protectedEventIds, cmpEventIds, navigationEventIds),
+    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 80, protectedEventIds, cmpEventIds, navigationEventIds, comparisonWindowEventIds, recipient80),
+    networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 60, protectedEventIds, cmpEventIds, navigationEventIds, new Set(), recipient80),
     scriptEvents: retainPriorityEvents(compacted.scriptEvents, referencedEventIds, 40),
     iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 40),
     runtimeTimeline: retainPriorityEvents(compacted.runtimeTimeline, referencedEventIds, 40),
@@ -1925,13 +1929,14 @@ function retainPriorityEvents<T extends RetainableRuntimeEvent>(
   cmpEventIds: Set<string> = new Set(),
   navigationEventIds: Set<string> = new Set(),
   comparisonWindowEventIds: Set<string> = new Set(),
+  recipientEventIds: Set<string> = new Set(),
 ): T[] {
   if (events.length <= maxEvents) {
     return events;
   }
   return [...events]
     .map((event, index) => ({ event, index, score: retentionPriorityScore(event, referencedEventIds, index, events.length) +
-      (navigationEventIds.has(event.eventId) ? 100_000 : comparisonWindowEventIds.has(event.eventId) ? 50_000 : protectedEventIds.has(event.eventId) ? 10_000 : cmpEventIds.has(event.eventId) ? 2_000 : 0) }))
+      (navigationEventIds.has(event.eventId) ? 100_000 : comparisonWindowEventIds.has(event.eventId) ? 50_000 : recipientEventIds.has(event.eventId) ? 20_000 : protectedEventIds.has(event.eventId) ? 10_000 : cmpEventIds.has(event.eventId) ? 2_000 : 0) }))
     .sort((left, right) => right.score - left.score || left.index - right.index)
     .slice(0, maxEvents)
     .sort((left, right) => left.index - right.index)

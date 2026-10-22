@@ -10,7 +10,7 @@ import {resolveCanonicalVendor} from "@certscore/vendor-resolver";
 import {deriveCaliforniaGpcResponsePolicy} from "./california-gpc-response-policy";
 import {buildUnifiedFindingDisplayPackets} from "./unified-findings";
 import {deriveCaliforniaRegulatoryScore} from "./california-regulatory-score";
-import {deriveConsentControlAssessment} from "@certscore/contracts";
+import {policySurfaceObservationSchema,deriveConsentControlAssessment} from "@certscore/contracts";
 import {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL} from "../../server/scans/california-review-coverage.fixture";
 import {projectCaliforniaPrivacyReview} from "../../server/scans/california-privacy-review-projection";
 import {buildCanonicalGpcResponseProjection} from "./gpc-response-projection";
@@ -20,8 +20,10 @@ import {californiaChoiceEnforcementPoints} from "./california-choice-enforcement
 import {projectAdminScoringEntityCounts} from "../../server/admin/admin-scan-posture-score";
 import {SCAN_REPORT_PROJECTION_VERSION} from "../../server/scans/scan-report-projection-contract";
 
-function observed(mode="collection", urls?: string[], currentQualification = false) {
+function observed(mode="collection", urls?: string[], currentQualification = false, declaration?:string) {
  const g=gpcProductionRuntimeFixture(),b=gpcRuntimeFixture({enabled:false});
+ if(declaration)g.policySurfaceObservations=[policySurfaceObservationSchema.parse({observationId:"privacy",surfaceType:"privacy_policy",url:g.url+"privacy",sourceScanner:"policy_surface",scenario:"policy_surface_review",consentStateAtTime:"not_applicable",discoveryMethod:"footer_link",status:"fetched",confidence:.98,
+  targetRelationship:"target_controller",ownershipConfidence:.98,documentEvaluationState:"usable",documentRole:"policy_document",documentFetchState:"fetched",httpStatus:200,documentLanguage:"en",textExcerpt:declaration})];
  const r=g.networkEvents[1]!;
  r.requestUrl=r.url=mode === "library"?"https://connect.facebook.net/en_US/fbevents.js":"https://www.facebook.com/tr/?id=fixture&ev=PageView";
  r.collectionEndpointObserved=mode !== "library";
@@ -51,6 +53,43 @@ function publicGpcResponse(a: ReturnType<typeof observed>, deductionPoints: numb
   comparison:{...comparison,delivery:{status:comparison.delivery.status},baselineArtifact:pointer(comparison.baselineArtifact!),gpcArtifact:pointer(comparison.gpcArtifact!)},
   californiaPolicy:{applied:deductionPoints>0,deductionPoints},evidenceUrl:"https://example.test/evidence"};
 }
+
+test("all three Google collection roles reach canonical GPC scoring without cookie matching and share one recipient", () => {
+ const urls = [
+  "https://www.google.com/pagead/1p-user-list/123/?cid=visitor-fixture&npa=1",
+  "https://cm.g.doubleclick.net/pixel?google_nid=publisher&google_cm&npa=1",
+  "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=visitor-fixture&npa=1",
+ ];
+ for (const [i, activity] of ["audience_collection", "identity_sync", "identified_advertising_collection"].entries()) {
+  const a = observed("collection", [urls[i]!], true);
+  assert.equal(a.observation.requests.advertisingCollectionQualification!.rows[0]!.activity, activity);
+  assert.equal(deriveCaliforniaGpcResponsePolicy(a).deductionPoints, 15, activity);
+ }
+ const a = observed("collection", urls, true);
+ const policy = deriveCaliforniaGpcResponsePolicy(a);
+ assert.deepEqual(policy.recipientIds, ["ent_7509263a9ab6"]);
+ assert.equal(policy.deductionPoints, 15, "three roles do not become three Google recipients");
+ assert.equal(apiV2GpcResponseSchema.safeParse(publicGpcResponse(a, 15)).success, true);
+ const findings = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { gpcResponseAssessment: a },
+  reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+ assert.equal(findings.find(f => f.unifiedFindingId === "gpc_response")?.scoreEffects?.[0]?.deductionPoints, 15);
+});
+
+test("Analytics identifiers, diagnostic field names and neighboring Ads contacts cannot manufacture a supported Google role", () => {
+ // Synthetic protocol shapes from the Ovid investigation, never retained visitor identifiers.
+ const urls = [
+  "https://www.google-analytics.com/g/collect?v=2&tid=G-ABC123&cid=visitor-fixture&sid=123&en=traffic_source_diagnostic&ep.diag_gclid=missing&ep.diag_linker=missing&npa=1&gcs=G100",
+  "https://www.google-analytics.com/g/collect?v=2&tid=G-ABC123&cid=visitor-fixture&sid=123&en=page_view&npa=1&gcs=G100",
+  "https://pagead2.googlesyndication.com/ccm/collect?tid=AW-123&en=page_view&npa=1",
+  "https://www.googletagmanager.com/gtag/js?id=AW-123",
+ ];
+ const a = observed("collection", urls, true);
+ assert.equal(deriveCaliforniaGpcResponsePolicy(a).deductionPoints, 0);
+ assert.deepEqual(deriveCaliforniaGpcResponsePolicy(a).recipientIds, []);
+ const mixed = observed("collection", [...urls, "https://www.google.com/pagead/1p-user-list/123/?cid=visitor-fixture&npa=1"], true);
+ assert.equal(deriveCaliforniaGpcResponsePolicy(mixed).deductionPoints, 15, "unresolved analytics does not cancel independently qualifying audience collection");
+ assert.deepEqual(deriveCaliforniaGpcResponsePolicy(mixed).eligibleActivity.persistedUnderGpc, ["collection-4"]);
+});
 
 test("only verified advertising collection qualifies; libraries and errors remain neutral",()=>{
  const a=observed();assert.equal(a.observation.requests.advertisingCollectionCount,1);
@@ -91,7 +130,7 @@ test("v7 sale/sharing qualification survives persistence and drives canonical fi
  const a = observed("partial", urls, true);
  assert.equal(a.observation.requests.advertisingCollectionCount, 6, "all factual collection remains retained");
  const policy = deriveCaliforniaGpcResponsePolicy(a);
- assert.equal(policy.policyVersion, "california-gpc-response.v7-gpp");
+ assert.equal(policy.policyVersion, "california-gpc-response.v10-property-bound");
  assert.equal(policy.deductionPoints, 25);
  assert.equal(policy.recipientIds?.length, 2);
  assert.deepEqual(policy.eligibleActivity.persistedUnderGpc, ["collection-0", "collection-3"]);
@@ -154,7 +193,7 @@ test("offline GPP decoding can qualify retained positive collection without upgr
  const old=structuredClone(a),qualification=old.observation.requests.advertisingCollectionQualification!;
  qualification.policyVersion="gpc_sale_sharing_evidence.v1";
  delete old.observation.requests.gppPropagation;
- for(const row of qualification.rows){delete row.gpp;row.processingSignals=["gpp_unresolved"];}
+ for(const row of qualification.rows){delete row.policyVersion;delete row.gpp;row.processingSignals=["gpp_unresolved"];}
  assert.equal(deriveCaliforniaGpcResponsePolicy(old).policyVersion,"california-gpc-response.v6-sale-sharing");
  assert.equal(deriveCaliforniaGpcResponsePolicy(old).deductionPoints,0);
  const missing=structuredClone(a);delete missing.observation.requests.advertisingCollectionQualification!.rows[0]!.gpp;
@@ -203,7 +242,7 @@ test("Admin GPC count includes only applied canonical recipient entities, dedupl
 });
 test("eight captured recipients reach 47 through the source-bound API contract",()=>{
  const urls=[threeRecipients[0]!,threeRecipients[1]!,"https://gum.criteo.com/r/d","https://www.facebook.com/tr/?id=fixture&ev=PageView","https://px.ads.linkedin.com/collect/",
-  "https://bat.bing.com/action/0?ti=123","https://analytics.tiktok.com/api/v2/pixel/track","https://ct.pinterest.com/ct.html"];
+  "https://bat.bing.com/action/0?ti=123","https://analytics.tiktok.com/api/v2/pixel","https://ct.pinterest.com/v3/"];
  for(let count=1;count<=8;count++) {
   const a=observed("collection",[...urls.slice(0,count),...urls.slice(0,count)]);
   const points=[0,15,25,32,37,40,43,45,47][count]!;
@@ -416,4 +455,61 @@ test("separate GPP propagation family survives persistence, caps at five, and ne
  assert.equal(deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:[...findings.filter(row=>row.unifiedFindingId!=="gpp_propagation_inconsistency"),badEffect]}).score,85);
  const wrongScan=structuredClone(child);wrongScan.scanId="other-scan";
  assert.ok(!deriveCaliforniaRegulatoryScore({assessment:wrongScan,checklistRows:[],unifiedFindings:[propagation]}).deductions.length);
+});
+
+test("matching identifiers under GPC survive canonical projection without reinterpreting historical qualifiers",()=>{
+ const hash="a1".repeat(32),base=`https://www.facebook.com/tr/?id=123&ev=PageView&ud%5Bem%5D=${hash}`;
+ const a=observed("partial",[base,base+"&dpo=LDU"],true);
+ const policy=deriveCaliforniaGpcResponsePolicy(a);
+ assert.equal(policy.deductionPoints,15);assert.equal(policy.recipientIds?.length,1);
+ assert.deepEqual(policy.eligibleActivity.persistedUnderGpc,["collection-0"]);
+ const findings=buildUnifiedFindingDisplayPackets({runtimeArtifacts:{gpcResponseAssessment:JSON.parse(JSON.stringify(a))},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+ const projected=buildCanonicalGpcResponseProjection(findings)!;
+ assert.equal(projected.vendorFindings?.[0]?.requestCount,1);
+ assert.ok(projected.observedFacts.some(row=>row.label==="Advertising activity with GPC" && /Meta|Facebook/.test(row.value)));
+ assert.equal(apiV2GpcResponseSchema.safeParse(publicGpcResponse(a,15)).success,true);
+ const historical=structuredClone(a);historical.observation.requests.advertisingCollectionQualification!.policyVersion="gpc_sale_sharing_evidence.v2";
+ assert.equal(gpcResponseAssessmentSchema.safeParse(historical).success,false,"new matching basis cannot be attributed to historical policy");
+ const restricted=observed("collection",[base+"&dpo=LDU"],true);
+ const neutral=buildUnifiedFindingDisplayPackets({runtimeArtifacts:{gpcResponseAssessment:restricted},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+ assert.equal(buildCanonicalGpcResponseProjection(neutral)?.vendorFindings?.length,0);
+ assert.equal(deriveCaliforniaGpcResponsePolicy(restricted).deductionPoints,0);
+});
+
+test('v9 GPC qualification admits supported NPA advertising without cookie proof and leaves stored v8 semantics unchanged',()=>{
+ const a=observed('collection',['https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=123.456&npa=1'],true);
+ const revised=deriveCaliforniaGpcResponsePolicy(a);assert.equal(revised.deductionPoints,15);assert.equal(revised.policyVersion,'california-gpc-response.v10-property-bound');
+ assert.equal(apiV2GpcResponseSchema.safeParse(publicGpcResponse(a,15)).success,true);
+ const old=structuredClone(a);old.observation.requests.advertisingCollectionQualification!.policyVersion='gpc_sale_sharing_evidence.v3';
+ for(const row of old.observation.requests.advertisingCollectionQualification!.rows)delete row.policyVersion;
+ assert.equal(deriveCaliforniaGpcResponsePolicy(old).deductionPoints,0);assert.equal(deriveCaliforniaGpcResponsePolicy(old).policyVersion,'california-gpc-response.v8-identifiers');
+});
+
+
+test("property-correlated collection survives persistence and canonical CA/API/Admin projection while same Google recipient counts once",()=>{
+ const ga="https://www.google-analytics.com/g/collect?v=2&tid=G-ABC123&cid=123.456&npa=1";
+ const a=observed("collection",[ga,"https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=123.456"],true,
+  "We use Google Analytics property G-ABC123 for remarketing.");
+ const persisted=gpcResponseAssessmentSchema.parse(JSON.parse(JSON.stringify(a)));
+ assert.equal(persisted.contractVersion,"certscore.gpc-response-assessment.v3");if(persisted.contractVersion!=="certscore.gpc-response-assessment.v3")throw Error("Expected v3");
+ const policy=deriveCaliforniaGpcResponsePolicy(persisted);assert.equal(policy.deductionPoints,15);assert.equal(policy.recipientIds?.length,1);
+ assert.equal(persisted.observation.requests.advertisingCollectionQualification?.rows[0]?.activity,"declared_sale_sharing_collection");
+ assert.equal(apiV2GpcResponseSchema.safeParse(publicGpcResponse(persisted,15)).success,true);
+ const findings=buildUnifiedFindingDisplayPackets({runtimeArtifacts:{gpcResponseAssessment:persisted},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+ const finding=findings.find(f=>f.unifiedFindingId==="gpc_response")!;assert.equal(finding.scoreEffects?.[0]?.deductionPoints,15);
+ assert.ok(/property-specific/.test(finding.summary));assert.ok(!/points|deduct/i.test(finding.summary));
+ const fixture=californiaCoverageFixture();fixture.bundle.scanId=persisted.observation.scanId!;fixture.policyEvidence.projection.scanId=fixture.bundle.scanId;
+ fixture.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v10";fixture.bundle.policySurfaceObservations.forEach(r=>r.documentLanguage="en");
+ const child=projectCaliforniaPrivacyReview(fixture.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,fixture.policyEvidence)!;
+ const parent=deriveConsentControlAssessment({scan:{scanId:fixture.bundle.scanId,finalUrl:CA_FIXTURE_URL}});parent.californiaPrivacyReview=child;
+ const projected=buildUnifiedFindingDisplayPackets({runtimeArtifacts:{consentControlAssessment:parent,gpcResponseAssessment:persisted},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+ const snapshot={report_projection_status:"ready",report_projection_version:SCAN_REPORT_PROJECTION_VERSION,report_projection_computed_at:fixture.bundle.completedAt,
+  admin_canonical_score_input:{scanId:fixture.bundle.scanId,projectionScanId:fixture.bundle.scanId,assessment:child,gpcAssessment:persisted,unifiedFindings:projected,checklistRows:[]}};
+ assert.equal(projectAdminScoringEntityCounts(fixture.bundle.scanId,snapshot,false).gpc,1);
+ assert.equal(deriveCaliforniaRegulatoryScore({assessment:child,unifiedFindings:projected,checklistRows:[]}).score,85);
+
+ const old=observed("collection",["https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=123.456&npa=1"],true);
+ old.observation.requests.advertisingCollectionQualification!.policyVersion="gpc_sale_sharing_evidence.v4";
+ old.observation.requests.advertisingCollectionQualification!.rows.forEach(r=>r.policyVersion="ca_sale_sharing_qualification.v2");
+ assert.equal(deriveCaliforniaGpcResponsePolicy(old).policyVersion,"california-gpc-response.v9-qualified-disclosure");assert.equal(deriveCaliforniaGpcResponsePolicy(old).deductionPoints,15);
 });

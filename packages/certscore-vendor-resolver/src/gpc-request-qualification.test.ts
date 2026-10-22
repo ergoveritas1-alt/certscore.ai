@@ -56,3 +56,34 @@ test("ambiguous identifiers and oversized/foreign protocols cannot qualify", () 
     `https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=123.456&padding=${"x".repeat(16384)}`,
   ]) assert.equal(inspect(url).activity, "unresolved", url.slice(0, 180));
 });
+
+test("Meta hashed email and phone qualify only on the reviewed pixel event endpoint", () => {
+  const hash = "a1".repeat(32);
+  for (const field of ["ud[em]", "ud[ph]"]) {
+    const q = new URLSearchParams({id: "123", ev: "PageView", [field]: hash});
+    const url = `https://www.facebook.com/tr/?${q}`;
+    assert.equal(inspect(url).basis, "meta_advanced_matching_identifier");
+    assert.equal(inspect("https://www.facebook.com/tr/", {}, q).basis, "meta_advanced_matching_identifier");
+    assert.deepEqual(inspect(`${url}&dpo=LDU`).processingSignals, ["meta_ldu"]);
+    for (const value of ["person@example.test", "15555555555", "", "a".repeat(32), "0".repeat(64), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]) {
+      q.set(field, value);
+      assert.equal(inspect(`https://www.facebook.com/tr/?${q}`).activity, "unresolved");
+    }
+    q.set(field, hash);q.append(field, hash);
+    assert.equal(inspect(`https://www.facebook.com/tr/?${q}`).activity, "unresolved", "duplicate identity keys are ambiguous");
+    q.delete(field);q.set(field,hash);
+    for (const base of ["https://evil.test/tr/", "https://www.facebook.com/config/", "https://www.facebook.com/tr/?ev=PageView&"])
+      assert.notEqual(inspect(base.includes("?") ? `${base}${field}=${hash}` : `${base}?${q}`).basis, "meta_advanced_matching_identifier");
+  }
+});
+
+test('revised qualification treats NPA as context, requires a supported role, and preserves historical NPA treatment',async()=>{
+ const {isQualifyingSaleSharingRequest}=await import('@certscore/contracts');
+ const url='https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=visitor123&npa=1';
+ const q=inspect(url);assert.ok(q.processingSignals.includes('google_npa'));
+ assert.equal(isQualifyingSaleSharingRequest(q),true,'supported advertising identifier without cookie-match input');
+ assert.equal(isQualifyingSaleSharingRequest({...q,policyVersion:undefined}),false,'historical rows retain their previous policy');
+ for(const suffix of ['&rdp=1','&ltd=1','&us_privacy=1NYN','&npa=0','&gpp=opaque'])assert.equal(isQualifyingSaleSharingRequest(inspect(url+suffix)),false,suffix);
+ for(const candidate of ['https://www.google-analytics.com/g/collect?v=2&tid=G-ABC&cid=visitor123&sid=123&npa=1','https://securepubads.g.doubleclick.net/gampad/ads?iu=123&npa=1'])
+  assert.equal(isQualifyingSaleSharingRequest(inspect(candidate)),false,'identifier or NPA removal alone does not establish a qualifying role');
+});

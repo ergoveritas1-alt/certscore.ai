@@ -2798,13 +2798,9 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     })
   );
   const passiveLaneBarrierCompletedAtMs = Date.now();
-  // Cost-neutral reconciliation: preserve action results already returned by
-  // the passive barrier, but add no tail wait solely to resolve passive absence.
-  // An unfinished independent session is limited, not evidence of no control.
-  if ((postRefusalState.passiveAbsence || postRefusalState.passiveCoverageLimited) && actionLanePassiveAbsenceDisposition({ ...postRefusalState, passiveBarrierReached: true }) === "cancel_incomplete") {
-    postRefusalState.cancelledNoReject = true;
-    postRefusalAbortController.abort(new Error("reject_path_incomplete_at_passive_barrier"));
-  }
+  // Accept retains its existing passive-absence cutoff. Reject takes its
+  // terminal snapshot after the already-required passive finalization below;
+  // that work must never be delayed to wait for an independent action.
   if ((postAcceptState.passiveAbsence || postAcceptState.passiveCoverageLimited) && actionLanePassiveAbsenceDisposition({ ...postAcceptState, passiveBarrierReached: true }) === "cancel_incomplete") {
     postAcceptState.cancelledNoAccept = true;
     postAcceptAbortController.abort(new Error("accept_path_incomplete_at_passive_barrier"));
@@ -2864,10 +2860,11 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   if (payload.gpcObservation?.enabled === true) {
     const baselineResult = workerResults.find((result) => result.workerLane === "runtime_evidence");
     const gpcResult = workerResults.find((result) => result.workerLane === "gpc_observation");
+    const policyResult = workerResults.find((result) => result.workerLane === "policy_evidence");
     if (!baselineResult) throw new Error("GPC comparison requires a verified runtime baseline.");
     const verifiedWorkerArtifact = (
       result: LocalV2DagLambdaShardResult,
-      lane: "runtime_evidence" | "gpc_observation",
+      lane: "runtime_evidence" | "gpc_observation" | "policy_evidence",
     ) => {
       const uri = result.artifactPointers?.scanArtifactUri;
       const metadata = result.artifactMetadata?.scanArtifactUri;
@@ -2897,6 +2894,9 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       }),
       gpcResponseAssessment: buildGpcProductionAssessment({
         scanId: payload.scanId,
+        propertySource: policyResult && verifiedGpcWorkerBytes.has(policyEvidenceBundle) ? {
+          bytes: verifiedGpcWorkerBytes.get(policyEvidenceBundle)!, pointer: verifiedWorkerArtifact(policyResult, "policy_evidence"),
+        } : undefined,
         source: verifiedGpc && gpcResult && verifiedGpcWorkerBytes.has(verifiedGpc) ? {
           bytes: verifiedGpcWorkerBytes.get(verifiedGpc)!, pointer: verifiedWorkerArtifact(gpcResult, "gpc_observation"),
         } : undefined,
@@ -2909,6 +2909,17 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         }),
       }),
     });
+  }
+  // reject_join_existing_work.v1: keep an already-invoked Reject response
+  // available during required passive downloads, verification, merge and
+  // mirroring. Snapshot once here, before any action join. Passive absence or
+  // uncertainty must still add zero worker wait: unfinished work is cancelled,
+  // while a returned result uses the ordinary checksum/binding verification.
+  // Keep the original passive timestamp as the absolute eight-second deadline;
+  // this is neither a grace period nor a new result/publication path.
+  if ((postRefusalState.passiveAbsence || postRefusalState.passiveCoverageLimited) && actionLanePassiveAbsenceDisposition({ ...postRefusalState, passiveBarrierReached: true }) === "cancel_incomplete") {
+    postRefusalState.cancelledNoReject = true;
+    postRefusalAbortController.abort(new Error("reject_path_incomplete_at_passive_barrier"));
   }
   // Accept and Reject have independent absolute post-passive deadlines and
   // are joined concurrently, including packet verification. This prevents
@@ -4117,7 +4128,7 @@ async function readWorkerBundleFromArtifactResult(
   if (result.workerLane === "gpc_observation" && bundle.scanId !== result.scanId) {
     throw new Error("GPC worker bundle does not retain its parent scan identity.");
   }
-  if (result.workerLane === "gpc_observation" || result.workerLane === "runtime_evidence") verifiedGpcWorkerBytes.set(bundle, body);
+  if (result.workerLane === "gpc_observation" || result.workerLane === "runtime_evidence" || result.workerLane === "policy_evidence") verifiedGpcWorkerBytes.set(bundle, body);
   return bundle;
 }
 

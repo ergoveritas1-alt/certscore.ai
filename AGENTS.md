@@ -34,6 +34,23 @@ A request containing “deploy,” “production,” “hosting,” “CI/CD,”
 
 If platform discovery is needed, inspect the repository’s deployment topology first. If any system capability suggests Vercel, treat it as inapplicable and continue with the canonical AWS path. Stop and ask before introducing any non-AWS deployment platform.
 
+## Supported potential privacy-risk findings — October 22, 2026
+
+The owner approved local `california.collection-review.v3-retained-scope`: verified collection
+under GPC or after an authorized Reject click may support a qualified California
+review finding while sale/sharing purpose remains unresolved. Persist typed
+path assessments through normalized concern, concern policy and unified finding.
+Use 7/11/13/15 potential-risk points for 1/2/3/4+ distinct recipients, capped at 15, excluding recipients
+already covered by the full California recipient family across all paths. Bound
+the mixed increment by the full schedule for the combined recipient inventory,
+preserving its 47-point cap and ensuring stronger proof cannot improve a score.
+Preserve historical v1 flat-5 and v2 scaled assessments under their original scope. Keep
+path findings visible despite score deduplication. Restricted-processing context
+is retained without claiming compliance; absence alone never creates a finding.
+Preserve the EU Reject non-essential presence rule and do not reinterpret GPC as
+EU consent refusal. No new Options panels, capture budgets, deployment or
+historical rewrite. See `docs/certscore-v2/california-potential-risk-policy.md`.
+
 ## California choice-enforcement scoring
 
 ### Dual posture score availability — October 21, 2026
@@ -96,6 +113,84 @@ v5 semantics. No new
 capture, wait, model call, Options opening, deployment or production rewrite is
 authorized. See `docs/certscore-v2/gpp-offline-decoder-policy.md`.
 
+## Revised California qualification — October 22, 2026
+
+The owner approved local `ca_sale_sharing_qualification.v2`, GPC qualifier v4 /
+California GPC policy v9-qualified-disclosure, and post-Reject v2-qualified-disclosure.
+No mandatory cookie match or persistent-cookie proof applies to supported
+sale/sharing activity. NPA is retained as context and is not an automatic veto.
+Supported role/purpose, successful collection, delivered signal or completed
+applicable choice, canonical attribution and source/ancestry proof remain required.
+Ordinary analytics CID/SID alone do not establish a qualifying role. Preserve
+other approved restricted-processing treatment, historical versions, the shared
+47-point recipient union, EU scoring and GPP scoring. No added capture budgets,
+Options panels, deployment or historical report rewrite. See
+`docs/certscore-v2/ca-qualified-disclosure-policy.md`. This supersedes earlier
+blanket NPA-neutrality instructions for the new version only.
+
+## GPC supplemental request discovery — October 22, 2026
+
+The owner approved local `gpc_request_capture.v1` / `gpc_request_proof.v1`
+POST body/header discovery within existing absolute scan budgets: at most 48
+candidate inspections, 32 detailed proofs, one shared header read per selected
+request, no added waits or visits. Prioritize distinct recipients and preserve
+known request-local restrictions when detailed proof is evicted. Missing or
+incomplete supplemental proof must not become a new prerequisite that removes
+otherwise qualifying URL evidence. Actual same-request restrictions/conflicts
+remain neutral; they do not cancel independently qualifying sibling requests.
+Keep exact document/request provenance, successful collection, delivered GPC,
+canonical recipient deduplication and historical versions. No Options panels,
+deployment or historical report rewrite. See
+`docs/certscore-v2/gpc-request-proof-policy.md`.
+
+## Vendor findings and matching identity — October 22, 2026
+
+Local owner-approved `gpc_sale_sharing_evidence.v3` /
+`california-gpc-response.v8-identifiers` and `bounded_ca_request_proof.v3`
+add reviewed LinkedIn hashed-email body and Meta pixel hashed email/phone
+qualification. Preserve request-local restrictions, exact source proof and
+historical versions. Keep vendor evidence visible on both GPC and Reject;
+deduplicate recipients only in the shared California score family. EU Reject
+continues to use non-essential presence without an identifier prerequisite.
+See `docs/certscore-v2/choice-vendor-findings-policy.md` for endpoint/source
+limits and minimum evidence. No budget increase, Options panels or deployment.
+
+## Property-bound California collection qualification — October 22, 2026
+
+The owner approved local `gpc_sale_sharing_evidence.v5` / GPC policy v10 and
+California post-Reject v3 property-bound purpose corroboration. Explicit verified,
+target-owned exact-property sale/sharing or advertising-audience declarations
+may corroborate successful identified collection in the relevant choice session.
+Preserve request-local processing restrictions, source/target/document binding,
+original GPC delivery and Reject action proof, historical policies, the shared
+47-point recipient union, EU scoring and the separate GPP family. Ordinary
+Analytics identifiers or bare tag configuration alone do not establish purpose.
+Retained collection metadata with unresolved purpose must not be described as
+missing metadata. No Options panels, new capture work, model calls, increased
+budgets, deployment or historical report rewrite is authorized. See
+`docs/certscore-v2/ca-property-bound-qualification-policy.md`.
+
+## Vendor coverage interpretation — October 22, 2026
+
+New captures use cookie-purpose v6 documented exact identities and bounded CA
+request-proof v4, preserving the shared 48-inspection/32-proof budgets. New EU
+Reject assessments use `after_reject_nonessential_presence.v2-vendor-coverage`
+and GDPR-ePrivacy v23 to classify positively retained cookie snapshots and
+attribute canonical owners. Preserve original source hashes, path/identity/time
+proof, deduplication, historical v1/v22 effects and unknown unsupported evidence.
+No vendor-wide tracking inference, invented collection or new full CA purpose
+qualification is authorized by recognition alone. No Options opening or deploy.
+See `docs/certscore-v2/vendor-coverage-policy-2026-10-22.md`.
+New reviewed collector envelopes use bounded CA request-proof v5 and canonical
+resolver v14: exact protocol attribution, duplicate-safe bounded decoding and
+endpoint-bound hashed identity facts apply to both GPC and Reject. Preserve
+v1-v4 reads, source/signal/action/response proof, the 48/32 caps and existing
+purpose evidence minimums. Source-reviewed advertising recipes require same-event
+publisher routing and supported visitor identity. Shape or identifier recognition alone creates no new
+full California purpose. Unsupported formats remain explicit. See
+`docs/certscore-v2/vendor-protocol-hardening-policy-2026-10-22.md`.
+
+
 ## Canonical Reject presence scoring — October 21, 2026
 
 The owner requires every completed authorized Reject path with retained,
@@ -141,6 +236,17 @@ cookie presence. Keep completed click and source/target/ancestry proof; no seman
 registration prerequisite is added. See
 `docs/certscore-v2/california-post-reject-policy.md`. No deployment, new browser
 work, Options opening or historical rewrite is authorized.
+
+October 22: new assessments use `california-post-reject.v4-retained-scope` and
+`california.collection-review.v3-retained-scope`. A retained v2 direct Reject
+classification with consent context may establish cookie-tracking rejection
+when the shared canonical classifier rechecks the exact label and the original
+control read joins the same selector, frame, label source and authorized target.
+Bare labels or CMP names alone do not supply context. Preserve old assessment
+versions, collection/response proof, restricted-processing treatment, entity
+deduplication and score weights. New effects use CA score v17. No semantic
+registration prerequisite, new capture, Options opening or deployment is added.
+See `docs/certscore-v2/california-reject-scope-policy.md`.
 
 ## Canonical GPP propagation scoring — October 21, 2026
 
@@ -346,6 +452,16 @@ At the passive barrier, an unfinished such lane becomes explicitly limited, not
 `not_applicable`; add no tail wait solely to resolve passive absence. Aborting an
 AWS invocation is best-effort; late output must not reopen or independently
 publish a terminal result. See `docs/certscore-v2/consent-action-evidence-policy.md`.
+October 22, 2026: the owner authorized local `reject_join_existing_work.v1` for
+Pella's join/finalization repair. For an already-invoked Reject worker only,
+snapshot its terminal state after already-required passive artifact verification,
+merge and mirroring. An unfinished worker then cancels immediately, with zero
+extra worker wait; a returned result uses the existing packet verification and
+original eight-second absolute deadline. No grace sleep, polling, extra capture,
+late publication or Accept change is authorized. This refines the immediate
+Reject cancellation checkpoint above, preserving passive control states and
+first-layer reportability. No deployment is authorized. See
+`docs/certscore-v2/reject-existing-finalization-join-policy-2026-10-22.md`.
 Customer-facing After Accept and After Reject sections require the corresponding
 canonical first-layer control assessment state to be `observed`. A completed
 independent action remains retained evidence but does not override `unknown` or

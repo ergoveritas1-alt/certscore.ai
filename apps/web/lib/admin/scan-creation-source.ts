@@ -29,7 +29,7 @@ const CHANNELS: Record<Exclude<ScanCreationSource, "unknown">, readonly string[]
   browser: ["browser", "marketing-full-scan"],
   api: ["pulse_api", "sdk", "other_api", "gpt_action"],
   scheduled: ["scheduler", "scheduled-monitoring"],
-  internal: ["corpus-import", "validation_ops"]
+  internal: ["corpus-import", "validation_ops", "operator-post-reject-proof-verification"]
 };
 
 export function scanCreationSource(channel: string | null | undefined): ScanCreationSource {

@@ -2010,6 +2010,29 @@ test("fresh Reject capture retains bounded measurement and identifier inspection
   }
 });
 
+test('fresh Reject preserves exact successful responses and typed proof for Reddit, Clarity and StackAdapt through projection',async()=>{
+ const server=createServer((_request,response)=>{response.setHeader('content-type','text/html');response.end(`<!doctype html>
+ <div id="certscore-fixture-consent-banner"><p>Choose optional cookies</p><button data-certscore-consent-action="reject">Reject all</button><button>Accept all</button></div><script>
+ document.querySelector('[data-certscore-consent-action="reject"]').onclick=()=>setTimeout(()=>{
+  fetch('https://alb.reddit.com/rp',{method:'POST',body:'opaque'}).catch(()=>{});
+  fetch('https://g.clarity.ms/collect',{method:'POST',body:'opaque'}).catch(()=>{});
+  fetch('https://tags.srv.stackadapt.com/js_tracking?uid=fixture',{method:'GET'}).catch(()=>{});
+ },60);</script>`);});const url=await listenHttpServer(server);
+ try{
+  const packet=await observe(url,{confirmationTimeoutMs:0,observationWindowMs:600});
+  const p=projectPostRefusalEvidenceForReport({packet,packetSha256:'b'.repeat(64)});
+  const rows=p.afterActionRequests!.filter(r=>r.californiaCollection&&r.method!=='OPTIONS');
+  assert.equal(rows.length,3);
+  for(const row of rows){
+   assert.equal(row.httpStatus,204);assert.equal(row.californiaCollection!.httpStatus,204);
+   assert.equal(row.californiaCollection!.requestId,row.requestId);assert.equal(row.californiaCollection!.startedAtMs,row.startedAtMs);
+   assert.ok(row.completedAtMs!==undefined&&row.completedAtMs<=p.afterActionCapture!.captureEndedAtMs);
+   assert.equal(p.scoringEvidence!.requests.find(r=>r.requestId===row.requestId)?.httpStatus,204);
+   assert.equal(row.nonEssential,true);
+  }
+ }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+});
+
 test("fresh unconfirmed Reject captures an exact first-party cid cookie match without another read or longer window", async () => {
   const server=createServer((_request,response)=>{
     response.setHeader("content-type","text/html; charset=utf-8");
@@ -2105,7 +2128,11 @@ test("fresh Reject binds Heap/HubSpot identifiers and exact JavaScript/server co
   const response=packet.network.requests.find(r=>r.sanitizedUrl.endsWith('/cookie-response'))?.responseCookieWrites?.[0];assert.ok(response);
   assert.equal(response.source,"response_set_cookie");assert.notEqual(response.identityHash,assignment.identityHash);
   assert.ok(packet.storage.postAction.some(s=>s.identityHash===response.identityHash&&s.valueHash===response.valueHash));
+  const successfulResponse=packet.network.requests.find(r=>r.sanitizedUrl.endsWith('/cookie-response'))!;
+  assert.equal(successfulResponse.httpStatus,200,"Retain the existing callback's positive response proof");
   const projected=projectPostRefusalEvidenceForReport({packet,packetSha256:"b".repeat(64)});
+  assert.equal(projected.scoringEvidence?.requests.find(r=>r.requestId===successfulResponse.requestId)?.httpStatus,200);
+  assert.equal(projected.afterActionRequests?.find(r=>r.requestId===successfulResponse.requestId)?.httpStatus,200);
   assert.equal(projected.afterActionCapture?.storageWrites.find(w=>w.name==="_ga")?.exactCookieWrite?.valueHash,assignment.valueHash);
   assert.equal(packet.network.requests.find(r=>r.measurementEvidence?.profile==="shopify_mixed_telemetry.v1")?.measurementEvidence?.identifierEvidence,"unknown");
   assert.doesNotMatch(JSON.stringify(packet),/987654321|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|setter-private-value|server-private-value|private-payload/);

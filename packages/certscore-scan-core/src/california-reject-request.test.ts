@@ -83,7 +83,7 @@ const encodedWa=(json:string,fmt="g",suffix="",headers:Record<string,string>={"c
 test("LinkedIn encoded click payloads inspect all fields and preserve exact advertising identity spelling",()=>{
  for(const fmt of ["g","b","a"]){
   const fact=encodedWa(JSON.stringify(waEvent({liFatId:"fixture-advertising-id",pageTitle:'A "quoted" title'})),fmt);
-  assert.equal(fact.proof?.policyVersion,"bounded_ca_request_proof.v2");assert.equal(fact.proof?.bodyStatus,"complete");
+  assert.equal(fact.proof?.policyVersion,"bounded_ca_request_proof.v3");assert.equal(fact.proof?.bodyStatus,"complete");
   assert.equal(fact.proof?.bodyFormat,"linkedin_wa_json");assert.ok(fact.proof?.decodedBodySha256);
   assert.equal(isQualifyingSaleSharingRequest(fact.qualification),true);
   assert.deepEqual(fact.proof?.identifiers.map(({field,source})=>({field,source})),[{field:"liFatId",source:"body"}]);
@@ -103,6 +103,49 @@ test("encoded unknown privacy state, duplicate/escaped keys, malformed streams a
   const fact=captureCaliforniaRejectRequest({url:"https://px.ads.linkedin.com/wa/?fmt=g",method:"POST",requestId:"invalid",startedAtMs:200,hasBody:true,body,headers:{"content-type":"text/plain"}})!;
   assert.equal(fact.payload,"uninspected_body");
  }
- const old=post("li_adsid=private-id");assert.equal(old.proof?.policyVersion,"bounded_ca_request_proof.v1");
- assert.equal(californiaRejectRequestEvidenceSchema.safeParse({...old,proof:{...old.proof,bodyEncoding:"base64_gzip"}}).success,false,"v1 proof vocabulary remains unchanged");
+ const old=post("li_adsid=private-id");assert.equal(old.proof?.policyVersion,"bounded_ca_request_proof.v4");
+ assert.equal(californiaRejectRequestEvidenceSchema.safeParse({...old,proof:{...old.proof,policyVersion:"bounded_ca_request_proof.v1",bodyEncoding:"base64_gzip"}}).success,false,"v1 proof vocabulary remains unchanged");
+});
+
+test("reviewed matching hashes retain source proof and explicit LinkedIn field dispositions", () => {
+ const hash="a1".repeat(32);
+ const fact=encodedWa(JSON.stringify(waEvent({hem:hash})));
+ assert.equal(fact.proof?.policyVersion,"bounded_ca_request_proof.v3");
+ assert.equal(fact.qualification.basis,"linkedin_hashed_email");
+ assert.equal(isQualifyingSaleSharingRequest(fact.qualification),true);
+ assert.deepEqual(fact.proof?.identifiers.map(id=>[id.field,id.source]),[["hem","body"]]);
+ assert.ok(!JSON.stringify(fact).includes(hash));
+ assert.deepEqual(fact.proof?.identifierDispositions,[{field:"liFatId",status:"null"},{field:"hem",status:"valid"},{field:"liGiant",status:"null"}]);
+ for(const [hem,status] of [[undefined,"absent"],[null,"null"],["","empty"],["raw@example.test","invalid"],["0".repeat(64),"invalid"],["a".repeat(2049),"invalid"]] as const){
+  const value=encodedWa(JSON.stringify(waEvent({hem,liGiant:"excluded-identifier"})));
+  assert.equal(isQualifyingSaleSharingRequest(value.qualification),false);
+  assert.equal(value.proof?.identifierDispositions?.find(row=>row.field==="hem")?.status,status);
+  assert.equal(value.proof?.identifierDispositions?.find(row=>row.field==="liGiant")?.status,"excluded");
+ }
+ assert.equal(isQualifyingSaleSharingRequest(encodedWa(JSON.stringify(waEvent({hem:hash,us_privacy:"1NYN"}))).qualification),false);
+ assert.equal(californiaRejectRequestEvidenceSchema.safeParse({...fact,proof:{...fact.proof,policyVersion:"bounded_ca_request_proof.v2"}}).success,false,"old proof cannot claim newly supported identity");
+ assert.equal(post(`hem=${hash}`).payload,"uninspected_body","LinkedIn hem requires reviewed decoded WA body");
+ for(const field of ["ud[em]","ud[ph]"]){
+  const body=new URLSearchParams({id:"123",ev:"PageView",[field]:hash}).toString();
+  const meta=captureCaliforniaRejectRequest({url:"https://www.facebook.com/tr/",method:"POST",requestId:"meta",startedAtMs:200,httpStatus:200,hasBody:true,body,headers:{"content-type":"application/x-www-form-urlencoded"}})!;
+  assert.equal(meta.qualification.basis,"meta_advanced_matching_identifier");
+  assert.equal(meta.proof?.policyVersion,"bounded_ca_request_proof.v3");
+  assert.equal(meta.proof?.identifiers[0]?.field,field);
+  assert.ok(!JSON.stringify(meta).includes(hash));
+ }
+});
+
+test("new identity proof remains bounded and body invalidation stays neutral rather than failing the lane",()=>{
+ const json=JSON.stringify(waEvent({hem:"a1".repeat(32)}));
+ const wrongLength=encodedWa(json,"g","",{"content-type":"text/plain","content-length":"1"});
+ assert.equal(wrongLength.payload,"uninspected_body");
+ assert.equal(isQualifyingSaleSharingRequest(wrongLength.qualification),false);
+ assert.deepEqual(wrongLength.proof?.identifiers,[]);
+ const crowded=encodedWa(json,"g","&cid=visitor&auid=visitor&gacid=visitor&gclid=visitor&fbp=visitor&fbc=visitor&vid=visitor&msclkid=visitor&d_uuid=visitor");
+ assert.equal(crowded.proof?.identifiers.length,8);
+ assert.equal(crowded.proof?.identifiers[0]?.field,"hem");
+ assert.equal(isQualifyingSaleSharingRequest(crowded.qualification),true);
+ const foreign=captureCaliforniaRejectRequest({url:`https://px.ads.linkedin.com/collect?ud%5Bem%5D=${"a1".repeat(32)}`,method:"GET",requestId:"foreign",startedAtMs:1,hasBody:false,body:null,headers:{}})!;
+ assert.equal(isQualifyingSaleSharingRequest(foreign.qualification),false);
+ assert.deepEqual(foreign.proof?.identifiers,[]);
 });

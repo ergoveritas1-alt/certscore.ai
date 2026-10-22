@@ -60,3 +60,22 @@ test("cid is persistent only with one exact same-session stored-value match", ()
   assert.equal(inspectMeasurementRequest({...input,url:`${ga.url}&sid=123.456`})?.identifierEvidence,"unknown");
   assert.equal(inspectMeasurementRequest({...input,hashIdentifier:undefined})?.identifierEvidence,"unknown");
 });
+
+test('GA identifiers retain bounded source/digest facts despite unsupported metadata without promoting persistence',()=>{
+ const hashIdentifier=(value:string)=>createHash('sha256').update(value).digest('hex');
+ const input={...ga,url:`${ga.url}&cid=private-client-123&sid=private-session-123&ep.custom=value&npa=1`,hashIdentifier};
+ const result=inspectMeasurementRequest(input)!;
+ assert.equal(result.identifierEvidence,'unknown');assert.equal(result.payloadInspection,'unknown');
+ assert.ok(result.diagnostics?.reasons.includes('unsupported_fields'));
+ assert.deepEqual(result.identifierObservation?.fields,[
+  {field:'cid',source:'query',disposition:'observed',valueHash:hashIdentifier('private-client-123')},
+  {field:'sid',source:'query',disposition:'observed',valueHash:hashIdentifier('private-session-123')},
+ ]);
+ assert.doesNotMatch(JSON.stringify(result),/private-client|private-session|ep.custom/);
+ for(const [suffix,disposition]of [['&cid=','empty'],['&cid=unknown','invalid'],['&cid=abc&cid=def','ambiguous']] as const){
+  assert.equal(inspectMeasurementRequest({...ga,url:ga.url+suffix,hashIdentifier})?.identifierObservation?.fields[0]?.disposition,disposition);
+ }
+ assert.equal(inspectMeasurementRequest({...ga,url:ga.url+'&cid=abc'})?.identifierObservation?.fields[0]?.disposition,'hash_unavailable');
+ const large=inspectMeasurementRequest({...input,body:'x'.repeat(32769)});
+ assert.equal(large?.identifierObservation,undefined,'oversized payload cannot invent a field inventory');
+});

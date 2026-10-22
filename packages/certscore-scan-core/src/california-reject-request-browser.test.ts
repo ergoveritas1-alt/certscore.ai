@@ -32,11 +32,11 @@ test("same Chromium Request captures LinkedIn gzip/base64 event POST and exact f
   const page=await browser.newPage();let post:Request|undefined;
   await page.route("**/*",async route=>{if(route.request().method()==="POST")post=route.request();await route.fulfill({status:route.request().method()==="POST"?204:200,contentType:"text/html",body:route.request().method()==="POST"?undefined:"<button>Fixture</button>"});});
   await page.goto("https://px.ads.linkedin.com/");
-  const body=gzipSync(JSON.stringify({pids:[123],signalType:"CLICK",liFatId:"browser-fixture-ad-id",domAttributes:{tagName:"BUTTON",innerText:"Reject All Cookies"},innerElements:null,elementCrumbsTree:[]})).toString("base64");
+  const body=gzipSync(JSON.stringify({pids:[123],signalType:"CLICK",liFatId:null,hem:"a1".repeat(32),domAttributes:{tagName:"BUTTON",innerText:"Reject All Cookies"},innerElements:null,elementCrumbsTree:[]})).toString("base64");
   await page.evaluate(async body=>{await fetch("/wa/?medium=fetch&fmt=g",{method:"POST",headers:{"content-type":"text/plain;charset=UTF-8"},body});},body);
   assert.ok(post);const response=await post.response();
   const fact=captureCaliforniaRejectRequest({url:post.url(),method:post.method(),requestId:"encoded-browser",startedAtMs:200,httpStatus:response!.status(),hasBody:true,body:post.postData(),headers:await post.allHeaders()})!;
   assert.equal(fact.proof?.bodyStatus,"complete");assert.equal(fact.proof?.headersStatus,"complete");assert.equal(fact.proof?.bodyEncoding,"base64_gzip");
-  assert.equal(isQualifyingSaleSharingRequest(fact.qualification),true);assert.ok(!JSON.stringify(fact).includes("browser-fixture-ad-id"));
+  assert.equal(isQualifyingSaleSharingRequest(fact.qualification),true);assert.equal(fact.qualification.basis,"linkedin_hashed_email");assert.ok(!JSON.stringify(fact).includes("a1".repeat(32)));
  }finally{await browser.close();}
 });

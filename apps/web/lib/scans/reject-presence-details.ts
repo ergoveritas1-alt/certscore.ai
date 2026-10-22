@@ -1,3 +1,4 @@
+import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
 import { AFTER_REJECT_SCORING_POLICY, readAfterRejectScoringAssessment } from "./after-reject-scoring-contract";
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -9,7 +10,7 @@ export function projectRejectPresenceDetails(value: unknown) {
   const root = record(value);
   const retained = record(root?.retainedEvidence) ?? record(record(root?.criticalEvidence)?.retainedEvidence);
   const assessment = readAfterRejectScoringAssessment(retained?.afterRejectScoringAssessment);
-  if (assessment?.policyVersion !== AFTER_REJECT_SCORING_POLICY || !assessment.entityEvidence?.observations.length) return [];
+  if (!assessment || !isRejectPresencePolicy(assessment.policyVersion) || !assessment.entityEvidence?.observations.length) return [];
   return assessment.entityEvidence.observations.map(row => ({
     entity: row.entity ?? null, vendor: row.vendor ?? null, kind: row.kind, name: row.name,
     hostname: row.hostname ?? null, purpose: row.purpose, msAfterClick: row.msAfterClick, evidenceRef: row.evidenceRef,

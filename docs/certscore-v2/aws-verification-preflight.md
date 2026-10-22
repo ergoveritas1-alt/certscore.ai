@@ -1,0 +1,11 @@
+# CertScore.ai isolated AWS verification preflight
+
+For owner-authorized verification without a production deployment, use a temporary scanner function with the current source bundle on the verified production base image. Preserve the original region, VPC, egress configuration, worker sizes, absolute deadlines, profile and authorized action windows. Copy required credentials directly between AWS configurations in memory; never remove a required policy credential or save it to an artifact.
+
+Before site contact, test the exact temporary function, role, VPC, artifact destination and result destination. Require actual S3 PutObject and GetObject/readback, SQS SendMessage and receipt of a uniquely marked preflight message. Preflight must not launch browsers, contact the target or call models. A configured IAM allow is insufficient: endpoint policies independently restrict destination paths and queue ARNs, and updates may need time to propagate. Failed preflights do not authorize target contact.
+
+The existing us-west-1 S3 endpoint permits `v2-dag-lambda/local/*` in the scanner artifact bucket. Place isolated run evidence under a unique sub-prefix of that path. An isolated result queue needs a narrowly scoped temporary SQS endpoint grant for that queue ARN as well as the execution role's IAM permission. Record the prior policy, remove only the owned grant afterward, and verify restoration. Do not expand general bucket or queue access, route around the VPC, or send verification results to the production report queue.
+
+Use typed synthetic result purpose, preserve producer/source hashes, and assess retained evidence through the canonical pipeline. Disable the separate Options-opening lane; CMP inventory remains passive. Require explicit owner authorization for any additional site attempt after the authorized run. Preserve contact history and ledger candidates. Save diagnostics and verification results locally before removing the temporary function, role, queue, image tag and log group. Verify production function code and configuration unchanged.
+
+The October 22 Ovid run implementing this workflow is retained under `artifacts/ovid-aws-preflight-verification-2026-10-22/`. The temporary verification infrastructure is expected to cost less than $1 total and is removed after the run; no recurring capacity is provisioned.

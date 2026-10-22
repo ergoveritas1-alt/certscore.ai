@@ -1,3 +1,4 @@
+import { propertySaleSharingSourceSchema } from "./property-sale-sharing";
 import {californiaRejectRequestEvidenceSchema,validateCaliforniaRejectRequest} from "./california-reject-evidence";
 import { consentConfirmationDiagnosticsSchema } from "./consent-confirmation-diagnostics";
 import { exactCookieWriteEvidenceSchema } from "./exact-cookie-write-evidence";
@@ -128,6 +129,9 @@ export const postRefusalRegistrationSchema = z.object({
 });
 
 export const postRefusalNetworkRequestSchema = z.object({
+  // Retain the already-observed response; terminal request timing also covers
+  // failures and must never be treated as a successful collection by itself.
+  httpStatus: z.number().int().min(100).max(599).optional(),
   californiaCollection: californiaRejectRequestEvidenceSchema.optional(),
   responseCookieWrites: z.array(exactCookieWriteEvidenceSchema).max(24).optional(),
   responseCookieNamesSet: z.array(z.string().max(180)).max(96).optional(),
@@ -1233,6 +1237,7 @@ const postRejectScoringEvidenceSchema = z.object({
 }).strict();
 
 export const postRefusalReportProjectionSchema = z.object({
+  propertySaleSharingSource: propertySaleSharingSourceSchema.optional(),
   sourceIdentity:z.object({policyVersion:z.literal("post_reject_source_identity.v1"),scanId:z.string().min(1).max(160),targetSha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict().optional(),
   scoringEvidence: postRejectScoringEvidenceSchema.optional(),
   interactionDiagnostics: postRefusalInteractionDiagnosticsSchema.optional(),
@@ -1272,6 +1277,8 @@ export const postRefusalReportProjectionSchema = z.object({
     "aborted",
   ]),
 }).superRefine((projection, context) => {
+  if(projection.propertySaleSharingSource && (projection.propertySaleSharingSource.scanId!==projection.sourceIdentity?.scanId || projection.propertySaleSharingSource.targetSha256!==projection.sourceIdentity?.targetSha256))
+    context.addIssue({code:"custom",message:"Property disclosure source must bind to the Reject scan and target."});
   for(const row of projection.scoringEvidence?.requests ?? [])validateCaliforniaRejectRequest(row,context);
   for(const row of projection.afterActionRequests ?? [])validateCaliforniaRejectRequest(row,context);
   if (projection.registeredObservationCompletion && (

@@ -95,6 +95,7 @@ export function buildGpcResponseReportProjection(
 
   return {
     assessment,
+    vendorFindings: projection.vendorFindings,
     californiaDeductionPoints: projection.californiaDeductionPoints,
     comparisonHeadline: projection.comparisonHeadline,
     coverageSummary: projection.coverageSummary,
@@ -115,10 +116,12 @@ export function buildGpcResponseReportProjection(
 export function gpcCollectionRecipients(projection: GpcResponseReportProjection) {
   if (projection.assessment.contractVersion !== "certscore.gpc-response-assessment.v3") return [];
   const rows = projection.assessment.observation.requests.advertisingCollectionRecipients?.rows ?? [];
-  const groups = new Map<string, {entityId: string; label: string; count: number; firstMs?: number; lastMs?: number}>();
+  const qualified = new Set(projection.vendorFindings?.flatMap(row => row.evidenceIds) ?? []);
+  const groups = new Map<string, {entityId: string; label: string; count: number; identifiedCount: number; firstMs?: number; lastMs?: number}>();
   for (const row of rows) {
-    const group = groups.get(row.entityId) ?? {entityId: row.entityId, label: row.label, count: 0};
+    const group = groups.get(row.entityId) ?? {entityId: row.entityId, label: row.label, count: 0, identifiedCount: 0};
     group.count++;
+    if (qualified.has(row.evidenceId)) group.identifiedCount++;
     if (row.observedAtMs !== undefined) {
       group.firstMs = Math.min(group.firstMs ?? row.observedAtMs, row.observedAtMs);
       group.lastMs = Math.max(group.lastMs ?? row.observedAtMs, row.observedAtMs);

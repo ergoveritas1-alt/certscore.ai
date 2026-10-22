@@ -6297,7 +6297,7 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
 function derivePostRejectOutcomeFromEvidence(input: GdprEprivacyCoveragePolicyInput) {
   const presenceConcern=(input.normalizedConcerns??[]).find(concern=>concern.originKey===REJECT_CLICK_TRACKING_SIGNAL &&
     concern.originType==="runtime_artifact" && concern.promotionEligibility==="eligible" && concern.externalSurfacingEligibility==="eligible" &&
-    readAfterRejectScoringAssessment(concern.evidenceBundle.rawEvidence?.afterRejectScoringAssessment)?.policyVersion==="after_reject_nonessential_presence.v1");
+    readAfterRejectScoringAssessment(concern.evidenceBundle.rawEvidence?.afterRejectScoringAssessment)?.policyVersion?.startsWith("after_reject_nonessential_presence.v"));
   const presence=readAfterRejectScoringAssessment(presenceConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment);
   if (presence && presence.deductionPoints>0) return makeOutcome("post_reject_tracking_reduction","Review signal",
     `${presence.cookieRefs?.length??0} classified non-essential cookie(s) and ${presence.requestIds.length} non-essential service request(s) were observed after the Reject control was clicked. Cookie presence does not establish active use or verify refusal registration.`,

@@ -1,3 +1,5 @@
+import {assessGpcPotentialRisk, type CaliforniaPotentialRiskAssessment} from "../../lib/scans/california-potential-risk-policy";
+import {withPropertySaleSharingSource} from "../../lib/scans/property-sale-sharing-source";
 import { buildFirstLayerRejectPathProjection } from "./scan-report-consent-projection";
 import {sanitizeEvidenceRequestUrl, sanitizeEvidenceRequestPath} from "@certscore/contracts";
 import { projectGoogleConsentModeRequest } from "../../lib/scans/google-consent-mode-assessment";
@@ -6204,14 +6206,14 @@ export function buildMaterializedLocalV2Detail(
     scanRecord,
     "postRefusalPacketUri",
   );
-  const postRefusalReportProjection = bundle.postRefusalEvidence
+  const postRefusalReportProjection = withPropertySaleSharingSource(bundle.postRefusalEvidence
     ? projectPostRefusalEvidenceForReport({
         packet: bundle.postRefusalEvidence,
         ...(postRefusalPacketPointer?.sha256
           ? { packetSha256: postRefusalPacketPointer.sha256 }
           : {}),
       })
-    : getReconciledPostRefusalReportProjection(scanRecord);
+    : getReconciledPostRefusalReportProjection(scanRecord),bundle,options.policyTextEvidenceContext?.sourceBundle);
   const postRefusalRuntimeProjection = buildPostRefusalRuntimeProjection(
     postRefusalReportProjection,
     bundle.postRefusalLaneOutcome,
@@ -6690,14 +6692,17 @@ export function buildGpcResponseRuntimeProjection(
 ): {
   gpcResponseAssessment?: CanonicalEvidenceBundle["gpcResponseAssessment"];
   gpc_response_assessment?: CanonicalEvidenceBundle["gpcResponseAssessment"];
+  californiaGpcPotentialRiskAssessment?: CaliforniaPotentialRiskAssessment | null;
   gpcActivityComparison?: CanonicalEvidenceBundle["gpcActivityComparison"];
 } {
   const activityComparison = bundle.gpcResponseAssessment && bundle.scanId
     ? readGpcActivityComparison(bundle.gpcActivityComparison, bundle.gpcResponseAssessment, bundle.scanId) : undefined;
+  const potentialRisk = assessGpcPotentialRisk(bundle.gpcResponseAssessment);
   return bundle.gpcResponseAssessment
     ? {
         gpcResponseAssessment: bundle.gpcResponseAssessment,
         gpc_response_assessment: bundle.gpcResponseAssessment,
+        ...(potentialRisk ? {californiaGpcPotentialRiskAssessment:potentialRisk} : {}),
         ...(activityComparison ? { gpcActivityComparison: activityComparison } : {}),
       }
     : {};
@@ -6707,7 +6712,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v33";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v38";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

@@ -24,6 +24,7 @@
       "@certscore/contracts": ["packages/certscore-contracts/src"],
       "@certscore/vendor-resolver": ["packages/certscore-vendor-resolver/src"],
       "@certscore/vendor-resolver/runtime-script-facts": ["packages/certscore-vendor-resolver/src/runtime-script-facts.ts"],
+      "@certscore/vendor-resolver/property-sale-sharing": ["packages/certscore-vendor-resolver/src/property-sale-sharing.ts"],
       "@certscore/scan-core": ["packages/certscore-scan-core/src"],
       "@certscore/scan-core/*": ["packages/certscore-scan-core/src/*"],
       "@certscore/review-engine": ["packages/certscore-review-engine/src"],

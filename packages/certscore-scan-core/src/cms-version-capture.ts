@@ -2,19 +2,96 @@ import { createHash } from "node:crypto";
 import type { Page } from "playwright";
 import { CMS_ASSET_PATTERNS, siteMetadataSchema, WORDPRESS_RELEASE, wordpressFeedGeneratorVersion, type SiteMetadata, type CmsVersionEvidence } from "@certscore/contracts";
 import { proxyFetch } from "./proxy-fetch";
+import { retainGoogleTagContext } from "./google-tag-context";
 
 /** One existing document read. No requests, clicks or renderer waits. */
 export async function readDocumentSiteMetadata(page: Page, documentIdentity: () => { token?: string } | undefined = () => undefined): Promise<SiteMetadata | null> {
   const url = page.url();
   const identity = documentIdentity();
   const metadata = await page.evaluate((assetPatterns) => {
+    // Match the existing browser-capture serialization helper; no site SDK call.
+    const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
+    globalWithNameHelper.__name ??= function(target) { return target; };
     const elements = Array.from(document.querySelectorAll('script[src],link[href]')).slice(0, 500);
+    const tagQueues = ["dataLayer"];
     const assets = elements.flatMap(el => {
       try {
         const asset = new URL(el.getAttribute("src") || el.getAttribute("href") || "", document.baseURI);
+        const queue = asset.searchParams.getAll("l");
+        if (asset.origin === "https://www.googletagmanager.com" && /^\/(?:gtm\.js|gtag\/(?:js|destination))$/.test(asset.pathname) &&
+          queue.length === 1 && /^[A-Za-z_$][\w$]{0,63}$/.test(queue[0]!) && !tagQueues.includes(queue[0]!) && tagQueues.length < 3) tagQueues.push(queue[0]!);
         return asset.origin === location.origin && !asset.username && !asset.password ? [asset] : [];
       } catch { return []; }
     });
+    // Reuse this evaluate call. Snapshot own data properties only: no gtag/get
+    // call, push wrapping, consent update, source fetch or SDK execution.
+    const rawGoogleTagContext = (() => {
+      const limitations = new Set<string>();
+      let queuesObserved = 0, inspectedEntries = 0;
+      const rows: Array<{ queue: string; queueIndex: number; command: string; eventKind?: string; destinations: string[]; settings: Record<string, boolean> }> = [];
+      const stopAt = performance.now() + 2;
+      const own = (object: unknown, key: string): unknown => {
+        if (!object || !["object", "function"].includes(typeof object)) return;
+        const descriptor = Object.getOwnPropertyDescriptor(object, key);
+        if (descriptor && !("value" in descriptor)) limitations.add("accessor_omitted");
+        return descriptor && "value" in descriptor ? descriptor.value : undefined;
+      };
+      const destinations = (value: unknown) => {
+        const values = typeof value === "string" && value.length <= 640 ? value.split(",") : Array.isArray(value) && value.length <= 4
+          ? Array.from({ length: value.length }, (_, i) => own(value, String(i))) : [];
+        if (values.length > 4) { limitations.add("unsupported_entry"); return []; }
+        const result: string[] = [];
+        for (const value of values) {
+          if (typeof value !== "string" || !/^(?:G-[A-Z0-9]{1,60}|AW-[0-9]{1,30}|DC-[0-9]{1,30}|GT-[A-Z0-9]{1,60})(?:\/[A-Za-z0-9_.-]{1,80})?$/.test(value)) {
+            limitations.add("unsupported_entry"); continue;
+          }
+          if (!result.includes(value)) result.push(value);
+        }
+        return result;
+      };
+      try {
+        for (const queue of tagQueues) {
+          if (performance.now() >= stopAt) { limitations.add("time_limit"); break; }
+          const layer = own(globalThis, queue);
+          if (!Array.isArray(layer)) continue;
+          const length = own(layer, "length");
+          if (typeof length !== "number" || !Number.isInteger(length) || length < 0 || length > 1_000_000_000) continue;
+          queuesObserved++;
+          const allowance = Math.floor(64 / tagQueues.length);
+          const take = Math.min(length, allowance), head = Math.floor(take / 2);
+          if (length > take) limitations.add("entry_limit");
+          const indices = length <= allowance ? Array.from({ length }, (_, i) => i)
+            : [...Array.from({ length: head }, (_, i) => i), ...Array.from({ length: take - head }, (_, i) => length - (take - head) + i)];
+          for (const queueIndex of indices) {
+            if (performance.now() >= stopAt) { limitations.add("time_limit"); break; }
+            inspectedEntries++;
+            const entry = own(layer, String(queueIndex));
+            const command = own(entry, "0");
+            if (!["config", "event", "set"].includes(command as string)) continue;
+            const second = own(entry, "1"), third = own(entry, "2");
+            const object = command === "set" ? second : third;
+            const settings: Record<string, boolean> = {};
+            for (const key of ["allow_google_signals", "allow_ad_personalization_signals", "ads_data_redaction"]) {
+              const value = command === "set" && second === key ? third : own(object, key);
+              if (typeof value === "boolean") settings[key] = value;
+            }
+            const targets = command === "config" ? destinations(second) : command === "event" ? destinations(own(object, "send_to")) : [];
+            if (command === "config" && targets.length !== 1 || command === "event" && !targets.length || command === "set" && !Object.keys(settings).length) continue;
+            rows.push({ queue, queueIndex, command: command as string,
+              ...(command === "event" ? { eventKind: second === "conversion" || second === "page_view" ? second : "other" } : {}), destinations: targets, settings });
+          }
+        }
+      } catch { limitations.add("queue_read_failed"); }
+      if (!queuesObserved) limitations.add("queue_unavailable");
+      // Prefer distinct recent declarations within the same eight-row cap.
+      const seen = new Set<string>();
+      const selected = rows.reverse().filter(row => {
+        const key = JSON.stringify([row.queue, row.command, row.eventKind, row.destinations, row.settings]);
+        if (seen.has(key)) return false; seen.add(key); return true;
+      });
+      if (selected.length > 8) limitations.add("row_limit");
+      return { queuesObserved, inspectedEntries, limitations: [...limitations], rows: selected.slice(0, 8).reverse() };
+    })();
     const release = /^(?:0|[1-9]\d{0,5})\.(?:0|[1-9]\d{0,5})(?:\.(?:0|[1-9]\d{0,5}))?$/;
     const sourceUrl = new URL(location.href || document.baseURI); sourceUrl.search = ""; sourceUrl.hash = "";
     const versionEvidence: CmsVersionEvidence[] = [];
@@ -56,10 +133,14 @@ export async function readDocumentSiteMetadata(page: Page, documentIdentity: () 
       }).filter((value, index, all) => all.indexOf(value) === index).slice(0, 6),
       wordpressAssetObserved: assets.some(asset => /^\/(?:wp-content|wp-includes)\//.test(asset.pathname)),
       versionEvidence, feedLinks,
+      rawGoogleTagContext,
     };
   }, Object.values(CMS_ASSET_PATTERNS)).catch(() => null);
   if (page.url() !== url || identity?.token !== documentIdentity()?.token) return null;
-  const parsed = siteMetadataSchema.safeParse(metadata);
+  const googleTagContext = retainGoogleTagContext(metadata?.rawGoogleTagContext, {
+    documentToken: identity?.token, documentUrl: url, capturedAtEpochMs: Date.now(),
+  });
+  const parsed = siteMetadataSchema.safeParse(metadata && { ...metadata, ...(googleTagContext ? { googleTagContext } : {}) });
   return parsed.success ? parsed.data : null;
 }
 

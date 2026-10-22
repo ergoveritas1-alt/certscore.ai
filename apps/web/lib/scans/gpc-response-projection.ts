@@ -7,6 +7,7 @@ import { describeGpcObservedFacts } from "./gpc-observed-facts";
 import { readGpcActivityComparison } from "./gpc-activity-comparison";
 
 export type CanonicalGpcResponseProjection = {
+  vendorFindings?: ReturnType<typeof import("./choice-vendor-findings").gpcVendorFindings>;
   assessment: GpcResponseAssessment;
   californiaDeductionPoints: import("./california-choice-enforcement-policy").CaliforniaChoiceEnforcementPoints;
   comparisonHeadline: string;
@@ -132,6 +133,10 @@ export function buildCanonicalGpcResponseProjection(
   const presentation = describeCanonicalGpcResponse(parsedAssessment.data);
   const observedFacts = describeGpcObservedFacts(parsedAssessment.data.contractVersion === "certscore.gpc-response-assessment.v3"
     ? parsedAssessment.data.observation : undefined);
+  if (finding.details.vendorFindings?.length) {
+    observedFacts.unshift({label: "Advertising activity with GPC", value: finding.details.vendorFindings.map(row =>
+      `${row.entity}${row.firstMs === undefined ? "" : ` · first observed +${row.firstMs} ms from GPC visit start`}`).join("; ")});
+  }
   if (measured) {
     observedFacts.push({ label: measured.headline, value: measured.summary });
   } else if (observedFacts.length && parsedAssessment.data.comparison.comparable) {
@@ -140,6 +145,7 @@ export function buildCanonicalGpcResponseProjection(
 
   return {
     assessment: parsedAssessment.data,
+    vendorFindings: finding.details.vendorFindings,
     californiaDeductionPoints: deduction,
     coverageSummary: measured?.summary ?? presentation.coverageSummary,
     comparisonHeadline: measured?.headline ?? presentation.comparisonHeadline,

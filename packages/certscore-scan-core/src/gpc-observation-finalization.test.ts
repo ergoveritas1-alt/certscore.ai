@@ -17,7 +17,8 @@ async function fixture() {
       return new Promise(resolve => { resolveTree = resolve; });
     }, detach:async()=>{},
   });
-  const page = Object.assign(new EventEmitter(), {context:()=>({addInitScript:async()=>{},newCDPSession:async()=>cdp}),isClosed:()=>false,url:()=>b.url,mainFrame:()=>({})});
+  const mainFrame = {};
+  const page = Object.assign(new EventEmitter(), {context:()=>({addInitScript:async()=>{},newCDPSession:async()=>cdp}),isClosed:()=>false,url:()=>b.url,mainFrame:()=>mainFrame});
   const s = await startGpcObservationSession({page:page as unknown as Page,scanId:b.scanId,captureId:b.gpcObservationSession!.captureId,scanStartedAtMs:started});
   cdp.emit('Network.requestWillBeSent',{type:'Document',frameId:'main',loaderId:'fixture-loader',requestId:'doc',request:{url:b.url,headers:{'Sec-GPC':'1'}}});
   cdp.emit('Page.frameNavigated',{frame:{id:'main',loaderId:'fixture-loader',url:b.url}});
@@ -27,6 +28,62 @@ async function fixture() {
   return {s,page,cdp,semantic,treeCalls:()=>treeCalls,resolve:async()=>{resolveTree({frameTree:{frame:{id:'main',loaderId:'fixture-loader',url:b.url}}});await Promise.resolve();await Promise.resolve();}};
 }
 const listener = {callbacks:0,dropped:0,registered:false};
+
+test("a directly blocked request retains its original proof when terminal document binding is verified", async () => {
+  const f = await fixture();
+  f.s.recordRequest({ eventId: "blocked_bound", timestampMs: f.semantic.capturedAtMs, requestUrl: "https://collector.test/blocked", requestHeaders: {} }, {
+    allHeaders: async () => ({}), frame: () => f.page.mainFrame() as never,
+    timing: () => ({ startTime: 0, requestStart: -1, responseStart: -1 }) as never,
+    failure: () => ({ errorText: "csp" }), serviceWorker: () => null,
+  });
+  await Promise.resolve();
+  f.s.prepareFinalization(); await f.resolve();
+  try {
+    const packet = await f.s.finish(f.semantic, listener, false);
+    assert.equal(packet.terminal, "completed");
+    const blocked = packet.requests.find(r => r.eventId === "blocked_bound")!;
+    assert.equal(blocked.secGpc, null, "A blocked request never receives invented header proof");
+    assert.equal(blocked.preTransmissionBlock?.reason, "csp");
+    assert.equal(blocked.preTransmissionBlock?.documentToken, packet.mainDocument?.documentToken);
+  } finally { await f.s.close(); }
+});
+
+test("document drift preserves an incomplete packet containing directly blocked requests", async () => {
+  const f = await fixture();
+  f.s.recordRequest({ eventId: "blocked", timestampMs: f.semantic.capturedAtMs, requestUrl: "https://collector.test/blocked", requestHeaders: {} }, {
+    allHeaders: async () => ({}), frame: () => f.page.mainFrame() as never,
+    timing: () => ({ startTime: 0, requestStart: -1, responseStart: -1 }) as never,
+    failure: () => ({ errorText: "csp" }), serviceWorker: () => null,
+  });
+  await Promise.resolve();
+  f.s.prepareFinalization(); await f.resolve();
+  f.cdp.emit("Page.navigatedWithinDocument", { frameId: "main", url: `${f.page.url()}?changed=1`, navigationType: "historyApi" });
+  try {
+    const packet = await f.s.finish(f.semantic, listener, false);
+    assert.equal(packet.terminal, "incomplete");
+    assert.equal(packet.mainDocument, null);
+    assert.equal(packet.requests.length, 2);
+    const blocked = packet.requests.find(r => r.eventId === "blocked")!;
+    assert.equal(blocked.secGpc, null);
+    assert.equal(blocked.preTransmissionBlock, undefined, "Unbound blocks cannot claim the current document's enforcement");
+  } finally { await f.s.close(); }
+});
+
+test("history changes before terminal dispatch cannot invent delivery or be cleared by returning to the URL", async () => {
+  for (const returnToOriginal of [false, true]) {
+    const f = await fixture();
+    f.cdp.emit("Page.navigatedWithinDocument", { frameId: "main", url: `${f.page.url()}?changed=1`, navigationType: "historyApi" });
+    if (returnToOriginal) f.cdp.emit("Page.navigatedWithinDocument", { frameId: "main", url: f.page.url(), navigationType: "historyApi" });
+    f.s.prepareFinalization(); await f.resolve();
+    const packet = await f.s.finish(f.semantic, listener, false);
+    assert.equal(packet.terminal, "incomplete");
+    assert.equal(packet.mainDocument, null);
+    assert.equal(packet.finalization?.documentUnchanged, false);
+    assert.ok(packet.finalization?.invalidationReasons?.includes("same_document_url_changed"));
+    assert.equal(f.treeCalls(), 2);
+    await f.s.close();
+  }
+});
 
 test("deadline or cancellation before semantic readback preserves a limited terminal packet", async () => {
   for (const aborted of [false, true]) {

@@ -88,3 +88,17 @@ test("GPC request comparison sits directly in the GPC details before nested comp
  assert.match(html,/Analytics \/ session replay/);
  assert.deepEqual(measured,before);
 });
+
+test("GPC vendor evidence distinguishes identified activity and other retained requests without hiding either",()=>{
+ const timed=structuredClone(projection);
+ if(timed.assessment.contractVersion!=="certscore.gpc-response-assessment.v3")throw Error("v3");
+ timed.assessment.observation.requests.advertisingCollectionRecipients={contractVersion:"canonical_collection_recipients.v1",resolverVersion:"fixture",rows:[
+  {entityId:"ent_3ee0b5177739",label:"LinkedIn Corporation",evidenceId:"identified",observedAtMs:49},
+  {entityId:"ent_3ee0b5177739",label:"LinkedIn Corporation",evidenceId:"other",observedAtMs:70},
+ ]};
+ timed.vendorFindings=[{entityId:"ent_3ee0b5177739",entity:"LinkedIn Corporation",requestCount:1,firstMs:49,evidenceIds:["identified"]}];
+ const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={timed} california />);
+ assert.match(html,/LinkedIn Corporation/);assert.match(html,/2 collection requests/);
+ assert.match(html,/1 identified advertising, audience or synchronization request with GPC enabled/);
+ assert.doesNotMatch(html,/deduction|penalt|points/i);
+});

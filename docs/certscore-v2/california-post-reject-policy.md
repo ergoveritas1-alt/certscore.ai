@@ -19,6 +19,12 @@ CCPA processing purpose. Ambiguous, partial-category and unsupported labels rema
 unknown. This initial scope includes cookie-based advertising/identity collection;
 it does not infer a statutory sale/sharing request from every generic Reject.
 
+October 22 scope correction: new v4 assessments also accept exact direct Reject
+labels whose retained v2 action context and matching control read establish the
+cookie-consent surface. This resolves the earlier narrow label gate; it does not
+relax collection or response requirements. V1-v3 assessments retain the preceding
+scope. See [retained Reject scope policy](california-reject-scope-policy.md).
+
 Initial worker requests optionally retain `california_reject_request.v1`: exact
 request ID, method, timestamp, origin/path, original URL hash, same-Response HTTP
 status, body-presence disposition, canonical entity attribution and request-local
@@ -78,3 +84,6 @@ A replay cannot recover facts the original producer did not retain. Zero
 additional qualified deductions therefore does not establish that post-Reject
 sale/sharing stopped; fresh scans after an authorized deployment are needed to
 measure coverage from the new capture fields.
+
+
+October 22 revision: new assessments use the [qualified-disclosure policy](ca-qualified-disclosure-policy.md). NPA alone is no longer an automatic veto; historical v1 assessments retain the preceding rules. No cookie-match prerequisite applies to supported CA collection.

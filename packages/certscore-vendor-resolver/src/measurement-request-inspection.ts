@@ -1,3 +1,4 @@
+import {isAdvertisingIdentityValue} from "./advertising-identifiers";
 import type { MeasurementRequestEvidence, MeasurementStoredIdentifier } from "@certscore/contracts";
 import { COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge } from "./cookie-knowledge-base";
 import { isCanonicalGoogleAnalyticsCollectionUrl, resolveCanonicalVendor } from "./index";
@@ -73,6 +74,7 @@ export function inspectMeasurementRequest(input: { url: string; method: string; 
   const method = ["GET", "POST", "OPTIONS"].includes(input.method) ? input.method as "GET" | "POST" | "OPTIONS" : "other";
   let complete = false;
   let identifierEvidence: MeasurementRequestEvidence["identifierEvidence"] = "unknown";
+  let identifierObservation:MeasurementRequestEvidence["identifierObservation"];
   let cookieIdentifierBinding: MeasurementStoredIdentifier | undefined;
   const reasons = new Set<NonNullable<MeasurementRequestEvidence["diagnostics"]>["reasons"][number]>();
   const bodyWithinLimit = input.body === null || input.body.length <= MAX_BODY_BYTES && new TextEncoder().encode(input.body).length <= MAX_BODY_BYTES;
@@ -89,6 +91,19 @@ export function inspectMeasurementRequest(input: { url: string; method: string; 
       const bodyFields = bodySupported ? lines.map(line => [...new URLSearchParams(line)]) : [];
       const fields = [...query, ...bodyFields.flat()];
       const withinFieldLimit = fields.length <= 64;
+      // Retain positive field facts even when unrelated metadata prevents a
+      // complete measurement interpretation. Never infer persistence or purpose.
+      const inventory=withinFieldLimit?fields:fields.slice(0,64);
+      identifierObservation={policyVersion:"measurement_identifier_observation.v1",fieldInventoryComplete:bodySupported&&withinFieldLimit,fields:[]};
+      for(const field of ["cid","sid","uid","user_id","device_id","gclid","dclid","fbclid"] as const){
+        const values=inventory.filter(([key])=>key===field).map(([,value])=>value);
+        if(!values.length)continue;
+        const inQuery=query.some(([key])=>key===field),inBody=bodyFields.flat().some(([key])=>key===field);
+        const source=inQuery&&inBody?"query_and_body":inQuery?"query":"body";
+        const value=values[0]!;
+        const disposition=values.length!==1?"ambiguous":value===""?"empty":!isAdvertisingIdentityValue(field,value)?"invalid":!input.hashIdentifier?"hash_unavailable":"observed";
+        identifierObservation.fields.push({field,source,disposition,...(disposition==="observed"?{valueHash:input.hashIdentifier!(value)}:{})});
+      }
       if (!bodySupported) { reasons.add("unsupported_payload"); bodyDisposition = "limited"; }
       if (!withinFieldLimit) reasons.add("field_limit");
       const events = bodySupported ? bodyFields.map(fields => [...query, ...fields]) : [];
@@ -124,6 +139,7 @@ export function inspectMeasurementRequest(input: { url: string; method: string; 
   if (input.body === null && Object.entries(input.headers ?? {}).some(([key, value]) => key.toLowerCase() === "content-length" && value !== "0")) {
     complete = false; reasons.add("body_unavailable"); bodyDisposition = "limited";
   }
+  if(identifierObservation && reasons.has("body_unavailable"))identifierObservation.fieldInventoryComplete=false;
   const header = (key: string) => !input.headers ? "unknown" as const : Object.entries(input.headers).some(([name, value]) => name.toLowerCase() === key && value.trim() !== "") ? "present" as const : "absent" as const;
   if (!complete && identifierEvidence === "not_observed") identifierEvidence = "unknown";
   const cookieNames = Object.entries(input.headers ?? {}).filter(([key]) => key.toLowerCase() === "cookie")
@@ -137,5 +153,6 @@ export function inspectMeasurementRequest(input: { url: string; method: string; 
     method, payloadInspection: complete ? "complete" : "unknown", identifierEvidence,
     cookieHeader: header("cookie"), authorizationHeader: header("authorization"),
     ...(cookieIdentifierBinding ? { cookieIdentifierBinding } : {}),
+    ...(identifierObservation?{identifierObservation}:{}),
     diagnostics: { policyVersion: "bounded_measurement_inspection.v1", reasons: [...reasons], bodyDisposition } };
 }

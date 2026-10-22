@@ -44,7 +44,9 @@ test(`form notices retain local text and policy links without values or cross-fo
     assert.match(contact?.excerpts[0]?.text ?? "", /handling my request/);
     assert.equal(contact?.excerpts[0]?.links[0]?.url, `${url}privacy`);
     assert.equal(forms.find(form => form.title === "Other")?.privacyDisclosure?.excerpts[0]?.association, "adjacent_notice");
-    assert.equal(forms.find(form => form.title === "Unrelated")?.privacyDisclosure, undefined);
+    assert.deepEqual(forms.find(form => form.title === "Unrelated")?.privacyDisclosure,
+      { version: 2, excerpts: [], truncated: false },
+      "A completed empty inspection must not inherit another form's notice or become unavailable capture");
     assert.doesNotMatch(JSON.stringify(forms.map(form => form.privacyDisclosure)), /private-value|private-message|footer|secret/);
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));

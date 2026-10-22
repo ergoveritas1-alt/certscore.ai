@@ -29,6 +29,13 @@ export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDi
       evidenceJson: { findingId: finding.unifiedFindingId, californiaPrivacyReview: projection },
       correctionSteps: [copy.action] });
   }
+  for(const finding of eligible) {
+    if(finding.details?.family!=="california_collection_review")continue;
+    result.push({id:finding.unifiedFindingId,title:finding.title,summary:finding.summary,status:"Partial concern",
+      evidence:finding.details.assessments.flatMap(a=>a.rows.filter(r=>r.treatment==="potential_risk").map(r=>`${r.entity}: +${r.msFromAnchor} ms ${a.path==="gpc"?"from GPC visit start":"after Reject click"}; ${r.purpose} collection; sale/sharing purpose unresolved`)),
+      evidenceJson:{findingId:finding.unifiedFindingId,assessments:finding.details.assessments},
+      correctionSteps:["Review effective recipient settings, processing arrangements and privacy-choice enforcement."]});
+  }
   const gpc=buildCanonicalGpcResponseProjection(eligible);
   if (gpc && gpc.californiaDeductionPoints > 0) result.push({id:"gpc_response",
     title:"GPC choice-enforcement risk observed",summary:gpc.summary,status:"Partial concern",

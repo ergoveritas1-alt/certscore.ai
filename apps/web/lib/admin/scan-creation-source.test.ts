@@ -15,6 +15,7 @@ test("creation channels use exact retained values, never requester identity", ()
   assert.equal(scanCreationSource("sdk"), "api");
   assert.equal(scanCreationSource("browser"), "browser");
   assert.equal(scanCreationSource("api-full-scan"), "unknown");
+  assert.equal(scanCreationSource("operator-post-reject-proof-verification"), "internal");
   for (const value of [null, "", "ChatGPT", "anonymous", "192.0.2.1"]) assert.equal(scanCreationSource(value), "unknown");
 });
 

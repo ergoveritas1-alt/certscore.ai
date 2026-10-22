@@ -46,3 +46,12 @@ test("new collector profiles cannot assert persistent IDs or telemetry absence w
  assert.equal(measurementRequestEvidenceSchema.safeParse({...v3,profile:"shopify_mixed_telemetry.v1",identifierEvidence:"not_observed"}).success,false);
  assert.equal(measurementRequestEvidenceSchema.safeParse({...v3,profile:"shopify_mixed_telemetry.v1",identifierEvidence:"unknown",payloadInspection:"complete"}).success,false);
 });
+
+test('supplemental GA identifier facts validate without changing measurement conclusions',()=>{
+ const row={...evidence,profile:'google_analytics_collection.v1',requestOrigin:'https://www.google-analytics.com',requestPath:'/g/collect',version:'measurement_request_evidence.v2',diagnostics:{policyVersion:'bounded_measurement_inspection.v1',reasons:[],bodyDisposition:'empty'},identifierEvidence:'unknown',
+  identifierObservation:{policyVersion:'measurement_identifier_observation.v1',fieldInventoryComplete:false,fields:[{field:'cid',source:'query',disposition:'observed',valueHash:'a'.repeat(64)}]}};
+ assert.equal(measurementRequestEvidenceSchema.safeParse(row).success,true);
+ assert.equal(measurementRequestEvidenceSchema.safeParse({...row,identifierObservation:{...row.identifierObservation,fields:[{field:'cid',source:'query',disposition:'observed'}]}}).success,false);
+ assert.equal(measurementRequestEvidenceSchema.safeParse({...row,profile:'cloudflare_rum.v1'}).success,false);
+ assert.equal(measurementRequestEvidenceSchema.safeParse({...row,identifierObservation:{...row.identifierObservation,fields:[row.identifierObservation.fields[0],row.identifierObservation.fields[0]]}}).success,false);
+});

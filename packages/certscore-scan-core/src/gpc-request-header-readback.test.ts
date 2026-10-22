@@ -120,3 +120,35 @@ test("a delayed allHeaders readback cannot mutate the frozen post-finish packet"
     await context.close();
   } finally { await closeServer(fixture.server); await browser.close(); }
 });
+
+test('GPC supplements inspect actual POST bytes and Cookie headers with one read per candidate',async()=>{
+ const browser=await chromium.launch(chromiumLaunchOptions({headless:true}));
+ try{
+  const context=await browser.newContext({extraHTTPHeaders:{'Sec-GPC':'1'}});
+  await context.addCookies([{name:'li_sugr',value:'fixture-advertising-id',domain:'px.ads.linkedin.com',path:'/',secure:true,sameSite:'None'}]);
+  await context.route('**/*',route=>route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>GPC proof fixture</title><p>Fixture</p>',headers:{'access-control-allow-origin':'https://fixture.test','access-control-allow-credentials':'true'}}));
+  const page=await context.newPage(),started=Date.now(),captureId='22222222-2222-4222-8222-222222222222';
+  const session=await startGpcObservationSession({page,scanId:'body-proof',captureId,scanStartedAtMs:started});
+  let seq=0,headerReads=0;
+  page.on('request',r=>{
+   const id=String(++seq);
+   session.recordRequest({eventId:`e${id}`,requestId:`r${id}`,method:r.method(),timestampMs:Date.now()-started,requestUrl:r.url(),requestHeaders:{secGpc:'1'}},{
+    allHeaders:async()=>{headerReads++;const h=await r.allHeaders();return r.url().includes('pid=456')?{...h,'sec-gpc':'0'}:h;},postData:()=>r.postData(),method:()=>r.method(),frame:()=>r.frame(),
+   });
+  });
+  await page.goto('https://fixture.test');
+  await page.evaluate(async()=>{
+   await fetch('https://px.ads.linkedin.com/wa/?fmt=a',{method:'POST',body:JSON.stringify({signalType:'PAGE_VISIT',hem:'a'.repeat(64)}),credentials:'include'});
+   await fetch('https://px.ads.linkedin.com/collect/?pid=123',{credentials:'include'});
+   await fetch('https://px.ads.linkedin.com/collect/?pid=456',{credentials:'include'});
+  });
+  const packet=await finishFixture(page,session,'body-proof',captureId,started);
+  assert.equal(packet.requestProofCapture?.inspected,3);
+  assert.equal(headerReads,3,'no duplicate reads and no read for snapshot-complete non-candidates');
+  assert.ok(packet.requestProofCapture?.rows.find(r=>r.proof.path==='/wa/')?.proof.proof?.identifiers.some(i=>i.field==='hem'&&i.source==='body'));
+  assert.ok(packet.requestProofCapture?.rows.find(r=>r.proof.path==='/collect/')?.proof.proof?.identifiers.some(i=>i.source==='cookie_header'));
+  assert.equal(JSON.stringify(packet).includes('fixture-advertising-id'),false);
+  assert.equal(packet.requests.at(-1)?.secGpc,'0','explicit contradictory same-request readback overrides the snapshot');
+  await session.close();await context.close();
+ }finally{await browser.close();}
+});

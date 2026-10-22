@@ -1,6 +1,6 @@
 import type { PostRefusalReportProjection } from "@certscore/contracts";
 import { CANONICAL_VENDOR_RESOLVER_VERSION, COOKIE_PURPOSE_POLICY, getCanonicalVendorRegistryManifest,
-  resolveCanonicalVendor, resolveCanonicalVendorLabel } from "@certscore/vendor-resolver";
+  resolveCanonicalVendor, resolveCanonicalVendorLabel, resolveCanonicalCookieClassification } from "@certscore/vendor-resolver";
 import { retainedRejectPresence } from "./reject-presence-evidence";
 
 export { postRejectEntityPoints as rejectEntityPoints } from "./scoring-policy";
@@ -26,10 +26,11 @@ export function retainedRejectEntityEvidence(p: PostRefusalReportProjection, pre
   for (const cookie of presence.cookies) {
     const source = p.scoringEvidence!.postActionStorage.find(row => row.storageType === "cookie" && row.name === cookie.name &&
       row.hostname === cookie.hostname && row.identityHash === cookie.identityHash && row.valueHash === cookie.valueHash)!;
-    const identity = owner({ type: "cookie", cookieName: source.name, hostname: source.hostname,
-      cookiePurposePolicyVersion: COOKIE_PURPOSE_POLICY }, source.vendor);
+    const classification=presence.reclassify?resolveCanonicalCookieClassification(source.name,{cookieDomain:source.hostname}):null;
+    const identity = classification?.provider?{entityId:classification.provider.registryAttribution.entityId,entity:classification.provider.entity,vendor:classification.provider.vendor}:owner({ type: "cookie", cookieName: source.name, hostname: source.hostname,
+      cookiePurposePolicyVersion: presence.reclassify?COOKIE_PURPOSE_POLICY:"certscore.cookie-purpose.v5" }, source.vendor);
     observations.push({ kind: "cookie_snapshot", evidenceRef: `cookie:${cookie.identityHash ?? `${cookie.name}@${cookie.hostname ?? ""}`}:${cookie.valueHash}`,
-      name: cookie.name, ...(cookie.hostname ? { hostname: cookie.hostname } : {}), purpose: source.purpose!,
+      name: cookie.name, ...(cookie.hostname ? { hostname: cookie.hostname } : {}), purpose: classification?.category??source.purpose!,
       msAfterClick: presence.postSnapshot! - presence.start, ...(identity ?? {}) });
   }
   for (const id of presence.requestIds) {

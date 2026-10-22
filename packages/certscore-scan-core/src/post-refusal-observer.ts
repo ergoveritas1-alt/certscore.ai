@@ -740,14 +740,15 @@ export async function runPostRefusalObserver(
       const caRecipient=actionDispatched?californiaProofRecipient(request.url()):null;
       if (request.method() !== "OPTIONS" && measurementBudget.available(actionDispatched,caRecipient?.entityId)) {
         try {
-          const body = request.postData();
+          const {body,hasBody} = readPostRefusalRequestBody(request);
           const observation = { url: request.url(), method: request.method(), requestId,
             timestampMs: elapsed(parentScanStartedAtMs, startedAtEpochMs),
             hashIdentifier: hashValue,
             storedIdentifiers: !actionDispatched || measurementBaselineAtMs === undefined ? [] : measurementCandidates.map(row => ({ ...row, capturedAtMs: measurementBaselineAtMs! })), body: body && body.length > 32768 ? body.slice(0, 32769) : body };
-          captured.measurementEvidence = inspectMeasurementRequest(observation);
+          const measurementInput=body!==undefined||!hasBody?{...observation,body:observation.body??null}:undefined;
+          captured.measurementEvidence = measurementInput?inspectMeasurementRequest(measurementInput):undefined;
           const caInput={url:observation.url,method:observation.method,requestId,startedAtMs:observation.timestampMs,
-            hasBody:body!==null,body:observation.body};
+            hasBody,body:observation.body};
           if(caRecipient)captured.californiaCollection=captureCaliforniaRejectRequest(caInput)??undefined;
           if (captured.measurementEvidence || captured.californiaCollection) {
             measurementBudget.retained(actionDispatched,caRecipient?.entityId);
@@ -755,7 +756,7 @@ export async function runPostRefusalObserver(
             // Pending/failed header reads stay unknown; never await them at publication.
             void request.allHeaders().then(headers => {
               if (timing.observationEndedAtMs !== undefined || effectiveSignal?.aborted) return;
-              captured.measurementEvidence = inspectMeasurementRequest({ ...observation, headers });
+              captured.measurementEvidence = measurementInput?inspectMeasurementRequest({ ...measurementInput, headers }):undefined;
               if(caRecipient)captured.californiaCollection=captureCaliforniaRejectRequest({...caInput,headers,httpStatus:captured.httpStatus})??undefined;
             }).catch(() => undefined);
           }
@@ -1924,6 +1925,7 @@ function classifyRequests(
       : elapsed(scanStartedAtMs, captured.startedAtEpochMs) - elapsed(scanStartedAtMs, refusalRegisteredAtEpochMs);
     return {
       requestId: captured.requestId,
+      ...(captured.httpStatus === undefined ? {} : {httpStatus:captured.httpStatus}),
       ...(californiaRows.has(captured.requestId)?{californiaCollection:californiaRows.get(captured.requestId)!}:{}),
       method: captured.request.method(),
       ...(rootStartedAtMs === undefined || rootStartedAtMs > startedAtMs ? {} : { rootStartedAtMs }),
@@ -1945,6 +1947,15 @@ function classifyRequests(
       ...purpose,
     };
   });
+}
+
+/** Body access is optional supplemental proof, not a collector identity gate. */
+export function readPostRefusalRequestBody(request:Pick<Request,"method"|"postData">){
+ let body:string|null|undefined;
+ try{body=request.postData();}catch{body=undefined;}
+ // An opaque body read cannot erase independently identified URL/collector
+ // facts. POST remains explicitly uninspected; no body absence is invented.
+ return {body,hasBody:body===undefined?!["GET","HEAD"].includes(request.method()):body!==null};
 }
 
 /** Shared producer classification for fresh capture and explicit evidence replays.

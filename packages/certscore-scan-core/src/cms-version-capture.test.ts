@@ -96,7 +96,7 @@ test("production runtime lane retains a feed declaration and GPC never repeats i
     if (req.url === "/feed/") { feedRequests++; res.setHeader("content-type", "application/rss+xml"); res.end(rss("6.8")); return; }
     if (req.url !== "/") { res.end(""); return; }
     res.setHeader("content-type", "text/html");
-    res.end(`<html lang="en"><head><link rel="alternate" type="application/rss+xml" href="/feed/"/><script src="/wp-includes/js/wp-embed.min.js?ver=6.8.3"></script></head><body><h1>Owned CMS fixture</h1><p>${"Public product information. ".repeat(100)}</p></body></html>`);
+    res.end(`<html lang="en"><head><link rel="alternate" type="application/rss+xml" href="/feed/"/><script src="/wp-includes/js/wp-embed.min.js?ver=6.8.3"></script><script>window.dataLayer = [['config','G-ABC123',{allow_google_signals:true}],['event','conversion',{send_to:'AW-123/fixture'}]];</script></head><body><h1>Owned CMS fixture</h1><p>${"Public product information. ".repeat(100)}</p></body></html>`);
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address(); assert.ok(address && typeof address === "object");
@@ -111,6 +111,10 @@ test("production runtime lane retains a feed declaration and GPC never repeats i
       assert.equal(proof?.version, gpc ? undefined : "6.8");
       assert.equal(feedRequests, 1);
       assert.ok(result.domSnapshots.at(-1)?.documentIdentity?.token);
+      const context = result.domSnapshots.at(-1)?.siteMetadata?.googleTagContext;
+      assert.equal(context?.documentToken, result.domSnapshots.at(-1)?.documentIdentity?.token);
+      assert.deepEqual(context?.rows.map(row => row.destinations[0]?.namespace), ["G", "AW"]);
+      assert.equal(context?.backendAdsLink, "not_observable");
     }
   } finally { await browser.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); }
 });

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { gpcRequestProofSchema } from "./california-reject-evidence";
+import { saleSharingRequestQualificationSchema } from "./gpc-bounded-observation";
 import { gpcOptOutObservationSchema } from "./gpc-opt-out-prototype";
 const time = z.number().int().nonnegative();
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -45,6 +47,18 @@ export const gpcObservationSessionSchema = z.object({
       documentToken: z.string().min(1).max(160), secGpcHeaderRetained: z.literal(false),
       responseReceived: z.literal(false), networkTimingAvailable: z.literal(false), serviceWorker: z.literal(false),
     }).strict().optional() }).strict()).max(5000),
+  /** Supplemental discovery only. Missing proof never vetoes URL evidence. */
+  requestProofCapture: z.object({
+    contractVersion:z.literal("gpc_request_capture.v1"), inspected:time.max(48), skipped:time,
+    pending:time.max(48), failed:time.max(48), retentionDropped:time.max(48),
+    rows:z.array(z.object({eventId:z.string().min(1).max(160),documentToken:z.string().min(1).max(160),
+      capturedAtMs:time,proof:gpcRequestProofSchema}).strict()).max(32),
+    // Keep known same-request restrictions even if detailed proof loses a slot.
+    restrictions:z.array(z.object({eventId:z.string().min(1).max(160),documentToken:z.string().min(1).max(160),
+      urlSha256:hash,timestampMs:time,capturedAtMs:time,
+      processingSignals:saleSharingRequestQualificationSchema.shape.processingSignals.min(1),
+    }).strict()).max(48),
+  }).strict().optional(),
   requestsObserved: time, requestsDropped: time,
   listener: z.object({ callbacks: time, dropped: time, registered: z.boolean() }).strict(),
   /** Correlation aids only. These never replace the request's original header proof. */
@@ -68,6 +82,18 @@ export const gpcObservationSessionSchema = z.object({
   }).strict().optional(),
   limitationKeys: z.array(z.string().min(1).max(160)).max(32),
 }).strict().superRefine((p, ctx) => {
+  const capture=p.requestProofCapture;
+  if(capture){
+    const bound=(eventId:string,url:string,at:number,captured:number)=>p.requests.some(r=>r.eventId===eventId&&r.urlSha256===url&&r.timestampMs===at)&&captured>=at&&captured<=p.captureEndedAtMs;
+    if(p.contractVersion!=="certscore.gpc-observation-session.v2" ||
+      capture.rows.length+capture.retentionDropped+capture.pending+capture.failed!==capture.inspected ||
+      new Set(capture.rows.map(r=>r.eventId)).size!==capture.rows.length ||
+      new Set(capture.restrictions.map(r=>r.eventId)).size!==capture.restrictions.length ||
+      capture.restrictions.length>capture.inspected ||
+      capture.rows.some(r=>!bound(r.eventId,r.proof.urlSha256,r.proof.startedAtMs,r.capturedAtMs)) ||
+      capture.restrictions.some(r=>!bound(r.eventId,r.urlSha256,r.timestampMs,r.capturedAtMs)))
+      ctx.addIssue({code:z.ZodIssueCode.custom,message:"GPC supplemental proof requires bounded same-request capture."});
+  }
   const f = p.finalization;
   if (f && ((f.readbackStartedAtMs !== null && (f.readbackStartedAtMs < p.captureStartedAtMs || f.readbackStartedAtMs > p.captureEndedAtMs)) ||
     (f.readbackCompletedAtMs !== null && (f.readbackStartedAtMs === null || f.readbackCompletedAtMs < f.readbackStartedAtMs || f.readbackCompletedAtMs > p.captureEndedAtMs)) ||

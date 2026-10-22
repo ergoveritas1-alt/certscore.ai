@@ -12,6 +12,7 @@ import { runAccessibilityAudit, unavailableAccessibilityAudit } from "../accessi
 import type { AccessibilityAuditObservation } from "@certscore/contracts";
 import { installBorlabsDeferredDialogReveal, revealBorlabsDeferredDialog } from "../borlabs-passive-dialog-reveal.js";
 import { installFormDestinationTracing } from "../form-destination-trace.js";
+import { readRuntimeRequestPayload } from "../request-payload-signals.js";
 import { SITE_INTEGRITY_LIMITS, siteIntegrityCodeProofSchema, siteIntegrityObservationSchema, type SiteIntegrityObservation } from "@certscore/contracts";
 import { createHash, randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
@@ -910,7 +911,7 @@ export async function preConsentRuntimeScanner(
     const headers = request.headers();
     const safeHeaders = safeRequestHeaders(headers);
     const querySignals = querySignalsFromUrl(requestUrl);
-    const payloadSignals = payloadSignalsFromRequest(request);
+    const payload = readRuntimeRequestPayload(request);
     const collectionEndpoint = isCollectionEndpoint(requestUrl, request.resourceType());
     const endpointAttribution = classifyEndpointAttribution({
       url: requestUrl,
@@ -999,11 +1000,11 @@ export async function preConsentRuntimeScanner(
       endpointGeographyPrecision: endpointGeography?.precision,
       endpointGeographyBasis: endpointGeography?.basis,
       relatedEvidenceRefs: [],
-      requestPayloadSignals: payloadSignals,
+      requestPayloadSignals: payload.signals,
     };
     const googleConsentMode = captureGoogleConsentModeRequest({ url: requestUrl, requestId, timestampMs: event.timestampMs });
     if (googleConsentMode) event.googleConsentMode = googleConsentMode;
-    formTracing?.request(requestId, requestUrl, request.method(), event.timestampMs, request.postData(), currentBrowserDocumentIdentity(page)?.token ?? "");
+    formTracing?.request(requestId, requestUrl, request.method(), event.timestampMs, payload.body, currentBrowserDocumentIdentity(page)?.token ?? "");
     networkEvents.push(event);
     cmpInitialization?.recordRequest(event);
     impactCapture?.recordRequest(event);
@@ -2358,7 +2359,6 @@ export async function preConsentRuntimeScanner(
         "Existing module budget leaves no loading-document allowance after reserving the atomic inventory capture.");
     }
 
-    gpcObservationSession?.prepareFinalization();
     const [pageEvidence, initialConsentObservation, lateAccessibilityObservation, gpcSignalObservation] = await recordTiming(
       timingBreakdown,
       "page evidence capture",
@@ -4226,6 +4226,12 @@ export async function preConsentRuntimeScanner(
     // readback, or budget. Other capture modes keep their earlier boundary.
     const finalizeGpcAfterPassiveMetadata = deferGpcFinalization &&
       captureScope === "runtime_evidence" && input.globalPrivacyControlEnabled === true;
+    // Dispatch the one terminal loader read only after already-required page
+    // and sparse-document recovery. Starting it before that work makes a real
+    // recovery commit invalidate the independent observation unnecessarily.
+    // This is the first read, never a refresh/rebind of dispatched proof. The
+    // paired impact/signal snapshot remains frozen at its original boundary.
+    gpcObservationSession?.prepareFinalization();
     if (deferGpcFinalization && !finalizeGpcAfterPassiveMetadata) await finalizeGpcEvidence();
 
     // All consent visual capture is complete. Reuse only the unused portion
@@ -4350,8 +4356,8 @@ export async function preConsentRuntimeScanner(
     retainedTransportSecurityObservation = transportSecurityObservation ?? undefined;
     retainedTransportSecurityArtifactRef = transportSecurityArtifactRef;
 
-    // Keep the original early loader anchor and paired-impact freeze. A page
-    // change during passive metadata invalidates proof rather than rebinding it.
+    // Keep the post-recovery loader anchor and original paired-impact freeze.
+    // A page change after the single loader read invalidates proof; no refresh.
     // Stop before geometry, inventory hooks, accessibility or form pixel work.
     if (finalizeGpcAfterPassiveMetadata) await finalizeGpcEvidence();
 
@@ -12454,41 +12460,6 @@ function classifyKnownCookiePurpose(name: string): CookieEvent["cookiePurpose"] 
     return "analytics";
   }
   return "unknown";
-}
-
-function payloadSignalsFromRequest(request: Request): NetworkEvent["requestPayloadSignals"] {
-  const postData = request.postData();
-  if (!postData) {
-    return {
-      bodyPresent: false,
-      bodyFieldNames: [],
-    };
-  }
-
-  return {
-    bodyPresent: true,
-    bodySizeBytes: Buffer.byteLength(postData),
-    bodyFieldNames: bodyFieldNames(postData),
-  };
-}
-
-function bodyFieldNames(body: string): string[] {
-  if (body.length > 20_000) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(body) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return Object.keys(parsed);
-    }
-  } catch {
-    // Try form-encoded below.
-  }
-  try {
-    return unique([...new URLSearchParams(body).keys()]);
-  } catch {
-    return [];
-  }
 }
 
 // Kept as the runtime API; classification lives in the canonical resolver.

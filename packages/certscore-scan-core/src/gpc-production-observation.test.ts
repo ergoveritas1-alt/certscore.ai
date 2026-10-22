@@ -35,11 +35,11 @@ function collectorFixture(url: string, historicalOverlap = false) {
     bundle.normalizedVendorObservations.push(duplicate);
   }
   bundle.gpcObservationSession!.requests.find(r => r.eventId === event.eventId)!.urlSha256 = createHash("sha256").update(url).digest("hex");
-  const run = () => {
+  const run = (propertySource?: Parameters<typeof buildGpcProductionObservation>[0]["propertySource"]) => {
     bundle.gpcObservationSession=gpcObservationSessionSchema.parse(bundle.gpcObservationSession);
     bundle.gpcPrototypeSessionBinding!.sessionSha256 = createHash("sha256").update(JSON.stringify(bundle.gpcObservationSession)).digest("hex");
     const bytes = Buffer.from(JSON.stringify(bundle));
-    return buildGpcProductionObservation({ scanId: bundle.scanId, source: { bytes,
+    return buildGpcProductionObservation({ scanId: bundle.scanId, propertySource, source: { bytes,
       pointer: { uri: "fixture.json", sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") } } });
   };
   return { bundle, event, run };
@@ -137,8 +137,8 @@ test("GPC producer retains verified request roles and restrictions without dropp
     const { run, bundle, event } = collectorFixture(url);
     const result = run();
     assert.equal(result.requests.advertisingCollectionCount, 1);
-    assert.deepEqual(result.requests.advertisingCollectionQualification, { policyVersion: "gpc_sale_sharing_evidence.v2",
-      rows: [{ evidenceId: event.eventId, activity, basis: activity === "unresolved" ? "endpoint_or_identity_unresolved" : "google_advertising_feature_identifier", processingSignals: [...signals], gpp: decodeGppRequest(new URLSearchParams()) }] });
+    assert.deepEqual(result.requests.advertisingCollectionQualification, { policyVersion: "gpc_sale_sharing_evidence.v5",
+      rows: [{ policyVersion:"ca_sale_sharing_qualification.v3", evidenceId: event.eventId, activity, basis: activity === "unresolved" ? "endpoint_or_identity_unresolved" : "google_advertising_feature_identifier", processingSignals: [...signals], gpp: decodeGppRequest(new URLSearchParams()) }] });
     bundle.networkResponseEvents[0]!.status = 500;
     assert.deepEqual(run().requests.advertisingCollectionQualification?.rows, [], "classification cannot invent successful collection");
   }
@@ -180,4 +180,91 @@ test("GPP propagation observations require retained successful requests and posi
     assert.equal(rows?.length,mode==="valid"?1:0,JSON.stringify({mode,observation}));
     if(mode==="valid")assert.equal(rows?.[0]?.cmpEvidence?.observedAtMs,f.event.timestampMs-1);
   }
+});
+
+test('same-request GPC POST proof adds a recipient through canonical observation and CA policy',async()=>{
+ const {createGpcRequestProofCapture}=await import('./gpc-request-proof');
+ const {deriveCaliforniaGpcResponsePolicy}=await import('../../../apps/web/lib/scans/california-gpc-response-policy');
+ const url='https://px.ads.linkedin.com/wa/?fmt=a';
+ const {bundle,event,run}=collectorFixture(url);
+ event.method='POST';
+ assert.equal(run().requests.advertisingCollectionQualification?.rows[0]?.activity,'unresolved');
+ const session=bundle.gpcObservationSession!,capture=createGpcRequestProofCapture(()=>event.timestampMs+1);
+ capture.reserve(event,session.mainDocument!.documentToken,{method:()=>event.method,postData:()=>JSON.stringify({signalType:'PAGE_VISIT',hem:'a'.repeat(64)})})!({'content-type':'text/plain'});
+ session.requestProofCapture=capture.finish();
+ const observation=run();
+ assert.equal(observation.requests.advertisingCollectionQualification?.rows[0]?.basis,'linkedin_hashed_email');
+ // The same shared policy consumes the producer-bound observation; no UI shortcut.
+ const {buildGpcResponseAssessment}=await import('./gpc-response-assessment');
+ const {gpcRuntimeFixture}=await import('../../certscore-contracts/src/test-fixtures/gpc-runtime');
+ const {buildUnifiedFindingDisplayPackets}=await import('../../../apps/web/lib/scans/unified-findings');
+ const bytes=Buffer.from(JSON.stringify(bundle)),pointer={uri:'fixture.json',sizeBytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};
+ const comparison=buildGpcResponseAssessment({baseline:gpcRuntimeFixture({enabled:false}),baselineArtifact:pointer,gpc:bundle,gpcArtifact:pointer});
+ const assessment={...comparison,contractVersion:'certscore.gpc-response-assessment.v3' as const,observation};
+ const result=deriveCaliforniaGpcResponsePolicy(assessment);
+ assert.equal(result.deductionPoints,15);assert.deepEqual(result.recipientIds,['ent_3ee0b5177739']);
+ const findings=buildUnifiedFindingDisplayPackets({runtimeArtifacts:{gpcResponseAssessment:assessment},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+ const finding=findings.find(f=>f.unifiedFindingId==='gpc_response');
+ assert.ok(finding?.scoreEffects?.length);assert.match(finding!.summary,/LinkedIn/);
+});
+
+test('the 100-row GPC qualification sample preserves a late distinct recipient after duplicate traffic',()=>{
+ const {bundle,event,run}=collectorFixture('https://www.google.com/pagead/conversion/123/?gclid=visitor123');
+ const session=bundle.gpcObservationSession!;
+ for(let i=0;i<105;i++){
+  const url=i===104?'https://px.ads.linkedin.com/collect/?pid=123&li_fat_id=visitor123':event.requestUrl;
+  const next={...event,eventId:`late-${i}`,requestId:`late-r-${i}`,requestUrl:url,url,timestampMs:event.timestampMs+i+1};
+  bundle.networkEvents.push(next);bundle.networkResponseEvents.push({...next,eventType:'network_response',eventId:`response-${i}`,responseUrl:url,status:200});
+  session.requests.push({eventId:next.eventId,timestampMs:next.timestampMs,urlSha256:createHash('sha256').update(url).digest('hex'),secGpc:'1'});session.requestsObserved++;
+ }
+ bundle.normalizedVendorObservations=resolveVendorObservations(bundle.networkEvents.map(e=>({type:'request' as const,url:e.requestUrl,evidenceId:e.eventId,sourceScanner:'pre_consent_runtime',matchSource:'network_request' as const})));
+ const result=run();
+ assert.equal(result.requests.advertisingCollectionCount,106);
+ assert.equal(result.requests.advertisingCollectionRecipients?.rows.length,100);
+ assert.ok(result.requests.advertisingCollectionRecipients?.rows.some(r=>r.entityId==='ent_3ee0b5177739'));
+});
+
+test("property-bound owner purpose joins successful GPC-session collection and cannot borrow identity, signal or source proof",()=>{
+ const url="https://www.google-analytics.com/g/collect?v=2&tid=G-ABC123&cid=123.456&npa=1";
+ for(const mode of ["positive","wrong_property","generic","restricted","failed","signal"]){
+  const {bundle,event,run}=collectorFixture(mode==="restricted"?url+"&rdp=1":url);
+  bundle.policySurfaceObservations=[{observationId:"privacy",surfaceType:"privacy_policy",url:bundle.url+"privacy",sourceScanner:"policy_surface",scenario:"policy_surface_review",consentStateAtTime:"not_applicable",discoveryMethod:"footer_link",status:"fetched",
+   targetRelationship:"target_controller",ownershipConfidence:.98,confidence:.98,documentEvaluationState:"usable",documentRole:"policy_document",documentFetchState:"fetched",httpStatus:200,documentLanguage:"en",
+   textExcerpt:mode==="generic"?"We use Google Analytics.":`We share data collected through Google Analytics property ${mode==="wrong_property"?"G-OTHER1":"G-ABC123"} with Google for cross-context behavioral advertising.`}];
+  if(mode==="failed")bundle.networkResponseEvents[0]!.status=500;
+  if(mode==="signal")bundle.gpcObservationSession!.requests.find(r=>r.eventId===event.eventId)!.secGpc=null;
+  const result=run();
+  const rows=result.requests.advertisingCollectionQualification?.rows??[];
+  const {gpcPolicyCollectionEvidenceIds}=require("../../certscore-contracts/src/gpc-bounded-observation");
+  assert.equal(gpcPolicyCollectionEvidenceIds(result).length,mode==="positive"?1:0,mode);
+  if(mode==="positive"){assert.equal(rows[0]?.activity,"declared_sale_sharing_collection");assert.ok(rows[0]?.propertyEvidence);assert.deepEqual(rows[0]?.processingSignals,["google_npa"]);}
+ }
+});
+
+
+test("verified policy worker purpose joins GPC without borrowing its collection; bad corroborating bytes leave direct recipients unchanged",()=>{
+ const {bundle,run}=collectorFixture("https://www.google-analytics.com/g/collect?v=2&tid=G-ABC123&cid=123.456");
+ const policy=structuredClone(bundle);policy.policySurfaceObservations=[{observationId:"privacy",surfaceType:"privacy_policy",url:bundle.url+"privacy",sourceScanner:"policy_surface",scenario:"policy_surface_review",consentStateAtTime:"not_applicable",discoveryMethod:"footer_link",status:"fetched",confidence:.98,
+ targetRelationship:"target_controller",ownershipConfidence:.98,documentEvaluationState:"usable",documentRole:"policy_document",documentFetchState:"fetched",httpStatus:200,documentLanguage:"en",textExcerpt:"We use Google Analytics property G-ABC123 for remarketing."}];
+ const artifact=()=>{const bytes=Buffer.from(JSON.stringify(policy));return {bytes,pointer:{uri:"s3://fixture/policy.json",sha256:createHash("sha256").update(bytes).digest("hex"),sizeBytes:bytes.length}};};
+ assert.equal(run(artifact()).requests.advertisingCollectionEvidenceIds?.length,1);
+ const bad=artifact();bad.pointer.sha256="f".repeat(64);assert.equal(run(bad).requests.advertisingCollectionEvidenceIds?.length,0);
+ policy.scanId="other-scan";assert.equal(run(artifact()).requests.advertisingCollectionEvidenceIds?.length,0);
+ policy.scanId=bundle.scanId;policy.url="https://other.test/";assert.equal(run(artifact()).requests.advertisingCollectionEvidenceIds?.length,0);
+ const direct=collectorFixture("https://px.ads.linkedin.com/collect?pid=publisher&li_adsId=visitor-fixture");assert.equal(direct.run(bad).requests.advertisingCollectionEvidenceIds?.length,1);
+});
+
+test("body-only Analytics property and identity proof can add a recipient without requiring cookie matching",()=>{
+ const {bundle,event,run}=collectorFixture("https://www.google-analytics.com/g/collect");
+ event.method="POST";
+ bundle.policySurfaceObservations=[{observationId:"privacy",surfaceType:"privacy_policy",url:bundle.url+"privacy",sourceScanner:"policy_surface",scenario:"policy_surface_review",consentStateAtTime:"not_applicable",discoveryMethod:"footer_link",status:"fetched",confidence:.98,
+ targetRelationship:"target_controller",ownershipConfidence:.98,documentEvaluationState:"usable",documentRole:"policy_document",documentFetchState:"fetched",httpStatus:200,documentLanguage:"en",textExcerpt:"We use Google Analytics property G-ABC123 for remarketing."}];
+ const {captureCaliforniaRejectRequest}=require("./california-reject-request");
+ const proof=captureCaliforniaRejectRequest({url:event.requestUrl,method:"POST",requestId:event.requestId,startedAtMs:event.timestampMs,httpStatus:204,hasBody:true,
+ body:"v=2&tid=G-ABC123&cid=123.456",headers:{"content-type":"application/x-www-form-urlencoded"}});
+ assert.ok(proof.propertyBinding);
+ bundle.gpcObservationSession!.requestProofCapture={contractVersion:"gpc_request_capture.v1",inspected:1,skipped:0,pending:0,failed:0,retentionDropped:0,rows:[{eventId:event.eventId,documentToken:"fixture-loader",capturedAtMs:900,proof:{...proof,contractVersion:"gpc_request_proof.v1"}}],restrictions:[]};
+ assert.equal(run().requests.advertisingCollectionEvidenceIds?.length,1);
+ bundle.gpcObservationSession!.requestProofCapture.rows[0]!.proof.requestId="different-request";
+ assert.equal(run().requests.advertisingCollectionEvidenceIds?.length,0);
 });

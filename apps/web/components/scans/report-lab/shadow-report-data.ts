@@ -134,6 +134,7 @@ export type ChoicePathComparison = {
 };
 
 export type GpcResponseReportProjection = {
+  vendorFindings?: ReturnType<typeof import("../../../lib/scans/choice-vendor-findings").gpcVendorFindings>;
   activityComparison?: import("@certscore/contracts").GpcActivityComparison;
   observedFacts: Array<{ label: string; value: string }>;
   assessment: GpcResponseAssessment;

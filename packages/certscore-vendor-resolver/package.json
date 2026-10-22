@@ -27,12 +27,19 @@
     "./runtime-script-facts": {
       "types": "./dist/runtime-script-facts.d.ts",
       "default": "./dist/runtime-script-facts.js"
+    },
+    "./property-sale-sharing": {
+      "types": "./dist/property-sale-sharing.d.ts",
+      "default": "./dist/property-sale-sharing.js"
     }
   },
   "typesVersions": {
     "*": {
       "runtime-script-facts": [
         "dist/runtime-script-facts.d.ts"
+      ],
+      "property-sale-sharing": [
+        "dist/property-sale-sharing.d.ts"
       ]
     }
   }

@@ -11,7 +11,7 @@ type EventInput = { kind: "input" | "change" | "submit"; time: number; pageUrl: 
 export function createFormDestinationCollector(startedAt: number) {
   const secret = randomBytes(32);
   const events: Array<{ event: FormDestinationTrace["events"][number]; values: Array<{ name: string; value: string; fieldRef: string }> }> = [];
-  const pending: Array<{ id: string; url: string; method: string; time: number; body: string | null; token: string; status: "request_observed" | "response_observed" | "failed" }> = [];
+  const pending: Array<{ id: string; url: string; method: string; time: number; body: string | null | undefined; token: string; status: "request_observed" | "response_observed" | "failed" }> = [];
   let truncated = false, unsupportedPayloads = 0, finished = false;
   return {
     event(input: EventInput, token: string, actualPageUrl: string) {
@@ -27,7 +27,7 @@ export function createFormDestinationCollector(startedAt: number) {
       events.push({ event: { evidenceRef: `form_trace:event:${i}`, kind: input.kind, observedAtMs: input.time - startedAt, documentUrl: pageUrl, documentToken: token, formIndex: input.formIndex, actionUrl, actionDomain: domain(actionUrl), fields },
         values: fields.flatMap((f,j) => { const value = input.fields[j]?.value; return f.personal && typeof value === "string" && value.length >= 4 && value.length <= 2048 && f.name ? [{ name: f.name, value, fieldRef: f.evidenceRef }] : []; }) });
     },
-    request(id: string, url: string, method: string, time: number, body: string | null, token: string) {
+    request(id: string, url: string, method: string, time: number, body: string | null | undefined, token: string) {
       if (finished) return;
       if (pending.length >= 100) { if (events.length) { truncated = true; return; } pending.shift(); }
       if (!safeUrl(url)) return;
@@ -42,6 +42,7 @@ export function createFormDestinationCollector(startedAt: number) {
         // Nearest preceding event in the same browser document; time alone never proves submission causality.
         const event = [...events].reverse().find(e => e.event.documentToken === r.token && e.event.observedAtMs <= r.time);
         if (!event) continue;
+        if (r.body === undefined) unsupportedPayloads++;
         const pairs: Array<{ key: string; value: string; location: "body" | "query" }> = [...new URL(r.url).searchParams].map(([key,value])=>({key,value,location:"query"}));
         if (r.body) {
           try { const json = JSON.parse(r.body); if (json && typeof json === "object" && !Array.isArray(json)) for (const [key,value] of Object.entries(json).slice(0,100)) if (typeof value === "string") pairs.push({key,value,location:"body"}); }

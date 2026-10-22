@@ -5,7 +5,7 @@ import {gzipSync} from "node:zlib";
 import {postRefusalReportProjectionSchema,deriveConsentControlAssessment} from "@certscore/contracts";
 import {captureCaliforniaRejectRequest} from "../../../../packages/certscore-scan-core/src/california-reject-request";
 import {assessCaliforniaPostReject,retainedCaliforniaPostReject} from "./california-post-reject-policy";
-import {afterRejectClickProjection} from "./test-fixtures/after-reject-scoring";
+import {afterRejectClickProjection,withRetainedRejectContext} from "./test-fixtures/after-reject-scoring";
 import {buildPostRefusalRuntimeProjection} from "./post-refusal-runtime-projection";
 import {buildUnifiedFindingDisplayPackets} from "./unified-findings";
 import {deriveCaliforniaRegulatoryScore} from "./california-regulatory-score";
@@ -16,6 +16,7 @@ import {gpcRuntimeFixture} from "../../../../packages/certscore-contracts/src/te
 import {buildGpcProductionAssessment} from "../../../../packages/certscore-scan-core/src/gpc-production-observation";
 import {buildGpcResponseAssessment} from "../../../../packages/certscore-scan-core/src/gpc-response-assessment";
 import {resolveCanonicalVendor} from "@certscore/vendor-resolver";
+import {extractPropertySaleSharingSource} from "@certscore/vendor-resolver/property-sale-sharing";
 const linkedin="https://px.ads.linkedin.com/collect?pid=publisher&li_adsId=visitor-fixture";
 const google="https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC&cid=visitor-fixture";
 function projection(urls=[linkedin]) {
@@ -51,7 +52,7 @@ function canonical(p:ReturnType<typeof projection>,withGpc=false) {
 test("California post-Reject request evidence persists canonically and unions recipients with GPC without a registration gate",()=>{
  const p=projection(),a=assessCaliforniaPostReject(p)!;assert.equal(p.registrationStatus,"unconfirmed");
  assert.equal(a.status,"qualified_collection");assert.equal(a.recipientIds.length,1);
- const first=canonical(p);assert.equal(first.score.score,85);assert.equal(first.score.policyVersion,"california-regulatory-posture.v14-reject");
+ const first=canonical(p);assert.equal(first.score.score,85);assert.equal(first.score.policyVersion,"california-regulatory-posture.v17-reject-scope");
  assert.deepEqual(retainedCaliforniaPostReject(first.runtime),a);
  const finding=first.findings.find(f=>f.unifiedFindingId==="california_post_reject_collection")!;
  assert.equal(finding.presentationDecision.status,"surface");assert.equal(finding.scoreEffects?.[0]?.deductionPoints,15);
@@ -62,6 +63,49 @@ test("California post-Reject request evidence persists canonically and unions re
  const drift=structuredClone(first.runtime);drift.californiaPostRejectAssessment.requests[0].msAfterClick++;
  assert.equal(retainedCaliforniaPostReject(drift),null);
  assert.ok(!buildUnifiedFindingDisplayPackets({runtimeArtifacts:drift,reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()}).some(f=>f.unifiedFindingId==="california_post_reject_collection"));
+});
+
+test('retained CMP/action context qualifies exact Reject variants without registration and preserves historical scope',()=>{
+ for(const label of ['Reject','Decline','Reject Optional Cookies']){
+  const p=withRetainedRejectContext(projection(),label),a=assessCaliforniaPostReject(p)!;
+  assert.equal(a.scope,'cookie_tracking_rejection',label);assert.equal(a.status,'qualified_collection');
+  assert.equal(a.scopeEvidence?.basis,'bound_canonical_reject_context');
+  assert.equal(assessCaliforniaPostReject(p,'california-post-reject.v3-property-bound')?.scope,'unknown');
+  assert.equal(assessCaliforniaPostReject(p,'california-post-reject.v2-qualified-disclosure')?.scope,'unknown');
+  const result=canonical(p,true);assert.equal(result.score.score,85,'same recipient across GPC and Reject is charged once');
+  assert.equal(result.score.policyVersion,'california-regulatory-posture.v17-reject-scope');
+  assert.equal(retainedCaliforniaPostReject(result.runtime)?.scope,'cookie_tracking_rejection');
+  result.runtime.californiaPostRejectAssessment.scopeEvidence.selectorSha256='0'.repeat(64);
+  assert.equal(retainedCaliforniaPostReject(result.runtime),null,'persisted scope cannot drift from retained proof');
+ }
+});
+
+test('bare labels, unrelated CMP names, partial choices and mismatched scope bindings remain unknown',()=>{
+ const original=withRetainedRejectContext(projection(),'Decline');
+ for(const change of [
+  (p:typeof original)=>{p.interactionDiagnostics!.resolver=undefined;},
+  p=>{p.actionControlProof!.classifierReasonCodes=['matched_reject'];},
+  p=>{p.actionControlProof!.classifierConfidence=.89;},
+  p=>{p.actionControlProof!.selectorHint='#other';},
+  p=>{p.interactionDiagnostics!.resolver!.snapshots[0]!.binding!.frameIdentitySha256='0'.repeat(64);},
+  p=>{p.interactionDiagnostics!.resolver!.snapshots[0]!.binding!.labelSources=['aria_label'];},
+  p=>{p.interactionDiagnostics!.resolver!.snapshots[0]!.controlLabels=['Accept'];},
+  p=>{p.interactionDiagnostics!.navigation.finalUrlAuthorized=false;},
+  p=>{p.sourceIdentity!.targetSha256='0'.repeat(64);},
+  p=>{p.actionControlProof!.contractVersion='certscore.consent_action_control_proof.v1';},
+  p=>{p.actionControlProof!.accessibleLabel='Decline analytics only';},
+  p=>{p.actionControlProof!.accessibleLabel='Do not sell or share';},
+  p=>{p.actionControlProof!.accessibleLabel='Reject and subscribe';},
+ ] as Array<(p:typeof original)=>void>){
+  const p=structuredClone(original);change(p);assert.equal(assessCaliforniaPostReject(p)?.scope??'unknown','unknown');
+ }
+ const bare=projection();bare.actionControlProof!.accessibleLabel='Reject';bare.actionControlProof!.cmpId='OneTrust';
+ assert.equal(assessCaliforniaPostReject(bare)?.scope,'unknown','a CMP name is not retained control context');
+ const failed=structuredClone(original);failed.interactionDiagnostics!.click.outcome='not_attempted';
+ assert.equal(assessCaliforniaPostReject(failed)?.recipientIds.length??0,0);
+ const explicit=projection(),historic=assessCaliforniaPostReject(explicit,'california-post-reject.v3-property-bound')!;
+ const stored={...buildPostRefusalRuntimeProjection(explicit),californiaPostRejectAssessment:historic};
+ assert.deepEqual(retainedCaliforniaPostReject(stored),historic,'historical v3 rederives without adding new scope fields');
 });
 test("unknown scope, absent historical request metadata, restrictions and bad source/action/response proof remain neutral",()=>{
  for(const mode of ["scope","history","restriction","body","response","target","failed","query_drift"]){
@@ -101,5 +145,87 @@ test("decoded LinkedIn POST proof passes canonical assessment and score while ne
   Object.assign(row,{method:"POST",sanitizedUrl:"https://px.ads.linkedin.com/wa/",californiaCollection:fact});p.afterActionRequests=structuredClone(p.scoringEvidence!.requests);
   assert.equal(fact.payload,"inspected_body");assert.equal(assessCaliforniaPostReject(p)!.status==="qualified_collection",mode==="identified");
   if(mode==="identified"){assert.equal(canonical(p).score.score,85);assert.equal(canonical(p,true).score.score,85,"shared GPC recipient is deduplicated");}
+ }
+});
+
+test("vendor findings retain both paths while matching hashes share one California recipient effect",()=>{
+ const p=projection(),row=p.scoringEvidence!.requests[0]!;
+ const body=gzipSync(JSON.stringify({signalType:"CLICK",hem:"a1".repeat(32)})).toString("base64");
+ const fact=captureCaliforniaRejectRequest({url:"https://px.ads.linkedin.com/wa/?fmt=g",method:"POST",requestId:row.requestId,startedAtMs:row.startedAtMs,httpStatus:204,hasBody:true,body,headers:{"content-type":"text/plain"}})!;
+ Object.assign(row,{method:"POST",sanitizedUrl:"https://px.ads.linkedin.com/wa/",californiaCollection:fact,vendor:"LinkedIn",purpose:"advertising",nonEssential:true});
+ p.afterActionRequests=structuredClone(p.scoringEvidence!.requests);
+ const result=canonical(p,true);
+ assert.equal(result.score.score,85);
+ assert.equal(result.runtime.californiaPostRejectAssessment.recipientIds.length,1);
+ const gpcFinding=result.findings.find(f=>f.unifiedFindingId==="gpc_response")!;
+ const rejectFinding=result.findings.find(f=>f.unifiedFindingId==="post_reject_click_tracking")!;
+ assert.match(gpcFinding.summary,/LinkedIn Corporation.*first observed \+\d+ ms from GPC visit start/);
+ assert.match(rejectFinding.summary,/LinkedIn Corporation.*first observed \+\d+ ms after Reject click/);
+ assert.ok(gpcFinding.details?.family==="privacy_signal" && gpcFinding.details.vendorFindings?.some(v=>v.entity==="LinkedIn Corporation"));
+ assert.doesNotMatch(gpcFinding.summary+rejectFinding.summary,/deduction|points|legal violation/i);
+ const restricted=projection([linkedin+"&us_privacy=1NYN"]);
+ restricted.scoringEvidence!.requests[0]!.vendor="LinkedIn";restricted.scoringEvidence!.requests[0]!.purpose="advertising";
+ restricted.afterActionRequests=structuredClone(restricted.scoringEvidence!.requests);
+ const restrictedResult=canonical(restricted,true);
+ assert.equal(restrictedResult.runtime.californiaPostRejectAssessment.recipientIds.length,0);
+ assert.ok(restrictedResult.findings.some(f=>f.unifiedFindingId==="post_reject_click_tracking" && /LinkedIn/.test(f.summary)),"EU presence remains visible when CA collection does not qualify");
+});
+
+test('NPA alone no longer vetoes supported advertising collection; cookie match is unnecessary and historical reads stay stable',()=>{
+ const p=projection([google+'&npa=1']);
+ const legacy=assessCaliforniaPostReject(p,'california-post-reject.v1')!;
+ assert.equal(legacy.status,'no_eligible_collection');
+ const revised=assessCaliforniaPostReject(p)!;assert.equal(revised.status,'qualified_collection');
+ assert.equal(revised.policyVersion,'california-post-reject.v4-retained-scope');
+ const historicalRuntime={postRefusalEvidenceProjection:p,californiaPostRejectAssessment:legacy};
+ assert.deepEqual(retainedCaliforniaPostReject(historicalRuntime),legacy);
+ const result=canonical(p,true);assert.equal(result.score.score,75,'LinkedIn GPC plus Google Reject: two unique recipients');
+ assert.equal(result.runtime.californiaPostRejectAssessment?.recipientIds.length,1);
+ const combined=canonical(projection([linkedin,google+'&npa=1']),true);assert.equal(combined.score.score,75,'same LinkedIn on both paths does not add another recipient');
+ for(const suffix of ['&npa=1&rdp=1','&npa=1&ltd=1','&npa=1&us_privacy=1NYN'])assert.notEqual(assessCaliforniaPostReject(projection([google+suffix]))?.status,'qualified_collection');
+});
+
+test("Google audience and identity-sync Reject requests independently qualify and deduplicate with advertising collection", () => {
+ const urls = [
+  "https://www.google.com/pagead/1p-user-list/123/?cid=visitor-fixture&npa=1",
+  "https://cm.g.doubleclick.net/pixel?google_nid=publisher&google_cm&npa=1",
+ ];
+ for (const url of urls) {
+  const result = canonical(projection([url]));
+  assert.equal(result.score.score, 85);
+  assert.deepEqual(result.runtime.californiaPostRejectAssessment.recipientIds, ["ent_7509263a9ab6"]);
+ }
+ const combined = canonical(projection([...urls, google + "&npa=1"]), true);
+ assert.equal(combined.score.score, 75, "one Google recipient plus LinkedIn GPC, regardless of Google's three roles");
+ assert.equal(combined.score.deductions.filter(d => d.policyKey === "california.choice_enforcement.recipients").length, 1);
+});
+
+test("property-bound sale/sharing reaches canonical CA findings, preserves EU evidence and deduplicates Google",()=>{
+ const url="https://www.google-analytics.com/g/collect?v=2&tid=G-ABC123&cid=123.456&npa=1";
+ const p=projection([linkedin]),row=p.scoringEvidence!.requests[0]!;
+ const fact=captureCaliforniaRejectRequest({url,method:"GET",requestId:row.requestId,startedAtMs:row.startedAtMs,httpStatus:204,hasBody:false,body:null,headers:{}})!;
+ assert.ok(fact.propertyBinding);assert.equal(fact.qualification.activity,"unresolved");
+ Object.assign(row,{sanitizedUrl:"https://www.google-analytics.com/g/collect",hostname:"www.google-analytics.com",californiaCollection:fact});p.afterActionRequests=structuredClone(p.scoringEvidence!.requests);
+ const source=extractPropertySaleSharingSource({scanId:p.sourceIdentity!.scanId,targetUrl:"https://fixture.test/",sourceBundleSha256:"a".repeat(64),observations:[{
+  observationId:"privacy",surfaceType:"privacy_policy",url:"https://fixture.test/privacy",status:"fetched",documentFetchState:"fetched",documentEvaluationState:"usable",documentRole:"policy_document",targetRelationship:"target_controller",ownershipConfidence:.98,httpStatus:200,documentLanguage:"en",
+  textExcerpt:"We share data collected through Google Analytics property G-ABC123 with Google for cross-context behavioral advertising."}]});
+ source.targetSha256=p.sourceIdentity!.targetSha256;p.propertySaleSharingSource=source;
+ const a=assessCaliforniaPostReject(p)!;assert.equal(a.status,"qualified_collection");assert.deepEqual(a.recipientIds,["ent_7509263a9ab6"]);assert.ok(a.requests[0]?.propertyEvidence);
+ const projected=canonical(p);assert.equal(projected.score.score,85);assert.ok(projected.findings.find(f=>f.unifiedFindingId==="california_post_reject_collection")?.scoreEffects?.length);
+ assert.deepEqual(retainedCaliforniaPostReject(projected.runtime),a);
+ const old=assessCaliforniaPostReject(p,"california-post-reject.v2-qualified-disclosure")!;assert.equal(old.recipientIds.length,0);assert.equal(old.requests[0]?.reason,"qualification_unresolved");
+ const runtime=buildPostRefusalRuntimeProjection(p),before=(runtime as Record<string,unknown>).afterRejectScoringAssessment;
+ const neutral=structuredClone(p);delete neutral.propertySaleSharingSource;
+ assert.deepEqual((buildPostRefusalRuntimeProjection(neutral) as Record<string,unknown>).afterRejectScoringAssessment,before,"static CA purpose evidence does not alter EU presence evidence");
+ assert.equal(assessCaliforniaPostReject(neutral)!.requests[0]?.reason,"sale_sharing_purpose_unresolved");
+ for(const mode of ["wrong_property","source_tamper","restriction","binding_absent","response"]){
+  const bad=structuredClone(p);
+  if(mode==="wrong_property")bad.scoringEvidence!.requests[0]!.californiaCollection!.propertyBinding!.propertyIdSha256="f".repeat(64);
+  if(mode==="source_tamper")bad.propertySaleSharingSource!.declarations[0]!.clause="We use Google Analytics.";
+  if(mode==="restriction")bad.scoringEvidence!.requests[0]!.californiaCollection!.qualification.processingSignals=["google_rdp"];
+  if(mode==="binding_absent")delete bad.scoringEvidence!.requests[0]!.californiaCollection!.propertyBinding;
+  if(mode==="response")bad.scoringEvidence!.requests[0]!.californiaCollection!.httpStatus=500;
+  bad.afterActionRequests=structuredClone(bad.scoringEvidence!.requests);
+  assert.notEqual(assessCaliforniaPostReject(bad)?.status,"qualified_collection",mode);
  }
 });

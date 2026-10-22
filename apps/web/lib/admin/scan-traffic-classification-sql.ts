@@ -1,5 +1,10 @@
+import { scanCanaryTargetSql } from "./canary-scan-target";
+
 // Parameters: Mac mini key names, QA emails, QA requester IPs, QA client names.
 export const SCAN_TRAFFIC_CLASSIFICATION_SQL = `with canary_scan_ids as materialized (
+         select s.id as scan_id from public.scans s
+          where ${scanCanaryTargetSql("s.scan_config_json")}
+         union
          select sp.scan_id
            from public.scan_pages sp
           where sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'

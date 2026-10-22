@@ -30,6 +30,7 @@ const projected = project(gpcBoundedObservationSchema);
 const activitySource = await readFile("packages/certscore-contracts/src/gpc-activity-comparison.ts", "utf8");
 const activityProjected = project(gpcActivityComparisonSchema);
 const files = {
+  "packages/certscore-api-contracts/src/property-sale-sharing.ts": banner + await readFile("packages/certscore-contracts/src/property-sale-sharing.ts", "utf8"),
   "packages/certscore-api-contracts/src/report-page-openapi.ts": banner + `export const reportEvidencePageOpenApi = ${JSON.stringify(project(reportEvidencePageSchema).json, null, 2)} as const;\n`,
   "packages/certscore-sdk/src/privacy-audit.ts": banner + `export type PrivacyAuditEvidence = ${project(privacyAuditEvidenceSchema).ts};\n`,
   "packages/certscore-api-contracts/src/gpc-activity-comparison.ts": banner + activitySource,

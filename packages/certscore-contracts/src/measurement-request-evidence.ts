@@ -29,6 +29,15 @@ export const measurementRequestEvidenceSchema = z.object({
   cookieHeader: z.enum(["absent", "present", "unknown"]),
   authorizationHeader: z.enum(["absent", "present", "unknown"]),
   cookieIdentifierBinding: cookieIdentifierBindingSchema.optional(),
+  identifierObservation: z.object({
+    policyVersion:z.literal("measurement_identifier_observation.v1"),
+    fieldInventoryComplete:z.boolean(),
+    fields:z.array(z.object({field:z.enum(["cid","sid","uid","user_id","device_id","gclid","dclid","fbclid"]),
+      source:z.enum(["query","body","query_and_body"]),
+      disposition:z.enum(["observed","empty","ambiguous","invalid","hash_unavailable"]),
+      valueHash:z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    }).strict()).max(8),
+  }).strict().optional(),
   diagnostics: z.object({
     policyVersion: z.literal("bounded_measurement_inspection.v1"),
     reasons: z.array(z.enum(["payload_size_limit", "unsupported_payload", "unsupported_fields", "duplicate_fields",
@@ -36,6 +45,11 @@ export const measurementRequestEvidenceSchema = z.object({
     bodyDisposition: z.enum(["empty", "inspected", "limited"]),
   }).strict().optional(),
 }).strict().superRefine((value, ctx) => {
+  const observation=value.identifierObservation;
+  if(observation && (value.version==="measurement_request_evidence.v1" || value.profile!=="google_analytics_collection.v1" ||
+    new Set(observation.fields.map(r=>r.field)).size!==observation.fields.length ||
+    observation.fields.some(r=>(r.disposition==="observed")!==Boolean(r.valueHash))))
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"Identifier observations require distinct bounded fields and consistent digests."});
   if ((["heap_collection.v1", "hubspot_collection.v1"].includes(value.profile) &&
     value.identifierEvidence === "persistent_observed" && !value.cookieIdentifierBinding) ||
     value.profile === "shopify_mixed_telemetry.v1" && (value.identifierEvidence !== "unknown" || value.payloadInspection !== "unknown"))

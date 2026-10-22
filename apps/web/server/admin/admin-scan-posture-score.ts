@@ -1,3 +1,4 @@
+import {isRejectPresencePolicy} from "../../lib/scans/after-reject-scoring-contract";
 import { californiaPrivacyReviewSchema } from "@certscore/contracts";
 import { gpcResponseAssessmentSchema } from "@certscore/contracts";
 import { deriveCaliforniaRegulatoryScore } from "../../lib/scans/california-regulatory-score";
@@ -59,6 +60,18 @@ export function projectAdminScoringEntityCounts(scanId:string,snapshot:ScoreSnap
     }
   } catch { /* Unverifiable pass evidence remains unavailable. */ }
   try {
+    const a=californiaPrivacyReviewSchema.safeParse(input.assessment),g=gpcResponseAssessmentSchema.safeParse(input.gpcAssessment);
+    if(a.success&&a.data.scanId===scanId&&g.success&&g.data.contractVersion==="certscore.gpc-response-assessment.v3"&&g.data.observation.scanId===scanId){
+      const score=deriveCaliforniaRegulatoryScore({assessment:a.data,checklistRows:input.checklistRows,unifiedFindings:input.unifiedFindings});
+      const eligible=new Set(score.score!==null?score.potentialRiskRecipientIds??[]:[]);
+      const sourceSha256=g.data.observation.sourceSha256;
+      const reviewIds=input.unifiedFindings.flatMap(f=>f.details?.family==="california_collection_review"?
+        f.details.assessments.filter(r=>r.path==="gpc"&&r.scanId===scanId&&r.sourceSha256===sourceSha256)
+          .flatMap(r=>r.rows.filter(r=>r.treatment==="potential_risk"&&eligible.has(r.entityId)).map(r=>r.entityId)):[]);
+      if(reviewIds.length)counts.gpc=new Set([...(counts.gpc?deriveCaliforniaGpcResponsePolicy(g.data).recipientIds??[]:[]),...reviewIds]).size;
+    }
+  } catch { /* A risk count requires its published canonical score effect. */ }
+  try {
     const gpc=gpcResponseAssessmentSchema.safeParse(input.gpcAssessment);
     if(gpc.success && gpc.data.contractVersion==="certscore.gpc-response-assessment.v3" && gpc.data.observation.scanId===scanId &&
       gpc.data.observation.requests.gppPropagation) {
@@ -78,7 +91,7 @@ export function projectAdminScoringEntityCounts(scanId:string,snapshot:ScoreSnap
     const row=input.checklistRows.find(row=>row.id==="post_reject_tracking_reduction");
     const retained=row?.criticalEvidence?.retainedEvidence;
     const assessment=readAfterRejectScoringAssessment(retained?.afterRejectScoringAssessment);
-    if(assessment?.policyVersion===AFTER_REJECT_SCORING_POLICY && assessment.sourcePacketSha256 &&
+    if(assessment && isRejectPresencePolicy(assessment.policyVersion) && assessment.sourcePacketSha256 &&
       assessment.sourcePacketSha256===input.rejectSourceHash &&
       (retained?.sourcePacketSha256===undefined || retained.sourcePacketSha256===input.rejectSourceHash) &&
       !assessment.reasons.includes("source_proof_incomplete")) {

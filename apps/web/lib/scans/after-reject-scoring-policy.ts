@@ -1,3 +1,6 @@
+import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
+import {PRIOR_REJECT_PRESENCE_POLICY} from "./after-reject-scoring-contract";
+import { rejectVendorFindingSummary } from "./choice-vendor-findings";
 import { isCanonicalGoogleAnalyticsCollectionUrl } from "@certscore/vendor-resolver";
 import { assessGoogleConsentModeRequest, postRefusalReportProjectionSchema, readBoundMeasurementRequestEvidence } from "@certscore/contracts";
 import { assessRejectClickTracking } from "./reject-click-tracking-policy";
@@ -15,8 +18,8 @@ export function assessAfterRejectScoring(value: unknown, policyVersion: AfterRej
   const parsed = postRefusalReportProjectionSchema.safeParse(value);
   if (!parsed.success) return null;
   const p = parsed.data;
-  if (policyVersion===AFTER_REJECT_SCORING_POLICY) {
-    const presence=retainedRejectPresence(p), positive=!!presence && (presence.cookies.length>0 || presence.requestIds.length>0);
+  if ([AFTER_REJECT_SCORING_POLICY,PRIOR_REJECT_PRESENCE_POLICY].some(v=>v===policyVersion)) {
+    const presence=retainedRejectPresence(p,policyVersion===AFTER_REJECT_SCORING_POLICY), positive=!!presence && (presence.cookies.length>0 || presence.requestIds.length>0);
     const contradiction=!!presence?.confirmed && p.contradictionObserved;
     const entityEvidence=presence?retainedRejectEntityEvidence(p,presence):{resolverVersion:"unavailable",entities:[],observations:[]};
     return schema.parse({policyVersion,sourcePacketSha256:p.packetSha256??null,
@@ -121,19 +124,20 @@ export function retainedAfterRejectScoringAssessment(runtime: Record<string, unk
   const stored = readAfterRejectScoringAssessment(runtime?.afterRejectScoringAssessment);
   if (!stored) return null;
   const derived = assessAfterRejectScoring(runtime?.postRefusalEvidenceProjection, stored.policyVersion);
+  if(derived&&stored.policyVersion===PRIOR_REJECT_PRESENCE_POLICY&&derived.entityEvidence&&stored.entityEvidence)derived.entityEvidence.resolverVersion=stored.entityEvidence.resolverVersion;
   return derived && JSON.stringify(stored) === JSON.stringify(derived) ? stored : null;
 }
 
 /** Canonical narrative for an already-admitted observation, never a new finding. */
 export function afterRejectScoringNarrative(assessment: AfterRejectScoringAssessment | null | undefined) {
-  if (assessment?.policyVersion===AFTER_REJECT_SCORING_POLICY && assessment.deductionPoints>0 &&
+  if (assessment && isRejectPresencePolicy(assessment.policyVersion) && assessment.deductionPoints>0 &&
     (assessment.cookieRefs?.length || assessment.requestIds.length)) return {
     title:"Non-essential cookies or services after Reject",
-    description:"Classified non-essential cookies or service requests were observed after the Reject control was clicked.",
+    description:[rejectVendorFindingSummary(assessment), "Classified non-essential cookies or service requests were observed after the Reject control was clicked."].filter(Boolean).join(" "),
     suggestedFix:"Review the retained cookies and service requests, align them with the visitor’s Reject choice, and retest the path.",
     whyThisMatters:"The retained evidence describes cookies or services present after Reject. Cookie presence alone does not establish active use, and the click does not establish that refusal registered.",
   };
-  if (assessment?.policyVersion===AFTER_REJECT_SCORING_POLICY && assessment.tier==="review") return {
+  if (assessment && isRejectPresencePolicy(assessment.policyVersion) && assessment.tier==="review") return {
     title:"After Reject observation for review",description:"The retained capture does not establish classified non-essential cookies or services on a completed Reject path.",
     suggestedFix:"Review the retained action and capture evidence and retest unresolved observations.",
     whyThisMatters:"Limited or absent evidence does not establish that the visitor’s Reject choice was honored.",

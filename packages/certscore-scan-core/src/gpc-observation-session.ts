@@ -1,3 +1,4 @@
+import {createGpcRequestProofCapture} from "./gpc-request-proof";
 import { verifiedGpcPreTransmissionBlock } from "./gpc-pre-transmission-block.js";
 import type { Page, CDPSession, Request, Response } from "playwright";
 import { gpcObservationSessionSchema, type GpcOptOutObservation, type GpcObservationSession, type NetworkEvent } from "@certscore/contracts";
@@ -11,6 +12,7 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
   const { page } = input;
   const now = () => Math.max(0, Date.now() - input.scanStartedAtMs);
   const captureStartedAtMs = now();
+  const requestProofCapture=createGpcRequestProofCapture(now);
   const monitorKey = `__certscore_gpc_${input.captureId.replaceAll("-", "")}`;
   await installGpcSemanticMonitor(page.context(), monitorKey);
   const cdp: CDPSession = await page.context().newCDPSession(page);
@@ -29,6 +31,7 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
   let requestedGeneration: number | null = null;
   let invalidated = false;
   type Reason = NonNullable<NonNullable<GpcObservationSession["finalization"]>["invalidationReasons"]>[number];
+  let sameDocumentTaint: Reason | undefined;
   const invalidationReasons = new Set<Reason>();
   const invalidate = (reason: Reason) => { if (!stopped) { generation++; if (terminalReadbackStarted) invalidationReasons.add(reason); } };
   const unavailable = (reason: Reason) => { if (!stopped) { invalidated = true; invalidate(reason); } };
@@ -41,8 +44,10 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
   const requestHandles = new Map<string, Request>();
   const requestLoaders = new Map<string, string>();
   const responses = new Set<Request>();
+  const requestEventIds=new WeakMap<Request,string>();
   const onResponse = (response: Response) => {
     if (!stopped && responses.size < 5000) responses.add(response.request());
+    const id=requestEventIds.get(response.request());if(!stopped&&id)requestProofCapture.response(id,response.status());
   };
   page.on("response", onResponse);
   const onRequest = (p: any) => {
@@ -57,6 +62,7 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
     if (stopped || p.frame?.id !== mainFrameId || !p.frame.loaderId || !/^https?:/.test(p.frame.url ?? "")) return;
     invalidate("document_commit");
     committed = { loader: p.frame.loaderId, urlHash: gpcDocumentHash(p.frame.url), at: now() };
+    sameDocumentTaint = undefined;
     exactCommittedUrl = p.frame.url;
   };
   // A same-document URL change retains the loader; keep the actual request URL
@@ -66,7 +72,8 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
     // A history API no-op does not change the active loader or complete URL.
     // Unknown identity and URL change-then-return still invalidate pending proof.
     if (committed && p.navigationType === "historyApi" && p.url === exactCommittedUrl) return;
-    invalidate(committed && typeof p.url === "string" && /^https?:/.test(p.url) ? "same_document_url_changed" : "same_document_identity_unverified");
+    sameDocumentTaint = committed && typeof p.url === "string" && /^https?:/.test(p.url) ? "same_document_url_changed" : "same_document_identity_unverified";
+    invalidate(sameDocumentTaint);
     if (committed && typeof p.url === "string" && /^https?:/.test(p.url)) { committed.urlHash = gpcDocumentHash(p.url); exactCommittedUrl = p.url; }
   };
   cdp.on("Network.requestWillBeSent", onRequest);
@@ -79,6 +86,7 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
     prepareFinalization() {
       if (stopped || terminalReadbackStarted) return;
       terminalReadbackStarted = true;
+      if (sameDocumentTaint) invalidationReasons.add(sameDocumentTaint);
       const startedGeneration = generation;
       readbackStartedAtMs = now(); requestedGeneration = startedGeneration;
       void cdp.send("Page.getFrameTree").then(tree => {
@@ -89,8 +97,8 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
         terminalReadback = { generation: startedGeneration, loaderId: frame.loaderId, url: frame.url };
       }).catch(() => { /* Missing proof is retained as an incomplete terminal packet. */ });
     },
-    recordRequest(event: Pick<NetworkEvent, "eventId" | "timestampMs" | "requestUrl" | "requestHeaders">,
-      request?: Pick<Request, "allHeaders"> & Partial<Pick<Request, "timing" | "method" | "resourceType" | "serviceWorker" | "failure" | "frame">>) {
+    recordRequest(event: Pick<NetworkEvent, "eventId" | "timestampMs" | "requestUrl" | "requestHeaders"> & Partial<Pick<NetworkEvent,"requestId"|"method">>,
+      request?: Pick<Request, "allHeaders"> & Partial<Pick<Request, "timing" | "method" | "resourceType" | "serviceWorker" | "failure" | "frame" | "postData">>) {
       if (stopped) return;
       requestsObserved++;
       if (requests.length >= 5000 || event.eventId.length > 160) { requestsDropped++; return; }
@@ -99,6 +107,7 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
       requests.push(row);
       if (request) {
         requestHandles.set(event.eventId, request as Request);
+        requestEventIds.set(request as Request,event.eventId);
         try { if (committed && request.frame?.() === page.mainFrame()) requestLoaders.set(event.eventId, committed.loader); } catch { /* No main-document owner. */ }
       }
       if (request && [request.timing, request.method, request.resourceType, request.serviceWorker, request.failure].every(fn => typeof fn === "function")) {
@@ -106,29 +115,37 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
         try { if (request.frame) isMainFrame = request.frame() === page.mainFrame(); } catch { /* Worker-owned requests have no frame. */ }
         requestDiagnostics.track(event.eventId, request as Request, isMainFrame);
       }
+      const supplement=request?requestProofCapture.reserve(event,requestLoaders.get(event.eventId),request):null;
       // Playwright's synchronous snapshot can omit security headers. Read only
-      // missing values from the same request, overlapping the existing window.
+      // missing values from the same request, sharing that read with selected
+      // supplemental proofs. Snapshot-complete candidates use at most one
+      // additional read in the bounded 48-inspection pool.
       // Finalization never waits for these promises or borrows configured values.
-      if (row.secGpc === null && request) {
-        row.headerSource = "readback_pending";
+      if ((row.secGpc === null || supplement) && request) {
+        const missingHeader=row.secGpc===null;
+        if(missingHeader)row.headerSource = "readback_pending";
         void request.allHeaders().then(headers => {
           if (stopped) return;
+          supplement?.(headers);
           const value = headers["sec-gpc"];
+          // Omission in a supplemental read does not erase the snapshot. An
+          // explicit contradictory value on this exact Request is real evidence.
+          if(!missingHeader && value===undefined)return;
           row.secGpc = typeof value === "string" && value.length <= 8 ? value : null;
           row.headerSource = "all_headers_readback"; row.headerReadbackAtMs = now();
-        }).catch(() => { if (!stopped) { row.headerSource = "readback_failed"; } });
+        }).catch(() => { if (!stopped) { supplement?.();if(missingHeader)row.headerSource = "readback_failed"; } });
       }
     },
     async finish(semanticObservation: GpcOptOutObservation | undefined, listener: { callbacks: number; dropped: number; registered: boolean } | undefined, aborted: boolean) {
       if (frozenPacket) return frozenPacket;
       const limitations: string[] = [];
-      const final = !invalidated && terminalReadback?.generation === generation ? terminalReadback : undefined;
+      const final = !invalidated && !sameDocumentTaint && terminalReadback?.generation === generation ? terminalReadback : undefined;
       const commit = committed as { loader: string; urlHash: string; at: number } | null;
       const matching = commit ? documents.filter(d => d.loader === commit.loader && d.frame === mainFrameId) : [];
       // The last redirect hop within this exact browser loader delivered the
       // committed document. Multiple same-URL requests are not borrowed across loaders.
       const delivered = matching.at(-1);
-      if (!commit || !delivered || page.isClosed() || final?.loaderId !== commit.loader || !final.url || gpcDocumentHash(final.url) !== commit.urlHash || gpcDocumentHash(page.url()) !== commit.urlHash ||
+      if (!commit || !delivered || delivered.urlHash !== commit.urlHash || page.isClosed() || final?.loaderId !== commit.loader || !final.url || gpcDocumentHash(final.url) !== commit.urlHash || gpcDocumentHash(page.url()) !== commit.urlHash ||
         semanticObservation?.captureBinding?.documentToken !== commit.loader || semanticObservation.documentUrlSha256 !== commit.urlHash) limitations.push("terminal_document_unverified");
       if (documentDrops) limitations.push("document_capture_overflow");
       if (!listener) limitations.push("semantic_monitor_unavailable");
@@ -138,7 +155,7 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
       // when there is no network errorText. No URL/timing correlation is used.
       for (const row of requests) {
         const request = requestHandles.get(row.eventId);
-        if (row.secGpc !== null || !request) continue;
+        if (row.secGpc !== null || !request || limitations.includes("terminal_document_unverified")) continue;
         try {
           const reason = verifiedGpcPreTransmissionBlock({ failureText: request.failure()?.errorText, secGpc: row.secGpc,
             timing: request.timing(), responseReceived: responses.has(request), serviceWorker: request.serviceWorker() !== null,
@@ -163,6 +180,7 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
           requestId: delivered.requestId, requestAtMs: delivered.requestAtMs, secGpc: delivered.secGpc, committedAtMs: commit.at,
         },
         semanticObservation: semanticObservation ?? null, requests, requestsObserved, requestsDropped,
+        requestProofCapture:requestProofCapture.finish(commit?.loader),
         listener: listener ?? { callbacks: 0, dropped: 0, registered: false },
         requestDiagnostics: requestDiagnostics.finish(requests), limitationKeys: limitations,
       });

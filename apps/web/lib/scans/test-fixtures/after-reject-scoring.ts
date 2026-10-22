@@ -1,4 +1,5 @@
-import { postRefusalReportProjectionSchema } from "@certscore/contracts";
+import { postRefusalReportProjectionSchema, classifyConsentControlLabel } from "@certscore/contracts";
+import {createHash} from "node:crypto";
 import { captureGoogleConsentModeRequest, inspectMeasurementRequest } from "@certscore/vendor-resolver";
 import { readAfterRejectScoringAssessment } from "../after-reject-scoring-policy";
 
@@ -56,4 +57,16 @@ export function afterRejectClickProjection(profile: Parameters<typeof afterRejec
       requestIds:[request.requestId],requestAncestry:[{requestId:request.requestId,rootStartedAtMs:request.rootStartedAtMs}]},
     afterActionRequests:[request],afterActionStorage:[],
   });
+}
+
+/** Retained producer-side context + exact control read; no inferred CMP text. */
+export function withRetainedRejectContext(p:ReturnType<typeof afterRejectClickProjection>,label:string){
+ const copy=structuredClone(p),proof=copy.actionControlProof!,classification=classifyConsentControlLabel({label,hasConsentContext:true,usage:"action",classifierProfile:"multilingual_v1"});
+ Object.assign(proof,{contractVersion:"certscore.consent_action_control_proof.v2",accessibleLabel:label,labelSource:"visible_text",actionSemantics:"direct_label",
+  classifierIntent:classification.intent,classifierConfidence:classification.confidence,matchedLocale:classification.matchedLocale,
+  matchStrength:classification.matchStrength,classifierReasonCodes:classification.reasonCodes});
+ copy.interactionDiagnostics!.resolver={truncated:false,snapshots:[{attempt:1,elapsedMs:10,source:"control_proof",state:"candidate_detected",
+  selectorMatchCount:1,visibleCount:1,enabledCount:1,labelMatchCount:0,actionableCount:0,cmpIds:[],controlLabels:[label],
+  binding:{selectorSha256:createHash("sha256").update(proof.selectorHint).digest("hex"),frameIdentitySha256:proof.frameIdentitySha256!,labelSources:["visible_text"]}}]};
+ return postRefusalReportProjectionSchema.parse(copy);
 }

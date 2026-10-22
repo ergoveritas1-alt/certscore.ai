@@ -1,8 +1,11 @@
+export {readBoundedProtocolJson, type ProtocolJson} from "./bounded-protocol-json";
+export {decodeCanonicalCollectionBody, canonicalCollectionBodyFields, collectionBodyPrivacySignals,isCanonicalProtocolIdentityField,readCanonicalBodyProcessing} from "./collection-request-body";
+import {VENDOR_COOKIE_COVERAGE} from "./vendor-cookie-coverage";
 export { classifyCanonicalCollectionEndpoint, isCanonicalAdvertisingCollectionCandidate, COLLECTION_ENDPOINT_POLICY_VERSION } from "./collection-endpoints";
 export { inspectGpcRequestQualification, GPC_REQUEST_QUALIFICATION_POLICY } from "./gpc-request-qualification";
-export { decodeGppRequest } from "./gpp-request-decoder";
+export { decodeGppRequest, applyGppRequestCmpContext } from "./gpp-request-decoder";
 import { cookieClassificationSchema, type CookieClassification } from "@certscore/contracts";
-import { COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge as cookieKnowledge, type CanonicalCookieContext } from "./cookie-knowledge-base";
+import { COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge as cookieKnowledge, type CanonicalCookieContext } from "./cookie-knowledge-base";
 import type {
   EndpointGeographyPrecision,
   EndpointGeographyStatus,
@@ -35,7 +38,7 @@ export {
 
 export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-21-collection-roles-v10";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-22-protocol-hardening-v14";
 export const COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-21-v4";
 
 export type VendorResolverEvidenceType =
@@ -695,7 +698,7 @@ const rules: VendorRule[] = [
     urlPatterns: [/\/r\/d/i, /\/dis\/dis\.aspx/i,
       // Retained first-party identity synchronization endpoints. Require the
       // exact vendor hosts/path and a nonempty ID; names alone are insufficient.
-      /^https:\/\/gum(?:\.us)?\.criteo\.com\/fpm\/(?:init|sid)\?(?:[^#]*&)?first_party_id=[^&#]+(?:&|$)/i],
+      /^https:\/\/gum(?:\.us)?\.criteo\.com\/fpm\/(?:init|sid)(?:[?]|$)/i],
     cookiePatterns: [/^cto_bundle$/i],
     suppressCookieMatchedHostname: true,
     storageKeyPatterns: [/criteo/i],
@@ -983,6 +986,7 @@ const rules: VendorRule[] = [
     storageKeyPatterns: [/^klaviyo/i, /^__kla/i],
     requireUrlPatternMatch: false,
     basisLabel: "klaviyo_marketing_automation_runtime",
+    review: {reviewedAt:"2026-10-22",reviewer:"Codex vendor-code and documentation verification",sourceUrls:["https://developers.klaviyo.com/en/reference/create_client_event", "https://developers.klaviyo.com/en/v1-2/docs/track-api-reference"]},
   },
   {
     identity: {"entityId":"ent_b4aefbd8ef6c","vendorId":"ven_babd585b5148","serviceId":"svc_825ea49f7898"},
@@ -1129,9 +1133,10 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
     confidence: 0.94,
     hostPatterns: [/^ct\.pinterest\.com$/i, /^s\.pinimg\.com$/i],
-    urlPatterns: [/\/ct\.html/i, /\/ct\/core\.js/i],
+    urlPatterns: [/\/ct\.html/i, /\/ct\/core\.js/i, /^https:\/\/ct\.pinterest\.com\/v3\/?(?:[?#]|$)/i],
     cookiePatterns: [/^_pin_unauth$/i],
     basisLabel: "pinterest_tag_endpoint_or_cookie",
+    review: {reviewedAt:"2026-10-22",reviewer:"Codex vendor-code and documentation verification",sourceUrls:["https://s.pinimg.com/ct/lib/main.c61fa7c9.js"]},
   },
   {
     identity: {"entityId":"ent_8dc0787fe589","vendorId":"ven_f62dd36174a7","serviceId":"svc_600e8045b29d"},
@@ -1143,8 +1148,9 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
     confidence: 0.94,
     hostPatterns: [/^www\.redditstatic\.com$/i, /^alb\.reddit\.com$/i, /^pixel-config\.reddit\.com$/i],
-    urlPatterns: [/\/pixel/i, /\/r\/pixel/i, /\/v\d+\/config\b/i],
+    urlPatterns: [/\/pixel/i, /\/r\/pixel/i, /\/v\d+\/config\b/i, /^https:\/\/alb\.reddit\.com\/rp(?:\.gif)?(?:[?#]|$)/i],
     basisLabel: "reddit_pixel_endpoint",
+    review: { reviewedAt:"2026-10-22",reviewer:"Codex vendor-code verification",sourceUrls:["https://www.redditstatic.com/ads/pixel.js"] },
   },
   {
     identity: {"entityId":"ent_0e487a8fc467","vendorId":"ven_ef1feb6654c0","serviceId":"svc_a246a27df504"},
@@ -1213,9 +1219,10 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
     confidence: 0.94,
     hostPatterns: [/^tr\.snapchat\.com$/i, /^sc-static\.net$/i],
-    urlPatterns: [/\/scevent/i, /\/snap-pixel/i],
+    urlPatterns: [/\/scevent/i, /\/snap-pixel/i, /^https:\/\/tr\.snapchat\.com\/p\/?(?:[?#]|$)/i],
     cookiePatterns: [/^sc_at$/i],
     basisLabel: "snap_pixel_endpoint_or_cookie",
+    review: {reviewedAt:"2026-10-22",reviewer:"Codex vendor-code and documentation verification",sourceUrls:["https://sc-static.net/scevent.min.js"]},
   },
   {
     identity: {"entityId":"ent_77d4f4329230","vendorId":"ven_5e57636b11b7","serviceId":"svc_2a51cde91fb3"},
@@ -2112,11 +2119,12 @@ const rules: VendorRule[] = [
     servicePurpose: "Session replay",
     regulatoryRelevance: ["consent", "behavioral_analytics", "session_replay"],
     confidence: 0.95,
-    hostPatterns: [/^(?:www|scripts|n|f|c|i)\.clarity\.ms$/i, /^clarity\.ms$/i],
-    urlPatterns: [/^https:\/\/(?:www|scripts|n|f|i)\.clarity\.ms\/(?:tag|collect|c\.gif)\b/i, /^https:\/\/c\.clarity\.ms\/c\.gif\b/i],
+    hostPatterns: [/^(?:www|scripts|[a-z])\.clarity\.ms$/i, /^clarity\.ms$/i],
+    urlPatterns: [/^https:\/\/(?:www|scripts|n|f|i)\.clarity\.ms\/(?:tag|collect|c\.gif)\b/i, /^https:\/\/c\.clarity\.ms\/c\.gif\b/i, /^https:\/\/[a-z]\.clarity\.ms\/collect(?:[?#]|$)/i],
     cookiePatterns: [/^_clck$/i, /^_clsk$/i],
     storageKeyPatterns: [/^_clck$/i, /^_clsk$/i],
     basisLabel: "clarity_script_endpoint_or_cookie",
+    review: { reviewedAt:"2026-10-22",reviewer:"Codex primary-source verification",sourceUrls:["https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-csp","https://github.com/microsoft/clarity/blob/master/packages/clarity-js/src/data/upload.ts"] },
   },
   {
     identity: {"entityId":"ent_02b1b951db45","vendorId":"ven_3e5a5b1911ca","serviceId":"svc_ac4e7a5227e2"},
@@ -2172,10 +2180,11 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "behavioral_analytics", "session_replay"],
     confidence: 0.95,
     hostPatterns: [/\.hotjar\.com$/i, /\.hotjar\.io$/i],
-    urlPatterns: [/\/c\/hotjar-/i, /\/api\/v2\/client\/sites\//i],
+    urlPatterns: [/\/c\/hotjar-/i, /\/api\/v2\/client\/sites\//i, /^https:\/\/events\.hotjar\.io\/(?:\?[^#]*)?$/],
     cookiePatterns: [/^_hj/i],
     storageKeyPatterns: [/^_hj/i],
     basisLabel: "hotjar_script_endpoint_or_cookie",
+    review: { reviewedAt: "2026-10-22", reviewer: "Codex vendor-code verification", sourceUrls: ["https://script.hotjar.com/modules.96a30129fbe7c16f762f.js"] },
   },
   {
     identity: {"entityId":"ent_f6de818ab901","vendorId":"ven_8d61e9e3c23a","serviceId":"svc_fec18582701c"},
@@ -2203,10 +2212,11 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
     confidence: 0.95,
     hostPatterns: [/^analytics\.tiktok\.com$/i, /^business-api\.tiktok\.com$/i],
-    urlPatterns: [/\/i18n\/pixel\/events\.js\b/i, /\/api\/v2\/pixel\//i],
+    urlPatterns: [/\/i18n\/pixel\/events\.js\b/i, /^https:\/\/analytics\.tiktok\.com\/api\/v2\/pixel(?:\/(?:act|inter|perf))?\/?(?:[?#]|$)/i],
     cookiePatterns: [/^_ttp$/i, /^ttclid$/i],
     storageKeyPatterns: [/^_ttp$/i, /^ttclid$/i],
     basisLabel: "tiktok_pixel_endpoint_or_cookie",
+    review: {reviewedAt:"2026-10-22",reviewer:"Codex vendor-code and documentation verification",sourceUrls:["https://analytics.tiktok.com/i18n/pixel/static/main.MWFjYmVlZGY0OQ.js"]},
   },
   {
     identity: {"entityId":"ent_3ee0b5177739","vendorId":"ven_cce9dd548420","serviceId":"svc_358664959597"},
@@ -2891,8 +2901,9 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "advertising", "programmatic_ads"],
     confidence: 0.91,
     hostPatterns: [/\.stackadapt\.com$/i],
-    urlPatterns: [/\/(?:sync|pixel|track|event)\b/i],
+    urlPatterns: [/\/(?:sync|pixel|track|event)\b/i, /^https:\/\/tags\.srv\.stackadapt\.com\/js_tracking(?:[?#]|$)/i],
     basisLabel: "stackadapt_advertising_endpoint",
+    review: { reviewedAt:"2026-10-22",reviewer:"Codex vendor-code verification",sourceUrls:["https://tags.srv.stackadapt.com/events.js"] },
   },
   {
     identity: {"entityId":"ent_48a7f75b2613","vendorId":"ven_f64bcbc44539","serviceId":"svc_178b0e447a10"},
@@ -5250,7 +5261,7 @@ export function getCanonicalVendorRegistryManifest() {
     contractVersion: "vendor-registry-manifest-v1" as const,
     resolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
     cookieProviderResolverVersion: COOKIE_PROVIDER_RESOLVER_VERSION,
-    rules: [...rules, ...auditedCookieProviderRules, ...currentCookieProviderRules].map(rule => ({
+    rules: [...rules, ...auditedCookieProviderRules, ...currentCookieProviderRules, ...coverageCookieProviderRules].map(rule => ({
       ruleId: rule.basisLabel,
       ...rule.identity,
       entity: rule.entity,
@@ -5580,8 +5591,8 @@ export function resolveVendorObservations(
     const storageKey = input.storageKey;
     const domSelector = input.domSelector;
 
-    const cookieRules = input.type === "cookie" && [COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
-      ? [...rules, ...auditedCookieProviderRules, ...(input.cookiePurposePolicyVersion === COOKIE_PURPOSE_POLICY ? currentCookieProviderRules : [])] : rules;
+    const cookieRules = input.type === "cookie" && [COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
+      ? [...rules, ...auditedCookieProviderRules, ...([COOKIE_PURPOSE_POLICY,PRIOR_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion) ? currentCookieProviderRules : []), ...(input.cookiePurposePolicyVersion===COOKIE_PURPOSE_POLICY?coverageCookieProviderRules:[])] : rules;
     for (const rule of cookieRules) {
       const matchedHost = hostname
         ? matchesAny(hostname, rule.hostPatterns) && !matchesAny(hostname, rule.excludeHostPatterns)
@@ -5647,7 +5658,7 @@ export function resolveVendorObservations(
             : matchedCookie ? "cookie_name" : "hostname";
       const registryAttribution: VendorRegistryAttribution = {
         contractVersion: "vendor-registry-attribution-v1",
-        resolverVersion: input.type === "cookie" && [COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
+        resolverVersion: input.type === "cookie" && [COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
           ? input.cookiePurposePolicyVersion === HEAP_COOKIE_PURPOSE_POLICY
             ? "certscore-cookie-provider-2026-10-15-v3" : COOKIE_PROVIDER_RESOLVER_VERSION
           : CANONICAL_VENDOR_RESOLVER_VERSION,
@@ -6225,16 +6236,33 @@ const currentCookieProviderRules: VendorRule[] = [{
   review: { reviewedAt: "2026-10-21", reviewer: "Codex primary-source review", sourceUrls: ["https://www.rtbhouse.com/privacy-center"] },
 }];
 
+// These name rules are enabled only under v6. They reuse existing identities
+// and carry the same primary-source provenance as the purpose classification.
+const coverageCookieProviderRules:VendorRule[]=VENDOR_COOKIE_COVERAGE.flatMap((coverage,index)=>{
+ const base=rules.find(r=>r.vendor===coverage.vendor&&r.product===coverage.product);
+ return base?[{...base,purpose:coverage.category,cookiePatterns:[coverage.pattern],hostPatterns:[],urlPatterns:[],storageKeyPatterns:[],
+   requireHostPatternForCookieMatch:false,requireUrlPatternMatch:false,confidence:.98,
+   basisLabel:`vendor_cookie_coverage_${index+1}`,review:{reviewedAt:"2026-10-22",reviewer:"Codex primary-source review",sourceUrls:[coverage.source]}}]:[];
+});
+
 export function resolveCanonicalCookieClassification(name: string, context: Pick<CanonicalCookieContext, "cookieDomain"> = {}): CookieClassification {
   const knowledge = cookieKnowledge(name, { ...context, purposePolicyVersion: COOKIE_PURPOSE_POLICY });
   const domain = context.cookieDomain?.replace(/^\.+/, "").toLowerCase() || null;
   const resolution = resolveCanonicalVendor({ type: "cookie", cookieName: name, hostname: domain ?? undefined, cookiePurposePolicyVersion: COOKIE_PURPOSE_POLICY });
   const owner = resolution.observation;
   // A rejected/ambiguous purpose context must not be restored through an unrelated name signature.
-  const provider = knowledge.vendor && owner?.registryAttribution ? {
+  let provider = knowledge.vendor && owner?.registryAttribution ? {
     vendor: owner.vendor, product: owner.product ?? owner.vendor, entity: owner.entity, registryAttribution: owner.registryAttribution,
   } : null;
+  const coverage=VENDOR_COOKIE_COVERAGE.find(r=>r.pattern.test(name));
+  if(!provider&&coverage&&knowledge.vendor===coverage.vendor){
+    const rule=rules.find(r=>r.vendor===coverage.vendor&&r.product===coverage.product);
+    if(rule)provider={vendor:rule.vendor,product:rule.product,entity:rule.entity,registryAttribution:{...rule.identity,
+      contractVersion:"vendor-registry-attribution-v1",resolverVersion:CANONICAL_VENDOR_RESOLVER_VERSION,ruleIds:[rule.basisLabel],matchKind:"cookie_name"}};
+  }
   return cookieClassificationSchema.parse({ version: COOKIE_PURPOSE_POLICY, cookieName: name, cookieDomain: domain,
     category: knowledge.category, essentiality: knowledge.essentiality, documentedPurposes: knowledge.documentedPurposes ?? [],
     ruleId: knowledge.ruleId ?? "unresolved", provider });
 }
+
+export { isAdvertisingIdentityValue } from "./advertising-identifiers";

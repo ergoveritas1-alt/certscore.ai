@@ -1,3 +1,5 @@
+import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
+import {retainedPotentialRisk,potentialRiskRecipients,CA_POTENTIAL_RISK_FINDING,CA_POTENTIAL_RISK_POLICY,potentialRiskPoints} from "./california-potential-risk-policy";
 import {retainedCaliforniaPostReject,californiaPostRejectPoints,CALIFORNIA_POST_REJECT_POLICY} from "./california-post-reject-policy";
 import {deriveGppPropagationPolicy} from "./gpp-propagation-policy";
 import {hasVerifiedCustomerGpcEvidence} from "./gpc-customer-policy";
@@ -2704,7 +2706,7 @@ export function deriveConcernPolicy(input: {
   if (suggestedUnifiedFindingId === REJECT_CLICK_TRACKING_FINDING || input.concern.originKey === REJECT_CLICK_TRACKING_SIGNAL) {
     const assessment = readRejectClickTrackingAssessment(input.rawEvidence?.rejectClickTrackingAssessment);
     const presence=readAfterRejectScoringAssessment(input.rawEvidence?.afterRejectScoringAssessment);
-    const observedPresence=presence?.policyVersion===AFTER_REJECT_SCORING_POLICY && presence.deductionPoints>0 &&
+    const observedPresence=presence && isRejectPresencePolicy(presence.policyVersion) && presence.deductionPoints>0 &&
       (!!presence.cookieRefs?.length || presence.requestIds.length>0);
     if ((assessment || observedPresence) && input.concern.originType === "runtime_artifact") {
       return {
@@ -2718,13 +2720,23 @@ export function deriveConcernPolicy(input: {
     return { allowedNarrativeTier: "weak", externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: ["missing_specific_runtime_anchor"], promotionEligibility: "internal_only" };
   }
+  if(suggestedUnifiedFindingId===CA_POTENTIAL_RISK_FINDING) {
+    const assessments=retainedPotentialRisk(input.rawEvidence),eligible=assessments.some(a=>a.rows.some(r=>r.treatment==="potential_risk"));
+    const ids=potentialRiskRecipients(assessments);
+    const version=assessments[0]?.policyVersion??CA_POTENTIAL_RISK_POLICY;
+    return {allowedNarrativeTier:eligible?"moderate":"weak",externalSurfacingEligibility:eligible?"eligible":"suppress",
+      negativeEvidenceFlags:[],promotionEligibility:eligible?"eligible":"blocked",regulatoryChecklistEligibility:"none",
+      scoreEffects:eligible&&ids.length?[{appliesTo:"california_posture",framework:"california",deductionPoints:potentialRiskPoints(ids,version),
+        evidenceRefs:assessments.map(a=>`choice-source:sha256:${a.sourceSha256}`),observedActivity:ids,
+        policyKey:version,policyVersion:version,reasonCode:"observed_collection_purpose_unresolved"}]:[]};
+  }
   if(suggestedUnifiedFindingId==="california_post_reject_collection") {
     const a=retainedCaliforniaPostReject(input.rawEvidence),eligible=a?.status==="qualified_collection";
     return {allowedNarrativeTier:eligible?"moderate":"weak",externalSurfacingEligibility:eligible?"eligible":"suppress",
       negativeEvidenceFlags:[],promotionEligibility:eligible?"eligible":"blocked",regulatoryChecklistEligibility:"none",
       scoreEffects:eligible?[{appliesTo:"california_posture",framework:"california",deductionPoints:californiaPostRejectPoints(a!),
         evidenceRefs:[`post-refusal-packet:sha256:${a!.sourcePacketSha256}`],observedActivity:a!.recipientIds,
-        policyKey:"california.choice_enforcement.post_reject",policyVersion:CALIFORNIA_POST_REJECT_POLICY,reasonCode:"verified_post_reject_sale_sharing_collection"}]:[]};
+        policyKey:"california.choice_enforcement.post_reject",policyVersion:a!.policyVersion,reasonCode:"verified_post_reject_sale_sharing_collection"}]:[]};
   }
   if (suggestedUnifiedFindingId === "gpp_propagation_inconsistency") {
     const value=input.rawEvidence?.gpcResponseAssessment;

@@ -381,9 +381,10 @@ export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow, policyVe
     return 0;
   }
   if (row.id === "post_reject_tracking_reduction") {
-    if (policyVersion === SCORING_POLICY_VERSION || policyVersion === "gdpr-eprivacy-posture.v21" || policyVersion === "gdpr-eprivacy-posture.v20") {
+    if (policyVersion === SCORING_POLICY_VERSION || policyVersion === "gdpr-eprivacy-posture.v22" || policyVersion === "gdpr-eprivacy-posture.v21" || policyVersion === "gdpr-eprivacy-posture.v20") {
       const assessment = readAfterRejectScoringAssessment(retained.afterRejectScoringAssessment);
-      if (policyVersion!==SCORING_POLICY_VERSION && assessment?.policyVersion==="after_reject_nonessential_presence.v1") return 0;
+      if(policyVersion!==SCORING_POLICY_VERSION&&assessment?.policyVersion==="after_reject_nonessential_presence.v2-vendor-coverage")return 0;
+      if(policyVersion!==SCORING_POLICY_VERSION&&policyVersion!=="gdpr-eprivacy-posture.v22"&&assessment?.policyVersion==="after_reject_nonessential_presence.v1")return 0;
       if (policyVersion === "gdpr-eprivacy-posture.v20" && assessment?.registration !== "confirmed") return 0;
       return ["gap_observed", "review_signal"].includes(row.assessmentStatus) ? assessment?.deductionPoints ?? 0 : 0;
     }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { cmsVersionEvidenceSchema } from "./cms-version-evidence";
+import { googleTagContextSchema } from "./google-tag-context";
 
 /** Document-bound observations; findings require the verified canonical CMS projection. */
 const siteMetadataBaseSchema = z.object({
@@ -12,6 +13,8 @@ const siteMetadataBaseSchema = z.object({
   cmsAssets: z.array(z.string().url().max(512)).max(6).optional(),
   versionEvidence: z.array(cmsVersionEvidenceSchema).max(8).optional(),
   feedLinks: z.array(z.string().url().max(512)).max(1).optional(),
+  /** Internal passive context only; never proof of tag execution or an Ads account link. */
+  googleTagContext: googleTagContextSchema.optional(),
 });
 export type SiteMetadata = z.infer<typeof siteMetadataBaseSchema>;
 // Keep bundle declarations bounded without changing runtime validation.

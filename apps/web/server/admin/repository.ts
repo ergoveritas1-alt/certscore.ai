@@ -1,6 +1,7 @@
 "use server";
 
 import { loadScanTrafficClassification } from "./scan-traffic-classification";
+import { scanCanaryTargetSql } from "../../lib/admin/canary-scan-target";
 import { activityTrafficDefaultVisibilitySql } from "../../lib/admin/activity-provenance";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { scanCreatedViaSql, scanCreatorSql, scanCreationSourceSql, type ScanCreationAttribution, type ScanCreationSource } from "../../lib/admin/scan-creation-source";
@@ -414,6 +415,7 @@ function adminScanActivityBaseSql() {
               or trim(split_part(coalesce(nullif(iqa_request.request_context ->> 'sourceIp', ''), nullif(iqa_request.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(iqa_request.requested_by ->> 'sourceIp', ''), ''), '/', 1)) = any($24::text[])
               or lower(coalesce(nullif(iqa_request.request_context ->> 'clientName', ''), nullif(iqa_request.request_context ->> 'client', ''), '')) = any($25::text[])
         )
+        or ${scanCanaryTargetSql("s.scan_config_json")}
       ) as canary_filter
       ,(
         exists (

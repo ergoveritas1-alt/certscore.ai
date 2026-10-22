@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { propertySaleSharingSourceSchema, propertySaleSharingProofSchema } from "./property-sale-sharing.js";
 const count = z.number().int().nonnegative();
 const axis = z.enum(["opted_out", "not_opted_out", "unknown"]);
 const gppAxis = z.union([z.literal(0), z.literal(1), z.literal(2)]);
@@ -39,8 +40,14 @@ const activityByBasis = {
   google_cookie_matching: "identity_sync",
   google_remarketing_audience: "audience_collection",
   google_advertising_conversion_identifier: "identified_advertising_collection",
+  linkedin_hashed_email: "identified_advertising_collection",
+  meta_advanced_matching_identifier: "identified_advertising_collection",
   linkedin_ads_identifier: "identified_advertising_collection",
   meta_pixel_identifier: "identified_advertising_collection",
+  tiktok_pixel_identifier: "identified_advertising_collection",
+  pinterest_tag_identifier: "identified_advertising_collection",
+  snap_pixel_identifier: "identified_advertising_collection",
+  reddit_pixel_identifier: "identified_advertising_collection",
   microsoft_uet_identifier: "identified_advertising_collection",
   adobe_identity_mapping: "identity_sync",
   criteo_first_party_identity: "identity_sync",
@@ -50,13 +57,18 @@ const activityByBasis = {
   lotame_profile_mapping: "identity_sync",
   openx_identity_resolution: "identity_sync",
   magnite_bid_user_identifier: "identified_advertising_collection",
+  owner_property_sale: "declared_sale_sharing_collection",
+  owner_property_sharing: "declared_sale_sharing_collection",
+  owner_property_audience: "declared_sale_sharing_collection",
 } as const;
 export const saleSharingRequestQualificationSchema = z.object({
-        activity: z.enum(["identity_sync", "audience_collection", "identified_advertising_collection", "unresolved"]),
+        policyVersion:z.enum(["ca_sale_sharing_qualification.v2", "ca_sale_sharing_qualification.v3"]).optional(),
+        activity: z.enum(["identity_sync", "audience_collection", "identified_advertising_collection", "declared_sale_sharing_collection", "unresolved"]),
         basis: z.enum(Object.keys(activityByBasis) as [keyof typeof activityByBasis, ...(keyof typeof activityByBasis)[]]),
         processingSignals: z.array(z.enum(["google_rdp", "google_npa", "google_limited_ads", "meta_ldu",
           "us_privacy_sale_opt_out", "gpp_unresolved", "privacy_signal_invalid", "gpp_opt_out", "gpp_service_provider", "privacy_signal_conflict"])).max(10),
         gpp: gpcRequestGppSchema.optional(),
+        propertyEvidence: propertySaleSharingProofSchema.optional(),
 }).strict();
 /** Facts within a retained window. Completion is never an opt-out or compliance decision. */
 export const gpcBoundedObservationSchema = z.object({
@@ -75,15 +87,26 @@ export const gpcBoundedObservationSchema = z.object({
   acknowledgment: z.object({ observed: z.boolean(), captureComplete: z.boolean() }).strict(),
   requests: z.object({ count, blockedBeforeTransmissionCount: count, complete: z.boolean(), fromMs: count.nullable(), documentCommittedAtMs: count.nullable(), throughMs: count.nullable(),
     classifiedCount: count, collectionCount: count,
+    collectionReview: z.object({
+      policyVersion: z.literal("gpc_collection_review.v1"),
+      rows: z.array(z.object({
+        evidenceId: z.string().min(1).max(160), entityId: z.string().regex(/^ent_[a-f0-9]{12}$/),
+        label: z.string().min(1).max(200), observedAtMs: count,
+        purpose: z.enum(["analytics", "advertising", "marketing", "session_replay"]),
+        httpStatus: z.number().int().min(200).max(399),
+        qualification: saleSharingRequestQualificationSchema,
+      }).strict()).max(32),
+    }).strict().optional(),
     advertisingCollectionCount: count.optional(),
     advertisingCollectionEvidenceIds: z.array(z.string().min(1).max(160)).max(100).optional(),
     gppPropagation: gppPropagationEvidenceSchema.optional(),
     // Optional only for historical records. New producers retain endpoint roles
     // and request-local processing declarations, without legal conclusions.
     advertisingCollectionQualification: z.object({
-      policyVersion: z.enum(["gpc_sale_sharing_evidence.v1", "gpc_sale_sharing_evidence.v2"]),
+      policyVersion: z.enum(["gpc_sale_sharing_evidence.v1", "gpc_sale_sharing_evidence.v2", "gpc_sale_sharing_evidence.v3", "gpc_sale_sharing_evidence.v4", "gpc_sale_sharing_evidence.v5"]),
       rows: z.array(saleSharingRequestQualificationSchema.extend({evidenceId:z.string().min(1).max(160)})).max(100),
     }).strict().optional(),
+    propertySaleSharingSource: propertySaleSharingSourceSchema.optional(),
     advertisingCollectionRecipients: z.object({
       contractVersion: z.literal("canonical_collection_recipients.v1"),
       resolverVersion: z.string().min(1).max(120),
@@ -97,10 +120,29 @@ export const gpcBoundedObservationSchema = z.object({
   limitationKeys: z.array(z.string().min(1).max(160)).max(32),
   scoreEffect: z.literal("none"), legalInterpretation: z.literal("not_assessed"),
 }).strict().superRefine((o, ctx) => {
+  const review = o.requests.collectionReview;
+  if (review && (new Set(review.rows.map(r => r.evidenceId)).size !== review.rows.length ||
+    review.rows.length > o.requests.collectionCount || review.rows.some(r =>
+      !o.sourceSha256 || !o.sessionSha256 || !o.documentUrlSha256 || (!o.delivery.httpHeaderRetained || !o.delivery.mainNavigatorReadbackRetained) ||
+      !o.positiveEvidence?.representativeDocument || o.requests.fromMs === null || o.requests.throughMs === null ||
+      r.observedAtMs < Math.max(o.requests.fromMs, o.requests.documentCommittedAtMs ?? 0) || r.observedAtMs > o.requests.throughMs)))
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"Collection review requires verified source, signal, document and timed successful collection."});
   const recipients = o.requests.advertisingCollectionRecipients;
   const qualification = o.requests.advertisingCollectionQualification;
   const propagation = o.requests.gppPropagation;
-  if (propagation && (qualification?.policyVersion !== "gpc_sale_sharing_evidence.v2" ||
+  const propertySource = o.requests.propertySaleSharingSource;
+  if (propertySource && (qualification?.policyVersion!=="gpc_sale_sharing_evidence.v5" || propertySource.scanId!==o.scanId) ||
+    qualification?.rows.some(row => {
+      const property = row.propertyEvidence, declared = row.activity==="declared_sale_sharing_collection";
+      if (declared !== Boolean(property)) return true;
+      if (!property) return false;
+      const declaration = propertySource?.declarations.find(d=>d.declarationId===property.declarationId);
+      const recipient = recipients?.rows.find(r=>r.evidenceId===row.evidenceId);
+      return qualification.policyVersion!=="gpc_sale_sharing_evidence.v5" || !declaration ||
+        declaration.basis!==row.basis || declaration.propertyIdSha256!==property.propertyIdSha256 ||
+        declaration.entityId!==recipient?.entityId || property.sourceBundleSha256!==propertySource?.sourceBundleSha256;
+    })) ctx.addIssue({code:z.ZodIssueCode.custom,message:"Property collection requires a same-scan source-bound declaration and recipient."});
+  if (propagation && (!["gpc_sale_sharing_evidence.v2", "gpc_sale_sharing_evidence.v3", "gpc_sale_sharing_evidence.v4", "gpc_sale_sharing_evidence.v5"].includes(qualification?.policyVersion ?? "") ||
     new Set(propagation.rows.map(row=>row.evidenceId)).size !== propagation.rows.length || propagation.rows.some(row=>{
       const request=qualification?.rows.find(q=>q.evidenceId===row.evidenceId);
       const recipient=recipients?.rows.find(r=>r.evidenceId===row.evidenceId);
@@ -118,8 +160,10 @@ export const gpcBoundedObservationSchema = z.object({
   if (qualification && (!recipients || qualification.rows.length !== recipients.rows.length ||
     new Set(qualification.rows.map(row => row.evidenceId)).size !== qualification.rows.length ||
     qualification.rows.some(row => !recipients.rows.some(recipient => recipient.evidenceId === row.evidenceId) ||
+      (qualification.policyVersion==="gpc_sale_sharing_evidence.v5" ? row.policyVersion!=="ca_sale_sharing_qualification.v3" : qualification.policyVersion==="gpc_sale_sharing_evidence.v4" ? row.policyVersion!=="ca_sale_sharing_qualification.v2" : row.policyVersion!==undefined) ||
       new Set(row.processingSignals).size !== row.processingSignals.length || row.activity !== activityByBasis[row.basis] ||
-      (qualification.policyVersion === "gpc_sale_sharing_evidence.v2" ? !row.gpp : Boolean(row.gpp)) ||
+      (qualification.policyVersion !== "gpc_sale_sharing_evidence.v1" ? !row.gpp : Boolean(row.gpp)) ||
+      (!["gpc_sale_sharing_evidence.v3","gpc_sale_sharing_evidence.v4","gpc_sale_sharing_evidence.v5"].includes(qualification.policyVersion) && ["linkedin_hashed_email", "meta_advanced_matching_identifier"].includes(row.basis)) ||
       row.gpp && (new Set(row.gpp.sectionIds).size !== row.gpp.sectionIds.length ||
         new Set(row.gpp.applicableSections).size !== row.gpp.applicableSections.length ||
         new Set(row.gpp.sections.map(section => section.sectionId)).size !== row.gpp.sections.length ||
@@ -164,10 +208,12 @@ export type GpcBoundedObservation = z.infer<typeof gpcBoundedObservationSchema>;
 /** Select typed, supported activity. Historical records keep their original
  * collection semantics; this helper does not recompute facts or assign points. */
 /** Shared current sale/sharing request qualification; declared restrictions
- * remain neutral even if a derived processing flag was omitted. */
+ * remain neutral even if a derived processing flag was omitted. Revised v2
+ * retains NPA as context rather than a standalone exemption. */
 export function isQualifyingSaleSharingRequest(row:z.infer<typeof saleSharingRequestQualificationSchema>):boolean {
  const gpp=row.gpp;
- if(row.activity==="unresolved" || row.activity!==activityByBasis[row.basis] || row.processingSignals.length || !gpp)return false;
+ if(row.activity==="unresolved" || row.activity!==activityByBasis[row.basis] || row.processingSignals.some(signal=>signal!=="google_npa" || !["ca_sale_sharing_qualification.v2","ca_sale_sharing_qualification.v3"].includes(row.policyVersion??"")) || !gpp)return false;
+ if(row.activity==="declared_sale_sharing_collection" && (row.policyVersion!=="ca_sale_sharing_qualification.v3" || !row.propertyEvidence))return false;
  if(gpp.status==="not_present")return gpp.sectionIds.length===0 && gpp.applicableSections.length===0 && gpp.sections.length===0 &&
   gpp.requestSignals==="not_assessed" && gpp.cmpComparison==="not_compared" && gpp.reasons.length===0;
  return gpp.status==="decoded" && gpp.requestSignals==="consistent" && gpp.cmpComparison!=="same_time_conflicting" &&
