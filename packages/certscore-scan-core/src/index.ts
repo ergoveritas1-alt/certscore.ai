@@ -622,6 +622,8 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       }),
     })
     : Promise.resolve(emptyPreConsentResult(nowIso(startedAtMs)));
+  let retainedPolicyCheckpoint: PolicySurfaceScannerResult | undefined;
+  let policyCheckpointsClosed = false;
   const policySurfaceResultPromise = policySurfaceEnabled
     ? policySurfaceScanner({
       url: input.url,
@@ -635,6 +637,17 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       nanoAssistProvider: nanoPolicyAssistProvider,
       policySurfaceSeeds: input.policySurfaceSeeds,
       stopAfterAccessBlock: input.policyStopAfterAccessBlock,
+      onRetainedPolicyDocument: (retained) => {
+        if (policyCheckpointsClosed || input.signal?.aborted ||
+            input.policySurfaceDeadlineAtMs !== undefined && Date.now() >= input.policySurfaceDeadlineAtMs) return;
+        retainedPolicyCheckpoint = normalizePolicySurfaceResultForEarlyHandoff({
+          policySurfaceObservations: applyGoverningPolicySelection(mergePolicySurfaceObservations(
+            retainedPolicyCheckpoint?.policySurfaceObservations ?? [], retained.policySurfaceObservations)),
+          artifactRefs: [...new Map([...(retainedPolicyCheckpoint?.artifactRefs ?? []), ...retained.artifactRefs]
+            .map(ref => [ref.artifactId, ref])).values()],
+          moduleRun: retained.moduleRun,
+        });
+      },
       discoveryMode: input.scenarioPlanningMode === "planned_parallel" ? "fast" : "full",
       signal: input.signal
         ? AbortSignal.any([input.signal, policySurfaceAbortController.signal])
@@ -917,7 +930,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     await phaseRecorder.record("policy_surface_for_replay", "failed", {
       error: policySurfaceSettled.reason instanceof Error ? policySurfaceSettled.reason.message : String(policySurfaceSettled.reason),
     });
-    throw policySurfaceSettled.reason;
+    // A completed document checkpoint survives cancellation of later optional
+    // policy work. Parent scan cancellation still terminates the entire scan.
+    if (!retainedPolicyCheckpoint || input.signal?.aborted) throw policySurfaceSettled.reason;
+    policySurfaceSettled = undefined;
   }
   if (policySurfaceSettled?.status === "fulfilled") {
     await phaseRecorder.record("policy_surface_for_replay", "completed", {
@@ -1064,7 +1080,8 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     await phaseRecorder.record("policy_surface_for_output", "failed", {
       error: policySurfaceSettled.reason instanceof Error ? policySurfaceSettled.reason.message : String(policySurfaceSettled.reason),
     });
-    throw policySurfaceSettled.reason;
+    if (!retainedPolicyCheckpoint || input.signal?.aborted) throw policySurfaceSettled.reason;
+    policySurfaceSettled = undefined;
   }
   const domSnapshot = preConsentResult.domSnapshots[0];
   const renderedPolicyEvidenceRef = domSnapshot
@@ -1076,7 +1093,8 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         evidenceRef: renderedPolicyEvidenceRef,
       })
     : [];
-  let policySurfaceResult = policySurfaceSettled?.value;
+  policyCheckpointsClosed = true;
+  let policySurfaceResult = policySurfaceSettled?.value ?? retainedPolicyCheckpoint;
   if (policySurfaceEnabled && !policySurfaceResult && retainedRenderedPolicyObservations.length > 0) {
     policySurfaceResult = buildRetainedRenderedPolicyFallbackResult({
       completedAtMs: Date.now(),

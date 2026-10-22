@@ -195,11 +195,28 @@ const californiaPrivacyReviewV9=californiaPrivacyReviewV8.extend({
   contractVersion:z.literal("certscore.california-privacy-review.v9"),policyVersion:z.literal("california-privacy-review.v9"),
   collectionNoticeAssessment:californiaCollectionNoticeV5Schema,
 }).strict();
+/** Score availability is independent of policy/choice completeness. This proof
+ * is materialized only from a verified, representative starting-page visit;
+ * it never establishes a policy pass, absence, applicability or finding. */
+export const californiaObservedScoreBasisSchema = z.object({
+  policyVersion:z.literal("usable_starting_page_score.v1"),
+  scanId:z.string().min(1).max(160), documentUrl:safeUrl, sourceHash:hash,
+  documentToken:z.string().min(1).max(256), domArtifactId:z.string().min(1).max(200),
+  sourceLane:z.literal("runtime_evidence"), accessOutcome:z.literal("representative_page"),
+  evidenceRef:z.literal("CanonicalEvidenceBundle.json#runtimeMetadataSnapshots"),
+}).strict();
+export type CaliforniaObservedScoreBasis = z.infer<typeof californiaObservedScoreBasisSchema>;
 const californiaPrivacyReviewV10=californiaPrivacyReviewV9.extend({
   contractVersion:z.literal("certscore.california-privacy-review.v10"),policyVersion:z.literal("california-privacy-review.v10"),
+  observedScoreBasis:californiaObservedScoreBasisSchema.optional(),
 }).strict();
 type CaliforniaPrivacyReviewShape = z.infer<typeof californiaPrivacyReviewV1> | z.infer<typeof californiaPrivacyReviewV2> | z.infer<typeof californiaPrivacyReviewV3> | z.infer<typeof californiaPrivacyReviewV4> | z.infer<typeof californiaPrivacyReviewV5> | z.infer<typeof californiaPrivacyReviewV6> | z.infer<typeof californiaPrivacyReviewV7> | z.infer<typeof californiaPrivacyReviewV8> | z.infer<typeof californiaPrivacyReviewV9> | z.infer<typeof californiaPrivacyReviewV10>;
 const californiaPrivacyReviewValidatedSchema: z.ZodType<CaliforniaPrivacyReviewShape> = z.discriminatedUnion("contractVersion",[californiaPrivacyReviewV1,californiaPrivacyReviewV2,californiaPrivacyReviewV3,californiaPrivacyReviewV4,californiaPrivacyReviewV5,californiaPrivacyReviewV6,californiaPrivacyReviewV7,californiaPrivacyReviewV8,californiaPrivacyReviewV9,californiaPrivacyReviewV10]).superRefine((row, ctx) => {
+  if (row.contractVersion === "certscore.california-privacy-review.v10" && row.observedScoreBasis &&
+      (row.observedScoreBasis.scanId !== row.scanId || row.observedScoreBasis.documentUrl !== row.documentUrl ||
+       row.observedScoreBasis.sourceHash !== row.sourceHash)) {
+    ctx.addIssue({code:"custom",message:"Observed score availability must bind the same verified scan, document and source."});
+  }
   if ((row.contractVersion === "certscore.california-privacy-review.v4" || row.contractVersion === "certscore.california-privacy-review.v5" || row.contractVersion === "certscore.california-privacy-review.v6" || (row.contractVersion === "certscore.california-privacy-review.v7" || (row.contractVersion === "certscore.california-privacy-review.v8" || (row.contractVersion === "certscore.california-privacy-review.v9" || row.contractVersion === "certscore.california-privacy-review.v10")))) && row.disclosureInspection) {
     const inspection = row.disclosureInspection;
     const coverage = row.reviewCoverage;

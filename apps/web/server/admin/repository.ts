@@ -149,6 +149,7 @@ export type AdminScanDetailSummaryRow = AdminScanQueryRow & {
 };
 
 export type AdminScanSnapshotRow = {
+  admin_canonical_score_input?: unknown;
   admin_site_integrity?: unknown;
   admin_collection_surfaces?: unknown;
   admin_cms_security?: unknown;
@@ -1503,6 +1504,26 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
                   report_projection_payload #> '{runtimeArtifacts,siteIntegrity}' as admin_site_integrity,
                   report_projection_payload #> '{canonicalReportProjection,collectionSurfaceAssessment}' as admin_collection_surfaces,
                   report_projection_payload #> '{runtimeArtifacts,cmsSecurity}' as admin_cms_security,
+                  jsonb_build_object(
+                    'scanId', report_projection_payload #>> '{scan,id}',
+                    'projectionScanId', report_projection_payload #>> '{canonicalReportProjection,legacyScoreAssessmentInput,scanId}',
+                    'assessment', report_projection_payload #> '{runtimeArtifacts,consentControlAssessment,californiaPrivacyReview}',
+                    'gpcAssessment', report_projection_payload #> '{runtimeArtifacts,gpcResponseAssessment}',
+                    'rejectSourceHash', report_projection_payload #>> '{runtimeArtifacts,postRefusalEvidenceProjection,packetSha256}',
+                    'checklistRows', (
+                      select coalesce(jsonb_agg(item), '[]'::jsonb)
+                        from jsonb_array_elements(case when jsonb_typeof(report_projection_payload #> '{canonicalReportProjection,checklistRows}') = 'array'
+                          then report_projection_payload #> '{canonicalReportProjection,checklistRows}' else '[]'::jsonb end) item
+                       where item->>'id' in ('privacy_notice_availability', 'post_reject_tracking_reduction')
+                    ),
+                    'unifiedFindings', (
+                      select coalesce(jsonb_agg(finding), '[]'::jsonb)
+                        from jsonb_array_elements(case when jsonb_typeof(report_projection_payload #> '{canonicalReportProjection,globalUnifiedFindings}') = 'array'
+                          then report_projection_payload #> '{canonicalReportProjection,globalUnifiedFindings}' else '[]'::jsonb end) finding
+                       where finding->'scoreEffects' @> '[{"appliesTo":"california_posture"}]'::jsonb
+                          or finding->'scoreEffects' @> '[{"framework":"accessibility"}]'::jsonb
+                    )
+                  ) as admin_canonical_score_input,
                   certscore_overall,
                   admin_industry_label,
                   admin_summary_generated_at,

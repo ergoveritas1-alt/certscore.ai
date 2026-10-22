@@ -246,6 +246,9 @@ function canonicalPublicDocumentUrl(value: string | null | undefined) {
 }
 
 function canonicalPolicySurfaceType(url: string, retainedType: string) {
+  // A combined document may live at /terms. Preserve its canonical retained
+  // role; URL hints are only a fallback for an unclassified legacy surface.
+  if (["privacy_policy", "cookie_policy", "terms_of_service", "terms", "accessibility_statement", "california_notice", "notice_at_collection"].includes(retainedType)) return retainedType;
   let pathname = "";
   try {
     pathname = new URL(url).pathname.toLowerCase();

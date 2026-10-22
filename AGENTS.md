@@ -36,6 +36,19 @@ If platform discovery is needed, inspect the repository’s deployment topology 
 
 ## California choice-enforcement scoring
 
+### Dual posture score availability — October 21, 2026
+
+Every reportable completed scan must have both a California and an EU score,
+regardless of scan region, finding count, or policy/choice completeness. New
+California materializations use `usable_starting_page_score.v1` with
+`california-regulatory-posture.v12-observed`, bound to the verified original
+starting-page visit. Keep coverage, unknown checks and score availability
+separate. Unknown evidence creates neither a pass nor a deduction. Preserve
+canonical finding eligibility, weights, recipient deduplication and historical
+policy versions. Failed/no-go attempts do not become scored reports. No display
+fallback, synthetic evidence, Options opening or extra capture is authorized.
+See `docs/certscore-v2/dual-posture-score-availability-policy.md`.
+
 ### Scan-report scoring presentation — October 19, 2026
 
 The owner requires verified findings to affect the score through the canonical
@@ -65,6 +78,24 @@ older flat-15 scoring instructions below for new materializations. See
 authorized. Estimated extra retained JSON storage is below $0.50/month at
 100,000 scans and 30-day retention; no new browser work or model call.
 
+## GPC sale/sharing qualification — October 21, 2026
+
+New GPC observations retain `gpc_sale_sharing_evidence.v2` request roles and
+processing declarations. `california-gpc-response.v7-gpp` qualifies
+only supported identity-sync, audience or identified advertising activity;
+generic ad delivery and unresolved payloads remain factual, score-neutral evidence.
+Request-local RDP, NPA/limited-ads, Meta LDU and sale-opt-out declarations, invalid
+privacy signals and unsupported/invalid GPP strings remain neutral. The pinned
+offline IAB decoder supports US National v1/v2 and California v1, with bounded
+header expansion, canonical re-encoding, request-local consistency and exact-time
+CMP checks. Never infer an earlier choice from a later readback. Declarations neither
+prove honoring nor cancel independently qualifying requests. Preserve verified
+GPC acknowledgment/opt-out contradictions and the shared 47-point recipient cap.
+Historical v1 qualifiers retain v6, and observations without a qualifier retain
+v5 semantics. No new
+capture, wait, model call, Options opening, deployment or production rewrite is
+authorized. See `docs/certscore-v2/gpp-offline-decoder-policy.md`.
+
 ## Canonical Reject presence scoring — October 21, 2026
 
 The owner requires every completed authorized Reject path with retained,
@@ -85,6 +116,45 @@ finding/checklist -> score pipeline. Preserve first-layer reportability and
 customer reports without deduction explanations. No deployment or historical
 report rewrite is authorized. See
 `docs/certscore-v2/reject-nonessential-presence-policy.md`.
+
+## Bounded Reject request proof — October 21, 2026
+
+The owner approved `california_reject_request.v2` body/header proof and distinct
+recipient prioritization within existing capture budgets. Share the existing 48
+inspection slots and header reads, retain at most 32 California request proofs,
+and prefer distinct recipients with qualifying positive evidence. No new visit,
+Options panel, wait, retry, model call or larger worker is authorized. Missing,
+late, unsupported or truncated body/header facts stay neutral; raw identifiers
+and payloads are not retained in the new proof. Preserve v1 and historical scans.
+See `docs/certscore-v2/reject-request-proof-policy.md`. No deployment is authorized.
+
+## California post-Reject assessment — October 21, 2026
+
+The owner approved local California assessment of verified post-Reject evidence,
+using `california_reject_request.v1` observed facts and the persisted
+`california-post-reject.v1` assessment through normalized concerns, concern policy
+and unified findings. Union eligible recipients with GPC and explicit opt-out
+under the existing shared 47-point family; deduplicate across paths. Preserve EU
+presence scoring and the separate GPP family. Do not infer collection or absence
+of restricted-processing declarations from historical sanitized URLs, scripts or
+cookie presence. Keep completed click and source/target/ancestry proof; no semantic
+registration prerequisite is added. See
+`docs/certscore-v2/california-post-reject-policy.md`. No deployment, new browser
+work, Options opening or historical rewrite is authorized.
+
+## Canonical GPP propagation scoring — October 21, 2026
+
+The owner approved one separate California-only 5-point deduction per scan,
+capped at 5, for verified GPP propagation inconsistencies under delivered GPC.
+Use `gpp_propagation_evidence.v1` -> persisted typed assessment -> normalized
+concern -> `california-gpp-propagation.v1` concern policy -> separate unified
+finding -> California score. Require positive source/session/document-bound
+request proof and the supported request-inventory or prior same-document CMP
+corroboration defined in `docs/certscore-v2/gpp-propagation-scoring-policy.md`.
+Unknown or unsupported data remains neutral. Preserve recipient eligibility,
+entity counts, the shared recipient-family cap, EU/Reject scoring, historical
+assessments and customer reports without deduction explanations. No deployment,
+new browser work, Options panels or historical rewrite is authorized.
 
 ## Passive CMP details — October 21, 2026
 

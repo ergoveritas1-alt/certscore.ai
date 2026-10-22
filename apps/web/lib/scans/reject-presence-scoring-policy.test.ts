@@ -9,6 +9,8 @@ import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyDeductionBreakdown, deriveRegulatoryCoverageScore } from "./regulatory-coverage-score";
+import {projectAdminScoringEntityCounts} from "../../server/admin/admin-scan-posture-score";
+import {SCAN_REPORT_PROJECTION_VERSION} from "../../server/scans/scan-report-projection-contract";
 
 export function cookieOnlyAfterReject() {
  const p=afterRejectClickProjection("measurement");
@@ -27,6 +29,20 @@ function canonical(p:ReturnType<typeof afterRejectClickProjection>){
  const rows=deriveGdprEprivacyCoverageChecklist({coverageOutcomes,projectedFindings:[],unifiedFindings,scanCompleted:true,coverageLimited:false}).filter(r=>r.id==="post_reject_tracking_reduction");
  return{retained,normalizedConcerns,unifiedFindings,rows};
 }
+test("Admin Reject count deduplicates the same eligible entity across cookies and service requests",()=>{
+ const p=afterRejectClickProjection("measurement"),cookie=cookieOnlyAfterReject();
+ p.scoringEvidence!.preActionStorage=cookie.scoringEvidence!.preActionStorage;
+ p.scoringEvidence!.postActionStorage=cookie.scoringEvidence!.postActionStorage;
+ p.afterActionStorage=cookie.afterActionStorage;
+ const result=canonical(postRefusalReportProjectionSchema.parse(p));
+ const snapshot={report_projection_status:"ready",report_projection_version:SCAN_REPORT_PROJECTION_VERSION,report_projection_computed_at:"2026-10-21T23:00:00.000Z",
+  admin_canonical_score_input:{scanId:"fixture",projectionScanId:"fixture",rejectSourceHash:p.packetSha256,unifiedFindings:result.unifiedFindings,checklistRows:result.rows}};
+ assert.equal(result.retained.afterRejectScoringAssessment?.entityEvidence?.observations.length,2);
+ assert.equal(projectAdminScoringEntityCounts("fixture",snapshot,false).reject,1);
+ assert.equal(projectAdminScoringEntityCounts("fixture",snapshot,true).reject,null);
+ const changed=structuredClone(snapshot);changed.admin_canonical_score_input.checklistRows[0]!.criticalEvidence!.retainedEvidence!.sourcePacketSha256="a".repeat(64);
+ assert.equal(projectAdminScoringEntityCounts("fixture",changed,false).reject,null,"Mismatched source proof cannot produce an eligible count");
+});
 test("canonical rule charges cookies alone, opaque analytics, measurement and service assets once after Reject",()=>{
  const cookies=cookieOnlyAfterReject(),opaque=afterRejectClickProjection("measurement"),performance=afterRejectClickProjection("performance");
  opaque.scoringEvidence!.requests[0]!.measurementEvidence=undefined;opaque.afterActionRequests![0]!.measurementEvidence=undefined;
@@ -98,4 +114,20 @@ test("unattributed positive presence gets the initial effect without invented in
  const assessment=assessAfterRejectScoring(p)!;
  assert.equal(assessment.deductionPoints,15);assert.equal(assessment.entityEvidence?.entities.length,0);
  assert.equal(assessment.entityEvidence?.observations[0]?.entityId,undefined);
+});
+
+test('fresh domain-scoped CreativeCDN cookie classification survives persistence and canonical Reject scoring without registration',async()=>{
+ const {resolveCanonicalActionStoragePurpose}=await import('@certscore/vendor-resolver');
+ const p=cookieOnlyAfterReject();
+ const before=p.scoringEvidence!.postActionStorage[0]!;
+ const item={...before,name:'ts',hostname:'creativecdn.com',...resolveCanonicalActionStoragePurpose({storageType:'cookie',name:'ts',hostname:'creativecdn.com'})};
+ p.scoringEvidence!.preActionStorage=[item];p.scoringEvidence!.postActionStorage=[item];p.afterActionStorage=[item];
+ const result=canonical(postRefusalReportProjectionSchema.parse(p));
+ const score=retainedAfterRejectScoringAssessment(result.retained)!;
+ assert.equal(score.deductionPoints,15);assert.equal(score.registration,'unconfirmed');
+ assert.equal(score.entityEvidence?.entities[0]?.entityId,'ent_f3a0ce7ab768');
+ assert.equal(deriveGdprEprivacyDeductionBreakdown(result.rows)[0]?.deductionPoints,15);
+ assert.ok(result.unifiedFindings.some(f=>f.unifiedFindingId==='post_reject_click_tracking'));
+ assert.equal(score.entityEvidence?.observations[0]?.kind,'cookie_snapshot');
+ for(const hostname of ['example.test','creativecdn.com.evil.test'])assert.equal(resolveCanonicalActionStoragePurpose({storageType:'cookie',name:'ts',hostname}).nonEssential,false);
 });

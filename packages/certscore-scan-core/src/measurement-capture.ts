@@ -43,8 +43,10 @@ export function measurementCookieCandidates(input: {
 }
 
 /** Preserve the existing total of 48 inspections, reserving 32 for after click. */
-export function measurementInspectionBudget() {
+export function measurementInspectionBudget(options:{distinctRecipients?:boolean}={}) {
   let total = 0, beforeAction = 0;
-  return { available: (afterAction: boolean) => total < 48 && (afterAction || beforeAction < 16),
-    retained: (afterAction: boolean) => { total += 1; if (!afterAction) beforeAction += 1; } };
+  const recipients=new Set<string>();
+  return { available: (afterAction: boolean, recipient?:string) => total < 48 && (afterAction || beforeAction < 16) &&
+    !(afterAction && (options.distinctRecipients || recipient!==undefined) && (!recipient || recipients.has(recipient)) && recipients.size<8 && total>=40),
+    retained: (afterAction: boolean, recipient?:string) => { total += 1; if (!afterAction) beforeAction += 1; else if(recipient)recipients.add(recipient); } };
 }

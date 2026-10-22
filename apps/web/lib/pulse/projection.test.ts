@@ -1402,3 +1402,8 @@ test("Pulse evidence JSON exposes bounded cookie setter context", () => {
   assert.match(source, /sourceRequestUrl: safeUrl\(row\.sourceRequestUrl\)/);
   assert.match(source, /setMethod: row\.setMethod/);
 });
+
+test('public policy inventory preserves canonical privacy classification for a combined document at a terms URL',()=>{
+ const rows=projectedPolicySurfaceRows(pulseScanRecord({policyEnrichment:[{policy_page_title:'Terms & Privacy',policy_page_type:'privacy_policy',policy_page_url:'https://example.fr/terms',status:'fetched',discoveryMethod:'footer_link'}]}));
+ assert.equal(rows[0]?.type,'privacy_policy');
+});

@@ -1,3 +1,4 @@
+import {assessCaliforniaPostReject} from "./california-post-reject-policy";
 import { assessAfterRejectScoring } from "./after-reject-scoring-policy";
 import { readChoicePathExecution } from "./choice-path-execution";
 import type {
@@ -137,6 +138,8 @@ export function buildPostRefusalRuntimeProjection(
         }
       : {}),
     afterRejectScoringAssessment: assessAfterRejectScoring(projection),
+    californiaPostRejectAssessment: !laneOutcome || (laneOutcome.status === "joined" && laneOutcome.evidenceJoined)
+      ? assessCaliforniaPostReject(projection) : null,
     postRefusalEvidenceProjection: projection,
     rejectClickTrackingAssessment: !laneOutcome || (laneOutcome.status === "joined" && laneOutcome.evidenceJoined)
       ? assessRejectClickTracking(projection) : null,

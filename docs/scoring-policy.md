@@ -7,7 +7,12 @@ into report components or documentation.
 
 Local versions: `gdpr-eprivacy-posture.v22`, `overall-posture.v13`, and
 `full-site-distinct-findings.v12`. These changes have not been deployed.
-The separately approved California recipient scoring policy is unchanged.
+The separately approved California recipient schedule is unchanged. New GPC
+observations use [sale/sharing qualification](certscore-v2/gpc-sale-sharing-qualification-policy.md),
+including request-level restricted-processing signals, under
+`california-gpc-response.v7-gpp`, including bounded
+[offline GPP decoding and consistency](certscore-v2/gpp-offline-decoder-policy.md).
+Historical v5/v6 observations retain their original interpretation.
 
 The score starts at 100, subtracts eligible deductions after shared family caps,
 and stops at 0. Insufficient evidence can withhold a score; it does not imply a
@@ -219,6 +224,16 @@ allowance and 12-point WCAG cap. WCAG evidence alone does not make an unavailabl
 California privacy assessment available. No scanner lane, capture, model call,
 wait or recurring infrastructure cost is added. No deployment is authorized.
 
+October 21 update: owner-authorized `california-regulatory-posture.v12-observed`
+separates score availability from assessment completeness. Every reportable visit
+receives both California and EU scores, including visits with unresolved checks
+and no eligible findings. New materializations retain a verified, document-bound
+`usable_starting_page_score.v1` basis. Existing finding eligibility, weights,
+recipient schedule and WCAG caps remain unchanged; missing evidence remains
+unknown and does not create a pass or deduction. Historical records retain their
+original availability rules. See
+`certscore-v2/dual-posture-score-availability-policy.md`.
+
 The five retained local reports were rebuilt through canonical publication:
 Spotify CA 100→94 (EU 59), Healthline CA 100→97 (EU 53), Chase CA 100→98
 (EU 66), Linear CA 88→76 (EU 88), Walmart CA 100→100 (EU 80). All EU values
@@ -245,3 +260,19 @@ GDPR/ePrivacy v22, overall v13 and full-site v12 through the canonical persisted
 assessment, normalized concern, concern-policy and unified checklist flow.
 Historical scores retain their original policy. See
 [the canonical policy](certscore-v2/reject-nonessential-presence-policy.md).
+
+## Verified GPP propagation — October 21, 2026
+
+The owner approved a separate California-only 5-point family, capped at 5 per
+scan, for verified GPP propagation inconsistencies. It does not increase GPC
+recipient counts or change EU/Reject scoring. See the [canonical policy](certscore-v2/gpp-propagation-scoring-policy.md)
+for the typed evidence, fail-closed qualification, historical compatibility and
+budget requirements. Local implementation and retained replay only; no deployment.
+
+## California post-Reject recipient union — October 21, 2026
+
+[California post-Reject assessment](certscore-v2/california-post-reject-policy.md)
+adds eligible, source-bound advertising/identity collection recipients to the same
+choice-enforcement union as GPC and explicit opt-out. The existing 47-point shared
+cap and separate GPP family remain unchanged; EU presence scoring is independent.
+Historical requests without the required capture facts remain neutral.

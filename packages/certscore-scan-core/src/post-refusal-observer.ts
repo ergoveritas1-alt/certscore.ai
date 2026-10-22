@@ -1,3 +1,4 @@
+import {captureCaliforniaRejectRequest,californiaProofRecipient,prioritizeCaliforniaRequests} from "./california-reject-request.js";
 import { measurementCookieCandidates, measurementInspectionBudget, type MeasurementCookieCandidate } from "./measurement-capture.js";
 import { afterActionWriteDiagnostics } from "./after-action-write-diagnostics.js";
 import { captureExactCookieWrite } from "./exact-cookie-write-capture.js";
@@ -249,10 +250,12 @@ type CapturedRequest = {
   requestId: string;
   startedAtEpochMs: number;
   completedAtEpochMs?: number;
+  httpStatus?: number;
   responseCookieNamesSet?: string[];
   responseCookieWrites?: import("@certscore/contracts").ExactCookieWriteEvidence[];
   rootStartedAtEpochMs?: number;
   measurementEvidence?: import("@certscore/contracts").MeasurementRequestEvidence;
+  californiaCollection?: import("@certscore/contracts").CaliforniaRejectRequestEvidence;
   inFlightAtRefusalRegistration: boolean;
 };
 
@@ -682,7 +685,7 @@ export async function runPostRefusalObserver(
       });
     }
 
-    const measurementBudget = measurementInspectionBudget();
+    const measurementBudget = measurementInspectionBudget({distinctRecipients:true});
     const responseCookieBudget = measurementInspectionBudget();
     let mainNavigationRequestCount = 0;
     page.on("framenavigated", frame => { if (actionDispatched && frame === page?.mainFrame()) sourceDocumentChanged = true; });
@@ -734,7 +737,8 @@ export async function runPostRefusalObserver(
         if (selection.evicted) activeRequestIds.delete(selection.evicted.requestId);
         if (!selection.retained) return;
       } else bucket.push(captured);
-      if (request.method() !== "OPTIONS" && measurementBudget.available(actionDispatched)) {
+      const caRecipient=actionDispatched?californiaProofRecipient(request.url()):null;
+      if (request.method() !== "OPTIONS" && measurementBudget.available(actionDispatched,caRecipient?.entityId)) {
         try {
           const body = request.postData();
           const observation = { url: request.url(), method: request.method(), requestId,
@@ -742,13 +746,17 @@ export async function runPostRefusalObserver(
             hashIdentifier: hashValue,
             storedIdentifiers: !actionDispatched || measurementBaselineAtMs === undefined ? [] : measurementCandidates.map(row => ({ ...row, capturedAtMs: measurementBaselineAtMs! })), body: body && body.length > 32768 ? body.slice(0, 32769) : body };
           captured.measurementEvidence = inspectMeasurementRequest(observation);
-          if (captured.measurementEvidence) {
-            measurementBudget.retained(actionDispatched);
+          const caInput={url:observation.url,method:observation.method,requestId,startedAtMs:observation.timestampMs,
+            hasBody:body!==null,body:observation.body};
+          if(caRecipient)captured.californiaCollection=captureCaliforniaRejectRequest(caInput)??undefined;
+          if (captured.measurementEvidence || captured.californiaCollection) {
+            measurementBudget.retained(actionDispatched,caRecipient?.entityId);
             // Observe already-issued request metadata inside the existing window.
             // Pending/failed header reads stay unknown; never await them at publication.
             void request.allHeaders().then(headers => {
               if (timing.observationEndedAtMs !== undefined || effectiveSignal?.aborted) return;
               captured.measurementEvidence = inspectMeasurementRequest({ ...observation, headers });
+              if(caRecipient)captured.californiaCollection=captureCaliforniaRejectRequest({...caInput,headers,httpStatus:captured.httpStatus})??undefined;
             }).catch(() => undefined);
           }
         } catch { /* Opaque requests retain ordinary facts and no measurement exemption. */ }
@@ -772,6 +780,8 @@ export async function runPostRefusalObserver(
       const captured = [...preRegistrationRequests, ...postRegistrationRequests]
         .find((entry) => entry.requestId === requestId);
       if (!captured) return;
+      if (timing.observationEndedAtMs !== undefined || effectiveSignal?.aborted) return;
+      captured.httpStatus=response.status();
       const observedAtMs = elapsed(parentScanStartedAtMs);
       const afterClick = actionDispatched;
       const capture = response.headersArray().then((headers) => {
@@ -1898,6 +1908,10 @@ function classifyRequests(
   scanStartedAtMs: number,
   refusalRegisteredAtEpochMs?: number,
 ): PostRefusalNetworkRequest[] {
+  const californiaRows=new Map(prioritizeCaliforniaRequests(requests.map(captured=>({
+    startedAtMs:elapsed(scanStartedAtMs,captured.startedAtEpochMs),
+    californiaCollection:captured.californiaCollection?{...captured.californiaCollection,httpStatus:captured.httpStatus??null}:undefined,
+  }))).map(row=>[row.californiaCollection!.requestId,row.californiaCollection!]));
   return requests.map((captured) => {
     const requestUrl = captured.request.url();
     const purpose = classifyPostRefusalRequestPurpose(requestUrl);
@@ -1910,6 +1924,7 @@ function classifyRequests(
       : elapsed(scanStartedAtMs, captured.startedAtEpochMs) - elapsed(scanStartedAtMs, refusalRegisteredAtEpochMs);
     return {
       requestId: captured.requestId,
+      ...(californiaRows.has(captured.requestId)?{californiaCollection:californiaRows.get(captured.requestId)!}:{}),
       method: captured.request.method(),
       ...(rootStartedAtMs === undefined || rootStartedAtMs > startedAtMs ? {} : { rootStartedAtMs }),
       ...(captured.measurementEvidence ? { measurementEvidence: { ...captured.measurementEvidence, timestampMs: startedAtMs } } : {}),

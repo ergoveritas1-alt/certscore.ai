@@ -2111,6 +2111,10 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     [],
     []
   ),
+  defineReportSignal("runtime_artifact_signal", "privacy.california_post_reject_collection",
+    "Advertising collection after Reject", "third_party_network_cookie_surface", [], []),
+  defineReportSignal("runtime_artifact_signal", "privacy.gpp_propagation_inconsistency",
+    "GPP propagation inconsistency", "third_party_network_cookie_surface", [], []),
   defineReportSignal(
     "runtime_artifact_signal",
     "privacy.weak_cookie_security_attributes_detected",
@@ -3057,6 +3061,17 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "third_party_network_cookie_surface",
     signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.gpc_response" }],
     aliases: ["No observable GPC response"]
+  }),
+  defineReportUnifiedFinding({
+    id:"california_post_reject_collection",label:"Advertising collection after Reject",
+    owner:"third_party_network_cookie_surface",
+    signalMappings:[{source:"runtime_artifact_signal",key:"privacy.california_post_reject_collection"}]
+  }),
+  defineReportUnifiedFinding({
+    id: "gpp_propagation_inconsistency",
+    label: "GPP propagation inconsistency",
+    owner: "third_party_network_cookie_surface",
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.gpp_propagation_inconsistency" }]
   }),
   defineReportUnifiedFinding({
     id: "gpc_disclosure_present",

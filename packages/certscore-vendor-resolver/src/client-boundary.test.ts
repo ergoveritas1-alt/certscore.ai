@@ -31,6 +31,6 @@ test("the scanner server entry bundles from source without generated dist files"
     metafile: true,
     logLevel: "silent",
   });
-  assert.ok(Object.keys(result.metafile!.inputs).some(path => path.endsWith("/src/runtime-script-facts.ts")));
+  assert.ok(Object.keys(result.metafile!.inputs).some(path => /(?:^|\/)src\/runtime-script-facts\.ts$/.test(path)));
   assert.equal(Object.keys(result.metafile!.inputs).some(path => /(?:^|\/)packages\/[^/]+\/dist\//.test(path)), false);
 });

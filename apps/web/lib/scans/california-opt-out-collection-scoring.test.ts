@@ -17,8 +17,10 @@ import {buildCanonicalGpcResponseProjection} from "./gpc-response-projection";
 import {apiV2GpcResponseSchema} from "@certscore/api-contracts";
 import {gpcResponseAssessmentSchema} from "@certscore/contracts";
 import {californiaChoiceEnforcementPoints} from "./california-choice-enforcement-policy";
+import {projectAdminScoringEntityCounts} from "../../server/admin/admin-scan-posture-score";
+import {SCAN_REPORT_PROJECTION_VERSION} from "../../server/scans/scan-report-projection-contract";
 
-function observed(mode="collection", urls?: string[]) {
+function observed(mode="collection", urls?: string[], currentQualification = false) {
  const g=gpcProductionRuntimeFixture(),b=gpcRuntimeFixture({enabled:false});
  const r=g.networkEvents[1]!;
  r.requestUrl=r.url=mode === "library"?"https://connect.facebook.net/en_US/fbevents.js":"https://www.facebook.com/tr/?id=fixture&ev=PageView";
@@ -34,7 +36,11 @@ function observed(mode="collection", urls?: string[]) {
  const bytes=Buffer.from(JSON.stringify(g));
  const pointer={uri:"s3://fixture/gpc.json",sha256:createHash("sha256").update(bytes).digest("hex"),sizeBytes:bytes.length};
  const comparison=buildGpcResponseAssessment({baseline:b,gpc:g,baselineArtifact:{...pointer,uri:"s3://fixture/base.json"},gpcArtifact:pointer});
- return buildGpcProductionAssessment({scanId:g.scanId,comparison,source:{bytes,pointer}});
+ const assessment = buildGpcProductionAssessment({scanId:g.scanId,comparison,source:{bytes,pointer}});
+ // Existing v5 calibration cases remain historical. New v7 cases below retain
+ // the explicit producer qualification rather than reinterpreting these rows.
+ if (!currentQualification) { delete assessment.observation.requests.advertisingCollectionQualification; delete assessment.observation.requests.gppPropagation; }
+ return assessment;
 }
 
 function publicGpcResponse(a: ReturnType<typeof observed>, deductionPoints: number) {
@@ -73,6 +79,90 @@ test("only verified advertising collection qualifies; libraries and errors remai
  assert.equal(deriveCaliforniaGpcResponsePolicy(legacy).deductionPoints,0);
 });
 
+test("v7 sale/sharing qualification survives persistence and drives canonical findings, CA score, API and Admin counts", () => {
+ const urls = [
+  "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=123.456&npa=0&gpp=DBABBg~BUoAAABA.YA&gpp_sid=8",
+  "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=789.012&rdp=1",
+  "https://securepubads.g.doubleclick.net/gampad/ads?iu=publisher&npa=1",
+  "https://px.ads.linkedin.com/collect?pid=publisher&li_adsId=visitor-fixture",
+  "https://www.facebook.com/tr/?id=publisher&ev=PageView&fbp=visitor-fixture&dpo=LDU",
+  "https://fastlane.rubiconproject.com/a/api/fastlane.json?site_id=publisher",
+ ];
+ const a = observed("partial", urls, true);
+ assert.equal(a.observation.requests.advertisingCollectionCount, 6, "all factual collection remains retained");
+ const policy = deriveCaliforniaGpcResponsePolicy(a);
+ assert.equal(policy.policyVersion, "california-gpc-response.v7-gpp");
+ assert.equal(policy.deductionPoints, 25);
+ assert.equal(policy.recipientIds?.length, 2);
+ assert.deepEqual(policy.eligibleActivity.persistedUnderGpc, ["collection-0", "collection-3"]);
+ assert.equal(apiV2GpcResponseSchema.safeParse(publicGpcResponse(a, 25)).success, true);
+ assert.equal(apiV2GpcResponseSchema.safeParse(publicGpcResponse(a, 37)).success, false, "raw advertising entities cannot inflate API weights");
+ const persisted = gpcResponseAssessmentSchema.parse(JSON.parse(JSON.stringify(a)));
+ assert.deepEqual(deriveCaliforniaGpcResponsePolicy(persisted), policy);
+ const f = californiaCoverageFixture(); f.bundle.scanId = a.observation.scanId!; f.policyEvidence.projection.scanId = f.bundle.scanId;
+ f.bundle.policySurfaceInspection!.californiaReviewPolicy = "california-privacy-review.v10";
+ f.bundle.policySurfaceObservations.forEach(row => { row.documentLanguage = "en"; });
+ const child = projectCaliforniaPrivacyReview(f.bundle, CA_FIXTURE_SOURCE, CA_FIXTURE_URL, f.policyEvidence)!;
+ const parent = deriveConsentControlAssessment({ scan: { scanId: f.bundle.scanId, finalUrl: CA_FIXTURE_URL } }); parent.californiaPrivacyReview = child;
+ const findings = buildUnifiedFindingDisplayPackets({ reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
+  runtimeArtifacts: { consentControlAssessment: parent, gpcResponseAssessment: persisted } });
+ const gpc = findings.find(row => row.unifiedFindingId === "gpc_response")!;
+ assert.equal(gpc.scoreEffects?.[0]?.deductionPoints, 25);
+ assert.equal(gpc.scoreEffects?.[0]?.policyVersion, policy.policyVersion);
+ assert.equal(gpc.scoreEffects?.some(effect => effect.appliesTo === "certscore_overall"), false);
+ assert.equal(deriveCaliforniaRegulatoryScore({ assessment: child, checklistRows: [], unifiedFindings: findings }).score, 75);
+ assert.equal(buildCanonicalGpcResponseProjection(findings)?.californiaDeductionPoints, 25);
+ const snapshot = { report_projection_status: "ready", report_projection_version: SCAN_REPORT_PROJECTION_VERSION, report_projection_computed_at: f.bundle.completedAt,
+  admin_canonical_score_input: { scanId: f.bundle.scanId, projectionScanId: f.bundle.scanId, assessment: child, gpcAssessment: persisted, unifiedFindings: findings, checklistRows: [] } };
+ assert.equal(projectAdminScoringEntityCounts(f.bundle.scanId, snapshot, false).gpc, 2);
+ const bad = structuredClone(a); bad.observation.requests.advertisingCollectionQualification!.rows[0]!.evidenceId = "different-request";
+ assert.equal(gpcResponseAssessmentSchema.safeParse(bad).success, false);
+ assert.equal(deriveCaliforniaGpcResponsePolicy(bad).deductionPoints, 0);
+ const roleMismatch = structuredClone(a);
+ roleMismatch.observation.requests.advertisingCollectionQualification!.rows[2]!.activity = "identity_sync";
+ assert.equal(gpcResponseAssessmentSchema.safeParse(roleMismatch).success, false, "an unresolved rule cannot manufacture an eligible role");
+});
+
+test("v7 restricted or unresolved collection stays neutral while verified CMP contradictions remain independent", () => {
+ for (const url of [
+  "https://securepubads.g.doubleclick.net/gampad/ads?iu=publisher&npa=1",
+  "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=123.456&rdp=1",
+  "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=123.456&us_privacy=1NYN",
+  "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=123.456&gpp=opaque",
+  "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=123.456&gpp=DBABBg~BVWSSSVY.YA&gpp_sid=8",
+  "https://px.ads.linkedin.com/collect?pid=publisher&pageLoadId=page-fixture",
+ ]) {
+  const a = observed("collection", [url], true);
+  assert.equal(a.observation.requests.advertisingCollectionCount, 1);
+  assert.equal(deriveCaliforniaGpcResponsePolicy(a).deductionPoints, 0, url);
+  assert.equal(apiV2GpcResponseSchema.safeParse(publicGpcResponse(a, 15)).success, false);
+  a.observation.semanticProbe = "observed";
+  a.observation.registration = { basis: "current_recorded_state", sale: "not_opted_out", sharing: "unknown", cmpGpcSignal: "received", causedByGpc: "not_established" };
+  assert.equal(deriveCaliforniaGpcResponsePolicy(a).deductionPoints, 15);
+  assert.deepEqual(deriveCaliforniaGpcResponsePolicy(a).recipientIds, [], "contradiction does not manufacture a recipient");
+  assert.equal(apiV2GpcResponseSchema.safeParse(publicGpcResponse(a, 15)).success, true);
+ }
+ const historical = observed("collection", ["https://securepubads.g.doubleclick.net/gampad/ads?iu=publisher&npa=1"]);
+ assert.equal(deriveCaliforniaGpcResponsePolicy(historical).policyVersion, "california-gpc-response.v5-recipients");
+ assert.equal(deriveCaliforniaGpcResponsePolicy(historical).deductionPoints, 15, "historical materializations are not silently reclassified");
+});
+
+test("offline GPP decoding can qualify retained positive collection without upgrading historical v6 records", () => {
+ const a=observed("collection",["https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=123.456&gpp=DBABBg~BUoAAABA.YA&gpp_sid=8"],true);
+ assert.equal(deriveCaliforniaGpcResponsePolicy(a).deductionPoints,15);
+ assert.equal(apiV2GpcResponseSchema.safeParse(publicGpcResponse(a,15)).success,true);
+ const old=structuredClone(a),qualification=old.observation.requests.advertisingCollectionQualification!;
+ qualification.policyVersion="gpc_sale_sharing_evidence.v1";
+ delete old.observation.requests.gppPropagation;
+ for(const row of qualification.rows){delete row.gpp;row.processingSignals=["gpp_unresolved"];}
+ assert.equal(deriveCaliforniaGpcResponsePolicy(old).policyVersion,"california-gpc-response.v6-sale-sharing");
+ assert.equal(deriveCaliforniaGpcResponsePolicy(old).deductionPoints,0);
+ const missing=structuredClone(a);delete missing.observation.requests.advertisingCollectionQualification!.rows[0]!.gpp;
+ assert.equal(gpcResponseAssessmentSchema.safeParse(missing).success,false);
+ const corrupt=structuredClone(a);corrupt.observation.requests.advertisingCollectionQualification!.rows[0]!.gpp!.sections[0]!.saleOptOut=1;
+ assert.equal(deriveCaliforniaGpcResponsePolicy(corrupt).deductionPoints,0,"a missing derived restriction flag cannot promote an explicit opt-out");
+});
+
 test("recipient schedule includes the first recipient and caps at 47",()=>{
  for (let count=0;count<=12;count++) {
   const ids=Array.from({length:count},(_,i)=>`recipient-${i}`);
@@ -94,6 +184,23 @@ test("measurement/security and sync bootstrap do not create GPC recipients; actu
 
 const threeRecipients=["https://dpm.demdex.net/id", "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/123/",
  "https://www.google.com/pagead/1p-user-list/123/", "https://config.aps.amazon-adsystem.com/configs/123", "https://pagead2.googlesyndication.com/pagead/ping"];
+test("Admin GPC count includes only applied canonical recipient entities, deduplicating repeated requests",()=>{
+ for(const mode of ["collection","library"]){
+  const gpc=observed(mode,mode==="collection"?[...threeRecipients,...threeRecipients]:undefined);
+  const f=californiaCoverageFixture();f.bundle.scanId=gpc.observation.scanId!;f.policyEvidence.projection.scanId=f.bundle.scanId;
+  f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v10";
+  f.bundle.policySurfaceObservations.forEach(row=>{row.documentLanguage="en";});
+  const assessment=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+  const parent=deriveConsentControlAssessment({scan:{scanId:f.bundle.scanId,finalUrl:CA_FIXTURE_URL}});parent.californiaPrivacyReview=assessment;
+  const findings=buildUnifiedFindingDisplayPackets({runtimeArtifacts:{consentControlAssessment:parent,gpcResponseAssessment:gpc},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+  const snapshot={report_projection_status:"ready",report_projection_version:SCAN_REPORT_PROJECTION_VERSION,report_projection_computed_at:f.bundle.completedAt,
+    admin_canonical_score_input:{scanId:f.bundle.scanId,projectionScanId:f.bundle.scanId,assessment,gpcAssessment:gpc,unifiedFindings:findings,checklistRows:[]}};
+  assert.equal(projectAdminScoringEntityCounts(f.bundle.scanId,snapshot,false).gpc,mode==="collection"?2:0);
+  assert.equal(projectAdminScoringEntityCounts(f.bundle.scanId,snapshot,true).gpc,null);
+  assert.equal(projectAdminScoringEntityCounts("other",snapshot,false).gpc,null);
+  if(mode==="collection")assert.equal(projectAdminScoringEntityCounts(f.bundle.scanId,{...snapshot,admin_canonical_score_input:{...snapshot.admin_canonical_score_input,unifiedFindings:[]}},false).gpc,null,"Unapplied evidence cannot become a qualifying entity count");
+ }
+});
 test("eight captured recipients reach 47 through the source-bound API contract",()=>{
  const urls=[threeRecipients[0]!,threeRecipients[1]!,"https://gum.criteo.com/r/d","https://www.facebook.com/tr/?id=fixture&ev=PageView","https://px.ads.linkedin.com/collect/",
   "https://bat.bing.com/action/0?ti=123","https://analytics.tiktok.com/api/v2/pixel/track","https://ct.pinterest.com/ct.html"];
@@ -250,4 +357,63 @@ test("GPT ad calls and Lotame profile mapping reach the canonical California sco
  const score=deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:packets});
  assert.equal(score.score,75);assert.equal(score.deductions.length,1);
  assert.equal(deriveCaliforniaGpcResponsePolicy(observed("no_response",urls)).deductionPoints,0);
+});
+
+test("separate GPP propagation family survives persistence, caps at five, and never inflates GPC entities or EU scoring",()=>{
+ const a=observed("collection",[
+  "https://securepubads.g.doubleclick.net/gampad/ads?gpp=DBAA&gpp_sid=8&us_privacy=1NYN",
+  "https://securepubads.g.doubleclick.net/gampad/ads?gpp=DBAA&gpp_sid=8&us_privacy=1NYN&slot=2",
+  "https://bcp.crwdcntrl.net/6/map?xcid=fixture",
+ ],true);
+ assert.equal(a.observation.requests.gppPropagation?.rows.length,2);
+ const persisted=gpcResponseAssessmentSchema.parse(JSON.parse(JSON.stringify(a)));
+ assert.equal(persisted.contractVersion,"certscore.gpc-response-assessment.v3");
+ if(persisted.contractVersion!=="certscore.gpc-response-assessment.v3")throw Error("Expected v3");
+ assert.equal(deriveCaliforniaGpcResponsePolicy(persisted).deductionPoints,15);
+ assert.equal(deriveCaliforniaGpcResponsePolicy(persisted).recipientIds?.length,1);
+ const f=californiaCoverageFixture();f.bundle.scanId=a.observation.scanId!;f.policyEvidence.projection.scanId=f.bundle.scanId;
+ f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v10";
+ f.bundle.policySurfaceObservations.forEach(row=>{row.documentLanguage="en";});
+ const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+ const parent=deriveConsentControlAssessment({scan:{scanId:f.bundle.scanId,finalUrl:CA_FIXTURE_URL}});parent.californiaPrivacyReview=child;
+ const findings=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),
+  runtimeArtifacts:{consentControlAssessment:parent,gpcResponseAssessment:persisted}});
+ const propagation=findings.find(row=>row.unifiedFindingId==="gpp_propagation_inconsistency")!;
+ assert.ok(propagation);assert.equal(propagation.presentationDecision.status,"surface",JSON.stringify({presentation:propagation.presentationDecision,surfacing:propagation.surfacingDecision,concern:propagation.concernContext}));assert.equal(propagation.surfacingDecision?.reportable,true);
+ assert.equal(propagation.scoreEffects?.length,1);
+ assert.equal(propagation.scoreEffects![0]!.deductionPoints,5);
+ assert.equal(propagation.scoreEffects![0]!.policyVersion,"california-gpp-propagation.v1");
+ assert.equal(propagation.scoreEffects!.some(effect=>effect.appliesTo==="certscore_overall"),false);
+ assert.ok(!/points|deduct/i.test(propagation.summary));
+ const score=deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:[...findings,propagation]});
+ assert.equal(score.score,80);assert.equal(score.policyVersion,"california-regulatory-posture.v13-gpp");
+ assert.equal(score.deductions.filter(row=>row.findingId==="gpp_propagation_inconsistency").length,1);
+ const snapshot={report_projection_status:"ready",report_projection_version:SCAN_REPORT_PROJECTION_VERSION,report_projection_computed_at:f.bundle.completedAt,
+  admin_canonical_score_input:{scanId:f.bundle.scanId,projectionScanId:f.bundle.scanId,assessment:child,gpcAssessment:persisted,unifiedFindings:findings,checklistRows:[]}};
+ assert.equal(projectAdminScoringEntityCounts(f.bundle.scanId,snapshot,false).gpc,1);
+ assert.equal(projectAdminScoringEntityCounts(f.bundle.scanId,snapshot,false).gpp,1,"two affected requests to one entity count once");
+ assert.equal(projectAdminScoringEntityCounts(f.bundle.scanId,snapshot,true).gpp,null);
+ const old=structuredClone(persisted);delete old.observation.requests.gppPropagation;
+ assert.equal(projectAdminScoringEntityCounts(f.bundle.scanId,{...snapshot,
+  admin_canonical_score_input:{...snapshot.admin_canonical_score_input,gpcAssessment:old}},false).gpp,null,"historical assessments were not assessed for propagation");
+ const oldFindings=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),
+  runtimeArtifacts:{consentControlAssessment:parent,gpcResponseAssessment:old}});
+ assert.ok(!oldFindings.some(row=>row.unifiedFindingId==="gpp_propagation_inconsistency"));
+ assert.equal(deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:oldFindings}).score,85);
+ for(const mode of ["request","timestamp","section","source","navigator","representative"]){
+  const bad=structuredClone(persisted);
+  if(mode==="request")bad.observation.requests.gppPropagation!.rows[0]!.evidenceId="different-request";
+  if(mode==="timestamp")bad.observation.requests.gppPropagation!.rows[0]!.observedAtMs++;
+  if(mode==="section")bad.observation.requests.gppPropagation!.rows[0]!.applicableSections=[7];
+  if(mode==="source")bad.observation.sourceSha256="b".repeat(64);
+  if(mode==="navigator")bad.observation.delivery.mainNavigatorReadbackRetained=false;
+  if(mode==="representative")bad.observation.positiveEvidence!.representativeDocument=false;
+  const packets=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),
+   runtimeArtifacts:{consentControlAssessment:parent,gpcResponseAssessment:bad}});
+  assert.ok(!packets.some(row=>row.unifiedFindingId==="gpp_propagation_inconsistency"),mode);
+ }
+ const badEffect=structuredClone(propagation);badEffect.scoreEffects![0]!.deductionPoints=15;
+ assert.equal(deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:[...findings.filter(row=>row.unifiedFindingId!=="gpp_propagation_inconsistency"),badEffect]}).score,85);
+ const wrongScan=structuredClone(child);wrongScan.scanId="other-scan";
+ assert.ok(!deriveCaliforniaRegulatoryScore({assessment:wrongScan,checklistRows:[],unifiedFindings:[propagation]}).deductions.length);
 });

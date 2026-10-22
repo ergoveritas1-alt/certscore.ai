@@ -1,4 +1,6 @@
+import {CALIFORNIA_POST_REJECT_FINDING} from "./california-post-reject-policy";
 import {hasVerifiedCustomerGpcEvidence} from "./gpc-customer-policy";
+import {deriveGppPropagationPolicy} from "./gpp-propagation-policy";
 import { FORM_DESTINATION_FINDING_ID, qualifiesFormDestinationReview } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, qualifiesCmsSecurityReview } from "@certscore/contracts";
 import { CALIFORNIA_PRIVACY_REVIEW_IDS, californiaPrivacyReviewFindingIds } from "@certscore/contracts";
@@ -279,6 +281,8 @@ const CONSENT_TRACKING_IDS = [
   "accept_reject_outcomes_indistinguishable",
   "paid_alternative_required_to_decline_tracking",
   "gpc_response",
+  "gpp_propagation_inconsistency",
+  "california_post_reject_collection",
   "weak_cookie_security_attributes",
   "cookie_retention_lifetime_review_signal",
   "consent_surface_required_deeper_sweep",
@@ -1831,6 +1835,20 @@ function overrideDecision(
 
 function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   const { packet, decision } = context;
+  if(packet.unifiedFindingId===CALIFORNIA_POST_REJECT_FINDING) {
+    const eligible=packet.details?.family==="california_post_reject"&&packet.details.assessment.status==="qualified_collection"&&
+      packet.concernContext?.promotionEligibilities.includes("eligible")&&packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
+    overrideDecision(decision,{state:eligible?"review":"suppressed",lane:eligible?"main":"suppressed",tier:"support",
+      reason:eligible?"Verified source-bound advertising collection after cookie-tracking rejection.":"Post-Reject California evidence is insufficient.",ruleId:"evidence.context.keep_review"});return;
+  }
+  if (packet.unifiedFindingId === "gpp_propagation_inconsistency") {
+    const eligible=packet.details?.family === "privacy_signal" && packet.details.kind === "gpp_propagation_inconsistency" &&
+      deriveGppPropagationPolicy(packet.details.assessment).scoreEffect === "deduction" &&
+      packet.concernContext?.promotionEligibilities.includes("eligible") && packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
+    overrideDecision(decision,{state:eligible?"review":"suppressed",lane:eligible?"main":"suppressed",tier:"support",
+      reason:eligible?"Verified retained GPP propagation inconsistency under delivered GPC.":"GPP propagation proof is insufficient.",ruleId:"evidence.context.keep_review"});
+    return;
+  }
   if (packet.unifiedFindingId === "gpc_response") {
     const eligible = packet.details?.family === "privacy_signal" && packet.details.kind === "gpc_response" &&
       hasVerifiedCustomerGpcEvidence(packet.details.assessment) &&

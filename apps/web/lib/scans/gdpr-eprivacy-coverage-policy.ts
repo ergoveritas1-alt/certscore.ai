@@ -2830,7 +2830,10 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
   const preferenceInterfaceConfirmed =
     policySurfaceControls.some((control) => /cookie|preferences?|settings|manage/i.test(control)) ||
     policySurfaceUrls.some((url) => /preference|settings|manage|privacy[-_ ]?center/i.test(url));
-  const policySurfaceAvailable =
+  const canonicalSurfaceAdmission = getString(policyDisclosureSummary, ["policySurfaceAdmissionVersion"]) === "target_policy_surfaces.v1";
+  const policySurfaceAvailable = canonicalSurfaceAdmission
+    ? getBoolean(policyDisclosureSummary, ["cookieDisclosurePresent"]) === true
+    :
     observedPolicySurfaceTypes.some((surfaceType) =>
       ["cookie_policy", "cookie_settings", "consent_preferences"].includes(surfaceType)
     ) ||

@@ -53,3 +53,24 @@ test("passive CMP visit captures loaded facts without opening panels, submitting
     assert.equal(cmpPreferenceBudgetMs(3008,"coverage_25_gb_seconds.v1"),6510);
   }finally{await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
+
+test('passive readiness recovers DOM-present OneTrust with delayed SDK data inside the existing budget', {timeout:15000}, async()=>{
+ let mutations=0;
+ const server=createServer((req,res)=>{
+  if(req.url==='/mutated'){mutations++;res.end();return;}
+  res.setHeader('Content-Type','text/html');
+  res.end(`<div id="onetrust-banner-sdk"><button id="onetrust-pc-btn-handler" onclick="fetch('/mutated')">Options</button></div><script>
+  let ready=false; window.OneTrust={ToggleInfoDisplay:()=>fetch('/mutated'),GetDomainData:()=>{
+    if(!ready&&!window.scheduled){window.scheduled=true;setTimeout(()=>{ready=true},35)}
+    return {Groups:ready?[{CustomGroupId:'C0002',GroupName:'Analytics',FirstPartyCookies:[{Name:'_ga',description:'Analytics'}]}]:[]};
+  }}; document.addEventListener('click',()=>fetch('/mutated'));document.addEventListener('submit',()=>fetch('/mutated'));
+  </script>`);
+ });
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();assert.ok(address&&typeof address!=='string');
+ const browser=await chromium.launch({headless:true});
+ try{
+  const p=await runCmpPreferencesObserver({browser,parentDispatchSha256:'a'.repeat(64),config:{policyVersion:'bounded_cmp_preferences.v1',enabled:true,scanId:'passive-delayed',exactTargetUrl:`http://127.0.0.1:${address.port}/`,computeBudgetPolicy:'coverage_25_gb_seconds.v1'}});
+  assert.equal(p.inspectionDiagnostic?.revision,'cmp_preferences.v20');assert.equal(p.inspectionDiagnostic?.budgetMs,6510);
+  assert.equal(p.declarations[0]?.name,'_ga',JSON.stringify(p));assert.equal(p.action.count,0);assert.equal(p.action.opened,false);assert.equal(mutations,0);
+ }finally{await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});

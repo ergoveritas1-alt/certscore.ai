@@ -179,7 +179,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
   }).optional(),
   executionDiagnostic: captureFailureDiagnosticSchema.optional(),
   inspectionDiagnostic: z.object({
-    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6", "cmp_preferences.v7", "cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12", "cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
+    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6", "cmp_preferences.v7", "cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12", "cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19", "cmp_preferences.v20"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
     identityScopes: z.object({ version: z.literal("cmp_scope_activity.v1"),
       providers: z.array(z.object({ provider: z.string().min(1).max(120), state: z.enum(["visible", "inactive", "unverified"]) }).strict()).max(40),
     }).strict().optional(),
@@ -212,7 +212,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
   }).optional(),
 }).superRefine((packet, ctx) => {
   const passive=packet.captureMode==="passive_cmp_inventory.v1";
-  if ((packet.inspectionDiagnostic?.revision==="cmp_preferences.v19")!==passive || passive &&
+  if ((["cmp_preferences.v19", "cmp_preferences.v20"].includes(packet.inspectionDiagnostic?.revision ?? ""))!==passive || passive &&
     (packet.action.count!==0 || packet.action.opened || packet.action.label!==null || packet.controlInventoryComplete || packet.declarationInventoryComplete ||
      packet.accessibilityAudit || packet.linkedPreferenceNavigation || packet.inspectionDiagnostic?.surfaceBinding ||
      packet.inspectionDiagnostic?.openingStage || packet.inspectionDiagnostic?.openingTiming || packet.inspectionDiagnostic?.passiveDialogReveal ||
@@ -220,23 +220,23 @@ export const cmpPreferencesEvidenceSchema = z.object({
     ctx.addIssue({code:"custom",message:"Passive CMP capture cannot open, navigate or mutate preferences or claim complete inventory."});
   if (packet.configuredCategories && (!passive || packet.support.provider!=="OneTrust" || !packet.checkpoints?.declarations || packet.captureProgress?.declarationsAtMs===undefined))
     ctx.addIssue({code:"custom",message:"Configured category names require the passive OneTrust declaration checkpoint."});
-  if(packet.linkedPreferenceNavigation && (!["cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19"].includes(packet.inspectionDiagnostic?.revision ?? "") ||
+  if(packet.linkedPreferenceNavigation && (!["cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19", "cmp_preferences.v20"].includes(packet.inspectionDiagnostic?.revision ?? "") ||
     !hasBoundCmpPreferenceDocument(packet) || packet.action.count!==0 || packet.action.opened || packet.controlInventoryComplete ||
     packet.controls.some(control=>control.kind!=="unclassified")))
     ctx.addIssue({code:"custom",message:"Read-only linked preferences require their own navigation proof and no choice action"});
   const audit=packet.accessibilityAudit;
   if(audit&&(!packet.action.opened||packet.action.count!==1||!packet.checkpoints?.controls||packet.checkpoints.controlsSurface!=="preferences"||
-    !["cmp_preferences.v13","cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19"].includes(packet.inspectionDiagnostic?.revision??"")||packet.inspectionDiagnostic?.surfaceBinding?.outcome!=="opened"||
+    !["cmp_preferences.v13","cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19", "cmp_preferences.v20"].includes(packet.inspectionDiagnostic?.revision??"")||packet.inspectionDiagnostic?.surfaceBinding?.outcome!=="opened"||
     audit.scanId!==packet.scanId||audit.documentUrl!==packet.finalUrl||audit.documentToken!==packet.documentToken||
     Date.parse(audit.startedAt)<Date.parse(packet.startedAt)||Date.parse(audit.completedAt)>Date.parse(packet.completedAt)))
     ctx.addIssue({code:"custom",message:"Preference accessibility requires the versioned opened document checkpoint"});
 
   if (packet.captureProgress && (!packet.documentToken || packet.captureProgress.documentToken!==packet.documentToken ||
-      !hasBoundCmpPreferenceDocument(packet) || !["cmp_preferences.v12","cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19"].includes(packet.inspectionDiagnostic?.revision??"") ||
+      !hasBoundCmpPreferenceDocument(packet) || !["cmp_preferences.v12","cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19", "cmp_preferences.v20"].includes(packet.inspectionDiagnostic?.revision??"") ||
       [packet.captureProgress.controlsAtMs,packet.captureProgress.declarationsAtMs,packet.captureProgress.privacyLinksAtMs].some(at=>at!==undefined && at>Date.parse(packet.completedAt)-Date.parse(packet.startedAt))))
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"Capture progress must bind the current versioned document."});
   if (packet.inventoryManifest && (!packet.checkpoints?.declarations || packet.captureProgress?.declarationsAtMs===undefined ||
-      !["cmp_preferences.v12","cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19"].includes(packet.inspectionDiagnostic?.revision??"") ||
+      !["cmp_preferences.v12","cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19", "cmp_preferences.v20"].includes(packet.inspectionDiagnostic?.revision??"") ||
       packet.inventoryManifest.source.startsWith("cookieyes_") && packet.support.provider!=="CookieYes" ||
       packet.inventoryManifest.source.startsWith("onetrust_") && packet.support.provider!=="OneTrust" ||
       packet.inventoryManifest.source==="termly_cookie_response.v1" ||
@@ -245,7 +245,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
   const loadedDeclarations = packet.declarations.filter(row => row.source === "cmp_loaded_inventory");
   if (packet.loadedInventory || loadedDeclarations.length) {
     const projected = packet.loadedInventory ? projectLoadedCmpInventory(packet.loadedInventory).declarations : [];
-    if (!packet.loadedInventory || !["cmp_preferences.v11","cmp_preferences.v12", "cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19"].includes(packet.inspectionDiagnostic?.revision ?? "") ||
+    if (!packet.loadedInventory || !["cmp_preferences.v11","cmp_preferences.v12", "cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19", "cmp_preferences.v20"].includes(packet.inspectionDiagnostic?.revision ?? "") ||
         packet.support.provider !== "Cookiebot" || packet.loadedInventory.version !== "cookiebot_loaded_declarations.v1" || !packet.action.opened || !packet.checkpoints?.declarations ||
         packet.inspectionDiagnostic?.surfaceBinding?.verification?.result !== "verified" ||
         packet.declarationInventoryComplete || loadedDeclarations.length !== projected.length ||
@@ -254,13 +254,13 @@ export const cmpPreferencesEvidenceSchema = z.object({
   }
   if (packet.visibleInventory) {
     const projected = projectVisibleCmpInventory(packet.visibleInventory);
-    if (!["cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12", "cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19"].includes(packet.inspectionDiagnostic?.revision ?? "") || !packet.action.opened && !passive || !packet.checkpoints?.declarations || projected.declarations.some(row =>
+    if (!["cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12", "cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19", "cmp_preferences.v20"].includes(packet.inspectionDiagnostic?.revision ?? "") || !packet.action.opened && !passive || !packet.checkpoints?.declarations || projected.declarations.some(row =>
         !packet.declarations.some(declared => declared.name === row.name && declared.purpose === row.purpose && declared.duration === row.duration && declared.source === row.source)))
       ctx.addIssue({code: z.ZodIssueCode.custom, message: "Visible inventory requires versioned exact declaration projection"});
   }
   if (packet.status === "completed" && (!packet.documentToken || !hasBoundCmpPreferenceDocument(packet))) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Completed preference evidence requires exact document binding." });
   if (packet.inspectionDiagnostic?.surfaceBinding?.mode === "registered_portal" &&
-      (!["cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12", "cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19"].includes(packet.inspectionDiagnostic.revision) || packet.action.opened &&
+      (!["cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12", "cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17", "cmp_preferences.v18", "cmp_preferences.v19", "cmp_preferences.v20"].includes(packet.inspectionDiagnostic.revision) || packet.action.opened &&
        packet.inspectionDiagnostic.surfaceBinding.verification?.result !== "verified"))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Registered portal opening requires versioned verified binding." });
   if (packet.action.opened && packet.action.count !== 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Opening proof requires the single authorized Options action." });

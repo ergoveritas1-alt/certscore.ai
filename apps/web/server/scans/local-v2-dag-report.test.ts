@@ -9667,3 +9667,20 @@ test("consent-mode context follows canonical materialization without changing fi
     await rm(outDir, { recursive: true, force: true });
   }
 });
+
+test('canonical surface admission cannot credit guessed privacy seeds or third-party cookie policies', async()=>{
+ const {dedupePolicySurfaces,summarizePolicySurfaces}=await loadLocalV2DagReport();
+ const raw=[
+  {observationId:'guessed',surfaceType:'privacy_policy',url:'https://example.test/privacy',normalizedUrl:'https://example.test/privacy',finalUrl:'https://provider.test/',linkText:'Privacy policy',discoveryMethod:'guessed_common_path',linkObservationState:'observed',status:'fetched',documentFetchState:'fetched',documentEvaluationState:'insufficient',documentRole:'unknown',targetRelationship:'unknown',confidence:0.9,textExcerpt:'Web hosting plans for everyone.',governingPolicySelection:{contractVersion:'governing_policy_selection.v1',state:'ineligible',score:0,reasonCodes:[]},governingPolicyBodyAssessment:{contractVersion:'governing_policy_body_assessment.v1',state:'insufficient',canonicalContextTermCount:0,documentTextChars:30,evidenceBoundObservedTopicCount:0,substantiveDisclosureSignalCount:0,reasonCodes:[]}},
+  {observationId:'vendor',surfaceType:'cookie_policy',url:'https://provider.test/privacy',normalizedUrl:'https://provider.test/privacy',linkText:'Cookies',discoveryMethod:'page_text_link',linkObservationState:'observed',status:'fetched',documentFetchState:'fetched',documentEvaluationState:'usable',targetRelationship:'service_provider',confidence:0.9,textExcerpt:'Provider cookie policy and preference settings. '.repeat(10)},
+ ];
+ const summary=summarizePolicySurfaces(dedupePolicySurfaces(raw as never,'https://example.test/'),'example.test',{discoveredPolicySurfaces:raw as never,privacyPolicyObserved:true});
+ assert.equal(summary.privacyNoticeAvailabilityObserved,false);assert.equal(summary.cookieDisclosurePresent,false);
+ const runtimeArtifacts={policyDisclosureSummary:summary,policySurfaceInspection:{observedSurfaceTypes:['cookie_policy']}};
+ const normalizedConcerns=buildNormalizedConcerns({runtimeArtifacts,reviewFindingCandidates:[],validationFindings:[]});
+ const outcomes=deriveGdprEprivacyCoveragePolicyOutcomes({runtimeArtifacts,normalizedConcerns,scanCompleted:true,coverageLimited:true});
+ assert.notEqual(outcomes.cookie_notice_policy_availability?.status,'Observed');
+ const authentic={...raw[0]!,discoveryMethod:'footer_link',status:'failed',linkObservationState:'observed',finalUrl:undefined};
+ const linked=summarizePolicySurfaces(dedupePolicySurfaces([authentic] as never,'https://example.test/'),'example.test',{discoveredPolicySurfaces:[authentic] as never,privacyPolicyObserved:true});
+ assert.equal(linked.privacyNoticeAvailabilityObserved,true,'a genuine target link remains factual evidence even without the body');
+});

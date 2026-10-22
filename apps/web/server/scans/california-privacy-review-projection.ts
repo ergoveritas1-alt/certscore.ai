@@ -5,6 +5,7 @@ import { assessCaliforniaRightsClauses,assessCaliforniaSaleSharingClauses, inspe
 import { californiaPrivacyReviewSchema, classifyPrivacySurface, isCurrentCaliforniaChoiceInspection, privacyChoiceInspectionSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { projectPrivacyAuditEvidence } from "./privacy-audit-projection";
 import { projectCaliforniaReviewCoverage, type CaliforniaPolicyEvidence } from "./california-review-coverage-projection";
+import { projectCaliforniaObservedScoreBasis } from "./california-observed-score-basis";
 
 /** Materialize only from the checksum-verified original policy-lane observations.
  * The workpaper supplies positive facts; its empty lists never establish absence. */
@@ -176,6 +177,15 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
     families:reviewCoverage.families.map(family=>{
       let assessmentState: "completed"|"partial"|"limited"=family.status === "unknown"?"limited":["observed","assessed_gap","not_triggered_in_scope"].includes(family.status)?"completed":"partial";
       let followUp:import("@certscore/contracts").CaliforniaFollowUp=family.status === "unknown"?"capture":family.status === "review"?"interpretation":"none";
+      // Broad topic presence cannot complete the versioned clause assessment.
+      // Preserve unrelated verified families when a policy lacks the language
+      // or governing-scope proof required for these substantive conclusions.
+      if ((family.id === "california_rights" && !rightsAssessment || family.id === "sale_sharing" && !saleSharingAssessment) &&
+          assessmentState === "completed") {
+        family = {...family, status:"review", reason:"Retained policy topics require a verified, resolved clause assessment before this family can be completed."};
+        assessmentState = "partial";
+        followUp = "interpretation";
+      }
       if(family.id === "sale_sharing" && saleSharingAssessment) {
         assessmentState=saleSharingAssessment.topics.every(topic=>!["review","qualified","conflicting"].includes(topic.status))?"completed":"partial";
         followUp=family.status === "review"?assessmentState === "completed"?"recipient_roles":"interpretation":"none";
@@ -199,6 +209,7 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
     policyVersion: transferPolicy ? "california-privacy-review.v10" : readUsePolicy ? "california-privacy-review.v9" : runtimePurposePolicy ? "california-privacy-review.v8" : categoryPolicy ? "california-privacy-review.v7" : refinedPolicy ? "california-privacy-review.v6" : clausePolicy ? "california-privacy-review.v5" : disclosurePolicy ? "california-privacy-review.v4" : captureBasedPolicy ? "california-privacy-review.v3" : newCoverage ? "california-privacy-review.v2" : "california-privacy-review.v1",
     scanId: bundle.scanId, documentUrl: workpaper.documentUrl, capturedAt: bundle.completedAt,
     sourceHash: source!.sha256, verificationStatus: "verified", scoreEffect: "none", applicability: "not_determined",
+    ...(transferPolicy ? {observedScoreBasis:projectCaliforniaObservedScoreBasis(bundle,source,workpaper.documentUrl)} : {}),
     inspection, choiceSurface, controls, controlsTruncated: workpaper.truncated, failedNoticeLinks,
     ...(verifiedOptOut ? {optOutObservation: verifiedOptOut} : {}),
     optOutEffectiveness: verifiedOptOut?.evidence.status === "complete" ? "bounded_observation" : "not_assessed", noticeAdequacy: "not_assessed",

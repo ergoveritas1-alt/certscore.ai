@@ -18,6 +18,7 @@ import {
   classifyGdprTransparencyTopics,
   type GdprTransparencyTopicMatch,
   classifyPrivacySurface,
+  classifyLocalizedPolicyControllerScope,
   nonPolicyDocumentReason,
   hasSubstantiveProcessingPurposesEvidence,
   type DirectVsInferred,
@@ -171,6 +172,8 @@ export interface PolicySurfaceScannerInput {
   renderedRecoveryLinkContexts?: RetainedRenderedPolicyLink[];
   /** Runtime-only same-session page; never retained as policy evidence. */
   renderedRecoveryPage?: Page;
+  /** In-memory, immutable completed-document checkpoint; no late publication. */
+  onRetainedPolicyDocument?: (result: PolicySurfaceScannerResult) => void;
   signal?: AbortSignal;
 }
 
@@ -2098,6 +2101,15 @@ async function processPolicyCandidateBeforeDeadline(
       absoluteDeadlineAtMs: input.input.absoluteDeadlineAtMs,
     });
     if (settled.status === "completed") {
+      if (settled.value.observation.documentFetchState === "fetched" && settled.value.artifactRefs.length > 0 &&
+          !input.input.signal?.aborted) {
+        input.input.onRetainedPolicyDocument?.(structuredClone({
+          moduleRun: moduleRun("partial", new Date(input.moduleStartedAtMs).toISOString(), input.moduleStartedAtMs,
+            ["policy_output_partial_completed_documents_checkpoint"], input.timingBreakdown),
+          policySurfaceObservations: [settled.value.observation, ...(settled.value.secondaryCandidateObservations ?? [])],
+          artifactRefs: settled.value.artifactRefs,
+        }));
+      }
       return settled.value;
     }
     candidateController.abort(new Error("Policy candidate processing budget exhausted."));
@@ -6569,8 +6581,15 @@ export function assessGoverningPolicyBodyEvidence(input: {
     (["direct", "equivalent"].includes(input.candidate.deterministicMatchStrength ?? "") ||
       input.candidate.deterministicClassifierReasonCodes.some(reason => ["match_strength_direct", "match_strength_equivalent"].includes(reason))) &&
     input.candidate.deterministicClassifierReasonCodes.includes("context_satisfied");
+  const classifierConfirmedCombinedPolicyCandidate = input.candidate.deterministicSurfaceType === "privacy_policy" &&
+    input.candidate.deterministicClassifierReasonCodes.includes("variant_combined_privacy_terms_surface") &&
+    ["substantive_topic_match", "substantive_privacy_signals"].includes(input.documentSubstance.reasonCode) &&
+    // Reuse the existing section/disclosure analysis instead of another full
+    // document classification pass for the combined facet.
+    (input.evidenceBoundObservedTopicCount >= 2 || input.substantiveDisclosureSignalCount >= 2 ||
+      canonicalContextTermCount >= 2 && input.substantiveDisclosureSignalCount >= 1);
   const exactPolicyCandidate = isExactPolicyDocumentCandidate(input.candidate) ||
-    classifierConfirmedStandalonePolicyCandidate || regionalNoticeCandidate;
+    classifierConfirmedStandalonePolicyCandidate || classifierConfirmedCombinedPolicyCandidate || regionalNoticeCandidate;
   const textCoverageComplete = input.documentTextCoverageStatus === "complete";
   const substantiveAssessment = input.documentSubstance.reasonCode === "substantive_topic_match" ||
     input.documentSubstance.reasonCode === "substantive_privacy_signals";
@@ -6584,6 +6603,10 @@ export function assessGoverningPolicyBodyEvidence(input: {
     input.substantiveDisclosureSignalCount >= 1 ||
     input.evidenceBoundObservedTopicCount >= 1;
   const minimumBodyRetained = input.documentTextChars >= MIN_SUBSTANTIVE_POLICY_TEXT_CHARS;
+  const shortSubstantiveBodyRetained = input.documentTextChars >= 1_000 &&
+    classifierConfirmedStandalonePolicyCandidate && substantiveAssessment &&
+    canonicalContextTermCount >= 2 &&
+    (input.evidenceBoundObservedTopicCount >= 2 || input.substantiveDisclosureSignalCount >= 2);
   const retainedTitleClassification = classifyPrivacySurface({ linkText: input.title ?? "" });
   const retainedPrivacyTitle = retainedTitleClassification.surfaceType === "privacy_policy" &&
     retainedTitleClassification.matchStrength === "direct";
@@ -6592,7 +6615,7 @@ export function assessGoverningPolicyBodyEvidence(input: {
   const state = !codeOrMarkup && !visitorScopeExcluded && targetOwned &&
       exactPolicyCandidate &&
       textCoverageComplete &&
-      minimumBodyRetained &&
+      (minimumBodyRetained || shortSubstantiveBodyRetained) &&
       input.documentSubstance.matchesExpectedSurface &&
       substantiveEvidence
     ? "substantive" as const
@@ -6620,6 +6643,7 @@ export function assessGoverningPolicyBodyEvidence(input: {
       exactPolicyCandidate ? "exact_privacy_policy_candidate" : "privacy_candidate_not_exact",
       textCoverageComplete ? "complete_policy_text_retention" : "policy_text_retention_incomplete",
       minimumBodyRetained ? "minimum_substantive_policy_text_retained" : "policy_text_below_substantive_minimum",
+      shortSubstantiveBodyRetained && !minimumBodyRetained ? "short_substantive_policy_body.v1" : null,
       substantiveAssessment ? input.documentSubstance.reasonCode : null,
       classifierConfirmedStandalonePolicyCandidate && substantiveEvidence
         ? "canonical_classifier_confirmed_standalone_policy_body"
@@ -7207,6 +7231,13 @@ export function classifyPolicyDocumentOwnership(input: {
   }
 
   const targetBrand = targetSite?.split(".")[0]?.replace(/[-_]+/g, " ");
+  const localizedScope = classifyLocalizedPolicyControllerScope({ targetUrl: input.targetUrl, text: input.text });
+  if (localizedScope) return {
+    documentOwnerEntity: localizedScope.ownerEntity,
+    targetRelationship: "first_party_brand",
+    ownershipConfidence: 0.86,
+    ownershipReasonCodes: ["cross_site_document", localizedScope.reasonCode, `controller_scope_locale:${localizedScope.locale}`],
+  };
   const documentBrand = documentSite?.split(".")[0]?.replace(/[-_]+/g, " ");
   const ownershipExcerpt = boundedOwnershipEvidenceText({
     documentTitle: input.documentTitle,
@@ -7652,7 +7683,7 @@ export function extractPolicyFacts(text: string): PolicyFacts {
   };
 }
 
-function gdprTransparencyTopicCandidatesFromText(text: string): PolicySurfaceObservation["gdprTransparencyTopicCandidates"] {
+export function gdprTransparencyTopicCandidatesFromText(text: string): PolicySurfaceObservation["gdprTransparencyTopicCandidates"] {
   const classification = classifyGdprTransparencyTopics({
     // Policy fetch and rendered-text inputs are already bounded by the scanner's
     // 500k text limits. Classify that bounded source directly so canonical locale

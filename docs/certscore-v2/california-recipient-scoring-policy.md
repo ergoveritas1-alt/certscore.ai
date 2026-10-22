@@ -4,6 +4,12 @@ Owner-authorized local implementation, October 17, 2026. Deployment remains
 unauthorized. This supersedes the flat California-only 15-point choice effect
 for new canonical materializations; the EU scoring policy is unchanged.
 
+October 21, 2026: new GPC observations use the narrower
+[`gpc_sale_sharing_evidence.v1` qualification](gpc-sale-sharing-qualification-policy.md)
+and `california-gpc-response.v6-sale-sharing`. The eligibility rules below remain
+historical context for v5. The recipient schedule, explicit opt-out policy and
+shared cap are unchanged.
+
 | Distinct supported recipients | Total points |
 | --- | --- |
 | 1 | 15 |

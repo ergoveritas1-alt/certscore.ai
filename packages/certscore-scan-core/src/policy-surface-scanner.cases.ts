@@ -7590,3 +7590,15 @@ test("combined notice is analyzed as privacy before extraction and retains both 
     assert.equal(requests.filter(url=>url==="/privacy-and-cookie-statement").length,1,JSON.stringify(requests));
   } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(tempRoot,{recursive:true,force:true});}
 });
+
+test('policySurfaceScanner checkpoints immutable completed documents before later work settles', async()=>{
+ const retained:Array<Parameters<NonNullable<Parameters<typeof policySurfaceScanner>[0]['onRetainedPolicyDocument']>>[0]>=[];
+ await withPolicyScan('policy-footer-privacy',({result})=>{
+  assert.ok(retained.length>0);
+  const checkpoint=retained.find(r=>r.policySurfaceObservations.some(p=>p.surfaceType==='privacy_policy'&&p.documentFetchState==='fetched'));
+  assert.ok(checkpoint);assert.ok(checkpoint.artifactRefs.length>0);
+  const id=checkpoint.policySurfaceObservations[0]!.observationId;
+  checkpoint.policySurfaceObservations[0]!.textExcerpt='mutated checkpoint';
+  assert.notEqual(result.policySurfaceObservations.find(p=>p.observationId===id)?.textExcerpt,'mutated checkpoint');
+ },{discoveryMode:'fast',onRetainedPolicyDocument:r=>{retained.push(r)}});
+});

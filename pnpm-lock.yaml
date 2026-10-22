@@ -364,6 +364,9 @@ importers:
       '@certscore/contracts':
         specifier: workspace:*
         version: link:../certscore-contracts
+      '@iabgpp/cmpapi':
+        specifier: 3.2.0
+        version: 3.2.0
       acorn:
         specifier: 8.15.0
         version: 8.15.0
@@ -996,6 +999,9 @@ packages:
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
+
+  '@iabgpp/cmpapi@3.2.0':
+    resolution: {integrity: sha512-p7qO2vhSZ/dzfRrWUbDWSXIl3rkvdAA+dQdoScDdbyf+HJBNqBuCuM4MsddTwT2QIQYsjb0F9ES6+Cx/KncxrQ==}
 
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
@@ -3617,6 +3623,8 @@ snapshots:
   '@hono/node-server@1.19.14(hono@4.12.23)':
     dependencies:
       hono: 4.12.23
+
+  '@iabgpp/cmpapi@3.2.0': {}
 
   '@img/colour@1.1.0': {}
 

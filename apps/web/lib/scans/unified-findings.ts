@@ -1,3 +1,4 @@
+import {californiaPostRejectAssessmentSchema,type CaliforniaPostRejectAssessment} from "./california-post-reject-policy";
 import { AFTER_REJECT_SCORING_POLICY, afterRejectScoringNarrative, readAfterRejectScoringAssessment, type AfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { FORM_DESTINATION_FINDING_ID, formDestinationProjectionSchema, type FormDestinationProjection } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, cmsSecurityProjectionSchema, type CmsSecurityProjection } from "@certscore/contracts";
@@ -161,9 +162,10 @@ export type UnifiedFindingDetails =
       runtimeEvidenceArtifacts?: string[];
       vendors?: string[];
     }
+  | { family:"california_post_reject";assessment:CaliforniaPostRejectAssessment; }
   | {
       family: "privacy_signal";
-      kind: "gpc_response";
+      kind: "gpc_response" | "gpp_propagation_inconsistency";
       activityComparison?: import("@certscore/contracts").GpcActivityComparison;
       assessment: GpcResponseAssessment;
     }
@@ -1754,7 +1756,8 @@ function getBestObservedValue(values: Array<string | null | undefined>) {
 }
 
 function getFindingFamily(id: string): UnifiedFindingDetails["family"] {
-  if (id === "gpc_response") {
+  if(id==="california_post_reject_collection")return "california_post_reject";
+  if (id === "gpc_response" || id === "gpp_propagation_inconsistency") {
     return "privacy_signal";
   }
   if (COVERAGE_FINDING_IDS.has(id)) {
@@ -1901,6 +1904,10 @@ function buildUnifiedFindingDetails(input: {
     } satisfies UnifiedFindingDetails;
   }
 
+  if(family === "california_post_reject") {
+    const a=californiaPostRejectAssessmentSchema.safeParse(input.fallbackEvidence?.californiaPostRejectAssessment);
+    return a.success?{family,assessment:a.data}:undefined;
+  }
   if (family === "privacy_signal") {
     const parsedAssessment = gpcResponseAssessmentSchema.safeParse(
       input.fallbackEvidence?.gpcResponseAssessment ?? input.fallbackEvidence?.gpc_response_assessment,
@@ -1910,7 +1917,7 @@ function buildUnifiedFindingDetails(input: {
     }
     return {
       family,
-      kind: "gpc_response",
+      kind: input.findingId === "gpp_propagation_inconsistency" ? "gpp_propagation_inconsistency" : "gpc_response",
       assessment: parsedAssessment.data,
       activityComparison: readGpcActivityComparison(input.fallbackEvidence?.gpcActivityComparison, parsedAssessment.data),
     } satisfies UnifiedFindingDetails;
@@ -5198,6 +5205,15 @@ const PACKETIZED_FINDING_SUPPORT_RULES: PacketizedFindingSupportRule[] = [
           sourceRef.key === "privacy.do_not_sell_link_present"
       )
   },
+  {findingId:"california_post_reject_collection",policyPageType:null,
+    rationale:"Verified advertising collection after a scope-appropriate Reject click.",
+    matchesLegacySource:(packet)=>packet.sourceRefs.some(ref=>ref.kind==="signal"&&ref.source==="runtime_artifact_signal"&&ref.key==="privacy.california_post_reject_collection")},
+  {
+    findingId: "gpp_propagation_inconsistency",
+    policyPageType: null,
+    rationale: "Surfaced from verified retained GPP propagation evidence under delivered GPC.",
+    matchesLegacySource: (packet) => packet.sourceRefs.some(ref=>ref.kind === "signal" && ref.source === "runtime_artifact_signal" && ref.key === "privacy.gpp_propagation_inconsistency")
+  },
   {
     findingId: "gpc_response",
     policyPageType: null,
@@ -5865,6 +5881,11 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   reject_did_not_reduce_third_party_cookies: {
     suggestedFix: "Review third-party cookie controls so reject meaningfully reduces non-essential cookie activity after the interaction completes.",
     whyThisMatters: "Persistent third-party cookies after reject can signal that consent controls are not enforcing the promised outcome."
+  },
+  california_post_reject_collection: {suggestedFix:"Review the recorded advertising recipients and enforce the visitor’s cookie-tracking rejection across those integrations.",whyThisMatters:"Advertising collection after a cookie-tracking rejection can indicate privacy-choice enforcement risk; recipient processing and legal applicability remain unverified."},
+  gpp_propagation_inconsistency: {
+    suggestedFix: "Review the CMP section inventory and ad adapters so applicable GPP payloads reach the recorded recipients consistently.",
+    whyThisMatters: "Missing declared GPP sections or empty downstream fields can interrupt propagation of browser privacy preferences. Recipient processing remains unverified."
   },
   gpc_response: {
     suggestedFix: "Review the retained baseline and GPC-condition deltas, then verify the intended browser-preference behavior separately for each applicable legal framework.",

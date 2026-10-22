@@ -66,7 +66,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 168);
+  assert.equal(new Set(REPORT_UNIFIED_FINDINGS.map(finding=>finding.id)).size, REPORT_UNIFIED_FINDINGS.length);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1

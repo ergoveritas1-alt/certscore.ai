@@ -1,4 +1,4 @@
-import { gpcBoundedObservationSchema } from "./gpc-bounded-observation.js";
+import { gpcBoundedObservationSchema, gpcPolicyCollectionEvidenceIds } from "./gpc-bounded-observation.js";
 import { gpcActivityComparisonSchema } from "./gpc-activity-comparison.js";
 import { z } from "zod";
 
@@ -208,14 +208,16 @@ export const apiV2GpcResponseSchema: z.ZodType<ApiV2GpcResponse> = apiV2GpcRespo
   }
   if (response.contractVersion === "certscore.gpc-response-assessment.v3" && response.californiaPolicy.applied) {
     const o=response.observation;
+    const collectionIds = o ? gpcPolicyCollectionEvidenceIds(o) : [];
     const direct=o && o.status !== "unavailable" && o.sourceSha256 && o.sessionSha256 && o.documentUrlSha256 && o.sourceSha256 === response.comparison.gpcArtifact?.sha256 &&
       Boolean(o.scanId) && o.delivery.httpHeaderRetained && o.delivery.mainNavigatorReadbackRetained &&
       (o.positiveEvidence?.representativeDocument || o.status === "complete" && o.delivery.fullContextVerified && o.requests.complete) &&
-      (((o.requests.advertisingCollectionCount ?? 0)>0 && Boolean(o.requests.advertisingCollectionEvidenceIds?.length)) ||
+      (((o.requests.advertisingCollectionCount ?? 0)>0 && collectionIds.length > 0) ||
         (o.semanticProbe === "observed" && o.registration.cmpGpcSignal === "received" &&
           (o.registration.sale === "not_opted_out" || o.registration.sharing === "not_opted_out")));
     if (!direct) context.addIssue({code:"custom",message:"California risk scoring requires verified direct GPC evidence."});
-    const recipients = new Set(o?.requests.advertisingCollectionRecipients?.rows.map(row => row.entityId) ?? []);
+    const recipients = new Set(o?.requests.advertisingCollectionRecipients?.rows
+      .filter(row => collectionIds.includes(row.evidenceId)).map(row => row.entityId) ?? []);
     const expected = [15, 25, 32, 37, 40, 43, 45, 47][Math.max(0, Math.min(8, recipients.size) - 1)];
     if (response.californiaPolicy.deductionPoints !== expected) context.addIssue({code:"custom",message:"California GPC weight must match distinct retained recipients."});
   }

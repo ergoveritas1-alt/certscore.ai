@@ -1,4 +1,5 @@
-import {isCanonicalAdvertisingCollectionCandidate, resolveCanonicalVendor, CANONICAL_VENDOR_RESOLVER_VERSION} from "@certscore/vendor-resolver";
+import {isCanonicalAdvertisingCollectionCandidate, resolveCanonicalVendor, CANONICAL_VENDOR_RESOLVER_VERSION,
+  inspectGpcRequestQualification, GPC_REQUEST_QUALIFICATION_POLICY} from "@certscore/vendor-resolver";
 import { createHash } from "node:crypto";
 import {
   canonicalEvidenceBundleSchema, gpcBoundedObservationSchema, gpcResponseAssessmentV3Schema,
@@ -71,6 +72,33 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
     if (qualified) collectionRecipients.set(event.eventId, { evidenceId:event.eventId, entityId:resolved.registryAttribution!.entityId, label:resolved.entity, observedAtMs:event.timestampMs });
     return qualified;
   });
+  const qualification = advertisingCollection.slice(0,100).map(event => ({ evidenceId:event.eventId,
+    ...inspectGpcRequestQualification(event.requestUrl, {gpcDelivered:true,requestAtMs:event.timestampMs,
+      ...(state && semantic ? {cmp:{capturedAtMs:semantic.capturedAtMs,sectionId:semantic.usca?8 as const:7 as const,
+        saleNotice:state.saleNotice,sharingNotice:state.sharingNotice,saleOptOut:state.saleOptOut,sharingOptOut:state.sharingOptOut,gpc:state.gpc}} : {})}) }));
+  const propagation: NonNullable<GpcBoundedObservation["requests"]["gppPropagation"]> = {
+    contractVersion:"gpp_propagation_evidence.v1",rows:[],
+  };
+  for (const event of advertisingCollection.slice(0,100)) {
+    const decoded=qualification.find(row=>row.evidenceId===event.eventId)!.gpp;
+    if (!decoded || decoded.status !== "invalid") continue;
+    const missing=decoded.applicableSections.filter((id):id is 7|8=>[7,8].includes(id) && !decoded.sectionIds.includes(id));
+    if (decoded.reasons.length === 1 && decoded.reasons[0] === "applicable_section_missing" && missing.length) {
+      propagation.rows.push({evidenceId:event.eventId,reason:"applicable_section_missing",observedAtMs:event.timestampMs,applicableSections:missing});
+      continue;
+    }
+    // Empty fields require an independently observed, prior same-document GPP
+    // state. A terminal readback after the request cannot supply this proof.
+    const q=new URL(event.requestUrl).searchParams;
+    if (q.getAll("gpp").length !== 1 || q.get("gpp") !== "" || q.getAll("gpp_sid").length !== 1 || q.get("gpp_sid") !== "") continue;
+    const prior=semantic?.stateTransitions?.filter(row=>row.observedAtMs <= event.timestampMs).at(-1);
+    if (!prior || prior.status !== "observed" || prior.state?.gpc !== true || !prior.stateSha256 ||
+      prior.observedAtMs < session!.mainDocument!.committedAtMs ||
+      createHash("sha256").update(JSON.stringify(prior.state)).digest("hex") !== prior.stateSha256) continue;
+    propagation.rows.push({evidenceId:event.eventId,reason:"empty_gpp_after_observed_cmp_state",observedAtMs:event.timestampMs,
+      applicableSections:[prior.state.sectionId],cmpEvidence:{observedAtMs:prior.observedAtMs,sectionId:prior.state.sectionId,
+        stateSha256:prior.stateSha256,gpc:true}});
+  }
   return gpcBoundedObservationSchema.parse({
     contractVersion: "certscore.gpc-bounded-observation.v1", scanId:input.scanId, scope: "main_document_and_retained_http_requests",
     status: result.completed && representative ? "complete" : result.sourceVerified ? "limited" : "unavailable",
@@ -87,6 +115,8 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
       advertisingCollectionCount: advertisingCollection.length, advertisingCollectionEvidenceIds: advertisingCollection.slice(0,100).map(row=>row.eventId),
       advertisingCollectionRecipients: { contractVersion: "canonical_collection_recipients.v1", resolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
         rows: advertisingCollection.slice(0,100).map(event => collectionRecipients.get(event.eventId)!) },
+      advertisingCollectionQualification: { policyVersion: GPC_REQUEST_QUALIFICATION_POLICY, rows:qualification },
+      gppPropagation: propagation,
       classifiedCount: classified.length, collectionCount: classified.filter(r => r.collectionEndpointObserved).length,
       evidenceIds: classified.slice(0, 100).map(r => r.eventId), samplesTruncated: classified.length > 100 },
     limitationKeys, scoreEffect: "none", legalInterpretation: "not_assessed",

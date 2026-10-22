@@ -54,6 +54,7 @@ import { resolveAdminPageUrl, type AdminPageUrlSource } from "../../lib/admin/ad
 import { type ScanCreationAttribution, type ScanCreationSource } from "../../lib/admin/scan-creation-source";
 import { loadAdminScanCreationAttributions } from "./repository";
 import { projectAdminScanInventory, type AdminScanInventory } from "./admin-scan-inventory";
+import { projectAdminCaliforniaScore, projectAdminScoringEntityCounts, type AdminScoringEntityCounts } from "./admin-scan-posture-score";
 
 function scannerEgressFromScanConfig(scanConfig: Record<string, unknown> | null | undefined) {
   if (shouldUseLocalV2DagScanTool()) {
@@ -103,6 +104,9 @@ export type AdminScanListItem = {
   noGoReason: string | null;
   noGoSource: AdminNoGoProjection["source"];
   certscoreOverall: number | null;
+  californiaScore?: number | null;
+  californiaScoreVersion?: string | null;
+  scoringEntityCounts?: AdminScoringEntityCounts;
   scoreCoverageConfidence: "high" | "medium" | "low" | "insufficient" | null;
   scoreCoverageRatio: number | null;
   scoreLabel: "GDPR/ePrivacy evidence" | "Legacy scan score" | null;
@@ -462,6 +466,7 @@ export async function listAdminScansPage(
       snapshot: overviewSnapshot as unknown as Record<string, unknown> | null
     });
     const displayedScore = canonicalSummary.score;
+    const california = projectAdminCaliforniaScore(scan.id, overviewSnapshot, noGo.isNoGo);
 
     return {
       activityAt: displayCreatedAt,
@@ -525,6 +530,9 @@ export async function listAdminScansPage(
       findingCount: noGo.isNoGo ? null : overviewSnapshot?.report_finding_count ?? null,
       freshRescanRequested: getFreshRescanRequested(linkedRequest?.request_context ?? pulseAttribution?.request_context ?? null),
       certscoreOverall: displayedScore,
+      californiaScore: california.score,
+      californiaScoreVersion: california.policyVersion,
+      scoringEntityCounts: projectAdminScoringEntityCounts(scan.id, overviewSnapshot, noGo.isNoGo),
       scoreCoverageConfidence: overviewSnapshot?.score_coverage_confidence as AdminScanListItem["scoreCoverageConfidence"] ?? scoreAssessment?.coverageConfidence ?? null,
       scoreCoverageRatio: overviewSnapshot?.score_coverage_ratio ?? scoreAssessment?.coverageRatio ?? null,
       scoreLabel: overviewSnapshot?.score_source === "canonical.gdpr_eprivacy"
@@ -643,6 +651,9 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     noGoReason: linkedScan?.noGoReason ?? null,
     noGoSource: linkedScan?.noGoSource ?? null,
     certscoreOverall: linkedScan?.certscoreOverall ?? null,
+    californiaScore: linkedScan?.californiaScore ?? null,
+    californiaScoreVersion: linkedScan?.californiaScoreVersion ?? null,
+    scoringEntityCounts: linkedScan?.scoringEntityCounts,
     scoreCoverageConfidence: linkedScan?.scoreCoverageConfidence ?? null,
     scoreCoverageRatio: linkedScan?.scoreCoverageRatio ?? null,
     scoreLabel: linkedScan?.scoreLabel ?? null,

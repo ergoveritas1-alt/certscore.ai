@@ -365,3 +365,24 @@ test("v10 retains explicit English rights passages without a language tag, witho
   (row:typeof f)=>{row.policyEvidence.texts.forEach(t=>{t.text+=' drift';});},
  ]) {const copy=structuredClone(f);mutate(copy);const result=assess(copy);assert.ok(!result.child || !('rightsAssessment' in result.child) || !result.child.rightsAssessment?.topics.some(t=>t.status==='disclosed'));assert.deepEqual(result.score.deductions,[]);}
 });
+
+test("unresolved sale/sharing clauses preserve the canonical California assessment",()=>{
+ const f=californiaCoverageFixture();
+ f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v10";
+ for(const surface of f.bundle.policySurfaceObservations)surface.documentLanguage=undefined;
+ const {child,score}=assess(f);
+ assert.ok(child,"A broad no-sale topic must not invalidate the entire assessment");
+ assert.equal(child.contractVersion,"certscore.california-privacy-review.v10");
+ assert.equal(child.disclosureInspection,undefined);
+ assert.equal(child.saleSharingAssessment,undefined);
+ assert.equal(californiaPrivacyReviewSchema.safeParse(child).success,true);
+ const sale=child.reviewCoverage.families.find(family=>family.id==="sale_sharing")!;
+ assert.equal(sale.status,"review");
+ assert.equal(sale.assessmentState,"partial");
+ assert.equal(sale.followUp,"interpretation");
+ assert.deepEqual(score.deductions,[]);
+ assert.equal(score.score,100);
+ const forged=structuredClone(child);
+ forged.reviewCoverage.families.find(family=>family.id==="sale_sharing")!.assessmentState="completed";
+ assert.equal(californiaPrivacyReviewSchema.safeParse(forged).success,false,"Unresolved policy coverage must still fail closed");
+});

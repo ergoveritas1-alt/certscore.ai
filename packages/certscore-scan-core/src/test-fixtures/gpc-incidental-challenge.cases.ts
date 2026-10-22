@@ -12,7 +12,7 @@ export function gpcIncidentalChallengeFixture(scanId?: string, additionalCollect
     bundle.gpcObservationSession!.semanticObservation!.scanId = scanId;
   }
   const template = bundle.networkEvents[1]!;
-  const urls = ["https://px.ads.linkedin.com/collect/", "https://px.ads.linkedin.com/collect/", ...additionalCollectionUrls.slice(0, 2), "https://snap.licdn.com/li.lms-analytics/insight.min.js"];
+  const urls = ["https://px.ads.linkedin.com/collect/?pid=publisher&li_adsId=visitor-fixture", "https://px.ads.linkedin.com/collect/?pid=publisher&li_adsId=visitor-fixture", ...additionalCollectionUrls.slice(0, 2), "https://snap.licdn.com/li.lms-analytics/insight.min.js"];
   bundle.networkEvents = [bundle.networkEvents[0]!, ...urls.map((url, index) => ({ ...template,
     eventId: `linkedin-${index}`, requestId: `linkedin-${index}`, requestUrl: url, url,
     collectionEndpointObserved: index < urls.length - 1,

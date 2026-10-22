@@ -35,7 +35,7 @@ export async function runCmpPreferencesObserver(input: {
     action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
     privacyLinks: [], declarations: [], declarationInventoryComplete: false,
     limitations: ["passive_inventory_only", "deeper_preference_sections_not_opened"],
-    inspectionDiagnostic: { revision: "cmp_preferences.v19", budgetMs, basicCaptureReserveMs: Math.min(1000, Math.floor(budgetMs / 3)), phase: "browser_start" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v20", budgetMs, basicCaptureReserveMs: Math.min(1000, Math.floor(budgetMs / 3)), phase: "browser_start" },
   };
   let browser = input.browser, context: BrowserContext | undefined, expired = false;
   const cancel = () => { void context?.close().catch(() => undefined); if (!input.browser) void browser?.close().catch(() => undefined); };
@@ -99,9 +99,39 @@ export async function runCmpPreferencesObserver(input: {
     // checkpoint may supply late data; there is no second navigation or fresh timeout.
     packet.inspectionDiagnostic!.phase = "control_inventory";
     let scopes = await readCmpScopeInventory(page, definitions, true); binding();
-    if (!scopes.overflow && (scopes.indices.length === 0 && scopes.configurationIndices.length === 0 || scopes.configurationIndices.length === 1 && !scopes.oneTrustInventory) && remaining() > 1250) {
+    const hasLoadedInventory = Boolean(scopes.oneTrustInventory?.categories.length || scopes.oneTrustInventory?.declarations.length || scopes.oneTrustInventory?.services.length);
+    const missingLoadedInventory = scopes.indices.length === 1 && definitions[scopes.indices[0]!]!.passiveConfigurationApi && !hasLoadedInventory;
+    if (!scopes.overflow && (scopes.indices.length === 0 && scopes.configurationIndices.length === 0 || scopes.configurationIndices.length === 1 && !hasLoadedInventory || missingLoadedInventory) && remaining() > 1250) {
       packet.inspectionDiagnostic!.phase = "cmp_readiness";
-      await page.waitForLoadState("domcontentloaded", { timeout: Math.min(750, remaining() - 1000) }).catch(() => undefined);
+      // Replace the old 750ms DOMContentLoaded checkpoint (which is a no-op
+      // after parsing) with one <=100ms passive SDK-readiness checkpoint.
+      // Scale down on larger workers: at most 0.4 incremental GB-seconds.
+      const memoryMb = Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE) || 3008;
+      const checkpointMs = Math.min(100, Math.floor(400 * 1024 / Math.max(3008, memoryMb)), remaining() - 1000);
+      await page.waitForFunction((paths: string[]) => paths.some(path => {
+        let value: unknown = window;
+        let receiver: unknown;
+        for (const part of path.split(".")) {
+          if (!value || typeof value !== "object" && typeof value !== "function") return false;
+          let owner: object | null = value as object, descriptor: PropertyDescriptor | undefined;
+          for (let depth = 0; owner && depth < 3; depth++, owner = Object.getPrototypeOf(owner)) {
+            if (owner === Object.prototype || owner === Function.prototype) break;
+            descriptor = Object.getOwnPropertyDescriptor(owner, part);
+            if (descriptor) break;
+          }
+          if (!descriptor || !("value" in descriptor)) return false;
+          receiver = value;
+          value = descriptor.value;
+        }
+        if (typeof value !== "function") return false;
+        // This is the registry's read-only GetDomainData method, never an SDK
+        // show/open call. A present function with unready data is not ready.
+        try {
+          const data = Reflect.apply(value, receiver, []);
+          const groups = data && typeof data === "object" ? Object.getOwnPropertyDescriptor(data, "Groups") : undefined;
+          return Boolean(groups && "value" in groups && Array.isArray(groups.value) && groups.value.length > 0);
+        } catch { return false; }
+      }), definitions.flatMap(d => d.passiveConfigurationApi ? [d.passiveConfigurationApi] : []), { timeout: checkpointMs, polling: 25 }).catch(() => undefined);
       binding(); scopes = await readCmpScopeInventory(page, definitions, true); binding();
     }
     packet.inspectionDiagnostic!.identityScopes = { version: "cmp_scope_activity.v1", providers: scopes.scopeStates.map(s => ({ provider: definitions[s.index]!.canonicalName, state: s.state })) };

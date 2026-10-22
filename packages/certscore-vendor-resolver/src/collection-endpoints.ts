@@ -1,6 +1,6 @@
 /** Versioned resource-role classification, independent of vendor ownership,
  * recipient identity and legal interpretation. Raw support contacts stay retained. */
-export const COLLECTION_ENDPOINT_POLICY_VERSION = "canonical_collection_endpoint.v6";
+export const COLLECTION_ENDPOINT_POLICY_VERSION = "canonical_collection_endpoint.v7";
 
 export function classifyCanonicalCollectionEndpoint(
   url: string,
@@ -11,6 +11,13 @@ export function classifyCanonicalCollectionEndpoint(
   if (!["https:", "http:"].includes(parsed.protocol)) return { observed: false };
   const hostname = parsed.hostname;
   const path = parsed.pathname;
+  // Criteo documents this as the sync-frame loader, separately from its
+  // tracking event. No identifier is sent by the retained plain loader visit.
+  // Child collectors and explicit identity-bearing requests remain separate.
+  if (hostname === "gum.criteo.com" && /^\/syncframe\/?$/.test(path) &&
+      ![...parsed.searchParams].some(([key, value]) => /^(?:uid|uuid|user_id|first_party_id|id)$/i.test(key) && value.length > 0)) {
+    return { observed: false, category: "identity_sync_bootstrap" };
+  }
   if ((hostname === "heapanalytics.com" && path === "/h") ||
     (/^track(?:-eu1)?\.hubspot\.com$/.test(hostname) && /^\/(?:__pt[qc]|ptq)\.gif$/.test(path))) {
     return { observed: true, category: "analytics_collection" };

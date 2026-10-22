@@ -428,10 +428,10 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-          <table className="w-[3647px] min-w-[3647px] table-fixed text-left text-xs">
+          <table className="w-[3882px] min-w-[3882px] table-fixed text-left text-xs">
             <colgroup>
               <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "115px" }} /><col style={{ width: "173px" }} /><col style={{ width: "190px" }} /><col style={{ width: "170px" }} />
-              <col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} /><col style={{ width: "156px" }} />
+              <col style={{ width: "70px" }} /><col style={{ width: "100px" }} /><col style={{ width: "75px" }} /><col style={{ width: "65px" }} /><col style={{ width: "65px" }} /><col style={{ width: "65px" }} /><col style={{ width: "156px" }} />
               <col style={{ width: "80px" }} /><col style={{ width: "205px" }} /><col style={{ width: "135px" }} /><col style={{ width: "145px" }} />
               <col style={{ width: "65px" }} /><col style={{ width: "75px" }} /><col style={{ width: "190px" }} />
               <col style={{ width: "180px" }} /><col style={{ width: "130px" }} /><col style={{ width: "65px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} />
@@ -442,11 +442,11 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" },
                   { label: "Requester IP" }, { label: "Requested" }, { label: "Page" }, { label: "Created via" }, { label: "Client / channel" }, { label: "Tranco" },
-                  { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" },
+                  { label: "Score" }, { label: "Top" }, { label: "GPC#", title: "Distinct canonical entities qualifying for a GPC deduction" }, { label: "Rej#", title: "Distinct canonical entities qualifying for a post-Reject deduction, deduplicated across cookies and services" }, { label: "GPP#", title: "Distinct canonical entities with verified GPP propagation inconsistencies qualifying for the applied deduction" }, { label: "Privacy / CMP" },
                   { label: "A/R/O" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" }, { label: "# HL" }, { label: "# Forms" }, { label: "CMS" }, { label: "Size" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Access" }, { label: "Industry" },
                   { label: "Scan ID" }, { label: "Scanner egress" },
                   { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }
-                ].map(({ label, className }) => <th key={label} className={`border-b border-slate-200 px-2.5 py-1.5 font-semibold ${className ?? ""}`}>{label}</th>)}
+                ].map(({ label, className, title }) => <th key={label} title={title} className={`border-b border-slate-200 px-2.5 py-1.5 font-semibold ${className ?? ""}`}>{label}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
@@ -478,8 +478,16 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                     <CreatedViaCell scan={scan} />
                     <ClientChannelCell scan={scan} />
                     <td className="px-2.5 py-1.5 font-medium text-slate-700">{scan.trancoRank ? `#${scan.trancoRank.toLocaleString()}` : "—"}</td>
-                    <td className="px-2.5 py-1.5" title={[scan.scoreLabel, scan.scoreVersion, scan.scoreCoverageConfidence ? `${scan.scoreCoverageConfidence} coverage` : null, scan.scoreScoredAt ? `scored ${scan.scoreScoredAt}` : null].filter(Boolean).join(" · ") || undefined}><span className="text-sm font-semibold text-slate-950">{scan.certscoreOverall ?? "—"}</span>{scan.certscoreOverall !== null ? <span className="text-slate-400">/100</span> : null}</td>
+                    <td className="px-2.5 py-1.5">
+                      {[
+                        { label: "EU", value: scan.certscoreOverall, title: [scan.scoreLabel, scan.scoreVersion, scan.scoreCoverageConfidence ? `${scan.scoreCoverageConfidence} coverage` : null, scan.scoreScoredAt ? `scored ${scan.scoreScoredAt}` : null].filter(Boolean).join(" · ") || undefined },
+                        { label: "CA", value: scan.californiaScore ?? null, title: scan.californiaScoreVersion ?? undefined }
+                      ].map(({ label, value, title }) => <p key={label} className="flex items-baseline justify-between gap-1 whitespace-nowrap leading-4" title={title} aria-label={`${label} score: ${value === null ? "unavailable" : `${value} out of 100`}`}><span className="text-[10px] font-medium text-slate-500">{label}</span><span><span className="font-semibold tabular-nums text-slate-950">{value ?? "—"}</span>{value !== null ? <span className="text-[10px] text-slate-400">/100</span> : null}</span></p>)}
+                    </td>
                     <td className="px-2.5 py-1.5"><span className="text-sm font-semibold text-slate-950">{scan.topFindingCount ?? "—"}</span></td>
+                    <td className="px-2.5 py-1.5 font-medium tabular-nums text-slate-800" title="Distinct entities qualifying for a GPC deduction; — means unavailable or entity attribution unresolved">{scan.scoringEntityCounts?.gpc ?? "—"}</td>
+                    <td className="px-2.5 py-1.5 font-medium tabular-nums text-slate-800" title="Distinct entities qualifying for a post-Reject deduction across cookies and services; — means unavailable or entity attribution unresolved">{scan.scoringEntityCounts?.reject ?? "—"}</td>
+                    <td className="px-2.5 py-1.5 font-medium tabular-nums text-slate-800" title="Distinct entities with GPP propagation inconsistencies qualifying for the applied deduction; — means unavailable or not assessed">{scan.scoringEntityCounts?.gpp ?? "—"}</td>
                     <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="Privacy" label="Privacy notice" result={matrix?.privacyConsent.privacyNotice ?? null} /><EvidenceCode code="CMP" label="CMP framework" result={matrix?.privacyConsent.cmp ?? null} /></p><p className="truncate text-[10px] text-slate-500" title={evidenceTitle("Consent mechanism", matrix?.privacyConsent.mechanism ?? null)}>Mechanism {matrix?.privacyConsent.cmpVendorName ?? evidenceMark(matrix?.privacyConsent.mechanism ?? null)}</p></td>
                     <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="A" label="Accept" result={matrix?.privacyConsent.accept ?? null} /><EvidenceCode code="R" label="Reject" result={matrix?.privacyConsent.reject ?? null} /><EvidenceCode code="O" label="Options" result={matrix?.privacyConsent.options ?? null} /></p><p className="truncate text-[10px] text-slate-400">Canonical controls</p></td>
                     <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transparency.aggregate ?? null} labels={TRANSPARENCY_LABELS} policyEvidence={matrix?.policyEvidence} results={matrix?.transparency.results ?? null} /></td>

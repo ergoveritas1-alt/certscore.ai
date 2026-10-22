@@ -1,6 +1,8 @@
 export { classifyCanonicalCollectionEndpoint, isCanonicalAdvertisingCollectionCandidate, COLLECTION_ENDPOINT_POLICY_VERSION } from "./collection-endpoints";
+export { inspectGpcRequestQualification, GPC_REQUEST_QUALIFICATION_POLICY } from "./gpc-request-qualification";
+export { decodeGppRequest } from "./gpp-request-decoder";
 import { cookieClassificationSchema, type CookieClassification } from "@certscore/contracts";
-import { COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge as cookieKnowledge, type CanonicalCookieContext } from "./cookie-knowledge-base";
+import { COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge as cookieKnowledge, type CanonicalCookieContext } from "./cookie-knowledge-base";
 import type {
   EndpointGeographyPrecision,
   EndpointGeographyStatus,
@@ -33,8 +35,8 @@ export {
 
 export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-21-collection-roles-v9";
-export const COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-15-v3";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-21-collection-roles-v10";
+export const COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-21-v4";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -849,7 +851,11 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "advertising", "programmatic_ads"],
     confidence: 0.93,
     hostPatterns: [/\.openx\.net$/i],
-    urlPatterns: [/\/w\/1\.0\//i, /\/sync/i],
+    urlPatterns: [/\/w\/1\.0\//i, /\/sync/i,
+      // OpenX's own ESP SDK sends the visited page URL to this JSON identity
+      // endpoint, independently of its subsequent pd iframe bootstrap.
+      // https://oa.openxcdn.net/esp.js (fetch + getESPId)
+      /^https:\/\/rtb\.openx\.net\/esp\?(?=(?:[^#]*&)?url=https?%3A%2F%2F[^&#]+(?:&|$))(?=(?:[^#]*&)?rid=esp(?:&|$))/i],
     cookiePatterns: [/^i$/i, /^pd$/i],
     requireHostPatternForCookieMatch: true,
     suppressCookieMatchedHostname: true,
@@ -2030,6 +2036,9 @@ const rules: VendorRule[] = [
       // Cookie-matching pixel; a partner-frame or SDK download alone does not
       // receive this endpoint attribution.
       /^https:\/\/cm\.g\.doubleclick\.net\/pixel(?:[/?#]|$)/i,
+      // Google advertising-feature collection with an explicit client ID.
+      // A generic GA endpoint, SDK, empty ping or host contact is insufficient.
+      /^https:\/\/stats\.g\.doubleclick\.net\/g\/collect\?(?=(?:[^#]*&)?v=2(?:&|$))(?=(?:[^#]*&)?tid=G-[A-Za-z0-9]+(?:&|$))(?=(?:[^#]*&)?cid=[^&#]+(?:&|$))/i,
     ],
     cookiePatterns: [/^IDE$/i, /^test_cookie$/i],
     requireHostPatternForCookieMatch: true,
@@ -5241,7 +5250,7 @@ export function getCanonicalVendorRegistryManifest() {
     contractVersion: "vendor-registry-manifest-v1" as const,
     resolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
     cookieProviderResolverVersion: COOKIE_PROVIDER_RESOLVER_VERSION,
-    rules: [...rules, ...auditedCookieProviderRules].map(rule => ({
+    rules: [...rules, ...auditedCookieProviderRules, ...currentCookieProviderRules].map(rule => ({
       ruleId: rule.basisLabel,
       ...rule.identity,
       entity: rule.entity,
@@ -5571,7 +5580,9 @@ export function resolveVendorObservations(
     const storageKey = input.storageKey;
     const domSelector = input.domSelector;
 
-    for (const rule of input.type === "cookie" && input.cookiePurposePolicyVersion === COOKIE_PURPOSE_POLICY ? [...rules, ...auditedCookieProviderRules] : rules) {
+    const cookieRules = input.type === "cookie" && [COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
+      ? [...rules, ...auditedCookieProviderRules, ...(input.cookiePurposePolicyVersion === COOKIE_PURPOSE_POLICY ? currentCookieProviderRules : [])] : rules;
+    for (const rule of cookieRules) {
       const matchedHost = hostname
         ? matchesAny(hostname, rule.hostPatterns) && !matchesAny(hostname, rule.excludeHostPatterns)
         : false;
@@ -5636,8 +5647,10 @@ export function resolveVendorObservations(
             : matchedCookie ? "cookie_name" : "hostname";
       const registryAttribution: VendorRegistryAttribution = {
         contractVersion: "vendor-registry-attribution-v1",
-        resolverVersion: input.type === "cookie" && input.cookiePurposePolicyVersion === COOKIE_PURPOSE_POLICY
-          ? COOKIE_PROVIDER_RESOLVER_VERSION : CANONICAL_VENDOR_RESOLVER_VERSION,
+        resolverVersion: input.type === "cookie" && [COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
+          ? input.cookiePurposePolicyVersion === HEAP_COOKIE_PURPOSE_POLICY
+            ? "certscore-cookie-provider-2026-10-15-v3" : COOKIE_PROVIDER_RESOLVER_VERSION
+          : CANONICAL_VENDOR_RESOLVER_VERSION,
         ...rule.identity,
         ruleIds: [rule.basisLabel],
         matchKind,
@@ -6202,6 +6215,15 @@ const auditedCookieProviderRules: VendorRule[] = [
     review: { reviewedAt: "2026-10-15", reviewer: "Astra source audit", sourceUrls: ["https://support.axeptio.eu/en/articles/274085-does-axeptio-place-cookies"] },
   },
 ];
+
+const currentCookieProviderRules: VendorRule[] = [{
+  identity: { entityId: "ent_f3a0ce7ab768", vendorId: "ven_67dd3d8e908b", serviceId: "svc_648a116f378d" },
+  entity: "RTB House S.A.", vendor: "RTB House", product: "RTB House Retargeting Tag",
+  purpose: "advertising", servicePurpose: "Advertising", regulatoryRelevance: ["advertising"], confidence: 0.98,
+  hostPatterns: [/(?:^|\.)creativecdn\.com$/i], cookiePatterns: [/^(?:u|ts)$/], requireHostPatternForCookieMatch: true,
+  basisLabel: "rtb_house_documented_service_cookie_v5",
+  review: { reviewedAt: "2026-10-21", reviewer: "Codex primary-source review", sourceUrls: ["https://www.rtbhouse.com/privacy-center"] },
+}];
 
 export function resolveCanonicalCookieClassification(name: string, context: Pick<CanonicalCookieContext, "cookieDomain"> = {}): CookieClassification {
   const knowledge = cookieKnowledge(name, { ...context, purposePolicyVersion: COOKIE_PURPOSE_POLICY });

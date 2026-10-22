@@ -1,3 +1,5 @@
+import {retainedCaliforniaPostReject,californiaPostRejectPoints,CALIFORNIA_POST_REJECT_POLICY} from "./california-post-reject-policy";
+import {deriveGppPropagationPolicy} from "./gpp-propagation-policy";
 import {hasVerifiedCustomerGpcEvidence} from "./gpc-customer-policy";
 import { readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { assessConsentProminenceMateriality } from "./consent-prominence-materiality";
@@ -2715,6 +2717,26 @@ export function deriveConcernPolicy(input: {
     }
     return { allowedNarrativeTier: "weak", externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: ["missing_specific_runtime_anchor"], promotionEligibility: "internal_only" };
+  }
+  if(suggestedUnifiedFindingId==="california_post_reject_collection") {
+    const a=retainedCaliforniaPostReject(input.rawEvidence),eligible=a?.status==="qualified_collection";
+    return {allowedNarrativeTier:eligible?"moderate":"weak",externalSurfacingEligibility:eligible?"eligible":"suppress",
+      negativeEvidenceFlags:[],promotionEligibility:eligible?"eligible":"blocked",regulatoryChecklistEligibility:"none",
+      scoreEffects:eligible?[{appliesTo:"california_posture",framework:"california",deductionPoints:californiaPostRejectPoints(a!),
+        evidenceRefs:[`post-refusal-packet:sha256:${a!.sourcePacketSha256}`],observedActivity:a!.recipientIds,
+        policyKey:"california.choice_enforcement.post_reject",policyVersion:CALIFORNIA_POST_REJECT_POLICY,reasonCode:"verified_post_reject_sale_sharing_collection"}]:[]};
+  }
+  if (suggestedUnifiedFindingId === "gpp_propagation_inconsistency") {
+    const value=input.rawEvidence?.gpcResponseAssessment;
+    const parsed=gpcResponseAssessmentSchema.safeParse(value);
+    const policy=deriveGppPropagationPolicy(value);
+    const eligible=parsed.success && policy.scoreEffect === "deduction" && hasVerifiedCustomerGpcEvidence(parsed.data);
+    return {allowedNarrativeTier:eligible?"moderate":"weak",externalSurfacingEligibility:eligible?"eligible":"suppress",
+      negativeEvidenceFlags:[],promotionEligibility:eligible?"eligible":"blocked",regulatoryChecklistEligibility:"none",
+      scoreEffects:eligible?[{appliesTo:"california_posture",framework:"california",deductionPoints:policy.deductionPoints,
+        evidenceRefs:[parsed.data.comparison.gpcArtifact?.uri ?? "",...parsed.data.comparison.evidenceRefs].filter(Boolean).slice(0,32),
+        observedActivity:policy.evidenceIds,policyKey:policy.policyKey,policyVersion:policy.policyVersion,
+        reasonCode:"verified_gpp_propagation_inconsistency"}]:[]};
   }
   if (suggestedUnifiedFindingId === "gpc_response") {
     const status = getFirstString(input.rawEvidence, ["gpcResponseStatus"]);

@@ -403,9 +403,16 @@ test("incidental challenge classification carries LinkedIn collection through ca
   const { buildGpcProductionAssessment } = await import("../../../../packages/certscore-scan-core/src/gpc-production-observation");
   const { buildGpcResponseAssessment } = await import("../../../../packages/certscore-scan-core/src/gpc-response-assessment");
   const { buildNormalizedConcerns } = await import("../../lib/scans/normalized-concerns");
-  for (const mode of ["incidental", "two_recipients", "blocked", "library_only", "missing_delivery", "bad_checksum"] as const) {
+  for (const mode of ["incidental", "two_recipients", "restricted", "blocked", "library_only", "missing_delivery", "bad_checksum"] as const) {
     const record = scanRecord();
-    const bundle = gpcIncidentalChallengeFixture(record.scan.id, mode === "two_recipients" ? ["https://www.facebook.com/tr/?id=fixture&ev=PageView"] : []);
+    const bundle = gpcIncidentalChallengeFixture(record.scan.id, mode === "two_recipients" ? ["https://www.facebook.com/tr/?id=fixture&ev=PageView&fbp=visitor-fixture"] : []);
+    if (mode === "restricted") {
+      for (const event of bundle.networkEvents) if (event.requestUrl.startsWith("https://px.ads.linkedin.com/collect/")) {
+        event.requestUrl = event.url = `${event.requestUrl}&us_privacy=1NYN`;
+        bundle.gpcObservationSession!.requests.find(row => row.eventId === event.eventId)!.urlSha256 = createHash("sha256").update(event.requestUrl).digest("hex");
+      }
+      bundle.gpcPrototypeSessionBinding!.sessionSha256 = createHash("sha256").update(JSON.stringify(bundle.gpcObservationSession)).digest("hex");
+    }
     if (mode === "blocked") bundle.scanNoGoAssessment!.decision = "no_go";
     if (mode === "library_only") for (const event of bundle.networkEvents) event.collectionEndpointObserved = false;
     if (mode === "missing_delivery") {
@@ -548,6 +555,33 @@ for(const version of ["v5","v6","v7","v8","v9","v10"] as const) test(`${version}
   assert.equal(JSON.parse(JSON.stringify(exported)).californiaScore.rightsAssessment.topics.length,4);
   assert.equal(exported.gpcResponse,null);
   if(version === "v6" || version === "v7" || version === "v8" || version === "v9" || version === "v10"){assert.ok(exported.californiaScore.saleSharingAssessment);assert.match(renderCanonicalReportPdf(exported).toString("latin1"),/Sale\/sharing clause/);}
+});
+
+test("usable reports retain both posture scores across persistence, API and export with unknown California checks",()=>{
+  const record=scanRecord();const f=californiaCoverageFixture();
+  f.bundle.scanId=record.scan.id;f.policyEvidence.projection.scanId=record.scan.id;
+  f.bundle.policySurfaceInspection={californiaReviewPolicy:"california-privacy-review.v10"} as typeof f.bundle.policySurfaceInspection;
+  f.bundle.policySurfaceObservations=[];f.policyEvidence.projection.documents=[];f.policyEvidence.texts=[];
+  f.bundle.scanLaneRuns=[{laneId:"runtime_evidence",executionOutcome:"success",accessOutcome:"representative_page",challengeDetected:false}] as typeof f.bundle.scanLaneRuns;
+  f.bundle.runtimeMetadataSnapshots=[{artifactId:"runtime-dom",path:"/retained/runtime-dom.txt",url:CA_FIXTURE_URL,capturedAtMs:500,
+    documentIdentity:{source:"cdp_loader_id",token:"runtime-loader"},textExcerpt:"Usable starting page",pagePhase:"network_idle",consentStateAtTime:"pre_consent"}];
+  const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+  assert.ok(child?.contractVersion==="certscore.california-privacy-review.v10" && child.observedScoreBasis);
+  const parent=deriveConsentControlAssessment({scan:{scanId:record.scan.id,finalUrl:CA_FIXTURE_URL}});parent.californiaPrivacyReview=child;
+  record.runtimeArtifacts={...record.runtimeArtifacts,consentControlAssessment:consentControlAssessmentSchema.parse(JSON.parse(JSON.stringify(parent)))};
+  record.accessPostureSummary={} as ScanDetailResponse["accessPostureSummary"];
+  record.snapshot={report_projection_status:"ready",certscore_overall:73,score_version:"overall-posture.v13"} as ScanDetailResponse["snapshot"];
+  const restored=JSON.parse(JSON.stringify(record)) as ScanDetailResponse;
+  const exported=buildCanonicalReportExport(restored,undefined,"ccpa_cpra")!;
+  const api=buildApiV2ScanResource(restored);
+  assert.equal(exported.californiaScore.score,100);
+  assert.equal(exported.californiaScore.policyVersion,"california-regulatory-posture.v12-observed");
+  assert.equal(exported.californiaScore.coverage,"limited");
+  assert.equal(exported.californiaScore.reviewCoverage?.scoreReady,false);
+  assert.deepEqual(exported.californiaScore.deductions,[]);
+  assert.equal(api.postureScores?.ccpaCpra.score,100);
+  assert.equal(api.postureScores?.gdprEprivacy.score,73);
+  assert.equal(JSON.parse(JSON.stringify(exported)).californiaScore.score,100);
 });
 
 test("source-bound short policy and separate provider evidence preserve canonical California findings and exports",async()=>{

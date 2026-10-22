@@ -69,7 +69,7 @@ export function scoringRuleDescription(rule: ScoringRule) {
 /** California posture has an independent registry. Historical schedules are
  * retained; new disclosure deductions apply only to v4 typed inspections. */
 export const CALIFORNIA_OPT_OUT_COLLECTION_POINTS = 15 as const;
-export const CALIFORNIA_SCORING_POLICY_VERSION = "california-regulatory-posture.v11-wcag" as const;
+export const CALIFORNIA_SCORING_POLICY_VERSION = "california-regulatory-posture.v12-observed" as const;
 export const CALIFORNIA_SCORING_RULES_V1 = [
   {findingId:"california_sale_sharing_opt_out_activity",policyKey:"california.opt_out_activity",points:18,label:"Activity after a recorded sale/sharing opt-out"},
   {findingId:"california_privacy_choice_destination_error",policyKey:"california.choice_destination_error",points:14,label:"Privacy-choice destination unavailable"},

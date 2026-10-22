@@ -114,7 +114,7 @@ test("completion materialization persists the canonical projection before score 
   assert.ok(completeIndex > scoreIndex);
   assert.match(source, /Admin scan summary persistence was incomplete/);
   assert.match(source, /canonicalScanRecord/);
-  assert.match(source, /persistScanReportProjection/);
+  assert.match(source, /publishCanonicalScanReportProjection/);
   assert.match(source, /loadPersistedScanReportProjection/);
   assert.match(source, /classifyScoreMaterializationFailure/);
   assert.match(source, /status: retryable \? 503 : 422/);
@@ -167,7 +167,7 @@ test("Admin Scans separates requester identity from outbound scanner egress", as
 test("Admin Scans gives access outcomes room for at most two visible lines", async () => {
   const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
 
-  assert.match(pageSource, /w-\[3647px\] min-w-\[3647px\] table-fixed/);
+  assert.match(pageSource, /w-\[3882px\] min-w-\[3882px\] table-fixed/);
   assert.match(pageSource, /<ScanSizeCell matrix=\{matrix\} \/>/);
   assert.match(pageSource, /Site load \{website \? `\$\{website\.megabytes\.toFixed\(2\)\} MB` : "—"\}/);
   assert.match(pageSource, /Policy \{policy\?\.compressedKilobytes/);

@@ -1,3 +1,5 @@
+import {retainedCaliforniaPostReject} from "./california-post-reject-policy";
+import {deriveGppPropagationPolicy} from "./gpp-propagation-policy";
 import { AFTER_REJECT_SCORING_POLICY, afterRejectScoringNarrative, retainedAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { assessConsentProminenceMateriality } from "./consent-prominence-materiality";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
@@ -3781,6 +3783,34 @@ function buildConsentControlInventoryConcerns(
   ];
 }
 
+function buildCaliforniaPostRejectConcerns(runtimeArtifacts:Record<string,unknown>|null|undefined,domainContext?:ScanDomainContext) {
+ const a=retainedCaliforniaPostReject(runtimeArtifacts);if(!a || a.status!=="qualified_collection")return [];
+ const refs=[`post-refusal-packet:sha256:${a.sourcePacketSha256}`,...a.requests.filter(r=>r.reason==="qualified_collection").map(r=>`request:${r.requestId}`)];
+ return [buildConcernFromSharedInput({categoryId:"privacy",domainContext,title:"Advertising collection after Reject",
+  description:`Qualifying advertising or identity collection was observed after a cookie-tracking rejection: ${a.requests.filter(r=>r.reason==="qualified_collection").map(r=>`${r.entity} at +${r.msAfterClick} ms`).join("; ")}. This observation does not determine legal sale/sharing or recipient use.`,
+  evidence:refs,observedValue:"observed",originKey:"privacy.california_post_reject_collection",originType:"runtime_artifact",
+  rawEvidence:{californiaPostRejectAssessment:a,postRefusalEvidenceProjection:runtimeArtifacts?.postRefusalEvidenceProjection,runtimeEvidenceArtifacts:refs},
+  severity:"low",signalKey:"privacy.california_post_reject_collection",signalLabel:"Advertising collection after Reject",signalSource:"runtime_artifact_signal",sourceType:"signal"})];
+}
+
+function buildGppPropagationConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined, domainContext?: ScanDomainContext) {
+  const assessment=runtimeArtifacts?.gpcResponseAssessment ?? runtimeArtifacts?.gpc_response_assessment;
+  const policy=deriveGppPropagationPolicy(assessment);
+  if (!policy.rows.length) return [];
+  const parsed=gpcResponseAssessmentSchema.parse(assessment);
+  const refs=[parsed.comparison.gpcArtifact?.uri ?? "",...parsed.comparison.evidenceRefs].filter(Boolean).slice(0,32);
+  const samples=policy.rows.map(row=>{
+    const recipient=policy.recipients.find(r=>r.evidenceId===row.evidenceId);
+    return `${recipient?.label ?? "Recipient"} at +${row.observedAtMs} ms: ${row.reason === "applicable_section_missing" ? "declared GPP section missing from the request payload" : "empty GPP fields after a usable same-document GPP state was observed"}`;
+  });
+  return [buildConcernFromSharedInput({categoryId:"privacy",domainContext,
+    title:"GPP propagation inconsistency",description:`${samples.join("; ")}. This observation does not establish recipient processing or a legal violation.`,
+    evidence:refs,observedValue:"observed",originKey:"privacy.gpp_propagation_inconsistency",originType:"runtime_artifact",
+    rawEvidence:{gpcResponseAssessment:parsed,legalInterpretation:"not_assessed",scoreEffect:"none",runtimeEvidenceArtifacts:refs},
+    severity:"low",signalKey:"privacy.gpp_propagation_inconsistency",signalLabel:"GPP propagation inconsistency",
+    signalSource:"runtime_artifact_signal",sourceType:"signal"})];
+}
+
 function buildGpcResponseConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext,
@@ -4637,6 +4667,8 @@ export function buildNormalizedConcerns(input: {
     ...buildConsentNoSurfaceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentControlInventoryConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildGpcResponseConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildGppPropagationConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildCaliforniaPostRejectConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentDismissWithoutRejectConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentVisualProminenceConcerns(input.runtimeArtifacts, input.domainContext),

@@ -2936,7 +2936,8 @@ export function summarizePolicySurfaces(
     gdprTransparencyProductionEvidenceProfileEnabled(gdprTransparencyEvidenceProfile);
   const privacySurfaces = policySurfaces.filter((row) => row.surface.surfaceType === "privacy_policy");
   const cookieSurfaces = policySurfaces.filter((row) =>
-    row.surface.surfaceType === "cookie_policy" || row.surface.surfaceType === "cookie_settings"
+    (row.surface.surfaceType === "cookie_policy" || row.surface.surfaceType === "cookie_settings") &&
+    !isGenericThirdPartyPrivacySurface(row, rootDomain, { homepageNoGo: options.homepageNoGo === true })
   );
   const cookiePolicyText = cookieSurfaces
     .map((row) => firstString(row.surface.textExcerpt))
@@ -2967,7 +2968,10 @@ export function summarizePolicySurfaces(
     .filter((surface) => surface.surfaceType === "privacy_policy")
     .filter((surface) => {
       const observedLink = surface.linkObservationState === "observed";
-      if (surface.discoveryMethod === "guessed_common_path" && !observedLink) {
+      // A generated seed label is not an observed target link, even when a
+      // fetched guessed URL was historically marked linkObservation=observed.
+      // A substantive verified guessed document can qualify independently below.
+      if (surface.discoveryMethod === "guessed_common_path") {
         return false;
       }
       if (surface.status === "failed" && !observedLink) {
@@ -3493,6 +3497,7 @@ export function summarizePolicySurfaces(
       }
     : null;
   return {
+    policySurfaceAdmissionVersion: "target_policy_surfaces.v1",
     article13CoverageAssessments,
     article13_coverage_assessments: article13CoverageAssessments,
     article13DisclosureSignals: dedupedArticle13DisclosureSignals,
@@ -5478,7 +5483,9 @@ export function projectRetainedCookieObservations(
   });
 }
 
-function buildMaterializedLocalV2Detail(
+/** Canonical materialization from an already verified retained bundle/text
+ * context. Callers own original-byte verification; no publication or model call. */
+export function buildMaterializedLocalV2Detail(
   scanRecord: ScanDetailResponse,
   bundle: CanonicalEvidenceBundle,
   options: {
@@ -5798,7 +5805,8 @@ function buildMaterializedLocalV2Detail(
   });
   const transportSecuritySummary = summarizeTransportSecurity(bundle);
   const privacySurface = targetRelevantVerifiedPolicySurfaces.find((row) => row.surface.surfaceType === "privacy_policy");
-  const termsSurface = verifiedPolicySurfaces.find((row) => row.surface.surfaceType === "terms");
+  const termsSurface = verifiedPolicySurfaces.find((row) => row.surface.surfaceType === "terms" ||
+    row.surface.classifierReasonCodes?.includes("variant_combined_privacy_terms_surface"));
   const cookieSurface = verifiedPolicySurfaces.find((row) =>
     row.surface.surfaceType === "cookie_policy" ||
     row.surface.surfaceType === "cookie_settings"

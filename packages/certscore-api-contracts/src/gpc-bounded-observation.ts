@@ -2,6 +2,63 @@
 import { z } from "zod";
 const count = z.number().int().nonnegative();
 const axis = z.enum(["opted_out", "not_opted_out", "unknown"]);
+const gppAxis = z.union([z.literal(0), z.literal(1), z.literal(2)]);
+export const gpcRequestGppSchema = z.object({
+  policyVersion: z.literal("gpp_request_decode.v1"),
+  decoderVersion: z.literal("@iabgpp/cmpapi@3.2.0"),
+  status: z.enum(["not_present", "decoded", "invalid", "unsupported", "limited"]),
+  sectionIds: z.array(z.number().int().min(1).max(63)).max(32),
+  applicableSections: z.array(z.number().int().min(-1).max(63)).max(8),
+  sections: z.array(z.object({
+    sectionId: z.union([z.literal(7), z.literal(8)]), version: z.union([z.literal(1), z.literal(2)]),
+    saleNotice: gppAxis, sharingNotice: gppAxis, saleOptOut: gppAxis, sharingOptOut: gppAxis,
+    targetedAdvertisingOptOut: gppAxis.nullable(), serviceProviderMode: gppAxis, gpc: z.boolean().nullable(),
+  }).strict()).max(2),
+  requestSignals: z.enum(["not_assessed", "consistent", "conflicting"]),
+  cmpComparison: z.enum(["not_compared", "unavailable", "earlier_readback", "later_readback", "same_time_consistent", "same_time_conflicting"]),
+  reasons: z.array(z.enum(["input_limit", "malformed_encoding", "unsupported_header", "unsupported_section_version", "duplicate_privacy_parameters",
+    "invalid_fields", "missing_gpp", "missing_applicable_sections", "invalid_applicable_sections", "section_inventory_mismatch",
+    "applicable_section_missing", "unsupported_applicable_section", "noncanonical_encoding", "us_privacy_conflict",
+    "section_state_conflict", "gpc_delivery_disagrees", "cmp_sale_disagrees", "cmp_sharing_disagrees", "cmp_gpc_disagrees"])).max(20),
+}).strict();
+export type GpcRequestGpp = z.infer<typeof gpcRequestGppSchema>;
+export const gppPropagationEvidenceSchema = z.object({
+  contractVersion: z.literal("gpp_propagation_evidence.v1"),
+  rows: z.array(z.object({
+    evidenceId: z.string().min(1).max(160),
+    reason: z.enum(["applicable_section_missing", "empty_gpp_after_observed_cmp_state"]),
+    observedAtMs: count,
+    applicableSections: z.array(z.union([z.literal(7),z.literal(8)])).min(1).max(2),
+    cmpEvidence: z.object({ observedAtMs: count, sectionId: z.union([z.literal(7),z.literal(8)]),
+      stateSha256: z.string().regex(/^[a-f0-9]{64}$/), gpc: z.literal(true) }).strict().optional(),
+  }).strict()).max(100),
+}).strict();
+export type GppPropagationEvidence = z.infer<typeof gppPropagationEvidenceSchema>;
+const activityByBasis = {
+  endpoint_or_identity_unresolved: "unresolved",
+  google_advertising_feature_identifier: "identified_advertising_collection",
+  google_cookie_matching: "identity_sync",
+  google_remarketing_audience: "audience_collection",
+  google_advertising_conversion_identifier: "identified_advertising_collection",
+  linkedin_ads_identifier: "identified_advertising_collection",
+  meta_pixel_identifier: "identified_advertising_collection",
+  microsoft_uet_identifier: "identified_advertising_collection",
+  adobe_identity_mapping: "identity_sync",
+  criteo_first_party_identity: "identity_sync",
+  amazon_identity_sync: "identity_sync",
+  pubmatic_cookie_sync: "identity_sync",
+  trade_desk_identity_mapping: "identity_sync",
+  lotame_profile_mapping: "identity_sync",
+  openx_identity_resolution: "identity_sync",
+  magnite_bid_user_identifier: "identified_advertising_collection",
+} as const;
+export const saleSharingRequestQualificationSchema = z.object({
+        activity: z.enum(["identity_sync", "audience_collection", "identified_advertising_collection", "unresolved"]),
+        basis: z.enum(Object.keys(activityByBasis) as [keyof typeof activityByBasis, ...(keyof typeof activityByBasis)[]]),
+        processingSignals: z.array(z.enum(["google_rdp", "google_npa", "google_limited_ads", "meta_ldu",
+          "us_privacy_sale_opt_out", "gpp_unresolved", "privacy_signal_invalid", "gpp_opt_out", "gpp_service_provider", "privacy_signal_conflict"])).max(10),
+        gpp: gpcRequestGppSchema.optional(),
+}).strict();
 /** Facts within a retained window. Completion is never an opt-out or compliance decision. */
 export const gpcBoundedObservationSchema = z.object({
   contractVersion: z.literal("certscore.gpc-bounded-observation.v1"),
@@ -21,6 +78,13 @@ export const gpcBoundedObservationSchema = z.object({
     classifiedCount: count, collectionCount: count,
     advertisingCollectionCount: count.optional(),
     advertisingCollectionEvidenceIds: z.array(z.string().min(1).max(160)).max(100).optional(),
+    gppPropagation: gppPropagationEvidenceSchema.optional(),
+    // Optional only for historical records. New producers retain endpoint roles
+    // and request-local processing declarations, without legal conclusions.
+    advertisingCollectionQualification: z.object({
+      policyVersion: z.enum(["gpc_sale_sharing_evidence.v1", "gpc_sale_sharing_evidence.v2"]),
+      rows: z.array(saleSharingRequestQualificationSchema.extend({evidenceId:z.string().min(1).max(160)})).max(100),
+    }).strict().optional(),
     advertisingCollectionRecipients: z.object({
       contractVersion: z.literal("canonical_collection_recipients.v1"),
       resolverVersion: z.string().min(1).max(120),
@@ -35,6 +99,40 @@ export const gpcBoundedObservationSchema = z.object({
   scoreEffect: z.literal("none"), legalInterpretation: z.literal("not_assessed"),
 }).strict().superRefine((o, ctx) => {
   const recipients = o.requests.advertisingCollectionRecipients;
+  const qualification = o.requests.advertisingCollectionQualification;
+  const propagation = o.requests.gppPropagation;
+  if (propagation && (qualification?.policyVersion !== "gpc_sale_sharing_evidence.v2" ||
+    new Set(propagation.rows.map(row=>row.evidenceId)).size !== propagation.rows.length || propagation.rows.some(row=>{
+      const request=qualification?.rows.find(q=>q.evidenceId===row.evidenceId);
+      const recipient=recipients?.rows.find(r=>r.evidenceId===row.evidenceId);
+      const gpp=request?.gpp;
+      return !recipient || recipient.observedAtMs !== row.observedAtMs || !gpp || gpp.status !== "invalid" ||
+        new Set(row.applicableSections).size !== row.applicableSections.length ||
+        (row.reason === "applicable_section_missing"
+          ? Boolean(row.cmpEvidence) || gpp.reasons.length !== 1 || !gpp.reasons.includes("applicable_section_missing") ||
+            row.applicableSections.some(id=>!gpp.applicableSections.includes(id) || gpp.sectionIds.includes(id))
+          : !row.cmpEvidence || row.cmpEvidence.observedAtMs > row.observedAtMs ||
+            o.requests.documentCommittedAtMs === null || row.cmpEvidence.observedAtMs < o.requests.documentCommittedAtMs ||
+            row.applicableSections.length !== 1 || row.applicableSections[0] !== row.cmpEvidence.sectionId ||
+            gpp.reasons.length !== 2 || !gpp.reasons.includes("missing_gpp") || !gpp.reasons.includes("missing_applicable_sections"));
+    }))) ctx.addIssue({code:z.ZodIssueCode.custom,message:"GPP propagation evidence must bind to verified request diagnostics and prior same-document CMP evidence."});
+  if (qualification && (!recipients || qualification.rows.length !== recipients.rows.length ||
+    new Set(qualification.rows.map(row => row.evidenceId)).size !== qualification.rows.length ||
+    qualification.rows.some(row => !recipients.rows.some(recipient => recipient.evidenceId === row.evidenceId) ||
+      new Set(row.processingSignals).size !== row.processingSignals.length || row.activity !== activityByBasis[row.basis] ||
+      (qualification.policyVersion === "gpc_sale_sharing_evidence.v2" ? !row.gpp : Boolean(row.gpp)) ||
+      row.gpp && (new Set(row.gpp.sectionIds).size !== row.gpp.sectionIds.length ||
+        new Set(row.gpp.applicableSections).size !== row.gpp.applicableSections.length ||
+        new Set(row.gpp.sections.map(section => section.sectionId)).size !== row.gpp.sections.length ||
+        row.gpp.sections.some(section => !row.gpp!.sectionIds.includes(section.sectionId) || !row.gpp!.applicableSections.includes(section.sectionId) || section.sectionId === 8 && section.version !== 1) ||
+        row.gpp.status === "decoded" && (!row.gpp.sections.length || row.gpp.sections.length !== row.gpp.applicableSections.length || row.gpp.applicableSections.some(id => ![7,8].includes(id))) ||
+        row.gpp.status !== "decoded" && (row.gpp.requestSignals !== "not_assessed" || row.gpp.cmpComparison !== "not_compared" || row.gpp.sections.length > 0) ||
+        row.gpp.status === "decoded" && (row.gpp.requestSignals === "not_assessed" ||
+          (row.gpp.requestSignals === "conflicting") !== row.gpp.reasons.some(code => ["us_privacy_conflict", "section_state_conflict"].includes(code)) ||
+          (row.gpp.cmpComparison === "same_time_conflicting") !== row.gpp.reasons.some(code => code.startsWith("cmp_"))) ||
+        row.gpp.status === "not_present" && (row.gpp.sectionIds.length > 0 || row.gpp.applicableSections.length > 0 || row.gpp.sections.length > 0))))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "GPC request qualification must bind exactly to retained collection recipients." });
+  }
   if (recipients && (!o.requests.advertisingCollectionEvidenceIds ||
     recipients.rows.length !== o.requests.advertisingCollectionEvidenceIds.length ||
     new Set(recipients.rows.map(row => row.evidenceId)).size !== recipients.rows.length ||
@@ -63,3 +161,27 @@ export const gpcBoundedObservationSchema = z.object({
   }
 });
 export type GpcBoundedObservation = z.infer<typeof gpcBoundedObservationSchema>;
+
+/** Select typed, supported activity. Historical records keep their original
+ * collection semantics; this helper does not recompute facts or assign points. */
+/** Shared current sale/sharing request qualification; declared restrictions
+ * remain neutral even if a derived processing flag was omitted. */
+export function isQualifyingSaleSharingRequest(row:z.infer<typeof saleSharingRequestQualificationSchema>):boolean {
+ const gpp=row.gpp;
+ if(row.activity==="unresolved" || row.activity!==activityByBasis[row.basis] || row.processingSignals.length || !gpp)return false;
+ if(gpp.status==="not_present")return gpp.sectionIds.length===0 && gpp.applicableSections.length===0 && gpp.sections.length===0 &&
+  gpp.requestSignals==="not_assessed" && gpp.cmpComparison==="not_compared" && gpp.reasons.length===0;
+ return gpp.status==="decoded" && gpp.requestSignals==="consistent" && gpp.cmpComparison!=="same_time_conflicting" &&
+  gpp.sections.length>0 && gpp.sections.length===gpp.applicableSections.length &&
+  new Set(gpp.sections.map(section=>section.sectionId)).size===gpp.sections.length &&
+  !gpp.reasons.some(reason=>["us_privacy_conflict","section_state_conflict","cmp_sale_disagrees","cmp_sharing_disagrees","cmp_gpc_disagrees"].includes(reason)) &&
+  gpp.sections.every(section=>gpp.sectionIds.includes(section.sectionId) && gpp.applicableSections.includes(section.sectionId) &&
+   section.saleOptOut!==1 && section.sharingOptOut!==1 && section.targetedAdvertisingOptOut!==1 && section.serviceProviderMode!==1);
+}
+
+export function gpcPolicyCollectionEvidenceIds(o: GpcBoundedObservation): string[] {
+ const qualification=o.requests.advertisingCollectionQualification;
+ return qualification?qualification.rows.filter(row=>qualification.policyVersion==="gpc_sale_sharing_evidence.v1"
+  ? row.activity!=="unresolved" && row.processingSignals.length===0 : isQualifyingSaleSharingRequest(row)).map(row=>row.evidenceId)
+  :o.requests.advertisingCollectionEvidenceIds??[];
+}

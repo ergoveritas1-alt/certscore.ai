@@ -15,6 +15,7 @@ on:
       - "scripts/check-mcp-http-deploy-readiness.ts"
       - "scripts/smoke-certscore-mcp-http-tools-diff.ts"
       - "scripts/verify-mcp-source-tracked.ts"
+      - "scripts/promote-scanned-ecr-tag*.mjs"
       - "scripts/configure-microsoft-mcp-pilot*.ts"
       - "scripts/configure-marketplace-light.ts"
       - "package.json"
@@ -94,6 +95,7 @@ jobs:
           pnpm ops:check:mcp-source
           node --import tsx --test scripts/configure-microsoft-mcp-pilot.test.ts
           node --import tsx --test scripts/configure-marketplace-light.test.ts
+          node --test scripts/promote-scanned-ecr-tag.test.mjs
           pnpm --filter @certscore/mcp-http build:deps
           pnpm --filter @certscore/api-contracts test
           pnpm --filter @certscore/sdk test
@@ -182,9 +184,7 @@ jobs:
 
       - name: Promote scanned release tag
         run: |
-          manifest="$(aws ecr batch-get-image --repository-name "${ECR_MCP_REPOSITORY}" --image-ids "imageTag=${GITHUB_SHA}" --query 'images[0].imageManifest' --output text)"
-          test -n "${manifest}" && test "${manifest}" != "None"
-          aws ecr put-image --repository-name "${ECR_MCP_REPOSITORY}" --image-tag "${RELEASE_TAG}" --image-manifest "${manifest}" >/dev/null
+          node scripts/promote-scanned-ecr-tag.mjs
 
       - name: Register MCP task definition
         env:

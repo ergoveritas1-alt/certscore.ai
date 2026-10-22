@@ -26,14 +26,15 @@ export type CanonicalCookieKnowledge = {
 export const AXEPTIO_COOKIE_PURPOSE_POLICY = "axeptio_consent_preferences.v1" as const;
 export const LEGACY_COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v2" as const;
 export const PREVIOUS_COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v3" as const;
-export const COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v4" as const;
+export const HEAP_COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v4" as const;
+export const COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v5" as const;
 export function retainedCookiePurposePolicy(codes: readonly string[] | undefined) {
   const markers = codes?.filter(code => code.startsWith("cookie_purpose_policy:")) ?? [];
   if (markers.length !== 1) return undefined;
-  return [COOKIE_PURPOSE_POLICY, PREVIOUS_COOKIE_PURPOSE_POLICY, LEGACY_COOKIE_PURPOSE_POLICY, AXEPTIO_COOKIE_PURPOSE_POLICY].find(version => markers[0] === `cookie_purpose_policy:${version}`);
+  return [COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, PREVIOUS_COOKIE_PURPOSE_POLICY, LEGACY_COOKIE_PURPOSE_POLICY, AXEPTIO_COOKIE_PURPOSE_POLICY].find(version => markers[0] === `cookie_purpose_policy:${version}`);
 }
 export type CanonicalCookieContext = {
-  purposePolicyVersion?: typeof AXEPTIO_COOKIE_PURPOSE_POLICY | typeof LEGACY_COOKIE_PURPOSE_POLICY | typeof COOKIE_PURPOSE_POLICY | typeof PREVIOUS_COOKIE_PURPOSE_POLICY;
+  purposePolicyVersion?: typeof AXEPTIO_COOKIE_PURPOSE_POLICY | typeof LEGACY_COOKIE_PURPOSE_POLICY | typeof COOKIE_PURPOSE_POLICY | typeof PREVIOUS_COOKIE_PURPOSE_POLICY | typeof HEAP_COOKIE_PURPOSE_POLICY;
   cookieDomain?: string | null;
   hostname?: string | null;
   initiatorChain?: readonly string[] | null;
@@ -598,7 +599,7 @@ export function resolveCanonicalCookieKnowledge(
   context: CanonicalCookieContext = {},
 ): CanonicalCookieKnowledge {
   const name = cookieName?.trim() ?? "";
-  if (context.purposePolicyVersion === COOKIE_PURPOSE_POLICY || context.purposePolicyVersion === PREVIOUS_COOKIE_PURPOSE_POLICY) return resolveAuditedCookieKnowledge(name, context);
+  if ([COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, PREVIOUS_COOKIE_PURPOSE_POLICY].some(version => version === context.purposePolicyVersion)) return resolveAuditedCookieKnowledge(name, context);
   const contextHosts = canonicalCookieContextHosts(context);
   const axeptioRule = (context.purposePolicyVersion === AXEPTIO_COOKIE_PURPOSE_POLICY || context.purposePolicyVersion === LEGACY_COOKIE_PURPOSE_POLICY)
     ? COOKIE_PURPOSE_CANDIDATE_RULES.find(rule => rule.vendor === "Axeptio" && rule.pattern.test(name)) : undefined;
@@ -653,10 +654,19 @@ function resolveAuditedCookieKnowledge(name: string, context: CanonicalCookieCon
 
   // Heap's current SDK persists userId in this exact app-scoped cookie.
   // https://developers.heap.io/docs/using-identify ; reviewed public v4 SDK.
-  if (context.purposePolicyVersion === COOKIE_PURPOSE_POLICY && /^_hp2_id\.[0-9]{1,20}$/.test(name)) return result("heap_app_visitor_identity.v1", {
+  if ([COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === context.purposePolicyVersion) && /^_hp2_id\.[0-9]{1,20}$/.test(name)) return result("heap_app_visitor_identity.v1", {
     category: "analytics", essentiality: "non_essential", vendor: "Heap", documentedPurposes: ["analytics"],
     dataTypes: ["persistent visitor identifier", "analytics session metadata"],
     description: "Heap app-scoped visitor identity cookie used to associate analytics events across visits.",
+  });
+  // RTB House's own Services Privacy Policy documents these exact cookies on
+  // creativecdn.com. Generic c/ts names on other domains remain unknown.
+  // https://www.rtbhouse.com/privacy-center (section 2)
+  if (context.purposePolicyVersion === COOKIE_PURPOSE_POLICY && /^(?:u|ts)$/.test(name) &&
+      inContext(/(?:^|\.)creativecdn\.com$/i)) return result("rtb_house_service_cookie.v1", {
+    category: "advertising", essentiality: "non_essential", vendor: "RTB House", documentedPurposes: ["advertising"],
+    dataTypes: [name === "u" ? "advertising browser identifier" : "advertising-cookie lifetime timestamp"],
+    description: "RTB House advertising-service cookie on its documented CreativeCDN domain. Presence does not establish active use or identifier transmission.",
   });
   // Google documents possible uses, not the active use in this observation.
   // https://policies.google.com/technologies/cookies

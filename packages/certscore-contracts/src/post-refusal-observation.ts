@@ -1,3 +1,4 @@
+import {californiaRejectRequestEvidenceSchema,validateCaliforniaRejectRequest} from "./california-reject-evidence";
 import { consentConfirmationDiagnosticsSchema } from "./consent-confirmation-diagnostics";
 import { exactCookieWriteEvidenceSchema } from "./exact-cookie-write-evidence";
 import { cookieClassificationSchema } from "./cookie-classification";
@@ -127,6 +128,7 @@ export const postRefusalRegistrationSchema = z.object({
 });
 
 export const postRefusalNetworkRequestSchema = z.object({
+  californiaCollection: californiaRejectRequestEvidenceSchema.optional(),
   responseCookieWrites: z.array(exactCookieWriteEvidenceSchema).max(24).optional(),
   responseCookieNamesSet: z.array(z.string().max(180)).max(96).optional(),
   measurementEvidence: measurementRequestEvidenceSchema.optional(),
@@ -564,6 +566,7 @@ const postRefusalEvidencePacketBaseSchema = z.object({
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "reject", context);
   validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
   for (const request of packet.network.requests) {
+    validateCaliforniaRejectRequest(request,context);
     if (request.responseCookieWrites?.some(write => write.source !== "response_set_cookie" ||
       write.observedAtMs < request.startedAtMs || write.observedAtMs > packet.timing.readyAtMs ||
       !request.responseCookieNamesSet?.includes(write.name)))
@@ -1230,6 +1233,7 @@ const postRejectScoringEvidenceSchema = z.object({
 }).strict();
 
 export const postRefusalReportProjectionSchema = z.object({
+  sourceIdentity:z.object({policyVersion:z.literal("post_reject_source_identity.v1"),scanId:z.string().min(1).max(160),targetSha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict().optional(),
   scoringEvidence: postRejectScoringEvidenceSchema.optional(),
   interactionDiagnostics: postRefusalInteractionDiagnosticsSchema.optional(),
   retainedActionTiming: retainedActionTimingSchema.optional(),
@@ -1268,6 +1272,8 @@ export const postRefusalReportProjectionSchema = z.object({
     "aborted",
   ]),
 }).superRefine((projection, context) => {
+  for(const row of projection.scoringEvidence?.requests ?? [])validateCaliforniaRejectRequest(row,context);
+  for(const row of projection.afterActionRequests ?? [])validateCaliforniaRejectRequest(row,context);
   if (projection.registeredObservationCompletion && (
     projection.registeredObservationCompletion.action !== "reject" ||
     projection.registeredObservationCompletion.startedAtMs !== projection.refusalRegisteredAtMs ||
@@ -1397,6 +1403,7 @@ export function projectPostRefusalEvidenceForReport(input: {
       observationEndedAtMs: packet.timing.observationEndedAtMs ?? packet.afterActionCapture?.captureEndedAtMs, requests: packet.network.requests });
 
   const projection = postRefusalReportProjectionSchema.parse({
+    ...(packet.exactTargetSha256?{sourceIdentity:{policyVersion:"post_reject_source_identity.v1",scanId:packet.parentScanId ?? packet.scanId,targetSha256:packet.exactTargetSha256}}:{}),
     scoringEvidence: {
       version: "post_reject_scoring_evidence.v1",
       actionDispatchedAtMs: packet.refusalRegistration.actionDispatchedAtMs,

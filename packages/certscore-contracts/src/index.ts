@@ -100,6 +100,7 @@ export * from "./article13-disclosure-rejection";
 export * from "./legal-framework-validity";
 export * from "./privacy-surface-classifier";
 export * from "./privacy-evidence-locale-registry";
+export * from "./policy-controller-scope";
 export * from "./policy-document-brand-relationships";
 export * from "./supported-languages";
 export * from "./model-assistance";
@@ -3807,3 +3808,5 @@ export * from "./evidence-request-url";
 export * from "./policy-supplement-materiality";
 
 export * from "./consent-confirmation-diagnostics";
+
+export * from "./california-reject-evidence";
