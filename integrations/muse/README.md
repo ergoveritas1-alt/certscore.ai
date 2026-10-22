@@ -1,7 +1,7 @@
 # CertScore.ai Muse skill
 
-The downloadable 1.0.0 package contains `SKILL.md`, Muse's `skill.yaml` manifest,
-and a Python 3 standard-library MCP helper. Native MCP tools take precedence.
+The downloadable 1.0.1 package contains `SKILL.md`, Muse's `skill.yaml` manifest,
+and a Python 3 MCP helper that selects curl when available, with a standard-library fallback. Native MCP tools take precedence.
 The helper lists tools or makes one explicit call; it never polls or retries a
 scan automatically. Installation does not start a scan.
 
@@ -20,11 +20,15 @@ Do not use scan creation as an installation test.
 
 Release validation: skill frontmatter, offline JSON/SSE/session/error transport
 checks, a live initialization and four-tool listing, and archive/source parity.
-The format follows the existing Muse consumer skill layout. Importing into a
-fresh Muse account remains a manual compatibility check.
+The package was installed and exercised in Muse’s consumer app. Version 1.0.0
+exposed truncated urllib responses in Muse’s VM proxy. Version 1.0.1 selects
+curl before any request; direct tool listing, status and bundle commands then
+succeeded on their first attempts using the retained test scan. Report links
+and contextual follow-up metadata were preserved. No fresh-account test was
+performed.
 
 Estimated added static transfer at 100,000 downloads/month: below $0.25/month
-(approximately 7.7 KB per ZIP). No new capacity, paid API calls, background jobs,
+(approximately 9.4 KB per ZIP). No new capacity, paid API calls, background jobs,
 or scanner behavior is introduced.
 
 ## Repeat-use behavior
@@ -40,9 +44,9 @@ follow-ups, comparison and checklist prompts, and the report URL. The helper
 preserves the complete MCP result so Muse can use that guidance. No MCP service
 or scanner changes are included in this web release.
 
-Recommended later MCP work: provide a compact typed browser-report action and
-one context-matched optional follow-up that survives tight bundle budgets;
-preserve terminal/error gates and separate retrieval from scan creation. Reuse
+MCP Light now supplies compact typed report and contextual follow-up actions
+in response guidance, including under tight bundle budgets. Preserve terminal
+and error gates and separate retrieval from scan creation. Reuse
 existing permitted telemetry to assess subsequent evidence retrieval, report
 opens where measurable, and requested rechecks. Do not add chat content capture,
 redirect tracking, background scans, or new analytics infrastructure solely for

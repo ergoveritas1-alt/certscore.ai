@@ -4,6 +4,7 @@ import io
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 import urllib.error
 
 spec = importlib.util.spec_from_file_location('certscore_mcp', Path(__file__).parent / 'certscore-website-privacy-scan/scripts/certscore_mcp.py')
@@ -35,6 +36,62 @@ class Opener:
 
 
 class TransportTests(unittest.TestCase):
+    def curl_runner(self, responses, calls):
+        def run(command, **kwargs):
+            calls.append((command, kwargs))
+            status, body, headers = responses.pop(0)
+            Path(command[command.index('--output') + 1]).write_bytes(body)
+            header = b'HTTP/1.1 200 Connection established\r\n\r\nHTTP/2 ' + str(status).encode() + b' OK\r\n'
+            header += b''.join(f'{key}: {value}\r\n'.encode() for key, value in headers.items()) + b'\r\n'
+            Path(command[command.index('--dump-header') + 1]).write_bytes(header)
+            return mcp.subprocess.CompletedProcess(command, 0, str(status).encode(), b'')
+        return run
+
+    def test_curl_handles_proxy_headers_and_preserves_session_and_guidance(self):
+        payload = {'structuredContent': {'scanId': 'retained'}, '_meta': {'ai.certscore/responseGuidance': {'reviewActions': {'version': 'retained'}}}}
+        def event(request_id, result):
+            return b'event: message\ndata: ' + json.dumps({'jsonrpc': '2.0', 'id': request_id, 'result': result}).encode() + b'\n\n'
+        responses = [(200, event(1, {'protocolVersion': mcp.PROTOCOLS[0]}), {'Content-Type': 'text/event-stream', 'Mcp-Session-Id': 'session'}),
+                     (202, b'', {}), (200, event(3, payload), {'Content-Type': 'text/event-stream'}), (200, b'', {})]
+        calls = []
+        with patch.object(mcp.subprocess, 'run', side_effect=self.curl_runner(responses, calls)):
+            client = mcp.LightClient(mcp.CurlOpener('/usr/bin/curl'))
+            client.connect()
+            self.assertEqual(client.call('certscore_get_scan_bundle', {'scanId': 'retained'}), payload)
+            client.close()
+        self.assertEqual(len(calls), 4)
+        self.assertIn('Mcp-session-id: session', calls[2][0])
+        self.assertEqual(calls[-1][0][calls[-1][0].index('--request') + 1], 'DELETE')
+        for command, kwargs in calls:
+            self.assertEqual(command[1], '--disable', 'ignore user curl config that could introduce retries or redirects')
+            self.assertNotIn('--location', command)
+            self.assertNotIn('--retry', command)
+            self.assertIn('--max-filesize', command)
+            self.assertNotIn('shell', kwargs)
+
+    def test_curl_denials_redirects_and_size_limits_stop_without_replay(self):
+        for status, body in [(429, b'quota'), (307, b''), (200, b'x' * (mcp.MAX_BYTES + 1))]:
+            calls = []
+            with self.subTest(status=status), patch.object(mcp.subprocess, 'run', side_effect=self.curl_runner([(status, body, {'Retry-After': '30'})], calls)):
+                with self.assertRaises(mcp.McpError) as raised:
+                    mcp.LightClient(mcp.CurlOpener('curl')).request('tools/list')
+                self.assertEqual(len(calls), 1)
+                if status == 429:
+                    self.assertEqual(raised.exception.payload['status'], 'rate_limited')
+                    self.assertEqual(raised.exception.payload['retryAfter'], '30')
+
+    def test_curl_timeout_never_falls_back_or_replays_creation(self):
+        with patch.object(mcp.subprocess, 'run', side_effect=mcp.subprocess.TimeoutExpired('curl', 30)) as run:
+            with self.assertRaises(mcp.McpError):
+                mcp.LightClient(mcp.CurlOpener('curl')).call('certscore_scan_site', {'url': 'https://example.com'})
+            self.assertEqual(run.call_count, 1)
+
+    def test_transport_is_selected_before_requests(self):
+        with patch.object(mcp.shutil, 'which', return_value='/usr/bin/curl'):
+            self.assertIsInstance(mcp.LightClient().opener, mcp.CurlOpener)
+        with patch.object(mcp.shutil, 'which', return_value=None):
+            self.assertNotIsInstance(mcp.LightClient().opener, mcp.CurlOpener)
+
     def test_negotiates_session_lists_only_and_cleans_up(self):
         opener = Opener([
             reply(1, {'protocolVersion': '2025-06-18'}, {'Content-Type': 'application/json', 'MCP-Session-Id': 'test-session'}),

@@ -47,9 +47,9 @@ export const museGuide = {
   reportRule: "Never present a finding as a legal violation or describe a site as compliant or non-compliant. These are observations for human review.",
   rateLimit: "If a call returns rate_limited, tell the user and stop. Do not retry in a loop.",
   skill: "Give Muse the workflow once, then use it for later website reviews. The package includes the skill instructions, a Muse manifest, and a Python helper for connecting when native MCP tools aren't available.",
-  skillDownloadPath: "/resources/certscore-muse-skill-1.0.0.zip",
+  skillDownloadPath: "/resources/certscore-muse-skill-1.0.1.zip",
   skillDownloadLabel: "Download the Muse skill package",
-  skillVersion: "Version 1.0.0 · ZIP · No dependencies to install",
+  skillVersion: "Version 1.0.1 · ZIP · No Python packages to install",
   skillInstallSteps: [
     "Download the ZIP and attach it to a Muse conversation.",
     "Ask Muse to save the contained skill for future website reviews and reuse your existing CertScore.ai connection.",
