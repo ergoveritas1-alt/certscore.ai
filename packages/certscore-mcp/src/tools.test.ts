@@ -6,6 +6,76 @@ import { CertScoreError, type PulseResult } from "@certscore/sdk";
 import { mcpScanBundleOutputSchema, mcpScanStatusOutputSchema, mcpPreConsentCookiesTrackersOutputSchema } from "@certscore/api-contracts";
 import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, pulseReportText, scanBundleText, scanSiteText, scanStatusText, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
 
+const budgetCore = JSON.parse(readFileSync(new URL('./test-fixtures/bundle-budget-core.json', import.meta.url), 'utf8'));
+
+test('5 KB bundles preserve complete posture coverage, accessibility and forms without mutating retained input', () => {
+  for (const detail of ['summary', 'findings', 'evidence', 'full'] as const) {
+    const scan = structuredClone(budgetCore.scan);
+    const findings = Array.from({ length: 12 }, (_, i) => ({ type: 'certscore_finding', id: `fixture_finding_${i}`,
+      label: 'Fixture tracking finding', criticality: 'high', confidence: 'good',
+      plainEnglish: 'Synthetic fixture: tracking before consent — review the retained evidence.' }));
+    const input = { scan, detail, maxBytes: 5000, responseCeilingBytes: 25000,
+      report: { type: 'certscore_pulse', scanId: scan.scanId, domain: scan.domain,
+        transportSecurity: budgetCore.transportSecurity },
+      findings: { type: 'certscore_finding_list', scanId: scan.scanId, findings } } as any;
+    const before = structuredClone(input);
+    const result = buildScanBundle(input);
+    assert.ok(result.mcpMetadata.actualBytes <= 5000, `${detail}: ${result.mcpMetadata.actualBytes}`);
+    assert.equal(result.mcpMetadata.actualBytes, Buffer.byteLength(JSON.stringify(result)));
+    assert.deepEqual(result.postureScores, scan.postureScores);
+    assert.deepEqual(result.accessibilityAudit, scan.accessibilityAudit);
+    assert.deepEqual(result.formsSummary, scan.formsSummary);
+    assert.equal(result.score, scan.score);
+    assert.equal(result.reportUrl, scan.links.report);
+    assert.equal(result.scanFrom, scan.scanFrom);
+    assert.equal(result.findings[0].id, findings[0]!.id);
+    assert.equal(result.findingsMetadata.total, findings.length);
+    assert.ok(result.mcpMetadata.omittedSections.includes('contentUrls'));
+    assert.equal(result.mcpMetadata.omittedContentAvailableViaUrl, true);
+    assert.deepEqual(input, before);
+    assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(result));
+  }
+});
+
+test('an irreducible core returns a bounded non-retryable error instead of an oversized or altered report', () => {
+  const scan = structuredClone(budgetCore.scan);
+  scan.postureScores.ccpaCpra.policyVersion = 'version_' + 'x'.repeat(30000);
+  const before = structuredClone(scan);
+  let failure: unknown;
+  try {
+    buildScanBundle({ scan, detail: 'findings', maxBytes: 5000, responseCeilingBytes: 25000,
+      report: null, findings: { type: 'certscore_finding_list', scanId: scan.scanId, findings: [] } });
+  } catch (error) { failure = error; }
+  assert.ok(failure instanceof CertScoreError);
+  assert.equal(failure.code, 'response_budget_exceeded');
+  const result = toToolError(failure);
+  assert.equal(result.isError, true);
+  const payload = JSON.parse((result.content[0] as any).text);
+  assert.equal(payload.error.retryable, false);
+  assert.match(payload.error.recommendedNextAction, /certscore_get_report_evidence_page/);
+  assert.doesNotMatch(payload.error.recommendedNextAction, /maxBytes=/);
+  assert.ok(Buffer.byteLength(JSON.stringify(payload)) < 5000);
+  assert.deepEqual(scan, before);
+});
+
+test('a budget correction retrieves the same intact core when it fits below the transport ceiling', () => {
+  const scan = structuredClone(budgetCore.scan);
+  scan.postureScores.ccpaCpra.policyVersion = 'version_' + 'x'.repeat(6000);
+  const input = { scan, detail: 'findings' as const, maxBytes: 5000, responseCeilingBytes: 25000,
+    report: null, findings: { type: 'certscore_finding_list' as const, scanId: scan.scanId, findings: [] } };
+  let failure: unknown;
+  try { buildScanBundle(input); } catch (error) { failure = error; }
+  assert.ok(failure instanceof CertScoreError);
+  const result = toToolError(failure);
+  const error = JSON.parse((result.content[0] as any).text).error;
+  const nextBudget = Number(error.recommendedNextAction.match(/maxBytes=(\d+)/)?.[1]);
+  assert.ok(nextBudget > 5000 && nextBudget <= 25000);
+  const corrected = buildScanBundle({ ...input, maxBytes: nextBudget });
+  assert.ok(corrected.mcpMetadata.actualBytes <= nextBudget);
+  assert.equal(corrected.scanId, scan.scanId);
+  assert.deepEqual(corrected.postureScores, scan.postureScores);
+});
+
 test("MCP bundles retain required accessibility status and link to rule evidence", () => {
   const accessibilityAudit = apiAccessibilityAuditSummarySchema.parse({ status: "limited", required: true, scope: "starting_page_rendered_content",
     engine: "axe-core", engineVersion: "4.11.3", durationMs: 8000, failedRuleCount: null, affectedNodeCount: null, reviewRuleCount: null });

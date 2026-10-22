@@ -63,6 +63,17 @@ Canonical Light workflow:
 
 Recommended bundle budgets are `maxBytes=5000` for `summary`, `maxBytes=8000` for `findings`, `maxBytes=8000` for `evidence`, and `maxBytes=12000` to `25000` for `full`. MCP Light applies a 25,000-byte response ceiling so results remain within practical client limits; larger requested budgets are reported but clamped. At the 5,000-byte floor, compact core finding rows take priority over optional inventory and duplicate envelope fields. When repeated per-finding URLs are omitted, `evidenceUrlTemplate` points to `contentUrls.findings` and the returned finding ID so the same canonical evidence endpoint remains derivable. Inspect `canonicalFindingsComplete`, `requestedMaxBytes`, `effectiveMaxBytes`, `responseCeilingBytes`, `actualBytes`, `fullPayloadBytes`, `truncated`, `omittedSections`, `nextRecommendedMaxBytes`, and returned report or evidence content URLs. When `canonicalFindingsComplete` is true, retry only if omitted envelope detail is needed.
 
+The final minimum-core fallback also enforces the requested structured-byte
+budget. Under pressure it removes empty envelopes, redundant retrieval URLs and
+duplicate prose while retaining typed posture scores and coverage, forms,
+accessibility, scan identity and core finding data. `contentUrls` may be empty
+with an explicit omission marker; use `reportUrl` or the same-scan evidence tool.
+If the core itself cannot fit, the tool returns a bounded, non-retryable
+`response_budget_exceeded` error instead of an oversized or altered report.
+Its guidance recommends a sufficient budget only when it fits within the
+transport ceiling; otherwise use bounded report-evidence pages. Never create a
+replacement scan to recover from a response-budget error.
+
 Verification prompt:
 
 > List the available CertScore tools. Read certscore://example-report if resources are supported; otherwise call certscore_get_scan_bundle with scanId=9ba99a8c-b1ad-44c1-985f-92cef760ab40. Report the retained example’s original date and coverage. If unavailable, report that; do not create a new scan to test the connection.

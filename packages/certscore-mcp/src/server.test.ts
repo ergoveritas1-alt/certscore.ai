@@ -1517,6 +1517,51 @@ test("Light compact review actions survive tight bundle budgets over the MCP pro
   }
 });
 
+test('Light enforces 5 KB on retained dual-posture core packets and returns bounded errors for irreducible cores', async () => {
+  const fixture = JSON.parse(readFileSync(new URL('./test-fixtures/bundle-budget-core.json', import.meta.url), 'utf8'));
+  for (const oversized of [false, true]) {
+    const scan = structuredClone(fixture.scan);
+    if (oversized) scan.postureScores.ccpaCpra.policyVersion = 'version_' + 'x'.repeat(30000);
+    const mock = installFetch([
+      { status: 200, body: scan },
+      { status: 200, body: { ...pulse, scanId: scan.scanId, domain: scan.domain, transportSecurity: fixture.transportSecurity } },
+      { status: 200, body: { type: 'certscore_finding_list', scanId: scan.scanId,
+        findings: Array.from({ length: 12 }, (_, i) => ({ ...apiFinding(`fixture_finding_${i}`), scanId: scan.scanId })) } },
+      { status: 200, body: { type: 'certscore_pre_consent_cookies_trackers', scanId: scan.scanId, domain: scan.domain, summary: { rowCount: 0 }, rows: [] } }
+    ]);
+    try {
+      await withMcpClient(async client => {
+        const raw = await client.callTool({ name: 'certscore_get_scan_bundle', arguments: { scanId: scan.scanId, detail: 'findings', maxBytes: 5000 } });
+        if (oversized) {
+          assert.equal(raw.isError, true);
+          const error = parseToolJson(raw).error as any;
+          assert.equal(error.code, 'response_budget_exceeded');
+          assert.equal(error.retryable, false);
+          assert.match(error.recommendedNextAction, /certscore_get_report_evidence_page/);
+          assert.ok(Buffer.byteLength(JSON.stringify(parseToolJson(raw))) < 5000);
+          assert.equal((raw._meta?.['ai.certscore/responseGuidance'] as any)?.reviewActions, undefined);
+        } else {
+          assert.notEqual(raw.isError, true);
+          const result = parseToolJson(raw) as any;
+          assertToolOutputSchema('certscore_get_scan_bundle', result);
+          assert.ok(Buffer.byteLength(JSON.stringify(result)) <= 5000);
+          assert.equal(result.mcpMetadata.actualBytes, Buffer.byteLength(JSON.stringify(result)));
+          assert.deepEqual(result.postureScores, scan.postureScores);
+          assert.deepEqual(result.formsSummary, scan.formsSummary);
+          assert.deepEqual(result.accessibilityAudit, scan.accessibilityAudit);
+          assert.equal(result.findingsMetadata.total, 12);
+          const actions = (raw._meta?.['ai.certscore/responseGuidance'] as any).reviewActions;
+          assert.deepEqual(actions.reportViews.map((view: any) => view.score), [10, 70]);
+          assert.ok(actions.reportViews.every((view: any) => view.createsScan === false));
+          assert.equal(actions.followUp.arguments.scanId, scan.scanId);
+        }
+        assert.equal(mock.calls.length, 4);
+        assert.ok(mock.requestBodies.every(body => body === undefined));
+      }, { toolProfile: 'light' });
+    } finally { mock.restore(); }
+  }
+});
+
 test("certscore_get_scan_bundle returns the canonical no-go result when the Pulse report is unavailable", async () => {
   const recommendedNextAction = "Publish the intended public website, then run the scan again.";
   const mock = installFetch([{

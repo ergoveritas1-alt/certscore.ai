@@ -1,0 +1,132 @@
+{
+  "source": "Retained public test1 scan metadata and canonical transport projection from October 22, 2026. Regression tests add explicitly synthetic finding rows; no new scan or raw payload capture.",
+  "scan": {
+    "type": "certscore_scan",
+    "scanId": "6a223ab2-cc98-4f50-9450-bbf3b8fb6f48",
+    "domain": "ergoveritas.com",
+    "url": "https://ergoveritas.com/test1.html",
+    "scanFrom": "eu_ie",
+    "status": "completed",
+    "score": 10,
+    "postureScores": {
+      "contractVersion": "certscore.posture-scores.v1",
+      "gdprEprivacy": {
+        "posture": "gdpr_eprivacy",
+        "score": 10,
+        "policyVersion": "gdpr-eprivacy-posture.v23",
+        "coverage": "scored",
+        "scope": "starting_page"
+      },
+      "ccpaCpra": {
+        "posture": "ccpa_cpra",
+        "score": 70,
+        "policyVersion": "california-regulatory-posture.v17-reject-scope",
+        "coverage": "limited",
+        "scope": "starting_page",
+        "coverageSummary": {
+          "postureBasis": "assuming_ccpa_applies",
+          "evidenceFamilies": 5,
+          "totalFamilies": 6,
+          "scoreReady": false,
+          "families": [
+            {
+              "id": "privacy_notice",
+              "status": "review",
+              "assessmentState": "partial",
+              "followUp": "interpretation"
+            },
+            {
+              "id": "california_rights",
+              "status": "assessed_gap",
+              "assessmentState": "completed",
+              "followUp": "none"
+            },
+            {
+              "id": "request_methods",
+              "status": "observed",
+              "assessmentState": "completed",
+              "followUp": "none"
+            },
+            {
+              "id": "collection_notice",
+              "status": "review",
+              "assessmentState": "limited",
+              "followUp": "capture"
+            },
+            {
+              "id": "sale_sharing",
+              "status": "review",
+              "assessmentState": "partial",
+              "followUp": "interpretation"
+            },
+            {
+              "id": "privacy_choices",
+              "status": "unknown",
+              "assessmentState": "limited",
+              "followUp": "capture"
+            }
+          ]
+        }
+      }
+    },
+    "scoreStatus": "final",
+    "scoreVersion": "overall-posture.v13",
+    "scoreUpdatedAt": "2026-10-22T23:05:37.664Z",
+    "riskLevel": "significant_review_recommended",
+    "accessibilityAudit": {
+      "status": "completed",
+      "required": true,
+      "scope": "starting_page_rendered_content",
+      "engine": "axe-core",
+      "engineVersion": "4.11.3",
+      "durationMs": 385,
+      "failedRuleCount": 3,
+      "affectedNodeCount": 3,
+      "reviewRuleCount": 0,
+      "exampleCoverage": {
+        "version": "breadth_before_detail.v1",
+        "observedNodeCount": 3,
+        "retainedNodeCount": 3,
+        "omittedNodeCount": 0,
+        "byteBudgetLimited": false
+      }
+    },
+    "formsSummary": {
+      "contractVersion": "certscore.forms-summary.v1",
+      "scope": "starting_page_reportable_observations",
+      "totalObserved": 2,
+      "preConsentObserved": 1,
+      "afterAcceptObserved": 1,
+      "preConsentCapture": "complete",
+      "afterAcceptCapture": "retained",
+      "countStatus": "captured"
+    },
+    "createdAt": "2026-10-22T23:05:23.147Z",
+    "startedAt": "2026-10-22T23:05:23.147Z",
+    "completedAt": "2026-10-22T23:05:37.664Z",
+    "scanTimeSeconds": 14.5,
+    "resultDisposition": null,
+    "links": {
+      "self": "https://certscore.ai/api/v2/scans/6a223ab2-cc98-4f50-9450-bbf3b8fb6f48",
+      "report": "https://certscore.ai/scan/6a223ab2-cc98-4f50-9450-bbf3b8fb6f48",
+      "findings": "https://certscore.ai/api/v2/scans/6a223ab2-cc98-4f50-9450-bbf3b8fb6f48/findings",
+      "pulse": "https://certscore.ai/api/v2/scans/6a223ab2-cc98-4f50-9450-bbf3b8fb6f48/pulse",
+      "preConsentCookiesTrackers": "https://certscore.ai/api/v2/scans/6a223ab2-cc98-4f50-9450-bbf3b8fb6f48/pre-consent-cookies-trackers"
+    }
+  },
+  "transportSecurity": {
+    "status": "available",
+    "evidenceRetained": true,
+    "observationCounts": {
+      "total": 5,
+      "observedPositive": 5,
+      "concernOrReview": 0,
+      "notObserved": 0,
+      "unavailable": 0
+    },
+    "observations": [],
+    "limitations": [
+      "Only the listed canonical observations are represented. Do not infer HSTS, supported TLS versions, cipher suites, or certificate properties that are not explicitly returned."
+    ]
+  }
+}

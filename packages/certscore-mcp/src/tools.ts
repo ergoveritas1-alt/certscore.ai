@@ -2239,6 +2239,26 @@ export function buildScanBundle(input: {
       disclaimer: bundle.disclaimer
     };
     updateBundleActualBytes(minimal);
+    if (minimal.mcpMetadata.actualBytes > maxBytes) {
+      // Keep typed scores, coverage, forms, accessibility and the core finding intact.
+      // The final fallback previously reintroduced empty envelopes and redundant URLs.
+      if (minimal.summary && Object.values(minimal.summary).every(value => value === null)) delete minimal.summary;
+      delete minimal.links;
+      minimal.mcpMetadata.contentUrls = {};
+      minimal.mcpMetadata.omittedSections = [...new Set([...minimal.mcpMetadata.omittedSections, "links", "contentUrls"])];
+      minimal.mcpMetadata.omittedContentAvailableViaUrl = typeof minimal.reportUrl === "string" && minimal.reportUrl.length > 0;
+      minimal.interpretationGuidance = interpretationGuidance(
+        "Use returned observations and classifications only. Missing evidence is unknown; execution is not consent registration. No legal conclusions.");
+      updateBundleActualBytes(minimal);
+    }
+    if (minimal.mcpMetadata.actualBytes > maxBytes) {
+      const nextBudget = Math.ceil(minimal.mcpMetadata.actualBytes / 1_000) * 1_000;
+      throw new CertScoreError("The retained core report cannot fit in the requested response budget.", {
+        code: "response_budget_exceeded", status: 400,
+        responseBody: { error: { retryable: false, recommendedNextAction:
+          `${nextBudget <= responseCeilingBytes ? `Retrieve the same scan with maxBytes=${nextBudget}, or use` : "Use"} certscore_get_report_evidence_page for bounded report pages. Do not start a new scan.` } }
+      });
+    }
     return minimal;
   }
 
