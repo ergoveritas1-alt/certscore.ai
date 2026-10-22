@@ -46,6 +46,7 @@ export default function DeveloperMcpPage() {
               <h3 className="mt-2 text-xl font-semibold text-slate-950">Light MCP</h3>
               <p className="mt-3 text-sm leading-7 text-slate-700">Scan public sites, inspect retained evidence, export inventories and prepare remediation checklists. No account required; scoped usage limits apply.</p>
               <Link className="mt-5 inline-flex rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800" href="/mcp/light">Start with Light MCP</Link>
+              <Link className="mt-3 block text-sm font-semibold text-sky-700 underline underline-offset-4" href="/muse">CertScore.ai for Muse</Link>
             </article>
             <article className="rounded-xl border border-slate-200 bg-white p-6">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Workspace access</p>

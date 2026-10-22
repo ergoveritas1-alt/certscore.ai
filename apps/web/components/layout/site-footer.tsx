@@ -27,6 +27,7 @@ const footerSections = [
       { href: "/developers/reference", label: "API reference" },
       { href: "/developers/sdk", label: "SDK docs" },
       { href: "/developers/mcp", label: "MCP docs" },
+      { href: "/muse", label: "CertScore.ai for Muse" },
       { href: "/claude", label: "Claude website scanner" },
       { href: "/regulatory", label: "Regulatory pages" },
       { href: "/gdpr", label: "GDPR evidence guide" },

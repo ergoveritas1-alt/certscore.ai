@@ -33,6 +33,11 @@ export const developerPages = [
     description: "Start no-account website scans from any remote MCP client."
   },
   {
+    href: "/muse",
+    label: "CertScore.ai for Muse",
+    description: "Connect Muse to MCP Light, run a first scan, and recheck after changes."
+  },
+  {
     href: "/developers/reference",
     label: "API reference",
     description: "Resource routes, status behavior, error shape, rate limits, and public-safe evidence rules."

@@ -45,6 +45,7 @@ const staticPaths = [
   "/releases",
   "/guides/website-form-scanning",
   "/claude",
+  "/muse",
   "/developers/examples",
   "/faq",
   "/contact-sales",

@@ -72,6 +72,7 @@ const schemas = [
 const clients = [
   ["Claude", "Add a custom remote MCP connector and paste the Light endpoint."],
   ["ChatGPT", "Add the remote MCP server in developer mode and paste the Light endpoint."],
+  ["Muse", "Add a custom remote Streamable HTTP connector with no authentication."],
   ["Cursor", "Add a remote Streamable HTTP MCP server using the Light endpoint."],
   ["VS Code", "Add an HTTP MCP server and use the Light endpoint as its URL."],
   ["Codex", `Run: ${codexSetupCommand}`]
@@ -144,6 +145,7 @@ export default function McpLightPage() {
                 Read the MCP Light launch release <span aria-hidden="true">→</span>
               </Link>
             </p>
+            <p className="text-sm"><Link className="font-semibold text-sky-700 underline underline-offset-4 hover:text-sky-900" href="/muse">CertScore.ai for Muse</Link></p>
             <p className="text-sm text-slate-600">
               Official MCP Registry: <a className="font-semibold text-sky-700 hover:text-sky-900" href={registryUrl} rel="noreferrer" target="_blank"><code>ai.certscore/mcp-light</code> v{mcpLightVersion}</a> · Published by CertScore.ai, LLC
             </p>

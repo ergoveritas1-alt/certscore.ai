@@ -25,6 +25,7 @@ Trust and security overview: https://certscore.ai/trust
 
 Use these canonical discovery resources:
 
+- [CertScore.ai for Muse](https://certscore.ai/muse): Connect Muse to MCP Light at https://mcp.certscore.ai/mcp/light, run a first public-site privacy scan, and recheck after changes. Exact guide copy: https://certscore.ai/muse.md
 - Concise LLM guide: https://certscore.ai/llms.txt
 - Full LLM guide: https://certscore.ai/llms-full.txt
 - Universal AI/API manifest: https://certscore.ai/.well-known/certscore-ai.json
