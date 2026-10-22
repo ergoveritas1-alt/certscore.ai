@@ -1781,12 +1781,12 @@
     },
     "https://pella.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-19T20:03:24.644Z",
-      "lastContactAt": "2026-10-22T20:03:24.644915+00:00",
+      "cooldownUntil": "2026-11-19T20:31:34.998Z",
+      "lastContactAt": "2026-10-22T20:31:34.998461+00:00",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "One explicitly owner-requested original-region AWS verification of recipient retention fixes; no automatic retry, Options or production deploy. owner-retention-two-20261022",
+      "note": "One explicitly owner-requested original-region AWS verification of Reject finalization within existing budgets; no automatic retry, Options panels or customer report persistence. owner-pella-release-20261022",
       "state": "cooldown",
       "url": "https://pella.com/"
     },
@@ -1803,7 +1803,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-22T20:06:14.424Z",
+  "updatedAt": "2026-10-22T20:32:01.998Z",
   "contactOnlyUrls": [
     "https://abc.xyz/",
     "https://acuitybrands.com/",
