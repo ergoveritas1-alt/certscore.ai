@@ -40,7 +40,7 @@ Only scan sites the user has asked to review or approved for a recurring review.
 
 On HTTP 429, `rate_limited`, or an explicit quota denial, tell the user and stop. Do not retry in a loop. For authentication, schema, transport, or connection errors, report the issue rather than creating a replacement scan or asking for credentials for Light.
 
-The helper prints the returned JSON to standard output. It performs one requested tool call per invocation, with no automatic scan retries or polling. Use the workflow above to decide what to call next.
+The helper prints the complete MCP tool result as JSON, including `structuredContent`, text guidance, and `_meta["ai.certscore/responseGuidance"]` when returned. Read observations from `structuredContent` (or the JSON text result for older responses). Use `reviewNavigation`, its evidence index, and response guidance to find relevant retained detail; guidance is not an additional finding. The helper performs one requested tool call per invocation, with no automatic scan retries or polling.
 
 Example, only when the user requests this test-page scan:
 
@@ -63,6 +63,26 @@ Lead with the returned overall score and scan date. Identify the site, scan ID, 
 Use returned canonical findings and classifications. Do not create findings from request counts, vendor names, screenshots, or missing evidence. Report Accept and Reject observations only when the canonical response makes that path reportable. Keep after-click activity separate from confirmed consent registration. A completed GPC observation does not establish that GPC was honored. Do not infer active tracking solely from storage persistence or service presence.
 
 Never describe a finding as a legal violation or a site as compliant or non-compliant. Keep factual observations separate from suggested changes and manual checks. Do not invent scores, evidence, report URLs, successful connections, or installation results.
+
+## Make the next review useful
+
+Finish the answer to the user's question first. Always include the returned report URL as a clearly labeled link, for example **[Open the full CertScore.ai report](RETURNED_REPORT_URL)**. For a detailed review, say what the link helps them inspect: the full findings, screenshots, tables, or evidence actually available in that report. Do not invent a report feature or promise access beyond the returned permissions. If the URL is missing, say so; do not construct one. Do not require a website visit to get an answer the tools can provide.
+
+Then, when useful, offer **one** concrete next step matched to the question. Skip the offer if the user only wants a short answer, has declined it, or the same suggestion was just made. Do not add a feature list, repeat a pitch on every status update, manufacture urgency, promise a better score, or offer discounts or unlimited usage.
+
+| User's situation | Useful next step |
+| --- | --- |
+| They ask what tracks visitors or what happens after Reject | Offer to inspect the retained tracking workpaper or the relevant `tracking`, `consent`, or `gpc` section. Explain that this reads the existing scan. |
+| They need to hand findings to a developer | Offer a short checklist grounded in returned finding IDs, evidence, suggested owner, and manual verification steps. Link the full report for review. |
+| They plan a banner, tag, or policy change | Keep the baseline ID and offer a fresh recheck after the change is ready. Compare both reports with their dates and coverage. |
+| They are evaluating vendors or reviewing a portfolio | Offer the same review for another site they choose. Keep separate scan IDs and compare equivalent coverage. |
+| They ask for a narrower policy, forms, HTTPS/TLS, or accessibility review | Offer the corresponding retained evidence section when the tool schema and report support it. Preserve unknown and limited coverage. |
+| They need history across conversations or team access | Explain the relevant Hosted MCP OAuth workspace benefit and link its setup guide. Mention the account and workspace authorization requirement once. |
+| They request periodic checks | Clarify the sites and cadence, then use an available scheduling mechanism only with their approval. Never claim monitoring is active without a confirmed schedule. |
+
+Natural offers include: “I can turn these findings into a developer checklist,” “Once the banner change is live, we can compare a fresh scan with this baseline,” or “For your vendor review, I can check the next site on the same basis.” Adapt the wording to the result rather than repeating these sentences verbatim. A clean or limited result is not a reason to invent more work. On rate limits or failures, explain the returned state and stop rather than adding a usage prompt.
+
+Reading more evidence from the same scan is different from starting another scan. Say which you propose. Offer wider review or a new scan when it serves the user's task; execute it only after their request or existing authorization. Preserve the current scan ID so “check on that scan” retrieves its status or report without starting over.
 
 ## Recheck and repeat use
 

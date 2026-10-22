@@ -58,7 +58,7 @@ class TransportTests(unittest.TestCase):
         opener = Opener([Response(stream, {'Content-Type': 'text/event-stream'})])
         client = mcp.LightClient(opener)
         arguments = {'scanId': 'existing-scan', 'cursor': 'opaque', 'workpaper': 'original'}
-        self.assertEqual(client.call('certscore_get_report_evidence_page', arguments)['nextCursor'], 'opaque-cursor')
+        self.assertEqual(client.call('certscore_get_report_evidence_page', arguments)['structuredContent']['nextCursor'], 'opaque-cursor')
         self.assertEqual(json.loads(opener.requests[0].data)['params']['arguments'], arguments)
 
     def test_429_and_ambiguous_network_error_never_replay(self):
@@ -80,6 +80,13 @@ class TransportTests(unittest.TestCase):
         with self.assertRaises(mcp.McpError):
             mcp.tool_payload({'content': [None, 'invalid']})
         self.assertEqual(mcp.tool_payload({'content': [{'type': 'text', 'text': '{"scanId":"retained"}'}]}), {'scanId': 'retained'})
+
+    def test_preserves_server_navigation_and_guidance(self):
+        result = {'structuredContent': {'scanId': 'retained', 'reviewNavigation': {'baseline': {'scanId': 'retained'}}},
+                  '_meta': {'ai.certscore/responseGuidance': {'reportUrl': 'https://certscore.ai/scan/retained'}},
+                  'content': [{'type': 'text', 'text': 'Relevant optional next actions'}]}
+        client = mcp.LightClient(Opener([reply(1, result)]))
+        self.assertEqual(client.call('certscore_get_scan_bundle', {'scanId': 'retained'}), result)
 
     def test_redirect_is_not_forwarded(self):
         with self.assertRaises(mcp.McpError):

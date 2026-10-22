@@ -126,7 +126,9 @@ class LightClient:
     def call(self, name, arguments):
         if name not in TOOLS:
             raise ValueError("Only the four MCP Light tools are supported.")
-        return tool_payload(self.request("tools/call", {"name": name, "arguments": arguments}))
+        result = self.request("tools/call", {"name": name, "arguments": arguments})
+        tool_payload(result)  # Validate errors without dropping server navigation or guidance.
+        return result
 
     def close(self):
         if self.session:
