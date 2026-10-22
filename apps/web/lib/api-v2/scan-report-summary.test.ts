@@ -430,7 +430,7 @@ test("current Reject presence yields the same score through persisted findings, 
   Object.assign(scan,{canonicalReportProjection:canonical});scan.snapshot!.certscore_overall=85;
   const api=buildApiV2ScanResource(scan),status=buildApiV2ScanStatus(scan,{canonicalScan:api}),report=buildTimelineReportModel(scan);
   assert.equal(api.score,85);assert.equal(status.score,85);assert.equal(report.score.value,85);
-  assert.equal(api.scoreExplanation?.policyVersion,"gdpr-eprivacy-posture.v22");assert.equal(api.scoreExplanation?.totalPolicyDeductionPoints,15);
+  assert.equal(api.scoreExplanation?.policyVersion,"gdpr-eprivacy-posture.v23");assert.equal(api.scoreExplanation?.totalPolicyDeductionPoints,15);
   assert.ok(findings.some(f=>f.presentation.findingName==="Non-essential cookies or services after Reject"));
   assert.doesNotMatch(canonical.checklistRows.map(r=>[r.label,r.explanation,r.note,r.limitation].join(" ")).join(" "),/deduction|points deducted|identifier.*required/i);
  }
