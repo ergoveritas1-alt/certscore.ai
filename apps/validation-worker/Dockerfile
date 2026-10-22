@@ -115,6 +115,8 @@ COPY --from=build /app/packages/certscore-scan-core/dist ./node_modules/@certsco
 # The runtime base intentionally contains a resolver for standalone operation,
 # but its contents can lag a resolver-only release. Always copy the resolver
 # built with this application image so the canonical version tracks this SHA.
+# Refresh export maps too: a cached manifest can hide newly built subpaths.
+COPY --from=build /app/packages/certscore-vendor-resolver/package.json ./node_modules/@certscore/vendor-resolver/package.json
 COPY --from=build /app/packages/certscore-vendor-resolver/dist ./node_modules/@certscore/vendor-resolver/dist
 
 # Refresh every workspace runtime dependency, not just scanner contracts. The
@@ -126,7 +128,8 @@ COPY --from=build /app/packages/web-bot-auth/dist ./node_modules/@website-signal
 COPY apps/validation-worker/scripts/verify-installed-compaction.cjs ./verify-installed-compaction.cjs
 RUN node ./verify-installed-compaction.cjs
 
-RUN node -e "const contracts=require('@certscore/contracts'); if (contracts.VERIFIED_POLICY_EVIDENCE_PACKET_VERSION !== 'certscore.verified-policy-evidence.v1' || typeof contracts.verifiedPolicyEvidencePacketSchema?.parse !== 'function') throw new Error('validation worker runtime is missing the current verified policy evidence contract');" \
+RUN node -e "const resolver=require('@certscore/vendor-resolver/property-sale-sharing'); if (typeof resolver.extractPropertySaleSharingSource !== 'function') throw new Error('validation worker runtime is missing the current resolver export map');" \
+  && node -e "const contracts=require('@certscore/contracts'); if (contracts.VERIFIED_POLICY_EVIDENCE_PACKET_VERSION !== 'certscore.verified-policy-evidence.v1' || typeof contracts.verifiedPolicyEvidencePacketSchema?.parse !== 'function') throw new Error('validation worker runtime is missing the current verified policy evidence contract');" \
   && node -e "const pw=require('playwright'); const pkg=require('playwright/package.json'); console.log(JSON.stringify({validationWorkerRuntime:{playwrightVersion:pkg.version,chromiumExecutablePath:pw.chromium.executablePath()}}));" \
   && du -sh node_modules /ms-playwright apps/validation-worker/dist
 

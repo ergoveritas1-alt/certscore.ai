@@ -721,6 +721,8 @@ test("validation worker runtime overlays the current policy evidence contract an
     dockerfile,
     /COPY --from=build \/app\/packages\/certscore-scan-core\/dist \.\/node_modules\/@certscore\/scan-core\/dist/,
   );
+  assert.match(dockerfile, /COPY --from=build \/app\/packages\/certscore-vendor-resolver\/package\.json \.\/node_modules\/@certscore\/vendor-resolver\/package\.json/);
+  assert.match(dockerfile, /require\('@certscore\/vendor-resolver\/property-sale-sharing'\)/);
   assert.match(dockerfile, /verifiedPolicyEvidencePacketSchema\?\.parse/);
   assert.match(source, /packet_contract_invalid/);
   assert.match(source, /v2_policy_evidence\.rejected/);
