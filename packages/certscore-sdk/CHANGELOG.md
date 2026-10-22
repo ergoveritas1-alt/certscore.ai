@@ -1,5 +1,12 @@
 # @certscore/sdk
 
+## 0.2.22
+
+- Align the standalone GPC observation declarations with the deployed canonical API contract; client requests and runtime behavior are unchanged.
+- Type successful collection-review rows, expanded vendor qualification bases, request-local processing signals, and supported GPP decoding and consistency evidence.
+- Include the separate GPP propagation evidence, sale/sharing qualification policy versions through v5, and corroborated property-bound sale/sharing source references.
+- Preserve optional fields and historical observation versions for backward-compatible consumption.
+
 ## 0.2.21
 
 - Align CertScore.ai SDK declarations with the deployed API without changing client request behavior.

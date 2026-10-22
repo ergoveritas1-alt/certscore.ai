@@ -6,7 +6,7 @@ CertScore.ai outputs are automated public-web observations for human and agentic
 
 ## Status
 
-The SDK is published as `@certscore/sdk` on npm. Use version `0.2.21` or newer for the deployed post-Reject entity/timing evidence, GPC recipient evidence, California posture coverage, and CMP inventory details. Typed EU and California posture scores are available on API v2 scan and report-evidence resources. See the [npm package](https://www.npmjs.com/package/@certscore/sdk) and [SDK source](https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk).
+The SDK is published as `@certscore/sdk` on npm. Use version `0.2.22` or newer for the deployed GPC collection-review, vendor qualification, GPP consistency/propagation and property-bound sale/sharing evidence types, alongside post-Reject entity/timing evidence, California posture coverage and CMP inventory details. Typed EU and California posture scores are available on API v2 scan and report-evidence resources. See the [npm package](https://www.npmjs.com/package/@certscore/sdk) and [SDK source](https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk).
 
 ```bash
 npm install @certscore/sdk

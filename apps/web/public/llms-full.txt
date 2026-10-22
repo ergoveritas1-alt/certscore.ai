@@ -246,7 +246,7 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 ## TypeScript SDK
 
-Status: published. Install `@certscore/sdk@0.2.21` or newer for typed EU and California posture scores on API v2 scan and report-evidence resources, including post-Reject entity/timing evidence, GPC recipient evidence, California posture coverage, and CMP inventory details.
+Status: published. Install `@certscore/sdk@0.2.22` or newer for typed EU and California posture scores on API v2 scan and report-evidence resources, including GPC collection-review and vendor qualification, GPP consistency/propagation, property-bound sale/sharing evidence, post-Reject entity/timing evidence, California posture coverage, and CMP inventory details.
 
 Choice-path interpretation:
 
