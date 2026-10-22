@@ -141,6 +141,25 @@ Completed bundles include an evidence index and optional next actions for task-r
 
 ## Light Bundle Detail and Byte Budgets
 
+Completed Light bundle responses also include compact `reviewActions` in
+`_meta["ai.certscore/responseGuidance"]` and the appended guidance TextContent.
+These remain available when a small structured bundle omits `reviewNavigation`.
+The version is `certscore.light-review-actions.v1`. `openReport` is an `open_url`
+action using the returned HTTPS CertScore.ai report URL for this exact scan;
+it is omitted if that URL is missing or invalid. No report URL is synthesized.
+One optional `followUp` offers remaining evidence, a developer-checklist prompt,
+retained tracking exports, limited-coverage review, or a future post-change
+recheck according to the returned bundle. Read and checklist actions preserve
+the scan ID and declare `createsScan: false`. Future rechecks are offers with
+`createsScan: true` and no executable scan call. All follow-ups require the
+user's request. Answer the original question first, skip repeated or declined
+offers, and do not claim a fix or legal compliance. Active, failed, no-go and
+error results have no review actions. Other tool profiles are unchanged.
+
+This guidance adds no API requests, scans, model calls or storage. Estimated
+additional response transfer is below $0.10/month at 100,000 completed bundle
+responses; no infrastructure capacity changes are required.
+
 Every bundle declares its selected `detail` mode. `summary` returns the overview, canonical result, up to five compact projected finding objects, compact row-level pre-consent cookie/tracker evidence, coverage, limitations, counts, and report URL. This lets conversational MCP clients enumerate projected consent-control, CMP-context, transport, GDPR/ePrivacy transparency, social/media embed, accessibility, disclosure, and other returned review signals without needing a second tool; only categories actually present in canonical projections are returned. Findings and inventory sections each declare `total`, `returned`, and `truncated`. Each compact finding retains its public API v2 evidence anchor. Each inventory row includes cookie/tracker identity, cookie names where present, vendor, purpose, category, first-observed time, domains, evidence classification, and confidence. `findings` raises the default finding allowance to 20. `evidence` adds bounded evidence digests and references. `full` adds every available non-duplicated section subject to the effective byte budget; findings, top findings, and transport security are returned once in their canonical top-level bundle sections. When `fullPayloadBytes` exceeds the Light response ceiling, use the canonical content URLs instead of retrying above the ceiling.
 
 `TextContent` is capped at 8,000 characters and uses short plain-text lines instead of large tables or nested JSON. It presents canonical overview facts and projected findings before the row inventory so one evidence family cannot crowd out the rest. The full profile's structured bundle defaults to 50,000 bytes and accepts a caller-selected 5,000-200,000-byte bound. Light defaults to and applies a 25,000-byte response ceiling. If either representation must omit returned items, it states that explicitly and preserves totals and truncation metadata.

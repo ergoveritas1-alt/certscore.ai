@@ -96,11 +96,35 @@ test('Light follow-ups are callable and stay within retained evidence, including
   const g = metadata(bundle);
   assert.equal(g.optionalFollowUps.length, 2);
   assert.ok(g.optionalFollowUps.every((action: any) => action.tool === 'certscore_get_report_evidence_page' && action.arguments.scanId === 'retained' && action.createsScan === false));
-  assert.match((bundle.content.at(-1) as any).text, /optionalFollowUps/);
+  assert.match((bundle.content.at(-1) as any).text, /reviewActions/);
+  assert.doesNotMatch((bundle.content.at(-1) as any).text, /optionalReview|optionalFollowUps/);
   for (const tool of ['certscore_scan_site', 'certscore_get_scan_status']) {
     assert.deepEqual(metadata(light(tool, { scanId: 'retained', status: 'completed', topFindings: [{ id: 'finding' }] })).optionalFollowUps, []);
   }
   for (const state of [{ status: 'failed' }, { status: 'completed_limited', resultDisposition: 'no_go' }]) {
     assert.deepEqual(metadata(light('certscore_get_scan_bundle', { scanId: 'retained', findings: [{ id: 'finding' }], ...state })).optionalFollowUps, []);
   }
+});
+
+test('Light report actions survive omitted navigation without changing the output contract or required next action', () => {
+  const scanId = '00000000-0000-4000-8000-000000000123';
+  const payload = { scanId, reportUrl: `https://certscore.ai/scan/${scanId}`, status: 'completed', findings: [],
+    mcpMetadata: { truncated: true, omittedSections: ['fullReport', 'preConsentCookiesTrackers'] } };
+  const raw = result(payload);
+  const light = withResponseGuidance('certscore_get_scan_bundle', {}, raw, undefined, { toolProfile: 'light' });
+  const g = metadata(light);
+  assert.equal(light.structuredContent, payload);
+  assert.deepEqual(light.content[0], raw.content[0]);
+  assert.equal(g.nextAction.tool, null);
+  assert.equal(g.reviewActions.openReport.url, payload.reportUrl);
+  const text = (light.content.at(-1) as any).text;
+  assert.match(text, /reviewActions/);
+  assert.match(text, /Offer at most this one relevant follow-up/);
+  assert.ok(Buffer.byteLength(text) < 1500);
+  assert.equal(metadata(guide('certscore_get_scan_bundle', payload)).reviewActions, undefined);
+  for (const tool of ['certscore_scan_site', 'certscore_get_scan_status', 'certscore_get_report_evidence_page']) {
+    assert.equal(metadata(withResponseGuidance(tool, {}, raw, undefined, { toolProfile: 'light' })).reviewActions, undefined);
+  }
+  const error = { ...raw, isError: true };
+  assert.equal(withResponseGuidance('certscore_get_scan_bundle', {}, error, undefined, { toolProfile: 'light' }), error);
 });

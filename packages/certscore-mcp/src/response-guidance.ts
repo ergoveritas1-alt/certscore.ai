@@ -1,6 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { transferResponseCapture } from './response-capture.js';
 import { bundleReviewNavigation } from './review-navigation.js';
+import { lightReviewActions } from './light-review-actions.js';
 
 const record = (value: unknown): Record<string, any> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
 const string = (value: unknown): string | null => typeof value === 'string' && value.trim() ? value.slice(0, 1000) : null;
@@ -60,6 +61,7 @@ export function withResponseGuidance(tool: string, input: unknown, result: CallT
     .slice(0, 20).map((item: unknown) => string(record(item).id)).filter(Boolean);
   if (tool === 'certscore_explain_finding' && string(payload.id)) findingIds.push(string(payload.id));
   const navigation = tool === 'certscore_get_scan_bundle' ? bundleReviewNavigation(payload) : null;
+  const reviewActions = options.toolProfile === 'light' && tool === 'certscore_get_scan_bundle' ? lightReviewActions(payload) : null;
   const optionalFollowUps = options.toolProfile === 'light' ? navigation?.nextActions ?? []
     : !noGo && ready && scanId && findingIds.length ? [
       { tool: 'certscore_explain_finding', arguments: { scanId, findingId: findingIds[0] }, reason: 'Explain a returned finding using retained evidence.' },
@@ -79,6 +81,7 @@ export function withResponseGuidance(tool: string, input: unknown, result: CallT
     evidenceLimits: { truncated: record(payload.evidenceMetadata).truncated ?? record(payload.mcpMetadata).truncated ?? null, total: record(payload.evidenceMetadata).total ?? null, returned: record(payload.evidenceMetadata).returned ?? null },
     pagination: Object.keys(pagination).length ? { ...pagination, nextOffset, complete: !hasMore } : null,
     optionalFollowUps,
+    ...(reviewActions ? { reviewActions } : {}),
     nextAction, actionCategory,
   };
   // Keep full machine metadata; avoid repeating the entire envelope in model-visible text.
@@ -86,9 +89,9 @@ export function withResponseGuidance(tool: string, input: unknown, result: CallT
     scanId, status, score: guidance.score, risk: guidance.risk, reportUrl: guidance.reportUrl,
     quotaConsumed: guidance.quotaConsumed, nextAction,
     ...(guidance.pagination ? { pagination: guidance.pagination } : {}),
-    ...(navigation && options.toolProfile === 'light' ? { optionalFollowUps, optionalReview: navigation.optionalReview } : {})
+    ...(reviewActions ? { reviewActions, reviewInstruction: 'Answer first and include the report link when available. Offer at most this one relevant follow-up; skip repeated or declined offers. Never execute it without the user’s request.' } : {})
   }).filter(([,value]) => value !== null));
-  const overview = `CertScore guidance: ${JSON.stringify(compact)}`;
+  const overview = `CertScore.ai guidance: ${JSON.stringify(compact)}`;
   const explanation = tool === 'certscore_explain_finding'
     ? `\nFinding: ${JSON.stringify({ id: string(payload.id), observation: string(payload.evidenceSummary) ?? string(record(payload.evidence).summary), interpretation: string(payload.plainEnglish), reviewerAction: string(payload.nextStep) })}` : '';
   return transferResponseCapture(result, {

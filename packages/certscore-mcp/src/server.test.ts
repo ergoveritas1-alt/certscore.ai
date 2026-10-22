@@ -1474,6 +1474,39 @@ test("CertScore Light clamps oversized bundle budgets and reports the applied ce
   }
 });
 
+test("Light compact review actions survive tight bundle budgets over the MCP protocol without extra origin work", async () => {
+  const scanId = "00000000-0000-4000-8000-000000000123";
+  const reportUrl = `https://certscore.ai/scan/${scanId}`;
+  for (const maxBytes of [5000, 8000]) {
+    const scan = { type: "certscore_scan", scanId, domain: "example.com", url: "https://example.com", status: "completed", score: 72,
+      links: { report: reportUrl } };
+    const mock = installFetch([
+      { status: 200, body: scan }, { status: 200, body: pulse },
+      { status: 200, body: { type: "certscore_finding_list", scanId, findings: Array.from({ length: 12 }, (_, i) => apiFinding(`finding_${i}`)) } },
+      { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId, domain: "example.com", summary: { rowCount: 0 }, rows: [] } }
+    ]);
+    try {
+      await withMcpClient(async client => {
+        const raw = await client.callTool({ name: "certscore_get_scan_bundle", arguments: { scanId, detail: "findings", maxBytes } });
+        assert.notEqual(raw.isError, true);
+        const bundle = parseToolJson(raw);
+        assertToolOutputSchema("certscore_get_scan_bundle", bundle);
+        assert.ok(Number((bundle.mcpMetadata as any).actualBytes) <= maxBytes);
+        assert.equal(bundle.reviewNavigation, undefined);
+        const guidance = raw._meta?.["ai.certscore/responseGuidance"] as any;
+        assert.equal(guidance.nextAction.tool, null);
+        assert.equal(guidance.reviewActions.openReport.url, reportUrl);
+        assert.equal(guidance.reviewActions.followUp.arguments.scanId, scanId);
+        assert.equal(guidance.reviewActions.followUp.requiresUserRequest, true);
+        assert.equal(guidance.reviewActions.followUp.createsScan, false);
+        assert.ok(raw.content.some(item => item.type === "text" && item.text.includes('"reviewActions"')));
+        assert.equal(mock.calls.length, 4, "navigation adds no origin read or scan creation");
+        assert.ok(mock.requestBodies.every(body => body === undefined), "all origin calls remain reads");
+      }, { toolProfile: "light" });
+    } finally { mock.restore(); }
+  }
+});
+
 test("certscore_get_scan_bundle returns the canonical no-go result when the Pulse report is unavailable", async () => {
   const recommendedNextAction = "Publish the intended public website, then run the scan again.";
   const mock = installFetch([{
