@@ -1778,10 +1778,32 @@
       "note": "Owner authorized one rerun per frozen source scan for POST/body/header verification; owner-ca-reject-proof-47-20261022. Permanent holds remain unchanged.",
       "state": "blocked",
       "url": "https://novelfire.net/"
+    },
+    "https://pella.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-19T20:03:24.644Z",
+      "lastContactAt": "2026-10-22T20:03:24.644915+00:00",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "One explicitly owner-requested original-region AWS verification of recipient retention fixes; no automatic retry, Options or production deploy. owner-retention-two-20261022",
+      "state": "cooldown",
+      "url": "https://pella.com/"
+    },
+    "https://securid.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-19T20:03:46.352Z",
+      "lastContactAt": "2026-10-22T20:03:46.352170+00:00",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "One explicitly owner-requested original-region AWS verification of recipient retention fixes; no automatic retry, Options or production deploy. owner-retention-two-20261022",
+      "state": "cooldown",
+      "url": "https://securid.com/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-22T14:10:10.560Z",
+  "updatedAt": "2026-10-22T20:06:14.424Z",
   "contactOnlyUrls": [
     "https://abc.xyz/",
     "https://acuitybrands.com/",
@@ -1838,6 +1860,8 @@
     "https://www.iubenda.com/en/",
     "https://www.onetrust.com/",
     "https://www.osano.com/",
-    "https://www.pferdeklinik-roentorf.de/"
+    "https://www.pferdeklinik-roentorf.de/",
+    "https://pella.com/",
+    "https://securid.com/"
   ]
 }
