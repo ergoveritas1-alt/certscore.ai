@@ -13,6 +13,8 @@ const publicAllowPaths = [
   "/guides",
   "/guides/",
   "/mcp/light",
+  "/muse",
+  "/muse.md",
   "/benchmarks",
   "/benchmarks/",
   "/compare",

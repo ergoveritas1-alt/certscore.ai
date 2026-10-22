@@ -41,6 +41,8 @@ const discoveryDocument = {
   aiDiscovery: {
     conciseGuide: "https://certscore.ai/llms.txt",
     fullGuide: "https://certscore.ai/llms-full.txt",
+    museGuide: "https://certscore.ai/muse",
+    museGuideMarkdown: "https://certscore.ai/muse.md",
     developerHub: "https://certscore.ai/developers",
     scannerSolutions: "https://certscore.ai/solutions",
     sitemap: "https://certscore.ai/sitemap.xml",

@@ -111,6 +111,15 @@ const nextConfig = {
         ]
       },
       {
+        source: "/muse",
+        headers: [
+          {
+            key: "Link",
+            value: '<https://certscore.ai/muse.md>; rel="alternate"; type="text/markdown", <https://certscore.ai/llms.txt>; rel="describedby"'
+          }
+        ]
+      },
+      {
         source: "/mcp/light",
         headers: [
           {

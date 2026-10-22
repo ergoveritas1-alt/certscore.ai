@@ -1,23 +1,17 @@
 import type { Metadata } from "next";
-import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import Link from "next/link";
+import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { CopyMcpValue } from "../../components/developers/mcp-light-actions";
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
 import { absoluteUrl, createPageMetadata, createPublicWebPageSchema } from "../../lib/seo";
-
-const title = "CertScore.ai for Muse Agents";
-const description = "Connect CertScore.ai to Muse and scan any public website's privacy posture from the conversation. No account or API key needed. Setup, first scan, and repeat-use guide for Muse agents.";
-const connectPrompt = "Connect the CertScore.ai MCP Light server as a custom connector. The endpoint is https://mcp.certscore.ai/mcp/light and it needs no authentication. Then save a skill so I can ask you to scan a website's privacy posture and show me the score, the findings, and the evidence.";
-const firstScanSteps = [
-  "Call certscore_scan_site with the site URL. Declare a purpose when one fits: prelaunch_review, vendor_review, tracking_check, consent_gpc_check, policy_review, recheck.",
-  "Poll certscore_get_scan_status until the scan completes. Scans are asynchronous; allow a few minutes.",
-  "Call certscore_get_scan_bundle for the scored results: overall score, findings, coverage, and the report link.",
-  "Call certscore_get_report_evidence_page when a finding needs its underlying evidence."
-];
+import { museGuide as guide } from "./content";
 
 const pageMetadata = createPageMetadata({
-  title,
-  description,
+  title: guide.title,
+  description: guide.description,
   path: "/muse",
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large" } },
   socialImage: {
     path: "/images/social/website-privacy-scanner.png",
     alt: "CertScore.ai website privacy scanner",
@@ -28,167 +22,161 @@ const pageMetadata = createPageMetadata({
 
 export const metadata: Metadata = {
   ...pageMetadata,
-  alternates: {
-    ...pageMetadata.alternates,
-    types: { "text/markdown": absoluteUrl("/muse.md") }
-  }
+  alternates: { ...pageMetadata.alternates, types: { "text/markdown": absoluteUrl("/muse.md") } }
 };
 
 const schemas = [
-  createPublicWebPageSchema({ title, description, path: "/muse" }),
+  {
+    ...createPublicWebPageSchema({ title: guide.title, description: guide.description, path: "/muse" }),
+    "@id": absoluteUrl("/muse#webpage"),
+    inLanguage: "en",
+    mainEntity: { "@id": absoluteUrl("/muse#howto") }
+  },
   {
     "@context": "https://schema.org",
     "@type": "HowTo",
-    name: "Part 2: First use. Connect and run a scan",
-    description,
+    "@id": absoluteUrl("/muse#howto"),
+    name: "Connect Muse and run your first scan",
+    description: guide.intro,
+    inLanguage: "en",
     url: absoluteUrl("/muse#first-use"),
     step: [
-      {
+      { "@type": "HowToStep", position: 1, name: "Connect Muse", text: guide.connectPrompt, url: absoluteUrl("/muse#connect") },
+      ...guide.scanSteps.map((step, index) => ({
         "@type": "HowToStep",
-        name: "Connect (under a minute, no credentials)",
-        text: connectPrompt,
-        url: absoluteUrl("/muse#connect")
-      },
-      ...firstScanSteps.map((text, index) => ({
-        "@type": "HowToStep",
-        name: ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle", "certscore_get_report_evidence_page"][index],
-        text,
+        position: index + 2,
+        name: step.name,
+        text: step.text,
         url: absoluteUrl(`/muse#scan-step-${index + 1}`)
       }))
     ]
   }
 ];
 
+const sectionTitle = "text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl";
+const linkClass = "font-semibold text-sky-700 underline underline-offset-4 hover:text-sky-900";
+const anchorClass = "scroll-mt-28";
+
 export default function MusePage() {
   return (
     <main className="min-h-screen bg-slate-50">
       <SiteHeader />
-      <article className="mx-auto max-w-5xl px-6 py-16">
-        {schemas.map((schema) => (
-          <script key={schema["@type"]} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
-        ))}
-        <header className="max-w-3xl space-y-4">
-          <h1 className="text-4xl font-semibold tracking-tight text-slate-900">{title}</h1>
-          <p className="text-lg text-slate-600">A guide for Muse agents and the people who use them: how to find CertScore.ai, run a first scan, and build it into repeat work.</p>
-          <p className="text-sm leading-6 text-slate-600">CertScore.ai scans public websites for privacy and consent risk signals and returns a scored report with retained evidence: cookies and trackers before consent, what fires after Accept and after Reject, consent banner behavior, fingerprinting and session replay signals, form collection, and policy wording.</p>
-          <p className="text-sm leading-6 text-slate-600">Results are automated observations of public pages. They are not legal advice, certification, or a compliance determination.</p>
+      <article className="mx-auto max-w-5xl px-6 py-16 [overflow-wrap:anywhere]">
+        {schemas.map((schema) => <script key={schema["@type"]} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />)}
+        <header className="space-y-6">
+          <div className="flex flex-wrap gap-2"><Badge tone="info">MCP Light</Badge><Badge>No account or API key</Badge></div>
+          <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-slate-900">{guide.title}</h1>
+          <p className="max-w-3xl text-lg leading-8 text-slate-600">{guide.intro}</p>
+          <div className="flex flex-wrap items-center gap-3 text-sm font-semibold" role="group" aria-label="Muse connects to MCP Light to retrieve a report">
+            <span className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-slate-800">Muse</span>
+            <span aria-hidden="true" className="text-xl text-sky-600">→</span>
+            <span className="rounded-xl bg-sky-700 px-5 py-3 text-white">CertScore.ai MCP Light</span>
+            <span aria-hidden="true" className="text-xl text-sky-600">→</span>
+            <span className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-slate-800">Score + findings + evidence</span>
+          </div>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">{guide.overview}</p>
+          <p className="max-w-3xl text-xs leading-6 text-slate-500">{guide.legal}</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link className="rounded-md bg-sky-700 px-5 py-3 text-sm font-semibold text-white hover:bg-sky-800" href="#first-use">Connect Muse</Link>
+            <Link className={linkClass + " text-sm"} href="/muse.md">Read the Markdown guide</Link>
+          </div>
         </header>
-        <div className="mt-10 grid gap-6">
-          <Card className="border-slate-200 bg-white">
-            <section aria-labelledby="identity">
-              <CardHeader>
-                <CardTitle id="identity">Identity block</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]">
-                <ul className="list-disc space-y-3 pl-5">
-                  <li>Service: CertScore.ai MCP Light</li>
-                  <li>Endpoint: <a className="text-sky-700 underline underline-offset-4 hover:text-sky-900" href="https://mcp.certscore.ai/mcp/light">https://mcp.certscore.ai/mcp/light</a></li>
-                  <li>Transport: Streamable HTTP</li>
-                  <li>Authentication: none. No account, API key, OAuth flow, or Authorization header.</li>
-                  <li>Hosted release: 0.2.30 (verified October 21, 2026)</li>
-                  <li>Registry identity: ai.certscore/mcp-light</li>
-                  <li>Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle, certscore_get_report_evidence_page</li>
-                  <li>Cost: free to use, with a scoped daily allowance. Current limits: <a className="text-sky-700 underline underline-offset-4 hover:text-sky-900" href="https://certscore.ai/developers/mcp#light-usage-limits">https://certscore.ai/developers/mcp#light-usage-limits</a></li>
-                  <li>Scope: public websites only. The scanner cannot sign in to login-protected pages.</li>
-                </ul>
+
+        <nav aria-label="On this page" className="my-10 flex flex-wrap gap-x-5 gap-y-3 border-y border-slate-200 py-4 text-sm">
+          {[["#connection", "Connection details"], ["#when-to-scan", "When to scan"], ["#first-use", "First scan"], ["#repeat-use", "Rechecks"], ["#quick-reference", "Quick reference"]].map(([href, label]) => <a className={linkClass} href={href} key={href}>{label}</a>)}
+        </nav>
+
+        <div className="space-y-12">
+          <section id="connection" aria-labelledby="connection-title" className={anchorClass}>
+            <Card className="overflow-hidden border-slate-200 bg-white">
+              <CardHeader><CardTitle id="connection-title">Connection details</CardTitle></CardHeader>
+              <CardContent className="space-y-6 text-sm leading-6">
+                <div className="rounded-2xl bg-slate-950 p-5 text-slate-100 sm:p-6">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><p className="text-xs font-semibold uppercase tracking-wider text-sky-300">Remote MCP endpoint</p><CopyMcpValue label="endpoint" value={guide.endpoint} /></div>
+                  <code className="block break-all text-base sm:text-lg">{guide.endpoint}</code>
+                </div>
+                <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+                  {guide.details.map(([label, value]) => <div key={label}><dt className="font-semibold text-slate-900">{label}</dt><dd className="mt-1 text-slate-600">{value}</dd></div>)}
+                </dl>
+                <p className="text-slate-600">Current limits: <a className={linkClass} href={guide.limitsUrl}>{guide.limitsUrl}</a></p>
+                <div className="border-t border-slate-100 pt-5"><p className="mb-3 font-semibold text-slate-900">Four tools</p><ul className="grid gap-2 sm:grid-cols-2">{guide.scanSteps.map((step, index) => <li key={step.tool}><a href={`#scan-step-${index + 1}`} className="block rounded-lg bg-slate-50 p-3 font-mono text-xs text-sky-800 underline underline-offset-4">{step.tool}</a></li>)}</ul></div>
               </CardContent>
-            </section>
-          </Card>
-          <Card className="border-slate-200 bg-white">
-            <section aria-labelledby="discovery">
-              <CardHeader>
-                <CardTitle id="discovery">Part 1: Discovery. When an agent should reach for this</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]">
-                <p>Reach for CertScore.ai when the conversation involves a public website and any of these:</p>
-                <ul className="list-disc space-y-3 pl-5">
-                  <li>A launch or redesign is coming up and someone asks if the site is ready</li>
-                  <li>A cookie banner, consent tool, tag manager, or analytics setup changed</li>
-                  <li>A vendor, partner, or acquisition target's site needs a privacy once-over</li>
-                  <li>Someone asks what a site loads before consent, or what fires after Reject</li>
-                  <li>A privacy policy page was rewritten and needs a wording check</li>
-                  <li>A client site needs evidence for a review, a renewal, or a report</li>
-                  <li>Two or more sites need a like-for-like privacy comparison</li>
-                </ul>
-                <p>Typical user phrasing that should trigger it: "is our banner OK", "what does this site track", "check this vendor", "we launch next week", "did the fix work".</p>
-                <p>Verified listings, if a user or agent wants to confirm the service is real: Official MCP Registry (ai.certscore/mcp-light), Smithery, Glama, Cursor Directory, mcpservers.org.</p>
+            </Card>
+          </section>
+
+          <section id="when-to-scan" aria-labelledby="when-title" className={anchorClass}>
+            <h2 id="when-title" className={sectionTitle}>When to use CertScore.ai</h2>
+            <ul className="mt-6 grid gap-4 sm:grid-cols-2">
+              {guide.useCases.map(([label, text], index) => <li key={label} className="flex gap-4 rounded-2xl border border-slate-200 bg-white p-5"><span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-xs font-semibold text-sky-800">{String(index + 1).padStart(2, "0")}</span><div><h3 className="font-semibold text-slate-900">{label}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{text}</p></div></li>)}
+            </ul>
+            <p className="mb-3 mt-6 text-sm font-semibold text-slate-900">Ask Muse</p>
+            <ul className="flex flex-wrap gap-2">{guide.examples.map((text) => <li key={text} className="rounded-2xl rounded-bl-sm border border-sky-100 bg-sky-50 px-4 py-2 text-sm text-sky-900">“{text}”</li>)}</ul>
+            <p className="mt-5 text-sm leading-7 text-slate-600">{guide.listings}</p>
+          </section>
+
+          <section id="first-use" aria-labelledby="first-use-title" className={anchorClass + " space-y-8"}>
+            <h2 id="first-use-title" className={sectionTitle}>Connect Muse and run your first scan</h2>
+            <Card className="border-slate-200 bg-white">
+              <CardHeader><div className="flex items-center gap-3"><Badge tone="info">1</Badge><h3 id="connect" className={anchorClass + " text-xl font-semibold tracking-tight text-slate-900"}>Connect Muse</h3></div></CardHeader>
+              <CardContent className="space-y-4 text-sm leading-7 text-slate-600">
+                <p>{guide.connectIntro}</p>
+                <div className="rounded-2xl bg-slate-950 p-5 sm:p-6">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><span className="text-xs font-semibold uppercase tracking-wider text-sky-300">Paste into Muse</span><CopyMcpValue label="setup prompt" value={guide.connectPrompt} /></div>
+                  <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-7 text-slate-100"><code>{guide.connectPrompt}</code></pre>
+                </div>
+                <p>{guide.agentConnect}</p>
               </CardContent>
-            </section>
-          </Card>
-          <Card className="border-slate-200 bg-white">
-            <section aria-labelledby="first-use">
-              <CardHeader>
-                <CardTitle id="first-use">Part 2: First use. Connect and run a scan</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]">
-                <h3 id="connect" className="pt-4 text-lg font-semibold text-slate-900">Connect (under a minute, no credentials)</h3>
-                <p>If you are a person setting this up for your Muse, paste this prompt into Muse:</p>
-                <pre className="overflow-x-auto rounded-lg bg-slate-950 p-4 text-sm leading-6 text-slate-100"><code className="whitespace-pre-wrap break-words">{connectPrompt}</code></pre>
-                <p>If you are an agent reading this with the ability to add an MCP server: add the endpoint above as a remote Streamable HTTP server with no auth headers. Nothing else is required.</p>
-                <h3 id="run-a-scan" className="pt-4 text-lg font-semibold text-slate-900">Run a scan</h3>
-                <ol className="list-decimal space-y-3 pl-5">
-                  {firstScanSteps.map((step, index) => <li id={`scan-step-${index + 1}`} key={step}>{step}</li>)}
+            </Card>
+            <Card className="border-slate-200 bg-white">
+              <CardHeader><div className="flex items-center gap-3"><Badge tone="info">2</Badge><h3 id="ask-for-scan" className={anchorClass + " text-xl font-semibold tracking-tight text-slate-900"}>Ask for a scan</h3></div></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-2xl rounded-bl-sm border border-sky-100 bg-sky-50 p-5"><p className="text-sm leading-7 text-sky-950">{guide.firstAsk}</p></div>
+                <CopyMcpValue label="example scan prompt" value={guide.firstAsk} />
+              </CardContent>
+            </Card>
+            <div>
+              <h3 className="text-xl font-semibold text-slate-900">The four-tool workflow</h3>
+              <ol className="mt-5 grid gap-4 sm:grid-cols-2">
+                {guide.scanSteps.map((step, index) => <li id={`scan-step-${index + 1}`} className={anchorClass + " rounded-2xl border border-slate-200 bg-white p-5"} key={step.tool}>
+                  <div className="mb-4 flex items-center justify-between"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-700 text-sm font-semibold text-white">{index + 1}</span><span aria-hidden="true" className="text-2xl text-sky-600">{index === guide.scanSteps.length - 1 ? "✓" : "→"}</span></div>
+                  <h4 className="font-semibold text-slate-900">{step.name}</h4><code className="mt-2 block font-mono text-xs leading-5 text-sky-800">{step.tool}</code><p className="mt-3 text-sm leading-7 text-slate-600">{step.text}</p>
+                </li>)}
+              </ol>
+              <p className="mt-4 text-sm leading-7 text-slate-600">{guide.reuse}</p>
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-slate-900">Share the results</h3>
+              <dl className="mt-5 grid gap-3 sm:grid-cols-2">{guide.reportItems.map(([label, text]) => <div key={label} className="rounded-xl border-l-4 border-sky-500 bg-white p-5"><dt className="font-semibold text-slate-900">{label}</dt><dd className="mt-2 text-sm leading-6 text-slate-600">{text}</dd></div>)}</dl>
+              <p className="mt-4 text-sm leading-7 text-slate-600">{guide.reportRule}</p>
+              <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">{guide.rateLimit}</p>
+            </div>
+          </section>
+
+          <section id="repeat-use" aria-labelledby="repeat-title" className={anchorClass + " space-y-7"}>
+            <h2 id="repeat-title" className={sectionTitle}>Use CertScore.ai after the first scan</h2>
+            <Card className="border-slate-200 bg-white"><CardHeader><h3 className="text-xl font-semibold tracking-tight text-slate-900">Save a skill</h3></CardHeader><CardContent className="space-y-3 text-sm leading-7 text-slate-600"><p>{guide.skill}</p><p>{guide.skillPlaceholder}</p></CardContent></Card>
+            <div>
+              <h3 className="text-xl font-semibold text-slate-900">Recheck after changes</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-600">{guide.recheckIntro}</p>
+              <div className="mt-5 rounded-2xl border border-sky-200 bg-sky-50 p-5 sm:p-6">
+                <ol className="grid gap-5 sm:grid-cols-4" aria-label="Scan, make changes, recheck, compare">
+                  {guide.recheckFlow.map(([label, text], index) => <li className="relative" key={label}><p className="flex items-center gap-2 font-semibold text-sky-950"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-xs text-sky-800">{index + 1}</span>{label}</p><p className="mt-2 text-xs leading-6 text-sky-900">{text}</p></li>)}
                 </ol>
-                <p>By default the service reuses a recent result for the same site instead of rescanning. Request a fresh scan only when the user asks for one, or for a recheck after a change.</p>
-                <h3 className="pt-4 text-lg font-semibold text-slate-900">Present results to the user</h3>
-                <ul className="list-disc space-y-3 pl-5">
-                  <li>Lead with the overall score and the scan date.</li>
-                  <li>List the findings that matter most, each with its evidence.</li>
-                  <li>State coverage limits plainly when a scan reports them (for example completed_limited).</li>
-                  <li>Always include the report link.</li>
-                  <li>Never present a finding as a legal violation or a site as compliant or non-compliant. These are observations for human review.</li>
-                  <li>Keep the scan ID. It is the baseline for any later recheck.</li>
-                </ul>
-                <p>If a call returns rate_limited, tell the user and stop. Do not retry in a loop.</p>
-              </CardContent>
-            </section>
-          </Card>
-          <Card className="border-slate-200 bg-white">
-            <section aria-labelledby="repeat-use">
-              <CardHeader>
-                <CardTitle id="repeat-use">Part 3: Repeat use. Make it a habit, not a one-off</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]">
-                <h3 className="pt-4 text-lg font-semibold text-slate-900">Install the skill</h3>
-                <p>A connector alone is easy to forget. A saved skill is what makes an agent reach for CertScore.ai in later conversations without being reminded. During setup, save a skill that covers: when to scan, the four-step workflow above, the presentation rules, and the recheck rules below. [Skill package link to be added.]</p>
-                <h3 className="pt-4 text-lg font-semibold text-slate-900">Recheck after changes</h3>
-                <p>The highest-value repeat pattern: scan, fix, rescan.</p>
-                <ol className="list-decimal space-y-3 pl-5">
-                  <li>Keep the scan ID from the first scan.</li>
-                  <li>After the site changes, run a fresh scan with purpose recheck.</li>
-                  <li>Compare findings against the baseline scan ID.</li>
-                  <li>Report what changed. A finding missing from a later scan is a change to note, not proof of a fix; say so.</li>
-                </ol>
-                <h3 className="pt-4 text-lg font-semibold text-slate-900">Standing patterns worth offering the user</h3>
-                <ul className="list-disc space-y-3 pl-5">
-                  <li>Pre-launch: scan the staging or production URL before any launch or redesign goes live.</li>
-                  <li>After consent changes: rescan whenever the banner, CMP, or tag setup changes.</li>
-                  <li>Vendor reviews: scan each new vendor or partner site before signing.</li>
-                  <li>Periodic posture check: a user-approved recurring scan of the same site, compared against the last one, so drift shows up early.</li>
-                  <li>Portfolio checks for agencies: the same scan across a set of client sites, one report per site, ready for client reviews.</li>
-                </ul>
-                <p>Only run scans the user has asked for or approved as a recurring pattern. Never scan sites on your own initiative.</p>
-                <h3 className="pt-4 text-lg font-semibold text-slate-900">Upgrade path: Hosted MCP OAuth</h3>
-                <p>MCP Light is anonymous and stateless, which is right for first use. When a user wants their agent to return to earlier scans, compare across sessions, or work inside a CertScore.ai workspace, point them to Hosted MCP OAuth: the agent connects to their workspace with OAuth, no API key to copy, and can reuse prior scans instead of starting over. It needs a CertScore.ai account.</p>
-                <p>Setup guide: <a className="text-sky-700 underline underline-offset-4 hover:text-sky-900" href="https://certscore.ai/releases/mcp-hosted-oauth">https://certscore.ai/releases/mcp-hosted-oauth</a></p>
-              </CardContent>
-            </section>
-          </Card>
-          <Card className="border-slate-200 bg-white">
-            <section aria-labelledby="quick-reference">
-              <CardHeader>
-                <CardTitle id="quick-reference">Quick reference</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]">
-                <ul className="list-disc space-y-3 pl-5">
-                  <li>First scan: connect, scan, poll, bundle, present with evidence and limits.</li>
-                  <li>Recheck: fresh scan, purpose recheck, compare to the baseline scan ID.</li>
-                  <li>Stuck or rate limited: tell the user, do not loop.</li>
-                  <li>Unsure a finding is real: pull the evidence page before reporting it.</li>
-                </ul>
-              </CardContent>
-            </section>
-          </Card>
+              </div>
+              <ol className="mt-5 list-decimal space-y-3 pl-5 text-sm leading-7 text-slate-600">{guide.recheckSteps.map((step) => <li key={step}>{step}</li>)}</ol>
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-slate-900">When to scan again</h3>
+              <dl className="mt-5 divide-y divide-slate-200">{guide.repeatPatterns.map(([label, text]) => <div className="grid gap-2 py-4 sm:grid-cols-[11rem_1fr]" key={label}><dt className="text-sm font-semibold text-slate-900">{label}</dt><dd className="text-sm leading-7 text-slate-600">{text}</dd></div>)}</dl>
+              <p className="mt-4 text-sm leading-7 text-slate-600">{guide.scanPermission}</p>
+            </div>
+            <Card className="border-slate-200 bg-white"><CardHeader><h3 className="text-xl font-semibold tracking-tight text-slate-900">Connect to a workspace with Hosted MCP OAuth</h3></CardHeader><CardContent className="space-y-4 text-sm leading-7 text-slate-600"><p>{guide.oauth}</p><a href={guide.oauthUrl} className={linkClass}>Hosted MCP OAuth setup guide <span aria-hidden="true">→</span></a></CardContent></Card>
+          </section>
+
+          <section id="quick-reference" aria-labelledby="quick-reference-title" className={anchorClass}>
+            <h2 className={sectionTitle} id="quick-reference-title">Quick reference</h2>
+            <dl className="mt-6 grid gap-4 sm:grid-cols-2">{guide.quickReference.map(([label, text]) => <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5"><dt className="font-semibold text-slate-900">{label}</dt><dd className="mt-2 text-sm leading-7 text-slate-600">{text}</dd></div>)}</dl>
+          </section>
         </div>
       </article>
       <SiteFooter />
