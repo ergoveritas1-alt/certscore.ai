@@ -3,6 +3,7 @@ import { getPlanDefinition, PLAN_DEFINITIONS } from "@website-signal-risk-scanne
 import Link from "next/link";
 import { CancelSubscriptionForm } from "../../../components/plans/cancel-subscription-form";
 import { ModifyPlanSelectForm } from "../../../components/plans/modify-plan-select-form";
+import { TrialScanAllowance } from "../../../components/scans/trial-scan-allowance";
 import { SCAN_ACCESS, formatScanThrottleIntervalLabel } from "../../../lib/scan-access";
 import { formatScanUsageResetDate } from "../../../lib/dashboard/scan-usage-reset";
 import { isSelfServePurchasingEnabled } from "../../../server/access-control";
@@ -105,6 +106,16 @@ export default async function ModifyPlanPage({ searchParams }: ModifyPlanPagePro
           {`. Allowance resets ${formatScanUsageResetDate(scanUsage.monthlyPeriodEnd)} UTC.`}
         </p>
       </div>
+
+      {organization.plan === "free" && organization.planStatus === "active" ? (
+        <div className="space-y-2">
+          <TrialScanAllowance planCode={organization.plan} planStatus={organization.planStatus} usage={scanUsage} />
+          {scansRemaining === null || scansRemaining > 0 ? (
+            <Link className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold text-sky-800 underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-700"
+              data-analytics-feature="scan_onboarding" data-analytics-id="trial:start_scan" href="/app#scan-a-site" prefetch={false}>Scan a website with your trial</Link>
+          ) : null}
+        </div>
+      ) : null}
 
       {billingNotice ? (
         <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-950">

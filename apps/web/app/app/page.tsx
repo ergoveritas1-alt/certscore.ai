@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { OverviewScanHistoryCard } from "../../components/dashboard/overview-scan-history-card";
 import { AddDomainForm } from "../../components/domains/add-domain-form";
+import { TrialScanAllowance } from "../../components/scans/trial-scan-allowance";
 import { getDashboardContext } from "../../server/auth";
 import { formatScanUsageResetDate } from "../../lib/dashboard/scan-usage-reset";
 import { getDashboardScanUsage } from "../../server/dashboard/get-dashboard-scan-usage";
@@ -101,11 +102,12 @@ export default async function DashboardPage() {
 
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="scroll-mt-6 border-sky-100 bg-[linear-gradient(145deg,#ffffff_0%,#f5fbff_100%)] shadow-sm" id="scan-a-site">
+        <Card className="scroll-mt-24 border-sky-100 bg-[linear-gradient(145deg,#ffffff_0%,#f5fbff_100%)] shadow-sm" id="scan-a-site">
           <CardHeader className="pb-2 pt-5">
-            <CardTitle>Scan a site</CardTitle>
+            <CardTitle>{scanUsage.totalScans === 0 ? "Scan your first website" : "Scan a site"}</CardTitle>
           </CardHeader>
-          <CardContent className="pb-5 pt-0">
+          <CardContent className="space-y-3 pb-5 pt-0">
+            <TrialScanAllowance planCode={organization.plan} planStatus={organization.planStatus} usage={scanUsage} />
             <AddDomainForm
               allowRestrictedScanOptions={allowRestrictedScanOptions}
               defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}

@@ -85,6 +85,9 @@ export function ProductAnalyticsTracker() {
     function onSubmit(event: SubmitEvent) {
       const form = event.target instanceof HTMLFormElement ? event.target : null;
       if (!form) return;
+      // These forms report submission only after their own validation gates.
+      // defaultPrevented cannot distinguish validation from React server actions.
+      if (form.dataset.analyticsSubmit === "manual") return;
       const formId = stableFormId(form);
       trackProductEvent({ eventName: "form_submitted", category: "form", feature: formId, formId, outcome: "submitted" });
     }

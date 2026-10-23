@@ -201,6 +201,8 @@ export function AppShell({
                 <div className="relative">
                 <button
                   type="button"
+                  data-analytics-feature="app_navigation"
+                  data-analytics-id="navigation:toggle"
                   aria-label={navigationOpen ? "Close navigation" : "Open navigation"}
                   aria-expanded={navigationOpen}
                   aria-haspopup="menu"
@@ -212,6 +214,7 @@ export function AppShell({
                 {navigationOpen ? (
                   <>
                     <button
+                      data-analytics-id="navigation:dismiss"
                       aria-label="Close navigation"
                       className="fixed inset-0 z-[90] cursor-default bg-transparent"
                       onClick={() => setNavigationOpen(false)}
@@ -230,6 +233,8 @@ export function AppShell({
                           const Icon = item.icon;
                           return (
                             <Link
+                              data-analytics-feature="app_navigation"
+                              data-analytics-id={`navigation:${item.label.toLowerCase().replaceAll(" ", "_")}`}
                               aria-current={active ? "page" : undefined}
                               className={[
                                 "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition",
@@ -265,7 +270,7 @@ export function AppShell({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-[14px] font-medium leading-tight text-white">{displayOrganizationName}</p>
-                    <span className="hidden rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-amber-300 md:inline-flex">
+                    <span className="inline-flex shrink-0 rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-amber-300">
                       {displayPlan}
                     </span>
                   </div>
@@ -277,6 +282,8 @@ export function AppShell({
                 <div className="relative">
                   <button
                     type="button"
+                    aria-label="Account menu"
+                    data-analytics-id="navigation:account_menu"
                     aria-expanded={accountMenuOpen}
                     aria-haspopup="menu"
                     onClick={() => setAccountMenuOpen((value) => !value)}
@@ -291,6 +298,7 @@ export function AppShell({
                     <div className="absolute right-0 z-[120] mt-0 w-52 overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 p-2 shadow-[0_24px_60px_rgba(2,6,23,0.65)]">
                       <div className="space-y-1">
                         <Link
+                          data-analytics-id="navigation:account_settings"
                           href="/app/settings"
                           onClick={() => setAccountMenuOpen(false)}
                           className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-200 transition hover:bg-slate-900 hover:text-white"

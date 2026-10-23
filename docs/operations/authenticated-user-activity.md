@@ -71,3 +71,44 @@ page requests in seven days (about 2,000/month). One small confirmation per init
 request plus bounded metadata is estimated **below $1/month** at this traffic.
 This estimate was disclosed before implementation; there is no capacity or retention
 increase. It should be revisited if authenticated document traffic grows materially.
+
+## Mobile first-scan onboarding — October 22, 2026
+
+Empty Scan History now links to the existing Overview scan form and the sample
+report. The form has a labelled URL input, a separate touch-sized submit button,
+and secondary scan options. Active trial copy on Overview and Modify Plan uses
+existing quota reads, including workspace overrides and consumed allowance.
+An exhausted allowance never displays the “No upgrade is needed” reassurance.
+No plan limit, quota enforcement, scan dispatch, report policy or deployment configuration changes.
+
+Existing click events now identify empty-history actions, account navigation,
+scan allowance, scan options and submission. The `website_scan` form reports its
+own `form_submitted` event only after its client gates pass; the generic tracker
+skips submission for forms declaring `data-analytics-submit="manual"`, preserving
+ordinary React server-action form tracking. `form_started` remains generic.
+Bounded `form_failed` features are `scan_validation:website_required`,
+`scan_validation:search_results_confirmation_required` and
+`scan_validation:server_rejected`. These are browser-reported outcomes; canonical
+server request records still establish scan acceptance. No form values, URLs or
+server error text are added to telemetry, and historical events are unchanged.
+
+The change mainly names existing events. A small number of new validation events
+is estimated below $1/month at the observed authenticated traffic (approximately
+2,000 document requests/month in the existing baseline). No retention, capacity,
+paid-service call or per-scan capture increase. Reassess the telemetry estimate
+if traffic grows materially. This estimate was disclosed before implementation.
+
+Verification: web typecheck; focused analytics/navigation tests; and
+`scripts/test-first-scan-onboarding.ts`, which renders actual components with
+intercepted local server boundaries and checks mobile/desktop layout, quota copy,
+confirmation gates, repeated rejection, event deduplication and redaction.
+Run from the repo root:
+
+```bash
+mkdir -p tmp/first-scan-onboarding
+pnpm --filter @website-signal-risk-scanner/web exec tailwindcss -c tailwind.config.ts -i app/globals.css -o ../../tmp/first-scan-onboarding/styles.css
+pnpm exec tsx scripts/test-first-scan-onboarding.ts
+```
+
+All browser HTTP in this harness is intercepted at `http://localhost:3000`;
+it does not submit a real scan, contact production, or require test accounts.

@@ -71,6 +71,7 @@ export function ScanUsageIndicator() {
 
   return (
     <Link
+      data-analytics-id="navigation:scan_allowance"
       aria-label={description}
       className="inline-flex shrink-0 items-center gap-2 rounded-lg px-1.5 py-1 text-xs font-medium text-slate-200 transition hover:bg-slate-900 hover:text-white"
       href="/app/settings"

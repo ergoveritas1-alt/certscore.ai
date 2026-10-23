@@ -5,6 +5,7 @@ import { PendingScanStartedEvent } from "../../../components/analytics/data-laye
 import { FreshRescanBadge } from "../../../components/scans/fresh-rescan-badge";
 import { RescanDomainForm } from "../../../components/scans/rescan-domain-form";
 import { ScanHistoryLiveRefresh } from "../../../components/scans/scan-history-live-refresh";
+import { EmptyScanHistory } from "../../../components/scans/empty-scan-history";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../components/ui/pagination-controls";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { getAdminScanThrottleMs, getScanThrottleCopy } from "../../../lib/scan-access";
@@ -191,10 +192,7 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
         </CardHeader>
         <CardContent>
           {scans.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-10 text-center">
-              <p className="text-base font-medium text-slate-900">No scans have been created yet.</p>
-              <p className="mt-2 text-sm text-slate-600">Add a website to queue the first scan and start building a history here.</p>
-            </div>
+            <EmptyScanHistory />
           ) : (
             <>
             <div className="hidden overflow-x-auto lg:block">
