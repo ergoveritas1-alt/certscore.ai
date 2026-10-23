@@ -4396,6 +4396,7 @@ test("three-lane merge keeps lane-local access failures limited when the indepen
     runtimeEvidence: canonicalBundleFixture("scan-consent-disagreement", {
       scanLaneRuns: [laneRunFixture("runtime_evidence", "invoke-runtime-success")],
       runtimeCoverage: usableRuntimeCoverage,
+      domSnapshots: [runtimeSnapshotFixture()],
     }),
     policyEvidence: canonicalBundleFixture("scan-consent-disagreement"),
   });
@@ -4412,6 +4413,21 @@ test("three-lane merge keeps lane-local access failures limited when the indepen
     [],
     "runtime success must not synthesize consent controls for the limited consent-proof lane",
   );
+
+  for (const snapshots of [[], [{...runtimeSnapshotFixture(),textExcerpt:""}],
+    [{...runtimeSnapshotFixture(),documentIdentity:undefined}],
+    [runtimeSnapshotFixture(),{...runtimeSnapshotFixture(),capturedAtMs:200,textExcerpt:""}]]) {
+    const unresolved = mergeLocalV2DagLambdaEvidenceLaneBundles({
+      artifactRoot:"/tmp/u1-regression",scanId:"u1-regression",
+      consentProof:canonicalBundleFixture("u1-regression",{scanNoGoAssessment:consentNoGo,scan_no_go_assessment:consentNoGo}),
+      runtimeEvidence:canonicalBundleFixture("u1-regression",{runtimeCoverage:usableRuntimeCoverage,
+        scanLaneRuns:[laneRunFixture("runtime_evidence","old-producer-http-success")],domSnapshots:snapshots}),
+      policyEvidence:canonicalBundleFixture("u1-regression"),
+    });
+    assert.equal(unresolved.scanNoGoAssessment?.decision,"no_go","bare/stale runtime label cannot override positive consent no-go");
+    assert.equal(unresolved.scanEvidenceLaneAssessment?.outcome,"no_go");
+    assert.ok(!unresolved.scanNoGoAssessment?.contradictorCodes.includes("independent_runtime_evidence_representative_page"));
+  }
 
   const bothLanesNoGo = mergeLocalV2DagLambdaEvidenceLaneBundles({
     artifactRoot: "/tmp/certscore-three-lane-both-no-go",
@@ -4858,6 +4874,13 @@ test("a captured WCAG audit survives worker path rewriting and canonical seriali
     await rm(root, { recursive: true, force: true });
   }
 });
+
+function runtimeSnapshotFixture(): CanonicalEvidenceBundle["domSnapshots"][number] {
+  return {artifactId:"runtime-dom",path:"/tmp/runtime-dom.txt",url:"https://example.com/",
+    capturedAtMs:100,documentIdentity:{source:"cdp_loader_id",token:"runtime-loader"},
+    textExcerpt:"This is retained content from the original starting page. Visitors can read information about our products and services, learn about the organization and explore its useful resources and public documentation.",
+    pagePhase:"network_idle",consentStateAtTime:"pre_consent"};
+}
 
 function canonicalBundleFixture(
   scanId: string,

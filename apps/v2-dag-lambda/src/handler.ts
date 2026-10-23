@@ -2,6 +2,7 @@ import { describeCaptureFailure } from "@certscore/contracts";
 import { saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, SALE_SHARING_OPT_OUT_POLICY, SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, SALE_SHARING_OPT_OUT_ARTIFACT_BUDGET_MS, type SaleSharingOptOutDispatch } from "@certscore/contracts";
 import { cmpPreferenceBudgetMs, cmpPreferenceDispatchSchema, cmpPreferencesEvidenceSchema, CMP_PREFERENCE_JOIN_MS, CMP_PREFERENCE_POLICY_VERSION, type CmpPreferenceDispatch } from "@certscore/contracts";
 import { actionWorkerCheckpoints } from "./action-worker-checkpoints.js";
+import { hasRepresentativeRuntimeEvidence } from "./runtime-representative-evidence.js";
 import { createOpenAiScreenshotSafetyClassifier as createFormSnapshotSafetyClassifier } from "./screenshot-safety";
 import { FULL_SITE_PAGE_DISPATCH } from "./full-site-dispatch-contract.js";
 import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
@@ -4689,7 +4690,7 @@ function reconcileEvidenceLaneNoGoAssessment(input: {
     consentRun.accessOutcome === "representative_page";
   const runtimeRepresentative = input.runtimeEvidence.runtimeCoverage?.coverageStatus !== "limited_none" &&
     runtimeRun?.executionOutcome === "success" &&
-    runtimeRun.accessOutcome === "representative_page";
+    runtimeRun.accessOutcome === "representative_page" && hasRepresentativeRuntimeEvidence(input.runtimeEvidence);
   const noGoLane = consentNoGo && !runtimeNoGo && runtimeRepresentative
     ? "consent_proof" as const
     : runtimeNoGo && !consentNoGo && consentRepresentative
