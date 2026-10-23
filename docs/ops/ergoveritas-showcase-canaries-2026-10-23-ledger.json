@@ -1,6 +1,6 @@
 {
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-23T16:10:32.357Z",
+  "updatedAt": "2026-10-23T16:12:50.649Z",
   "entries": {
     "https://ergoveritas.com/test1.html": {
       "consecutiveNoGoCount": 0,
@@ -18,7 +18,7 @@
       "lastContactAt": "2026-10-23T16:09:18.849Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "lastOutcome": "failed",
+      "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://ergoveritas.com/test2.html"
     }

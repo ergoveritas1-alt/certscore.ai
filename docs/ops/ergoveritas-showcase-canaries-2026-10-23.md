@@ -95,3 +95,12 @@ scan contacts use idempotent calibration run key
 `owned-showcase-2026-10-23-1521be46` in addition to normal MCP contact recording.
 The rotating public inventory is unchanged. Local bounded report exports and
 scan responses are under tmp/canary-score-showcase-review/.
+
+Browser verification confirmed 28/44 for test1 and 40/44 for test2 using the
+review-focus controls. Static publication completed and verified on apex/www;
+only the older supplementary test2 copy changed after the passing scans.
+The central helper persisted all four contacts successfully. For the repository
+cohort ledger, API completed_limited maps to a completed calibration run with
+limited coverage; the original API status remains retained in the raw responses
+and central contacts. This avoids mislabeling a completed limited scan as a
+failed calibration run. No rotating public baseline was promoted.
