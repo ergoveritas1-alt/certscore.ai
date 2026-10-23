@@ -11,7 +11,7 @@ test("a high score cannot hide a projected refusal concern", () => {
   assert.equal(brief.basis, "projected_gap");
   assert.equal(brief.primary?.sourceRef, reject.id);
   const copy = buildAssessmentHighlights([reject], page, { score: 85 });
-  assert.match(copy, /^A privacy concern needs attention/);
+  assert.match(copy, /^“Non-essential activity after confirmed Reject”/);
   assert.ok(copy.includes(reject.summary));
   assert.ok(copy.includes(reject.correctionSteps[0]!));
   assert.doesNotMatch(copy, /low risk|compliant|Strong|priority issues were identified/);
@@ -30,8 +30,9 @@ test("explicit low severity supports proportionate wording, zero deduction alone
 test("storage review does not inherit a non-essential classification from its topic", () => {
   const finding = { id: "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage", title: "Pre-consent storage classification review", status: "Partial concern", summary: "Storage was retained; its purpose classification needs review." };
   const copy = buildAssessmentHighlights([finding], page, { score: 100 });
-  assert.match(copy, /cookies and storage before consent/);
-  assert.doesNotMatch(copy, /non-essential|tracking continued/);
+  assert.match(copy, /Storage was retained; its purpose classification needs review/);
+  assert.match(copy, /Check each retained item's purpose; defer confirmed non-essential storage/);
+  assert.doesNotMatch(copy, /non-essential storage was observed|tracking continued/);
 });
 
 test("known maintenance warnings do not displace a canonical gap", () => {
@@ -49,7 +50,7 @@ test("a secondary accessibility priority does not upgrade a partial privacy lead
   const brief = buildAssessmentBrief([partial, accessibility], { kind: "site", scannedPages: 12 }, { score: 90 });
   assert.equal(brief.attention, "review");
   assert.equal(brief.primary?.id, partial.id);
-  assert.match(buildAssessmentHighlights([partial, accessibility], brief.scope, { score: 90 }), /^The assessment calls for focused review of privacy disclosures/);
+  assert.match(buildAssessmentHighlights([partial, accessibility], brief.scope, { score: 90 }), /^“Outdated transfer framework referenced”/);
 });
 
 test("a projected gap may lead before a partial review without changing the input", () => {
@@ -75,7 +76,7 @@ test("completed and limited empty assessments never claim legal compliance", () 
   const limited = buildAssessmentBrief([], page, { score: 100, coverage: { state: "limited", limitedCount: 3 } });
   assert.equal(complete.attention, "no_priority_observed");
   assert.equal(limited.attention, "limited");
-  assert.equal(buildAssessmentHighlights([], page, { coverage: limited.coverage }), "Review the retained evidence for this visit.");
+  assert.equal(buildAssessmentHighlights([], page, { coverage: limited.coverage }), "No priority findings are available from this visit.");
   assert.doesNotMatch(`${complete.lead} ${limited.lead}`, /compliant|secure|no risk|passed|all clear/i);
 });
 
@@ -118,5 +119,5 @@ test("oversized source prose is never cut into an unqualified assertion", () => 
   const copy = buildAssessmentHighlights([finding], page);
   assert.ok(copy.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
   assert.doesNotMatch(copy, /Unqualified assertion/);
-  assert.match(copy, /Detailed evidence/);
+  assert.match(copy, /retest the affected page/);
 });

@@ -1,0 +1,187 @@
+[
+  {
+    "url": "https://ergoveritas.com/test1.html",
+    "scanId": "1a02167e-bb00-408b-a5a2-4a647a28156b",
+    "capturedAt": "2026-10-23T16:08:14.137Z",
+    "sourceSha256": "379addb85abc543d5ac698c3b10e3737be323ef92706327015b3b8f5de96cf1d",
+    "findings": [
+      {
+        "id": "site_integrity_hidden_outbound_links",
+        "title": "Hidden outbound links",
+        "summary": "Outbound links were concealed using off-screen positioning or zero-size styling. Review whether these links were intentionally added.",
+        "status": "Partial concern",
+        "priority": "high",
+        "correctionSteps": [
+          "Locate each listed destination hostname in the affected page's rendered DOM using browser developer tools (Elements search). Inspect the anchor and its ancestors against the retained excerpt and computed styles where available; the excerpt is not a CSS selector.\n\nFind the code that produces the link: search page content, CMS blocks, templates, theme/plugin files and tag-manager tags for that hostname. If it appears only after JavaScript runs, trace the inserting script with a DOM subtree-modification breakpoint on its parent.\n\nIf the link is unintended, remove the anchor and the content or code that inserts it, rather than hiding it with different CSS. If it is intended navigation, remove the concealing rule from the responsible element and give the link visible, meaningful text in the normal layout. Preserve legitimate skip links and responsive controls after checking their intended behavior.\n\nIf the owner cannot account for the insertion, review recent CMS, template, plugin and tag-manager changes and access logs; address any verified unauthorized change at its source. Concealment alone does not establish compromise.\n\nPublish the approved source change and clear any page/CDN caches. Check the rendered page again in a fresh browser session at desktop and mobile widths, including after scripts have run.\n\nRe-test: On each listed source URL, search the rendered DOM again for the destination hostname. Confirm an unwanted link is absent and does not reappear after scripts run, or that intended navigation is visibly and meaningfully labelled and keyboard-operable. Re-scan the same URL and compare its hidden-link evidence. Do not visit the outbound destination to perform these checks."
+        ],
+        "rank": 1
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking",
+        "title": "Tracking and embedded content before consent",
+        "summary": "Tracking requests and embedded content were observed before consent. Review each observation\u2019s evidence, affected pages and consent requirements.",
+        "status": "Potential gap",
+        "correctionSteps": [
+          "Review the retained vendor and request timing evidence, confirm purpose and necessity, and gate confirmed non-essential requests until the relevant consent state is available."
+        ],
+        "rank": 2
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
+        "title": "Pre-consent storage classification review",
+        "summary": "Cookies or browser storage were retained before consent. First retained item: _ga_TEST1 (ergoveritas.com): non_essential, present in periodic pre-consent snapshot. Essentiality was not confirmed for every item.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "In DevTools Network, filter each listed hostname/path, reload with site data cleared, and open its Initiator stack. Locate the originating tag, inline script, embed or CMS/plugin configuration; search source files for the hostname if no initiator was retained. Record each integration's purpose and required consent category with the privacy owner. Move consent-dependent initialization behind the CMP's confirmed category state: default optional loaders and storage writers to off, and start them only after the matching category is granted. Remove unconditional page-load triggers and duplicate hard-coded tags. A banner, consent cookie, or denied-storage flag alone does not prevent a request. Apply the same gate to deferred callbacks, SPA route changes, timers and retries. For replay tools, exclude sensitive pages and mask inputs; verify with non-sensitive test values in staging. A script download does not prove what was recorded. Do not delete essential or consent-decision storage indiscriminately. Publish the approved source/CMP changes and clear caches. Re-test: Use three independent fresh sessions: no choice, confirmed Reject, and confirmed Accept. For each relevant category, compare the listed requests and storage writes over equal windows at least as long as the retained comparison. Consent-dependent collection must not start before a grant or after refusal, and should work after the applicable grant. Inspect payloads and replay masking separately; retain sanitized Network logs and re-scan the same URL."
+        ],
+        "rank": 3
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__session_replay_fingerprinting_review",
+        "title": "Session replay signal",
+        "summary": "Session replay or behavioral analytics signals were observed: Microsoft Clarity; first seen 1.57s after scan start; before any recorded consent action.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Review consent timing, masking, exclusions, sensitive-page coverage, and disclosure for the retained replay/behavioral-analytics signal; correct confirmed gaps and retest."
+        ],
+        "rank": 4
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__device_identification_fingerprinting_signal_observed",
+        "title": "Device identification / fingerprinting signal",
+        "summary": "Device-identification or fingerprinting-like browser API signals were observed: HTMLCanvasElement.toDataURL, CanvasRenderingContext2D.getImageData, OfflineAudioContext.startRendering, and canvas; first seen 2.04s after scan start.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Search loaded sources for the listed API names (for example toDataURL, getImageData or startRendering) and set a breakpoint at the actual call site. Reload and inspect the call stack to identify the responsible first-party function or SDK. Do not disable browser APIs globally: graphics and audio can have legitimate uses. Trace the returned values through the calling code and Network payloads using synthetic test data. Check whether results are combined into an identifier, stored or transmitted; API access alone is not proof of fingerprinting. If a minified third-party bundle cannot be traced, obtain the vendor's purpose/configuration documentation before deciding on a change. Remove unnecessary collection in the initiating component, or disable the vendor feature. Where the verified purpose requires consent, gate the call and subsequent storage/transmission on the relevant category, including delayed callbacks. Preserve legitimate graphics/audio functions and document the purpose. Validate in staging, publish the approved change and clear caches. Re-test: Repeat the call-stack and Network inspection before a choice, after Reject and after the relevant Accept choice. Confirm the unnecessary call or data flow has stopped, or document the verified legitimate use. Test affected graphics/audio features and re-scan. An unresolved purpose remains a review item, not a confirmed fingerprinting defect."
+        ],
+        "rank": 5
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction",
+        "title": "Non-essential cookies or services after Reject",
+        "summary": "Non-essential entities after Reject: Google LLC (service request and cookie snapshot, first observed +125 ms after Reject click). Classified non-essential cookies or service requests were observed after the Reject control was clicked.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Filter the cited post-refusal endpoint in DevTools Network and inspect its Initiator stack. Locate its tag, timer, retry, queued callback or storage writer. Use the retained confirmation-relative timing to separate a new request chain from one already in flight; cookie presence alone does not prove active use. In the Reject handler, persist denied optional categories and apply them to each consent-dependent loader and collection call before queued work can run. Cancel pending optional timers/retries and use the vendor's documented disable/consent mechanism for an already-loaded SDK. Guard SPA navigation and later callbacks against reinitializing it. Stop the cited optional writes at their source. If cleanup is appropriate, remove only the identified optional cookie name/domain/path or web-storage origin/type/key; do not clear essential cookies or the saved refusal. Review browser and corresponding server-side collection settings, validate in staging, publish the approved changes and clear caches. Re-test: In a fresh session confirm Reject, record confirmation separately from the click, then inspect new request chains and writes for the full configured observation target listed here, not just an early-stop sample. If that target is unavailable, cover at least the measured window in Appendix A and later callbacks. Reload and navigate without submitting forms. The saved refusal must remain in force without newly initiated consent-dependent collection. Compare with a separate confirmed Accept session and retain sanitized results."
+        ],
+        "rank": 6
+      },
+      {
+        "id": "california_rights_disclosure_not_observed",
+        "title": "Non-discrimination disclosure not found in the inspected policy",
+        "summary": "A complete inspection of retained English policy text and material linked supplements found no consumer-rights disclosure for non-discrimination when exercising privacy rights. This is a scoped disclosure finding, assessed assuming CCPA/CPRA applies; it does not prove requests would be refused.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Review the retained topic inspection and explain each applicable consumer right and how to exercise it. Check business applicability and any exemptions."
+        ],
+        "rank": 7
+      },
+      {
+        "id": "gpc_response",
+        "title": "GPC choice-enforcement risk observed",
+        "summary": "Advertising identity, audience or synchronization activity with GPC enabled: Google LLC (first observed +1197 ms from GPC visit start); Meta Platforms, Inc. (first observed +1205 ms from GPC visit start); Microsoft Corporation (first observed +1211 ms from GPC visit start). GPC delivery was verified on the page request and browser setting. Retained GPC request samples include 5 classified advertising, marketing, analytics or replay requests, including 5 collection requests. Paired activity comparison: no observable response.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Check that GPC applies the relevant sale/sharing opt-out state and governs advertising collection."
+        ],
+        "rank": 8
+      },
+      {
+        "id": "accessibility_priority_group",
+        "title": "Accessibility issues",
+        "summary": "Review automated accessibility findings and retained examples in Detailed evidence.",
+        "status": "Observed",
+        "priority": "high",
+        "correctionSteps": [
+          "Repair labels, accessible names, role/ARIA usage, and semantic structure for the retained axe examples, then rerun the accessibility scan.",
+          "For flagged images, add concise alt text describing their purpose; use alt=\"\" for purely decorative images. Provide captions or equivalent text alternatives for other flagged media, then rerun the affected checks.",
+          "Adjust the flagged text and background colors to meet the required contrast ratio shown in the evidence. For links flagged as distinguishable only by color, add a persistent non-color cue such as an underline. Rerun the affected checks after updating the styles."
+        ],
+        "rank": 9
+      }
+    ]
+  },
+  {
+    "url": "https://ergoveritas.com/test2.html",
+    "scanId": "1bd6fcb0-f749-45f1-967b-4056c5cf31af",
+    "capturedAt": "2026-10-23T16:09:11.620Z",
+    "sourceSha256": "46ee05c1f728bb84c3cc632fe5601a38a6028c913ce2ec67b2f52dc75f66a3e5",
+    "findings": [
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking",
+        "title": "Tracking and embedded content before consent",
+        "summary": "Tracking requests and embedded content were observed before consent. Review each observation\u2019s evidence, affected pages and consent requirements.",
+        "status": "Potential gap",
+        "correctionSteps": [
+          "Review the retained vendor and request timing evidence, confirm purpose and necessity, and gate confirmed non-essential requests until the relevant consent state is available."
+        ],
+        "rank": 1
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
+        "title": "Pre-consent storage classification review",
+        "summary": "Cookies or browser storage were retained before consent. First retained item: _fbc (ergoveritas.com): non_essential, present in periodic pre-consent snapshot. Essentiality was not confirmed for every item.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "In DevTools Network, filter each listed hostname/path, reload with site data cleared, and open its Initiator stack. Locate the originating tag, inline script, embed or CMS/plugin configuration; search source files for the hostname if no initiator was retained. Record each integration's purpose and required consent category with the privacy owner. Move consent-dependent initialization behind the CMP's confirmed category state: default optional loaders and storage writers to off, and start them only after the matching category is granted. Remove unconditional page-load triggers and duplicate hard-coded tags. A banner, consent cookie, or denied-storage flag alone does not prevent a request. Apply the same gate to deferred callbacks, SPA route changes, timers and retries. For replay tools, exclude sensitive pages and mask inputs; verify with non-sensitive test values in staging. A script download does not prove what was recorded. Do not delete essential or consent-decision storage indiscriminately. Publish the approved source/CMP changes and clear caches. Re-test: Use three independent fresh sessions: no choice, confirmed Reject, and confirmed Accept. For each relevant category, compare the listed requests and storage writes over equal windows at least as long as the retained comparison. Consent-dependent collection must not start before a grant or after refusal, and should work after the applicable grant. Inspect payloads and replay masking separately; retain sanitized Network logs and re-scan the same URL."
+        ],
+        "rank": 2
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__session_replay_fingerprinting_review",
+        "title": "Session replay signal",
+        "summary": "Session replay or behavioral analytics signals were observed: Microsoft Clarity; first seen 0.678s after scan start; before any recorded consent action.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Review consent timing, masking, exclusions, sensitive-page coverage, and disclosure for the retained replay/behavioral-analytics signal; correct confirmed gaps and retest."
+        ],
+        "rank": 3
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction",
+        "title": "Non-essential cookies or services after Reject",
+        "summary": "Non-essential entities after Reject: Microsoft Corporation (service request and cookie snapshot, first observed +120 ms after Reject click); Google LLC (service request and cookie snapshot, first observed +111 ms after Reject click). Classified non-essential cookies or service requests were observed after the Reject control was clicked.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Filter the cited post-refusal endpoint in DevTools Network and inspect its Initiator stack. Locate its tag, timer, retry, queued callback or storage writer. Use the retained confirmation-relative timing to separate a new request chain from one already in flight; cookie presence alone does not prove active use. In the Reject handler, persist denied optional categories and apply them to each consent-dependent loader and collection call before queued work can run. Cancel pending optional timers/retries and use the vendor's documented disable/consent mechanism for an already-loaded SDK. Guard SPA navigation and later callbacks against reinitializing it. Stop the cited optional writes at their source. If cleanup is appropriate, remove only the identified optional cookie name/domain/path or web-storage origin/type/key; do not clear essential cookies or the saved refusal. Review browser and corresponding server-side collection settings, validate in staging, publish the approved changes and clear caches. Re-test: In a fresh session confirm Reject, record confirmation separately from the click, then inspect new request chains and writes for the full configured observation target listed here, not just an early-stop sample. If that target is unavailable, cover at least the measured window in Appendix A and later callbacks. Reload and navigate without submitting forms. The saved refusal must remain in force without newly initiated consent-dependent collection. Compare with a separate confirmed Accept session and retain sanitized results."
+        ],
+        "rank": 4
+      },
+      {
+        "id": "california_rights_disclosure_not_observed",
+        "title": "Non-discrimination disclosure not found in the inspected policy",
+        "summary": "A complete inspection of retained English policy text and material linked supplements found no consumer-rights disclosure for non-discrimination when exercising privacy rights. This is a scoped disclosure finding, assessed assuming CCPA/CPRA applies; it does not prove requests would be refused.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Review the retained topic inspection and explain each applicable consumer right and how to exercise it. Check business applicability and any exemptions."
+        ],
+        "rank": 5
+      },
+      {
+        "id": "gpc_response",
+        "title": "GPC choice-enforcement risk observed",
+        "summary": "Advertising identity, audience or synchronization activity with GPC enabled: Google LLC (first observed +928 ms from GPC visit start); Meta Platforms, Inc. (first observed +934 ms from GPC visit start); Microsoft Corporation (first observed +935 ms from GPC visit start). GPC delivery was verified on the page request and browser setting. Retained GPC request samples include 4 classified advertising, marketing, analytics or replay requests, including 4 collection requests. Paired activity comparison: responsive.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Check that GPC applies the relevant sale/sharing opt-out state and governs advertising collection."
+        ],
+        "rank": 6
+      },
+      {
+        "id": "accessibility_priority_group",
+        "title": "Accessibility issues",
+        "summary": "Review automated accessibility findings and retained examples in Detailed evidence.",
+        "status": "Observed",
+        "priority": "high",
+        "correctionSteps": [
+          "Fix the retained keyboard-related WCAG examples, verify controls are reachable and operable with Tab, Shift+Tab, Enter, Space, and Escape, then rerun the scan.",
+          "Increase the retained control's target size or spacing, accounting for the WCAG 2.5.8 exceptions.",
+          "Repair labels, accessible names, role/ARIA usage, and semantic structure for the retained axe examples, then rerun the accessibility scan.",
+          "For flagged images, add concise alt text describing their purpose; use alt=\"\" for purely decorative images. Provide captions or equivalent text alternatives for other flagged media, then rerun the affected checks.",
+          "Adjust the flagged text and background colors to meet the required contrast ratio shown in the evidence. For links flagged as distinguishable only by color, add a persistent non-color cue such as an underline. Rerun the affected checks after updating the styles."
+        ],
+        "rank": 7
+      }
+    ]
+  }
+]

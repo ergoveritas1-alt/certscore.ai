@@ -868,6 +868,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const metadata = siteMetadataProjectionSchema.safeParse(record(scanRecord.runtimeArtifacts)?.siteMetadata);
   return {
     assessmentHighlightLinks: highlights.links,
+    assessmentHighlightExpansion: highlights.expanded,
     cmpAudit,
     ...(scanConfig?.fullSite === true && crawlOptions ? { fullSite: { maxPages: Number(crawlOptions.maxPages), concurrency: Number(crawlOptions.concurrency), waitSeconds: Number(crawlOptions.waitSeconds) } } : {}),
     siteMetadata: metadata.success ? metadata.data : null,

@@ -315,6 +315,7 @@ const TARGETS: Target[] = [
       file.startsWith("packages/ui/") ||
       file.startsWith("packages/validation-shared/"),
     checks: [
+      { key: "assessment-highlights", label: "reviewed assessment highlights and bounded expansion", command: ["pnpm", "test:assessment-highlights"] },
       CALIFORNIA_REVIEW_CHECK,
       RUNTIME_GRAPH_RELEASE_CHECK,
       SCAN_NO_GO_RELEASE_CHECK,

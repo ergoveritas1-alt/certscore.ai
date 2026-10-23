@@ -1089,7 +1089,7 @@ function VerdictBlock({ compact = false, report, showNextStep = true }: { compac
       <h2 className={`mt-2 max-w-4xl ${reportSectionTitle}`}>
         Executive overview
       </h2>
-      <p className={`${compact ? "mt-3 text-[0.95rem] leading-7" : "mt-4 text-base leading-7"} max-w-4xl text-zinc-600`}><AssessmentHighlightsText text={report.verdict} links={report.assessmentHighlightLinks} /></p>
+      <p className={`${compact ? "mt-3 text-[0.95rem] leading-7" : "mt-4 text-base leading-7"} max-w-4xl text-zinc-600`}><AssessmentHighlightsText text={report.verdict} links={report.assessmentHighlightLinks} expanded={report.assessmentHighlightExpansion} /></p>
       {showNextStep ? (
         <div className="mt-5 border-l-4 border-sky-500 pl-4">
           <p className="text-xs font-semibold uppercase text-zinc-500">First review step</p>
@@ -1108,7 +1108,7 @@ function MobileVerdict({ report }: { report: ShadowReportData }) {
         <span className="text-xs font-medium text-zinc-500">{priorityIssueCountLabel(report.findings.length)}</span>
       </div>
       <h2 className={`mt-2 ${reportSectionTitle}`}>Executive overview</h2>
-      <p className="mt-3 text-[0.95rem] leading-7 text-zinc-600"><AssessmentHighlightsText text={report.verdict} links={report.assessmentHighlightLinks} /></p>
+      <p className="mt-3 text-[0.95rem] leading-7 text-zinc-600"><AssessmentHighlightsText text={report.verdict} links={report.assessmentHighlightLinks} expanded={report.assessmentHighlightExpansion} /></p>
     </div>
   );
 }
@@ -1203,7 +1203,7 @@ function TriageVariant({ report }: { report: ShadowReportData }) {
                 <span className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs font-semibold text-zinc-600">{report.findings.length} {report.findings.length === 1 ? "finding" : "findings"} to review</span>
               </div>
             </div>
-            <p className="mt-3 max-w-4xl text-sm leading-6 text-zinc-600"><AssessmentHighlightsText text={report.verdict} links={report.assessmentHighlightLinks} /></p>
+            <p className="mt-3 max-w-4xl text-sm leading-6 text-zinc-600"><AssessmentHighlightsText text={report.verdict} links={report.assessmentHighlightLinks} expanded={report.assessmentHighlightExpansion} /></p>
           </div>
           <FindingsList dense report={report} />
           <div className="mt-9 grid gap-6 border-t border-zinc-200 pt-7 lg:grid-cols-2">
@@ -1249,7 +1249,7 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
     </header>
     <FullSiteExecutiveSummary reviewFocus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} californiaScore={report.californiaScore} inventorySummary={<ReportInventorySummary formCountStatus={report.formsSummary ? report.formsSummary.countStatus : "not_captured"} formsSummary={report.formsSummary} forms={report.collectionTableRows} formCount={report.metrics.forms} metrics={report.inventorySummary ?? []} siteIntegrity={report.siteIntegritySummary ?? (report.siteIntegrity ? { findings: [report.siteIntegrity], coverage: [{ pageId: report.scan.id, url: report.siteIntegrity.evidence.observation.documentUrl, homepage: true, status: report.siteIntegrity.evidence.observation.truncated ? "limited" : "captured" }] } : undefined)} />} score={{ value: report.score.value, priorityReview, scoredPages: 1, deductions: report.scoreExplanation?.score === report.score.value ? report.scoreExplanation.deductions : undefined }} pending={false} scannedPages={1}
       actions={<ShadowReportShareMenu key="share-report" reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
-      snapshot={<SignalSnapshot siteOverview={Boolean(report.fullSite)} report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} />
+      snapshot={<SignalSnapshot siteOverview={Boolean(report.fullSite)} report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} homepageHighlightExpansion={report.assessmentHighlightExpansion} />
     <SitePriorityReview californiaAssessment={report.californiaPrivacyReview} reviewFocus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} findings={priorityReview} pending={false} sitewideAvailable scannedPages={1} />
     <ReportPageEventTimeline events={report.timeline} accept={report.actionTimelines?.accept} reject={report.actionTimelines?.reject} gpc={report.gpcTimeline} />
     {report.resourceInventory ? <SinglePageResourceInventory inventory={report.resourceInventory} report={report}/> : <div id="report-resource-inventory"><RuntimeInventoryTable report={report} heading="Services & Resources" /></div>}
@@ -1412,7 +1412,7 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
         <div>
           <p className="text-xs font-semibold uppercase text-amber-900">Review recommended</p>
           <h2 className="mt-3 text-3xl font-semibold leading-tight text-zinc-950">Consent controls and pre-consent third-party activity need review.</h2>
-          <p className="mt-5 text-base leading-7 text-zinc-600"><AssessmentHighlightsText text={report.verdict} links={report.assessmentHighlightLinks} /></p>
+          <p className="mt-5 text-base leading-7 text-zinc-600"><AssessmentHighlightsText text={report.verdict} links={report.assessmentHighlightLinks} expanded={report.assessmentHighlightExpansion} /></p>
           <p className="mt-5 text-sm font-medium leading-6 text-zinc-950">{report.nextStep}</p>
         </div>
       </div>
@@ -1711,7 +1711,7 @@ export function ShadowScanReport({
     </>
   );
 
-  const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace californiaAssessment={report.californiaPrivacyReview} californiaScore={report.californiaScore} reviewFocus={focus} afterAcceptForms={report.collectionTableRows?.filter(isAfterAcceptForm)} afterAcceptFormsLimited={report.afterAcceptFormsLimited} formDestinationEvidence={<FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />} homepageRuntimeCards={report.executiveRuntimeCards} executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<ReportPageEventTimeline events={report.timeline} accept={report.actionTimelines?.accept} reject={report.actionTimelines?.reject} gpc={report.gpcTimeline} />} executiveSnapshot={<SignalSnapshot siteOverview={Boolean(report.fullSite)} report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
+  const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace californiaAssessment={report.californiaPrivacyReview} californiaScore={report.californiaScore} reviewFocus={focus} afterAcceptForms={report.collectionTableRows?.filter(isAfterAcceptForm)} afterAcceptFormsLimited={report.afterAcceptFormsLimited} formDestinationEvidence={<FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />} homepageRuntimeCards={report.executiveRuntimeCards} executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<ReportPageEventTimeline events={report.timeline} accept={report.actionTimelines?.accept} reject={report.actionTimelines?.reject} gpc={report.gpcTimeline} />} executiveSnapshot={<SignalSnapshot siteOverview={Boolean(report.fullSite)} report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} homepageHighlightExpansion={report.assessmentHighlightExpansion} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
   const completionEvent = report.resultDisposition !== "no_go" && !report.fullSite
     ? <ScanCompletedEvent scanId={report.scan.id} scanSource={mode === "authenticated" ? "dashboard" : "homepage"} domain={report.scan.host} /> : null;

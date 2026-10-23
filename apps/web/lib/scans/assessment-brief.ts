@@ -26,8 +26,20 @@ export function normalizeAssessmentCopy(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
+/** Members are already-projected findings, not raw accessibility observations. */
+function accessibilityMembers(finding: AssessmentHighlightFinding): AssessmentHighlightFinding[] {
+  if (finding.id !== "accessibility_priority_group" || !Array.isArray(finding.evidenceJson?.findings)) return [];
+  return finding.evidenceJson.findings.filter((value): value is AssessmentHighlightFinding =>
+    Boolean(value && typeof value === "object" && typeof value.id === "string" && typeof value.title === "string"
+      && typeof value.summary === "string"));
+}
+
 /** Reader labels over already-projected identities, never a new assessment. */
 function readerTitle(finding: AssessmentHighlightFinding): string {
+  if (finding.id === "regulatory_gap__gdpr_eprivacy__transport_security_http_redirect") return "HTTP-to-HTTPS redirect review";
+  if (finding.id === "regulatory_gap__gdpr_eprivacy__consent_surface_observed" && finding.summary === "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.") return "Consent interface not confirmed";
+  if (finding.id === "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction" && finding.title === "Post-choice tracking reduction") return "Activity after a Reject click — review";
+  if (finding.id === "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control") return "Consent settings access review";
   if (finding.id === "visual_contrast_accessibility_issue") return finding.summary?.startsWith("Low-contrast text was detected") ? "Low text contrast" : "Text contrast and color cues";
   if (finding.id === "accessibility_priority_group" && Array.isArray(finding.evidenceJson?.findings)) {
     const members = finding.evidenceJson.findings.filter((value): value is AssessmentHighlightFinding =>
@@ -82,6 +94,7 @@ export function buildAssessmentBrief(
     : finding.status === "Potential gap" || finding.severity === "critical" || finding.severity === "high" ? 0 : 1;
   const ordered = [...highlighted].sort((left, right) => rank(left) - rank(right));
   const sources = ordered.map(finding => ({
+    readerMembers: accessibilityMembers(finding),
     sourceRef: finding.id ?? `projected-finding:${findings.indexOf(finding) + 1}`,
     id: finding.id ?? null,
     title: normalizeAssessmentCopy(finding.title),
@@ -89,7 +102,7 @@ export function buildAssessmentBrief(
     summary: normalizeAssessmentCopy(finding.summary ?? ""),
     readerSummary: finding.id === "regulatory_gap__gdpr_eprivacy__privacy_notice_availability"
       ? "Privacy policy not found within the assessed scope."
-      : normalizeAssessmentCopy(finding.summary ?? ""),
+      : normalizeAssessmentCopy(accessibilityMembers(finding).map(member => member.summary).join(" ") || finding.summary || ""),
     status: finding.status ?? "unknown",
     severity: finding.severity ?? null,
     priority: finding.priority ?? null,
