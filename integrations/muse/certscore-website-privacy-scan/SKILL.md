@@ -2,7 +2,7 @@
 name: certscore-website-privacy-scan
 description: Review public website privacy, cookies, tracking, consent, GPC, and policy signals with CertScore.ai. Use for a requested launch check, vendor review, tracking investigation, policy review, or comparison with an earlier scan.
 metadata:
-  version: 1.0.2
+  version: 1.0.3
 ---
 
 # CertScore.ai website privacy scan
@@ -13,7 +13,7 @@ Results are automated observations of public pages. They are not legal advice, c
 
 ## Connection
 
-Endpoint: `https://mcp.certscore.ai/mcp/light`. Transport: Streamable HTTP. Registry identity: `ai.certscore/mcp-light`. Hosted release reference: `0.2.30`, verified October 21, 2026. The package version is independent of the hosted release.
+Endpoint: `https://mcp.certscore.ai/mcp/light`. Transport: Streamable HTTP. Registry identity: `ai.certscore/mcp-light`. Hosted release reference: `0.2.30`, verified October 22, 2026. The package version is independent of the hosted release.
 
 Reuse an existing CertScore.ai Light connection. If Muse exposes connector discovery, read its current connector instructions first. Native tools are preferable when available. If no connection is available, the included `scripts/certscore_mcp.py` calls the same MCP endpoint with Python 3. It selects curl when available, which avoids truncated Python HTTP reads in Muse's proxy; otherwise it uses Python's standard library. No Python packages are required. Run its commands from this skill's directory. It has no credentials, installation hooks, or background jobs.
 
@@ -37,6 +37,10 @@ Only scan sites the user has asked to review or approved for a recurring review.
 2. Keep the returned `scanId`. Poll `certscore_get_scan_status` with that ID only while status is `queued`, `running`, or `finalizing`. Honor returned retry guidance and wait at least five seconds between polls. Stop after 60 polls or 15 minutes, whichever comes first, and give the user the scan ID and latest status. Never poll without a scan ID or restart an ambiguously timed-out scan creation.
 3. For `completed` or `completed_limited`, call `certscore_get_scan_bundle` with that ID. Start with `detail="findings"` and `maxBytes=8000`. Do not treat a preliminary preview as the final report. Preserve truncation notices and retrieve additional context only when it helps answer the question. Stop on other terminal or unknown states and report the returned state without inventing a score or findings.
 4. Use `certscore_get_report_evidence_page` with the same ID when a finding needs evidence. Follow its returned retrieval instructions and cursor; preserve any selected section or workpaper. Retrieve only relevant pages. A bounded or omitted section is not evidence of absence.
+
+Choose an evidence selector for the current question and scan. For a general findings checklist, start without a section; for cookies and trackers, use the returned tracking-workpaper action. Do not carry an unrelated section from an earlier page into the next review.
+
+On `response_budget_exceeded`, read the same scan at the suggested budget within the response ceiling, or use bounded evidence pages. This is a response-size correction, not a reason to create a scan.
 
 On HTTP 429, `rate_limited`, or an explicit quota denial, tell the user and stop. Do not retry in a loop. For authentication, schema, transport, or connection errors, report the issue rather than creating a replacement scan or asking for credentials for Light.
 
@@ -65,6 +69,10 @@ Lead with the relevant returned score and scan date. When `postureScores` is ret
 For a broad first-review question, start with three to five priorities and one concrete evidence anchor for each. Group closely related tracking, storage, and replay findings when useful. Leave the full inventory to the report or a requested deeper review. Confirm installation briefly; keep paths, manifests, and transport diagnostics out of the opening unless the user asks or a failure prevents the review.
 
 Write a routine site-owner review in roughly 200–300 words when the question allows it. Use plain finding labels and concrete observations; reserve opaque finding IDs, internal status names, tool names, and schema terms for a requested technical checklist or diagnostics. A report link can carry the detailed references. Describe a follow-up as “show the cookies and trackers found on this page” or “look at the underlying evidence,” rather than calling it a “retained tracking workpaper” or a “canonical bundle.” Keep the coverage caveats that affect the answer.
+
+Keep a routine comparison shorter: about 100–160 words unless the user asks for detail. Give the verdict, a small score table when helpful, two or three evidence differences, one coverage caveat, and labeled report links. Avoid repeating full inventories, scan IDs and explanations already given. A simple report-focus switch usually needs only the requested scores, links and relevant coverage.
+
+Check the ordering before describing it. Identify the lower-scoring page within each review focus, then weigh the findings and coverage for the priority recommendation. Say the ranking reverses only when the pages actually exchange order. A page's own score changing between EU and California views does not mean the cross-page ranking changed. Keep limited coverage visible; a higher score alone does not establish a safer or compliant site.
 
 Use returned canonical findings and classifications. Do not create findings from request counts, vendor names, screenshots, or missing evidence. Report Accept and Reject observations only when the canonical response makes that path reportable. Keep after-click activity separate from confirmed consent registration. A completed GPC observation does not establish that GPC was honored. Do not infer active tracking solely from storage persistence or service presence.
 

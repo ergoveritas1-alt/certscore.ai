@@ -1,6 +1,6 @@
 # CertScore.ai Muse skill
 
-The downloadable 1.0.2 package contains `SKILL.md`, Muse's `skill.yaml` manifest,
+The downloadable 1.0.3 package contains `SKILL.md`, Muse's `skill.yaml` manifest,
 and a Python 3 MCP helper that selects curl when available, with a standard-library fallback. Native MCP tools take precedence.
 The helper lists tools or makes one explicit call; it never polls or retries a
 scan automatically. Installation does not start a scan.
@@ -74,3 +74,18 @@ $0.01/month in transfer at 100,000 downloads over 1.0.1. Combined incremental
 MCP guidance and archive transfer is estimated below $0.10/month at 100,000
 bundle responses and downloads each. There are no additional origin reads,
 model calls, retained evidence, jobs or provisioned resources per response.
+
+## Version 1.0.3
+
+Comparisons now target 100–160 words, check each posture's page ordering before
+claiming a reversal, and keep evidence and coverage ahead of a score-only priority.
+Evidence selectors follow the current question instead of an unrelated earlier
+section. Response-budget guidance retains the same scan. The helper changes only
+its client version. The guide puts download/install first, offers copyable
+same-scan evidence and report-view prompts, and keeps a matched-location recheck
+for after a site change. HTML and Markdown share the same content; FAQ answers,
+discovery links and download headers are updated together.
+
+Estimated incremental static transfer is below $0.10/month at 100,000 guide visits
+and downloads, including the larger skill instructions. No added runtime
+capacity, origin calls per tool, scanner work, paid model calls or retention.

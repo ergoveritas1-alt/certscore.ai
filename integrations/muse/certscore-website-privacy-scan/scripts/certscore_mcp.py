@@ -21,7 +21,7 @@ TOOLS = (
     "certscore_get_scan_bundle", "certscore_get_report_evidence_page",
 )
 MAX_BYTES = 2 * 1024 * 1024
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 
 
 class McpError(Exception):
