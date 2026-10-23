@@ -104,3 +104,38 @@ cohort ledger, API completed_limited maps to a completed calibration run with
 limited coverage; the original API status remains retained in the raw responses
 and central contacts. This avoids mislabeling a completed limited scan as a
 failed calibration run. No rotating public baseline was promoted.
+
+## Opposite-region verification — October 23, 2026
+
+The owner explicitly requested test1 from California and test2 from the EU after
+reviewing the original scan locations. Live main-page hashes matched the passing
+canaries. Registry check, fresh central contact-history export and canonical
+owned-target selection passed, with the owner's exact cross-region authorization
+recorded as the owned-canary cooldown override. No canary/application/scoring
+changes or deployments were made for this verification.
+
+| Page | New execution location | GDPR/ePrivacy | California | Report |
+| --- | --- | ---: | ---: | --- |
+| test1 | California | 28 | 44 | https://certscore.ai/scan/e285e660-dccb-4518-b091-4fec6b5c1302 |
+| test2 | Ireland | 40 | 44 | https://certscore.ai/scan/d674c3a4-37ba-4fc8-aad1-c65ad4ecd9d4 |
+
+Both creation responses confirm a fresh new scan (not reused), and returned
+execution locations match the requests. All four scores stay within 20–45 and
+are identical to the corresponding opposite-location baseline scores.
+
+Canonical report exports preserve all nine test1 and seven test2 finding groups,
+with no groups added or removed. Test1 retains fingerprinting, hidden links,
+replay, pre-consent tracking/storage, residual Google after Reject, GPC advertising
+activity, the rights-disclosure gap and accessibility. Test2 retains the broader
+accessibility sample, residual Google/Microsoft after Reject, replay,
+pre-consent tracking/storage, rights disclosure and GPC advertising activity.
+Its paired GPC comparison remains responsive (partial reduction); test1 remains
+no observable response. Both retain verified Google, Meta and Microsoft GPC
+advertising collection.
+
+California coverage remains limited on both; test2 still has limited policy and
+accessibility coverage. Unknown evidence was not promoted or treated as a pass.
+Normal MCP records and idempotent calibration run
+`owned-showcase-cross-region-2026-10-23` retain the contacts. Local raw responses,
+exports, selection and comparison summary use the cross-region prefix under
+`tmp/canary-score-showcase-review/`. No recurring infrastructure cost change.
