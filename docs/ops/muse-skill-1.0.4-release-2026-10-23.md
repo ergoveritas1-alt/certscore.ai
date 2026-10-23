@@ -45,6 +45,11 @@ not publish an npm package or desktop archive.
   network timeout; the authenticated GitHub CLI asset check passed.
 - Browser component verification opens nested pre-consent evidence and the shared
   Reject alias on arrival and reload, without a database or scan connection.
+- Local guide verification passes metadata, canonical/social, FAQ/HowTo parity,
+  Markdown, discovery, ZIP headers/source parity, robots and sitemap checks.
+  It caught missing attachment/noindex headers for the new version. The first
+  web run was canceled before its image build; the header correction is a web-only
+  follow-up commit. The independently verified MCP deployment retains its SHA.
 - Target only the public web and hosted MCP AWS workflows from the committed,
   pushed branch. Preserve scanner, validation, capacity and runtime-base settings.
   The new API-contracts export contains navigation constants only and adds no
