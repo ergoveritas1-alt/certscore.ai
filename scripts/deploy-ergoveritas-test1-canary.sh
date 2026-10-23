@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 canary_root="${repo_root}/infra/aws/ergoveritas-canary"
-assets=(test1-privacy-policy.html test1.html)
+assets=(certscore-showcase-canary.js test1-privacy-policy.html test1.html)
 expected_account="199536052647"
 aws_region="us-west-1"
 bucket="ergoveritas-com-static-199536052647"
@@ -17,7 +17,7 @@ for arg in "$@"; do
 done
 
 if [[ "${apply}" != true ]]; then
-  echo "Dry run: verify committed source and the existing AWS canary origin/runtime; publish only ${assets[*]}; invalidate those two paths."
+  echo "Dry run: verify committed source and the existing AWS canary origin/runtime; publish only ${assets[*]}; invalidate only those paths."
   exit 0
 fi
 
@@ -47,8 +47,10 @@ paths=()
 for asset in "${assets[@]}"; do
   source_path="${canary_root}/${asset}"
   source_hash="$(shasum -a 256 "${source_path}" | awk '{print $1}')"
+  content_type="text/html"
+  [[ "${asset}" == *.js ]] && content_type="text/javascript"
   aws s3api put-object --region "${aws_region}" --bucket "${bucket}" --key "${asset}" \
-    --body "${source_path}" --content-type "text/html" --cache-control "public,max-age=60" \
+    --body "${source_path}" --content-type "${content_type}" --cache-control "public,max-age=60" \
     --server-side-encryption AES256 --metadata "source-sha256=${source_hash},source-revision=${revision}" >/dev/null
   stored_hash="$(aws s3api head-object --region "${aws_region}" --bucket "${bucket}" --key "${asset}" --query 'Metadata."source-sha256"' --output text)"
   [[ "${stored_hash}" == "${source_hash}" ]] || { echo "S3 verification failed for ${asset}" >&2; exit 1; }

@@ -20,7 +20,7 @@
 <body>
   <main data-certscore-canary="openai-review-test1">
     <h1>Privacy preflight canary — test 1</h1>
-    <p>Owned synthetic fixture with six cookie signatures, six tracker requests, canvas/audio fingerprinting, session-replay endpoints, and a deterministic Reject observation.</p>
+    <p>Owned synthetic fixture for tracking, canvas/audio fingerprinting, session replay, a concealed link, and an incomplete Reject action. Requests use fixed invented identifiers; never enter real personal information.</p>
     <section class="banner" id="onetrust-banner-sdk" role="dialog" aria-label="Cookie choices">
       <strong>Cookie choices</strong><br>
       <button id="onetrust-reject-all-handler">Reject optional cookies</button><button id="onetrust-pc-btn-handler">Manage choices</button><button id="onetrust-accept-btn-handler">Accept all cookies</button>
@@ -29,7 +29,8 @@
     <section aria-labelledby="scenario-heading">
       <h2 id="scenario-heading">A realistic report-review scenario</h2>
       <p>This page combines positive privacy disclosures with deliberately failing controls and accessibility examples. A linked policy describes the actual test behavior rather than claiming that optional tracking is successfully blocked.</p>
-      <p><a href="/test1-privacy-policy.html">Privacy Policy for this test page</a></p>
+      <p><a href="/test1-privacy-policy.html">Privacy Policy for this test page</a> · <a href="/test1-do-not-sell-or-share.html">Do Not Sell or Share My Personal Information</a></p>
+      <p class="fine">The sale/sharing choice link deliberately leads to an unavailable page. Reject clears most optional cookies, but one advertising request and cookie remain. These are owned test defects.</p>
       <p>The illustration and icon control below intentionally lack accessible names. The enquiry form also contains an unlabelled email field. These are rendered WCAG test defects, not pre-written report findings.</p>
       <img id="test1-missing-alt" class="sample-image" width="160" height="56" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='56'%3E%3Crect width='160' height='56' fill='%23075985'/%3E%3Ctext x='14' y='34' fill='white' font-size='18'%3EDemo services%3C/text%3E%3C/svg%3E">
       <button id="test1-unnamed-button" class="icon-control" type="button"><svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 20 20"><path d="M4 10h12M10 4l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
@@ -63,21 +64,31 @@
       document.getElementById("test1-preview-status").textContent = "Demo icon activated; no navigation or request was made.";
     });
     window.__CERTSCORE_REVIEW_CANARY__ = {
-      id: "test1",
-      controls: "direct",
-      postRefusal: "reject_ignored",
-      fingerprint: "canvas_audio",
-      cookies: ["_ga_TEST1", "_gid", "_fbp", "_clck", "_hjSessionUser_100001", "fs_uid"],
-      trackers: [
-        "https://www.google-analytics.com/g/collect?v=2&tid=G-TEST000001&cid=certscore-test1&en=page_view",
-        "https://www.facebook.com/tr?id=000000000000001&ev=PageView&noscript=1",
-        "https://www.clarity.ms/collect?tid=certscore-test1",
-        "https://static.hotjar.com/c/hotjar-100001.js?sv=7",
-        "https://rs.fullstory.com/s/fs.js?certscore=test1",
-        "https://api.segment.io/v1/track?certscore=test1"
-      ]
-    };
+  "id": "test1",
+  "controls": "direct",
+  "postRefusal": "reject_ignored",
+  "fingerprint": "canvas_audio",
+  "optionalStorage": false,
+  "cookies": [
+    "_ga_TEST1",
+    "_fbp",
+    "_clck"
+  ],
+  "trackers": [
+    "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-TEST000001&cid=certscore-test1-synthetic&en=page_view",
+    "https://www.facebook.com/tr?id=000000000000001&ev=PageView&fbp=fb.1.1700000000000.100000001&noscript=1",
+    "https://bat.bing.com/action/0?ti=000000001&vid=certscore-test1-synthetic&evt=pageLoad",
+    "https://ct.pinterest.com/v3/?tid=000000001&event=pagevisit&external_id=certscore-test1-synthetic",
+    "https://www.clarity.ms/collect?tid=certscore-test1-synthetic"
+  ],
+  "afterRejectCookies": [
+    "_ga_TEST1"
+  ],
+  "afterRejectTrackers": [
+    "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-TEST000001&cid=certscore-test1-synthetic&en=page_view"
+  ]
+};
   </script>
-  <script src="/certscore-review-canary.js"></script>
+  <script src="/certscore-showcase-canary.js"></script>
 </body>
 </html>

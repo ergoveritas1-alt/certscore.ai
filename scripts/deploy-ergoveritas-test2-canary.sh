@@ -5,7 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_source="${repo_root}/infra/aws/ergoveritas-canary/certscore-review-canary.js"
 canary_root="${repo_root}/infra/aws/ergoveritas-canary"
 pages=(test2.html test2-do-not-sell-or-share.html test2-privacy-choices.html test2-cookie-settings.html test2-notice-at-collection.html test2-privacy-policy.html test2-cookie-policy.html)
-assets=("${pages[@]}" test2-choice-runtime.js)
+assets=(certscore-showcase-canary.js "${pages[@]}" test2-choice-runtime.js)
 expected_account="199536052647"
 aws_region="us-west-1"
 bucket="ergoveritas-com-static-199536052647"
@@ -33,6 +33,11 @@ if [[ "${apply}" != true ]]; then
   exit 0
 fi
 
+[[ -z "$(git -C "${repo_root}" status --porcelain)" ]] || { echo "Refusing publication from a dirty worktree." >&2; exit 1; }
+revision="$(git -C "${repo_root}" rev-parse HEAD)"
+for asset in "${assets[@]}"; do
+  git -C "${repo_root}" ls-files --error-unmatch "infra/aws/ergoveritas-canary/${asset}" >/dev/null
+done
 actual_account="$(aws sts get-caller-identity --query Account --output text)"
 [[ "${actual_account}" == "${expected_account}" ]] || { echo "Unexpected AWS account: ${actual_account}" >&2; exit 1; }
 
@@ -57,7 +62,7 @@ for asset in "${assets[@]}"; do
   [[ "${asset}" == *.js ]] && content_type="text/javascript"
   aws s3api put-object --region "${aws_region}" --bucket "${bucket}" --key "${asset}" \
     --body "${source_path}" --content-type "${content_type}" --cache-control "public,max-age=60" \
-    --server-side-encryption "AES256" --metadata "source-sha256=${source_hash}" >/dev/null
+    --server-side-encryption "AES256" --metadata "source-sha256=${source_hash},source-revision=${revision}" >/dev/null
   stored_hash="$(aws s3api head-object --region "${aws_region}" --bucket "${bucket}" --key "${asset}" --query 'Metadata."source-sha256"' --output text)"
   [[ "${stored_hash}" == "${source_hash}" ]] || { echo "S3 upload verification failed for ${asset}." >&2; exit 1; }
   invalidation_paths+=("/${asset}")
