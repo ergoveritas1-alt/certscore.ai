@@ -10,9 +10,12 @@ historical production rewrite.
 New verified California v10 assessments may retain the optional, typed
 `observedScoreBasis` under `usable_starting_page_score.v1`. Its scan identity,
 final document URL and source hash must match the parent California assessment.
-The materializer derives it only from a successful representative runtime lane,
-usable runtime coverage and its original loader-bound, retained runtime DOM
-snapshot in the checksum-verified canonical bundle. No-go, challenges, failed
+The materializer derives it from the original representative runtime visit and
+its loader-bound retained runtime snapshot in the checksum-verified canonical
+bundle. A nonempty page text excerpt or retained page title supplies positive
+page metadata. An empty excerpt alone does not invalidate an otherwise usable
+visit. A degraded lane with partial optional inventory may qualify only with
+positive successful 2xx navigation proof; inventory completeness remains limited. No-go, challenges, failed
 lanes, missing identity and changed documents do not receive this proof.
 
 The scorer selects `california-regulatory-posture.v12-observed` only when that
@@ -68,3 +71,14 @@ memory, time, lane, request, model and retention allowances are unchanged.
 
 Replay, per-scan diagnostics, verification and source fingerprints:
 `artifacts/california-score-coverage-2026-10-21/`.
+
+## October 22 local audit repair
+
+The owner authorized local fixes and retained replay for the three confirmed
+production-audit defects. This clarifies the original visit basis above without
+changing finding eligibility or score weights. Existing persisted assessments
+and reports are not reinterpreted or rewritten. New materializations alone use
+the corrected projection; historical records without a basis keep their original
+score availability. No deployment, fresh scan, browser work or model call occurs.
+Incremental metadata storage/processing is estimated below $0.02/month at
+100,000 scans, disclosed before implementation; capture budgets are unchanged.

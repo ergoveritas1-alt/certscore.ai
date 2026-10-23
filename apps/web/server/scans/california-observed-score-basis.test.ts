@@ -64,3 +64,27 @@ test("score availability requires the original usable runtime visit; failed, blo
  assert.equal(projectCaliforniaObservedScoreBasis(f.bundle,{...CA_FIXTURE_SOURCE,verificationStatus:"unverified"},CA_FIXTURE_URL),undefined);
  assert.equal(projectCaliforniaObservedScoreBasis(f.bundle,{...CA_FIXTURE_SOURCE,sha256:"invalid"},CA_FIXTURE_URL),undefined);
 });
+
+test("verified runtime title supplies visit proof when the bounded text excerpt is empty", () => {
+  const f=fixture();const snapshot=f.bundle.runtimeMetadataSnapshots![0]!;
+  snapshot.textExcerpt="";
+  snapshot.siteMetadata={contractVersion:"certscore.site-metadata.v1",title:"Statistikmyndigheten SCB"} as NonNullable<typeof snapshot.siteMetadata>;
+  assert.ok(projectCaliforniaObservedScoreBasis(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL));
+  snapshot.siteMetadata.title=" ";
+  assert.equal(projectCaliforniaObservedScoreBasis(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL),undefined);
+});
+
+test("partial inventory does not erase positively verified original navigation and runtime document", () => {
+  const f=fixture();const lane=f.bundle.scanLaneRuns![0]!;
+  f.bundle.runtimeCoverage!.coverageStatus="limited_partial";
+  lane.executionOutcome="degraded";
+  lane.navigationAttempts=[{sequence:1,mode:"initial_https_navigation",outcome:"success",httpStatus:200,durationMs:100,effectiveUrl:CA_FIXTURE_URL}];
+  const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+  assert.equal(child.contractVersion,"certscore.california-privacy-review.v10");
+  assert.ok(child.observedScoreBasis);
+  assert.equal(deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:[]}).score,100);
+  lane.navigationAttempts=[];
+  assert.equal(projectCaliforniaObservedScoreBasis(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL),undefined);
+  lane.navigationAttempts=[{sequence:1,mode:"initial_https_navigation",outcome:"success",httpStatus:403,durationMs:100,effectiveUrl:CA_FIXTURE_URL}];
+  assert.equal(projectCaliforniaObservedScoreBasis(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL),undefined);
+});

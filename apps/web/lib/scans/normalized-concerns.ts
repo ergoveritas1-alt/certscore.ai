@@ -76,7 +76,8 @@ import {
 } from "./consent-control-lifecycle";
 import {
   CONSENT_GOVERNANCE_DISCLOSURE_CONCERN_ID,
-  getConsentGovernanceDisclosureEvidence
+  getConsentGovernanceDisclosureEvidence,
+  evaluateConsentGovernanceDisclosureEvidence
 } from "./consent-governance-disclosure";
 import { buildPreConsentStorageAssessment } from "./runtime-cookie-evidence";
 import {
@@ -1013,7 +1014,8 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     );
   }
 
-  if (consentGovernanceDisclosureEvidence) {
+  if (consentGovernanceDisclosureEvidence &&
+      evaluateConsentGovernanceDisclosureEvidence(rawEvidence).disposition === "eligible") {
     addEntity(entities, "findingSubtype", [CONSENT_GOVERNANCE_DISCLOSURE_CONCERN_ID]);
     addEntity(entities, "consentGovernanceDisclosureEvidence", [JSON.stringify(consentGovernanceDisclosureEvidence)]);
     addEntity(entities, "observedConsentVendors", consentGovernanceDisclosureEvidence.supportingAnchors.observedConsentVendors ?? []);

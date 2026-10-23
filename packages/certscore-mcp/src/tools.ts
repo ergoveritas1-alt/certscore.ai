@@ -1254,13 +1254,6 @@ function reportSummaryTextLines(value: Record<string, any>) {
     lines.push(`Forms observed (starting page): ${summary.totalObserved}; pre-consent=${summary.preConsentObserved ?? "unavailable"}; after Accept click=${summary.afterAcceptObserved ?? "unavailable"}.`);
     if (value.scanId) lines.push(`Form fields and screenshots: certscore_get_report_evidence_page with scanId=${value.scanId}, section=forms.`);
   }
-  const score = scanScoreExplanationSchema.safeParse(value.scoreExplanation);
-  if (score.success) {
-    for (const family of score.data.deductions) {
-      lines.push(`Canonical score deduction: ${family.deductionPoints} points (${family.label}); ` +
-        family.rules.map(rule => `${rule.ruleId}${rule.decisionVerification === "not_applicable" ? "" : `; decision verification=${rule.decisionVerification}`}`).join(", ") + ".");
-    }
-  }
   return lines;
 }
 

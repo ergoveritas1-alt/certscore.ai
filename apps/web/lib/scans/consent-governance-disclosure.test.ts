@@ -348,16 +348,38 @@ test("attaches eligible governance evidence to an existing cookie disclosure gap
   assert.equal(projection.findings.some((entry) => entry.id === "consent_governance_disclosure_gap"), false);
 });
 
-test("attaches eligible governance evidence to Consent Experience details", () => {
+test("eligible governance evidence cannot promote a deferred Consent Experience finding", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makeDisplayPacket({ evidence: governanceEvidence(), unifiedFindingId: "consent_control_not_reopenable" })
   ]);
-  const finding = projection.findings.find((entry) => entry.id === "consent_preference_reopen_control_not_observed");
-  assert.ok(finding);
-  assert.equal(
-    (finding.evidenceDetails?.disclosureEvidence?.consentGovernanceDisclosure as Record<string, unknown> | undefined)?.subtype,
-    "consent_governance_disclosure_gap"
-  );
-  assert.equal(projection.findings.filter((entry) => entry.id === "consent_preference_reopen_control_not_observed").length, 1);
-  assert.equal(projection.findings.some((entry) => entry.id === "consent_dark_patterns_detected"), false);
+  assert.equal(projection.findings.some(entry => entry.id === "consent_preference_reopen_control_not_observed"), false);
+  assert.equal(projection.findings.some(entry => entry.id === "consent_dark_patterns_detected"), false);
+});
+
+test("runtime anchors cannot manufacture governance disclosure evidence in unrelated concerns", () => {
+  for (const id of ["gpc_response", "post_reject_click_tracking", "california_collection_review"]) {
+    const raw = { runtimeEvidenceArtifacts: ["request:retained-example"] };
+    assert.equal(evaluateConsentGovernanceDisclosureEvidence(raw).evidence, null);
+    const concern = normalizeConcernFromReviewFindingCandidate({
+      title: id, description: "Retained runtime collection", severity: "medium", sourceType: "signal",
+      signalKey: id, observedValue: null, fallbackEvidence: raw
+    });
+    assert.ok(concern.evidenceBundle.runtimeArtifacts.includes("request:retained-example"));
+    assert.ok(!concern.evidenceBundle.flags.includes("consent_governance_disclosure_gap"));
+    assert.equal(concern.evidenceBundle.entities.consentGovernanceDisclosureEvidence, undefined);
+    assert.ok(!JSON.stringify(concern.evidenceBundle).includes("Consent governance disclosure note:"));
+  }
+});
+
+test("typed governance evidence must support a gap before normalization adds disclosure prose", () => {
+  for (const evidence of [governanceEvidence(), governanceEvidence({missingOrWeakDisclosureSignals:{}}),
+    governanceEvidence({supportingAnchors:{runtimeAnchors:["request:1"]},coverage:{}}),
+    governanceEvidence({coverage:{materiallyBlocked:true}})]) {
+    const review = evaluateConsentGovernanceDisclosureEvidence({consentGovernanceDisclosureEvidence:evidence});
+    const concern = normalizeConcernFromReviewFindingCandidate({title:"Governance review",description:"Retained evidence",
+      observedValue:null,severity:"medium",sourceType:"signal",signalKey:"privacy.consent_governance_disclosure_gap",
+      fallbackEvidence:{consentGovernanceDisclosureEvidence:evidence}});
+    assert.equal(concern.evidenceBundle.runtimeArtifacts.some(value=>value.startsWith("Consent governance disclosure note:")),
+      review.disposition === "eligible");
+  }
 });

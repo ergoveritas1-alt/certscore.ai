@@ -149,7 +149,6 @@ function normalizeEvidence(rawEvidence: Record<string, unknown>): ConsentGoverna
   const concernId = getString(source.concernId ?? source.concern_id ?? source.subtype ?? source.findingSubtype);
   const signalKey = getString(source.signalKey ?? source.signal_key);
   if (
-    concernId &&
     concernId !== CONSENT_GOVERNANCE_DISCLOSURE_CONCERN_ID &&
     signalKey !== CONSENT_GOVERNANCE_DISCLOSURE_CONCERN_ID
   ) {

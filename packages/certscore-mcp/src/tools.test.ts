@@ -119,7 +119,7 @@ test("MCP preserves the canonical accessibility score and capped deduction expla
       score: 88, scoreStatus: "final", scoreExplanation } as any });
   assert.equal(bundle.score, 88);
   assert.deepEqual(bundle.scoreExplanation, scoreExplanation);
-  assert.match(scanBundleText(bundle), /Canonical score deduction: 12 points \(Accessibility \(WCAG\)\)/);
+  assert.doesNotMatch(scanBundleText(bundle), /Canonical score deduction|decision verification=/);
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
 
@@ -146,8 +146,8 @@ test("bounded MCP bundles retain form phases, canonical Reject deductions and fo
     const text = scanBundleText(bundle);
     assert.match(text, /Forms observed \(starting page\): 2; pre-consent=0; after Accept click=2/);
     assert.match(text, /section=forms/);
-    assert.match(text, /Canonical score deduction: 15 points \(Post-refusal\)/);
-    assert.ok(text.includes(`decision verification=${decisionVerification}`));
+    assert.doesNotMatch(text, /Canonical score deduction|decision verification=/);
+
     const bounded = buildScanBundle({ detail: "summary", maxBytes: 8000, report: null,
       findings: { type: "certscore_finding_list", scanId: "scan_123", findings: [] },
       scan: { type: "certscore_scan", scanId: "scan_123", domain: "sits.example", url: "https://sits.example/en/", status: "completed",
@@ -159,7 +159,7 @@ test("bounded MCP bundles retain form phases, canonical Reject deductions and fo
     assert.ok(bounded.mcpMetadata.omittedSections.includes("gpcResponse"));
     assert.ok(bounded.mcpMetadata.actualBytes <= 8000);
     assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bounded));
-    assert.match(scanBundleText(bounded), /Canonical score deduction: 15 points/);
+    assert.doesNotMatch(scanBundleText(bounded), /Canonical score deduction|decision verification=/);
   }
 });
 
@@ -2282,4 +2282,23 @@ test("full bundles preserve typed evidence arrays and nested fields; byte limits
   assert.ok(bounded.mcpMetadata.actualBytes <= 25_000);
   assert.deepEqual(bounded.gpcResponse, gpcResponse);
   assert.equal(bounded.score, 100);
+});
+
+test("all customer MCP summary formatters omit deduction narration while retaining typed scores", () => {
+  for (const detail of ["summary", "findings", "evidence", "full"] as const) {
+    const scan={...structuredClone(budgetCore.scan),score:88,scoreExplanation:{
+      contractVersion:"certscore.score-explanation.v1",scope:"starting_page_canonical_score",
+      scoreVersion:"overall-posture.v13",policyVersion:"gdpr-eprivacy-posture.v23",baseScore:100,scoreFloor:0,
+      score:88,totalPolicyDeductionPoints:12,deductions:[{family:"accessibility",label:"Accessibility",
+      deductionPoints:12,rules:[{ruleId:"accessibility",label:"Accessibility",policyDeductionPoints:12,
+      findingIds:["accessibility"],decisionVerification:"not_applicable"}]}]}};
+    const bundle=buildScanBundle({scan,detail,maxBytes:25000,report:null,
+      findings:{type:"certscore_finding_list",scanId:scan.scanId,findings:[]}} as any);
+    assert.ok(bundle.scoreExplanation);
+    for (const text of [scanBundleText(bundle),scanBundleText(bundle,{toolProfile:"light"}),scanSiteText(scan),pulseReportText({...scan,summary:{score:scan.score}})]) {
+      assert.doesNotMatch(text,/Canonical score deduction|decision verification=|points deducted/i);
+    }
+    assert.equal(bundle.score,scan.score);
+    assert.deepEqual(bundle.scoreExplanation,scan.scoreExplanation);
+  }
 });
