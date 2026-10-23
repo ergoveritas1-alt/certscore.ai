@@ -3,6 +3,7 @@ import { gpcVendorFindingSummary } from "./choice-vendor-findings";
 import {retainedCaliforniaPostReject} from "./california-post-reject-policy";
 import {deriveGppPropagationPolicy} from "./gpp-propagation-policy";
 import { AFTER_REJECT_SCORING_POLICY, afterRejectScoringNarrative, retainedAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
+import { VENDOR_COVERAGE_REJECT_PRESENCE_POLICY } from "./after-reject-scoring-contract";
 import { assessConsentProminenceMateriality } from "./consent-prominence-materiality";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { readAccessibilityAudit, readPreferenceAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-evidence";
@@ -4123,7 +4124,7 @@ function buildRejectClickTrackingConcerns(
   domainContext?: ScanDomainContext
 ) {
   const scoring=retainedAfterRejectScoringAssessment(runtimeArtifacts);
-  if (scoring?.policyVersion===AFTER_REJECT_SCORING_POLICY && scoring.deductionPoints>0 &&
+  if (scoring && [AFTER_REJECT_SCORING_POLICY,VENDOR_COVERAGE_REJECT_PRESENCE_POLICY].some(version=>version===scoring.policyVersion) && scoring.deductionPoints>0 &&
     (scoring.cookieRefs?.length || scoring.requestIds.length)) {
     const narrative=afterRejectScoringNarrative(scoring)!;
     const refs=[`post-refusal-packet:sha256:${scoring.sourcePacketSha256}`,
@@ -4193,7 +4194,7 @@ function buildPostRefusalObservationConcerns(
     ...persistedStorageRows.map((row) => getStringValue(row.vendor))
   ]);
   const scoringAssessment = retainedAfterRejectScoringAssessment(runtimeArtifacts);
-  const presenceProjected=scoringAssessment?.policyVersion===AFTER_REJECT_SCORING_POLICY && scoringAssessment.deductionPoints>0 &&
+  const presenceProjected=scoringAssessment && [AFTER_REJECT_SCORING_POLICY,VENDOR_COVERAGE_REJECT_PRESENCE_POLICY].some(version=>version===scoringAssessment.policyVersion) && scoringAssessment.deductionPoints>0 &&
     (!!scoringAssessment.cookieRefs?.length || scoringAssessment.requestIds.length>0);
   const narrative = afterRejectScoringNarrative(scoringAssessment);
   const commonEvidence = {

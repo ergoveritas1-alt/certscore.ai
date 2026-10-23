@@ -12,7 +12,9 @@ import { projectCaliforniaObservedScoreBasis } from "./california-observed-score
 export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, source: { sha256?: string; verificationStatus?: string } | undefined, documentUrl: string | null, policyEvidence?: CaliforniaPolicyEvidence) {
   const workpaper = projectPrivacyAuditEvidence(bundle, source, documentUrl);
   const start = Date.parse(bundle.startedAt), end = Date.parse(bundle.completedAt);
-  if (!workpaper || !Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  if (!workpaper || !documentUrl || !Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  // The workpaper sanitizes URLs for display. Typed provenance must retain the
+  // original document identity, including query and fragment, to join its parent.
   const parsedInspection = privacyChoiceInspectionSchema.safeParse(bundle.policySurfaceInspection?.privacyChoiceInspection);
   const inspection = parsedInspection.success && parsedInspection.data.documentUrl === documentUrl &&
     Date.parse(parsedInspection.data.capturedAt) >= start && Date.parse(parsedInspection.data.capturedAt) <= end
@@ -84,7 +86,7 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
   const captureBasedPolicy = disclosurePolicy || bundle.policySurfaceInspection?.californiaReviewPolicy === "california-privacy-review.v3";
   const newCoverage = captureBasedPolicy || bundle.policySurfaceInspection?.californiaReviewPolicy === "california-privacy-review.v2" || isCurrentCaliforniaChoiceInspection(inspection);
   const reviewCoverage = newCoverage ? projectCaliforniaReviewCoverage(bundle, source!.sha256!, {
-    documentUrl:workpaper.documentUrl, inspection, choiceSurface, controls, ...(verifiedOptOut ? {optOutObservation:verifiedOptOut}:{}),
+    documentUrl:documentUrl, inspection, choiceSurface, controls, ...(verifiedOptOut ? {optOutObservation:verifiedOptOut}:{}),
   }, policyEvidence) : undefined;
   // Negative conclusions require verified full source text, not a missing positive
   // passage. Unknown languages, translation, truncation and missing supplements
@@ -131,7 +133,7 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
         completeCoverage: Boolean(disclosureInspection), positivePassageLanguage,
       }) : undefined;
   const saleSharingAssessment=refinedPolicy && disclosureInspection?assessCaliforniaSaleSharingClauses(clauseDocuments,source!.sha256!):undefined;
-  const collectionNoticeAssessment=clausePolicy ? (readUsePolicy?matchCaliforniaCollectionNoticesV5:runtimePurposePolicy?matchCaliforniaCollectionNoticesV4:categoryPolicy?matchCaliforniaCollectionNoticesV3:refinedPolicy?matchCaliforniaCollectionNoticesV2:matchCaliforniaCollectionNotices)({bundle,sourceHash:source!.sha256!,documentUrl:workpaper.documentUrl,
+  const collectionNoticeAssessment=clausePolicy ? (readUsePolicy?matchCaliforniaCollectionNoticesV5:runtimePurposePolicy?matchCaliforniaCollectionNoticesV4:categoryPolicy?matchCaliforniaCollectionNoticesV3:refinedPolicy?matchCaliforniaCollectionNoticesV2:matchCaliforniaCollectionNotices)({bundle,sourceHash:source!.sha256!,documentUrl:documentUrl,
     documents:clauseDocuments,policyComplete:Boolean(disclosureInspection),inventoryComplete:reviewCoverage?.contractVersion === "certscore.california-review-coverage.v2" && reviewCoverage.captureCoverage.collectionInventoryComplete}) : undefined;
   if(clausePolicy && reviewCoverage) {
     const rights=reviewCoverage.families.find(family=>family.id === "california_rights")!;
@@ -146,7 +148,7 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
       const rows=saleSharingAssessment.topics;
       const status=(topic:string)=>rows.find(row=>row.topic === topic)!.status.replaceAll("_"," ");
       const claim=saleSharingAssessment.choiceBasis;
-      const baselineIds=new Set((bundle.networkEvents??[]).filter(event=>["pre_consent","fresh_pre_consent"].includes(event.scenario??"") && event.documentUrl===workpaper.documentUrl).map(event=>event.eventId));
+      const baselineIds=new Set((bundle.networkEvents??[]).filter(event=>["pre_consent","fresh_pre_consent"].includes(event.scenario??"") && event.documentUrl===documentUrl).map(event=>event.eventId));
       const advertising=(bundle.normalizedVendorObservations??[]).some(vendor=>vendor.purpose === "advertising" && vendor.matchSources.some(match=>["pre_consent","fresh_pre_consent"].includes(match.scenario??"") && match.sourceEventId && baselineIds.has(match.sourceEventId)));
       const unresolved=rows.filter(row=>row.topic === "sale" || row.topic === "cross_context_sharing").some(row=>["qualified","conflicting","review","not_observed"].includes(row.status));
       sale.status=!unresolved && !(claim === "declared_neither" && advertising)?"observed":"review";
@@ -207,9 +209,9 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
   const result = californiaPrivacyReviewSchema.safeParse({
     contractVersion: transferPolicy ? "certscore.california-privacy-review.v10" : readUsePolicy ? "certscore.california-privacy-review.v9" : runtimePurposePolicy ? "certscore.california-privacy-review.v8" : categoryPolicy ? "certscore.california-privacy-review.v7" : refinedPolicy ? "certscore.california-privacy-review.v6" : clausePolicy ? "certscore.california-privacy-review.v5" : disclosurePolicy ? "certscore.california-privacy-review.v4" : captureBasedPolicy ? "certscore.california-privacy-review.v3" : newCoverage ? "certscore.california-privacy-review.v2" : "certscore.california-privacy-review.v1",
     policyVersion: transferPolicy ? "california-privacy-review.v10" : readUsePolicy ? "california-privacy-review.v9" : runtimePurposePolicy ? "california-privacy-review.v8" : categoryPolicy ? "california-privacy-review.v7" : refinedPolicy ? "california-privacy-review.v6" : clausePolicy ? "california-privacy-review.v5" : disclosurePolicy ? "california-privacy-review.v4" : captureBasedPolicy ? "california-privacy-review.v3" : newCoverage ? "california-privacy-review.v2" : "california-privacy-review.v1",
-    scanId: bundle.scanId, documentUrl: workpaper.documentUrl, capturedAt: bundle.completedAt,
+    scanId: bundle.scanId, documentUrl: documentUrl, capturedAt: bundle.completedAt,
     sourceHash: source!.sha256, verificationStatus: "verified", scoreEffect: "none", applicability: "not_determined",
-    ...(transferPolicy ? {observedScoreBasis:projectCaliforniaObservedScoreBasis(bundle,source,workpaper.documentUrl)} : {}),
+    ...(transferPolicy ? {observedScoreBasis:projectCaliforniaObservedScoreBasis(bundle,source,documentUrl)} : {}),
     inspection, choiceSurface, controls, controlsTruncated: workpaper.truncated, failedNoticeLinks,
     ...(verifiedOptOut ? {optOutObservation: verifiedOptOut} : {}),
     optOutEffectiveness: verifiedOptOut?.evidence.status === "complete" ? "bounded_observation" : "not_assessed", noticeAdequacy: "not_assessed",

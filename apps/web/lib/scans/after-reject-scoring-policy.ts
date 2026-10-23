@@ -1,5 +1,5 @@
 import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
-import {PRIOR_REJECT_PRESENCE_POLICY} from "./after-reject-scoring-contract";
+import {PRIOR_REJECT_PRESENCE_POLICY, VENDOR_COVERAGE_REJECT_PRESENCE_POLICY} from "./after-reject-scoring-contract";
 import { rejectVendorFindingSummary } from "./choice-vendor-findings";
 import { isCanonicalGoogleAnalyticsCollectionUrl } from "@certscore/vendor-resolver";
 import { assessGoogleConsentModeRequest, postRefusalReportProjectionSchema, readBoundMeasurementRequestEvidence } from "@certscore/contracts";
@@ -18,8 +18,8 @@ export function assessAfterRejectScoring(value: unknown, policyVersion: AfterRej
   const parsed = postRefusalReportProjectionSchema.safeParse(value);
   if (!parsed.success) return null;
   const p = parsed.data;
-  if ([AFTER_REJECT_SCORING_POLICY,PRIOR_REJECT_PRESENCE_POLICY].some(v=>v===policyVersion)) {
-    const presence=retainedRejectPresence(p,policyVersion===AFTER_REJECT_SCORING_POLICY), positive=!!presence && (presence.cookies.length>0 || presence.requestIds.length>0);
+  if (isRejectPresencePolicy(policyVersion)) {
+    const presence=retainedRejectPresence(p,policyVersion===AFTER_REJECT_SCORING_POLICY?"certscore.cookie-purpose.v7":policyVersion===VENDOR_COVERAGE_REJECT_PRESENCE_POLICY?"certscore.cookie-purpose.v6":undefined), positive=!!presence && (presence.cookies.length>0 || presence.requestIds.length>0);
     const contradiction=!!presence?.confirmed && p.contradictionObserved;
     const entityEvidence=presence?retainedRejectEntityEvidence(p,presence):{resolverVersion:"unavailable",entities:[],observations:[]};
     return schema.parse({policyVersion,sourcePacketSha256:p.packetSha256??null,

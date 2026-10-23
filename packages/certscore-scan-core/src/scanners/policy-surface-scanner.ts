@@ -6597,11 +6597,17 @@ export function assessGoverningPolicyBodyEvidence(input: {
     /(?:^|[\/_-])website[-_ ]privacy[-_ ](?:policy|notice)(?:[\/_.-]|$)/i
       .test(input.candidate.normalizedUrl) &&
     /\bwebsite\s+privacy\s+(?:policy|notice)\b/i.test(input.title ?? "");
-  const substantiveEvidence = substantiveAssessment ||
-    explicitWebsitePrivacyNoticeIdentity ||
-    canonicalContextTermCount >= 2 ||
-    input.substantiveDisclosureSignalCount >= 1 ||
+  const independentDisclosureEvidence = input.substantiveDisclosureSignalCount >= 1 ||
     input.evidenceBoundObservedTopicCount >= 1;
+  // Longer CMP shells can contain enough generic privacy vocabulary to pass
+  // the short-shell guard. Withhold governing-body credit unless an independent
+  // retained disclosure/section corroborates the notice. Keep multilingual
+  // reviewable notices eligible; absence of an English topic match is not a shell.
+  const consentShellWithoutDisclosure = !independentDisclosureEvidence &&
+    canonicalConsentControlIntentsInText(input.text.slice(0, 10_000)).size >= 2;
+  const substantiveEvidence = !consentShellWithoutDisclosure && (
+    substantiveAssessment || canonicalContextTermCount >= 2 || independentDisclosureEvidence
+  );
   const minimumBodyRetained = input.documentTextChars >= MIN_SUBSTANTIVE_POLICY_TEXT_CHARS;
   const shortSubstantiveBodyRetained = input.documentTextChars >= 1_000 &&
     classifierConfirmedStandalonePolicyCandidate && substantiveAssessment &&
@@ -6639,6 +6645,7 @@ export function assessGoverningPolicyBodyEvidence(input: {
     reasonCodes: uniqueStrings([
       ...(visitorScopeExcluded ? ["policy_body_explicitly_excludes_website_visitors"] : []),
       ...(codeOrMarkup ? ["policy_body_code_or_markup"] : []),
+      ...(consentShellWithoutDisclosure ? ["policy_body_disclosure_evidence_unverified"] : []),
       targetOwned ? "policy_body_target_owned" : "policy_body_target_ownership_unverified",
       exactPolicyCandidate ? "exact_privacy_policy_candidate" : "privacy_candidate_not_exact",
       textCoverageComplete ? "complete_policy_text_retention" : "policy_text_retention_incomplete",
@@ -6713,13 +6720,14 @@ export function assessPolicyDocumentRoleForChildSelection(
   const body=options.governingPolicyBodyAssessment;
   const nonPolicyRole = nonPolicyDocumentReason({ url: candidate.normalizedUrl, linkText: candidate.linkText });
   if (nonPolicyRole) return { role: "unknown", reasonCodes: [nonPolicyRole] };
+  const disclosureEvidenceUnverified = body?.reasonCodes.includes("policy_body_disclosure_evidence_unverified");
   const retainedChildren = [...selection.fetchCandidates, ...selection.observedChildCandidates];
   const directPrivacyClassification = candidate.deterministicClassifierReasonCodes
     .includes("matched_privacy_policy");
   const fragmentScopedCombinedPrivacyNotice =
     candidate.deterministicClassifierReasonCodes.includes("variant_combined_privacy_terms_surface") &&
     /#(?:privacy|privacy-policy|privacy-notice)(?:$|[/?_-])/i.test(candidate.normalizedUrl);
-  if (fragmentScopedCombinedPrivacyNotice) {
+  if (fragmentScopedCombinedPrivacyNotice && !disclosureEvidenceUnverified) {
     return { role: "policy_document", reasonCodes: ["fragment_scoped_combined_privacy_notice"] };
   }
   const privacyChildren = retainedChildren
@@ -6734,7 +6742,7 @@ export function assessPolicyDocumentRoleForChildSelection(
         .test(child.normalizedUrl);
     }
   });
-  if (directPrivacyClassification && onlyHistoricalPrivacyChildren) {
+  if (directPrivacyClassification && onlyHistoricalPrivacyChildren && !disclosureEvidenceUnverified) {
     return { role: "policy_document", reasonCodes: ["direct_privacy_document_with_only_historical_children"] };
   }
   if (privacyChildren.some((child) =>
@@ -6788,6 +6796,9 @@ export function assessPolicyDocumentRoleForChildSelection(
   const privacyChildCount = privacyChildren.length;
   if (privacyChildCount >= 2) {
     return { role: "policy_index", reasonCodes: ["multiple_distinct_privacy_document_children_retained"] };
+  }
+  if (disclosureEvidenceUnverified) {
+    return { role: "unknown", reasonCodes: ["retained_document_has_no_substantive_privacy_body"] };
   }
   if(body && body.state!=="substantive" && body.canonicalContextTermCount<2 &&
       (options.substantiveDisclosureSignalCount??body.substantiveDisclosureSignalCount)===0 &&

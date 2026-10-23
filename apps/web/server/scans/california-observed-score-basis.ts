@@ -4,7 +4,6 @@ function documentUrl(value:string) {
   try {
     const url=new URL(value);
     if(!["http:","https:"].includes(url.protocol) || url.username || url.password)return null;
-    url.search="";url.hash="";
     return url.toString();
   } catch {return null;}
 }
@@ -26,7 +25,9 @@ export function projectCaliforniaObservedScoreBasis(bundle:CanonicalEvidenceBund
   if(lane.executionOutcome==="degraded" && !lane.navigationAttempts?.some(attempt=>
     attempt.outcome==="success" && typeof attempt.httpStatus==="number" &&
     attempt.httpStatus>=200 && attempt.httpStatus<300))return undefined;
-  const snapshot=bundle.runtimeMetadataSnapshots?.find(row=>documentUrl(row.url)===finalUrl &&
+  const exactFinalUrl=documentUrl(finalUrl);
+  if(!exactFinalUrl)return undefined;
+  const snapshot=bundle.runtimeMetadataSnapshots?.find(row=>documentUrl(row.url)===exactFinalUrl &&
     row.documentIdentity?.source==="cdp_loader_id" && row.documentIdentity.token && row.artifactId && row.path &&
     (row.textExcerpt?.trim() || row.siteMetadata?.title?.trim()));
   // The typed runtime snapshot (including page text or title) is retained in the

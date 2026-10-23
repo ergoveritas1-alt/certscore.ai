@@ -1,5 +1,5 @@
 import type { PostRefusalReportProjection } from "@certscore/contracts";
-import { CANONICAL_VENDOR_RESOLVER_VERSION, COOKIE_PURPOSE_POLICY, getCanonicalVendorRegistryManifest,
+import { CANONICAL_VENDOR_RESOLVER_VERSION, C3_COOKIE_PROVIDER_RESOLVER_VERSION, getCanonicalVendorRegistryManifest,
   resolveCanonicalVendor, resolveCanonicalVendorLabel, resolveCanonicalCookieClassification } from "@certscore/vendor-resolver";
 import { retainedRejectPresence } from "./reject-presence-evidence";
 
@@ -26,9 +26,9 @@ export function retainedRejectEntityEvidence(p: PostRefusalReportProjection, pre
   for (const cookie of presence.cookies) {
     const source = p.scoringEvidence!.postActionStorage.find(row => row.storageType === "cookie" && row.name === cookie.name &&
       row.hostname === cookie.hostname && row.identityHash === cookie.identityHash && row.valueHash === cookie.valueHash)!;
-    const classification=presence.reclassify?resolveCanonicalCookieClassification(source.name,{cookieDomain:source.hostname}):null;
+    const classification=presence.reclassify?resolveCanonicalCookieClassification(source.name,{cookieDomain:source.hostname},presence.cookiePurposePolicy):null;
     const identity = classification?.provider?{entityId:classification.provider.registryAttribution.entityId,entity:classification.provider.entity,vendor:classification.provider.vendor}:owner({ type: "cookie", cookieName: source.name, hostname: source.hostname,
-      cookiePurposePolicyVersion: presence.reclassify?COOKIE_PURPOSE_POLICY:"certscore.cookie-purpose.v5" }, source.vendor);
+      cookiePurposePolicyVersion: presence.cookiePurposePolicy??"certscore.cookie-purpose.v5" }, source.vendor);
     observations.push({ kind: "cookie_snapshot", evidenceRef: `cookie:${cookie.identityHash ?? `${cookie.name}@${cookie.hostname ?? ""}`}:${cookie.valueHash}`,
       name: cookie.name, ...(cookie.hostname ? { hostname: cookie.hostname } : {}), purpose: classification?.category??source.purpose!,
       msAfterClick: presence.postSnapshot! - presence.start, ...(identity ?? {}) });
@@ -44,5 +44,5 @@ export function retainedRejectEntityEvidence(p: PostRefusalReportProjection, pre
   const entities = [...new Map(observations.flatMap(row => row.entityId ? [[row.entityId,
     { entityId: row.entityId, entity: row.entity!, vendor: row.vendor! }] as const] : [])).values()]
     .sort((a, b) => a.entityId.localeCompare(b.entityId));
-  return { resolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION, entities, observations };
+  return { resolverVersion: presence.cookiePurposePolicy==="certscore.cookie-purpose.v7"?C3_COOKIE_PROVIDER_RESOLVER_VERSION:CANONICAL_VENDOR_RESOLVER_VERSION, entities, observations };
 }

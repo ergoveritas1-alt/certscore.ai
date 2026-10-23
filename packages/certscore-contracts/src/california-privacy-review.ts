@@ -14,6 +14,12 @@ const safeUrl = z.string().url().max(800).refine(value => {
   const url = new URL(value);
   return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash;
 });
+// Provenance joins the exact original visit. Unlike public display links, its
+// query/fragment cannot be discarded without changing document identity.
+const documentIdentityUrl = z.string().url().max(800).refine(value => {
+  const url = new URL(value);
+  return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password;
+});
 
 /** Positive, narrowly named request routes; a link does not prove the method works. */
 export function classifyCaliforniaRightsMethod(label: string): boolean {
@@ -145,7 +151,7 @@ const noticeLinkSchema = z.object({
 
 const californiaPrivacyReviewFields = {
   scanId: z.string().min(1),
-  documentUrl: safeUrl,
+  documentUrl: documentIdentityUrl,
   capturedAt: z.string().datetime(),
   sourceHash: hash,
   verificationStatus: z.literal("verified"),
@@ -200,7 +206,7 @@ const californiaPrivacyReviewV9=californiaPrivacyReviewV8.extend({
  * it never establishes a policy pass, absence, applicability or finding. */
 export const californiaObservedScoreBasisSchema = z.object({
   policyVersion:z.literal("usable_starting_page_score.v1"),
-  scanId:z.string().min(1).max(160), documentUrl:safeUrl, sourceHash:hash,
+  scanId:z.string().min(1).max(160), documentUrl:documentIdentityUrl, sourceHash:hash,
   documentToken:z.string().min(1).max(256), domArtifactId:z.string().min(1).max(200),
   sourceLane:z.literal("runtime_evidence"), accessOutcome:z.literal("representative_page"),
   evidenceRef:z.literal("CanonicalEvidenceBundle.json#runtimeMetadataSnapshots"),

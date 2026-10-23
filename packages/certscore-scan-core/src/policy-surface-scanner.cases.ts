@@ -2029,7 +2029,8 @@ test("complete substantive policy bodies outrank supplemental child counts witho
     text: navigationText,
     title: "Website Privacy Notice - Example",
   });
-  assert.equal(explicitWebsiteNoticeAssessment.state, "substantive");
+  // An exact notice URL/title cannot upgrade the same retained navigation shell.
+  assert.equal(explicitWebsiteNoticeAssessment.state, "insufficient");
   assert.equal(
     explicitWebsiteNoticeAssessment.reasonCodes.includes("explicit_website_privacy_notice_identity"),
     true,
