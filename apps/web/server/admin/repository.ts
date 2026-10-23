@@ -1,5 +1,6 @@
 "use server";
 
+import { scanOriginalRequesterQaSql, scanOriginalRequesterMacMiniSql, scanOriginalRequestCanarySql } from "../../lib/admin/scan-traffic-classification-sql";
 import { loadScanTrafficClassification } from "./scan-traffic-classification";
 import { scanCanaryTargetSql } from "../../lib/admin/canary-scan-target";
 import { activityTrafficDefaultVisibilitySql } from "../../lib/admin/activity-provenance";
@@ -23,32 +24,6 @@ import {
   ADMIN_OPERATIONAL_SNAPSHOT_CONFIG,
   type AdminOperationalSnapshotPeriod,
 } from "../../lib/admin/admin-operational-snapshot";
-
-function internalQaLinkedRequestSql(
-  scanIdExpression: string,
-  emailParam: string,
-  requesterIpParam: string,
-  clientNameParam: string,
-) {
-  return `exists (
-    select 1
-      from (
-        select iqa_pr.requested_by, iqa_pr.request_context
-          from public.pulse_requests iqa_pr
-         where iqa_pr.scan_id = ${scanIdExpression}
-        union all
-        select iqa_sr.requested_by, iqa_sr.request_context
-          from public.scan_requests iqa_sr
-         where coalesce(iqa_sr.fulfilled_by_scan_id, iqa_sr.scan_id) = ${scanIdExpression}
-      ) iqa_request
-      left join public.integration_api_keys iqa_key on iqa_key.public_id = iqa_request.requested_by ->> 'apiKeyId'
-      left join public.users iqa_user on iqa_user.id::text = coalesce(iqa_request.requested_by ->> 'userId', iqa_key.owner_user_id::text)
-      left join public.better_auth_users iqa_auth_user on iqa_auth_user.id = iqa_request.requested_by ->> 'userId'
-     where lower(coalesce(iqa_user.email, iqa_auth_user.email, iqa_key.created_by, '')) = any(${emailParam}::text[])
-        or trim(split_part(coalesce(nullif(iqa_request.request_context ->> 'sourceIp', ''), nullif(iqa_request.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(iqa_request.requested_by ->> 'sourceIp', ''), ''), '/', 1)) = any(${requesterIpParam}::text[])
-        or lower(coalesce(nullif(iqa_request.request_context ->> 'clientName', ''), nullif(iqa_request.request_context ->> 'client', ''), '')) = any(${clientNameParam}::text[])
-  )`;
-}
 
 function adminTrafficVisibilitySql(input: {
   trafficClass?: string;
@@ -387,47 +362,11 @@ function adminScanActivityBaseSql() {
       ,coalesce(nullif(trim(ss.stop_reason_code), ''), ss.scan_outcome) as outcome_filter
       ,(
         exists (select 1 from public.scan_pages csp where csp.scan_id = s.id and csp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
-        or exists (
-          select 1 from public.scan_requests csr
-          where coalesce(csr.fulfilled_by_scan_id, csr.scan_id) = s.id
-            and coalesce(csr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
-        )
-        or exists (
-          select 1 from public.pulse_requests cpr
-          where cpr.scan_id = s.id
-            and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
-        )
-        or exists (
-          select 1
-            from (
-              select iqa_pr.requested_by, iqa_pr.request_context
-                from public.pulse_requests iqa_pr
-               where iqa_pr.scan_id = s.id
-              union all
-              select iqa_sr.requested_by, iqa_sr.request_context
-                from public.scan_requests iqa_sr
-               where coalesce(iqa_sr.fulfilled_by_scan_id, iqa_sr.scan_id) = s.id
-            ) iqa_request
-            left join public.integration_api_keys iqa_key on iqa_key.public_id = iqa_request.requested_by ->> 'apiKeyId'
-            left join public.users iqa_user on iqa_user.id::text = coalesce(iqa_request.requested_by ->> 'userId', iqa_key.owner_user_id::text)
-            left join public.better_auth_users iqa_auth_user on iqa_auth_user.id = iqa_request.requested_by ->> 'userId'
-           where lower(coalesce(iqa_user.email, iqa_auth_user.email, iqa_key.created_by, '')) = any($23::text[])
-              or trim(split_part(coalesce(nullif(iqa_request.request_context ->> 'sourceIp', ''), nullif(iqa_request.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(iqa_request.requested_by ->> 'sourceIp', ''), ''), '/', 1)) = any($24::text[])
-              or lower(coalesce(nullif(iqa_request.request_context ->> 'clientName', ''), nullif(iqa_request.request_context ->> 'client', ''), '')) = any($25::text[])
-        )
+        or ${scanOriginalRequestCanarySql("s.id")}
+        or ${scanOriginalRequesterQaSql("s.id", "$23", "$24", "$25")}
         or ${scanCanaryTargetSql("s.scan_config_json")}
       ) as canary_filter
-      ,(
-        exists (
-          select 1 from public.pulse_requests bot_pr
-          join public.integration_api_keys bot_key on bot_key.public_id = bot_pr.requested_by ->> 'apiKeyId'
-          where bot_pr.scan_id = s.id and bot_key.name = any($22::text[])
-        ) or exists (
-          select 1 from public.scan_requests bot_sr
-          join public.integration_api_keys bot_key on bot_key.public_id = bot_sr.requested_by ->> 'apiKeyId'
-          where coalesce(bot_sr.fulfilled_by_scan_id, bot_sr.scan_id) = s.id and bot_key.name = any($22::text[])
-        )
-      ) as mac_mini_scan_bot_filter
+      ,${scanOriginalRequesterMacMiniSql("s.id", "$22")} as mac_mini_scan_bot_filter
     from public.scans s
     left join public.domains d on d.id = s.domain_id
     left join public.industries ind on ind.id = d.industry_primary_id
@@ -573,11 +512,7 @@ function adminScanActivityBaseSql() {
         exists (
           select 1 from public.integration_api_keys bot_key
           where bot_key.public_id = sr.requested_by ->> 'apiKeyId' and bot_key.name = any($22::text[])
-        ) or exists (
-          select 1 from public.pulse_requests bot_pr
-          join public.integration_api_keys bot_key on bot_key.public_id = bot_pr.requested_by ->> 'apiKeyId'
-          where bot_pr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id) and bot_key.name = any($22::text[])
-        )
+        ) or ${scanOriginalRequesterMacMiniSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$22")}
       ) as mac_mini_scan_bot_filter
     from public.scan_requests sr
     left join public.scans s on s.id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
@@ -2791,23 +2726,15 @@ export async function loadAdminScanOperationalSnapshot(
       where sp.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
         and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
     )
-    or exists (
-      select 1 from public.pulse_requests cpr
-      where cpr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
-        and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
-    )
+    or ${scanOriginalRequestCanarySql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)")}
     or lower(coalesce(request_user.email, request_auth_user.email, request_key.created_by, '')) = any($5::text[])
     or trim(split_part(coalesce(nullif(sr.request_context ->> 'sourceIp', ''), nullif(sr.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(sr.requested_by ->> 'sourceIp', ''), ''), '/', 1)) = any($6::text[])
     or lower(coalesce(nullif(sr.request_context ->> 'clientName', ''), nullif(sr.request_context ->> 'client', ''), '')) = any($7::text[])
-    or ${internalQaLinkedRequestSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$5", "$6", "$7")}
+    or ${scanOriginalRequesterQaSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$5", "$6", "$7")}
   `;
   const snapshotRequestMacMiniFilter = `
     exists (select 1 from mac_mini_scan_bot_keys bot_key where bot_key.public_id = sr.requested_by ->> 'apiKeyId')
-    or exists (
-      select 1 from public.pulse_requests bot_pr
-      join mac_mini_scan_bot_keys bot_key on bot_key.public_id = bot_pr.requested_by ->> 'apiKeyId'
-      where bot_pr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
-    )
+    or ${scanOriginalRequesterMacMiniSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$3")}
   `;
   const result = await queryOne<AdminScanOperationalSnapshotRow>(
     `with mac_mini_scan_bot_keys as materialized (
@@ -3012,23 +2939,15 @@ export async function loadAdminScanOverviewCounts(includeCanary = false, exclude
             where sp.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
               and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
           )
-          and not exists (
-            select 1 from pulse_requests cpr
-            where cpr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
-              and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
-          )
+          and not ${scanOriginalRequestCanarySql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)")}
           and lower(coalesce(request_user.email, request_auth_user.email, request_key.created_by, '')) <> all($4::text[])
           and trim(split_part(coalesce(nullif(sr.request_context ->> 'sourceIp', ''), nullif(sr.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(sr.requested_by ->> 'sourceIp', ''), ''), '/', 1)) <> all($5::text[])
           and lower(coalesce(nullif(sr.request_context ->> 'clientName', ''), nullif(sr.request_context ->> 'client', ''), '')) <> all($6::text[])
-          and not ${internalQaLinkedRequestSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$4", "$5", "$6")}
+          and not ${scanOriginalRequesterQaSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$4", "$5", "$6")}
         ))
           and ($2::boolean = false or not (
             exists (select 1 from integration_api_keys bot_key where bot_key.public_id = sr.requested_by ->> 'apiKeyId' and bot_key.name = any($3::text[]))
-            or exists (
-              select 1 from pulse_requests bot_pr
-              join integration_api_keys bot_key on bot_key.public_id = bot_pr.requested_by ->> 'apiKeyId'
-              where bot_pr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id) and bot_key.name = any($3::text[])
-            )
+            or ${scanOriginalRequesterMacMiniSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$3")}
           ))`,
       [includeCanary, excludeMacMiniScanBot, MAC_MINI_SCAN_BOT_API_KEY_NAMES, INTERNAL_QA_EMAILS, INTERNAL_QA_REQUESTER_IPS, INTERNAL_QA_MCP_CLIENT_NAMES],
       { readOnly: true }

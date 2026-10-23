@@ -1,61 +1,51 @@
 import { scanCanaryTargetSql } from "./canary-scan-target";
+import { scanCreatorSql, scanOriginalRequestsSql } from "./scan-creation-source";
+
+function requesterJoinsSql() {
+  return `left join public.integration_api_keys origin_key on origin_key.public_id = origin.requested_by ->> 'apiKeyId'
+    left join public.users origin_user on origin_user.id::text = coalesce(origin.requested_by ->> 'userId', origin_key.owner_user_id::text)
+    left join public.better_auth_users origin_auth_user on origin_auth_user.id = coalesce(origin.requested_by ->> 'userId', origin_key.owner_user_id::text)`;
+}
+
+function requesterQaSql(emailParam: string, ipParam: string, clientParam: string) {
+  return `(lower(coalesce(origin_user.email, origin_auth_user.email, origin_key.created_by, '')) = any(${emailParam}::text[])
+    or trim(split_part(coalesce(nullif(origin.request_context ->> 'sourceIp', ''), nullif(origin.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(origin.requested_by ->> 'sourceIp', ''), ''), '/', 1)) = any(${ipParam}::text[])
+    or lower(coalesce(nullif(origin.request_context ->> 'clientName', ''), nullif(origin.request_context ->> 'client', ''), '')) = any(${clientParam}::text[]))`;
+}
+
+export function scanOriginalRequesterQaSql(scanId: string, emailParam: string, ipParam: string, clientParam: string) {
+  return `exists (select 1 from (${scanCreatorSql(scanId)}) origin ${requesterJoinsSql()}
+    where ${requesterQaSql(emailParam, ipParam, clientParam)})`;
+}
+
+export function scanOriginalRequesterMacMiniSql(scanId: string, keysParam: string) {
+  return `exists (select 1 from (${scanCreatorSql(scanId)}) origin ${requesterJoinsSql()}
+    where origin_key.name = any(${keysParam}::text[]))`;
+}
+
+export function scanOriginalRequestCanarySql(scanId: string) {
+  return `exists (select 1 from (${scanCreatorSql(scanId)}) origin
+    where coalesce(origin.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')`;
+}
 
 // Parameters: Mac mini key names, QA emails, QA requester IPs, QA client names.
-export const SCAN_TRAFFIC_CLASSIFICATION_SQL = `with canary_scan_ids as materialized (
-         select s.id as scan_id from public.scans s
-          where ${scanCanaryTargetSql("s.scan_config_json")}
-         union
-         select sp.scan_id
-           from public.scan_pages sp
-          where sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
-         union
-         select coalesce(sr.fulfilled_by_scan_id, sr.scan_id) as scan_id
-           from public.scan_requests sr
-          where coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is not null
-            and coalesce(sr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
-         union
-         select pr.scan_id
-           from public.pulse_requests pr
-          where pr.scan_id is not null
-            and coalesce(pr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
-         union
-         select iqa_pr.scan_id
-           from public.pulse_requests iqa_pr
-           left join public.integration_api_keys iqa_key on iqa_key.public_id = iqa_pr.requested_by ->> 'apiKeyId'
-           left join public.users iqa_user on iqa_user.id::text = coalesce(iqa_pr.requested_by ->> 'userId', iqa_key.owner_user_id::text)
-           left join public.better_auth_users iqa_auth_user on iqa_auth_user.id = iqa_pr.requested_by ->> 'userId'
-          where iqa_pr.scan_id is not null
-            and (
-              lower(coalesce(iqa_user.email, iqa_auth_user.email, iqa_key.created_by, '')) = any($2::text[])
-              or trim(split_part(coalesce(nullif(iqa_pr.request_context ->> 'sourceIp', ''), nullif(iqa_pr.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(iqa_pr.requested_by ->> 'sourceIp', ''), ''), '/', 1)) = any($3::text[])
-              or lower(coalesce(nullif(iqa_pr.request_context ->> 'clientName', ''), nullif(iqa_pr.request_context ->> 'client', ''), '')) = any($4::text[])
-            )
-         union
-         select coalesce(iqa_sr.fulfilled_by_scan_id, iqa_sr.scan_id)
-           from public.scan_requests iqa_sr
-           left join public.integration_api_keys iqa_key on iqa_key.public_id = iqa_sr.requested_by ->> 'apiKeyId'
-           left join public.users iqa_user on iqa_user.id::text = coalesce(iqa_sr.requested_by ->> 'userId', iqa_key.owner_user_id::text)
-           left join public.better_auth_users iqa_auth_user on iqa_auth_user.id = iqa_sr.requested_by ->> 'userId'
-          where coalesce(iqa_sr.fulfilled_by_scan_id, iqa_sr.scan_id) is not null
-            and (
-              lower(coalesce(iqa_user.email, iqa_auth_user.email, iqa_key.created_by, '')) = any($2::text[])
-              or trim(split_part(coalesce(nullif(iqa_sr.request_context ->> 'sourceIp', ''), nullif(iqa_sr.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(iqa_sr.requested_by ->> 'sourceIp', ''), ''), '/', 1)) = any($3::text[])
-              or lower(coalesce(nullif(iqa_sr.request_context ->> 'clientName', ''), nullif(iqa_sr.request_context ->> 'client', ''), '')) = any($4::text[])
-            )
-       ), mac_mini_scan_bot_keys as materialized (
-         select public_id
-           from public.integration_api_keys
-          where name = any($1::text[])
-       ), mac_mini_scan_bot_scan_ids as materialized (
-         select pr.scan_id
-           from public.pulse_requests pr
-           join mac_mini_scan_bot_keys bot_key on bot_key.public_id = pr.requested_by ->> 'apiKeyId'
-          where pr.scan_id is not null
-         union
-         select coalesce(sr.fulfilled_by_scan_id, sr.scan_id) as scan_id
-           from public.scan_requests sr
-           join mac_mini_scan_bot_keys bot_key on bot_key.public_id = sr.requested_by ->> 'apiKeyId'
-          where coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is not null
-       ) select
-       coalesce((select array_agg(scan_id::text) from canary_scan_ids), '{}') as qa,
-       coalesce((select array_agg(scan_id::text) from mac_mini_scan_bot_scan_ids), '{}') as macmini`;
+// Select the original request before classifying it. A later internal result
+// lookup (or daemon reuse) cannot change the audience of an existing scan.
+export const SCAN_TRAFFIC_CLASSIFICATION_SQL = `with origins as materialized (
+    ${scanOriginalRequestsSql()}
+  ), classified as (
+    select origin.scan_id,
+      ${requesterQaSql("$2", "$3", "$4")} as qa,
+      origin_key.name = any($1::text[]) as macmini,
+      coalesce(origin.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/' as canary
+    from origins origin ${requesterJoinsSql()}
+  ), canary_scan_ids as (
+    select s.id as scan_id from public.scans s where ${scanCanaryTargetSql("s.scan_config_json")}
+    union
+    select sp.scan_id from public.scan_pages sp
+      where sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+    union
+    select scan_id from classified where qa or canary
+  ) select
+    coalesce((select array_agg(scan_id::text) from canary_scan_ids), '{}') as qa,
+    coalesce((select array_agg(scan_id::text) from classified where macmini), '{}') as macmini`;

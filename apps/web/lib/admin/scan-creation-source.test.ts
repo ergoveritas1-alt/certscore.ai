@@ -38,11 +38,11 @@ test("SQL creator attribution ignores reuse and reads, preserves oldest creation
   try {
     await db.query(`begin;
       create temp table scans(id text, scan_config_json jsonb);
-      create temp table scan_requests(public_id text, scan_id text, fulfilled_by_scan_id text, requested_at timestamptz, request_channel text, resolution_mode text);
-      create temp table pulse_requests(public_id text, scan_id text, requested_at timestamptz, request_channel text, resolution_mode text, request_context jsonb, requested_by jsonb);
+      create temp table scan_requests(public_id text, scan_id text, fulfilled_by_scan_id text, requested_at timestamptz, request_channel text, resolution_mode text, requested_by jsonb default '{}', request_context jsonb default '{}', requested_url text);
+      create temp table pulse_requests(public_id text, scan_id text, requested_at timestamptz, request_channel text, resolution_mode text, request_context jsonb, requested_by jsonb, requested_url text);
       insert into scans values ('browser','{"source":"homepage-anonymous"}'), ('light','{"source":"pulse_api"}'), ('auth','{}'), ('legacy','{}'), ('unknown','{}');
-      insert into scan_requests values ('browser-create','browser','browser','2026-09-01','homepage-anonymous','queued_new_scan');
-      insert into pulse_requests values
+      insert into scan_requests(public_id,scan_id,fulfilled_by_scan_id,requested_at,request_channel,resolution_mode) values ('browser-create','browser','browser','2026-09-01','homepage-anonymous','queued_new_scan');
+      insert into pulse_requests(public_id,scan_id,requested_at,request_channel,resolution_mode,request_context,requested_by) values
         ('later-mcp','browser','2026-09-02','mcp','reused_existing_scan','{}','{}'),
         ('light-create','light','2026-09-01','mcp','created_new_scan','{"anonymousMcpSurface":"mcp_light"}','{"anonymous":true}'),
         ('auth-create','auth','2026-09-01','mcp','queued_new_scan','{}','{"anonymous":false}'),

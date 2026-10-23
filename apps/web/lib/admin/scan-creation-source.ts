@@ -40,22 +40,38 @@ export function scanCreationSourceSql(expression: string) {
   return `case ${Object.entries(CHANNELS).map(([kind, channels]) => `when ${expression} in (${channels.map((channel) => `'${channel}'`).join(",")}) then '${kind}'`).join(" ")} else 'unknown' end`;
 }
 
-// Both filtering and row enrichment use this same creator selection. Only an
-// explicit new-scan resolution qualifies; later reads/reuse never become creators.
-export function scanCreatorSql(scanId: string) {
-  return `select creator.* from (
-    select pr.public_id, pr.requested_at,
+// Only explicit creation requests qualify. Reads/reuse and missing historical
+// provenance must never become scan ownership, even when they are the only rows.
+export function scanCreationRequestsSql(scanId?: string) {
+  return `select pr.scan_id, pr.public_id, pr.requested_at,
+      pr.requested_by, pr.request_context, pr.requested_url,
       case when pr.request_channel = 'mcp' and pr.request_context ->> 'anonymousMcpSurface' = 'mcp_light' then 'mcp_light'
         when pr.request_channel = 'mcp' and pr.requested_by ->> 'anonymous' = 'false' then 'mcp_authenticated'
         else pr.request_channel end as channel, 0 as priority
     from public.pulse_requests pr
-    where pr.scan_id = ${scanId} and pr.resolution_mode in ('created_new_scan', 'queued_new_scan')
+    where pr.scan_id is not null ${scanId ? `and pr.scan_id = ${scanId}` : ""}
+      and pr.resolution_mode in ('created_new_scan', 'queued_new_scan')
+      and coalesce(pr.request_context ->> 'mode', '') <> 'scanId'
     union all
-    select sr.public_id, sr.requested_at, sr.request_channel as channel, 1 as priority
+    select coalesce(sr.fulfilled_by_scan_id, sr.scan_id), sr.public_id, sr.requested_at,
+      sr.requested_by, sr.request_context, sr.requested_url, sr.request_channel as channel, 1 as priority
     from public.scan_requests sr
-    where coalesce(sr.fulfilled_by_scan_id, sr.scan_id) = ${scanId}
+    where coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is not null
+      ${scanId ? `and coalesce(sr.fulfilled_by_scan_id, sr.scan_id) = ${scanId}` : ""}
       and sr.resolution_mode = 'queued_new_scan'
-  ) creator order by creator.requested_at asc, creator.priority asc, creator.public_id asc limit 1`;
+      and coalesce(sr.request_context ->> 'mode', '') <> 'scanId'`;
+}
+
+// Filtering, row enrichment and traffic classification share the same ordering.
+export function scanCreatorSql(scanId: string) {
+  return `select creator.* from (${scanCreationRequestsSql(scanId)}) creator
+    order by creator.requested_at asc, creator.priority asc, creator.public_id asc limit 1`;
+}
+
+export function scanOriginalRequestsSql() {
+  return `select distinct on (creator.scan_id) creator.*
+    from (${scanCreationRequestsSql()}) creator
+    order by creator.scan_id, creator.requested_at asc, creator.priority asc, creator.public_id asc`;
 }
 
 export function scanCreatedViaSql(scanId: string, config: string) {

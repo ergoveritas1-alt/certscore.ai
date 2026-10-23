@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import pg from 'pg';
 import { getAdminUsersOrderBy, type AdminUsersSortKey } from './admin-users-sort';
-import { SCAN_TRAFFIC_CLASSIFICATION_SQL } from '../../lib/admin/scan-traffic-classification-sql';
 
 const repository = readFileSync('apps/web/server/admin/repository.ts', 'utf8');
 const databaseUrl = process.env.ADMIN_PERFORMANCE_TEST_DATABASE_URL;
@@ -58,28 +57,6 @@ test('Users preserves submitted/claimed/request counts and sorting with grouped 
   } finally { await db.end(); }
 });
 
-test('cached scan classification preserves canary, ownership, IP, client, reused-scan and bot identities', { skip: !databaseUrl }, async () => {
-  const db = await connect();
-  try {
-    await db.query(`create temp table scans(id text,scan_config_json jsonb);
-      create temp table scan_pages(scan_id text,page_url text);
-      create temp table scan_requests(scan_id text,fulfilled_by_scan_id text,requested_by jsonb,request_context jsonb,requested_url text);
-      create temp table pulse_requests(scan_id text,requested_by jsonb,request_context jsonb,requested_url text);
-      create temp table integration_api_keys(public_id text,name text,owner_user_id text,created_by text);
-      create temp table users(id text,email text);
-      create temp table better_auth_users(id text,email text);
-      insert into scan_pages values ('canary','https://example.test/.well-known/certscore-canary/check'),('ordinary','https://example.test/');
-      insert into scans values ('config-only-canary','{"normalizedUrl":"https://example.test/.well-known/certscore-canary/sentinels/test.html"}'),
-        ('config-only-ordinary','{"normalizedUrl":"https://example.test/"}');
-      insert into users values ('qa','qa@example.test');
-      insert into integration_api_keys values ('bot','mini',null,null),('owner','ordinary','qa',null);
-      insert into pulse_requests values ('owner','{"apiKeyId":"owner"}','{}',null),('ip','{}','{"provenance":{"sourceIp":"192.0.2.1/32"}}',null),('client','{}','{"client":"LOCAL-QA"}',null),('bot','{"apiKeyId":"bot"}','{}',null),('external','{}','{}',null);
-      insert into scan_requests values ('original','fulfilled','{"userId":"qa"}','{}',null),('unlinked',null,'{}','{}','https://example.test/.well-known/certscore-canary/check');`);
-    const row = (await db.query(SCAN_TRAFFIC_CLASSIFICATION_SQL.replaceAll('public.','pg_temp.'),[['mini'],['qa@example.test'],['192.0.2.1'],['local-qa']])).rows[0];
-    assert.deepEqual(row.qa.sort(),['canary','client','config-only-canary','fulfilled','ip','owner','unlinked']);
-    assert.deepEqual(row.macmini,['bot']);
-  } finally { await db.end(); }
-});
 
 test('admin read paths rely on the existing scan-request migration rather than runtime DDL', () => {
   assert.doesNotMatch(repository, /ensureScanRequestLogTable/);

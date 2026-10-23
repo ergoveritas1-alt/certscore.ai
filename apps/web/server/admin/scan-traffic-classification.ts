@@ -12,5 +12,5 @@ const loadCached = unstable_cache(async () => {
     [MAC_MINI_SCAN_BOT_API_KEY_NAMES, INTERNAL_QA_EMAILS, INTERNAL_QA_REQUESTER_IPS, INTERNAL_QA_MCP_CLIENT_NAMES], { readOnly: true });
   if (!row) throw new Error("Scan traffic classification unavailable");
   return row;
-}, ["admin-scan-traffic-classification-v1"], { revalidate: 30 });
+}, ["admin-scan-traffic-classification-v2-original-requester"], { revalidate: 30 });
 export const loadScanTrafficClassification = cache(() => loadCached());

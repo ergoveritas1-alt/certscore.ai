@@ -250,7 +250,7 @@ const loadCachedMcpTrafficExclusions = unstable_cache(async () => {
     [INTERNAL_QA_EMAILS, MAC_MINI_SCAN_BOT_API_KEY_NAMES], { readOnly: true }));
   if (!result) throw new Error("MCP traffic classification unavailable");
   return result;
-}, ["admin-mcp-traffic-exclusions-v1"], { revalidate: 30 });
+}, ["admin-mcp-traffic-exclusions-v2-original-requester"], { revalidate: 30 });
 const loadMcpTrafficExclusions = cache(() => loadCachedMcpTrafficExclusions());
 
 function macMiniMcpTrafficFilter(alias: string, excludeParameter: string, scanIdsParameter: string) {
