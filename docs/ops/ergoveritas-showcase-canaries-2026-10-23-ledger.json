@@ -1,0 +1,26 @@
+{
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-10-23T16:10:32.357Z",
+  "entries": {
+    "https://ergoveritas.com/test1.html": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-20T16:08:22.886Z",
+      "lastContactAt": "2026-10-23T16:08:22.886Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ergoveritas.com/test1.html"
+    },
+    "https://ergoveritas.com/test2.html": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-20T16:09:18.849Z",
+      "lastContactAt": "2026-10-23T16:09:18.849Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "failed",
+      "state": "cooldown",
+      "url": "https://ergoveritas.com/test2.html"
+    }
+  }
+}

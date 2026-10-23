@@ -54,3 +54,44 @@ working manual choice on that document; older standalone choice pages remain
 available. Its partial GPC example now suppresses Pinterest while retaining
 Google, Meta and Microsoft. This changes the actual test behavior and does not
 reinterpret limited capture or change any score policy.
+
+## Verified final behavior
+
+Fresh scans of 1521be46bb383ed6d5781598020c63d87328ec45:
+
+| Page | GDPR/ePrivacy | California | Public report |
+| --- | ---: | ---: | --- |
+| test1 | 28 | 44 | https://certscore.ai/scan/1a02167e-bb00-408b-a5a2-4a647a28156b |
+| test2 | 40 | 44 | https://certscore.ai/scan/1bd6fcb0-f749-45f1-967b-4056c5cf31af |
+
+All four scores are in the requested 20–45 range. Canonical report exports
+retain the corresponding score policies (GDPR v23, California v17), evidence
+and coverage states. No historical score or policy was changed.
+
+Test1: seven GDPR top issues, with tracking/storage, residual Google after Reject,
+Microsoft Clarity replay, observed canvas/audio identification, concealed outbound
+link and five captured accessibility rules. California retains qualified Google,
+Meta and Microsoft GPC activity, a scoped rights-disclosure gap and accessibility.
+
+Test2: distinct partial GPC reduction (Pinterest suppressed), while successful
+Google, Meta and Microsoft advertising requests remain with verified GPC delivery;
+residual Google/Microsoft activity after Reject, replay, rights disclosure and
+broader accessibility examples. California rights coverage now supports the
+scoped missing-disclosure finding after notice consolidation.
+
+California coverage remains explicitly limited (5/6 families) on both reports.
+Test2's accessibility audit is limited; retained positive findings remain factual,
+not proof of complete WCAG coverage. These two owned fixtures do not establish an
+internet-wide calibration baseline or legal compliance status.
+
+Final copy polish corrects the older, standalone test2 pages' cookie counts and
+Pinterest/GPC wording. Those pages are no longer linked by the scanned main page
+or governing policy; main page, runtime and governing policy bytes stay identical
+to the fresh passing scans. The offline verifier also exercises manual choice
+save, cleanup (including _epik), later-visit suppression and reset.
+
+The generated owned-target contact ledger is retained beside this note; the four
+scan contacts use idempotent calibration run key
+`owned-showcase-2026-10-23-1521be46` in addition to normal MCP contact recording.
+The rotating public inventory is unchanged. Local bounded report exports and
+scan responses are under tmp/canary-score-showcase-review/.

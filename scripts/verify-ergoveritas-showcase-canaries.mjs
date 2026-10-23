@@ -35,5 +35,18 @@ for(const n of [1,2]) for(const gpc of [false,true]) for(const manualChoice of [
   assert.equal(local.get(`certscore_test${n}_consent_state`),'denied');
   assert.equal(session.size,0);
   assert.ok(html.includes('noindex, nofollow, noarchive'));
+  if(n===2) {
+    document.body.dataset={test2ChoiceCookie:'certscore_test2_dns_optout'};
+    vm.runInContext(readFileSync(new URL('test2-choice-runtime.js',root),'utf8'),context);
+    listeners.get('save-choice:click')();
+    assert.equal(cookies.get('certscore_test2_dns_optout'),'1');
+    for(const name of ['_ga_TEST2','_fbc','_clsk','ajs_anonymous_id','_epik'])assert.equal(cookies.has(name),false);
+    const count=requests.length;
+    for(const code of inline)vm.runInContext(code,context);
+    assert.equal(context.__CERTSCORE_CANARY_RESULT__.manualOptOut,true);
+    assert.equal(requests.length,count,'Saved manual choice prevents later optional requests');
+    listeners.get('reset-choice:click')();
+    assert.equal(cookies.has('certscore_test2_dns_optout'),false);
+  }
 }
 console.log('Passed: two fixtures, baseline/GPC, manual choice, bounded Reject cleanup and residual activity. No network calls.');
