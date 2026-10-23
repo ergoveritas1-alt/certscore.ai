@@ -127,6 +127,7 @@ export function FullSiteWorkspace({
   evidenceDirectory,
   homepageVerdict,
   homepageHighlightLinks,
+  homepageHighlightExpansion,
   homepageFindings = [],
   californiaAssessment,
   californiaScore,
@@ -154,6 +155,7 @@ export function FullSiteWorkspace({
   homepageTimeline?: ReactNode;
   evidenceDirectory?: ReactNode;
   homepageVerdict?: string;
+  homepageHighlightExpansion?: import("../../lib/scans/assessment-highlights").AssessmentHighlightCopy;
   homepageHighlightLinks?: readonly import("../../lib/scans/assessment-highlights").AssessmentHighlightLink[];
   homepageFindings?: ShadowFinding[];
   californiaAssessment?: import("@certscore/contracts").CaliforniaPrivacyReview | null;
@@ -592,7 +594,7 @@ export function FullSiteWorkspace({
       {tab !== "homepage" ? (
         <>
           {tab === "resources" ? <>
-          <FullSiteExecutiveSummary reviewFocus={reviewFocus} californiaScore={californiaScore} inventorySummary={inventorySummary} actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} score={reviewScore} pending={!overview || valuesUpdating} loadingSavedResult={!initialPending && !overview && !["waiting_homepage", "running"].includes(initialNotice?.status ?? "")} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} homepageHighlightLinks={homepageHighlightLinks} />
+          <FullSiteExecutiveSummary reviewFocus={reviewFocus} californiaScore={californiaScore} inventorySummary={inventorySummary} actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} score={reviewScore} pending={!overview || valuesUpdating} loadingSavedResult={!initialPending && !overview && !["waiting_homepage", "running"].includes(initialNotice?.status ?? "")} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} homepageHighlightLinks={homepageHighlightLinks} homepageHighlightExpansion={homepageHighlightExpansion} />
           {!(initialPending && !overview?.score) ? <SitePriorityReview californiaAssessment={californiaAssessment} reviewFocus={reviewFocus} scannedPages={scannedPages} findings={priorityFindings} pending={!overview || valuesUpdating} sitewideAvailable={Boolean(overview?.score)} /> : null}
           {homepageTimeline}
           </> : null}

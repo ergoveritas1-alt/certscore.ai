@@ -1,9 +1,11 @@
-import React, { Fragment, type ReactNode } from "react";
-import type { AssessmentHighlightLink } from "../../lib/scans/assessment-highlights";
+"use client";
+
+import React, { Fragment, useId, useState, type ReactNode } from "react";
+import type { AssessmentHighlightCopy, AssessmentHighlightLink } from "../../lib/scans/assessment-highlights";
 import { EvidenceJumpLink } from "./evidence-jump-link";
 
 /** Render links supplied by the shared highlight projection; do not infer findings. */
-export function AssessmentHighlightsText({ text, links = [] }: { text: string; links?: readonly AssessmentHighlightLink[] }) {
+function LinkedHighlights({ text, links = [] }: { text: string; links?: readonly AssessmentHighlightLink[] }) {
   const parts: ReactNode[] = [];
   let position = 0;
   while (position < text.length) {
@@ -15,4 +17,19 @@ export function AssessmentHighlightsText({ text, links = [] }: { text: string; l
     position = next.index + next.label.length;
   }
   return <>{parts.map((part, index) => <Fragment key={index}>{part}</Fragment>)}</>;
+}
+
+/** Reset disclosure when the report or review focus changes. */
+export function AssessmentHighlightsText(props: { text: string; links?: readonly AssessmentHighlightLink[]; expanded?: AssessmentHighlightCopy }) {
+  return <HighlightsDisclosure key={`${props.text}:${props.expanded?.text ?? ""}`} {...props} />;
+}
+
+function HighlightsDisclosure({ text, links, expanded }: { text: string; links?: readonly AssessmentHighlightLink[]; expanded?: AssessmentHighlightCopy }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const shown = open && expanded ? expanded : { text, links };
+  return <><span id={id}><LinkedHighlights {...shown} /></span>{expanded ? <> <button type="button"
+    aria-expanded={open} aria-controls={id} aria-label={open ? "Show fewer assessment highlights" : "Show more assessment highlights"}
+    className="inline-flex min-h-6 min-w-6 items-center justify-center rounded-sm font-semibold text-sky-700 underline underline-offset-2 hover:text-sky-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+    onClick={() => setOpen(value => !value)}>{open ? "Show less" : "…"}</button></> : null}</>;
 }

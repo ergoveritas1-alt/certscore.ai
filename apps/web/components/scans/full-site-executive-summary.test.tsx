@@ -50,7 +50,7 @@ test("site highlights preserve the missing-policy finding without changing ranks
   ]);
   const summary = buildSiteAssessmentSummary(priorities, 10);
   assert.match(summary, /Privacy policy not found/);
-  assert.match(summary, /privacy disclosures/);
+  assert.match(summary, /within the assessed scope/);
   assert.equal(priorities[0]?.id, "issue_0");
 });
 
@@ -62,17 +62,18 @@ test("site paragraphs prioritize meaning and action while preserving the lead's 
   assert.match(summary, /5 storage items were observed before consent/);
   assert.match(summary, /Direct write-level timing was captured for 2/);
   assert.match(summary, /Review the classified storage and its consent requirements/);
-  assert.match(summary, /Also review “Decline consent control”/);
+  assert.match(summary, /“Decline consent control”: No observable refusal path was retained/);
   assert.doesNotMatch(summary, /all 10 pages|priority issues across/);
 });
 
 test("site score and coverage influence significance without inventing a finding", () => {
   assert.equal(buildSiteAssessmentSummary([], 10, { score: 100, coverage: { state: "complete" } }), "No priority issues were identified in the assessed evidence.");
   const limited = buildSiteAssessmentSummary([], 10, { score: 100, coverage: { state: "limited" } });
-  assert.equal(limited, "Review the retained evidence for this visit.");
+  assert.equal(limited, "No priority findings are available from this visit.");
   assert.doesNotMatch(limited, /all clear|compliant|safe/);
   const poor = buildSiteAssessmentSummary([{ title: "Projected issue", status: "Potential gap" }], 10, { score: 35 });
-  assert.match(poor, /high-priority remediation/);
+  assert.match(poor, /^“Projected issue”/);
+  assert.doesNotMatch(poor, /compliant|no issues/);
 });
 
 test("executive score uses the full-site projection while homepage context remains scoped", () => {
@@ -139,4 +140,11 @@ test("empty California capture is incomplete rather than a clean zero-issue resu
   assert.match(html,/Assessment incomplete/);
   assert.match(html,/Missing capture is not a passing result/);
   assert.doesNotMatch(html,/0 CCPA\/CPRA issues|No CCPA\/CPRA priority issues|out of 100/);
+});
+
+test("incomplete California empty assessments link the referenced evidence without implying a clean result",()=>{
+  const html=renderToStaticMarkup(<FullSiteExecutiveSummary score={score} pending={false} scannedPages={4} reviewFocus="ccpa_cpra" />);
+  assert.match(html,/California assessment is incomplete/);
+  assert.match(html,/href="#evidence"[^>]*>Detailed evidence<\/a>/);
+  assert.doesNotMatch(html,/No CCPA\/CPRA priority issues were identified/);
 });

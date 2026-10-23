@@ -12,13 +12,13 @@ import { getGdprEprivacyPostureTone } from "../../lib/scans/regulatory-coverage-
 import { ScanLiveValue } from "./scan-live-value";
 import type { ScoreDeductions } from "./score-deductions";
 import type { CaliforniaRegulatoryScore } from "../../lib/scans/california-regulatory-score";
-import { buildAssessmentHighlights, buildAssessmentHighlightsPresentation, type AssessmentHighlightLink, type AssessmentHighlightFinding, type AssessmentContext } from "../../lib/scans/assessment-highlights";
+import { buildAssessmentHighlights, buildAssessmentHighlightsPresentation, type AssessmentHighlightCopy, type AssessmentHighlightLink, type AssessmentHighlightFinding, type AssessmentContext } from "../../lib/scans/assessment-highlights";
 
 export function buildSiteAssessmentSummary(priorities: ReadonlyArray<AssessmentHighlightFinding>, scannedPages: number | null, context: AssessmentContext = {}) {
   return buildAssessmentHighlights(priorities, { kind: "site", scannedPages }, context);
 }
 
-export function FullSiteExecutiveSummary({ score, californiaScore, pending, loadingSavedResult = false, scannedPages, statusLabel, actions, snapshot, homepageVerdict, homepageHighlightLinks, inventorySummary, reviewFocus }: {
+export function FullSiteExecutiveSummary({ score, californiaScore, pending, loadingSavedResult = false, scannedPages, statusLabel, actions, snapshot, homepageVerdict, homepageHighlightLinks, homepageHighlightExpansion, inventorySummary, reviewFocus }: {
   reviewFocus?: ReportReviewFocus;
   californiaScore?: CaliforniaRegulatoryScore | null;
   score?: (Pick<NonNullable<FullSiteReportResponse["score"]>, "value" | "priorityReview" | "scoredPages"> & { limitedPages?: number; deductions?: ScoreDeductions }) | null;
@@ -31,6 +31,7 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
   inventorySummary?: ReactNode;
   homepageVerdict?: string;
   homepageHighlightLinks?: readonly AssessmentHighlightLink[];
+  homepageHighlightExpansion?: AssessmentHighlightCopy;
 }) {
   const panesRef = useRef<HTMLDivElement>(null);
   const [collapsedHeight, setCollapsedHeight] = useState(0);
@@ -62,10 +63,9 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
   const color = getGdprEprivacyPostureTone(value).ringColor;
   const review = reviewFocus && score?.priorityReview ? selectRegulatoryReview(score.priorityReview, reviewFocus) : null;
   const priorities = review?.topIssues ?? score?.priorityReview;
-  const highlightPriorities = review?.regulatory.length ? review.regulatory : priorities;
   const singlePage = scannedPages === 1;
   const scoreLabel = californiaReview ? "California score" : singlePage ? "Score" : "Site score";
-  const highlights = priorities && (!singlePage || reviewFocus) ? buildAssessmentHighlightsPresentation(highlightPriorities!, singlePage ? { kind: "page" } : { kind: "site", scannedPages: scannedPages ?? score?.scoredPages ?? null }, { score: value, coverage: { state: score?.limitedPages ? "limited" : "unknown" } }) : null;
+  const highlights = priorities && (!singlePage || reviewFocus) ? buildAssessmentHighlightsPresentation(priorities, singlePage ? { kind: "page" } : { kind: "site", scannedPages: scannedPages ?? score?.scoredPages ?? null }, { score: value, coverage: { state: score?.limitedPages ? "limited" : "unknown" } }) : null;
   return <section id="report-overview" aria-label="Executive overview" className="my-4 rounded-xl border border-zinc-200 bg-white">
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-5 py-3">
       <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold tracking-tight text-zinc-950">Executive overview</h2>{actions}</div>
@@ -96,8 +96,8 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
       <div className="flex min-w-0 flex-col justify-between gap-4 md:min-h-[var(--overview-height)]">
         <div data-overview-block>
         <h3 className="text-sm font-bold tracking-tight text-zinc-900">Assessment highlights</h3>
-        {reviewFocus && priorities ? <p className="mt-2 text-sm leading-6 text-zinc-600">{priorities.length ? <AssessmentHighlightsText text={highlights!.text} links={highlights!.links} /> : californiaReview ? californiaPresentation.emptySummary : `No ${REVIEW_FOCUS_LABELS[reviewFocus]} priority issues were identified in the assessed evidence.`}</p> : singlePage ? <p className="mt-2 text-sm leading-6 text-zinc-600"><AssessmentHighlightsText text={homepageVerdict ?? "The single page assessment will appear when ready."} links={homepageHighlightLinks} /></p>
-          : priorities ? <p className="mt-2 text-sm leading-5 text-zinc-700"><AssessmentHighlightsText text={highlights!.text} links={highlights!.links} /></p>
+        {reviewFocus && priorities ? <p className="mt-2 text-sm leading-6 text-zinc-600">{priorities.length ? <AssessmentHighlightsText text={highlights!.text} links={highlights!.links} expanded={highlights!.expanded} /> : californiaReview ? <AssessmentHighlightsText text={californiaPresentation.emptySummary} links={californiaPresentation.emptySummaryLinks} /> : `No ${REVIEW_FOCUS_LABELS[reviewFocus]} priority issues were identified in the assessed evidence.`}</p> : singlePage ? <p className="mt-2 text-sm leading-6 text-zinc-600"><AssessmentHighlightsText text={homepageVerdict ?? "The single page assessment will appear when ready."} links={homepageHighlightLinks} expanded={homepageHighlightExpansion} /></p>
+          : priorities ? <p className="mt-2 text-sm leading-5 text-zinc-700"><AssessmentHighlightsText text={highlights!.text} links={highlights!.links} expanded={highlights!.expanded} /></p>
           : <p className="mt-2 text-sm leading-6 text-zinc-500">{loadingSavedResult ? "Loading the saved site assessment." : pending ? "Page evidence is still being assessed. The site-scan assessment will appear when ready." : "Site assessment is unavailable."}</p>}
         </div>
         {inventorySummary ? <div>{inventorySummary}</div> : null}

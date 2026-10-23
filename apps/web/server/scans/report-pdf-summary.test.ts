@@ -28,7 +28,7 @@ test("PDF site assessment uses the scan report writer with canonical observation
 test("PDF summary never turns missing findings or unusable control visits into a positive assessment", () => {
   const report = reportFixture();
   report.score.value = null;
-  assert.equal(pdfSiteAssessment(report), "Review the retained evidence for this visit.");
+  assert.equal(pdfSiteAssessment(report), "No priority findings are available from this visit.");
   report.consentControlAssessment!.document.identityStatus = "mismatched";
   const consent = pdfSummaryTopics(report)[0]!.visual;
   assert.equal(consent.kind, "choices");

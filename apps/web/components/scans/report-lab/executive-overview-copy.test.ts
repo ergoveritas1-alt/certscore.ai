@@ -12,7 +12,7 @@ test("page highlights explain the projected Reject finding before accessibility"
       summary: "Review automated accessibility findings and retained examples in Detailed evidence." },
   ];
   const copy = buildExecutiveOverview({ findings });
-  assert.match(copy, /^A privacy concern needs attention/);
+  assert.match(copy, /^“Non-essential activity after confirmed Reject”/);
   assert.match(copy, /retained post-Reject capture/);
   assert.match(copy, /Accessibility issues/);
   assert.doesNotMatch(copy, /2 priority issues were identified/);

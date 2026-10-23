@@ -1,0 +1,154 @@
+[
+  {
+    "domain": "www.fullstory.com",
+    "scanId": "f7b36da6-7043-4789-8ca7-093de4d0377f",
+    "focus": "gdpr_eprivacy",
+    "findings": [
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking",
+        "title": "Pre-consent non-essential tracking",
+        "summary": "Tracking-classified requests were observed before consent: Claydar, FullStory, DoubleClick Floodlight. The first retained qualifying request was Claydar at 2.13s after scan start.",
+        "status": "Potential gap",
+        "correctionSteps": [
+          "Review the retained vendor and request timing evidence, confirm purpose and necessity, and gate confirmed non-essential requests until the relevant consent state is available."
+        ]
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction",
+        "title": "Tracking after Reject click",
+        "summary": "Partial support from scan evidence; 22 tracking request(s) began after the Reject control was clicked (including Claydar, FullStory, AB Tasty); first observed 0.05s after the click. Review the recorded requests and how the Reject action controls this tracking activity.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Ensure a confirmed Reject suppresses optional tracker requests and storage writes, then retest the same post-Refusal observation window."
+        ]
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
+        "title": "Pre-consent storage classification review",
+        "summary": "Cookies or browser storage were retained before consent. First retained item: _gcl_au (fullstory.com): non_essential, present in periodic pre-consent snapshot. Essentiality was not confirmed for every item.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Inspect the listed cookie and storage identities, their purposes, and the retained timing evidence. Distinguish a directly observed write from snapshot presence. For items confirmed to require consent, gate their creation and use on the relevant affirmative choice; check the responsible tag or integration. Retest the same page and location in a fresh session. Verify those items are absent before consent and after Reject, and appear only after the applicable Accept choice."
+        ]
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__session_replay_fingerprinting_review",
+        "title": "Session replay signal",
+        "summary": "Session replay or behavioral analytics signals were observed: FullStory; first seen 2.17s after scan start; before any recorded consent action.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Review consent timing, masking, exclusions, sensitive-page coverage, and disclosure for the retained replay/behavioral-analytics signal; correct confirmed gaps and retest."
+        ]
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__device_identification_fingerprinting_signal_observed",
+        "title": "Device identification / fingerprinting signal",
+        "summary": "Device-identification or fingerprinting-like browser API signals were observed: HTMLCanvasElement.toDataURL, OfflineAudioContext.startRendering, Navigator.plugins, and canvas; first seen 12.1s after scan start.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Review the retained checklist evidence, confirm whether the row is applicable to the site, and address the underlying implementation or disclosure gap if confirmed."
+        ]
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control",
+        "title": "Options / settings / preferences control",
+        "summary": "Accept and Decline controls were observed on the first-layer consent surface. A separate preferences or granular-settings control was not retained on that layer. This is not necessarily a compliance gap where refusal is as easy as acceptance. Verify whether users can later review, vary, or withdraw consent by purpose.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Inspect the Options or preferences control in a fresh browser session using the scan's location and page. Resolve the stated evidence limitation before treating an unconfirmed control or behavior as absent or defective. Record control visibility separately from click completion and confirmed consent registration. Retest the same scenario; confirm the intended control and behavior are supported by complete, document-bound evidence."
+        ]
+      },
+      {
+        "id": "accessibility_priority_group",
+        "title": "Accessibility issues",
+        "summary": "Review automated accessibility findings and retained examples in Detailed evidence.",
+        "status": "Observed",
+        "priority": "high",
+        "correctionSteps": [
+          "Fix the retained keyboard-related WCAG examples, verify controls are reachable and operable with Tab, Shift+Tab, Enter, Space, and Escape, then rerun the scan.",
+          "Adjust the flagged text and background colors to meet the required contrast ratio shown in the evidence. For links flagged as distinguishable only by color, add a persistent non-color cue such as an underline. Rerun the affected checks after updating the styles."
+        ],
+        "evidenceJson": {
+          "findings": [
+            {
+              "id": "keyboard_navigation_accessibility_issue",
+              "title": "Keyboard navigation accessibility issue",
+              "summary": "Automated accessibility checks found failures on 1 tested page (1 element failure). Interactive controls were nested inside other interactive controls.",
+              "status": "Observed",
+              "priority": "high",
+              "correctionSteps": [
+                "Fix the retained keyboard-related WCAG examples, verify controls are reachable and operable with Tab, Shift+Tab, Enter, Space, and Escape, then rerun the scan."
+              ]
+            },
+            {
+              "id": "visual_contrast_accessibility_issue",
+              "title": "Visual contrast accessibility issue",
+              "summary": "Low-contrast text was detected on 1 tested page (4 element failures). Retained examples measured 4.44:1 (required 4.5:1); 2.92:1 (required 4.5:1).",
+              "status": "Observed",
+              "priority": "high",
+              "correctionSteps": [
+                "Adjust the flagged text and background colors to meet the required contrast ratio shown in the evidence. For links flagged as distinguishable only by color, add a persistent non-color cue such as an underline. Rerun the affected checks after updating the styles."
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "domain": "www.nih.gov",
+    "scanId": "7c7280eb-8751-4ab7-a868-622d0528271a",
+    "focus": "ccpa_cpra",
+    "findings": [
+      {
+        "id": "accessibility_priority_group",
+        "title": "Accessibility issues",
+        "summary": "Review automated accessibility findings and retained examples in Detailed evidence.",
+        "status": "Observed",
+        "priority": "high",
+        "correctionSteps": [
+          "Adjust the flagged text and background colors to meet the required contrast ratio shown in the evidence. For links flagged as distinguishable only by color, add a persistent non-color cue such as an underline. Rerun the affected checks after updating the styles."
+        ],
+        "evidenceJson": {
+          "findings": [
+            {
+              "id": "visual_contrast_accessibility_issue",
+              "title": "Visual contrast accessibility issue",
+              "summary": "Links were not distinguishable from surrounding text without relying on color on 1 tested page (1 element failure).",
+              "status": "Observed",
+              "priority": "high",
+              "correctionSteps": [
+                "Adjust the flagged text and background colors to meet the required contrast ratio shown in the evidence. For links flagged as distinguishable only by color, add a persistent non-color cue such as an underline. Rerun the affected checks after updating the styles."
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "domain": "achmea.nl",
+    "scanId": "05792e99-0e3f-4d22-87ff-0a086a80b4b6",
+    "focus": "gdpr_eprivacy",
+    "findings": [
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction",
+        "title": "Post-choice tracking reduction",
+        "summary": "Partial support from scan evidence; 2 tracking request(s) began after the Reject control was clicked (including Google); first observed 0.53s after the click. Review the recorded requests and how the Reject action controls this tracking activity.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Ensure a confirmed Reject suppresses optional tracker requests and storage writes, then retest the same post-Refusal observation window."
+        ]
+      },
+      {
+        "id": "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
+        "title": "Pre-consent storage classification review",
+        "summary": "Cookies or browser storage were retained before consent. First retained item: __RequestVerificationToken (www.achmea.nl): unknown, first observed 2.949s after scan start. Essentiality was not confirmed for every item.",
+        "status": "Partial concern",
+        "correctionSteps": [
+          "Review the retained cookie and storage rows, confirm purpose and necessity, and gate confirmed non-essential writes until the relevant consent state is available."
+        ]
+      }
+    ]
+  }
+]

@@ -225,6 +225,7 @@ export type ShadowReportData = {
     usableEvidence: number;
   };
   verdict: string;
+  assessmentHighlightExpansion?: import("../../../lib/scans/assessment-highlights").AssessmentHighlightCopy;
   assessmentHighlightLinks?: import("../../../lib/scans/assessment-highlights").AssessmentHighlightLink[];
   executiveHeadline: string;
   nextStep: string;
