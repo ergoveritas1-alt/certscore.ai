@@ -35,7 +35,7 @@
         data-expected-prechoice-categories="analytics,advertising,session_replay,product_analytics"
         data-expected-post-refusal-activity="true">
     <h1>Privacy and accessibility canary</h1>
-    <p class="note">Owned synthetic test page. It loads optional technologies before a choice and suppresses Meta advertising when browser GPC is enabled, while other identified advertising requests deliberately continue. No account or transaction state is involved.</p>
+    <p class="note">Owned synthetic test page. It loads optional technologies before a choice and suppresses Pinterest advertising when browser GPC is enabled, while other identified advertising requests deliberately continue. No account or transaction state is involved.</p>
 
     <section class="banner" id="onetrust-banner-sdk" role="dialog" aria-label="Cookie choices">
       <h2>Cookie choices</h2>
@@ -50,12 +50,12 @@
 
     <section class="choice" aria-labelledby="collection-notice-title">
       <h2 id="collection-notice-title">Notice at collection</h2>
-      <p>This test page records identifiers and internet activity through optional analytics, advertising, session replay, and product measurement requests. Before a choice is saved, those requests may be sent to the named providers. Browser GPC prevents the Meta advertising request and its test cookie, while Google, Microsoft and Pinterest advertising requests remain; a saved manual opt-out stops all future optional test requests in this browser.</p>
+      <p>This test page records identifiers and internet activity through optional analytics, advertising, session replay, and product measurement requests. Before a choice is saved, those requests may be sent to the named providers. Browser GPC prevents the Pinterest advertising request and its test cookie, while Google, Meta and Microsoft advertising requests remain; a saved manual opt-out stops all future optional test requests in this browser.</p>
       <nav aria-label="Privacy and cookie choices">
         <ul>
-          <li><a href="/test2-cookie-settings.html">Cookie Settings</a></li>
-          <li><a href="/test2-do-not-sell-or-share.html">Do Not Sell or Share My Personal Information</a></li>
-          <li><a href="/test2-privacy-choices.html">Your Privacy Choices</a></li>
+          <li><a href="/test2-privacy-policy.html#privacy-choices">Cookie Settings</a></li>
+          <li><a href="/test2-privacy-policy.html#privacy-choices">Do Not Sell or Share My Personal Information</a></li>
+          <li><a href="/test2-privacy-policy.html#privacy-choices">Your Privacy Choices</a></li>
         </ul>
       </nav>
       <p id="test2-choice-status" role="status" aria-live="polite"></p>
@@ -63,19 +63,19 @@
 
     <section class="choice" aria-labelledby="notice-links-title">
       <h2 id="notice-links-title">Test notices</h2>
-      <p><a href="/test2-notice-at-collection.html">Notice at Collection</a> explains the categories collected, purposes, retention and opt-out methods. The <a href="/test2-privacy-policy.html">Privacy Policy</a> describes sale/sharing, privacy rights, cookie practices, and the canary's deliberate GPC behavior. The <a href="/test2-cookie-policy.html">Cookie Policy</a> lists the synthetic cookies and their purposes.</p>
+      <p><a href="/test2-privacy-policy.html#notice-at-collection">Notice at Collection</a> explains the categories collected, purposes, retention and opt-out methods. The <a href="/test2-privacy-policy.html">Privacy Policy</a> describes sale/sharing, privacy rights, cookie practices, and the canary's deliberate GPC behavior. The <a href="/test2-privacy-policy.html#cookies">Cookie Policy</a> lists the synthetic cookies and their purposes.</p>
     </section>
 
     <section aria-labelledby="test2-expectations">
       <h2 id="test2-expectations">Signals to inspect</h2>
       <ul>
         <li>First-party analytics cookie: <code>_ga_TEST2</code>.</li>
-        <li>Advertising identity cookie: <code>_fbc</code>.</li>
+        <li>Advertising identity cookies: <code>_fbc</code> and <code>_epik</code>.</li>
         <li>Session-replay cookie: <code>_clsk</code>.</li>
         <li>Product-analytics identity cookie: <code>ajs_anonymous_id</code>.</li>
         <li>Five vendor requests without GPC, four with GPC, spanning advertising and session replay. Their observed transmission and classification must be verified from retained network evidence.</li>
       </ul>
-      <p class="note">Expected GPC outcome: the Meta advertising request and its test cookie appear only without GPC; four other optional requests remain. Reject clears the optional state, then deliberately recreates Google and Microsoft state and requests. A complete, verified paired comparison can show this partial reduction. A limited comparison remains indeterminate.</p>
+      <p class="note">Expected GPC outcome: the Pinterest advertising request and its test cookie appear only without GPC; four other optional requests remain. Reject clears the optional state, then deliberately recreates Google and Microsoft state and requests. A complete, verified paired comparison can show this partial reduction. A limited comparison remains indeterminate.</p>
     </section>
 
     <section class="wcag-fixtures" aria-labelledby="test2-wcag-fixtures" data-certscore-accessibility-fixture="wcag-starting-page.v1">
@@ -168,11 +168,11 @@
         "https://bat.bing.com/action/0?ti=000000002&vid=certscore-test2-synthetic&evt=pageLoad",
         "https://ct.pinterest.com/v3/?tid=000000002&event=pagevisit&external_id=certscore-test2-synthetic",
         "https://www.clarity.ms/collect?tid=certscore-test2-synthetic"
-].filter((url) => !gpcEnabled || !url.startsWith("https://www.facebook.com/"));
+].filter((url) => !gpcEnabled || !url.startsWith("https://ct.pinterest.com/"));
       window.__CERTSCORE_REVIEW_CANARY__ = {
         id: "test2", controls: "stacked", postRefusal: "reject_ignored",
         fingerprint: "webgl_fonts", optionalStorage: true,
-        cookies: ["_ga_TEST2", "_fbc", "_clsk", "ajs_anonymous_id"].filter((name) => !gpcEnabled || name !== "_fbc"),
+        cookies: ["_ga_TEST2", "_fbc", "_clsk", "ajs_anonymous_id", "_epik"].filter((name) => !gpcEnabled || name !== "_epik"),
         trackers: trackerUrls,
         afterRejectCookies: ["_ga_TEST2", "_clsk"],
         afterRejectTrackers: ["https://stats.g.doubleclick.net/g/collect?v=2&tid=G-TEST000002&cid=certscore-test2-synthetic&en=page_view", "https://bat.bing.com/action/0?ti=000000002&vid=certscore-test2-synthetic&evt=pageLoad"]

@@ -22,8 +22,9 @@ for(const n of [1,2]) for(const gpc of [false,true]) for(const manualChoice of [
   if(n===2&&manualChoice){assert.equal(context.__CERTSCORE_CANARY_RESULT__.manualOptOut,true);assert.equal(requests.length,0);continue;}
   vm.runInContext(runtime,context);
   assert.equal(requests.length,n===2&&gpc?4:5);
-  assert.equal(requests.some(url=>new URL(url).hostname==='www.facebook.com'),n===1||!gpc);
+  assert.equal(requests.some(url=>new URL(url).hostname==='www.facebook.com'),true);
   assert.ok(requests.every(url=>!url.includes('ud%5Bem%5D')&&!url.includes('hem=')),'No real or hashed personal details');
+  assert.equal(requests.some(url=>new URL(url).hostname==='ct.pinterest.com'),n===1||!gpc);
   const before=requests.length;
   listeners.get('onetrust-reject-all-handler:click')();
   while(timers.length)timers.shift()();

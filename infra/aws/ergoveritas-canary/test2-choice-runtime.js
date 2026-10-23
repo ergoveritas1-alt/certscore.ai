@@ -10,7 +10,7 @@
       : "This manual choice is not saved in this browser.";
   };
   const clearTestState = () => {
-    for (const name of ["_ga_TEST2", "_gat_TEST2", "_fbc", "_clsk", "ajs_anonymous_id", "mp_test2_mixpanel", "_gid", "OptanonConsent"]) {
+    for (const name of ["_ga_TEST2", "_gat_TEST2", "_fbc", "_clsk", "ajs_anonymous_id", "mp_test2_mixpanel", "_gid", "_epik", "OptanonConsent"]) {
       document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax; Secure`;
     }
     try {
