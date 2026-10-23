@@ -1,5 +1,10 @@
 # certscore-mcp
 
+## 0.2.31
+
+- Add bounded contextual report links over returned finding identities, with matching GDPR focus and preserved access parameters. Focused evidence reads return available deep links without extra origin work.
+- Guide concise reviews and comparisons, keeping scan IDs internal and website visits optional.
+
 ## 0.2.30
 
 - Return both versioned posture scores in scan bundles and status responses, including California coverage. Preserve the legacy score and MCP response budgets.

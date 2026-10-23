@@ -14,6 +14,7 @@ export * from "./gpc-activity-comparison.js";
 
 export * from "./report-page.js";
 export * from "./detailed-evidence.js";
+export * from "./report-evidence-links.js";
 export * from "./privacy-audit.js";
 
 export { apiV2ChoicePathExecutionSchema } from "./scan-observation-results.js";

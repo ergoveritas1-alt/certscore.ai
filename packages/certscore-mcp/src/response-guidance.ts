@@ -1,7 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { transferResponseCapture } from './response-capture.js';
 import { bundleReviewNavigation } from './review-navigation.js';
-import { lightReviewActions } from './light-review-actions.js';
+import { lightReviewActions, lightEvidencePageActions } from './light-review-actions.js';
 
 const record = (value: unknown): Record<string, any> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
 const string = (value: unknown): string | null => typeof value === 'string' && value.trim() ? value.slice(0, 1000) : null;
@@ -61,7 +61,8 @@ export function withResponseGuidance(tool: string, input: unknown, result: CallT
     .slice(0, 20).map((item: unknown) => string(record(item).id)).filter(Boolean);
   if (tool === 'certscore_explain_finding' && string(payload.id)) findingIds.push(string(payload.id));
   const navigation = tool === 'certscore_get_scan_bundle' ? bundleReviewNavigation(payload) : null;
-  const reviewActions = options.toolProfile === 'light' && tool === 'certscore_get_scan_bundle' ? lightReviewActions(payload) : null;
+  const reviewActions = options.toolProfile !== 'light' ? null : tool === 'certscore_get_scan_bundle' ? lightReviewActions(payload)
+    : tool === 'certscore_get_report_evidence_page' ? lightEvidencePageActions(payload) : null;
   const optionalFollowUps = options.toolProfile === 'light' ? navigation?.nextActions ?? []
     : !noGo && ready && scanId && findingIds.length ? [
       { tool: 'certscore_explain_finding', arguments: { scanId, findingId: findingIds[0] }, reason: 'Explain a returned finding using retained evidence.' },
@@ -89,7 +90,7 @@ export function withResponseGuidance(tool: string, input: unknown, result: CallT
     scanId, status, score: guidance.score, risk: guidance.risk, reportUrl: guidance.reportUrl,
     quotaConsumed: guidance.quotaConsumed, nextAction,
     ...(guidance.pagination ? { pagination: guidance.pagination } : {}),
-    ...(reviewActions ? { reviewActions, reviewInstruction: 'Answer first and link the relevant report view. Label EU and California scores separately using reportViews; preserve limited coverage and unknown scores. Changing review focus uses the same visit’s evidence, not another scan location. Offer at most one useful next step, adapting the suggested follow-up to the question. Skip repeated or declined offers for the same scan; a checklist for a different priority page may still help. Carry out offered follow-ups only when requested. Never start another scan without the user’s request.' } : {})
+    ...(reviewActions ? { reviewActions, reviewInstruction: 'Answer first: routine reviews 120–180 words; comparisons 100–160 words including tables and links unless more detail is requested. Keep scan IDs internal unless requested. Label scores GDPR/ePrivacy or California (CCPA/CPRA), preserving coverage. Use one evidenceLinks URL that matches the question, or primaryReportLink, and explain what it opens; use openReport as fallback. Use reportViews for a requested focus switch; do not substitute a GDPR evidence link for a California view. Switching focus reuses the same visit. Do not list every link, withhold answers or repeat a pitch. Offer at most one relevant follow-up; skip repeated or declined offers. Read more evidence or start another scan only when requested.' } : {})
   }).filter(([,value]) => value !== null));
   const overview = `CertScore.ai guidance: ${JSON.stringify(compact)}`;
   const explanation = tool === 'certscore_explain_finding'

@@ -25,7 +25,7 @@ Trust and security overview: https://certscore.ai/trust
 
 Use these canonical discovery resources:
 
-- [CertScore.ai for Muse](https://certscore.ai/muse.md): Download the Muse skill to review website cookies, tracking, consent and accessibility. Use MCP Light at https://mcp.certscore.ai/mcp/light, inspect the same scan, switch report focus, and compare a fresh recheck after changes. Web guide: https://certscore.ai/muse. Downloadable Muse skill: https://certscore.ai/resources/certscore-muse-skill-1.0.3.zip
+- [CertScore.ai for Muse](https://certscore.ai/muse.md): Download the Muse skill to review website cookies, tracking, consent and accessibility. Use MCP Light at https://mcp.certscore.ai/mcp/light, inspect the same scan, switch report focus, and compare a fresh recheck after changes. Web guide: https://certscore.ai/muse. Downloadable Muse skill: https://certscore.ai/resources/certscore-muse-skill-1.0.4.zip
 - Concise LLM guide: https://certscore.ai/llms.txt
 - Full LLM guide: https://certscore.ai/llms-full.txt
 - Universal AI/API manifest: https://certscore.ai/.well-known/certscore-ai.json
@@ -56,7 +56,7 @@ Use these canonical discovery resources:
 
 These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, Google/Gemini, Microsoft Copilot/Bing, DeepSeek, Kimi, Qwen, Grok/xAI, Mistral, Meta, and future agents. They are vendor-neutral and should not be treated as limited to one AI platform.
 
-The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.30`, and the publisher and legal owner is CertScore.ai, LLC.
+The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.31`, and the publisher and legal owner is CertScore.ai, LLC.
 
 ## Agent quick path
 

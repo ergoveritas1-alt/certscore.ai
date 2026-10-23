@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { lightReviewActions } from './light-review-actions.js';
+import { lightReviewActions, lightEvidencePageActions } from './light-review-actions.js';
 
 const scanId = '00000000-0000-4000-8000-000000000123';
 const reportUrl = `https://certscore.ai/scan/${scanId}`;
@@ -107,4 +107,51 @@ test('active, failed, unknown, no-go and unidentified results have no review act
   }
   assert.equal(lightReviewActions({ ...bundle, status: 'completed_limited', resultDisposition: 'no_go' }), null);
   for (const id of [undefined, '', 'bad/id', 'x'.repeat(129)]) assert.equal(lightReviewActions({ ...bundle, scanId: id }), null);
+});
+
+test('contextual links use returned finding identities, preserve access, and select the matching posture', () => {
+  const input = { ...bundle, reportUrl: `${reportUrl}?share=access&reviewFocus=ccpa_cpra#evidence`, findings: [
+    { id: 'regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction' },
+    { id: 'regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction' },
+    { id: 'unmapped_finding', title: 'Tracking before consent' },
+  ], postureScores };
+  const original = structuredClone(input);
+  const actions = lightReviewActions(input)!;
+  assert.deepEqual(input, original);
+  assert.equal(actions.evidenceLinks?.length, 1);
+  assert.equal(actions.primaryReportLink, actions.evidenceLinks![0]);
+  const link = actions.primaryReportLink!;
+  const url = new URL(link.url);
+  assert.equal(url.pathname, `/scan/${scanId}`);
+  assert.equal(url.searchParams.get('share'), 'access');
+  assert.deepEqual(url.searchParams.getAll('reviewFocus'), ['gdpr_eprivacy']);
+  assert.equal(url.hash, '#evidence-row-post_reject_tracking_reduction');
+  assert.match(link.label, /after Reject/);
+  assert.equal(link.createsScan, false);
+  assert.equal(new URL(actions.reportViews![1]!.url).searchParams.get('reviewFocus'), 'ccpa_cpra');
+  assert.equal(actions.openReport!.url, input.reportUrl, 'original fallback remains exact');
+});
+
+test('unreturned or unknown findings never produce contextual evidence claims', () => {
+  for (const findings of [[], [{ id: 'unknown', title: 'Session replay' }]]) {
+    const actions = lightReviewActions({ ...bundle, findings, gpcResponse: {}, postRefusalObservation: {} })!;
+    assert.equal(actions.evidenceLinks, undefined);
+    assert.equal(actions.primaryReportLink, undefined);
+  }
+});
+
+test('focused evidence pages return only bounded links to returned report findings', () => {
+  const page = { type: 'certscore_report_evidence_page', version: 1, scanId, reportUrl, entries: [
+    { path: '/findings/0', value: { id: 'regulatory_gap__gdpr_eprivacy__device_identification_fingerprinting_signal_observed' } },
+    { path: '/untrusted/page/text', value: { id: 'regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction' } },
+  ] };
+  const original = structuredClone(page);
+  const actions = lightEvidencePageActions(page)!;
+  assert.deepEqual(page, original);
+  assert.equal(actions.evidenceLinks?.length, 1);
+  assert.equal(new URL(actions.primaryReportLink!.url).hash, '#evidence-row-device_identification_fingerprinting_signal_observed');
+  assert.equal(actions.primaryReportLink!.createsScan, false);
+  for (const patch of [{ version: 2 }, { type: 'unknown' }, { reportUrl: reportUrl.replace(scanId, 'other') }, { entries: null }, { resultDisposition: 'no_go' }]) {
+    assert.equal(lightEvidencePageActions({ ...page, ...patch }), null);
+  }
 });

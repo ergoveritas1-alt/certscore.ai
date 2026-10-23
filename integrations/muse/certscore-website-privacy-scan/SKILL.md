@@ -2,7 +2,7 @@
 name: certscore-website-privacy-scan
 description: Review public website privacy, cookies, tracking, consent, GPC, and policy signals with CertScore.ai. Use for a requested launch check, vendor review, tracking investigation, policy review, or comparison with an earlier scan.
 metadata:
-  version: 1.0.3
+  version: 1.0.4
 ---
 
 # CertScore.ai website privacy scan
@@ -13,7 +13,7 @@ Results are automated observations of public pages. They are not legal advice, c
 
 ## Connection
 
-Endpoint: `https://mcp.certscore.ai/mcp/light`. Transport: Streamable HTTP. Registry identity: `ai.certscore/mcp-light`. Hosted release reference: `0.2.30`, verified October 22, 2026. The package version is independent of the hosted release.
+Endpoint: `https://mcp.certscore.ai/mcp/light`. Transport: Streamable HTTP. Registry identity: `ai.certscore/mcp-light`. Hosted release reference: `0.2.31`, verified October 23, 2026. The package version is independent of the hosted release.
 
 Reuse an existing CertScore.ai Light connection. If Muse exposes connector discovery, read its current connector instructions first. Native tools are preferable when available. If no connection is available, the included `scripts/certscore_mcp.py` calls the same MCP endpoint with Python 3. It selects curl when available, which avoids truncated Python HTTP reads in Muse's proxy; otherwise it uses Python's standard library. No Python packages are required. Run its commands from this skill's directory. It has no credentials, installation hooks, or background jobs.
 
@@ -64,13 +64,13 @@ python3 scripts/certscore_mcp.py --call certscore_get_report_evidence_page --arg
 
 ## Present the results
 
-Lead with the relevant returned score and scan date. When `postureScores` is returned, label scores by review focus: EU (GDPR/ePrivacy) or California (CCPA/CPRA). The overall `score` can remain the EU score even for a California execution; the report may default to California. Do not present differently scoped scores as interchangeable. For a cross-page comparison, compare the same posture and state its coverage. Preserve a returned score when coverage is limited; explain the limitation rather than declaring the score invalid. Identify the site, scan ID, execution region when returned, and whether the result was new or reused. Summarize the findings that answer the user's question, with supporting evidence and the report link. State reported coverage limits plainly. Show the score as returned, without deduction breakdowns or explanations.
+Lead with the relevant returned score and scan date. When `postureScores` is returned, label scores by review focus: GDPR/ePrivacy or California (CCPA/CPRA), for example “10/100 GDPR”. The overall `score` can remain the EU score even for a California execution; the report may default to California. Do not present differently scoped scores as interchangeable. For a cross-page comparison, compare the same posture and state its coverage. Preserve a returned score when coverage is limited; explain the limitation rather than declaring the score invalid. Identify the site, date and whether the result was new or reused. Keep the scan ID internally for follow-ups; show it only when requested or needed to recover an incomplete scan. Mention the execution location when it affects the interpretation or comparison. Summarize the findings that answer the user's question, with supporting evidence and the report link. State reported coverage limits plainly. Show the score as returned, without deduction breakdowns or explanations.
 
-For a broad first-review question, start with three to five priorities and one concrete evidence anchor for each. Group closely related tracking, storage, and replay findings when useful. Leave the full inventory to the report or a requested deeper review. Confirm installation briefly; keep paths, manifests, and transport diagnostics out of the opening unless the user asks or a failure prevents the review.
+For a broad first-review question, start with up to three priorities and one concrete evidence anchor for each. Group closely related tracking, storage, and replay findings when useful. Leave the full inventory to the report or a requested deeper review. Confirm installation briefly; keep paths, manifests, and transport diagnostics out of the opening unless the user asks or a failure prevents the review.
 
-Write a routine site-owner review in roughly 200–300 words when the question allows it. Use plain finding labels and concrete observations; reserve opaque finding IDs, internal status names, tool names, and schema terms for a requested technical checklist or diagnostics. A report link can carry the detailed references. Describe a follow-up as “show the cookies and trackers found on this page” or “look at the underlying evidence,” rather than calling it a “retained tracking workpaper” or a “canonical bundle.” Keep the coverage caveats that affect the answer.
+Keep the entire routine site-owner review around 120–180 words, including bullets, tables, caveats, link labels and any follow-up. Aim below the upper bound rather than filling it. Give more detail when the user asks for it. Use plain finding labels and concrete observations; reserve opaque finding IDs, internal status names, tool names, and schema terms for a requested technical checklist or diagnostics. A report link can carry the detailed references. Describe a follow-up as “show the cookies and trackers found on this page” or “look at the underlying evidence,” rather than calling it a “retained tracking workpaper” or a “canonical bundle.” Keep the coverage caveats that affect the answer.
 
-Keep a routine comparison shorter: about 100–160 words unless the user asks for detail. Give the verdict, a small score table when helpful, two or three evidence differences, one coverage caveat, and labeled report links. Avoid repeating full inventories, scan IDs and explanations already given. A simple report-focus switch usually needs only the requested scores, links and relevant coverage.
+Keep a routine comparison shorter: about 100–160 words for the entire visible answer, including table cells, link labels and any offer, unless the user asks for detail. Give the verdict, a small score table when helpful, two or three evidence differences, one coverage caveat, and labeled report links. Avoid repeating full inventories, scan IDs and explanations already given. A simple report-focus switch usually needs only the requested scores, links and relevant coverage.
 
 Check the ordering before describing it. Identify the lower-scoring page within each review focus, then weigh the findings and coverage for the priority recommendation. Say the ranking reverses only when the pages actually exchange order. A page's own score changing between EU and California views does not mean the cross-page ranking changed. Keep limited coverage visible; a higher score alone does not establish a safer or compliant site.
 
@@ -82,7 +82,9 @@ Never describe a finding as a legal violation or a site as compliant or non-comp
 
 ## Make the next review useful
 
-Finish the answer to the user's question first. Always include the returned report URL as a clearly labeled link, for example **[Open the full CertScore.ai report](RETURNED_REPORT_URL)**. For a detailed review, say what the link helps them inspect: the full findings, screenshots, tables, or evidence actually available in that report. Do not invent a report feature or promise access beyond the returned permissions. If the URL is missing, say so; do not construct one. Do not require a website visit to get an answer the tools can provide.
+Finish the answer to the user's question first, then include one useful CertScore.ai report link per reviewed page. Prefer a returned `reviewActions.evidenceLinks` action that matches the current question; otherwise use `primaryReportLink`, then `openReport` or the returned report URL as fallback. Explain the value in the link label: for example, “Inspect the tracking observed before consent in CertScore.ai” or “See when activity started in the CertScore.ai timeline”. A relevant evidence link also opens the full report; do not repeat it with another generic link. For comparisons, label each link by page. Use `reportViews` when the user requests a GDPR or California view, preserving that view instead of substituting a different-focus evidence link.
+
+Use only returned URLs and available evidence. Do not generate fragments, add query parameters, claim screenshots or timing exist when they were not returned, or list every action. Focused evidence reads may return new links for that question; keep the same scan. If no report URL is returned, say so. Keep the answer useful in chat: a website visit is optional, not a prerequisite for evidence that the tools can provide.
 
 Then, when useful, offer **one** concrete next step matched to the question. Skip the offer if the user only wants a short answer, has declined it, or the same suggestion was just made. Do not add a feature list, repeat a pitch on every status update, manufacture urgency, promise a better score, or offer discounts or unlimited usage.
 

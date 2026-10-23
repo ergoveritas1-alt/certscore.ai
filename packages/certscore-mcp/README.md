@@ -10,7 +10,7 @@ CertScore.ai MCP Light is live in the [GitHub MCP Registry](https://github.com/m
 | Transport | Streamable HTTP |
 | Authentication | None |
 | Tools | `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, `certscore_get_report_evidence_page` |
-| Current hosted version | `0.2.30` |
+| Current hosted version | `0.2.31` |
 
 [Start with MCP Light](https://certscore.ai/mcp/light?utm_source=github&utm_medium=mcp_registry&utm_campaign=github_mcp_registry_launch) · [Install in Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D) · [Read the installation reference](../../docs/mcp-light-install.md)
 
@@ -158,6 +158,12 @@ These remain available when a small structured bundle omits `reviewNavigation`.
 The version is `certscore.light-review-actions.v1`. `openReport` is an `open_url`
 action using the returned HTTPS CertScore.ai report URL for this exact scan;
 it is omitted if that URL is missing or invalid. No report URL is synthesized.
+When returned finding identities have a supported report target, `evidenceLinks`
+and `primaryReportLink` explain what the report opens. They preserve the scan and
+access parameters and select the matching review focus. Focused report-evidence
+pages expose the same bounded navigation over their returned findings. Use one
+link relevant to the question, with `openReport` as fallback; a requested
+California report view must not be replaced by a GDPR evidence link.
 One optional `followUp` offers remaining evidence, a developer-checklist prompt,
 retained tracking exports, limited-coverage review, or a future post-change
 recheck according to the returned bundle. Read and checklist actions preserve

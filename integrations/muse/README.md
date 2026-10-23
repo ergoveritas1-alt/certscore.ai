@@ -1,6 +1,6 @@
 # CertScore.ai Muse skill
 
-The downloadable 1.0.3 package contains `SKILL.md`, Muse's `skill.yaml` manifest,
+The downloadable 1.0.4 package contains `SKILL.md`, Muse's `skill.yaml` manifest,
 and a Python 3 MCP helper that selects curl when available, with a standard-library fallback. Native MCP tools take precedence.
 The helper lists tools or makes one explicit call; it never polls or retries a
 scan automatically. Installation does not start a scan.
@@ -89,3 +89,7 @@ discovery links and download headers are updated together.
 Estimated incremental static transfer is below $0.10/month at 100,000 guide visits
 and downloads, including the larger skill instructions. No added runtime
 capacity, origin calls per tool, scanner work, paid model calls or retention.
+
+## Version 1.0.4
+
+Routine reviews target 120–180 visible words; comparisons target 100–160, including tables and links. Keep scan IDs internal and label the GDPR/ePrivacy posture directly. Use one returned contextual evidence link per page, with the generic report as fallback; requested California focus links remain California. MCP Light 0.2.31 returns verified report anchors over existing finding identities, including focused evidence reads. Incoming report links open collapsed evidence and shared targets. No additional scan, origin read, capacity or retention is introduced. Estimated incremental static and MCP guidance transfer remains below $0.10/month at 100,000 visits, downloads and bundle responses.

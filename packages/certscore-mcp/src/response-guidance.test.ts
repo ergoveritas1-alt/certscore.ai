@@ -14,6 +14,22 @@ test('preserves success schema and original evidence, with honest missing metada
   assert.equal(g.quotaConsumed, null);
   assert.equal(g.nextAction.tool, 'certscore_get_scan_bundle');
 });
+
+test('Light focused reads expose contextual navigation without changing evidence or requesting another scan', () => {
+  const scanId = 'retained';
+  const payload = { type: 'certscore_report_evidence_page', version: 1, scanId,
+    reportUrl: `https://certscore.ai/scan/${scanId}`, pagination: { complete: true, nextCursor: null },
+    entries: [{ path: '/findings/0', value: { id: 'regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction' } }] };
+  const raw = result(payload);
+  const response = withResponseGuidance('certscore_get_report_evidence_page', { scanId, section: 'consent' }, raw, undefined, { toolProfile: 'light' });
+  assert.equal(response.structuredContent, payload);
+  assert.equal(response.content[0], raw.content[0]);
+  assert.equal(metadata(response).nextAction.tool, null);
+  const action = metadata(response).reviewActions.primaryReportLink;
+  assert.equal(new URL(action.url).hash, '#evidence-row-post_reject_tracking_reduction');
+  assert.equal(action.createsScan, false);
+  assert.equal(metadata(response).reviewActions.followUp, undefined);
+});
 test('queued, terminal failure and no-go never recommend fetching a completed bundle', () => {
   for (const status of ['queued', 'failed', 'no_go']) {
     const g = metadata(guide('certscore_get_scan_status', { scanId: 'abc', status }));
@@ -119,7 +135,7 @@ test('Light report actions survive omitted navigation without changing the outpu
   assert.equal(g.reviewActions.openReport.url, payload.reportUrl);
   const text = (light.content.at(-1) as any).text;
   assert.match(text, /reviewActions/);
-  assert.match(text, /Offer at most one useful next step/);
+  assert.match(text, /Offer at most one relevant follow-up/);
   assert.ok(Buffer.byteLength(text) < 2500);
   assert.equal(g.reviewActions.reportViews.length, 2);
   assert.ok(g.reviewActions.reportViews.every((view: any) => view.createsScan === false && !('score' in view)));

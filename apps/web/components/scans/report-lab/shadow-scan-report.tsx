@@ -16,7 +16,7 @@ import { FormDestinationEvidence } from "../form-destination-evidence";
 import { CmsSecurityEvidence } from "../cms-security-evidence";
 import { CmpDetails } from "../cmp-details";
 import { cmpDetailsExperience } from "../../../lib/scans/cmp-audit-projection";
-import { EvidenceJumpLink } from "../evidence-jump-link";
+import { EvidenceJumpLink, ReportEvidenceHashNavigation } from "../evidence-jump-link";
 import { GpcActivityComparison } from "../gpc-activity-comparison";
 import { SiteIntegrityEvidence } from "../site-integrity-evidence";
 import { choicePathExecutionLabel } from "@certscore/contracts";
@@ -1724,6 +1724,7 @@ export function ShadowScanReport({
       <div className="-mx-5 min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950 lg:-mx-10">
         {completionEvent}
         {reportContent}
+        {report.resultDisposition !== "no_go" ? <ReportEvidenceHashNavigation /> : null}
         {reportDisclaimer}
       </div>
       </ReportPdfAccessProvider>
@@ -1735,6 +1736,7 @@ export function ShadowScanReport({
       {completionEvent}
       <SiteHeader mobilePrimaryAction="sign-in" wide />
       {reportContent}
+      {report.resultDisposition !== "no_go" ? <ReportEvidenceHashNavigation /> : null}
       {reportDisclaimer}
       <SiteFooter hideDisclaimer wide />
     </div>

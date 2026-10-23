@@ -1,5 +1,5 @@
 /** Optional navigation over a completed canonical bundle. No reads, scans or findings. */
-import { apiV2PostureScoresSchema } from '@certscore/api-contracts';
+import { apiV2PostureScoresSchema, REPORT_EVIDENCE_LINK_TARGETS } from '@certscore/api-contracts';
 
 const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -30,7 +30,7 @@ function returnedReportUrl(bundle: Record<string, unknown>, scanId: string) {
 function reportViews(bundle: Record<string, unknown>, reportUrl: string) {
   const parsed = apiV2PostureScoresSchema.safeParse(bundle.postureScores);
   return ([
-    ['gdpr_eprivacy', 'EU (GDPR/ePrivacy)', parsed.success ? parsed.data.gdprEprivacy : null],
+    ['gdpr_eprivacy', 'GDPR/ePrivacy', parsed.success ? parsed.data.gdprEprivacy : null],
     ['ccpa_cpra', 'California (CCPA/CPRA)', parsed.success ? parsed.data.ccpaCpra : null],
   ] as const).map(([reviewFocus, label, posture]) => {
     const url = new URL(reportUrl);
@@ -39,6 +39,38 @@ function reportViews(bundle: Record<string, unknown>, reportUrl: string) {
     return { type: 'open_url' as const, label, reviewFocus, url: url.toString(), createsScan: false as const,
       ...(posture ? { score: posture.score, coverage: posture.coverage, scope: posture.scope } : {}) };
   });
+}
+
+function evidenceLinks(reportUrl: string, findings: unknown[], hasInventory: boolean) {
+  const links: Array<{ type: 'open_url'; label: string; url: string; createsScan: false }> = [];
+  const add = (anchor: string, label: string, reviewFocus?: string) => {
+    const url = new URL(reportUrl);
+    if (reviewFocus) url.searchParams.set('reviewFocus', reviewFocus);
+    url.hash = anchor;
+    if (!links.some(link => link.url === url.toString())) links.push({ type: 'open_url', label, url: url.toString(), createsScan: false });
+  };
+  for (const finding of findings) {
+    const target = REPORT_EVIDENCE_LINK_TARGETS.find(target => target.findingId === record(finding).id);
+    if (target) add(target.anchor, target.label, 'reviewFocus' in target ? target.reviewFocus : undefined);
+  }
+  if (links.some(link => ['#evidence-row-pre_consent_third_party_tracking', '#evidence-row-pre_consent_cookies_storage'].includes(new URL(link.url).hash))) {
+    add('page-event-timeline', 'See when activity started in the CertScore.ai timeline', 'gdpr_eprivacy');
+  }
+  if (hasInventory) add('report-resource-inventory', 'Inspect the cookies, trackers and request inventory in CertScore.ai');
+  return links.slice(0, 8);
+}
+
+/** Focused reads expose links only to identities actually returned on this retained page. */
+export function lightEvidencePageActions(page: Record<string, unknown>) {
+  if (page.type !== 'certscore_report_evidence_page' || page.version !== 1 || page.resultDisposition === 'no_go'
+    || !Array.isArray(page.entries) || typeof page.scanId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(page.scanId)) return null;
+  const reportUrl = returnedReportUrl(page, page.scanId);
+  if (!reportUrl) return null;
+  const findings = page.entries.filter(entry => /^\/findings\/\d+$/.test(String(record(entry).path))).map(entry => record(entry).value);
+  const links = evidenceLinks(reportUrl, findings, false);
+  return { version: 'certscore.light-report-links.v1' as const,
+    openReport: { type: 'open_url' as const, label: 'Open the full CertScore.ai report', url: reportUrl, createsScan: false as const },
+    ...(links.length ? { primaryReportLink: links[0], evidenceLinks: links } : {}) };
 }
 
 export function lightReviewActions(bundle: Record<string, unknown>) {
@@ -50,6 +82,7 @@ export function lightReviewActions(bundle: Record<string, unknown>) {
   const findings = Array.isArray(bundle.findings) ? bundle.findings : [];
   const findingMetadata = record(bundle.findingsMetadata);
   const inventory = record(bundle.preConsentCookiesTrackers);
+  const links = reportUrl ? evidenceLinks(reportUrl, findings, typeof inventory.total === 'number' && inventory.total > 0) : [];
   const moreFindings = findingMetadata.truncated === true || record(bundle.mcpMetadata).canonicalFindingsComplete === false;
   let followUp: FollowUp;
   if (moreFindings) {
@@ -74,6 +107,7 @@ export function lightReviewActions(bundle: Record<string, unknown>) {
     ...(reportUrl ? {
       openReport: { type: 'open_url' as const, label: 'Open the full CertScore.ai report', url: reportUrl, createsScan: false as const },
       reportViews: reportViews(bundle, reportUrl),
+      ...(links.length ? { primaryReportLink: links[0], evidenceLinks: links } : {}),
     } : {}),
     followUp,
   };

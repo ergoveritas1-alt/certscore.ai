@@ -8,7 +8,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 NAME = 'certscore-website-privacy-scan'
 SOURCE = ROOT / 'integrations/muse' / NAME
-OUTPUT = ROOT / 'apps/web/public/resources/certscore-muse-skill-1.0.3.zip'
+OUTPUT = ROOT / 'apps/web/public/resources/certscore-muse-skill-1.0.4.zip'
 FILES = ('SKILL.md', 'skill.yaml', 'scripts/certscore_mcp.py')
 
 
@@ -16,7 +16,7 @@ def package_bytes():
     output = io.BytesIO()
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for filename in FILES:
-            entry = zipfile.ZipInfo(f'{NAME}/{filename}', date_time=(2026, 10, 22, 0, 0, 0))
+            entry = zipfile.ZipInfo(f'{NAME}/{filename}', date_time=(2026, 10, 23, 0, 0, 0))
             entry.compress_type = zipfile.ZIP_DEFLATED
             entry.create_system = 3
             entry.external_attr = 0o100644 << 16
