@@ -4,6 +4,21 @@ import { cmpPreferencesEvidenceSchema, consentControlAssessmentSchema, deriveCon
 import { deriveLaneOwnedConsentSurfaceInspection, deriveMaterializedConsentControlAssessment, deriveWs01ConsentControlAssessment } from "./consent-control-assessment-projector";
 import { projectCaliforniaPrivacyReview } from "./california-privacy-review-projection";
 
+test("materialized consent retains exact query and fragment for its California child while document comparison stays normalized", () => {
+  const finalUrl="https://redirect-fixture.test/?locale=en#/overview";
+  const source=bundle([], {url:finalUrl,captureStatus:"no_evidence",likelyPresent:false});
+  source.startedAt="2026-07-27T18:04:00.000Z";
+  const assessment=deriveMaterializedConsentControlAssessment({bundle:source,finalUrl,noGo:false,
+    consentSurfaceInspection:completeInspection("no_surface_observed",false)});
+  const child=projectCaliforniaPrivacyReview(source,{verificationStatus:"verified",sha256:"a".repeat(64)},finalUrl)!;
+  assert.ok(child);
+  assessment.californiaPrivacyReview=child;
+  assert.equal(assessment.scan.finalUrl,finalUrl);
+  assert.equal(assessment.document.canonicalDocumentId,"https://redirect-fixture.test/?locale=en");
+  assert.ok(consentControlAssessmentSchema.safeParse(JSON.parse(JSON.stringify(assessment))).success);
+  assert.equal(consentControlAssessmentSchema.safeParse({...assessment,californiaPrivacyReview:{...child,documentUrl:finalUrl.replace("overview","other")}}).success,false);
+});
+
 for (const finalUrl of ["https://redirect-fixture.test/web/", "https://redirect-fixture.test/en/"]) {
   test(`materialized consent preserves the retained final URL for California binding: ${finalUrl}`, () => {
     const source = bundle([], { url: finalUrl, captureStatus: "no_evidence", likelyPresent: false });

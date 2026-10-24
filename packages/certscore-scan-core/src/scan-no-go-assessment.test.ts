@@ -22,6 +22,21 @@ import {
   shouldAttemptScreenshotOnlyFallback,
 } from "./index.js";
 
+test("an HTTP 200 request-rejection shell is no-go without classifying quotations or short public pages as blocked", () => {
+  const shell = "The requested URL was rejected. Please consult with your administrator.\nYour support ID is retained-fixture-id\n[Go Back]";
+  for (const text of [shell, `Request Rejected\n${shell}`, "The requested URL was rejected. Please consult with your administrator."]) {
+    const result = buildScanNoGoAssessment(scanEvidence({text, finalMainDocumentStatus:200, screenshots:[]}));
+    assert.equal(result?.scanNoGoAssessment.decision, "no_go");
+    assert.equal(result?.primaryReasonCode, "access_denied_or_forbidden_page");
+  }
+  for (const text of [
+    `Troubleshooting guide: ${shell} Read our instructions and contact our team for help.`,
+    `The requested URL was rejected. Please consult with your administrator. This example explains a failed form submission; the rest of our site is available.`,
+    "Hello world. Public project documentation.",
+    "公开资料与服务说明",
+  ]) assert.notEqual(buildScanNoGoAssessment(scanEvidence({text, finalMainDocumentStatus:200, screenshots:[], firstPartySuccesses:8}))?.scanNoGoAssessment.decision, "no_go", text);
+});
+
 test("all retained main-document 5xx responses are terminal, including Cloudflare origin timeouts", () => {
   for (const status of [500, 501, 502, 503, 504, 507, 520, 521, 522, 523, 524, 525, 526, 530, 599]) {
     const result=buildScanNoGoAssessment(scanEvidence({finalMainDocumentStatus:status,firstPartySuccesses:8,

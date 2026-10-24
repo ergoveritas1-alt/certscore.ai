@@ -1,4 +1,16 @@
-import type { CanonicalEvidenceBundle } from "@certscore/contracts";
+import { getUsableRuntimeVisitSnapshot, type CanonicalEvidenceBundle } from "@certscore/contracts";
+
+/** A usable consent session remains retained evidence, but cannot supply the
+ * original runtime visit required to publish a report with both scores. */
+export function assertOriginalRuntimeVisitForReport(
+  runtimeEvidence: CanonicalEvidenceBundle,
+  merged: CanonicalEvidenceBundle,
+): void {
+  if ((merged.scanNoGoAssessment ?? merged.scan_no_go_assessment)?.decision === "no_go") return;
+  if (!getUsableRuntimeVisitSnapshot(runtimeEvidence, runtimeEvidence.domSnapshots)) {
+    throw new Error("original_runtime_visit_unavailable");
+  }
+}
 
 /** A successful transport is not a representative page. Read only the original
  * runtime worker's retained main-document evidence, never another lane's DOM.

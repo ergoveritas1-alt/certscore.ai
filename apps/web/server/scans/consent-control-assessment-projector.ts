@@ -79,7 +79,6 @@ function retainedDocumentUrl(value: string | null | undefined) {
   if (!value) return null;
   try {
     const url = new URL(value);
-    url.hash = "";
     return url.toString();
   } catch {
     return null;
@@ -90,6 +89,7 @@ function normalizedDocumentId(value: string | null | undefined) {
   const retained = retainedDocumentUrl(value);
   if (!retained) return null;
   const url = new URL(retained);
+  url.hash = "";
   if (url.pathname !== "/") url.pathname = url.pathname.replace(/\/+$/, "");
   return url.toString();
 }

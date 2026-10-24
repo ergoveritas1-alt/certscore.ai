@@ -53,6 +53,7 @@ export * from "./accessibility-audit";
 const canonicalAccessibilityAuditSchema: z.ZodType<AccessibilityAuditObservation> = accessibilityAuditObservationSchema;
 export * from "./cms-version-evidence";
 import { z } from "zod";
+export { getUsableRuntimeVisitSnapshot } from "./usable-runtime-visit";
 import { consentControlLinkDestinationSchema } from "./consent-control-link";
 import { vendorServicePurposeSchema } from "./vendor-service-purpose";
 import { vendorRegistryAttributionSchema } from "./vendor-registry-attribution";

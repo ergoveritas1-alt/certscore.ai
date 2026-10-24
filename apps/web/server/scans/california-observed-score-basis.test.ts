@@ -110,3 +110,15 @@ test("partial inventory does not erase positively verified original navigation a
   lane.navigationAttempts=[{sequence:1,mode:"initial_https_navigation",outcome:"success",httpStatus:403,durationMs:100,effectiveUrl:CA_FIXTURE_URL}];
   assert.equal(projectCaliforniaObservedScoreBasis(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL),undefined);
 });
+
+test("an earlier usable runtime snapshot cannot supply a basis after a later empty or different document", () => {
+ const f=fixture();const original=f.bundle.runtimeMetadataSnapshots![0]!;
+ for(const later of [
+   {...original,capturedAtMs:600,textExcerpt:"",siteMetadata:undefined},
+   {...original,capturedAtMs:600,url:"https://different.test/",documentIdentity:{source:"cdp_loader_id" as const,token:"later-loader"}},
+   {...original,documentIdentity:{source:"cdp_loader_id" as const,token:"ambiguous-loader"}},
+ ]) {
+   const b=structuredClone(f.bundle);b.runtimeMetadataSnapshots!.push(later);
+   assert.equal(projectCaliforniaObservedScoreBasis(b,CA_FIXTURE_SOURCE,CA_FIXTURE_URL),undefined);
+ }
+});

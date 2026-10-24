@@ -3055,6 +3055,10 @@ const SCAN_NO_GO_CAPACITY_HOLDING_PREFIX_PATTERN =
   /^sit tight[.!]?\s+we(?:'|’)ve got our hands full[^.]{0,160}\.\s*this page will automatically refresh and bring you into the website as soon as we can handle it\./i;
 const SCAN_NO_GO_CLIENT_CHALLENGE_SHELL_PATTERN =
   /^oops,? something went wrong[.!]?\s+please check your connection, disable any ad blockers, or try using a different browser[.!\s]*$/i;
+// Match the complete access-rejection shell, not a phrase quoted in an article
+// or an application explaining why one submitted URL was rejected.
+const SCAN_NO_GO_REQUEST_REJECTION_SHELL_PATTERN =
+  /^(?:request rejected[.!]?\s+)?the requested url was rejected[.!]?\s+please consult with your administrator[.!]?(?:\s+your support id is\s+[a-z0-9-]{1,160})?(?:\s+\[?go back\]?)?[.!\s]*$/i;
 
 function classifyScanNoGoText(text: string): ClassifiedNoGoPageState | null {
   const normalized = text.replace(/\s+/g, " ").trim();
@@ -3062,6 +3066,9 @@ function classifyScanNoGoText(text: string): ClassifiedNoGoPageState | null {
     return null;
   }
   const evidenceText = boundedScanNoGoText(normalized) ?? normalized;
+  if (SCAN_NO_GO_REQUEST_REJECTION_SHELL_PATTERN.test(normalized)) {
+    return { confidence: 0.97, evidenceText, hardTerminal: true, reasonCode: "access_denied_or_forbidden_page", visualPageState: "access_blocked" };
+  }
   if (SCAN_NO_GO_CLIENT_CHALLENGE_SHELL_PATTERN.test(normalized)) {
     return { confidence: 0.95, evidenceText, hardTerminal: true, reasonCode: "captcha_or_challenge", visualPageState: "captcha_or_challenge" };
   }

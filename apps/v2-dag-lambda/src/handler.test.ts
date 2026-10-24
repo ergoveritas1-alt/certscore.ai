@@ -33,7 +33,7 @@ import {
 } from "@certscore/contracts";
 import { buildPreConsentRuntimePreview, buildGpcResponseAssessment } from "@certscore/scan-core";
 import { gpcRuntimeFixture } from "../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime";
-import { PassiveLaneFailure, retainFailedTerminalLaneEvidence, localGpcComparisonMinDurationMs, localGpcAdaptiveEnabled } from "./handler";
+import { OriginalRuntimeVisitFailure, PassiveLaneFailure, retainFailedTerminalLaneEvidence, localGpcComparisonMinDurationMs, localGpcAdaptiveEnabled } from "./handler";
 import { parseLocalV2DagLambdaResultMessage } from "../../web/server/scans/local-v2-dag-lambda-dispatch";
 import {
   LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS,
@@ -2234,6 +2234,9 @@ async function runCoordinatorFixture(input: {
   optOut?: "complete" | "hang" | "wrong_hash" | "wrong_target" | "redirected" | "policy_downgrade" | "bad_redirect";
   routeCase?: "valid" | "downgrade" | "bad_ancestry" | "wrong_parent" | "wrong_hash";
   invalidActionHash?: boolean;
+  runtimeBundle?: CanonicalEvidenceBundle;
+  onRead?: (key: string) => void;
+  onActionAbort?: () => void;
 }) {
   const artifactRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-coordinator-cutoff-"));
   const actionCalls: string[] = [];
@@ -2244,6 +2247,7 @@ async function runCoordinatorFixture(input: {
   const passiveBundles = new Map<string, CanonicalEvidenceBundle>([
     ["consent_proof", input.consentBundle],
     ["runtime_evidence", canonicalBundleFixture(input.scanId, {
+      domSnapshots: [runtimeSnapshotFixture()],
       scanLaneRuns: [laneRunFixture("runtime_evidence", "fixture-runtime")],
       runtimeCoverage: {
         coverageStatus: "usable",
@@ -2265,6 +2269,7 @@ async function runCoordinatorFixture(input: {
       scanLaneRuns: [laneRunFixture("policy_evidence", "fixture-policy")],
     })],
   ] as const);
+  if (input.runtimeBundle) passiveBundles.set("runtime_evidence",input.runtimeBundle);
   if (input.gpcPair) {
     passiveBundles.set("runtime_evidence", input.gpcPair.baseline);
     passiveBundles.set("gpc_observation", input.gpcPair.gpc);
@@ -2367,7 +2372,10 @@ async function runCoordinatorFixture(input: {
         if (input.action === "validation_failed") throw new Error("Evidence validation failed: [field].resolver.[field].[7].[field].[0] (too_big)");
         if (input.action === "hang") {
           return await new Promise<never>((_resolve, reject) => {
-            options?.abortSignal?.addEventListener("abort", () => reject(options.abortSignal?.reason ?? new Error("aborted")), { once: true });
+            options?.abortSignal?.addEventListener("abort", () => {
+              input.onActionAbort?.();
+              reject(options.abortSignal?.reason ?? new Error("aborted"));
+            }, { once: true });
           });
         }
         if (input.action === "late") await new Promise((resolve) => setTimeout(resolve, 25));
@@ -2459,6 +2467,7 @@ async function runCoordinatorFixture(input: {
   const s3GetClient = {
     async send(command: any) {
       const key = String(command.input.Key ?? "");
+      input.onRead?.(key);
       const uri = `s3://${String(command.input.Bucket)}/${key}`;
       const entry = pointers.get(uri);
       if (!entry) throw new Error(`missing fixture object ${uri}`);
@@ -2510,6 +2519,53 @@ test("ARO coordinator: limited consent cancels an undispatched Accept before the
     if (priorFlag === undefined) delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG]; else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = priorFlag;
     if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
   }
+});
+
+test("unusable original runtime ends the attempt with verified lane pointers and no additional artifact reads", async () => {
+  const priorBucket=process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  const priorAccept=process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET="test-bucket";
+  process.env[POST_ACCEPT_WORKER_FEATURE_FLAG]="1";
+  const scanId="unusable-original-runtime", reads:string[]=[];
+  let aborted=0;
+  const runtime=canonicalBundleFixture(scanId,{
+    scanLaneRuns:[{...laneRunFixture("runtime_evidence","blocked-runtime"),accessOutcome:"access_denied"}],
+    runtimeCoverage:{coverageStatus:"limited_none",silentEmpty:false,limitationKeys:[],fallbackModesUsed:[],notes:[],observationCounts:{}} as CanonicalEvidenceBundle["runtimeCoverage"],
+    scanNoGoAssessment:terminalLaneNoGo("access_denied_or_forbidden_page"),
+  });
+  const consent=coordinatorConsentBundle(scanId,{inspectionCompleted:true,acceptControlObserved:true});
+  consent.scanLaneRuns=[laneRunFixture("consent_proof","usable-consent")];
+  consent.screenshots=[screenshotArtifact("screenshot_pre_consent_settled","/tmp/consent/screenshot-pre-consent-settled.png")];
+  consent.visualCapture={status:"available",captureMethod:"primary_full_page",artifactRefs:[],notes:[]};
+  try {
+    await assert.rejects(runCoordinatorFixture({scanId,action:"hang",dispatchDelayMs:0,runtimeBundle:runtime,onRead:key=>reads.push(key),onActionAbort:()=>{aborted++;},
+      consentBundle:consent}),error=>{
+      assert.ok(error instanceof OriginalRuntimeVisitFailure);
+      assert.equal(error.code,"original_runtime_visit_unavailable");
+      assert.equal(error.message,"The starting page could not be verified, so a report could not be generated.");
+      assert.equal(error.terminalLaneEvidence?.lanes.length,3);
+      assert.ok(error.terminalLaneEvidence?.lanes.every(lane=>lane.status==="verified_retained" && lane.source));
+      return true;
+    });
+    assert.equal(reads.filter(key=>key.endsWith("/runtime_evidence/CanonicalEvidenceBundle.json")).length,1);
+    assert.equal(aborted,1,"unfinished action work must be cancelled when the original runtime visit is unusable");
+  } finally {
+    if(priorBucket===undefined)delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET=priorBucket;
+    if(priorAccept===undefined)delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG]=priorAccept;
+  }
+});
+
+test("runtime metadata retains the final worker document instead of an earlier navigation snapshot", () => {
+  const scanId="final-runtime-document";
+  const earlier={...runtimeSnapshotFixture(),capturedAtMs:50,url:"https://example.com/old"};
+  const latest={...runtimeSnapshotFixture(),capturedAtMs:100,url:"https://example.com/final"};
+  const runtime=canonicalBundleFixture(scanId,{domSnapshots:[earlier,latest],
+    runtimeCoverage:{coverageStatus:"usable",silentEmpty:false,limitationKeys:[],fallbackModesUsed:[],notes:[],observationCounts:{}} as CanonicalEvidenceBundle["runtimeCoverage"]});
+  const merged=mergeLocalV2DagLambdaEvidenceLaneBundles({artifactRoot:"/tmp/final-runtime-document",scanId,
+    runtimeEvidence:runtime,consentProof:canonicalBundleFixture(scanId),policyEvidence:canonicalBundleFixture(scanId)});
+  assert.equal(merged.runtimeMetadataSnapshots?.[0]?.url,latest.url);
+  assert.equal(runtime.domSnapshots[0]?.url,earlier.url,"selection must not mutate original worker observations");
+  assert.deepEqual(merged.domSnapshots,[],"runtime metadata cannot become consent evidence");
 });
 
 test("ARO coordinator: an invoked unfinished Accept is canceled at the passive barrier", async () => {
@@ -5160,6 +5216,7 @@ test("GPC coordinator publishes bounded comparison from the original verified wo
   const scanId = "bounded-gpc-coordinator";
   const pair = [false, true].map(enabled => {
     const bundle = gpcRuntimeFixture({ enabled }); bundle.scanId = scanId;
+    if (!enabled) bundle.domSnapshots=[{...runtimeSnapshotFixture(),url:bundle.url}];
     let now = 0;
     const capture = createGpcImpactCapture({ expectedEnabled: enabled, now: () => now });
     capture.documentRequested({ type: "Document", frameId: "main", loaderId: "loader", request: { url: bundle.url, headers: enabled ? { "Sec-GPC": "1" } : {} } }, "main");
@@ -5580,6 +5637,7 @@ test("presence-only coordinator invokes at most the six core workers with both o
   try {
     const scanId="presence-six-workers", baseline=gpcRuntimeFixture({enabled:false}),gpc=gpcRuntimeFixture({enabled:true});
     baseline.scanId=scanId;gpc.scanId=scanId;
+    baseline.domSnapshots=[{...runtimeSnapshotFixture(),url:baseline.url}];
     const outcome=await runCoordinatorFixture({scanId,presenceOnly:true,bothActions:true,action:"completed",dispatchDelayMs:0,
       consentBundle:coordinatorConsentBundle(scanId,{inspectionCompleted:true,acceptControlObserved:true,rejectControlObserved:true}),gpcPair:{baseline,gpc}});
     artifactRoot=outcome.artifactRoot;

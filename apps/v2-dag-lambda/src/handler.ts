@@ -6,7 +6,7 @@ import {activeSaleSharingCanaryCampaign,assertSaleSharingCanary,consumeSaleShari
 import {createSaleSharingCanaryStore} from "./sale-sharing-canary-store";
 import { cmpPreferenceBudgetMs, cmpPreferenceDispatchSchema, cmpPreferencesEvidenceSchema, CMP_PREFERENCE_JOIN_MS, CMP_PREFERENCE_POLICY_VERSION, type CmpPreferenceDispatch } from "@certscore/contracts";
 import { actionWorkerCheckpoints } from "./action-worker-checkpoints.js";
-import { hasRepresentativeRuntimeEvidence } from "./runtime-representative-evidence.js";
+import { assertOriginalRuntimeVisitForReport, hasRepresentativeRuntimeEvidence } from "./runtime-representative-evidence.js";
 import { createOpenAiScreenshotSafetyClassifier as createFormSnapshotSafetyClassifier } from "./screenshot-safety";
 import { FULL_SITE_PAGE_DISPATCH } from "./full-site-dispatch-contract.js";
 import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
@@ -1132,9 +1132,10 @@ export function buildLocalV2DagLambdaLaneRun(input: {
   const mainDocumentRequestIds = new Set(input.bundle.networkEvents
     .filter((event) => event.isMainFrame === true && event.resourceType === "document")
     .flatMap((event) => event.requestId ? [event.requestId] : []));
-  const firstTopLevelResponse = [...input.bundle.networkResponseEvents]
+  const topLevelResponses = [...input.bundle.networkResponseEvents]
     .filter((event) => Boolean(event.requestId && mainDocumentRequestIds.has(event.requestId)))
-    .sort((left, right) => left.timestampMs - right.timestampMs)[0];
+    .sort((left, right) => left.timestampMs - right.timestampMs);
+  const firstTopLevelResponse = topLevelResponses[0];
   const firstSuccessfulNavigationAttempt = moduleRun.recoveryDiagnostics?.attempts?.find((attempt) =>
     attempt.outcome === "success" && attempt.httpStatus !== undefined
   );
@@ -1203,7 +1204,21 @@ export function buildLocalV2DagLambdaLaneRun(input: {
     : moduleRun.status === "failed" || moduleRun.status === "not_testable"
       ? "failed"
       : "degraded";
-  const accessStatus = laneId === "policy_evidence" ? siteFacingNavigation?.terminalHttpStatus : siteFacingNavigation?.terminalHttpStatus ?? firstHttpStatus;
+  // First-response diagnostics may describe an earlier failed apex visit. Use
+  // a later response only when this worker retained the matching final page;
+  // subresources, frames, stale responses and another lane cannot supply it.
+  const lastSnapshot = [...input.bundle.domSnapshots].sort((a, b) => b.capturedAtMs - a.capturedAtMs)[0];
+  const terminalResponse = topLevelResponses.filter(response =>
+    lastSnapshot && response.timestampMs <= lastSnapshot.capturedAtMs).at(-1);
+  const requestDocumentUrl = (value: string | undefined) => {
+    try { const url = new URL(value ?? ""); url.hash = ""; return url.toString(); } catch { return null; }
+  };
+  const terminalDocumentStatus = terminalResponse && lastSnapshot &&
+    requestDocumentUrl(terminalResponse.responseUrl ?? terminalResponse.url) === requestDocumentUrl(lastSnapshot.url) &&
+    hasRepresentativeRuntimeEvidence(input.bundle) ? terminalResponse.status : undefined;
+  const observedTerminalStatus = terminalResponse ? terminalDocumentStatus ?? null : firstHttpStatus;
+  const accessStatus = laneId === "policy_evidence" ? siteFacingNavigation?.terminalHttpStatus :
+    siteFacingNavigation?.terminalHttpStatus ?? observedTerminalStatus;
   const accessOutcome: ScanLaneRun["accessOutcome"] = challengeDetected
     ? "bot_challenge"
     : siteFacingNavigation?.terminalAccess === "access_denied" || noGoReason === "access_denied_or_forbidden_page" ||
@@ -2895,6 +2910,27 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   );
   const workerAuxiliaryMirrorOutcome = await workerAuxiliaryMirrorOutcomePromise;
   if (workerAuxiliaryMirrorOutcome.status === "rejected") throw workerAuxiliaryMirrorOutcome.error;
+  try {
+    assertOriginalRuntimeVisitForReport(runtimeEvidenceBundle, bundle);
+  } catch (cause) {
+    postAcceptAbortController.abort(cause);
+    postRefusalAbortController.abort(cause);
+    preferenceController.abort(cause);
+    optOutController.abort(cause);
+    const error = new OriginalRuntimeVisitFailure("The starting page could not be verified, so a report could not be generated.", workerResults);
+    // Reuse the already verified downloads. A non-reportable visit must not
+    // trigger another read, invocation, retry or independent publication.
+    error.terminalLaneEvidence = terminalLaneEvidenceSchema.parse({
+      contractVersion: "certscore.failed-terminal-lane-evidence.v1", scanId: payload.scanId,
+      mode: "internal_only", productionProjectable: false, scoreEffect: "none",
+      lanes: workerResults.map((result, index) => ({
+        lane: result.workerLane,
+        status: workerBundles[index] ? "verified_retained" : result.status === "failed" ? "failed" : "unverifiable",
+        source: workerBundles[index] ? { uri: result.artifactPointers?.scanArtifactUri, ...result.artifactMetadata?.scanArtifactUri } : null,
+      })),
+    });
+    throw error;
+  }
   if (payload.gpcObservation?.enabled === true) {
     const baselineResult = workerResults.find((result) => result.workerLane === "runtime_evidence");
     const gpcResult = workerResults.find((result) => result.workerLane === "gpc_observation");
@@ -3451,6 +3487,10 @@ function skippedLambdaPhaseTiming(label: string): LocalV2DagLambdaPhaseTiming {
 export class PassiveLaneFailure extends Error {
   terminalLaneEvidence?: TerminalLaneEvidence;
   constructor(message: string, readonly results: LocalV2DagLambdaShardResult[]) { super(message); }
+}
+
+export class OriginalRuntimeVisitFailure extends PassiveLaneFailure {
+  readonly code = "original_runtime_visit_unavailable";
 }
 
 export async function retainFailedTerminalLaneEvidence(results: LocalV2DagLambdaShardResult[], scanId: string,
@@ -4657,7 +4697,7 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     screenshots: consentProof.screenshots,
     domSnapshots: consentProof.domSnapshots,
     // Runtime descriptive metadata must not replace consent-owned DOM evidence.
-    runtimeMetadataSnapshots: runtimeEvidence.domSnapshots.slice(0, 1),
+    runtimeMetadataSnapshots: [...runtimeEvidence.domSnapshots].sort((a,b)=>b.capturedAtMs-a.capturedAtMs).slice(0, 1),
     normalizedVendorObservations: runtimeEvidence.normalizedVendorObservations,
     observedJourneys: runtimeEvidence.observedJourneys,
     artifactRefs,
@@ -6515,6 +6555,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       error: {
         code: error instanceof LocalV2DagLambdaSafetyTimeoutError
           ? error.code
+          : error instanceof OriginalRuntimeVisitFailure
+            ? error.code
           : scannerDeadlineAborted
             ? "v2_dag_lambda_safety_timeout"
           : validationFailure?.code ?? "v2_dag_lambda_failed",
