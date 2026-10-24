@@ -22,6 +22,27 @@ import {
   shouldAttemptScreenshotOnlyFallback,
 } from "./index.js";
 
+test("all retained main-document 5xx responses are terminal, including Cloudflare origin timeouts", () => {
+  for (const status of [500, 501, 502, 503, 504, 507, 520, 521, 522, 523, 524, 525, 526, 530, 599]) {
+    const result=buildScanNoGoAssessment(scanEvidence({finalMainDocumentStatus:status,firstPartySuccesses:8,
+      text:"Connection timed out Error code 522. Browser Working. Cloudflare Working. Host Error.",screenshots:[]}));
+    assert.equal(result?.scanNoGoAssessment.decision,"no_go",String(status));
+    assert.equal(result?.primaryReasonCode,"server_error_5xx",String(status));
+  }
+});
+
+test("subresource 522, quoted timeout guidance and an earlier recovered 522 do not block the public page", () => {
+  const text="Public documentation explains Cloudflare error code 522 and connection timeouts. Explore our products and services, compare plans, meet the team and read our public troubleshooting guide.";
+  const subresource=scanEvidence({text,screenshots:[],firstPartySuccesses:8});
+  subresource.networkEvents.push({requestId:"api",resourceType:"fetch",isMainFrame:true} as NetworkEvent);
+  subresource.networkResponseEvents.push({requestId:"api",status:522} as NetworkResponseEvent);
+  const subframe=structuredClone(subresource);
+  subframe.networkEvents.at(-1)!.resourceType="document";
+  subframe.networkEvents.at(-1)!.isMainFrame=false;
+  for(const evidence of [subresource,subframe,scanEvidence({text,screenshots:[],priorMainDocumentStatus:522,finalMainDocumentStatus:200,firstPartySuccesses:8})])
+    assert.notEqual(buildScanNoGoAssessment(evidence)?.scanNoGoAssessment.decision,"no_go");
+});
+
 test("a complete connection/adblock error shell is a challenge, while quoted article text remains usable", () => {
   const shell = "Oops, something went wrong. Please check your connection, disable any ad blockers, or try using a different browser.";
   assert.equal(buildScanNoGoAssessment(scanEvidence({text: shell, finalMainDocumentStatus: 200, screenshots: []}))?.scanNoGoAssessment.decision, "no_go");

@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { summarizeOptOutFunnel } from "./lib/sale-sharing-opt-out-funnel";
 import * as prodDbNamespace from "./lib/prod-db-psql-oneoff.ts";
 
 const prodDb = (prodDbNamespace as typeof prodDbNamespace & { default?: typeof prodDbNamespace }).default ?? prodDbNamespace;
@@ -11,6 +13,8 @@ type CohortRow = {
   optOutConfigured: boolean | null;
   california: Record<string, unknown> | null;
   workpaper: Record<string, unknown> | null;
+  optOutLaneOutcome?:unknown;
+  canonicalFindingIds?:string[]|null;
 };
 
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value)
@@ -66,6 +70,12 @@ export function summarizeCaliforniaCapture(rows: CohortRow[]) {
   });
   return {
     scans: rows.length,
+    optOutFunnel: summarizeOptOutFunnel(rows.map(row=>{
+      const ca=record(row.california),observation=record(ca.optOutObservation);
+      return {scanId:row.scanId,configured:row.optOutConfigured,evidence:observation.evidence,
+        evidenceVerified:observation.verificationStatus==="verified",laneOutcome:row.optOutLaneOutcome,
+        findingIds:row.canonicalFindingIds};
+    })),
     scanStatuses: countBy(details.map(row => row.scanStatus)),
     reportStatuses: countBy(details.map(row => row.reportStatus)),
     assessments: details.filter(row => row.assessmentPresent).length,
@@ -86,6 +96,12 @@ export function summarizeCaliforniaCapture(rows: CohortRow[]) {
 }
 
 async function main() {
+  if(process.argv[2]==="--input"){
+    if(!process.argv[3])throw new Error("Pass a local cohort JSON file after --input.");
+    const rows=JSON.parse(await readFile(process.argv[3],"utf8"));
+    if(!Array.isArray(rows))throw new Error("Local cohort must be an array.");
+    console.log(JSON.stringify(summarizeCaliforniaCapture(rows),null,2));return;
+  }
   const requested = Number(process.argv[2] ?? "100");
   if (!Number.isInteger(requested) || requested < 1 || requested > 300) throw new Error("Pass a cohort size from 1 to 300.");
   const sql = `with cohort as (
@@ -100,6 +116,7 @@ async function main() {
         ),
         'choiceSurface', ss.consent_control_assessment #>> '{californiaPrivacyReview,choiceSurface}',
         'controlCount', jsonb_array_length(coalesce(ss.consent_control_assessment #> '{californiaPrivacyReview,controls}', '[]'::jsonb)),
+        'optOutObservation', ss.consent_control_assessment #> '{californiaPrivacyReview,optOutObservation}',
         'optOutEffectiveness', ss.consent_control_assessment #>> '{californiaPrivacyReview,optOutEffectiveness}',
         'optOutStatus', ss.consent_control_assessment #>> '{californiaPrivacyReview,optOutObservation,evidence,status}',
         'optOutLimitations', coalesce(ss.consent_control_assessment #> '{californiaPrivacyReview,optOutObservation,evidence,limitations}', '[]'::jsonb),

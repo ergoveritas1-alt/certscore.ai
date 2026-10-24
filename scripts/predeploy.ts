@@ -70,6 +70,8 @@ const CALIFORNIA_REVIEW_CHECK: Check = {
     "packages/certscore-contracts/src/california-clause-assessment.test.ts",
     "packages/certscore-contracts/src/california-sale-sharing-assessment.test.ts",
     "apps/web/server/scans/california-privacy-review-projection.test.ts",
+    "apps/web/server/scans/california-disclosure-choice-scoring.test.ts",
+    "apps/web/server/scans/california-runtime-link-scoring.test.ts",
     "apps/web/server/scans/report-export.test.ts",
     "apps/web/lib/scans/regulatory-review-catalog.test.tsx",
     "apps/web/lib/scans/california-opt-out-collection-scoring.test.ts",

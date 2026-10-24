@@ -21,6 +21,7 @@ export function prioritizeGpcRecipients<T>(rows:readonly T[],entity:(r:T)=>strin
 export function createGpcRequestProofCapture(now:()=>number){
  const budget=measurementInspectionBudget({distinctRecipients:true});
  let inspected=0,skipped=0,pending=0,failed=0,finished=false;
+ const failureOutcomes={noProof:0,captureException:0};
  const rows:Row[]=[],restrictions:Capture["restrictions"]=[];
  const statuses=new Map<string,number|null>();
  return {
@@ -45,7 +46,7 @@ export function createGpcRequestProofCapture(now:()=>number){
     try{
      const fact=captureCaliforniaRejectRequest({url:event.requestUrl,method:request.method!(),requestId:event.requestId!,startedAtMs:event.timestampMs,
       httpStatus:statuses.get(event.eventId)??undefined,hasBody,body,headers,headerPolicy:"supplemental",qualificationContext:{gpcDelivered:true,requestAtMs:event.timestampMs}});
-     if(!fact){failed++;return;}
+     if(!fact){failed++;failureOutcomes.noProof++;return;}
      const proof=gpcRequestProofSchema.parse({...fact,contractVersion:"gpc_request_proof.v1"});
      const capturedAtMs=now();rows.push({eventId:event.eventId,documentToken,capturedAtMs,proof});
      // Absence/limits of supplemental proof are not a new URL eligibility gate.
@@ -53,13 +54,18 @@ export function createGpcRequestProofCapture(now:()=>number){
      // headers-unavailable markers. Independent sibling requests remain eligible.
      const signals=proof.qualification.processingSignals;
      if(signals.length)restrictions.push({eventId:event.eventId,documentToken,urlSha256:proof.urlSha256,timestampMs:event.timestampMs,capturedAtMs,processingSignals:signals});
-    }catch{failed++;}finally{body=undefined;}
+    }catch{failed++;failureOutcomes.captureException++;}finally{body=undefined;}
    };
   },
   finish(documentToken?:string):Capture{
    finished=true;
-   const selected=prioritizeGpcRecipients(documentToken?rows.filter(r=>r.documentToken===documentToken):rows,r=>r.proof.entity.entityId,r=>isQualifyingSaleSharingRequest(r.proof.qualification)&&(r.proof.httpStatus??0)>=200&&(r.proof.httpStatus??600)<400,32);
-   return {contractVersion:"gpc_request_capture.v1",inspected,skipped,pending,failed,retentionDropped:rows.length-selected.length,rows:selected,restrictions};
+   const current=documentToken?rows.filter(r=>r.documentToken===documentToken):rows;
+   const selected=prioritizeGpcRecipients(current,r=>r.proof.entity.entityId,r=>isQualifyingSaleSharingRequest(r.proof.qualification)&&(r.proof.httpStatus??0)>=200&&(r.proof.httpStatus??600)<400,32);
+   const bodyOutcomes={absent:0,complete:0,unavailable:0,limited:0,unsupported:0};
+   for(const row of rows)bodyOutcomes[row.proof.proof!.bodyStatus]++;
+   return {contractVersion:"gpc_request_capture.v2",inspected,skipped,pending,failed,retentionDropped:rows.length-selected.length,rows:selected,restrictions,
+    diagnostics:{contractVersion:"gpc_request_capture_diagnostics.v1",documentFilterApplied:!!documentToken,
+     obsoleteDocumentDropped:rows.length-current.length,capEvicted:current.length-selected.length,bodyOutcomes,failureOutcomes:{...failureOutcomes}}};
   },
  };
 }

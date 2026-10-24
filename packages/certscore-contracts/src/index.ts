@@ -1,3 +1,5 @@
+import {californiaDisclosureChoiceCapturePolicySchema, type CaliforniaDisclosureChoiceAssessment} from "./california-disclosure-choice-assessment";
+export * from "./california-disclosure-choice-assessment";
 export * from "./exact-cookie-write-evidence";
 import {captureFailureDiagnosticSchema, type CaptureFailureDiagnostic} from "./capture-failure-diagnostic";
 export * from "./capture-failure-diagnostic";
@@ -2624,6 +2626,7 @@ export const policyNegativeSearchEvidenceSchema: z.ZodType<PolicyNegativeSearchE
 });
 
 export const policySurfaceInspectionOutcomeSchema = z.object({
+  californiaDisclosureChoicePolicy:californiaDisclosureChoiceCapturePolicySchema.optional(),
   californiaReviewPolicy: z.enum(["california-privacy-review.v2","california-privacy-review.v3","california-privacy-review.v4","california-privacy-review.v5","california-privacy-review.v6","california-privacy-review.v7","california-privacy-review.v8","california-privacy-review.v9","california-privacy-review.v10"]).optional(),
   privacyChoiceInspection: privacyChoiceInspectionSchema.optional(),
   outcome: z.enum([
@@ -2680,6 +2683,7 @@ export function derivePolicySurfaceInspectionOutcome(input: {
   normalizedUrl?: string;
   negativeSearchEvidence?: PolicyNegativeSearchEvidence;
   privacyChoiceInspection?: PrivacyChoiceInspection;
+  californiaDisclosureChoicePolicy?: CaliforniaDisclosureChoiceAssessment["policyVersion"];
   californiaReviewPolicy?: "california-privacy-review.v2" | "california-privacy-review.v3" | "california-privacy-review.v4" | "california-privacy-review.v5" | "california-privacy-review.v6" | "california-privacy-review.v7" | "california-privacy-review.v8" | "california-privacy-review.v9" | "california-privacy-review.v10";
   policySurfaceObservations?: z.infer<typeof policySurfaceObservationSchema>[];
 }) {
@@ -2756,6 +2760,7 @@ export function derivePolicySurfaceInspectionOutcome(input: {
 
   return policySurfaceInspectionOutcomeSchema.parse({
     californiaReviewPolicy: input.californiaReviewPolicy,
+    californiaDisclosureChoicePolicy: input.californiaDisclosureChoicePolicy,
     privacyChoiceInspection: input.privacyChoiceInspection,
     outcome,
     ...(negativeSearchCoverageVerified ? { negativeSearchEvidence } : {}),
@@ -3812,3 +3817,6 @@ export * from "./policy-supplement-materiality";
 export * from "./consent-confirmation-diagnostics";
 
 export * from "./california-reject-evidence";
+
+export * from "./privacy-capture-profile";
+export * from "./privacy-choice-presence";

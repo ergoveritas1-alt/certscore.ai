@@ -1655,3 +1655,45 @@ test('verified linked privacy choices survive persistence and canonical concern 
  const forged=structuredClone(input);forged.cmpPreferencesEvidence!.linkedPreferenceNavigation!.destinationUrl='https://external.test/settings';
  assert.equal(deriveCmpAuditAssessment(forged),undefined);
 });
+
+test("core CMP facts survive with neither optional packet nor outcome through canonical projection", () => {
+  const input = bundle();
+  input.postRefusalEvidence = completedUnconfirmedPacket("reject") as any;
+  input.postRefusalEvidence!.storage.postAction = [{storageType:"cookie",name:"borlabs-cookie",hostname:"example.com",nonEssential:false,
+    identityBasis:"cookie_name_domain_path_partition",identityHash:"a".repeat(64),valueHash:"b".repeat(64),expiresAtEpochSeconds:1797130216,capturedAtEpochSeconds:1791946219.865}];
+  const full = deriveCmpAuditAssessment(input)!;
+  delete input.cmpPreferencesEvidence; delete input.cmpPreferenceLaneOutcome; delete input.cmpBasicEvidence;
+  const before = structuredClone(input), core = deriveCmpAuditAssessment(input)!;
+  for (const id of ["duration", "consent_record", "implementation"]) {
+    assert.deepEqual(core.rows.find(row=>row.id===id),full.rows.find(row=>row.id===id));
+  }
+  for (const id of ["categories","services","privacy_access","cookie_information","declared_not_found","found_not_declared"])
+    assert.equal(core.rows.find(row=>row.id===id)?.status,"not_assessed");
+  const parent=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:core});
+  const persisted=JSON.parse(JSON.stringify(parent));
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:{consentControlAssessment:persisted},reviewFindingCandidates:[],validationFindings:[]});
+  const report=projectCmpAudit({scanId:input.scanId,consentControlAssessment:persisted,normalizedConcerns:concerns});
+  assert.equal(report.rows.find(row=>row.id==="duration")?.status,"Observed");
+  assert.ok(concerns.filter(row=>row.originKey.startsWith("consent.cmp_audit.")).every(row=>!row.scoreEffects?.length));
+  assert.deepEqual(input,before);
+  const changed=structuredClone(input); changed.postRefusalEvidence!.parentScanId="foreign";
+  assert.equal(deriveCmpAuditAssessment(changed),undefined);
+  const empty=bundle();delete empty.cmpPreferencesEvidence;
+  assert.equal(deriveCmpAuditAssessment(empty),undefined);
+});
+
+test("independent fallback does not mask configured-cookie facts from valid core CMP basics", () => {
+  const input=bundle();delete input.cmpPreferencesEvidence;
+  input.completedAt="2026-10-13T00:00:12.000Z";
+  input.domSnapshots=[{url:input.url,capturedAtMs:100,consentStateAtTime:"pre_consent",documentIdentity:{token:"basic-loader"}}] as CanonicalEvidenceBundle["domSnapshots"];
+  input.cmpBasicEvidence={contractVersion:"certscore.cmp-basic-evidence.v1",sourceLane:"consent_proof",scanId:input.scanId,
+    targetUrl:input.url,documentUrl:input.url,documentToken:"basic-loader",capturedAtMs:100,
+    provider:"Drupal EU Cookie Compliance module, non-TCF",controls:[],privacyLinks:[],declarations:[],serviceNames:[],limitations:["passive_first_layer_only"],
+    configuredConsentCookies:[{version:"cmp_configured_cookie_identity.v1",configurationPath:"drupalSettings.eu_cookie_compliance.cookie_name",name:"cookie_compliance"}]};
+  input.postRefusalEvidence=completedUnconfirmedPacket("reject") as any;
+  input.postRefusalEvidence!.storage.postAction=["borlabs-cookie","cookie_compliance"].map((name,i)=>({storageType:"cookie",name,hostname:"example.com",nonEssential:false,
+    identityBasis:"cookie_name_domain_path_partition",identityHash:String(i+1).repeat(64),valueHash:"b".repeat(64),expiresAtEpochSeconds:5184100,capturedAtEpochSeconds:100}));
+  assert.deepEqual(deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==="duration")!.inventory!.expiries!.map(row=>row.name),["borlabs-cookie","cookie_compliance"]);
+  input.cmpBasicEvidence.documentToken="foreign";
+  assert.deepEqual(deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==="duration")!.inventory!.expiries!.map(row=>row.name),["borlabs-cookie"]);
+});

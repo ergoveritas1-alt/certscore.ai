@@ -1,4 +1,5 @@
-import { AFTER_REJECT_SCORING_POLICY, afterRejectScoringNarrative, readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
+import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
+import { afterRejectScoringNarrative, readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 type ActivityDetails = {
   version: 1;
   activityCount: number;
@@ -70,7 +71,7 @@ export function describePostRejectFinding(value: unknown): { title: string; summ
   const evidence = record(value);
   if (!evidence) return null;
   const presence=readAfterRejectScoringAssessment(evidence.afterRejectScoringAssessment);
-  if (presence?.policyVersion===AFTER_REJECT_SCORING_POLICY) {
+  if (presence && isRejectPresencePolicy(presence.policyVersion)) {
     const narrative=afterRejectScoringNarrative(presence);
     if (narrative && presence.deductionPoints>0) return {title:narrative.title,summary:narrative.description};
   }

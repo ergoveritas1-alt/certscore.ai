@@ -1,3 +1,4 @@
+import { selectCaliforniaPriorityFindings } from "./california-priority-selection";
 import { findMissingPrivacyPolicyHighlight } from "./missing-privacy-policy-highlight";
 import { getGdprEprivacyPostureTone } from "./regulatory-coverage-score";
 import { SCORING_RULE_BY_ID } from "./scoring-policy";
@@ -86,8 +87,9 @@ export function buildAssessmentBrief(
   scope: AssessmentScope,
   context: AssessmentContext = {},
 ) {
-  const privacy = findMissingPrivacyPolicyHighlight(findings);
-  const highlighted = privacy ? [privacy, ...findings.filter(finding => finding !== privacy)] : findings;
+  const priorityFindings = selectCaliforniaPriorityFindings(findings);
+  const privacy = findMissingPrivacyPolicyHighlight(priorityFindings);
+  const highlighted = privacy ? [privacy, ...priorityFindings.filter(finding => finding !== privacy)] : priorityFindings;
   // Rank only already-projected findings. A supported gap should not hide
   // behind a review row, and a low-severity maintenance item belongs last.
   const rank = (finding: AssessmentHighlightFinding) => finding.severity === "low" ? 2
@@ -148,7 +150,7 @@ export function buildAssessmentBrief(
   return {
     contractVersion: ASSESSMENT_BRIEF_VERSION,
     scope, score, scoreBand, attention, basis, lead, coverage,
-    findingCount: findings.length,
+    findingCount: sources.length,
     primary,
     secondary: sources.slice(1),
     firstAction: primary?.actions[0] ?? null,

@@ -1,8 +1,8 @@
 
 /** Owner-approved September 6/17 and October 10/11, 2026. Shared by scoring and review UI. */
-export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v23";
+export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v24";
 export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v12";
-export type GdprEprivacyScoringPolicyVersion = typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v22" | "gdpr-eprivacy-posture.v21" | "gdpr-eprivacy-posture.v20" | "gdpr-eprivacy-posture.v19" | "gdpr-eprivacy-posture.v18";
+export type GdprEprivacyScoringPolicyVersion = typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v23" | "gdpr-eprivacy-posture.v22" | "gdpr-eprivacy-posture.v21" | "gdpr-eprivacy-posture.v20" | "gdpr-eprivacy-posture.v19" | "gdpr-eprivacy-posture.v18";
 export const POST_REJECT_ENTITY_TOTALS = [0, 15, 20, 23, 25, 27, 28, 29, 30] as const;
 /** Initial effect includes the first entity; unknown ownership cannot add increments. */
 export function postRejectEntityPoints(entityIds: readonly string[], supported: boolean) {
@@ -90,4 +90,15 @@ export const CALIFORNIA_SCORING_RULES = [...CALIFORNIA_SCORING_RULES_V4_V7.filte
   row => row.findingId !== "california_sale_sharing_opt_out_activity"),
   {findingId:"california_sale_sharing_opt_out_activity",policyKey:"california.opt_out_collection",points:CALIFORNIA_OPT_OUT_COLLECTION_POINTS,
     label:"Verified advertising collection after a sale/sharing opt-out"},
+] as const;
+
+/** Explicitly marked new captures only; all preceding registries stay frozen. */
+export const CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION = "california-regulatory-posture.v18-disclosure-choice" as const;
+export const CALIFORNIA_RUNTIME_LINK_SCORE_VERSION = "california-regulatory-posture.v19-runtime-link" as const;
+export const CALIFORNIA_NON_DISCRIMINATION_ONLY_POINTS = 3;
+export const CALIFORNIA_DISCLOSURE_CHOICE_SCORING_RULES = [
+  ...CALIFORNIA_SCORING_RULES.map(rule => ({...rule, ...(rule.findingId === "california_rights_disclosure_not_observed"
+    ? {nonDiscriminationOnlyPoints: CALIFORNIA_NON_DISCRIMINATION_ONLY_POINTS} : {})})),
+  {findingId:"california_privacy_choice_not_observed",policyKey:"california.required_choice_link_not_observed",points:6,
+    label:"Required sale/sharing opt-out link not found after permitted-alternative assessment"},
 ] as const;

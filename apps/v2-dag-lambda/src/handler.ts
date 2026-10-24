@@ -1,7 +1,12 @@
+import {CALIFORNIA_RUNTIME_LINK_POLICY} from "@certscore/contracts";
+import { assertPrivacyCaptureProfile, PRESENCE_ONLY_CAPTURE_PROFILE } from "@certscore/contracts";
 import { describeCaptureFailure } from "@certscore/contracts";
-import { saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, SALE_SHARING_OPT_OUT_POLICY, SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, SALE_SHARING_OPT_OUT_ARTIFACT_BUDGET_MS, type SaleSharingOptOutDispatch } from "@certscore/contracts";
+import { saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, saleSharingOptOutMatchesDispatch, SALE_SHARING_OPT_OUT_POLICY, SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, SALE_SHARING_OPT_OUT_ARTIFACT_BUDGET_MS, type SaleSharingOptOutDispatch } from "@certscore/contracts";
+import {activeSaleSharingCanaryCampaign,assertSaleSharingCanary,consumeSaleSharingCanary,type SaleSharingCanaryCampaign,type SaleSharingCanaryLedger} from "@certscore/contracts";
+import {createSaleSharingCanaryStore} from "./sale-sharing-canary-store";
 import { cmpPreferenceBudgetMs, cmpPreferenceDispatchSchema, cmpPreferencesEvidenceSchema, CMP_PREFERENCE_JOIN_MS, CMP_PREFERENCE_POLICY_VERSION, type CmpPreferenceDispatch } from "@certscore/contracts";
 import { actionWorkerCheckpoints } from "./action-worker-checkpoints.js";
+import { hasRepresentativeRuntimeEvidence } from "./runtime-representative-evidence.js";
 import { createOpenAiScreenshotSafetyClassifier as createFormSnapshotSafetyClassifier } from "./screenshot-safety";
 import { FULL_SITE_PAGE_DISPATCH } from "./full-site-dispatch-contract.js";
 import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
@@ -136,6 +141,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   hostname: string;
   localCallbackUrl: string | null;
   orchestrationMode?: "single" | "sharded" | "worker";
+  privacyCaptureProfile?: typeof PRESENCE_ONLY_CAPTURE_PROFILE;
   productionFindingIntegration: false;
   profile: "standard" | "tiny";
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
@@ -779,11 +785,12 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   const coordinatorPlanSummary = parseCoordinatorPlanSummary(record.coordinatorPlanSummary);
   const debugOverrides = parseDebugOverrides(record.debugOverrides);
   const policySurfaceSeeds = parsePolicySurfaceSeeds(record.policySurfaceSeeds);
+  assertPrivacyCaptureProfile(record);
   const saleSharingOptOut = record.saleSharingOptOut === undefined ? undefined : saleSharingOptOutDispatchSchema.parse(record.saleSharingOptOut);
   if (saleSharingOptOut && (saleSharingOptOut.scanId !== scanId || saleSharingOptOut.exactTargetUrl !== record.targetUrl || !["sharded", "worker"].includes(String(record.orchestrationMode)))) throw new Error("Sale/sharing authorization must bind an exact sharded scan target.");
   const cmpPreferenceInspection = record.cmpPreferenceInspection !== undefined
     ? cmpPreferenceDispatchSchema.parse(record.cmpPreferenceInspection)
-    : record.orchestrationMode === "sharded" && process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED === "1"
+    : record.privacyCaptureProfile === undefined && record.orchestrationMode === "sharded" && process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED === "1"
       ? cmpPreferenceDispatchSchema.parse({ policyVersion: CMP_PREFERENCE_POLICY_VERSION, enabled: true, scanId, exactTargetUrl: requireString(record, "targetUrl"),
         ...(process.env.CERTSCORE_CMP_PREFERENCE_COVERAGE_BUDGET_POLICY === "coverage_25_gb_seconds.v1" ? {computeBudgetPolicy: "coverage_25_gb_seconds.v1"} : {}) }) : undefined;
   if (cmpPreferenceInspection && (cmpPreferenceInspection.scanId !== scanId || cmpPreferenceInspection.exactTargetUrl !== record.targetUrl || !["sharded", "worker"].includes(String(record.orchestrationMode)))) throw new Error("CMP inspection authorization must bind the exact sharded scan target.");
@@ -806,6 +813,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   }
   const payload: LocalV2DagLambdaDispatchPayload = {
     ...(record.resourceInventoryCrawl === true ? {resourceInventoryCrawl:true,resourceInventoryDiscovery:record.resourceInventoryDiscovery === true} : {}),
+    ...(record.privacyCaptureProfile === PRESENCE_ONLY_CAPTURE_PROFILE ? {privacyCaptureProfile: PRESENCE_ONLY_CAPTURE_PROFILE} : {}),
     artifactOnly: true,
     awsRegion: parseAwsRegion(record.awsRegion),
     callbackCorrelationId: requireString(record, "callbackCorrelationId"),
@@ -2005,6 +2013,7 @@ export function postRefusalParentDispatchSha256(
   payload: LocalV2DagLambdaDispatchPayload,
 ) {
   return canonicalSha256({
+    ...(payload.privacyCaptureProfile ? {privacyCaptureProfile: payload.privacyCaptureProfile} : {}),
     artifactOnly: payload.artifactOnly,
     awsRegion: payload.awsRegion,
     callbackCorrelationId: payload.callbackCorrelationId,
@@ -2445,13 +2454,36 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
   };
 }
 
+export async function authorizeSaleSharingCanaryStage(payload:LocalV2DagLambdaDispatchPayload,stage:"coordinator"|"worker",
+  options:{signal?:AbortSignal;deadlineAtMs?:number;campaign?:SaleSharingCanaryCampaign|null;ledger?:SaleSharingCanaryLedger;
+    runtime?:{buildGitSha?:string;functionVersion?:string;region?:string;memoryMb?:number}}={}) {
+  const config=payload.saleSharingOptOut;
+  if(!config||config.policyVersion===SALE_SHARING_OPT_OUT_POLICY)return;
+  const campaign=options.campaign===undefined?activeSaleSharingCanaryCampaign():options.campaign;
+  const runtime=options.runtime??{buildGitSha:process.env.BUILD_GIT_SHA,functionVersion:process.env.AWS_LAMBDA_FUNCTION_VERSION,region:process.env.AWS_REGION,memoryMb:Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE)};
+  const validate=()=>assertSaleSharingCanary({authorization:config.canaryAuthorization,scanId:payload.scanId,targetUrl:payload.targetUrl,region:payload.awsRegion,functionName:payload.functionName,policyVersion:config.policyVersion,route:config.exactRouteAuthorization,runtime},campaign);
+  const authorization=validate();
+  if(!campaign)throw Error("sale_sharing_canary_inactive");
+  const remaining=Math.min(500,(options.deadlineAtMs??Infinity)-Date.now());
+  if(remaining<=0)throw Error("sale_sharing_canary_deadline");
+  const signal=AbortSignal.any([AbortSignal.timeout(Math.max(1,Math.floor(remaining))),...(options.signal?[options.signal]:[])]);
+  const ledger=options.ledger??createSaleSharingCanaryStore(campaign,signal);
+  let onAbort:()=>void=()=>{};
+  const aborted=new Promise<never>((_,reject)=>{onAbort=()=>reject(Error("sale_sharing_canary_deadline"));signal.addEventListener("abort",onAbort,{once:true});if(signal.aborted)onAbort();});
+  try{await Promise.race([consumeSaleSharingCanary(authorization,stage,ledger,stage==="coordinator"?postRefusalParentDispatchSha256(payload):payload.parentDispatchSha256),aborted]);}
+  finally{signal.removeEventListener("abort",onAbort);}
+  signal.throwIfAborted();validate();
+}
+
 export async function runSaleSharingOptOutArtifactChain(payload: LocalV2DagLambdaDispatchPayload,
   options: { artifactRoot: string; s3Client?: S3PutClient; signal?: AbortSignal; artifactSignal?: AbortSignal; deadlineAtMs?: number;
     onScanCoreComplete?: () => void }): Promise<ArtifactChainResult> {
+  assertPrivacyCaptureProfile(payload);
   if (payload.workerLane !== "sale_sharing_opt_out" || !payload.saleSharingOptOut ||
     process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED !== "1" || !payload.parentDispatchSha256) throw new Error("Sale/sharing opt-out is not authorized.");
   const memory = Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE ?? (process.env.AWS_LAMBDA_FUNCTION_NAME ? "NaN" : "4096"));
   if (!Number.isFinite(memory) || memory < 512 || memory > 4096) throw new Error("Sale/sharing worker exceeds approved memory budget.");
+  await authorizeSaleSharingCanaryStage(payload,"worker",{signal:options.signal,deadlineAtMs:options.deadlineAtMs});
   const { runSaleSharingOptOutObserver } = await import("@certscore/scan-core/sale-sharing-opt-out-observer");
   const packet = await runSaleSharingOptOutObserver({ config: payload.saleSharingOptOut, parentDispatchSha256: payload.parentDispatchSha256, signal: options.signal, deadlineAtMs: options.deadlineAtMs });
   options.onScanCoreComplete?.();
@@ -2464,9 +2496,10 @@ export async function retainSaleSharingOptOutPacket(payload: LocalV2DagLambdaDis
   packet: unknown, options: { artifactRoot: string; s3Client?: S3PutClient; artifactSignal?: AbortSignal }): Promise<ArtifactChainResult> {
   options.artifactSignal?.throwIfAborted();
   const parsed = saleSharingOptOutEvidenceSchema.parse(packet);
-  if (parsed.scanId !== payload.scanId || parsed.targetUrl !== payload.targetUrl || parsed.parentDispatchSha256 !== payload.parentDispatchSha256)
+  if (!payload.saleSharingOptOut || !saleSharingOptOutMatchesDispatch(parsed,payload.saleSharingOptOut) || parsed.scanId !== payload.scanId || parsed.targetUrl !== payload.targetUrl || parsed.parentDispatchSha256 !== payload.parentDispatchSha256)
     throw new Error("sale_sharing_packet_binding_mismatch");
   const body = Buffer.from(JSON.stringify(parsed));
+  if(body.byteLength>32000)throw new Error("sale_sharing_packet_metadata_invalid");
   const sha256 = createHash("sha256").update(body).digest("hex");
   const bucket = requireArtifactBucket(), key = `${artifactKeyPrefix(payload)}/SaleSharingOptOutEvidencePacket.json`;
   await mkdir(options.artifactRoot, { recursive: true });
@@ -2478,6 +2511,7 @@ export async function retainSaleSharingOptOutPacket(payload: LocalV2DagLambdaDis
 export async function runCmpPreferencesArtifactChain(payload: LocalV2DagLambdaDispatchPayload,
   options: { artifactRoot: string; s3Client?: S3PutClient; signal?: AbortSignal; artifactSignal?: AbortSignal; deadlineAtMs?: number;
     onScanCoreComplete?: () => void }): Promise<ArtifactChainResult> {
+  assertPrivacyCaptureProfile(payload);
   if (payload.workerLane !== "cmp_preferences" || !payload.cmpPreferenceInspection ||
     process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED !== "1" || !payload.parentDispatchSha256) throw new Error("CMP preference inspection is not authorized.");
   const { runCmpPreferencesObserver } = await import("@certscore/scan-core/cmp-preferences-observer");
@@ -2513,6 +2547,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     s3GetClient?: S3GetClient;
     signal?: AbortSignal;
     workspaceRoot?: string;
+    /** Trusted dependency injection for offline gate fixtures, never payload. */
+    canary?: Parameters<typeof authorizeSaleSharingCanaryStage>[2];
   }
 ): Promise<{
   artifactMetadata: LocalV2DagLambdaArtifactMetadata;
@@ -2520,7 +2556,9 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   laneTimingSummary: LocalV2DagLambdaLaneTimingSummary;
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
 }> {
+  assertPrivacyCaptureProfile(payload);
   const coordinatorStartedAtMs = Date.now();
+  await authorizeSaleSharingCanaryStage(payload,"coordinator",{...options.canary,signal:options.signal});
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
   const artifactRoot = path.resolve(workspaceRoot, options.artifactRoot);
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
@@ -2552,7 +2590,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         phase = "artifact_contract";
         const packet = saleSharingOptOutEvidenceSchema.parse(JSON.parse(body.toString("utf8")));
         phase = "artifact_binding";
-        if (packet.scanId !== payload.scanId || packet.targetUrl !== payload.targetUrl || packet.parentDispatchSha256 !== postRefusalParentDispatchSha256(payload)) throw new Error("sale_sharing_packet_binding_mismatch");
+        if (!saleSharingOptOutMatchesDispatch(packet,payload.saleSharingOptOut!) || packet.scanId !== payload.scanId || packet.targetUrl !== payload.targetUrl || packet.parentDispatchSha256 !== postRefusalParentDispatchSha256(payload)) throw new Error("sale_sharing_packet_binding_mismatch");
         return { status: "joined" as const, packet, sha256: metadata.sha256, sizeBytes: metadata.sizeBytes, startedAt: new Date(optOutStartedAt).toISOString(), completedAt: new Date().toISOString() };
       } catch (error) { return { status: "limited" as const, diagnostic: describeCaptureFailure(error, phase),
         limitationCode: options.signal?.aborted ? "opt_out_inspection_cancelled" as const
@@ -3481,7 +3519,8 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   signal?: AbortSignal;
   workerLane: LocalV2DagLambdaWorkerLane;
 }): Promise<LocalV2DagLambdaShardResult> {
-  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion });
+  assertPrivacyCaptureProfile(input.parentPayload, input.workerLane);
+  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion,...(input.parentPayload.saleSharingOptOut?.canaryAuthorization?{maxAttempts:1}:{}) });
   const workerLane = input.workerLane;
   const { gpcObservation: parentGpcObservation, ...parentPayloadWithoutGpcObservation } = input.parentPayload;
   const workerPayload: LocalV2DagLambdaDispatchPayload = {
@@ -4689,7 +4728,7 @@ function reconcileEvidenceLaneNoGoAssessment(input: {
     consentRun.accessOutcome === "representative_page";
   const runtimeRepresentative = input.runtimeEvidence.runtimeCoverage?.coverageStatus !== "limited_none" &&
     runtimeRun?.executionOutcome === "success" &&
-    runtimeRun.accessOutcome === "representative_page";
+    runtimeRun.accessOutcome === "representative_page" && hasRepresentativeRuntimeEvidence(input.runtimeEvidence);
   const noGoLane = consentNoGo && !runtimeNoGo && runtimeRepresentative
     ? "consent_proof" as const
     : runtimeNoGo && !consentNoGo && consentRepresentative
@@ -5481,6 +5520,7 @@ async function writeManifest(input: {
     scanTuning: input.scanTuning,
     ...(input.payload.debugOverrides ? { debugOverrides: input.payload.debugOverrides } : {}),
     scanId: input.payload.scanId,
+    ...(input.payload.privacyCaptureProfile ? {privacyCaptureProfile:input.payload.privacyCaptureProfile} : {}),
     ...(input.payload.coordinatorPlanSummary ? { coordinatorPlanSummary: input.payload.coordinatorPlanSummary } : {}),
     ...(input.payload.strongEvidenceMode ? { strongEvidenceMode: input.payload.strongEvidenceMode } : {}),
     targetEnvironment: input.payload.targetEnvironment,
@@ -5740,6 +5780,7 @@ export function buildVerifiedPolicyEvidencePacket(input: {
       negativeSearchEvidence: input.result.negativeSearchEvidence,
       privacyChoiceInspection: input.result.privacyChoiceInspection,
       californiaReviewPolicy: "california-privacy-review.v10",
+      californiaDisclosureChoicePolicy: CALIFORNIA_RUNTIME_LINK_POLICY,
       modulesRun: [input.result.moduleRun],
       policySurfaceObservations,
     }),

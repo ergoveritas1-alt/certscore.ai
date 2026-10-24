@@ -1,4 +1,5 @@
-import { AFTER_REJECT_SCORING_POLICY, assessAfterRejectScoring, readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
+import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
+import { retainedAfterRejectScoringAssessment, readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { postRefusalReportProjectionSchema } from "@certscore/contracts";
 import { readChoicePathExecution } from "./choice-path-execution";
 import { assessRejectClickTracking, readRejectClickTrackingAssessment } from "./reject-click-tracking-policy";
@@ -7,11 +8,11 @@ import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage
 /** Metadata only: preserve the capture belonging to an existing assessed review. */
 export function retainedRejectClickCapture(assessmentValue: unknown, projectionValue: unknown) {
   const current=readAfterRejectScoringAssessment(assessmentValue);
-  const assessment = current?.policyVersion===AFTER_REJECT_SCORING_POLICY?current:readRejectClickTrackingAssessment(assessmentValue);
+  const assessment = current && isRejectPresencePolicy(current.policyVersion)?current:readRejectClickTrackingAssessment(assessmentValue);
   const projection = postRefusalReportProjectionSchema.safeParse(projectionValue);
   if (!assessment || !projection.success || !projection.data.afterActionCapture ||
     projection.data.packetSha256 !== assessment.sourcePacketSha256) return null;
-  const checked = current?.policyVersion===AFTER_REJECT_SCORING_POLICY?assessAfterRejectScoring(projection.data):assessRejectClickTracking(projection.data);
+  const checked = current && isRejectPresencePolicy(current.policyVersion)?retainedAfterRejectScoringAssessment({afterRejectScoringAssessment:current,postRefusalEvidenceProjection:projection.data}):assessRejectClickTracking(projection.data);
   if (!checked || JSON.stringify(checked) !== JSON.stringify(assessment)) return null;
   return {
     reportEvidenceProjectionPolicy: "retained_reject_click_capture.v1",

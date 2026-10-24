@@ -1,3 +1,4 @@
+import {CALIFORNIA_RUNTIME_LINK_POLICY} from "@certscore/contracts";
 import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
 import { collectionRecipientPriorities } from "./collection-recipient-retention.js";
 import type { LocalGpcAdaptiveParticipant } from "./local-gpc-adaptive.js";
@@ -1395,6 +1396,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     negativeSearchEvidence: policySurfaceResult?.negativeSearchEvidence,
     privacyChoiceInspection: policySurfaceResult?.privacyChoiceInspection,
     californiaReviewPolicy: "california-privacy-review.v10",
+    californiaDisclosureChoicePolicy: CALIFORNIA_RUNTIME_LINK_POLICY,
     modulesRun: boundedModulesRun,
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
   });
@@ -2776,7 +2778,10 @@ export function buildScanNoGoAssessment(input: {
         (partialRuntimeWithoutPageEvidence || sparseSuccessfulPage || temporallyConfirmedSparsePage
           ? "blank_or_unusable"
           : "degraded_but_useful");
-  const blockedMainDocument = mainDocumentStatus !== null && [401, 403, 407, 429, 451, 500, 502, 503, 504].includes(mainDocumentStatus);
+  const blockedMainDocument = mainDocumentStatus !== null && (
+    [401, 403, 407, 429, 451].includes(mainDocumentStatus) ||
+    classifyMainDocumentStatus(mainDocumentStatus)?.reasonCode === "server_error_5xx"
+  );
   const explicitTerminalPage = Boolean(settledPageState) || sparseSuccessfulPage || temporallyConfirmedSparsePage || partialRuntimeWithoutPageEvidence;
   const successfulSettledMainDocument =
     mainDocumentStatus !== null &&
@@ -3137,7 +3142,7 @@ function classifyMainDocumentStatus(status: number | null): ClassifiedNoGoPageSt
   if ([403, 407, 451].includes(status)) {
     return { confidence: 0.99, evidenceText: `The main document returned HTTP ${status}.`, hardTerminal: true, reasonCode: "access_denied_or_forbidden_page", visualPageState: "access_blocked" };
   }
-  if ([500, 502, 503, 504].includes(status)) {
+  if (Number.isInteger(status) && status >= 500 && status <= 599) {
     return { confidence: 0.99, evidenceText: `The main document returned HTTP ${status}.`, hardTerminal: true, reasonCode: "server_error_5xx", visualPageState: "maintenance_or_unavailable" };
   }
   return null;

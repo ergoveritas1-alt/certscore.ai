@@ -49,6 +49,7 @@ test("retained California choices and notices remain accessible only in CCPA foc
   assert.doesNotMatch(html, /Opt-out functionality and notice completeness were not tested/);
   assert.match(html, /Evidence provenance/);
   assert.doesNotMatch(html, /<details[^>]+open=/);
+  assert.doesNotMatch(renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="ccpa_cpra" evidence={evidence} />), /Effectiveness has not been verified/);
 });
 
 test("California evidence distinguishes identified links from verified visitor-facing choices", () => {
@@ -129,5 +130,27 @@ test("regular and public report menus omit PDF downloads", () => {
     const markup = renderToStaticMarkup(allowed === undefined ? menu : <ReportPdfAccessProvider allowed={allowed}>{menu}</ReportPdfAccessProvider>);
     assert.doesNotMatch(markup, /format=pdf/);
     assert.match(markup, /format=json/);
+  }
+});
+
+
+test("California snapshot leads with observed, not observed or unknown without effectiveness copy", async () => {
+  const {CaliforniaCoverageSummary} = await import("./regulatory-review-focus");
+  const {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL} = await import("../../server/scans/california-review-coverage.fixture");
+  const {projectCaliforniaPrivacyReview} = await import("../../server/scans/california-privacy-review-projection");
+  const fixture=californiaCoverageFixture();
+  const review=projectCaliforniaPrivacyReview(fixture.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,fixture.policyEvidence)!;
+  assert.ok("reviewCoverage" in review);
+  const coverage=review.reviewCoverage;
+  assert.match(renderToStaticMarkup(<CaliforniaCoverageSummary />),/Sale\/sharing opt-out link unknown/);
+  for (const state of ["observed","not_observed",null] as const) {
+    const title=state === "observed" ? "Sale/sharing opt-out link observed" : state === "not_observed" ? "Sale/sharing opt-out link not observed" : "Sale/sharing opt-out link unknown";
+    const choicePresence=state ? {state,title,scanId:fixture.bundle.scanId,sourceHash:"a".repeat(64),labels:state === "observed" ? ["Do Not Sell or Share My Personal Information"] : []} : null;
+    const html=renderToStaticMarkup(<CaliforniaCoverageSummary coverage={coverage} choicePresence={choicePresence} />);
+    assert.ok(html.includes(title));
+    assert.equal((html.match(/<summary/g)??[]).length,1);
+    assert.ok(html.indexOf("data-california-opt-out-presence") < html.indexOf("View California privacy review"));
+    assert.doesNotMatch(html,/effectiveness|unverified|deduction|<details[^>]* open=/i);
+    if (!state) assert.doesNotMatch(html,/link not observed|link observed/);
   }
 });

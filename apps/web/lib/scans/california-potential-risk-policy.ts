@@ -1,14 +1,11 @@
 import {californiaChoiceEnforcementPoints} from "./california-choice-enforcement-policy";
-import {z} from "zod";
 import {gpcResponseAssessmentSchema, postRefusalReportProjectionSchema, isQualifyingSaleSharingRequest} from "@certscore/contracts";
 import {resolveCanonicalVendor} from "@certscore/vendor-resolver";
 import {retainedRejectPresence} from "./reject-presence-evidence";
 import {assessCaliforniaPostReject,PROPERTY_BOUND_POST_REJECT_POLICY} from "./california-post-reject-policy";
 
-export const CA_POTENTIAL_RISK_FINDING = "california_collection_review";
-export const CA_POTENTIAL_RISK_LEGACY_POLICY = "california.collection-review.v1";
-export const CA_POTENTIAL_RISK_PRIOR_POLICY = "california.collection-review.v2";
-export const CA_POTENTIAL_RISK_POLICY = "california.collection-review.v3-retained-scope";
+import { CA_POTENTIAL_RISK_LEGACY_POLICY, CA_POTENTIAL_RISK_POLICY, californiaPotentialRiskSchema, type CaliforniaPotentialRiskAssessment } from "./california-potential-risk-contract";
+export * from "./california-potential-risk-contract";
 export function potentialRiskPoints(ids:Iterable<string>,version:string=CA_POTENTIAL_RISK_POLICY):number {
  const count=new Set(ids).size;
  return count===0?0:version===CA_POTENTIAL_RISK_LEGACY_POLICY?5:[0,7,11,13,15][Math.min(count,4)]!;
@@ -22,21 +19,6 @@ export function potentialRiskIncrement(full:Iterable<string>,potential:Iterable<
  return Math.min(points,Math.max(0,californiaChoiceEnforcementPoints([...qualified,...remaining],supported||remaining.length>0)-californiaChoiceEnforcementPoints([...qualified],supported)));
 }
 const restricted = new Set(["google_rdp", "google_limited_ads", "meta_ldu", "us_privacy_sale_opt_out", "gpp_opt_out", "gpp_service_provider"]);
-const rowSchema = z.object({
-  evidenceId:z.string().min(1).max(160),entityId:z.string().regex(/^ent_[a-f0-9]{12}$/),entity:z.string().min(1).max(200),
-  msFromAnchor:z.number().int().nonnegative(),purpose:z.enum(["analytics","advertising","marketing","session_replay"]),
-  processingSignals:z.array(z.string().max(80)).max(12),
-  treatment:z.enum(["potential_risk","qualified_collection","declared_restriction"]),
-}).strict();
-export const californiaPotentialRiskSchema=z.object({
-  policyVersion:z.enum([CA_POTENTIAL_RISK_LEGACY_POLICY,CA_POTENTIAL_RISK_PRIOR_POLICY,CA_POTENTIAL_RISK_POLICY]),path:z.enum(["gpc","reject"]),scanId:z.string().min(1),
-  sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),rows:z.array(rowSchema).max(32),
-  responseUnverified:z.number().int().nonnegative(),
-  legalConclusion:z.literal("not_established"),
-}).strict().superRefine((a,ctx)=>{
-  if(new Set(a.rows.map(r=>r.evidenceId)).size!==a.rows.length)ctx.addIssue({code:z.ZodIssueCode.custom,message:"Duplicate collection review evidence"});
-});
-export type CaliforniaPotentialRiskAssessment=z.infer<typeof californiaPotentialRiskSchema>;
 function requestSignals(q:Parameters<typeof isQualifyingSaleSharingRequest>[0]):string[] {
   const signals=new Set<string>(q.processingSignals);
   // Keep decoded declarations authoritative even if a historical producer
@@ -47,7 +29,7 @@ function requestSignals(q:Parameters<typeof isQualifyingSaleSharingRequest>[0]):
   }
   return [...signals];
 }
-function treatment(signals:string[],qualified:boolean):z.infer<typeof rowSchema>["treatment"] {
+function treatment(signals:string[],qualified:boolean):CaliforniaPotentialRiskAssessment["rows"][number]["treatment"] {
   return qualified?"qualified_collection":signals.some(s=>restricted.has(s))?"declared_restriction":"potential_risk";
 }
 export function assessGpcPotentialRisk(value:unknown,policyVersion:CaliforniaPotentialRiskAssessment["policyVersion"]=CA_POTENTIAL_RISK_POLICY):CaliforniaPotentialRiskAssessment|null {
@@ -90,7 +72,7 @@ export function assessRejectPotentialRisk(value:unknown,policyVersion:California
     if(status===undefined||status===null||status<200||status>=400||r.completedAtMs===undefined||r.completedAtMs>presence.end){responseUnverified++;continue;}
     const signals=f?requestSignals(f.qualification):["processing_declarations_not_retained",...(r.googleConsentMode?.nonPersonalizedAds==="declared"?["google_npa"]:[])];
     rows.push({evidenceId:id,entityId:vendor.registryAttribution.entityId,entity:vendor.entity,msFromAnchor:r.startedAtMs-presence.start,
-      purpose:vendor.purpose as z.infer<typeof rowSchema>["purpose"],processingSignals:signals,
+      purpose:vendor.purpose as CaliforniaPotentialRiskAssessment["rows"][number]["purpose"],processingSignals:signals,
       treatment:treatment(signals,full.requests.some(q=>q.requestId===id&&q.reason==="qualified_collection"))});
   }
   // Prioritize distinct recipients without increasing the retained 32-row cap.

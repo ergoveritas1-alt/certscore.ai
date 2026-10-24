@@ -62,7 +62,12 @@ export type KnownCmpActionCapability = {
 
 export type KnownCmpDefinition = {
   /** Separate California action recipe; cookie Reject/Save never authorizes this action. */
-  saleSharingOptOut?: { version: string; entranceSelector: string; dialogSelector: string; submitSelector: string; submitLabels: readonly string[]; documentationUrls: readonly string[] };
+  saleSharingOptOut?: { version: string; entranceSelector: string; entranceLabels?: readonly string[]; dialogSelector: string; submitSelector: string; submitLabels: readonly string[]; documentationUrls: readonly string[];
+    /** Separate, owner-reviewed Settings opening authority; submission is unchanged.
+     * Applies only after the exact source route has reached its bound destination. */
+    settingsEntrances?: readonly { version: string; originalTargetUrl: string; actionTargetUrl: string;
+      buttonSelector: string; anchorSelector?: string; labels: readonly string[] }[];
+  };
   /** Explicit documented tenant/site cookie variants; identity only. */
   cookieNameVariants?: Array<{ canonicalName: string; pattern: RegExp }>;
   initialOptionalOffCloseObservation?: {
@@ -254,6 +259,27 @@ export type KnownCmpDetectionInput = {
 
 export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
+    // Passive identity only. Source-reviewed on the Volkswagen consent bundle;
+    // Bootstrapper/Ensighten Manage alone does not identify a consent UI.
+    canonicalName: "Ensighten Privacy", aliases: ["CHEQ Enforce"], domains: [],
+    domSelectors: ["#ensNotifyBanner", "#ensModalWrapper", "#tcf2__ensNotifyBanner", "#tcf2__ensModalWrapper"],
+    domMarkerPatterns: [/^#(?:ensNotifyBanner|ensModalWrapper|tcf2__ensNotifyBanner|tcf2__ensModalWrapper)$/],
+    preferenceScopeSelector: "#ensNotifyBanner, #ensModalWrapper, #tcf2__ensNotifyBanner, #tcf2__ensModalWrapper",
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform",
+    interactionDocumentationUrls: ["https://academy.ensighten.com/hc/en-us/articles/22832165668241-Enforce-Training-Course-Overview"],
+  },
+  {
+    // FC-Moto's reviewed self-hosted app is CCM19, not a Tracking Garden CMP.
+    // No generic CCM global, /app.js path, cookie or tracking-domain alias.
+    canonicalName: "CCM19", aliases: ["CCM19 Cookie Consent Manager"], domains: [],
+    domSelectors: [".ccm-root", "#ccm-widget"],
+    domMarkerPatterns: [/^(?:\.ccm-root|#ccm-widget)$/],
+    preferenceScopeSelector: ".ccm-root",
+    urlPatterns: [/^https:\/\/www\.fc-moto\.com\/rp\/cb\/app\.js(?:\?[^#]*)?$/],
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform",
+    interactionDocumentationUrls: ["https://www.ccm19.de/en/knowledge/api", "https://www.ccm19.de/faq/kann-ich-das-einstellungs-icon-unten-links-entfernen.html"],
+  },
+  {
     preferenceScopeSelector: '.ax-website-overlay, [data-testid="widget-container"]:has(#axeptio_btn_close[aria-label="Close cookie settings"]):not(.ax-website-overlay *)',
     preferenceDialogBinding: { version: "axeptio_preferences.v1", openingBudgetMs: 3_000,
       controlSelector: '#axeptio_main_button[title="Manage your preferences about cookies"]',
@@ -428,9 +454,17 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     acceptControlSelectors: ["#onetrust-accept-btn-handler"],
     canonicalName: "OneTrust",
     observationControlRecipes: [{recipeId:"onetrust.notice_continue.v1",controlSelector:"#onetrust-accept-btn-handler",containerSelectors:["#onetrust-button-group","#onetrust-banner-sdk"]}],
-    saleSharingOptOut: { version: "onetrust.explicit_sale_share.v1", entranceSelector: "#ot-sdk-btn.ot-sdk-show-settings", dialogSelector: "#onetrust-pc-sdk",
-      submitSelector: "button.save-preference-btn-handler.onetrust-close-btn-handler", submitLabels: ["do not sell or share my personal information"],
-      documentationUrls: ["https://developer.onetrust.com/onetrust/docs/common-custom-css", "https://developer.onetrust.com/onetrust/docs/iab-ccpa-us-privacy-string"] },
+    saleSharingOptOut: { version: "onetrust.explicit_sale_share.v2", entranceSelector: "button.ot-sdk-show-settings", dialogSelector: "#onetrust-pc-sdk",
+      settingsEntrances: [
+        { version: "onetrust.readcube_settings.v1", originalTargetUrl: "https://readcube.com/", actionTargetUrl: "https://about.readcube.com/",
+          buttonSelector: "button#onetrust-pc-btn-handler", labels: ["cookies settings", "cookies settings, opens the preference center dialog"] },
+        { version: "onetrust.gimbal_settings.v2", originalTargetUrl: "https://gimbal.com/", actionTargetUrl: "https://infillion.com/",
+          buttonSelector: "button#onetrust-pc-btn-handler", anchorSelector: "a#ot-sdk-btn.ot-sdk-show-settings",
+          labels: ["cookie settings", "cookie settings, opens preference center dialog", "cookie settings, opens the preference center dialog"] },
+      ],
+      entranceLabels: ["your privacy choices", "privacy choices", "do not sell or share my personal information", "do not sell or share", "do not sell my personal information"],
+      submitSelector: "button.save-preference-btn-handler.onetrust-close-btn-handler", submitLabels: ["do not sell or share my personal information", "do not sell or share", "do not sell my personal information"],
+      documentationUrls: ["https://developer.onetrust.com/onetrust/docs/common-custom-css", "https://developer.onetrust.com/onetrust/docs/single-page-applications", "https://developer.onetrust.com/onetrust/reference/publishscripttosite", "https://developer.onetrust.com/onetrust/docs/iab-ccpa-us-privacy-string"] },
     preferenceDialogBinding: { version: "onetrust_preferences.v3", allowPrivacyOptOutEntrance: true, controlSelector: "#onetrust-pc-btn-handler, #ot-sdk-btn.ot-sdk-show-settings", dialogSelector: "#onetrust-pc-sdk", deferredRootSelector: "#onetrust-consent-sdk" },
     rejectLabelBoundNecessaryOnly: {
       policyVersion: "label_bound_necessary_only_reject.v2",

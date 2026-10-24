@@ -1,3 +1,4 @@
+import { readSaleSharingLinkPresence, PRIVACY_CHOICE_PRESENCE_SIGNAL, PRIVACY_CHOICE_PRESENCE_TITLE } from "@certscore/contracts";
 import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
 import {retainedPotentialRisk,type CaliforniaPotentialRiskAssessment} from "./california-potential-risk-policy";
 import { gpcVendorFindings } from "./choice-vendor-findings";
@@ -1835,6 +1836,10 @@ function buildUnifiedFindingDetails(input: {
   if (input.findingId === CMS_SECURITY_FINDING_ID) {
     const projection = cmsSecurityProjectionSchema.safeParse(input.fallbackEvidence?.cmsSecurity);
     return projection.success ? { family: "cms_security", projection: projection.data } satisfies UnifiedFindingDetails : undefined;
+  }
+  if (input.findingId === "targeted_advertising_choices_present") {
+    const presence = readSaleSharingLinkPresence(input.fallbackEvidence?.consentControlAssessment);
+    if (presence) return {family:"california_privacy_review",projection:presence.review} satisfies UnifiedFindingDetails;
   }
   if (CALIFORNIA_PRIVACY_REVIEW_IDS.some(id => id === input.findingId)) {
     const projection = readCaliforniaPrivacyReviewFromConsent(input.fallbackEvidence?.consentControlAssessment);
@@ -5212,8 +5217,8 @@ const PACKETIZED_FINDING_SUPPORT_RULES: PacketizedFindingSupportRule[] = [
       packet.sourceRefs.some(
         (sourceRef) =>
           sourceRef.kind === "signal" &&
-          sourceRef.source === "snapshot_signal" &&
-          sourceRef.key === "privacy.do_not_sell_link_present"
+          ((sourceRef.source === "snapshot_signal" && sourceRef.key === "privacy.do_not_sell_link_present") ||
+           (sourceRef.source === "runtime_artifact_signal" && sourceRef.key === PRIVACY_CHOICE_PRESENCE_SIGNAL))
       )
   },
   {findingId:"california_collection_review",policyPageType:null,
@@ -6937,7 +6942,9 @@ function createInitialUnifiedFindingPacket(
   const scoring=readAfterRejectScoringAssessment(candidate.normalizedConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment);
   return {
     unifiedFindingId: definition.id,
-    title: definition.id === "post_refusal_non_essential_activity" || definition.id === "post_reject_click_tracking" && isRejectPresencePolicy(scoring?.policyVersion)
+    title: candidate.normalizedConcern?.originKey === PRIVACY_CHOICE_PRESENCE_SIGNAL
+      ? PRIVACY_CHOICE_PRESENCE_TITLE
+      : definition.id === "post_refusal_non_essential_activity" || definition.id === "post_reject_click_tracking" && isRejectPresencePolicy(scoring?.policyVersion)
       ? afterRejectScoringNarrative(readAfterRejectScoringAssessment(candidate.normalizedConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment))?.title ?? definition.label
       : definition.label,
     severity: candidate.severity,
@@ -7162,6 +7169,11 @@ function mergeUnifiedFindingCandidateEvidence(input: {
   linkedValidationFinding?: ScanValidationFinding | null;
   packet: UnifiedFindingPacket;
 }) {
+  if (input.findingId === "targeted_advertising_choices_present" && input.candidate.normalizedConcern?.originKey === PRIVACY_CHOICE_PRESENCE_SIGNAL &&
+      readSaleSharingLinkPresence(input.candidate.fallbackEvidence?.consentControlAssessment)) {
+    input.packet.title = PRIVACY_CHOICE_PRESENCE_TITLE;
+    input.packet.summary = input.candidate.description;
+  }
   input.packet.evidence = mergeEvidence(
     input.packet.evidence,
     input.fallbackEvidence,

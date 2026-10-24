@@ -20,3 +20,19 @@ export const VENDOR_COOKIE_COVERAGE = [
  // session identity and sampling/recording flags. Neither proves active recording.
  {pattern:/^_hj(?:SessionUser|Session)_[0-9]{1,20}$/,vendor:"Hotjar",product:"Hotjar",category:"session_replay",source:"https://script.hotjar.com/modules.96a30129fbe7c16f762f.js"},
 ] as const;
+
+
+/** C3 exact identities introduced in v7; v6 retains the table above unchanged. */
+export const C3_COOKIE_COVERAGE = [
+ {pattern:/^fundraiseup_stat$/,vendor:"Fundraise Up",product:"Fundraise Up",category:"analytics",source:"https://fundraiseup.com/docs/cookies/"},
+ {pattern:/^fundraiseup_cid$/,vendor:"Fundraise Up",product:"Fundraise Up",category:"security",source:"https://fundraiseup.com/docs/cookies/"},
+ {pattern:/^nmstat$/,vendor:"Siteimprove",product:"Siteimprove Analytics",category:"analytics",source:"https://help.siteimprove.com/support/solutions/articles/80000863908-siteimprove-analytics-cookies"},
+ {pattern:/^szcib$/,vendor:"Siteimprove",product:"Siteimprove Analytics",category:"consent_management",source:"https://help.siteimprove.com/support/solutions/articles/80000863908-siteimprove-analytics-cookies"},
+ {pattern:/^SC_ANALYTICS_GLOBAL_COOKIE$/,vendor:"Sitecore",product:"Sitecore Experience Analytics",category:"analytics",source:"https://doc.sitecore.com/xp/en/developers/103/platform-administration-and-architecture/cookies-used-by-sitecore.html"},
+ {pattern:/^SC_TRACKING_CONSENT$/,vendor:"Sitecore",product:"Sitecore Experience Analytics",category:"consent_management",source:"https://doc.sitecore.com/xp/en/developers/103/platform-administration-and-architecture/cookies-used-by-sitecore.html"},
+] as const;
+
+export function cookieCoverageForPolicy(version: string | undefined) {
+ return version === "certscore.cookie-purpose.v7" ? [...VENDOR_COOKIE_COVERAGE, ...C3_COOKIE_COVERAGE]
+  : version === "certscore.cookie-purpose.v6" ? VENDOR_COOKIE_COVERAGE : [];
+}

@@ -1,3 +1,4 @@
+import { selectCaliforniaPriorityFindings } from "./california-priority-selection";
 import type { ReportReviewFocus } from "@certscore/api-contracts";
 
 /** Editorial context over already-projected identities. Never establishes evidence or eligibility. */
@@ -121,13 +122,14 @@ export function regulatoryReviewContext(id: string, focus: ReportReviewFocus) {
 }
 
 /** Rank existing entries for one issue list; framework-specific context stays separate. */
-export function selectRegulatoryReview<T extends { id: string; status: string; rank: number }>(findings: readonly T[], focus: ReportReviewFocus) {
-  const relevant = findings.filter(finding => regulatoryReviewContext(finding.id, focus));
+export function selectRegulatoryReview<T extends { id: string; status: string; rank: number; evidenceJson?: Record<string, unknown> }>(findings: readonly T[], focus: ReportReviewFocus) {
+  const priorityFindings = selectCaliforniaPriorityFindings(findings);
+  const relevant = priorityFindings.filter(finding => regulatoryReviewContext(finding.id, focus));
   const regulatory = [...relevant].sort((a, b) =>
     Number(b.status === "Potential gap") - Number(a.status === "Potential gap") ||
     regulatoryReviewContext(b.id, focus)!.priority - regulatoryReviewContext(a.id, focus)!.priority
   ).map((finding, index) => ({ ...finding, rank: index + 1 }));
-  const other = findings.filter(finding => finding.id !== "gpc_response" && !REGULATORY_REVIEW_TOPICS.some(topic => topic.findingIds.includes(finding.id)))
+  const other = priorityFindings.filter(finding => finding.id !== "gpc_response" && !REGULATORY_REVIEW_TOPICS.some(topic => topic.findingIds.includes(finding.id)))
     .map((finding, index) => ({ ...finding, rank: index + 1 }));
   // A finding tied solely to the other privacy framework stays in Detailed evidence.
   const topIssues = [...regulatory, ...other].map((finding, index) => ({ ...finding, rank: index + 1 }));

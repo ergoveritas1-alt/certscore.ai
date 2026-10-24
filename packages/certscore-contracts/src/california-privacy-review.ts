@@ -1,10 +1,14 @@
+import {californiaDisclosureChoiceAssessmentSchema,isExplicitCaliforniaSaleSharingDeclaration} from "./california-disclosure-choice-assessment";
+import { privacyChoiceDiagnosticsSchema, PRIVACY_CHOICE_DIAGNOSTIC_BYTES } from "./privacy-choice-diagnostics";
+export * from "./privacy-choice-diagnostics";
+import { privacyChoicePresenceSchema } from "./privacy-choice-presence";
 import {californiaRightsClauseAssessmentSchema,californiaCollectionNoticeAssessmentSchema,californiaCollectionNoticeV2Schema,californiaCollectionNoticeV3Schema,californiaCollectionNoticeV4Schema,californiaCollectionNoticeV5Schema} from "./california-clause-assessment";
 import {californiaSaleSharingAssessmentSchema} from "./california-sale-sharing-assessment";
 export * from "./california-sale-sharing-assessment";
 export * from "./california-clause-assessment";
 import { californiaDisclosureInspectionSchema, CALIFORNIA_RIGHTS_DISCLOSURE_ID } from "./california-disclosure-inspection";
 export * from "./california-disclosure-inspection";
-import { verifiedSaleSharingOptOutSchema } from "./sale-sharing-opt-out";
+import { verifiedSaleSharingOptOutSchema,saleSharingOptOutBindsDocument } from "./sale-sharing-opt-out";
 import { z } from "zod";
 import { californiaCoverageV1Schema, californiaCoverageV2Schema,californiaCoverageV3Schema,californiaCoverageV4Schema } from "./california-review-coverage";
 export * from "./california-review-coverage";
@@ -13,6 +17,12 @@ const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const safeUrl = z.string().url().max(800).refine(value => {
   const url = new URL(value);
   return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash;
+});
+// Provenance joins the exact original visit. Unlike public display links, its
+// query/fragment cannot be discarded without changing document identity.
+const documentIdentityUrl = z.string().url().max(800).refine(value => {
+  const url = new URL(value);
+  return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password;
 });
 
 /** Positive, narrowly named request routes; a link does not prove the method works. */
@@ -97,23 +107,87 @@ function frameInspectionSchema() { return z.object(privacyChoiceInspectionV3Fiel
 const privacyChoiceInspectionV3Schema = frameInspectionSchema().extend({contractVersion:z.literal("certscore.privacy-choice-inspection.v3")}).strict().superRefine(validateFrameCoverage);
 const privacyChoiceInspectionV4Schema = frameInspectionSchema().extend({contractVersion:z.literal("certscore.privacy-choice-inspection.v4"),
   homepageAccessPolicy:z.literal("representative_homepage.v1")}).strict().superRefine(validateFrameCoverage);
-const privacyChoiceInspectionV5Schema = frameInspectionSchema().extend({
+const privacyChoiceInspectionV5Base = frameInspectionSchema().extend({
   contractVersion:z.literal("certscore.privacy-choice-inspection.v5"),
   homepageAccessPolicy:z.literal("representative_homepage.v1"),
   readinessPolicy:z.literal("document_bound_dom_inventory.v1"),
+  diagnostics:privacyChoiceDiagnosticsSchema.optional(),
   documentReadyState:z.enum(["loading","interactive","complete"]),
   limitationKeys:z.array(z.enum(["document_loading","inventory_unavailable","document_not_representative","document_binding_unverified",
     "candidate_inventory_truncated","unnamed_controls","frame_inventory_incomplete","shadow_inventory_incomplete","unsupported_language"])).max(9),
-}).strict().superRefine((row,ctx)=>{
+}).strict();
+const privacyChoiceInspectionV5Schema = privacyChoiceInspectionV5Base.superRefine((row,ctx)=>{
   validateFrameCoverage(row,ctx);
+  if (row.diagnostics && row.diagnostics.inspectionSourceHash !== row.sourceHash) ctx.addIssue({code:"custom",message:"Choice diagnostics must bind the original inspection hash."});
   if (row.coverage === "complete" && (row.documentReadyState === "loading" || row.limitationKeys.length)) {
     ctx.addIssue({code:"custom",message:"Complete choice inventory requires a parsed, bound document without inspection limitations."});
   }
 });
-export const privacyChoiceInspectionSchema = z.union([privacyChoiceInspectionV1Schema, privacyChoiceInspectionV2Schema, privacyChoiceInspectionV3Schema, privacyChoiceInspectionV4Schema, privacyChoiceInspectionV5Schema]);
-export type PrivacyChoiceInspection = z.infer<typeof privacyChoiceInspectionSchema>;
+/** V6 excludes only fully proved, self-hidden frames from the visible-link
+ * absence scope. Raw capture counters/limitations remain intact. This is not
+ * evidence that the contents of those frames were inspected. */
+const selfHiddenFrameExclusionSchema = z.object({
+  policyVersion: z.literal("self_display_none_at_both_checkpoints.v1"),
+  excludedFrameCount: z.number().int().min(1).max(4),
+  blockingFrameCount: z.literal(0),
+  frameSlots: z.array(z.number().int().min(0).max(3)).min(1).max(4),
+}).strict();
+function eligibleSelfHiddenFrames(i: z.infer<typeof privacyChoiceInspectionV5Schema>): boolean {
+  const d = i.diagnostics, p = d?.checkpointIdentity;
+  if (i.coverage !== "limited" || i.documentReadyState !== "complete" || !i.documentStable ||
+      !i.representativeDocument || !i.supportedDocumentLanguage || i.unnamedControlCount ||
+      i.candidateEnumerationTruncated || i.uninspectedShadowRootCount || i.namedChoiceCandidateCount ||
+      i.limitationKeys.length !== 1 || i.limitationKeys[0] !== "frame_inventory_incomplete") return false;
+  if (i.frameCount < 1 || i.frameCount > 4 || i.frameCount !== i.hiddenUninspectedFrameCount ||
+      i.frameCount !== i.uninspectedFrameCount || i.inspectedSameOriginFrameCount || i.inaccessibleFrameCount ||
+      i.unreadyFrameCount || i.unprojectableFrameCount || i.frameBudgetLimitedCount) return false;
+  if (!d || d.status !== "captured" || d.limitations.length || d.inspectionSourceHash !== i.sourceHash ||
+      d.firstDocumentHash !== d.secondDocumentHash || d.frames.length !== i.frameCount || d.unnamedControls.length) return false;
+  if (!p || p.status !== "matched" || p.limitations.length || p.parentDocument !== "same" ||
+      p.frames.length !== i.frameCount) return false;
+  if (new Set(d.frames.map(f => f.first.locatorHash)).size !== i.frameCount) return false;
+  return d.frames.every((f, index) => f.second && !f.first.locatorLimited && !f.second.locatorLimited &&
+    f.first.locatorHash === f.second.locatorHash && f.first.frameDocumentHash !== null &&
+    f.first.frameDocumentHash === f.second.frameDocumentHash && f.first.reason === "display_none" &&
+    f.second.reason === "display_none" && f.first.depth === 0 && f.second.depth === 0 &&
+    p.frames[index]?.slot === index && p.frames[index]?.node === "same" && p.frames[index]?.document === "same");
+}
+const privacyChoiceInspectionV6Schema = privacyChoiceInspectionV5Base.extend({
+  contractVersion: z.literal("certscore.privacy-choice-inspection.v6"),
+  coverage: z.literal("complete"),
+  frameExclusion: selfHiddenFrameExclusionSchema,
+}).strict().superRefine((row, ctx) => {
+  const { frameExclusion, ...captured } = row;
+  const original = privacyChoiceInspectionV5Schema.safeParse({...captured,
+    contractVersion: "certscore.privacy-choice-inspection.v5", coverage: "limited"});
+  if (!original.success || !eligibleSelfHiddenFrames(original.data))
+    ctx.addIssue({code: "custom", message: "Self-hidden frame exclusion requires complete bound endpoint proof and no other blocker."});
+  if (new TextEncoder().encode(JSON.stringify(row.diagnostics)).length +
+      new TextEncoder().encode(JSON.stringify(frameExclusion)).length > PRIVACY_CHOICE_DIAGNOSTIC_BYTES)
+    ctx.addIssue({code: "custom", message: "Frame exclusion and diagnostics must share the original metadata cap."});
+  if (frameExclusion.excludedFrameCount !== row.frameCount || frameExclusion.frameSlots.length !== row.frameCount ||
+      frameExclusion.frameSlots.some((slot, index) => slot !== index))
+    ctx.addIssue({code: "custom", message: "Excluded frames must account for every original frame slot without changing observed counters."});
+});
+
+/** Capture-time materialization only. Report projection must never call this on
+ * old retained inspections; v1-v5 keep their original absence semantics. */
+export function materializeSelfHiddenFrameInspection(value: unknown): z.infer<typeof privacyChoiceInspectionV6Schema> | undefined {
+  const original = privacyChoiceInspectionV5Schema.safeParse(value);
+  if (!original.success || !eligibleSelfHiddenFrames(original.data)) return undefined;
+  const result = privacyChoiceInspectionV6Schema.safeParse({...original.data,
+    contractVersion: "certscore.privacy-choice-inspection.v6", coverage: "complete",
+    frameExclusion: {policyVersion: "self_display_none_at_both_checkpoints.v1", excludedFrameCount: original.data.frameCount,
+      blockingFrameCount: 0, frameSlots: Array.from({length: original.data.frameCount}, (_, index) => index)},
+  });
+  return result.success ? result.data : undefined;
+}
+export type PrivacyChoiceInspection = z.infer<typeof privacyChoiceInspectionV1Schema> | z.infer<typeof privacyChoiceInspectionV2Schema> |
+  z.infer<typeof privacyChoiceInspectionV3Schema> | z.infer<typeof privacyChoiceInspectionV4Schema> |
+  z.infer<typeof privacyChoiceInspectionV5Schema> | z.infer<typeof privacyChoiceInspectionV6Schema>;
+export const privacyChoiceInspectionSchema: z.ZodType<PrivacyChoiceInspection> = z.union([privacyChoiceInspectionV1Schema, privacyChoiceInspectionV2Schema, privacyChoiceInspectionV3Schema, privacyChoiceInspectionV4Schema, privacyChoiceInspectionV5Schema, privacyChoiceInspectionV6Schema]);
 export function isCurrentCaliforniaChoiceInspection(inspection:PrivacyChoiceInspection|null|undefined) {
-  return inspection?.contractVersion === "certscore.privacy-choice-inspection.v4" || inspection?.contractVersion === "certscore.privacy-choice-inspection.v5";
+  return inspection?.contractVersion === "certscore.privacy-choice-inspection.v4" || inspection?.contractVersion === "certscore.privacy-choice-inspection.v5" || inspection?.contractVersion === "certscore.privacy-choice-inspection.v6";
 }
 
 export const CALIFORNIA_CHOICE_ABSENCE_ID = "california_privacy_choice_not_observed";
@@ -145,7 +219,7 @@ const noticeLinkSchema = z.object({
 
 const californiaPrivacyReviewFields = {
   scanId: z.string().min(1),
-  documentUrl: safeUrl,
+  documentUrl: documentIdentityUrl,
   capturedAt: z.string().datetime(),
   sourceHash: hash,
   verificationStatus: z.literal("verified"),
@@ -154,6 +228,7 @@ const californiaPrivacyReviewFields = {
   inspection: privacyChoiceInspectionSchema.nullable(),
   choiceSurface: z.enum(["observed", "not_observed_in_inspected_scope", "unknown"]),
   controls: choiceSchema.array().max(12),
+  choicePresence: privacyChoicePresenceSchema.optional(),
   controlsTruncated: z.boolean(),
   failedNoticeLinks: noticeLinkSchema.array().max(8).optional(),
   optOutObservation: verifiedSaleSharingOptOutSchema.optional(),
@@ -200,7 +275,7 @@ const californiaPrivacyReviewV9=californiaPrivacyReviewV8.extend({
  * it never establishes a policy pass, absence, applicability or finding. */
 export const californiaObservedScoreBasisSchema = z.object({
   policyVersion:z.literal("usable_starting_page_score.v1"),
-  scanId:z.string().min(1).max(160), documentUrl:safeUrl, sourceHash:hash,
+  scanId:z.string().min(1).max(160), documentUrl:documentIdentityUrl, sourceHash:hash,
   documentToken:z.string().min(1).max(256), domArtifactId:z.string().min(1).max(200),
   sourceLane:z.literal("runtime_evidence"), accessOutcome:z.literal("representative_page"),
   evidenceRef:z.literal("CanonicalEvidenceBundle.json#runtimeMetadataSnapshots"),
@@ -209,9 +284,32 @@ export type CaliforniaObservedScoreBasis = z.infer<typeof californiaObservedScor
 const californiaPrivacyReviewV10=californiaPrivacyReviewV9.extend({
   contractVersion:z.literal("certscore.california-privacy-review.v10"),policyVersion:z.literal("california-privacy-review.v10"),
   observedScoreBasis:californiaObservedScoreBasisSchema.optional(),
+  disclosureChoiceAssessment:californiaDisclosureChoiceAssessmentSchema.optional(),
 }).strict();
 type CaliforniaPrivacyReviewShape = z.infer<typeof californiaPrivacyReviewV1> | z.infer<typeof californiaPrivacyReviewV2> | z.infer<typeof californiaPrivacyReviewV3> | z.infer<typeof californiaPrivacyReviewV4> | z.infer<typeof californiaPrivacyReviewV5> | z.infer<typeof californiaPrivacyReviewV6> | z.infer<typeof californiaPrivacyReviewV7> | z.infer<typeof californiaPrivacyReviewV8> | z.infer<typeof californiaPrivacyReviewV9> | z.infer<typeof californiaPrivacyReviewV10>;
 const californiaPrivacyReviewValidatedSchema: z.ZodType<CaliforniaPrivacyReviewShape> = z.discriminatedUnion("contractVersion",[californiaPrivacyReviewV1,californiaPrivacyReviewV2,californiaPrivacyReviewV3,californiaPrivacyReviewV4,californiaPrivacyReviewV5,californiaPrivacyReviewV6,californiaPrivacyReviewV7,californiaPrivacyReviewV8,californiaPrivacyReviewV9,californiaPrivacyReviewV10]).superRefine((row, ctx) => {
+  if (row.contractVersion === "certscore.california-privacy-review.v10" && row.disclosureChoiceAssessment) {
+    const a=row.disclosureChoiceAssessment,p=a.requiredLinkProof;
+    if(a.scanId!==row.scanId || a.documentUrl!==row.documentUrl || a.sourceHash!==row.sourceHash)
+      ctx.addIssue({code:"custom",message:"Disclosure/choice assessment must bind the original scan, document and source."});
+    if(p && (row.choiceSurface!=="not_observed_in_inspected_scope" || !isCurrentCaliforniaChoiceInspection(row.inspection) ||
+        !row.disclosureInspection || !row.reviewCoverage.captureCoverage.policyTextComplete ||
+        row.saleSharingAssessment?.choiceBasis!=="declared_sale_or_sharing" ||
+        p.documents.length!==row.disclosureInspection.documents.length ||
+        new Set(p.documents.map(d=>d.evidenceRef)).size!==p.documents.length ||
+        p.documents.some(d=>!row.disclosureInspection!.documents.some(source=>source.evidenceRef===d.evidenceRef &&
+          source.textSha256===d.textSha256 && source.inspectedChars===d.inspectedChars)) ||
+        !isExplicitCaliforniaSaleSharingDeclaration(p.declaration.excerpt) ||
+        !row.saleSharingAssessment.topics.some(t=>["sale","cross_context_sharing"].includes(t.topic) && t.status==="described" &&
+          t.passages.some(passage=>JSON.stringify(passage)===JSON.stringify(p.declaration)))))
+      ctx.addIssue({code:"custom",message:"Required link scoring needs complete absence, owned policy coverage and the exact California declaration."});
+    const runtime=a.policyVersion === "california.disclosure-choice.v2-runtime" ? a.runtimeLinkProof : undefined;
+    if(runtime && (row.choiceSurface!=="not_observed_in_inspected_scope" || !isCurrentCaliforniaChoiceInspection(row.inspection) ||
+        runtime.inspectionSourceHash!==row.inspection?.sourceHash ||
+        row.reviewCoverage.families.some(f=>f.id==="privacy_choices"&&f.status==="not_triggered_in_scope")))
+      ctx.addIssue({code:"custom",message:"Runtime link proof requires original complete inspection and independently reviewed choice scope."});
+
+  }
   if (row.contractVersion === "certscore.california-privacy-review.v10" && row.observedScoreBasis &&
       (row.observedScoreBasis.scanId !== row.scanId || row.observedScoreBasis.documentUrl !== row.documentUrl ||
        row.observedScoreBasis.sourceHash !== row.sourceHash)) {
@@ -255,7 +353,10 @@ const californiaPrivacyReviewValidatedSchema: z.ZodType<CaliforniaPrivacyReviewS
     if(purpose.items.some(item=>item.readUse?.reads.some(read=>!purpose.retainedReadTrace?.observations.some(raw=>raw.id===read.evidenceRef&&raw.documentUrl===row.documentUrl))))ctx.addIssue({code:"custom",message:"Read-use observation must belong to this report document"});
     if(purpose.items.some(item=>item.declaredPurpose&&!row.disclosureInspection?.documents.some(source=>source.evidenceRef===item.declaredPurpose!.passage.evidenceRef&&source.textSha256===item.declaredPurpose!.passage.textSha256&&item.declaredPurpose!.passage.end<=source.inspectedChars)))ctx.addIssue({code:"custom",message:"Declared purposes require verified retained policy passages"});
   }
-  if (row.optOutObservation && (row.optOutObservation.evidence.scanId !== row.scanId || row.optOutObservation.evidence.targetUrl !== row.documentUrl)) ctx.addIssue({code: "custom", message: "Opt-out observation binding mismatch."});
+  if (row.choicePresence?.links.some(link => link.sourceDocumentUrl !== row.documentUrl ||
+      !row.controls.some(control => control.evidenceRef === link.evidenceRef && control.label === link.label && control.kind === link.kind)))
+    ctx.addIssue({code:"custom",message:"Presence proof must bind a retained control and the exact report document."});
+  if (row.optOutObservation && (row.optOutObservation.evidence.scanId !== row.scanId || !saleSharingOptOutBindsDocument(row.optOutObservation.evidence,row.documentUrl))) ctx.addIssue({code: "custom", message: "Opt-out observation binding mismatch."});
   if (row.optOutEffectiveness === "bounded_observation" && row.optOutObservation?.evidence.status !== "complete") ctx.addIssue({code: "custom", message: "Bounded assessment requires completed verified capture."});
   if (row.inspection && row.inspection.documentUrl !== row.documentUrl) ctx.addIssue({code: "custom", message: "Inspection document mismatch."});
   if (row.choiceSurface === "observed" && !row.controls.length) ctx.addIssue({code: "custom", message: "Observed choice requires retained control proof."});
