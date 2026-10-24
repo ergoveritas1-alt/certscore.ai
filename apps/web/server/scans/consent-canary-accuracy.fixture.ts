@@ -56,3 +56,18 @@ export function consentCanaryAccuracyFixture(index: number) {
   } as unknown as CanonicalEvidenceBundle;
   return {visit,baseline,scanId,url,bundle,geometry};
 }
+
+/** These packets are fictional consent-only shapes. Publication fixtures also
+ * need an explicitly fictional, independent original runtime visit. */
+export function withOriginalRuntimeForPublication(bundle: import("@certscore/contracts").CanonicalEvidenceBundle) {
+  const document = bundle.domSnapshots.at(-1)!;
+  bundle.policySurfaceInspection = { ...bundle.policySurfaceInspection, californiaReviewPolicy: "california-privacy-review.v10" } as import("@certscore/contracts").CanonicalEvidenceBundle["policySurfaceInspection"];
+  bundle.runtimeMetadataSnapshots = [{ ...document, artifactId: "fixture-runtime-dom", path: "/fixture/runtime.txt",
+    documentIdentity: {source:"cdp_loader_id",token:"fixture-runtime-loader"},
+    siteMetadata: {contractVersion:"certscore.site-metadata.v1",title:"Fictional publication fixture",language:"en",generators:[],wordpressAssetObserved:false} }];
+  bundle.scanLaneRuns = [{laneId:"runtime_evidence",physicalInvocationId:"fixture-runtime",region:"local",phaseName:"preConsentRuntimeScanner",
+    startedAt:bundle.startedAt,completedAt:bundle.completedAt,durationMs:Date.parse(bundle.completedAt)-Date.parse(bundle.startedAt),
+    firstResponseAt:bundle.startedAt,firstResponseOffsetMs:0,firstHttpStatus:200,firstEffectiveUrl:document.url,navigationCount:1,
+    navigationAttempts:[{sequence:1,mode:"initial_https_navigation",outcome:"success",httpStatus:200,durationMs:10,effectiveUrl:document.url}],
+    challengeDetected:false,challengeType:null,executionOutcome:"success",accessOutcome:"representative_page"}];
+}

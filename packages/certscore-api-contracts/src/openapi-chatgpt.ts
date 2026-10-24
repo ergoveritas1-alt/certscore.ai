@@ -1,3 +1,4 @@
+import { postureScoresActionOpenApi } from "./posture-scores-openapi.js";
 import { scanReportSummaryOpenApi } from "./scan-report-summary-openapi.js";
 import { accessibilityAuditEvidenceOpenApiProperties } from "./accessibility-audit.js";
 import { PULSE_CAPABILITIES, PULSE_PURPOSE_STATEMENT, PULSE_SCHEMA_VERSION, PULSE_STANDARD_DISCLAIMER } from "./pulse-v1.js";
@@ -242,6 +243,7 @@ export function buildPulseChatGptOpenApiDocument() {
               properties: {
                 score: { type: "integer", nullable: true },
                 riskLevel: { type: "string" },
+                postureScores: postureScoresActionOpenApi(),
                 coverageNote: { type: "string" }
               }
             },

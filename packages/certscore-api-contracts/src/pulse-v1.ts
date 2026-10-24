@@ -1,3 +1,4 @@
+import { apiV2PostureScoresSchema } from "./posture-scores.js";
 import { scanFormsSummarySchema, scanScoreExplanationSchema } from "./scan-report-summary.js";
 import { apiAccessibilityAuditSummarySchema } from "./accessibility-audit.js";
 import { z } from "zod";
@@ -85,6 +86,7 @@ export const pulseMetaSchema = z
 
 export const pulseSummarySchema = z
   .object({
+    postureScores: apiV2PostureScoresSchema.optional(),
     headline: z.string().optional(),
     score: z.number().int().nullable().optional(),
     riskLevel: z.string().optional(),

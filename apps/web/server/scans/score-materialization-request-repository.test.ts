@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import {Pool} from "pg";
 import {redirectPublicationHarness} from "./redirect-publication.fixture";
-import {consentCanaryAccuracyFixture} from "./consent-canary-accuracy.fixture";
+import {consentCanaryAccuracyFixture,withOriginalRuntimeForPublication} from "./consent-canary-accuracy.fixture";
 
 const adminUrl=process.env.CERTSCORE_PUBLICATION_TEST_ADMIN_URL;
 
@@ -43,7 +43,7 @@ test("canonical invariant failures quarantine once; transient errors retain boun
     const post=(scanId:string)=>pipeline.POST(new Request("http://localhost:3000/api/internal/scan-score-materialization",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({scanId,token,mode:"publish_report"})}));
     const row=async(id:string)=>(await db.query("select *,next_attempt_at>now() as future from scan_score_materialization_requests where scan_id=$1",[id])).rows[0];
     const prepareValid=async(scanId:string,defect?:"checksum"|"json")=>{
-      const f=consentCanaryAccuracyFixture(0);f.bundle.scanId=scanId;
+      const f=consentCanaryAccuracyFixture(0);withOriginalRuntimeForPublication(f.bundle);f.bundle.scanId=scanId;
       const outDir=path.join(harness!.directory,scanId);await mkdir(outDir);
       const bundleBytes=defect==="json"?"{invalid retained json":JSON.stringify(f.bundle),geometryBytes=JSON.stringify(f.geometry);
       const digest=(bytes:string)=>({sha256:createHash("sha256").update(bytes).digest("hex"),sizeBytes:Buffer.byteLength(bytes)});

@@ -1,3 +1,4 @@
+import { decodeMixpanelBody, isMixpanelTrack } from "./mixpanel-collection-body";
 import {isAdvertisingIdentityValue} from './advertising-identifiers';
 import {readBoundedProtocolJson,type ProtocolJson} from './bounded-protocol-json';
 
@@ -9,11 +10,14 @@ const scalar=(v:ProtocolJson)=>v===null||['string','number','boolean'].includes(
 const privacy=new Set(['gpp','gpp_sid','us_privacy','rdp','npa','ltd','dpo','data_processing_options']);
 const restricted=new Set(['opt_out','optOut','du','data_use','limited_data_use']);
 const split=(s:string)=>new Set(s.split(' '));
+const expandedReddit=split('ts aaid external_id idfa auto_em auto_pn partner_ids pm drp m.itemCount m.value m.valueDecimal m.currency m.transactionId m.orderId m.customEventName m.products m.conversionId');
 const reddit=split('id event uuid click_id em pn mthd esurl drfr integration partner partner_version opt_out sh sw v dpm dpcc dprc conversion_id transaction_id currency value item_count products trigger_id db');
+for (const field of expandedReddit) reddit.add(field);
 const snap=split('pid ev u_c1 u_sclid u_scsid u_hem u_hpn u_hed pl rf ts v intg trackId t du data_use e_cur e_pr e_id e_desc e_pids e_qt e_cs e_dm c_type d_b d_m d_os d_ot m_sw m_sh m_wbt huah if nat df s_r_id s_r_ids');
 const pinterest=split('event tid cb tv pd ed ad rd ov if uo dp np cdh em epik noscript');
 const tiktok=split('event event_id message_id is_onsite properties context partner timestamp pixel_code ttp ttclid type');
 function protocol(url:URL){
+ if(isMixpanelTrack(url))return 'mixpanel';
  if(url.origin==='https://alb.reddit.com'&&/^\/rp(?:\.gif)?$/.test(url.pathname))return 'reddit';
  if(url.origin==='https://tr.snapchat.com'&&/^\/p\/?$/.test(url.pathname))return 'snap';
  if(url.origin==='https://ct.pinterest.com'&&/^\/v3\/?$/.test(url.pathname))return 'pinterest';
@@ -32,10 +36,12 @@ export function canonicalCollectionBodyFields(url:URL):ReadonlySet<string>{
 /** Explicit vendor opt-outs are never silently dropped. Unsupported vendor
  * semantics stay neutral rather than being mislabeled as an IAB opt-out. */
 export function collectionBodyPrivacySignals(url:URL,fields:URLSearchParams):boolean{
- return protocol(url)!==null&&[...fields].some(([k,v])=>['rdp','npa','ltd','dpo','data_processing_options'].includes(k)||restricted.has(k)&&!['0','false'].includes(v));
+ return protocol(url)!==null&&[...fields].some(([k,v])=>
+   protocol(url)==='reddit' && ['dpm','dpcc','dprc'].includes(k) && !['','0','false'].includes(v)||['rdp','npa','ltd','dpo','data_processing_options'].includes(k)||restricted.has(k)&&!['0','false'].includes(v));
 }
 export function decodeCanonicalCollectionBody(url:URL,body:string):{fields:URLSearchParams;format:'json'|'form'}|null{
  const p=protocol(url);if(!p)return null;
+ if(p==='mixpanel')return decodeMixpanelBody(url,body);
  let text=body.trim(),format:'json'|'form'='json';
  if(p==='klaviyo'&&!text.startsWith('{')){
   if(/%(?![a-f0-9]{2})/i.test(text))fail('unsupported_body');
@@ -118,17 +124,23 @@ export function decodeCanonicalCollectionBody(url:URL,body:string):{fields:URLSe
 export function readCanonicalBodyProcessing(url:URL,body:string):URLSearchParams|null{
  const p=protocol(url);if(!p||new TextEncoder().encode(body).length>32768)return null;
  try{
+  if(p==='mixpanel')return decodeMixpanelBody(url,body,true)?.fields??null;
   const text=body.trim(),fields=new URLSearchParams();
   if(!text.startsWith('{')){
    if(/[{}\r\n]/.test(text)||/%(?![a-f0-9]{2})/i.test(text))return null;
    const values=new URLSearchParams(text);if([...values].length>128)return null;
-   for(const[k,v]of values)if(privacy.has(k)||restricted.has(k))fields.append(k,v);
+   for(const[k,v]of values)if(privacy.has(k)||restricted.has(k)||p==='reddit'&&['dpm','dpcc','dprc'].includes(k))fields.append(k,v);
   }else{
    const root=readBoundedProtocolJson(text,[...url.searchParams].length);if(!object(root))return null;
-   const retain=(v:ProtocolJson)=>{if(!object(v))return;for(const[k,x]of Object.entries(v))if((privacy.has(k)||restricted.has(k))&&scalar(x))fields.append(k,x===null?'[invalid]':String(x));};
+   const retain=(v:ProtocolJson)=>{if(!object(v))return;for(const[k,x]of Object.entries(v))if((privacy.has(k)||restricted.has(k)||p==='reddit'&&['dpm','dpcc','dprc'].includes(k))&&scalar(x))fields.append(k,x===null?'[invalid]':String(x));};
    retain(root);
    if(p==='snap'&&Array.isArray(root.req)&&root.req.length<=16)for(const event of root.req)if(object(event))retain(event.t??null);
   }
   return fields;
  }catch{return null;}
+}
+
+/** New parses carry a distinct proof policy; original v1-v5 records stay intact. */
+export function usesExpandedCollectionBody(url: URL, fields: URLSearchParams): boolean {
+ return isMixpanelTrack(url) || protocol(url)==='reddit' && [...fields.keys()].some(key=>expandedReddit.has(key)||['dpm','dpcc','dprc'].includes(key));
 }

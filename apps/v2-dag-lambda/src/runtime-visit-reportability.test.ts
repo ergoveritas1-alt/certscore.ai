@@ -57,3 +57,13 @@ test("a scored report requires its own usable runtime visit even when consent ca
     assert.doesNotThrow(()=>assertOriginalRuntimeVisitForReport(runtime,noGo),"an explicitly no-go attempt can publish its existing unscored disposition");
   }
 });
+
+test("a different consent route alone does not invalidate an original usable runtime", () => {
+  const runtime = fixture(), merged = fixture();
+  for (const url of ["https://auth.example.test/login?redirect=%2Fapp", "https://www.example.test/?region=US", "https://www.example.test/#/other"]) {
+    merged.domSnapshots[0]!.url = url;
+    assert.doesNotThrow(() => assertOriginalRuntimeVisitForReport(runtime, merged));
+  }
+  merged.domSnapshots[0]!.url = runtime.domSnapshots[0]!.url;
+  assert.doesNotThrow(() => assertOriginalRuntimeVisitForReport(runtime, merged));
+});

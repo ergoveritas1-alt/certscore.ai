@@ -384,3 +384,14 @@ console.log(cms.cmsSecurity?.detections, cms.cmsSecurity?.advisories);
 `getReportEvidence` follows bounded pagination only when called, checks snapshot and selector continuity, and resolves shared `reportContentRef` values. It returns typed `DetailedEvidenceReport`, `PublicCmpAudit`, and `PublicCmsSecurity` fields. Default `maxPages` is 20; use `getReportEvidencePage` for explicit one-request reads or manual continuation. Every page uses existing read quotas. `reconstructReportEvidencePages` also reconstructs already-retrieved pages without making requests.
 
 Use `detailedEvidence` for report titles, summaries, display labels, correction steps and cross-links. `status` preserves the source assessment; `displayStatus` supplies its customer-facing label. Row sources identify the retained evidence field and row ID; `evidenceTarget` and shared targets are report anchors. CMP comparisons retain their scope and source hash. CMS results retain source and catalogue provenance. Audit rows are not additional entries in the canonical findings list. Raw diagnostic JSON, cookie values, document state and point deductions are excluded from these new sections. Policy passages and original accessibility examples remain in their existing evidence fields. Full exports and `section: "policy"` also retain `privacyAuditEvidence`: verified privacy-choice links, unverified link candidates, notice passages and provenance. California-focused reports include the matching `privacy` presentation section; these are passive observations, not tested opt-out functionality.
+
+### EU and California summary scores
+
+Completed reportable Pulse responses expose `summary.postureScores.gdprEprivacy`
+and `summary.postureScores.ccpaCpra`, using the same canonical starting-page
+projection as the scan resource. Each includes its score, policy version, scope
+and coverage. The existing `summary.score` remains the EU-weighted score.
+A null score stays unavailable; coverage limitations do not establish a pass.
+Older immutable Pulse artifacts may omit `postureScores`. Failed and no-go
+attempts do not gain posture scores. These observations are not a compliance
+certification.

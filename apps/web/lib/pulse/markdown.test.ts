@@ -399,3 +399,14 @@ test("Pulse markdown keeps lens labels cautious when surfaced findings reference
   assert.match(markdown, /GDPR \/ ePrivacy review context: Consent timing, consent surface, and tracker behavior drive this review context\.[^\n]+Review context retained/);
   assert.doesNotMatch(markdown, /Needs Work|: Clear/);
 });
+
+test("Markdown labels both canonical postures and keeps unavailable California neutral", () => {
+  const result = renderPulseMarkdown({ domain: "example.com", summary: { score: 88, postureScores: {
+    contractVersion: "certscore.posture-scores.v1",
+    gdprEprivacy: { posture: "gdpr_eprivacy", score: 88, policyVersion: "eu-fixture", coverage: "scored", scope: "starting_page" },
+    ccpaCpra: { posture: "ccpa_cpra", score: null, policyVersion: "ca-fixture", coverage: "unavailable", scope: "starting_page" },
+  } } });
+  assert.match(result, /EU posture score \| 88/);
+  assert.match(result, /California posture score \| Not available/);
+  assert.doesNotMatch(result, /deduction|points deducted/i);
+});

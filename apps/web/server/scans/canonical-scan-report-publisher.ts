@@ -123,6 +123,7 @@ async function publishCanonicalScanReportProjectionUncached(input: {
         throw new StaleScanReportProjectionSourceError(input.scanId);
       }
       await persistScanReportProjection(materializedRecord, {
+        enforceDualPostureScores: true,
         snapshot: materializedRecord.snapshot,
         runtimeArtifacts: materializedRecord.runtimeArtifacts
       });

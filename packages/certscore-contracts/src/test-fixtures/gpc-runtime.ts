@@ -3,9 +3,9 @@ import { canonicalEvidenceBundleSchema, type CanonicalEvidenceBundle, type Norma
 
 /** Shared retained-evidence fixture for scanner -> contract -> WC01 tests. */
 export function gpcRuntimeFixture(input: {
-  enabled: boolean; vendors?: Array<{ name: string; purpose?: NormalizedVendorObservation["purpose"]; atMs?: number }>;
+  enabled: boolean; url?: string; vendors?: Array<{ name: string; purpose?: NormalizedVendorObservation["purpose"]; atMs?: number }>;
 }): CanonicalEvidenceBundle {
-  const url = "https://example.test/", at = "2026-09-05T12:00:00.000Z";
+  const url = input.url ?? "https://example.test/", at = "2026-09-05T12:00:00.000Z";
   const lane = input.enabled ? "gpc_observation" : "runtime_evidence";
   const vendors = input.vendors ?? [];
   const request = (id: string, requestUrl: string, timestampMs: number, main: boolean) => ({

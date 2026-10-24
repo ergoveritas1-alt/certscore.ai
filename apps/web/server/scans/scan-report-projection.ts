@@ -1,9 +1,11 @@
+import { readCaliforniaPrivacyReviewFromConsent } from "@certscore/contracts";
+import { deriveCaliforniaRegulatoryScore } from "../../lib/scans/california-regulatory-score";
 import { projectConsentControlReport } from "../../lib/scans/consent-control-report";
 import { retainedConsentAssessment } from "../../lib/scans/after-action-report-eligibility";
 import "server-only";
 import { projectScanReportNoGo, resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 import { getLocalV2DagReportInput } from "./local-v2-dag-report";
-import { boundedPublicationSchemaIssues, ReportPublicationInvariantError } from "./report-publication-invariant";
+import { boundedPublicationSchemaIssues, ReportPublicationInvariantError, assertReportablePostureScores } from "./report-publication-invariant";
 
 import { createHash } from "node:crypto";
 import { presentRuntimeGraphForRead } from "./runtime-evidence-graph-projection";
@@ -515,6 +517,8 @@ function assertCanonicalConsentProjectionInput(
 }
 
 type ScanReportProjectionSource = {
+  /** The authoritative new-publication path requires both actual posture scores. */
+  enforceDualPostureScores?: boolean;
   snapshot?: unknown;
   runtimeArtifacts?: unknown;
 };
@@ -764,6 +768,11 @@ export async function deriveScanReportProjection(
   );
   const industry = stringValue(scanRecord.domainBenchmark?.industry) ?? stringValue(sourceSnapshot?.admin_industry_label) ?? stringValue(snapshot?.admin_industry_label);
   const score = resolveScanReportScore(projectionScanRecord, canonicalScore ?? numberValue(snapshot?.certscore_overall));
+  if (source.enforceDualPostureScores) {
+    const california = deriveCaliforniaRegulatoryScore({ assessment: readCaliforniaPrivacyReviewFromConsent(assessment),
+      checklistRows: checklist, unifiedFindings: reportState.globalUnifiedFindings });
+    assertReportablePostureScores({ eu: score, california: california.score, noGo: Boolean(noGo) });
+  }
   const egressId = shouldUseLocalV2DagScanTool() ? null : stringValue(sourceSnapshot?.egress_id) ?? stringValue(snapshot?.egress_id);
   const egressProvider = shouldUseLocalV2DagScanTool() ? null : stringValue(sourceSnapshot?.egress_type) ?? stringValue(snapshot?.egress_type);
 

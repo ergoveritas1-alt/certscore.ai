@@ -3,6 +3,7 @@ import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 export type ScanReportAccessContext = {
   runtimeArtifacts: Record<string, unknown> | null | undefined;
   snapshot?: Record<string, unknown> | null;
+  scan?: { status?: string };
 };
 
 /** Consume the retained decision; never reconstruct access from page text or HTTP hints. */
@@ -16,9 +17,14 @@ export function projectScanReportNoGo(input: ScanReportAccessContext) {
   });
 }
 
-/** Only a retained no-go decision makes an otherwise supported report score ineligible. */
+export function hasTerminalScanReportFailure(input: ScanReportAccessContext) {
+  return ["failed", "expired", "canceled", "cancelled"].includes(input.scan?.status ?? "") ||
+    input.snapshot?.report_projection_status === "failed";
+}
+
+/** Retained terminal outcomes govern score eligibility across report surfaces. */
 export function resolveScanReportScore(input: ScanReportAccessContext, score: number | null) {
-  return projectScanReportNoGo(input) ? null : score;
+  return hasTerminalScanReportFailure(input) || projectScanReportNoGo(input) ? null : score;
 }
 
 /** Withhold ineligible report scores without rewriting retained evidence or assessment decisions. */

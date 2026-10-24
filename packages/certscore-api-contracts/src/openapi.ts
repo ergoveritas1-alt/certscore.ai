@@ -1,3 +1,4 @@
+import { postureScoresOpenApi } from "./posture-scores-openapi.js";
 import { scanReportSummaryOpenApi } from "./scan-report-summary-openapi.js";
 import { accessibilityAuditEvidenceOpenApiProperties } from "./accessibility-audit.js";
 import { PULSE_CAPABILITIES, PULSE_PURPOSE_STATEMENT, PULSE_SCHEMA_VERSION, PULSE_STANDARD_DISCLAIMER } from "./pulse-v1.js";
@@ -276,6 +277,7 @@ export function buildPulseV1OpenApiDocument() {
                 headline: { type: "string" },
                 score: { type: ["integer", "null"] },
                 riskLevel: { type: "string" },
+                postureScores: postureScoresOpenApi,
                 coverageNote: { type: "string" }
               }
             },

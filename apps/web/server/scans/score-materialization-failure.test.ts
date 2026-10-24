@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ScanReportProjectionTooLargeError } from "./scan-report-projection-contract";
 import { classifyScoreMaterializationFailure } from "./score-materialization-failure";
 import { serializeScoreMaterializationFailure } from "./score-materialization-failure";
-import { ReportPublicationInvariantError } from "./report-publication-invariant";
+import { ReportPublicationInvariantError, assertReportablePostureScores } from "./report-publication-invariant";
 
 test("oversized canonical projections fail terminally instead of retrying", () => {
   const error = new ScanReportProjectionTooLargeError({
@@ -111,4 +111,19 @@ test("storage/network failures and stale/not-ready races stay retryable", () => 
     const result=classifyScoreMaterializationFailure(Object.assign(new Error("infrastructure failure"),{code}));
     assert.equal(result.retryable,true,code);
   }
+});
+
+
+test("new reports require both real posture scores without rejecting valid independent routes", () => {
+  for (const [eu,california] of [[0,0],[100,100],[48,76],[74,69],[80,77]]) {
+    assert.doesNotThrow(()=>assertReportablePostureScores({eu:eu!,california:california!,noGo:false}));
+  }
+  for (const [eu,california] of [[86,null],[null,90],[null,null],[NaN,90],[101,90],[50,1.5]]) {
+    assert.throws(()=>assertReportablePostureScores({eu:eu!,california:california!,noGo:false}),error=>{
+      const failure=classifyScoreMaterializationFailure(error);
+      assert.equal(failure.code,"publication_invariant_failed");assert.equal(failure.retryable,false);
+      assert.equal(failure.details?.phase,"score_availability");return true;
+    });
+  }
+  assert.doesNotThrow(()=>assertReportablePostureScores({eu:null,california:null,noGo:true}));
 });

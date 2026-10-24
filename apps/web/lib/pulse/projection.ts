@@ -1,3 +1,4 @@
+import { projectScanPostureScores } from "../api-v2/posture-scores";
 import { hasSuspendedGpcScoreEffect } from "../scans/gpc-customer-policy";
 import { projectScanFormsSummary, projectScanScoreExplanation } from "../api-v2/scan-report-summary";
 import { isAccessibilityAuditLimited } from "@certscore/contracts";
@@ -700,7 +701,7 @@ export function derivePulseReportScore(input: {
       ? finiteNumber(scanRecord.snapshot.certscore_overall)
       : null;
   if (persistedReportScore !== null) {
-    return boundedScore(persistedReportScore);
+    return resolveScanReportScore(scanRecord, boundedScore(persistedReportScore));
   }
   const coverageLimited = input.coverageLimited ?? (deriveCoverage(scanRecord).status !== "complete");
   const surface = buildPulseReportSurface({
@@ -2315,13 +2316,16 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const benchmark = hydratedScanRecord.domainBenchmark
     ? `${hydratedScanRecord.domainBenchmark.industry} / ${hydratedScanRecord.domainBenchmark.estimatedRankLabel}`
     : null;
-  const summary = buildSummary({
+  const summary = { ...buildSummary({
     benchmark,
     coverageLimited: coverage.status !== "complete",
     domain,
     findings: allFindings,
     score
-  });
+  }), ...(!noGoProjection && ["completed", "completed_limited"].includes(scan.status) &&
+    (hydratedScanRecord.snapshot?.report_projection_status === "ready" ||
+      !hydratedScanRecord.snapshot?.report_projection_status && typeof hydratedScanRecord.snapshot?.certscore_overall === "number")
+      ? { postureScores: projectScanPostureScores(hydratedScanRecord, score, projectScanScoreExplanation(hydratedScanRecord, score)) } : {}) };
   if (noGoProjection) {
     summary.headline = noGoProjection.noGo.title;
     summary.completionSummary = noGoProjection.noGo.summary;
@@ -2433,6 +2437,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     summary.score !== null &&
     (summary.score < 70 || !["clear", "monitor"].includes(summary.riskLevel))
       ? {
+          ...(summary.postureScores ? { postureScores: summary.postureScores } : {}),
           headline: summary.headline,
           score: summary.score,
           riskLevel: summary.riskLevel,
@@ -2440,6 +2445,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
             "Score reflects scan coverage limitations. No specific findings were surfaced. Review the full report for coverage diagnostics."
         }
       : {
+          ...(summary.postureScores ? { postureScores: summary.postureScores } : {}),
           headline: summary.headline,
           score: summary.score,
           riskLevel: summary.riskLevel

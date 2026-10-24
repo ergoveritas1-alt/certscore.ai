@@ -1,5 +1,5 @@
 import { PULSE_PURPOSE_STATEMENT, PULSE_STANDARD_DISCLAIMER } from "./constants";
-import { apiV2GpcResponseSchema, scanFormsSummarySchema, scanScoreExplanationSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
+import { apiV2PostureScoresSchema, apiV2GpcResponseSchema, scanFormsSummarySchema, scanScoreExplanationSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
 import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
 
 type PulseMarkdownInput = Record<string, any>;
@@ -271,6 +271,7 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
         : findings.length;
   const completionSummary = line(pulse.summary?.completionSummary ?? executive.completionSummary);
   const surfacedResults = compactSurfacedResults(pulse);
+  const posture = apiV2PostureScoresSchema.safeParse(pulse.summary?.postureScores);
   const markdown = [
     "# CertScore.ai Pulse",
     "",
@@ -279,7 +280,10 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
     "| Field | Value |",
     "|---|---|",
     `| Domain | ${titleDomain} |`,
-    `| Score | ${scoreDisplay(pulse.summary?.score)} |`,
+    ...(posture.success ? [
+      `| EU posture score | ${scoreDisplay(posture.data.gdprEprivacy.score)} |`,
+      `| California posture score | ${scoreDisplay(posture.data.ccpaCpra.score)} |`,
+    ] : [`| Score | ${scoreDisplay(pulse.summary?.score)} |`]),
     `| Risk level | ${formatLabel(pulse.summary?.riskLevel)} |`,
     `| Issues to review | ${executiveIssueCount} |`,
     `| High-priority findings | ${highPriorityCount} |`,

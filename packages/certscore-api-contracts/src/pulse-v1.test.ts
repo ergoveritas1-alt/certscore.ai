@@ -639,3 +639,18 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   assert.ok(document.paths["/api/v2/scans"].post.responses["500"].content["application/json"].examples.internalError);
   assert.doesNotMatch(serialized, /raw DOM|raw request body|stack trace|DATABASE_URL|AUTH_SECRET|internal-only/i);
 });
+
+test("Pulse summary validates canonical posture scores and preserves legacy summaries", () => {
+  const postureScores = { contractVersion: "certscore.posture-scores.v1",
+    gdprEprivacy: { posture: "gdpr_eprivacy", score: 88, policyVersion: "eu-fixture", coverage: "scored", scope: "starting_page" },
+    ccpaCpra: { posture: "ccpa_cpra", score: 93, policyVersion: "ca-fixture", coverage: "limited", scope: "starting_page" } };
+  const response = { type: "certscore_pulse_summary", summary: { score: 88, postureScores } };
+  assert.equal(pulseResponseSchema.safeParse(response).success, true);
+  assert.equal(pulseResponseSchema.safeParse({ ...response, summary: { score: 88 } }).success, true);
+  for (const score of [101, -1, "93"]) {
+    assert.equal(pulseResponseSchema.safeParse({ ...response, summary: { postureScores: { ...postureScores, ccpaCpra: { ...postureScores.ccpaCpra, score } } } }).success, false);
+  }
+  for (const document of [buildPulseV1OpenApiDocument(), buildPulseChatGptOpenApiDocument()]) {
+    assert.match(JSON.stringify(document), /"postureScores"/);
+  }
+});

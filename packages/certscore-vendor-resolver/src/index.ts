@@ -1,5 +1,5 @@
 export {readBoundedProtocolJson, type ProtocolJson} from "./bounded-protocol-json";
-export {decodeCanonicalCollectionBody, canonicalCollectionBodyFields, collectionBodyPrivacySignals,isCanonicalProtocolIdentityField,readCanonicalBodyProcessing} from "./collection-request-body";
+export {decodeCanonicalCollectionBody, canonicalCollectionBodyFields, collectionBodyPrivacySignals,isCanonicalProtocolIdentityField,readCanonicalBodyProcessing,usesExpandedCollectionBody} from "./collection-request-body";
 import {VENDOR_COOKIE_COVERAGE, C3_COOKIE_COVERAGE, cookieCoverageForPolicy} from "./vendor-cookie-coverage";
 export { classifyCanonicalCollectionEndpoint, isCanonicalAdvertisingCollectionCandidate, COLLECTION_ENDPOINT_POLICY_VERSION } from "./collection-endpoints";
 export { inspectGpcRequestQualification, GPC_REQUEST_QUALIFICATION_POLICY } from "./gpc-request-qualification";
@@ -39,7 +39,7 @@ export {
 
 export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-23-passive-cmp-v15";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-24-collector-envelopes-v16";
 export const C3_COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-23-v5";
 export const COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-21-v4";
 

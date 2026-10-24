@@ -76,7 +76,7 @@ export function classifyScoreMaterializationFailure(error: unknown): Materializa
     const candidate = value as Record<string, unknown>;
     return candidate.name === "ReportPublicationInvariantError" &&
       REPORT_PUBLICATION_INVARIANTS.some(invariant => invariant === candidate.invariant) &&
-      (candidate.phase === "consent_assessment" || candidate.phase === "artifact_verification");
+      (candidate.phase === "consent_assessment" || candidate.phase === "artifact_verification" || candidate.phase === "score_availability");
   }) as {invariant:string;phase:string;issues:unknown[]} | undefined;
   if (invariantError) return {
     code: "publication_invariant_failed",

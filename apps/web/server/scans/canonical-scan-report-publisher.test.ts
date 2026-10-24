@@ -1,3 +1,4 @@
+import {withOriginalRuntimeForPublication} from "./consent-canary-accuracy.fixture";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { consentControlAssessmentSchema, CALIFORNIA_CHOICE_ABSENCE_ID, CALIFORNIA_PRIVACY_REVIEW_IDS } from "@certscore/contracts";
@@ -203,6 +204,9 @@ test("redirected retained evidence publishes once through assessment, concerns, 
         assert.equal(consentControlAssessmentSchema.safeParse(invalid.runtimeArtifacts.consentControlAssessment).success,false,"strict contract remains strict");
         const parentProvenance=structuredClone(invalid.runtimeArtifacts.consentControlAssessment.provenance);
         state.writes.length=0;
+        await assert.rejects(pipeline.persistScanReportProjection(invalid,{enforceDualPostureScores:true}),
+          (error:unknown)=>classifyScoreMaterializationFailure(error).diagnostic === "publication_invariant_failed:posture_scores_unavailable");
+        assert.equal(state.writes.filter((row:{sql:string})=>row.sql.includes("insert into public.scan_snapshots")).length,0,"new publication cannot persist a one-score report");
         await pipeline.persistScanReportProjection(invalid);
         const partialWrites=state.writes.filter((row:{sql:string})=>row.sql.includes("insert into public.scan_snapshots"));
         assert.equal(partialWrites.length,1,"publish the verified remainder once");
@@ -258,7 +262,7 @@ test("seven retained canary shapes preserve consent eligibility through canonica
   process.env.NEXT_PUBLIC_APP_URL="http://localhost:3000";
   try{
     for(let i=0;i<consentCanaryVisits.length;i++){
-      const f=consentCanaryAccuracyFixture(i),outDir=path.join(harness.directory,`canary-${i}`);
+      const f=consentCanaryAccuracyFixture(i);withOriginalRuntimeForPublication(f.bundle);const outDir=path.join(harness.directory,`canary-${i}`);
       await mkdir(outDir);
       const bytes=JSON.stringify(f.bundle),geometryBytes=JSON.stringify(f.geometry);
       const manifestBytes=JSON.stringify({auxiliaryArtifacts:[{fileName:"ConsentControlGeometryEvidence.json",uri:`s3://offline-fixture/${f.scanId}/ConsentControlGeometryEvidence.json`,...digest(geometryBytes)}]});
@@ -321,7 +325,7 @@ test("unknown cookie names and a compatibility flag cannot publish tracking; cla
   try{
     const scores:number[]=[];
     for(const [index,mode] of ["unknown_stale_flag","unknown_no_flag","classified"].entries()){
-      const classified=mode==="classified",f=consentCanaryAccuracyFixture(0);
+      const classified=mode==="classified",f=consentCanaryAccuracyFixture(0);withOriginalRuntimeForPublication(f.bundle);
       const scanId=`20000000-0000-4000-8000-00000000000${index}`,outDir=path.join(harness.directory,`tracking-${index}`);
       f.bundle.scanId=scanId;
       f.bundle.cookieEvents=(classified?[{cookieName:"_fbp",cookieDomain:".facebook.com",cookieParty:"third_party",category:"advertising",essentiality:"non_essential"}]:
@@ -375,7 +379,7 @@ test("rights passage eligibility survives canonical publication, persisted conce
   const ownRights="You have the right to access or delete your personal data by contacting us.";
   try {
     for (const valid of [false,true]) {
-      const f=consentCanaryAccuracyFixture(0),scanId=`30000000-0000-4000-8000-00000000000${Number(valid)}`;
+      const f=consentCanaryAccuracyFixture(0);withOriginalRuntimeForPublication(f.bundle);const scanId=`30000000-0000-4000-8000-00000000000${Number(valid)}`;
       f.bundle.scanId=scanId;
       const outDir=path.join(harness.directory,`rights-${valid}`);
       await mkdir(outDir);

@@ -15,14 +15,14 @@ test("passive CMP visit captures loaded facts without opening panels, submitting
     res.setHeader("Content-Type","text/html");
     if(mode==="blocked"){res.statusCode=403;res.end("Access denied");return;}
     const groups=[{CustomGroupId:"C0002",GroupName:"Analytics",VendorServices:[{CustomVendorServiceId:"v1",ServiceName:"Explicit Analytics Service"}],FirstPartyCookies:[{Name:"_ga",description:"Audience measurement",IsSession:false,Length:"730",DurationType:365}]}];
-    const sdk=mode==="unknown"?"":`window.OneTrust={ToggleInfoDisplay:()=>fetch('/mutated'),GetDomainData:()=>{${mode==="drift"?"history.replaceState({},'', '/drift');":""}return ${JSON.stringify({Groups:groups})};}};`;
+    const sdk=mode==="unknown"?"":`window.OneTrust={ToggleInfoDisplay:()=>fetch('/mutated'),GetDomainData:()=>{${mode==="drift"?"history.replaceState({},'', '/drift');":""}return ${JSON.stringify({Groups:mode==="empty"?[]:groups})};}};`;
     res.end(`<section id="${mode==="unknown"?"custom-cookie-panel":"onetrust-banner-sdk"}"><button id="onetrust-pc-btn-handler" onclick="fetch('/mutated');prefs.hidden=false">Cookie settings</button><button onclick="fetch('/mutated')">Accept all</button><button onclick="fetch('/mutated')">Reject all</button><form action="/mutated"><button>Save</button></form><label><input type="checkbox" checked>Analytics</label><a href="/privacy">Privacy policy</a><section id="prefs" hidden><label><input type="checkbox">Hidden marketing</label><table><tr><th>Provider</th><th>Cookie</th></tr><tr><td>Hidden Vendor</td><td>secret_cookie</td></tr></table></section></section>${mode==="ambiguous"?'<section id="CybotCookiebotDialog"><button>Customize</button></section>':''}<script>${sdk}document.addEventListener('click',()=>fetch('/mutated'));document.addEventListener('submit',()=>fetch('/mutated'));addEventListener('scroll',()=>fetch('/mutated'));</script>`);
   });
   await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
   const address=server.address();assert.ok(address&&typeof address!=="string");
   const browser=await chromium.launch({headless:true});
   try {
-    for(mode of ["loaded","ambiguous","unknown","drift","blocked"]){
+    for(mode of ["loaded","empty","ambiguous","unknown","drift","blocked"]){
       mutations=0;
       const packet=await runCmpPreferencesObserver({browser,parentDispatchSha256:"a".repeat(64),config:{policyVersion:"bounded_cmp_preferences.v1",enabled:true,scanId:mode,exactTargetUrl:`http://127.0.0.1:${address.port}/`,computeBudgetPolicy:"coverage_25_gb_seconds.v1"}});
       assert.equal(mutations,0,mode);assert.deepEqual(packet.action,{count:0,intent:"options",label:null,opened:false});
@@ -39,6 +39,10 @@ test("passive CMP visit captures loaded facts without opening panels, submitting
         for(const mutate of [(p:typeof packet)=>{p.action.count=1;},p=>{p.action.opened=true;},p=>{p.controlInventoryComplete=true;},p=>{p.checkpoints!.controlsSurface="preferences";},p=>{p.inspectionDiagnostic!.revision="cmp_preferences.v18";}]){
           const invalid=structuredClone(packet);mutate(invalid);assert.equal(cmpPreferencesEvidenceSchema.safeParse(invalid).success,false);
         }
+      }else if(mode==="empty"){
+        assert.equal(packet.status,"completed",JSON.stringify(packet));
+        assert.equal(packet.inspectionDiagnostic?.readiness?.final,"loaded_empty");
+        assert.equal(packet.declarations.length,0);assert.equal(packet.declarationInventoryComplete,false);
       }else if(mode==="drift"){
         assert.equal(packet.status,"limited");assert.equal(packet.documentToken,null);assert.equal(packet.declarations.length,0);assert.equal(packet.controls.length,0);
       }else{
@@ -70,7 +74,26 @@ test('passive readiness recovers DOM-present OneTrust with delayed SDK data insi
  const browser=await chromium.launch({headless:true});
  try{
   const p=await runCmpPreferencesObserver({browser,parentDispatchSha256:'a'.repeat(64),config:{policyVersion:'bounded_cmp_preferences.v1',enabled:true,scanId:'passive-delayed',exactTargetUrl:`http://127.0.0.1:${address.port}/`,computeBudgetPolicy:'coverage_25_gb_seconds.v1'}});
-  assert.equal(p.inspectionDiagnostic?.revision,'cmp_preferences.v20');assert.equal(p.inspectionDiagnostic?.budgetMs,6510);
+  assert.equal(p.inspectionDiagnostic?.revision,'cmp_preferences.v21');assert.equal(p.inspectionDiagnostic?.budgetMs,6510);
   assert.equal(p.declarations[0]?.name,'_ga',JSON.stringify(p));assert.equal(p.action.count,0);assert.equal(p.action.opened,false);assert.equal(mutations,0);
+ }finally{await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+test('existing passive checkpoint recognizes a delayed registered DOM scope without an SDK recipe', {timeout:15000}, async()=>{
+ let mutations=0;
+ const server=createServer((req,res)=>{
+  if(req.url==='/mutated'){mutations++;res.end();return;}
+  res.setHeader('Content-Type','text/html');
+  res.end(`<main>Fixture</main><script>setTimeout(()=>{document.body.insertAdjacentHTML('beforeend','<section id="CybotCookiebotDialog"><label><input type="checkbox">Analytics</label><button>Options</button></section>')},35);document.addEventListener('click',()=>fetch('/mutated'));</script>`);
+ });
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();assert.ok(address&&typeof address!=='string');
+ const browser=await chromium.launch({headless:true});
+ try{
+  const p=await runCmpPreferencesObserver({browser,parentDispatchSha256:'a'.repeat(64),config:{policyVersion:'bounded_cmp_preferences.v1',enabled:true,scanId:'delayed-scope',exactTargetUrl:`http://127.0.0.1:${address.port}/`,computeBudgetPolicy:'coverage_25_gb_seconds.v1'}});
+  assert.equal(p.support.provider,'Cookiebot',JSON.stringify(p));assert.equal(p.action.count,0);assert.equal(mutations,0);
+  assert.equal(p.inspectionDiagnostic?.readiness?.final,'scope_only');
+  assert.ok((p.inspectionDiagnostic?.readiness?.checkpointBudgetMs??101)<=100);
+  const invalid=structuredClone(p);invalid.inspectionDiagnostic!.readiness!.documentToken='other-loader';
+  assert.equal(cmpPreferencesEvidenceSchema.safeParse(invalid).success,false);
  }finally{await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });

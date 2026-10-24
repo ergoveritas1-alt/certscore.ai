@@ -698,6 +698,8 @@ export interface PulseRequest {
 }
 
 export interface PulseSummary {
+  /** Canonical EU and California starting-page postures; no inferred fallback. */
+  postureScores?: PostureScores;
   headline?: string;
   score?: number | null;
   riskLevel?: string;

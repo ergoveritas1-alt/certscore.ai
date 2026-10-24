@@ -867,3 +867,15 @@ test("accessibility evidence uses the same authenticated SDK retrieval path", as
     assert.equal(new Headers(mock.callDetails[0]!.headers).get("authorization"), "Bearer test-key");
   } finally { mock.restore(); }
 });
+
+test("SDK preserves separately typed EU and California scores in a Pulse summary", async () => {
+  const postureScores: import("./types.js").PostureScores = { contractVersion: "certscore.posture-scores.v1",
+    gdprEprivacy: { posture: "gdpr_eprivacy", score: 88, policyVersion: "eu-fixture", coverage: "scored", scope: "starting_page" },
+    ccpaCpra: { posture: "ccpa_cpra", score: 93, policyVersion: "ca-fixture", coverage: "limited", scope: "starting_page" } };
+  const mock = installFetch([{ status: 200, body: { ...pulse, summary: { score: 88, postureScores } } }]);
+  try {
+    const result = await new CertScoreClient().scan("https://example.com");
+    assert.equal(result.summary?.postureScores?.gdprEprivacy.score, 88);
+    assert.equal(result.summary?.postureScores?.ccpaCpra.score, 93);
+  } finally { mock.restore(); }
+});

@@ -1,3 +1,8 @@
+import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
+import { retainedConsentAssessment } from "../scans/after-action-report-eligibility";
+import { readCaliforniaPrivacyReviewFromConsent } from "@certscore/contracts";
+import { deriveCaliforniaRegulatoryScore } from "../scans/california-regulatory-score";
 import { apiV2PostureScoresSchema, type ApiV2PostureScores } from "@certscore/api-contracts";
 import {
   CALIFORNIA_REGULATORY_SCORE_VERSION,
@@ -34,4 +39,15 @@ export function buildApiV2PostureScores(input: {
       }} : {}),
     },
   });
+}
+
+/** Both API resources and Pulse summaries consume the same persisted assessment. */
+export function projectScanPostureScores(scanRecord: ScanDetailResponse, score: number | null,
+  scoreExplanation?: { score: number; policyVersion: string } | null): ApiV2PostureScores {
+  const canonical = getPersistedCanonicalReportProjection(scanRecord);
+  const california = deriveCaliforniaRegulatoryScore({
+    assessment: canonical ? readCaliforniaPrivacyReviewFromConsent(retainedConsentAssessment(scanRecord)) : null,
+    checklistRows: canonical?.checklistRows ?? [], unifiedFindings: canonical?.ownerUnifiedFindings ?? [],
+  });
+  return buildApiV2PostureScores({ score, scoreExplanation, californiaScore: california });
 }

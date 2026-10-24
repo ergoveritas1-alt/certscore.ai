@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import {californiaRejectRequestEvidenceSchema,isQualifyingSaleSharingRequest,type CaliforniaRejectRequestEvidence} from "@certscore/contracts";
-import {resolveCanonicalVendor,inspectGpcRequestQualification,isAdvertisingIdentityValue,CANONICAL_VENDOR_RESOLVER_VERSION,isCanonicalAdvertisingCollectionCandidate,readBoundedProtocolJson,decodeCanonicalCollectionBody,canonicalCollectionBodyFields,collectionBodyPrivacySignals,isCanonicalProtocolIdentityField,readCanonicalBodyProcessing} from "@certscore/vendor-resolver";
+import {resolveCanonicalVendor,inspectGpcRequestQualification,isAdvertisingIdentityValue,CANONICAL_VENDOR_RESOLVER_VERSION,isCanonicalAdvertisingCollectionCandidate,readBoundedProtocolJson,decodeCanonicalCollectionBody,canonicalCollectionBodyFields,collectionBodyPrivacySignals,isCanonicalProtocolIdentityField,readCanonicalBodyProcessing,usesExpandedCollectionBody} from "@certscore/vendor-resolver";
 import {decodeLinkedInWaBody} from "./linkedin-wa-body";
 const sha=(value:string|Uint8Array)=>createHash("sha256").update(value).digest("hex");
 const identifiers=["li_adsId","li_adsid","li_fat_id","liFatId","hem","ud[em]","ud[ph]","li_sugr","lms_ads","fbp","fbc","external_id","vid","msclkid","cid","auid","gacid","gclid","d_cid","d_cid_ic","d_uuid","vi","first_party_id","eid_pubcid.org","eid_sharedid.org","eid_id5-sync.com","eid_liveramp.com","uuid","click_id","ttp","ttclid","u_c1","epik"] as const;
@@ -149,6 +149,7 @@ export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
  if(!v2 && ["linkedin_hashed_email","meta_advanced_matching_identifier","tiktok_pixel_identifier","pinterest_tag_identifier","snap_pixel_identifier","reddit_pixel_identifier"].includes(qualification.basis))return null;
  if(!v2 && qualification.activity==="unresolved")return null;
  if(collectionBodyPrivacySignals(url,new URLSearchParams([...url.searchParams,...bodyFields]))&&!qualification.processingSignals.includes("privacy_signal_invalid"))qualification.processingSignals.push("privacy_signal_invalid");
+ if(v2 && input.hasBody && usesExpandedCollectionBody(url,bodyFields))proof.policyVersion="bounded_ca_request_proof.v6";
  const combined=new URLSearchParams(url.searchParams);if(proof.bodyStatus==="complete")for(const [k,v]of bodyFields)combined.append(k,v);
  const propertyId=combined.getAll("tid").length===1?combined.get("tid"):null;
  const propertyBinding=v2&&["google-analytics.com","www.google-analytics.com"].includes(url.hostname)&&url.pathname==="/g/collect"&&

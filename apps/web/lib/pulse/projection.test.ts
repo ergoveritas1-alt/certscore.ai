@@ -1407,3 +1407,35 @@ test('public policy inventory preserves canonical privacy classification for a c
  const rows=projectedPolicySurfaceRows(pulseScanRecord({policyEnrichment:[{policy_page_title:'Terms & Privacy',policy_page_type:'privacy_policy',policy_page_url:'https://example.fr/terms',status:'fetched',discoveryMethod:'footer_link'}]}));
  assert.equal(rows[0]?.type,'privacy_policy');
 });
+
+test("Pulse summary variants expose the same canonical posture scores as API v2", () => {
+  const { buildApiV2ScanResource } = require("../api-v2/scan-resource") as typeof import("../api-v2/scan-resource");
+  const scanRecord = pulseScanRecord({
+    scan: { id: "11111111-1111-4111-8111-111111111111", domainHostname: "example.com", status: "completed", pagesRequested: 1, pagesScanned: 1 },
+    snapshot: { report_projection_status: "ready", certscore_overall: 88 },
+  });
+  const common = { freshnessMode: "latest" as const, pulseRequestId: "posture-fixture", resolutionMode: "test", waitSeconds: 0 };
+  const expected = buildApiV2ScanResource(scanRecord).postureScores;
+  assert.ok(expected);
+  for (const detail of ["tiny", "summary", "standard", "full", "evidence"] as const) {
+    const result = buildPulseProjection({ ...common, scanRecord, requestedUrl: "https://example.com/", detail, format: "json" });
+    assert.deepEqual((result.summary as any).postureScores, expected, detail);
+    assert.ok(pulseResponseSchema.safeParse(result).success, detail);
+  }
+  for (const status of ["running", "failed"]) {
+    const result = buildPulseProjection({ ...common, scanRecord: pulseScanRecord({ ...(scanRecord as any), scan: { ...(scanRecord as any).scan, status } }), requestedUrl: "https://example.com/", detail: "summary", format: "json" });
+    assert.equal((result.summary as any)?.postureScores, undefined, status);
+  }
+});
+
+test("failed canonical publication exposes no stale API or summary scores", () => {
+  const { buildApiV2ScanResource } = require("../api-v2/scan-resource") as typeof import("../api-v2/scan-resource");
+  for (const [status,projection] of [["failed","ready"],["completed","failed"]]) {
+    const record=pulseScanRecord({scan:{id:"11111111-1111-4111-8111-111111111111",domainHostname:"example.com",status,pagesScanned:1},
+      snapshot:{report_projection_status:projection,certscore_overall:88}});
+    assert.equal(buildApiV2ScanResource(record).score,null);
+    const result=buildPulseProjection({scanRecord:record,detail:"summary",format:"json",freshnessMode:"latest",pulseRequestId:"failed",requestedUrl:"https://example.com/",resolutionMode:"test",waitSeconds:0});
+    assert.equal((result.summary as any).score,null);
+    assert.equal((result.summary as any).postureScores,undefined);
+  }
+});

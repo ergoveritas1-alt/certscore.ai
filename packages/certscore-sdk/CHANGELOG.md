@@ -110,3 +110,8 @@ Extend Detailed Evidence types for scoped CMP inventories, possible cookie-templ
 - Prepared the TypeScript SDK as a source-preview package for future public distribution.
 - Changed `certscore.scans.wait()` before first publish so it always resolves to the completed API v2 scan resource object.
 - Added `CertScoreTimeoutError` and `CertScoreScanFailedError` exports for typed timeout and terminal failure handling.
+
+## Unreleased
+
+- Add typed EU and California `summary.postureScores` to Pulse responses while
+  preserving the existing generic score and older immutable artifacts.

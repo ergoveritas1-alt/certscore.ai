@@ -72,3 +72,14 @@ test("HTTP hints, empty inventories and visual-only lane failures do not invent 
     assert.equal(projectScanReportNoGo({ runtimeArtifacts }), null);
   }
 });
+
+test("failed attempts and failed canonical publications cannot expose a stale numeric score", () => {
+  for (const input of [
+    {scan:{status:"failed"},snapshot:{report_projection_status:"ready",certscore_overall:88},runtimeArtifacts:{}},
+    {scan:{status:"completed"},snapshot:{report_projection_status:"failed",certscore_overall:88},runtimeArtifacts:{}},
+  ]) {
+    assert.equal(resolveScanReportScore(input,88),null);
+    assert.equal(input.snapshot.certscore_overall,88,"original retained score is not rewritten");
+    assert.equal(projectScanReportNoGo(input),null,"a failed publication is not a site no-go finding");
+  }
+});

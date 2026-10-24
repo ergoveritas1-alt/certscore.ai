@@ -5215,7 +5215,7 @@ test("GPC coordinator publishes bounded comparison from the original verified wo
   const { createGpcImpactCapture } = await import("../../../packages/certscore-scan-core/src/gpc-impact-capture");
   const scanId = "bounded-gpc-coordinator";
   const pair = [false, true].map(enabled => {
-    const bundle = gpcRuntimeFixture({ enabled }); bundle.scanId = scanId;
+    const bundle = gpcRuntimeFixture({ enabled, url: "https://example.com/" }); bundle.scanId = scanId;
     if (!enabled) bundle.domSnapshots=[{...runtimeSnapshotFixture(),url:bundle.url}];
     let now = 0;
     const capture = createGpcImpactCapture({ expectedEnabled: enabled, now: () => now });
@@ -5635,7 +5635,7 @@ test("presence-only coordinator invokes at most the six core workers with both o
   const previous=keys.map(key=>process.env[key]); keys.forEach(key=>{process.env[key]=key.endsWith("ARTIFACT_BUCKET")?"test-bucket":"1";});
   let artifactRoot:string|undefined;
   try {
-    const scanId="presence-six-workers", baseline=gpcRuntimeFixture({enabled:false}),gpc=gpcRuntimeFixture({enabled:true});
+    const scanId="presence-six-workers", baseline=gpcRuntimeFixture({enabled:false,url:"https://example.com/"}),gpc=gpcRuntimeFixture({enabled:true,url:"https://example.com/"});
     baseline.scanId=scanId;gpc.scanId=scanId;
     baseline.domSnapshots=[{...runtimeSnapshotFixture(),url:baseline.url}];
     const outcome=await runCoordinatorFixture({scanId,presenceOnly:true,bothActions:true,action:"completed",dispatchDelayMs:0,
