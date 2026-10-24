@@ -435,3 +435,33 @@ test("current Reject presence yields the same score through persisted findings, 
   assert.doesNotMatch(canonical.checklistRows.map(r=>[r.label,r.explanation,r.note,r.limitation].join(" ")).join(" "),/deduction|points deducted|identifier.*required/i);
  }
 });
+
+
+test("California snapshot reaches the report only through canonical presence findings", async () => {
+  const {deriveConsentControlAssessment} = await import("@certscore/contracts");
+  const {projectCaliforniaPrivacyReview} = await import("../../server/scans/california-privacy-review-projection");
+  const scan=fixture();
+  const bundle={scanId,startedAt:"2026-10-07T10:00:00.000Z",completedAt:"2026-10-07T10:00:02.000Z",
+    domSnapshots:[{url:pageUrl,documentIdentity:{source:"cdp_loader_id",token:"doc"}}],
+    policySurfaceObservations:[{observationId:"dns",surfaceType:"do_not_sell_or_share",url:pageUrl+"choices",
+      linkText:"Do Not Sell or Share My Personal Information",linkObservationState:"observed",linkSourcePageUrl:pageUrl,
+      linkVisibility:"visible",accessibleNameSource:"text",classifierProvenance:"privacy_surface_classifier.v1",
+      directlyLinkedFromScannedPage:true,discoveryMethod:"footer_link",documentFetchState:"not_attempted",status:"discovered"}],
+  } as unknown as import("@certscore/contracts").CanonicalEvidenceBundle;
+  const assessment=deriveConsentControlAssessment({scan:{scanId,finalUrl:pageUrl}});
+  assessment.californiaPrivacyReview=projectCaliforniaPrivacyReview(bundle,{verificationStatus:"verified",sha256:"a".repeat(64)},pageUrl)!;
+  scan.runtimeArtifacts={consentControlAssessment:assessment};
+  // A raw persisted assessment alone cannot bypass concern policy or unified projection.
+  const withoutCanonical=buildTimelineReportModel(scan);
+  assert.ok("findings" in withoutCanonical);
+  assert.equal(withoutCanonical.californiaChoicePresence,null);
+  const findings=buildUnifiedFindingDisplayPackets({runtimeArtifacts:scan.runtimeArtifacts,reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+  const canonical=getPersistedCanonicalReportProjection(scan)!;
+  canonical.ownerUnifiedFindings=findings;canonical.globalUnifiedFindings=findings;
+  Object.assign(scan,{canonicalReportProjection:canonical});
+  const report=buildTimelineReportModel(scan);
+  assert.ok("findings" in report);
+  assert.equal(report.californiaChoicePresence?.title,"Sale/sharing opt-out link observed");
+  assert.ok(!report.findings.some(row=>row.id==="targeted_advertising_choices_present"));
+  assert.deepEqual(findings.find(row=>row.unifiedFindingId==="targeted_advertising_choices_present")?.scoreEffects??[],[]);
+});

@@ -1,3 +1,4 @@
+import { PRIVACY_CHOICE_PRESENCE_SIGNAL, californiaPrivacyReviewSchema } from "@certscore/contracts";
 import {CALIFORNIA_POST_REJECT_FINDING} from "./california-post-reject-policy";
 import {hasVerifiedCustomerGpcEvidence} from "./gpc-customer-policy";
 import {deriveGppPropagationPolicy} from "./gpp-propagation-policy";
@@ -54,6 +55,7 @@ export type SurfacingPolicyRuleId =
   | "family.financial_promotion.default"
   | "family.accessibility.default"
   | "evidence.positive_surface.support_only"
+  | "evidence.privacy_choice_presence.observed"
   | "evidence.positive_surface.review_high_value_policy_path"
   | "evidence.positive_surface.review_high_value_privacy_disclosure"
   | "evidence.coverage_gap.keep_review"
@@ -1865,6 +1867,15 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       reason: eligible ? "Verified GPC evidence; California deductions follow canonical concern policy." : "GPC delivery evidence is not verified.", ruleId: "evidence.context.keep_review" });
     return;
   }
+  if (packet.unifiedFindingId === "targeted_advertising_choices_present" && packet.details?.family === "california_privacy_review") {
+    const assessment = californiaPrivacyReviewSchema.safeParse(packet.details.projection);
+    const eligible = assessment.success && assessment.data.choicePresence?.links.some(link => link.kind === "do_not_sell_or_share") &&
+      packet.sourceRefs.some(ref => ref.kind === "signal" && ref.source === "runtime_artifact_signal" && ref.key === PRIVACY_CHOICE_PRESENCE_SIGNAL) &&
+      packet.concernContext?.promotionEligibilities.includes("eligible") && packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
+    overrideDecision(decision, {state:eligible?"support_only":"suppressed",lane:eligible?"confidence_and_coverage":"suppressed",tier:"support",
+      reason:"Source-bound opt-out link presence belongs in the California coverage snapshot.",ruleId:"evidence.privacy_choice_presence.observed"});
+    return;
+  }
   if (CALIFORNIA_PRIVACY_REVIEW_IDS.some(id => id === packet.unifiedFindingId)) {
     const eligible = packet.details?.family === "california_privacy_review" && californiaPrivacyReviewFindingIds(packet.details.projection).includes(packet.unifiedFindingId) &&
       packet.concernContext?.promotionEligibilities.includes("eligible") && packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
@@ -2962,6 +2973,11 @@ function applyCrossFindingRules(decisionsById: Map<string, MutableDecision>, pac
 
     const policy = UNIFIED_FINDING_SURFACING_POLICY_REGISTRY[findingId as ReportUnifiedFindingId];
     const fallback = policy?.orphanedSupportFallback ?? (decision.family === "positive_surface" ? "suppressed" : "review");
+
+    if (decision.appliedRules.includes("evidence.privacy_choice_presence.observed")) {
+      decision.reportLane = "confidence_and_coverage";
+      continue;
+    }
 
     if (decision.supportedBy) {
       continue;

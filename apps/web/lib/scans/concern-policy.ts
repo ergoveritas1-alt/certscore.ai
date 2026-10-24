@@ -1,3 +1,4 @@
+import { readSaleSharingLinkPresence, PRIVACY_CHOICE_PRESENCE_SIGNAL } from "@certscore/contracts";
 import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
 import {retainedPotentialRisk,potentialRiskRecipients,CA_POTENTIAL_RISK_FINDING,CA_POTENTIAL_RISK_POLICY,potentialRiskPoints} from "./california-potential-risk-policy";
 import {retainedCaliforniaPostReject,californiaPostRejectPoints,CALIFORNIA_POST_REJECT_POLICY} from "./california-post-reject-policy";
@@ -2580,6 +2581,7 @@ export function packetNeedsPageAttribution(input: {
 }
 
 export function deriveConcernPolicy(input: {
+  californiaRuntimeGpcAssessment?: unknown;
   consentControlAssessment?: unknown;
   concern: Pick<
     NormalizedConcern,
@@ -2601,6 +2603,12 @@ export function deriveConcernPolicy(input: {
   regulatoryChecklistEligibility?: NormalizedConcernRegulatoryChecklistEligibility;
   scoreEffects?: NormalizedConcernScoreEffect[];
 } {
+  if (input.concern.originKey === PRIVACY_CHOICE_PRESENCE_SIGNAL) {
+    const eligible = input.concern.originType === "runtime_artifact" && input.concern.suggestedUnifiedFindingId === "targeted_advertising_choices_present" &&
+      Boolean(readSaleSharingLinkPresence(input.rawEvidence?.consentControlAssessment));
+    return {allowedNarrativeTier:"moderate",externalSurfacingEligibility:eligible?"eligible":"suppress",
+      promotionEligibility:eligible?"eligible":"blocked",negativeEvidenceFlags:[],regulatoryChecklistEligibility:"none",scoreEffects:[]};
+  }
   if (input.concern.suggestedUnifiedFindingId === FORM_DESTINATION_FINDING_ID) {
     const eligible = input.concern.originType === "runtime_artifact" && qualifiesFormDestinationReview(input.rawEvidence?.formDestinations);
     return { allowedNarrativeTier: "moderate", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
@@ -2618,7 +2626,7 @@ export function deriveConcernPolicy(input: {
     const assessment = readCaliforniaPrivacyReviewFromConsent(input.rawEvidence?.consentControlAssessment);
     return {allowedNarrativeTier: "moderate", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
       promotionEligibility: eligible ? "eligible" : "blocked", negativeEvidenceFlags: [], regulatoryChecklistEligibility: "none",
-      scoreEffects: eligible && assessment ? californiaFindingScoreEffect(input.concern.suggestedUnifiedFindingId!, assessment.sourceHash, assessment.contractVersion, assessment) : []};
+      scoreEffects: eligible && assessment ? californiaFindingScoreEffect(input.concern.suggestedUnifiedFindingId!, assessment.sourceHash, assessment.contractVersion, assessment, input.californiaRuntimeGpcAssessment) : []};
   }
   if (input.concern.suggestedUnifiedFindingId === SITE_INTEGRITY_FINDING_ID) {
     const eligible = input.concern.originType === "runtime_artifact" && qualifiesSiteIntegrityReview(input.rawEvidence?.siteIntegrity);

@@ -1,7 +1,11 @@
+import {deriveCaliforniaRuntimeLinkProof} from "../../lib/scans/california-runtime-link-policy";
+import {CALIFORNIA_RUNTIME_LINK_POLICY} from "@certscore/contracts";
+import {assessCaliforniaDisclosureChoice,CALIFORNIA_DISCLOSURE_CHOICE_POLICY} from "@certscore/contracts";
+import { privacyChoicePresenceSchema } from "@certscore/contracts";
 import {cmpPreferencesEvidenceSchema,hasBoundCmpPreferenceDocument} from "@certscore/contracts";
 import {matchCaliforniaCollectionNotices,matchCaliforniaCollectionNoticesV2,matchCaliforniaCollectionNoticesV3,matchCaliforniaCollectionNoticesV4,matchCaliforniaCollectionNoticesV5} from "./california-collection-notice-matching";
 import { createHash } from "node:crypto";
-import { assessCaliforniaRightsClauses,assessCaliforniaSaleSharingClauses, inspectCaliforniaRightsConcepts, californiaDisclosureInspectionSchema, verifiedSaleSharingOptOutSchema } from "@certscore/contracts";
+import { assessCaliforniaRightsClauses,assessCaliforniaSaleSharingClauses, inspectCaliforniaRightsConcepts, californiaDisclosureInspectionSchema, verifiedSaleSharingOptOutSchema,saleSharingOptOutBindsDocument } from "@certscore/contracts";
 import { californiaPrivacyReviewSchema, classifyPrivacySurface, isCurrentCaliforniaChoiceInspection, privacyChoiceInspectionSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { projectPrivacyAuditEvidence } from "./privacy-audit-projection";
 import { projectCaliforniaReviewCoverage, type CaliforniaPolicyEvidence } from "./california-review-coverage-projection";
@@ -32,6 +36,17 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
       destinationStatus: exactDestinationError ? "http_error" as const : control.retrieval === "fetched" ? "retrieved" as const : "not_tested" as const,
       ...(exactDestinationError ? {httpStatus: observed!.httpStatus as 404 | 410} : {}) };
   });
+  // New presence claims require an exact originating document and an observed
+  // link. Visible buttons and generic settings remain separate workpaper facts.
+  const presenceLinks = controls.flatMap(control => {
+    const surface = bundle.policySurfaceObservations.find(row => `policy-surface:${row.observationId}` === control.evidenceRef);
+    if (!surface || surface.linkSourcePageUrl !== documentUrl ||
+        !["footer_link", "header_link", "page_text_link"].includes(surface.discoveryMethod) ||
+        !surface.url || surface.clickable === false || bundle.scanNoGoAssessment?.decision === "no_go") return [];
+    return [{label:control.label, kind:control.kind, evidenceRef:control.evidenceRef, sourceDocumentUrl:documentUrl}];
+  }).slice(0, 12);
+  while (presenceLinks.length && !privacyChoicePresenceSchema.safeParse({version:"privacy_choice_presence.v1",effectiveness:"not_verified",links:presenceLinks}).success)
+    presenceLinks.pop();
   // Independently verified, read-only linked settings can supply positive
   // named choice facts. They never establish homepage absence or execution.
   const linkedPacket=cmpPreferencesEvidenceSchema.safeParse(bundle.cmpPreferencesEvidence);
@@ -73,7 +88,8 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
   const parsedOptOut = verifiedSaleSharingOptOutSchema.safeParse(bundle.saleSharingOptOut);
   const optOut = parsedOptOut.success ? parsedOptOut.data : null;
   const bytes = optOut ? Buffer.from(JSON.stringify(optOut.evidence)) : null;
-  const verifiedOptOut = optOut && bytes && optOut.evidence.scanId === bundle.scanId && optOut.evidence.targetUrl === documentUrl &&
+  const verifiedOptOut = optOut && bytes && optOut.evidence.scanId === bundle.scanId && saleSharingOptOutBindsDocument(optOut.evidence,documentUrl) &&
+    (optOut.evidence.contractVersion==="certscore.sale-sharing-opt-out-evidence.v1" || optOut.evidence.targetUrl===bundle.normalizedUrl) &&
     Date.parse(optOut.evidence.completedAt) <= end && Date.parse(optOut.evidence.startedAt) >= start - 5000 &&
     bytes.byteLength === optOut.sizeBytes && createHash("sha256").update(bytes).digest("hex") === optOut.sha256 ? optOut : null;
   const transferPolicy=bundle.policySurfaceInspection?.californiaReviewPolicy === "california-privacy-review.v10";
@@ -212,6 +228,7 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
     scanId: bundle.scanId, documentUrl: documentUrl, capturedAt: bundle.completedAt,
     sourceHash: source!.sha256, verificationStatus: "verified", scoreEffect: "none", applicability: "not_determined",
     ...(transferPolicy ? {observedScoreBasis:projectCaliforniaObservedScoreBasis(bundle,source,documentUrl)} : {}),
+    ...(presenceLinks.length ? {choicePresence:{version:"privacy_choice_presence.v1",effectiveness:"not_verified",links:presenceLinks}} : {}),
     inspection, choiceSurface, controls, controlsTruncated: workpaper.truncated, failedNoticeLinks,
     ...(verifiedOptOut ? {optOutObservation: verifiedOptOut} : {}),
     optOutEffectiveness: verifiedOptOut?.evidence.status === "complete" ? "bounded_observation" : "not_assessed", noticeAdequacy: "not_assessed",
@@ -222,5 +239,24 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
     ...(clausePolicy ? {rightsAssessment,collectionNoticeAssessment} : {}),
     ...(refinedPolicy?{saleSharingAssessment}:{}),
   });
-  return result.success ? result.data : null;
+  if (!result.success) return null;
+  // The source-bound capture marker opts in future captures only. Old bundles,
+  // persisted assessments and historical scoring are never silently upgraded.
+  const capturePolicy=bundle.policySurfaceInspection?.californiaDisclosureChoicePolicy;
+  if (transferPolicy && (capturePolicy === CALIFORNIA_DISCLOSURE_CHOICE_POLICY || capturePolicy === CALIFORNIA_RUNTIME_LINK_POLICY)) {
+    const declaration=assessCaliforniaDisclosureChoice(result.data,clauseDocuments);
+    const runtimeLinkProof=capturePolicy === CALIFORNIA_RUNTIME_LINK_POLICY ? deriveCaliforniaRuntimeLinkProof(result.data,bundle.gpcResponseAssessment) : undefined;
+    const assessment={...declaration,policyVersion:capturePolicy,...(runtimeLinkProof?{runtimeLinkProof}:{})};
+    const review=result.data;
+    // A negative policy claim cannot erase independently retained positive
+    // runtime corroboration. Keep the existing reviewed wording and coverage.
+    const reviewCoverage=runtimeLinkProof && review.contractVersion === "certscore.california-privacy-review.v10"
+      ? {...review.reviewCoverage,families:review.reviewCoverage.families.map(f=>f.id === "privacy_choices" && f.status === "not_triggered_in_scope"
+        ? {...f,status:"review" as const,followUp:"applicability" as const,
+          reason:"Named choice and policy claims retained separately; verified execution and applicable opt-out requirements remain distinct checks."} : f)}
+      : undefined;
+    const current=californiaPrivacyReviewSchema.safeParse({...review,...(reviewCoverage?{reviewCoverage}:{}),disclosureChoiceAssessment:assessment});
+    return current.success ? current.data : null;
+  }
+  return result.data;
 }

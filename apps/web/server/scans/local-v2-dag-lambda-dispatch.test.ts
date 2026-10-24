@@ -9,6 +9,7 @@ import {
   dispatchLocalV2DagLambdaScan,
   ingestLocalV2DagLambdaResultMessage,
   parseLocalV2DagLambdaResultMessage,
+  reserveSaleSharingCanaryDispatch,
   summarizeLocalV2DagLambdaDispatchForEvent
 } from "./local-v2-dag-lambda-dispatch";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
@@ -19,6 +20,7 @@ function buildLambdaScanConfig(options: {
   saleSharingEnabled?: boolean;
   scanFrom?: "eu_de" | "eu_ie" | "california";
   source?: string;
+  targetUrl?: string;
 } = {}) {
   return buildQueuedFullScanConfig({
     env: {
@@ -31,12 +33,12 @@ function buildLambdaScanConfig(options: {
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       NODE_ENV: "development"
     },
-    hostname: "example.com",
+    hostname: new URL(options.targetUrl??"https://example.com/").hostname,
     localV2DagLambdaDebugOverrides: options.localV2DagLambdaDebugOverrides,
     localV2DagRunViaLambda: true,
     localV2DagScanProfile: "tiny",
     maxPages: 3,
-    normalizedUrl: "https://example.com/",
+    normalizedUrl: options.targetUrl??"https://example.com/",
     profile: "homepage",
     scanFrom: options.scanFrom,
     source: options.source ?? "manual-dashboard"
@@ -125,7 +127,7 @@ test("dispatch always includes GPC for sharded orchestration", () => {
   assert.equal(sharded.orchestrationMode, "sharded");
 });
 
-test("sale/sharing opt-out requires its own server flag and persisted exact-target rollout intent", () => {
+test("presence-only dispatch suppresses optional opt-out for every legacy flag and rollout combination", () => {
   const previous = process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;
   try {
     for (const enabled of [true, false]) for (const rollout of ["all_eligible", "disabled"]) for (const serverFlag of ["1", "0"]) {
@@ -135,11 +137,9 @@ test("sale/sharing opt-out requires its own server flag and persisted exact-targ
       intent.saleSharingOptOutEnabled = enabled;
       intent.saleSharingOptOutRolloutMode = rollout;
       const payload = buildLocalV2DagLambdaDispatchPayload({ scanConfig: config, scanId: "opt-out-authorization" });
-      assert.equal(Boolean(payload.saleSharingOptOut), enabled && rollout === "all_eligible" && serverFlag === "1");
-      if (payload.saleSharingOptOut) {
-        assert.equal(payload.saleSharingOptOut.scanId, payload.scanId);
-        assert.equal(payload.saleSharingOptOut.exactTargetUrl, payload.targetUrl);
-      }
+      assert.equal(payload.saleSharingOptOut, undefined);
+      assert.equal(payload.privacyCaptureProfile, "presence_only_six_workers.v1");
+
     }
     process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED = "1";
     for (const orchestrationMode of ["single", "sharded"] as const) {
@@ -157,7 +157,7 @@ test("sale/sharing opt-out requires its own server flag and persisted exact-targ
   }
 });
 
-test("every eligible regional scan source receives sale/sharing intent and dispatch; single or disabled scans do not", () => {
+test("all regional scan sources use the six-worker profile despite legacy optional intent", () => {
   const previous = process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;
   try {
     process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED = "1";
@@ -167,8 +167,9 @@ test("every eligible regional scan source receives sale/sharing intent and dispa
       assert.equal(intent.saleSharingOptOutEnabled, true);
       assert.equal(intent.saleSharingOptOutRolloutMode, "all_eligible");
       const payload = buildLocalV2DagLambdaDispatchPayload({ scanConfig: config, scanId: `${scanFrom}-${source}` });
-      assert.equal(payload.saleSharingOptOut?.scanId, `${scanFrom}-${source}`);
-      assert.equal(payload.saleSharingOptOut?.exactTargetUrl, "https://example.com/");
+      assert.equal(payload.saleSharingOptOut, undefined);
+      assert.equal(payload.privacyCaptureProfile, "presence_only_six_workers.v1");
+      assert.equal(payload.targetUrl, "https://example.com/");
     }
     for (const options of [
       { orchestrationMode: "single", saleSharingEnabled: true, scanFrom: "california" },
@@ -682,4 +683,64 @@ test("full-site opt-in alone adds inventory context; a one-target scan never dis
   assert.equal(build(1).resourceInventoryCrawl,true);assert.equal(build(1).resourceInventoryDiscovery,false);
   assert.equal(build(200).resourceInventoryDiscovery,true);
   assert.equal(buildLocalV2DagLambdaDispatchPayload({scanId:"normal",scanConfig:config,localCallbackUrl:null}).resourceInventoryCrawl,undefined);
+});
+
+
+import {exactRouteSources} from "../../../../packages/certscore-contracts/src/sale-sharing-exact-route.fixture";
+import {SALE_SHARING_EXACT_ROUTE_POLICY,saleSharingExactRouteAuthorization} from "@certscore/contracts";
+test("presence-only dispatch excludes the optional worker for all ten routes and other scans",()=>{
+  const previous=process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;
+  try{
+    for(const targetUrl of [...exactRouteSources,"https://salomon.com/","https://jaguar.com/path","https://www.jaguar.com/"]){
+      for(const enabled of [true,false])for(const serverFlag of ["1","0"]){
+        process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED=serverFlag;
+        const config=buildLambdaScanConfig({orchestrationMode:"sharded",targetUrl});
+        const intent=config.execution!.v2DagLambda as unknown as Record<string,unknown>;
+        intent.saleSharingOptOutEnabled=enabled;intent.saleSharingOptOutRolloutMode="all_eligible";
+        const result=buildLocalV2DagLambdaDispatchPayload({scanConfig:config,scanId:"routes"});
+        assert.equal(result.saleSharingOptOut,undefined);
+        assert.equal(result.privacyCaptureProfile,"presence_only_six_workers.v1");
+        assert.equal(result.targetUrl,targetUrl);
+      }
+    }
+  }finally{if(previous===undefined)delete process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;else process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED=previous;}
+});
+
+import {saleSharingCanaryFixture} from "../../../../packages/certscore-contracts/src/sale-sharing-canary.fixture";
+test("presence-only dispatch rejects a trusted canary override and ignores scan-option injection",()=>{
+  const previous=process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;
+  try{
+    process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED="1";
+    const campaign=saleSharingCanaryFixture(),a=campaign.slots[0];
+    const config=buildLambdaScanConfig({orchestrationMode:"sharded",saleSharingEnabled:true,scanFrom:"california",targetUrl:a.targetUrl});
+    const input={scanConfig:config,scanId:a.scanId};
+    (config.execution!.v2DagLambda as unknown as Record<string,unknown>).canaryCampaign=campaign;
+    assert.equal(buildLocalV2DagLambdaDispatchPayload(input).saleSharingOptOut?.canaryAuthorization,undefined);
+    assert.throws(()=>buildLocalV2DagLambdaDispatchPayload({...input,canaryCampaign:campaign}),/excludes sale\/sharing canary/);
+    assert.throws(()=>buildLocalV2DagLambdaDispatchPayload({...input,scanId:"unlisted",canaryCampaign:campaign}),/excludes sale\/sharing canary/);
+  }finally{if(previous===undefined)delete process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;else process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED=previous;}
+});
+
+test("web reservation burns one attempt and rechecks expiry before allowing invocation",async()=>{
+  const previous=process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;
+  try{
+    process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED="1";
+    const campaign=saleSharingCanaryFixture(),a=campaign.slots[0],signal=new AbortController().signal;
+    const payload=buildLocalV2DagLambdaDispatchPayload({scanConfig:buildLambdaScanConfig({orchestrationMode:"sharded",saleSharingEnabled:true,scanFrom:"california",targetUrl:a.targetUrl}),scanId:a.scanId});
+    // Historical, unmarked dispatches still retain their independent canary reservation guard.
+    delete payload.privacyCaptureProfile;
+    payload.functionName=a.functionName;
+    payload.saleSharingOptOut={policyVersion:SALE_SHARING_EXACT_ROUTE_POLICY,enabled:true,scanId:a.scanId,exactTargetUrl:a.targetUrl,
+      exactRouteAuthorization:saleSharingExactRouteAuthorization(a.targetUrl)!,canaryAuthorization:a};
+    let writes=0,now=Date.now();const records=new Map<string,unknown>();
+    const ledger={async read(k:string){return records.get(k)??null;},async create(k:string,v:unknown){writes++;if(records.has(k))throw Error("already_claimed");records.set(k,v);}};
+    await assert.rejects(reserveSaleSharingCanaryDispatch(payload,{signal,ledger}));assert.equal(writes,0);
+    await reserveSaleSharingCanaryDispatch(payload,{signal,campaign,ledger});
+    await assert.rejects(reserveSaleSharingCanaryDispatch(payload,{signal,campaign,ledger}),/already_claimed/);
+    assert.equal(records.size,1);
+    const expiredLedger={async read(){return null;},async create(){now=Date.parse(a.expiresAt);}};
+    await assert.rejects(reserveSaleSharingCanaryDispatch(payload,{signal,campaign,ledger:expiredLedger,now:()=>now}),/not_authorized/);
+    const controller=new AbortController();controller.abort();
+    await assert.rejects(reserveSaleSharingCanaryDispatch(payload,{signal:controller.signal,campaign,ledger}));assert.equal(writes,2);
+  }finally{if(previous===undefined)delete process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;else process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED=previous;}
 });

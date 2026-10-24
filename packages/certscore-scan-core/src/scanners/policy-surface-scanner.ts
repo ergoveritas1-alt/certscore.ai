@@ -1,9 +1,13 @@
+import { createPrivacyFrameContinuityProof } from "../privacy-frame-continuity";
+import { buildPrivacyChoiceDiagnostics, createPrivacyChoiceDomDiagnostics } from "../privacy-choice-diagnostics";
+import { canStartPolicyAnalysis, createPolicyAnalysisGate } from "../policy-analysis-gate";
 import { locateCaliforniaReviewTopics } from "@certscore/contracts";
 import { applyGoverningPolicySelection, mergePolicySurfaceObservations, canonicalPolicyUrlIdentity, policySurfaceObservationKey } from "../policy-surface-projection.js";
 export { applyGoverningPolicySelection, mergePolicySurfaceObservations, canonicalPolicyUrlIdentity } from "../policy-surface-projection.js";
 import {
   type ArtifactRef,
   privacyChoiceInspectionSchema,
+  materializeSelfHiddenFrameInspection,
   classifyCaliforniaRightsMethod,
   type PrivacyChoiceInspection,
   extractPolicyUpdateDateText,
@@ -39,7 +43,7 @@ import {
   getCrawlerUserAgent,
   isFreshPriorScanAccelerationSource,
 } from "@website-signal-risk-scanner/shared";
-import { chromium, type Browser, type Locator, type Page } from "playwright";
+import { chromium, type Browser, type Locator, type Page, type JSHandle } from "playwright";
 import { createHash } from "node:crypto";
 import { Resolver } from "node:dns";
 import { isIP } from "node:net";
@@ -563,6 +567,9 @@ export async function policySurfaceScanner(
   let renderedCandidateCount = 0;
   let observedCandidateCount = 0;
   let commonPathFallbackUsed = false;
+  // Completed choice proof survives policy fetch/recovery exits independently
+  // of whether optional policy-document work completes.
+  let privacyChoiceInspection: PrivacyChoiceInspection | undefined;
   const policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget = {
     remainingChars: MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS,
   };
@@ -843,10 +850,12 @@ export async function policySurfaceScanner(
           return {
             moduleRun: completedPolicyModuleRun(),
             policySurfaceObservations: observations,
+            privacyChoiceInspection,
             artifactRefs,
           };
         }
         renderedCandidates = firstUsefulRecovery.renderedDiscovery.candidates;
+        privacyChoiceInspection = firstUsefulRecovery.renderedDiscovery.privacyChoiceInspection;
       } catch (error) {
         speculativeCommonPathNanoAbortController.abort();
         await speculativeCommonPathNanoRankingPromise?.catch(() => undefined);
@@ -877,6 +886,7 @@ export async function policySurfaceScanner(
         return {
           moduleRun: completedPolicyModuleRun(),
           policySurfaceObservations: observations,
+          privacyChoiceInspection,
           artifactRefs,
         };
       }
@@ -934,6 +944,7 @@ export async function policySurfaceScanner(
           return {
             moduleRun: completedPolicyModuleRun(),
             policySurfaceObservations: observations,
+            privacyChoiceInspection,
             artifactRefs,
           };
         }
@@ -963,6 +974,7 @@ export async function policySurfaceScanner(
         return {
           moduleRun: completedPolicyModuleRun(),
           policySurfaceObservations: observations,
+          privacyChoiceInspection,
           artifactRefs,
         };
       }
@@ -999,6 +1011,7 @@ export async function policySurfaceScanner(
         return {
           moduleRun: completedPolicyModuleRun(),
           policySurfaceObservations: observations,
+          privacyChoiceInspection,
           artifactRefs,
         };
       }
@@ -1030,6 +1043,7 @@ export async function policySurfaceScanner(
           timingBreakdown,
         )),
         policySurfaceObservations: observations,
+        privacyChoiceInspection,
         artifactRefs,
       };
     }
@@ -1090,6 +1104,9 @@ export async function policySurfaceScanner(
           ...deterministicStaticFetchCandidates,
         ])
     ).slice(0, POLICY_FETCH_CONCURRENCY);
+    // Keep guarded fetches overlapping capture, but do not let speculative
+    // synchronous section/fact work compete with the choice inspection.
+    const policyAnalysisGate = createPolicyAnalysisGate(input.signal);
     const speculativeStaticFetchPromise = speculativeStaticFetchCandidates.length > 0
       ? recordPolicyTiming(
         timingBreakdown,
@@ -1101,6 +1118,8 @@ export async function policySurfaceScanner(
           candidates: speculativeStaticFetchCandidates,
           input,
           moduleStartedAtMs,
+          analysisPermission: policyAnalysisGate.permission,
+          analysisDeadlineAtMs: policyDeadlineAtMs,
         }),
       )
       : undefined;
@@ -1130,7 +1149,6 @@ export async function policySurfaceScanner(
     let renderedCandidates: PolicySurfaceCandidate[];
     let renderedDiscoveryDeadlineReached = false;
     let renderedInspection: RenderedPolicyDiscoveryResult["inspection"];
-    let privacyChoiceInspection: PrivacyChoiceInspection | undefined;
     try {
       if (fastStaticCoverage) {
         renderedCandidates = await recordPolicyTiming(
@@ -1150,12 +1168,18 @@ export async function policySurfaceScanner(
         renderedInspection = renderedDiscovery.inspection;
         privacyChoiceInspection = renderedDiscovery.privacyChoiceInspection;
         renderedDiscoveryDeadlineReached = renderedDiscovery.deadlineReached;
+        policyAnalysisGate.finish(!renderedDiscovery.deadlineReached && Boolean(renderedDiscovery.privacyChoiceInspection));
       }
     } catch (error) {
+      policyAnalysisGate.discard();
       speculativeCommonPathNanoAbortController?.abort();
       await speculativeCommonPathNanoRankingPromise?.catch(() => undefined);
       await speculativeStaticFetchPromise?.catch(() => undefined);
       throw error;
+    } finally {
+      // No inspection, skipped capture, failure and deadline exits must release
+      // waiters without flushing the speculative CPU queue. First decision wins.
+      policyAnalysisGate.discard();
     }
     await speculativeStaticFetchPromise?.catch(() => undefined);
     renderedCandidateCount = renderedCandidates.length;
@@ -1400,8 +1424,8 @@ export async function policySurfaceScanner(
     return {
       moduleRun: completedPolicyModuleRun(),
       negativeSearchEvidence,
-      privacyChoiceInspection,
       policySurfaceObservations: observations,
+      privacyChoiceInspection,
       artifactRefs,
     };
   } catch (error) {
@@ -1421,6 +1445,7 @@ export async function policySurfaceScanner(
           timingBreakdown,
         )),
         policySurfaceObservations: observations,
+        privacyChoiceInspection,
         artifactRefs,
       };
     }
@@ -1432,6 +1457,7 @@ export async function policySurfaceScanner(
         ...(diagnosticWriteError ? [`Policy-surface failure diagnostics could not be retained: ${diagnosticWriteError}`] : []),
       ], timingBreakdown)),
       policySurfaceObservations: observations,
+      privacyChoiceInspection,
       artifactRefs,
     };
   } finally {
@@ -4218,6 +4244,8 @@ async function warmPolicyDocumentFetchCache(input: {
   candidates: PolicySurfaceCandidate[];
   input: PolicySurfaceScannerInput;
   moduleStartedAtMs: number;
+  analysisPermission: Promise<boolean>;
+  analysisDeadlineAtMs: number;
 }): Promise<void> {
   await mapWithConcurrency(
     input.candidates,
@@ -4246,8 +4274,10 @@ async function warmPolicyDocumentFetchCache(input: {
           }
         }
       }
+      if (!(await input.analysisPermission) ||
+          !canStartPolicyAnalysis(input.input.signal, input.analysisDeadlineAtMs)) return;
       await recordPolicyTiming(input.timingBreakdown, "static policy analysis warmup",
-        "Content-bound deterministic section/fact preparation overlaps rendered discovery; selected document and analysis mode must match before reuse.", async () => {
+        "Content-bound deterministic section/fact preparation after retained choice inspection; selected document and analysis mode must match before reuse.", async () => {
           const late = input.input.internalBudgetMs <= POLICY_FAST_RENDERED_DISCOVERY_TIMEOUT_MS;
           const html = fetched.html ?? fetched.text;
           const text = late ? resolvePrefetchedPolicyVisibleText(fetched.html ? fetched.text : html)
@@ -4590,13 +4620,23 @@ async function extractRenderedCandidates(
   moduleStartedAtMs: number,
   browserRuntime: PolicyBrowserRuntime,
   timingBreakdown?: ScanModuleRun["timingBreakdown"],
-  progress?: { stage: string; startedAtMs: number; candidates: PolicySurfaceCandidate[] },
+  progress?: RenderedPolicyDiscoveryProgress,
+  diagnosticOnly = false,
 ): Promise<RenderedPolicyDiscoveryResult> {
   if (remainingMs(input, moduleStartedAtMs) < 1_500) {
     return { candidates: [], deadlineReached: false };
   }
   let context: Awaited<ReturnType<Browser["newContext"]>> | undefined;
   let releaseAbortContext: (() => void) | undefined;
+  let frameCheckpointHandle: JSHandle | undefined;
+  let checkpointAborted = false;
+  const releaseFrameCheckpoint = () => {
+    const handle = frameCheckpointHandle;
+    frameCheckpointHandle = undefined;
+    if (handle) void handle.dispose().catch(() => undefined);
+  };
+  const abortCheckpoint = () => { checkpointAborted = true; releaseFrameCheckpoint(); };
+  input.signal?.addEventListener("abort", abortCheckpoint, { once: true });
   let stage = "browser launch";
   let stageStartedAtMs = Date.now();
   const nextStage = (next: string) => {
@@ -4605,13 +4645,18 @@ async function extractRenderedCandidates(
       detail: "Substage of rendered discovery; included in its wall time, not additive." });
     stage = next;
     stageStartedAtMs = now;
-    if (progress) { progress.stage = stage; progress.startedAtMs = now; }
+    if (progress && !progress.closed) { progress.stage = stage; progress.startedAtMs = now; }
   };
   try {
     const browser = await browserRuntime.getBrowser();
     nextStage("browser context");
     context = await browser.newContext(chromiumContextOptions());
     releaseAbortContext = bindAbortSignalToBrowserContext(context, input.signal);
+    if (progress?.closed || input.signal?.aborted) throw new Error("Policy capture is terminal");
+    if (progress) progress.cancelCapture = () => {
+      abortCheckpoint();
+      void context?.close().catch(() => undefined);
+    };
     await installWebBotAuthRoute(context);
     await installPublicNetworkGuardRoute(context);
     const page = await context.newPage();
@@ -4648,7 +4693,7 @@ async function extractRenderedCandidates(
         .filter(footer => !cmpSelectors.some(selector => footer.closest(selector))).slice(-4)
         .map(footer => footer.outerHTML.slice(-maxChars)).join("\n").slice(-maxChars),
     }), { maxChars: 100_000, cmpSelectors: CMP_POLICY_SCOPES.flatMap(scope => scope.selectors) }).catch(() => undefined);
-    if (progress && footerCheckpoint?.bodyPresent && footerCheckpoint.documentUrl === page.url() &&
+    if (progress && !progress.closed && !input.signal?.aborted && footerCheckpoint?.bodyPresent && footerCheckpoint.documentUrl === page.url() &&
         assessPolicyHomepageAccess({ ok: navigationResponse?.ok() ?? false,
           status: navigationResponse?.status(), text: footerCheckpoint.text }) === "representative_page") {
       progress.candidates = extractCandidates(footerCheckpoint.documentUrl, footerCheckpoint.html,
@@ -4678,7 +4723,7 @@ async function extractRenderedCandidates(
       cmpScopes: typeof CMP_POLICY_SCOPES;
       vendorPattern: string;
       priorityPhrases: string[];
-    }) => {
+    }, diagnostics: ReturnType<typeof createPrivacyChoiceDomDiagnostics>) => {
       type RawCandidate = {
         cmpProvider?: string;
         cmpVendor?: boolean;
@@ -4754,6 +4799,30 @@ async function extractRenderedCandidates(
         }
         return [...element.getClientRects()].some((rect) => rect.width > 0 && rect.height > 0);
       }
+      let svgNameReadCount = 0;
+      let svgNameWorkMs = 0;
+      function renderedNameText(element: Element): string | undefined {
+        const htmlText = (element as HTMLElement).innerText;
+        if (typeof htmlText === "string") return htmlText;
+        // SVG has no innerText. Admit only a leaf text/tspan, or one direct
+        // leaf <text> in an SVG anchor. Never flatten metadata, hidden spans,
+        // multiple graphics or an arbitrary subtree into a visible name.
+        if (element.namespaceURI !== "http://www.w3.org/2000/svg") return undefined;
+        const text = element.localName === "a" && element.childElementCount === 1
+          ? element.firstElementChild : element;
+        if (!text || text.namespaceURI !== "http://www.w3.org/2000/svg" ||
+            !(text.localName === "text" || text === element && text.localName === "tspan") ||
+            text.childElementCount !== 0) return undefined;
+        // A new fallback must not turn a large SVG inventory into unbounded
+        // work. Share eight attempts / 2 ms across this existing read (including
+        // frames), inside its original absolute and frame budgets. Unresolved
+        // controls still enter the existing unnamed-control limitation.
+        if (svgNameReadCount >= 8 || svgNameWorkMs >= 2) return undefined;
+        svgNameReadCount++;
+        const started = performance.now();
+        try { return isVisible(text) ? text.textContent ?? undefined : undefined; }
+        finally { svgNameWorkMs += performance.now() - started; }
+      }
       function collect(root: ParentNode, output: RawCandidate[]): void {
         if (seenRoots.has(root)) return;
         if (output.length >= maxCandidates) { candidateEnumerationTruncated = true; return; }
@@ -4804,13 +4873,17 @@ async function extractRenderedCandidates(
           const cmpContext = cmpContextFor(element);
           const href = hrefFromElement(element);
           const directAnchor = element.matches("a[href]") && Boolean(element.getAttribute("href")?.trim());
-          const labelledBy = element.getAttribute("aria-labelledby")?.split(/\s+/).slice(0, 4)
+          // A named navigation/container is not its descendant privacy link.
+          // Retain the child in this same bounded read, with its own locator.
+          if (!href && !element.matches("button, [role='button'], [role='link']") &&
+              element.querySelector("a[href], button, [role='button'], [role='link']")) continue;
+          const labelledBy = element.getAttribute("aria-labelledby")?.trim().split(/\s+/).slice(0, 4)
             .map((id) => (element.getRootNode() as Document | ShadowRoot).getElementById(id)?.textContent ?? "")
             .join(" ");
           const names = [
             ["aria_label", element.getAttribute("aria-label")],
             ["aria_labelledby", labelledBy],
-            ["text", (element as HTMLElement).innerText],
+            ["text", renderedNameText(element)],
             ["image_alt", [...element.querySelectorAll("img[alt]")].map((img) => img.getAttribute("alt")).join(" ")],
             ["svg_title", element.querySelector("svg title")?.textContent],
             ["title", element.getAttribute("title")],
@@ -4825,7 +4898,7 @@ async function extractRenderedCandidates(
             !(element.matches("button") && element.closest("form"));
           const visibility = directAnchor || namedActionableControl || (interactive && !accessibleName) ? isVisible(element) : true;
           if (!accessibleName && interactive) {
-            if (visibility) unnamedControlCount++;
+            if (visibility) { unnamedControlCount++; diagnostics.unnamed(element, names, "main"); }
             else hiddenUnnamedControlCount++;
           }
           const linkVisibility: "visible" | "hidden" = visibility ? "visible" : "hidden";
@@ -4836,12 +4909,15 @@ async function extractRenderedCandidates(
             element.getAttribute("data-testid"),
             href,
           ].filter(Boolean).join(" "));
-          if (!text && !href) continue;
+          // Referenced labels and image/SVG names may be the only text on an
+          // actionable control. Do not count it as named and then drop it from
+          // the candidate inventory used to decide whether a choice was seen.
+          if (!text && !href && !accessibleName) continue;
           output.push({
             href,
             cmpProvider: cmpContext.provider,
             cmpVendor: cmpContext.vendor,
-            text: text.slice(0, 220),
+            text: (text || accessibleName).slice(0, 220),
             ...(directAnchor || namedActionableControl ? {
               accessibleName,
               accessibleNameSource: named?.[0] ?? "none",
@@ -4890,6 +4966,7 @@ async function extractRenderedCandidates(
         try {
           if (frameInspectionStartedAt < 0) frameInspectionStartedAt = performance.now();
           frameCount++;
+          diagnostics.frame(element, frameCount - 1, frameInspectionStartedAt + 20);
           if (!isVisible(element)) { hiddenUninspectedFrameCount++; uninspectedFrameCount++; frameProofs.push("uninspected"); return; }
           if (frameCount > 4 || performance.now() - frameInspectionStartedAt > 20) {
             frameBudgetLimitedCount++; uninspectedFrameCount++; frameProofs.push("uninspected"); return;
@@ -4921,18 +4998,19 @@ async function extractRenderedCandidates(
               const interactive = child.matches("a[href], button, [role='button'], [role='link']") || Boolean(hrefFromElement(child));
               if (interactive) hasInteractiveControl = true;
               if (child.matches("a[href], button, [role='button'], [role='link'], [aria-label], [title]")) {
-                const label = normalizeText([
-                  child.getAttribute("aria-label"),
-                  child.getAttribute("aria-labelledby")?.split(/\s+/).slice(0, 4)
+                const names = [
+                  ["aria_label", child.getAttribute("aria-label")],
+                  ["aria_labelledby", child.getAttribute("aria-labelledby")?.trim().split(/\s+/).slice(0, 4)
                     .map(id => child.getRootNode() instanceof Document
                       ? frameDocument!.getElementById(id)?.textContent ?? ""
-                      : (child.getRootNode() as ShadowRoot).getElementById(id)?.textContent ?? "").join(" "),
-                  (child as HTMLElement).innerText,
-                  child.querySelector("img[alt]")?.getAttribute("alt"),
-                  child.querySelector("svg title")?.textContent,
-                  child.getAttribute("title"),
-                ].filter(Boolean).join(" ")).normalize("NFKC").toLowerCase();
-                if (!label && interactive && isVisible(child)) unnamedControlCount++;
+                      : (child.getRootNode() as ShadowRoot).getElementById(id)?.textContent ?? "").join(" ")],
+                  ["text", renderedNameText(child)],
+                  ["image_alt", child.querySelector("img[alt]")?.getAttribute("alt")],
+                  ["svg_title", child.querySelector("svg title")?.textContent],
+                  ["title", child.getAttribute("title")],
+                ] as const;
+                const label = normalizeText(names.map(([,value])=>value).filter(Boolean).join(" ")).normalize("NFKC").toLowerCase();
+                if (!label && interactive && isVisible(child)) { unnamedControlCount++; diagnostics.unnamed(child, names, "frame", frameInspectionStartedAt + 20); }
                 else if (!label && interactive) hiddenUnnamedControlCount++;
                 else if (priorityPhrases.some(phrase => label.includes(phrase))) namedFrameChoiceCandidateCount++;
               }
@@ -4975,6 +5053,7 @@ async function extractRenderedCandidates(
       };
       inspectCoverage(document);
       return { candidates: output, documentUrl: document.URL, timeOrigin: performance.timeOrigin,
+        diagnostic: diagnostics.result(),
         language: document.documentElement.lang, unnamedControlCount, hiddenUnnamedControlCount,
         documentReady: document.readyState === "complete" && Boolean(document.body),
         documentReadyState: document.readyState,
@@ -4994,20 +5073,32 @@ async function extractRenderedCandidates(
         .filter((phrase) => ["do_not_sell_or_share", "your_privacy_choices"].includes(phrase.surfaceType) && ["direct", "equivalent"].includes(phrase.strength))
         .map((phrase) => phrase.phrase.normalize("NFKC").toLowerCase()),
     });
-    const domInspection = await page.evaluate<ReturnType<typeof collectPolicyCandidates>>(
-      `(() => { const __name = (fn) => fn; return (${collectPolicyCandidates.toString()})(${discoveryArgs}); })()`,
+    frameCheckpointHandle = await page.evaluateHandle(
+      `(() => { const __name = (fn) => fn;
+        const proof = (${createPrivacyFrameContinuityProof.toString()})();
+        const data = (${collectPolicyCandidates.toString()})(${discoveryArgs}, (${createPrivacyChoiceDomDiagnostics.toString()})(proof, "first"));
+        return { data, proof };
+      })()`,
     ).catch(() => undefined);
-    const rawCandidates = domInspection?.candidates ?? [];
+    // This is the single additional serialization read. It copies only data,
+    // never DOM references, and finishes before the second checkpoint starts.
+    if (checkpointAborted || input.signal?.aborted || progress?.closed) {
+      releaseFrameCheckpoint();
+      throw new Error("Policy checkpoint capture is terminal");
+    }
+    const domInspection = frameCheckpointHandle ? await page.evaluate(
+      (held: { data: ReturnType<typeof collectPolicyCandidates> }) => held.data, frameCheckpointHandle,
+    ).catch(() => undefined) : undefined;
     let auxiliaryReadsComplete = true;
-    const didomiPublisherUrl = await page.evaluate(readDidomiPublisherPolicy, undefined).catch(() => { auxiliaryReadsComplete = false; return undefined; });
 
-    const renderedPolicyRegion = await page.evaluate((maxChars) => {
+    const readPolicyRegion = (maxChars: number, diagnostics: ReturnType<typeof createPrivacyChoiceDomDiagnostics>) => {
       const regionHtml = [
         document.head?.outerHTML ?? "",
         ...Array.from(document.querySelectorAll("header, nav, footer"), (element) => element.outerHTML),
       ].join("\n");
       const frameProofStartedAt = performance.now();
       const frameProofs = Array.from(document.querySelectorAll("iframe, frame"), (element, index) => {
+        diagnostics.frame(element, index, frameProofStartedAt + 20);
         if (index >= 4 || performance.now() - frameProofStartedAt > 20) return "uninspected";
         try {
           const frameDocument = (element as HTMLIFrameElement).contentDocument;
@@ -5026,176 +5117,227 @@ async function extractRenderedCandidates(
         } catch { return "uninspected"; }
       });
       const frameProofWorkMs = Math.ceil(performance.now() - frameProofStartedAt);
-      if (regionHtml.length <= maxChars) return { html: regionHtml, frameProofs, frameProofWorkMs };
+      if (regionHtml.length <= maxChars) return { html: regionHtml, frameProofs, frameProofWorkMs, diagnostic: diagnostics.result() };
       const headChars = Math.floor(maxChars * 0.5);
-      return { html: `${regionHtml.slice(0, headChars)}\n${regionHtml.slice(-(maxChars - headChars))}`, frameProofs, frameProofWorkMs };
-    }, MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS).catch(() => { auxiliaryReadsComplete = false; return undefined; });
-    const renderedPolicyRegionHtml = renderedPolicyRegion?.html ?? "";
-    nextStage("candidate classification");
-    const renderedHtmlCandidates = renderedPolicyRegionHtml
-      ? extractCandidates(
-        renderedBaseUrl,
-        renderedPolicyRegionHtml,
-        htmlToVisibleText(renderedPolicyRegionHtml),
-      )
-      : [];
-    // If rendered inspection fails, retain only the independently parsed HTML
-    // candidates; an unscoped DOM retry could turn vendor links into publisher links.
-    const retainedRawCandidates = [
-      ...rawCandidates,
-    ];
-    const visibleTextLower = visibleText.toLowerCase();
+      return { html: `${regionHtml.slice(0, headChars)}\n${regionHtml.slice(-(maxChars - headChars))}`, frameProofs, frameProofWorkMs, diagnostic: diagnostics.result() };
+    };
+    // Freeze first-checkpoint facts with the existing incomplete-inspection
+    // rules. A failed/timed-out second read cannot turn them into absence.
+    const firstCheckpoint = projectCheckpoint(undefined);
+    retainCheckpoint(firstCheckpoint);
+    if (checkpointAborted || input.signal?.aborted || progress?.closed) {
+      releaseFrameCheckpoint();
+      throw new Error("Policy checkpoint capture is terminal");
+    }
+    const frameCheckpointRead = new Function("held",
+      `const __name = (fn) => fn; return (${readPolicyRegion.toString()})(${MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS}, (${createPrivacyChoiceDomDiagnostics.toString()})(held?.proof, "second"));`,
+    ) as (held: unknown) => ReturnType<typeof readPolicyRegion>;
+    const renderedPolicyRegion = domInspection && frameCheckpointHandle
+      ? await page.evaluate(frameCheckpointRead, frameCheckpointHandle)
+        .catch(() => { auxiliaryReadsComplete = false; return undefined; })
+      : undefined;
+    releaseFrameCheckpoint();
+    const { candidates, choiceInspection, inventoryComplete } = renderedPolicyRegion
+      ? projectCheckpoint(renderedPolicyRegion) : firstCheckpoint;
 
-    const candidates = dedupeCandidates([
-      ...renderedHtmlCandidates,
-      ...cmpConfigCandidates(didomiPolicyReference(didomiPublisherUrl, renderedBaseUrl), renderedBaseUrl),
-      ...retainedRawCandidates.flatMap((candidate, index): PolicySurfaceCandidate[] => {
-      if ("cmpVendor" in candidate && candidate.cmpVendor) return [];
-      const normalizedUrl = candidate.href ? normalizeUrl(candidate.href, renderedBaseUrl) : renderedBaseUrl;
-      const candidateLinkText = candidate.accessibleName || candidate.text;
-      const surroundingTextExcerpt = surroundingText(visibleText, candidateLinkText, visibleTextLower);
-      const deterministic = classifySurface({
-        linkText: candidateLinkText,
-        url: normalizedUrl,
-        surroundingText: surroundingTextExcerpt,
-      });
-      if (deterministic.surfaceType === "unknown" || deterministic.score <= 0.2 || !normalizedUrl) {
-        return [];
+    function projectCheckpoint(renderedPolicyRegion: ReturnType<typeof readPolicyRegion> | undefined) {
+      const rawCandidates = domInspection?.candidates ?? [];
+      const renderedPolicyRegionHtml = renderedPolicyRegion?.html ?? "";
+      nextStage("candidate classification");
+      const renderedHtmlCandidates = renderedPolicyRegionHtml
+        ? extractCandidates(
+          renderedBaseUrl,
+          renderedPolicyRegionHtml,
+          htmlToVisibleText(renderedPolicyRegionHtml),
+        )
+        : [];
+      // If rendered inspection fails, retain only the independently parsed HTML
+      // candidates; an unscoped DOM retry could turn vendor links into publisher links.
+      const retainedRawCandidates = [
+        ...rawCandidates,
+      ];
+      const visibleTextLower = visibleText.toLowerCase();
+
+      const candidates = dedupeCandidates([
+        ...renderedHtmlCandidates,
+        ...retainedRawCandidates.flatMap((candidate, index): PolicySurfaceCandidate[] => {
+        if ("cmpVendor" in candidate && candidate.cmpVendor) return [];
+        const normalizedUrl = candidate.href ? normalizeUrl(candidate.href, renderedBaseUrl) : renderedBaseUrl;
+        const candidateLinkText = candidate.accessibleName || candidate.text;
+        const surroundingTextExcerpt = surroundingText(visibleText, candidateLinkText, visibleTextLower);
+        const deterministic = classifySurface({
+          linkText: candidateLinkText,
+          url: normalizedUrl,
+          surroundingText: surroundingTextExcerpt,
+        });
+        if (deterministic.surfaceType === "unknown" || deterministic.score <= 0.2 || !normalizedUrl) {
+          return [];
+        }
+        if (isExternalUrlOnlyPolicyCandidate(
+          renderedBaseUrl,
+          normalizedUrl,
+          candidate.text,
+          deterministic.surfaceType,
+        )) {
+          return [];
+        }
+        if ("cmpProvider" in candidate && candidate.cmpProvider && isCmpProviderPolicy(normalizedUrl, renderedBaseUrl)) return [];
+        if (isExternalPoweredByAttributionLink(renderedBaseUrl, normalizedUrl, candidate.text)) {
+          return [];
+        }
+        const fetchable = Boolean(candidate.href) && isFetchablePolicyCandidateForPolicySurface({
+          baseUrl: renderedBaseUrl,
+          href: candidate.href ?? "",
+          normalizedUrl,
+          surfaceType: deterministic.surfaceType,
+          matchStrength: deterministic.matchStrength,
+          linkText: candidate.text,
+        });
+        if (!fetchable && !["california_notice", "notice_at_collection"].includes(deterministic.surfaceType) && !isPreferenceControlSurface(deterministic.surfaceType, candidate.text)) {
+          return [];
+        }
+        const observationOnly = !fetchable || isObservationOnlyPreferenceControl(deterministic.surfaceType, candidate.text);
+        return [{
+          candidateId: `policy_rendered_candidate_${index}`,
+          cmpDiscovery: "cmpProvider" in candidate && candidate.cmpProvider
+            ? [cmpPolicyProvenance("cmp_dom", candidate.cmpProvider, renderedBaseUrl, candidate.selector ?? "a")]
+            : undefined,
+          url: candidate.href ?? renderedBaseUrl,
+          normalizedUrl,
+          linkText: candidateLinkText || normalizedUrl,
+          ...(candidate.linkSourcePageUrl === renderedBaseUrl && page.url() === renderedBaseUrl ? {
+            linkVisibility: candidate.linkVisibility,
+            accessibleNameSource: candidate.accessibleNameSource,
+            linkSourcePageUrl: sanitizedSiteFacingUrl(candidate.linkSourcePageUrl),
+          } : {}),
+          selector: candidate.selector,
+          renderedSourcePageUrl: renderedBaseUrl,
+          surroundingTextExcerpt,
+          domLocation: candidate.domLocation,
+          sameOrigin: sameOrigin(renderedBaseUrl, normalizedUrl),
+          fetchable,
+          clickable: candidate.clickable,
+          mayLeadToConsentControls: isPreferenceControlSurface(deterministic.surfaceType, candidate.text),
+          observationOnly,
+          deterministicSurfaceType: deterministic.surfaceType,
+          deterministicScore: deterministic.score,
+          deterministicKeywordMatches: deterministic.keywords,
+          ...classifierCandidateFields(deterministic),
+          discoveryMethod: candidate.domLocation === "footer"
+            ? "footer_link"
+            : candidate.domLocation === "header" || candidate.domLocation === "nav"
+              ? "header_link"
+            : "page_text_link",
+        }];
+        }),
+      ]);
+      const frameProofsMatch = Boolean(domInspection && renderedPolicyRegion &&
+        JSON.stringify(domInspection.frameProofs) === JSON.stringify(renderedPolicyRegion.frameProofs));
+      const namedTopLevelChoiceCandidateCount = candidates.filter(candidate =>
+        ["do_not_sell_or_share", "your_privacy_choices"].includes(candidate.deterministicSurfaceType)).length;
+      const choiceCandidateEnumerationTruncated = Boolean(domInspection?.candidateEnumerationTruncated ||
+        namedTopLevelChoiceCandidateCount + (domInspection?.namedFrameChoiceCandidateCount ?? 0) > 1000);
+      // Named-control inventory needs a parsed, bound DOM. Unrelated pending
+      // images must not veto a completed inventory, nor may optional CMP config
+      // reads establish its completeness. Keep policy negative-search unchanged.
+      const inventoryComplete = domInspection?.bodyPresent && domInspection.documentReadyState !== "loading" && frameProofsMatch &&
+        !choiceCandidateEnumerationTruncated &&
+        domInspection.uninspectedFrameCount === 0 && domInspection.uninspectedShadowRootCount === 0 &&
+        domInspection.documentUrl === renderedBaseUrl && page.url() === renderedBaseUrl &&
+        textInspection?.documentUrl === domInspection.documentUrl && textInspection.timeOrigin === domInspection.timeOrigin &&
+        assessPolicyHomepageAccess({ ok: navigationResponse?.ok() ?? false,
+          status: navigationResponse?.status(), text: visibleText }) === "representative_page";
+      const supportedDocumentLanguage = Boolean(domInspection?.language && PRIVACY_EVIDENCE_LOCALE_REGISTRY.some(entry => entry.locale === domInspection.language.toLowerCase().split("-")[0]));
+      const documentStable = Boolean(domInspection && frameProofsMatch && domInspection.documentUrl === renderedBaseUrl && page.url() === renderedBaseUrl &&
+        textInspection?.documentUrl === domInspection.documentUrl && textInspection.timeOrigin === domInspection.timeOrigin);
+      const representativeDocument = assessPolicyHomepageAccess({ok: navigationResponse?.ok() ?? false, status: navigationResponse?.status(), text: visibleText}) === "representative_page";
+      const limitationKeys: Array<"document_loading"|"inventory_unavailable"|"document_not_representative"|"document_binding_unverified"|
+        "candidate_inventory_truncated"|"unnamed_controls"|"frame_inventory_incomplete"|"shadow_inventory_incomplete"|"unsupported_language"> = [];
+      if (!domInspection?.bodyPresent) limitationKeys.push("inventory_unavailable");
+      if (domInspection?.documentReadyState === "loading") limitationKeys.push("document_loading");
+      if (!representativeDocument) limitationKeys.push("document_not_representative");
+      if (!documentStable) limitationKeys.push("document_binding_unverified");
+      if (choiceCandidateEnumerationTruncated) limitationKeys.push("candidate_inventory_truncated");
+      if (domInspection?.unnamedControlCount) limitationKeys.push("unnamed_controls");
+      if (domInspection?.uninspectedFrameCount) limitationKeys.push("frame_inventory_incomplete");
+      if (domInspection?.uninspectedShadowRootCount) limitationKeys.push("shadow_inventory_incomplete");
+      if (!supportedDocumentLanguage) limitationKeys.push("unsupported_language");
+      // Reuse the current rendered DOM read. These are positive routes only;
+      // neither an empty list nor a visible link verifies a usable request flow.
+      const rightsMethods = rawCandidates.flatMap(candidate => {
+        if (candidate.cmpVendor || candidate.linkVisibility !== "visible" || !candidate.accessibleName ||
+            !candidate.accessibleNameSource || candidate.accessibleNameSource === "none" ||
+            candidate.linkSourcePageUrl !== renderedBaseUrl || !candidate.href ||
+            !classifyCaliforniaRightsMethod(candidate.accessibleName)) return [];
+        const destination = normalizeUrl(candidate.href, renderedBaseUrl);
+        if (!destination) return [];
+        try {
+          const parsed = new URL(destination);
+          if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) return [];
+          parsed.search = ""; parsed.hash = "";
+          return [{ label: candidate.accessibleName.slice(0, 200), destinationUrl: parsed.toString(),
+            accessibleNameSource: candidate.accessibleNameSource }];
+        } catch { return []; }
+      }).filter((row, index, rows) => rows.findIndex(other => other.destinationUrl === row.destinationUrl && other.label === row.label) === index).slice(0, 12);
+      const inspectionSourceHash = createHash("sha256").update(JSON.stringify({domInspection, textInspection, frameDiagnostics: renderedPolicyRegion?.diagnostic})).digest("hex");
+      const diagnostics = buildPrivacyChoiceDiagnostics(domInspection?.diagnostic, renderedPolicyRegion?.diagnostic, inspectionSourceHash);
+      const capturedChoiceInspection = domInspection ? privacyChoiceInspectionSchema.safeParse({
+        contractVersion: "certscore.privacy-choice-inspection.v5", homepageAccessPolicy: "representative_homepage.v1", documentUrl: renderedBaseUrl,
+        readinessPolicy: "document_bound_dom_inventory.v1", documentReadyState:domInspection.documentReadyState, limitationKeys,
+        capturedAt: new Date().toISOString(), sourceHash: inspectionSourceHash, ...(diagnostics ? {diagnostics} : {}),
+        scope: "rendered_named_links_and_buttons",
+        coverage: inventoryComplete && limitationKeys.length === 0 ? "complete" : "limited",
+        namedChoiceCandidateCount: Math.min(1000, namedTopLevelChoiceCandidateCount + domInspection.namedFrameChoiceCandidateCount),
+        unnamedControlCount: domInspection.unnamedControlCount, hiddenUnnamedControlCount: domInspection.hiddenUnnamedControlCount,
+        candidateEnumerationTruncated: choiceCandidateEnumerationTruncated,
+        uninspectedFrameCount: domInspection.uninspectedFrameCount, uninspectedShadowRootCount: domInspection.uninspectedShadowRootCount,
+        frameCount: domInspection.frameCount, inspectedSameOriginFrameCount: domInspection.inspectedSameOriginFrameCount,
+        hiddenUninspectedFrameCount: domInspection.hiddenUninspectedFrameCount,
+        inaccessibleFrameCount: domInspection.inaccessibleFrameCount, unreadyFrameCount: domInspection.unreadyFrameCount,
+        unprojectableFrameCount: domInspection.unprojectableFrameCount,
+        frameBudgetLimitedCount: domInspection.frameBudgetLimitedCount,
+        namedFrameChoiceCandidateCount: Math.min(1000, domInspection.namedFrameChoiceCandidateCount),
+        frameInspectionWorkMs: domInspection.frameInspectionWorkMs, frameProofWorkMs: renderedPolicyRegion?.frameProofWorkMs ?? 0,
+        supportedDocumentLanguage, representativeDocument, documentStable,
+        rightsMethods,
+      }) : null;
+      // Apply the approved new scope only while materializing this fresh visit.
+      // Historical v5 inspection packets are never upgraded by report projection.
+      const selfHidden = capturedChoiceInspection?.success
+        ? materializeSelfHiddenFrameInspection(capturedChoiceInspection.data) : undefined;
+      const choiceInspection = selfHidden ? privacyChoiceInspectionSchema.safeParse(selfHidden) : capturedChoiceInspection;
+      return { candidates, choiceInspection, inventoryComplete };
+    }
+    function retainCheckpoint(checkpoint: ReturnType<typeof projectCheckpoint>) {
+      if (progress && !progress.closed && !input.signal?.aborted) {
+        progress.candidates = dedupeCandidates([...checkpoint.candidates, ...progress.candidates]);
+        if (checkpoint.choiceInspection?.success) progress.privacyChoiceInspection = structuredClone(checkpoint.choiceInspection.data);
       }
-      if (isExternalUrlOnlyPolicyCandidate(
-        renderedBaseUrl,
-        normalizedUrl,
-        candidate.text,
-        deterministic.surfaceType,
-      )) {
-        return [];
-      }
-      if ("cmpProvider" in candidate && candidate.cmpProvider && isCmpProviderPolicy(normalizedUrl, renderedBaseUrl)) return [];
-      if (isExternalPoweredByAttributionLink(renderedBaseUrl, normalizedUrl, candidate.text)) {
-        return [];
-      }
-      const fetchable = Boolean(candidate.href) && isFetchablePolicyCandidateForPolicySurface({
-        baseUrl: renderedBaseUrl,
-        href: candidate.href ?? "",
-        normalizedUrl,
-        surfaceType: deterministic.surfaceType,
-        matchStrength: deterministic.matchStrength,
-        linkText: candidate.text,
-      });
-      if (!fetchable && !["california_notice", "notice_at_collection"].includes(deterministic.surfaceType) && !isPreferenceControlSurface(deterministic.surfaceType, candidate.text)) {
-        return [];
-      }
-      const observationOnly = !fetchable || isObservationOnlyPreferenceControl(deterministic.surfaceType, candidate.text);
-      return [{
-        candidateId: `policy_rendered_candidate_${index}`,
-        cmpDiscovery: "cmpProvider" in candidate && candidate.cmpProvider
-          ? [cmpPolicyProvenance("cmp_dom", candidate.cmpProvider, renderedBaseUrl, candidate.selector ?? "a")]
-          : undefined,
-        url: candidate.href ?? renderedBaseUrl,
-        normalizedUrl,
-        linkText: candidateLinkText || normalizedUrl,
-        ...(candidate.linkSourcePageUrl === renderedBaseUrl && page.url() === renderedBaseUrl ? {
-          linkVisibility: candidate.linkVisibility,
-          accessibleNameSource: candidate.accessibleNameSource,
-          linkSourcePageUrl: sanitizedSiteFacingUrl(candidate.linkSourcePageUrl),
-        } : {}),
-        selector: candidate.selector,
-        renderedSourcePageUrl: renderedBaseUrl,
-        surroundingTextExcerpt,
-        domLocation: candidate.domLocation,
-        sameOrigin: sameOrigin(renderedBaseUrl, normalizedUrl),
-        fetchable,
-        clickable: candidate.clickable,
-        mayLeadToConsentControls: isPreferenceControlSurface(deterministic.surfaceType, candidate.text),
-        observationOnly,
-        deterministicSurfaceType: deterministic.surfaceType,
-        deterministicScore: deterministic.score,
-        deterministicKeywordMatches: deterministic.keywords,
-        ...classifierCandidateFields(deterministic),
-        discoveryMethod: candidate.domLocation === "footer"
-          ? "footer_link"
-          : candidate.domLocation === "header" || candidate.domLocation === "nav"
-            ? "header_link"
-          : "page_text_link",
-      }];
-      }),
-    ]);
-    const frameProofsMatch = Boolean(domInspection && renderedPolicyRegion &&
-      JSON.stringify(domInspection.frameProofs) === JSON.stringify(renderedPolicyRegion.frameProofs));
-    const namedTopLevelChoiceCandidateCount = candidates.filter(candidate =>
-      ["do_not_sell_or_share", "your_privacy_choices"].includes(candidate.deterministicSurfaceType)).length;
-    const choiceCandidateEnumerationTruncated = Boolean(domInspection?.candidateEnumerationTruncated ||
-      namedTopLevelChoiceCandidateCount + (domInspection?.namedFrameChoiceCandidateCount ?? 0) > 1000);
-    // Named-control inventory needs a parsed, bound DOM. Unrelated pending
-    // images must not veto a completed inventory, nor may optional CMP config
-    // reads establish its completeness. Keep policy negative-search unchanged.
-    const inventoryComplete = domInspection?.bodyPresent && domInspection.documentReadyState !== "loading" && frameProofsMatch &&
-      !choiceCandidateEnumerationTruncated &&
-      domInspection.uninspectedFrameCount === 0 && domInspection.uninspectedShadowRootCount === 0 &&
-      domInspection.documentUrl === renderedBaseUrl && page.url() === renderedBaseUrl &&
-      textInspection?.documentUrl === domInspection.documentUrl && textInspection.timeOrigin === domInspection.timeOrigin &&
-      assessPolicyHomepageAccess({ ok: navigationResponse?.ok() ?? false,
-        status: navigationResponse?.status(), text: visibleText }) === "representative_page";
+    }
+    retainCheckpoint({candidates, choiceInspection, inventoryComplete});
+    if (checkpointAborted || input.signal?.aborted || progress?.closed) {
+      throw new Error("Policy checkpoint capture is terminal");
+    }
+    // Explicit local passive diagnostic entry only: stop before optional SDK
+    // reads. Ordinary policy discovery and all absence decisions are unchanged.
+    if (diagnosticOnly) return { candidates: [], deadlineReached: false,
+      privacyChoiceInspection: choiceInspection?.success ? choiceInspection.data : undefined };
+    nextStage("optional CMP policy reference");
+    const didomiPublisherUrl = await page.evaluate(readDidomiPublisherPolicy, undefined).catch(() => { auxiliaryReadsComplete = false; return undefined; });
     const inspectionComplete = auxiliaryReadsComplete && domInspection?.documentReady && inventoryComplete;
-    const supportedDocumentLanguage = Boolean(domInspection?.language && PRIVACY_EVIDENCE_LOCALE_REGISTRY.some(entry => entry.locale === domInspection.language.toLowerCase().split("-")[0]));
-    const documentStable = Boolean(domInspection && frameProofsMatch && domInspection.documentUrl === renderedBaseUrl && page.url() === renderedBaseUrl &&
-      textInspection?.documentUrl === domInspection.documentUrl && textInspection.timeOrigin === domInspection.timeOrigin);
-    const representativeDocument = assessPolicyHomepageAccess({ok: navigationResponse?.ok() ?? false, status: navigationResponse?.status(), text: visibleText}) === "representative_page";
-    const limitationKeys: Array<"document_loading"|"inventory_unavailable"|"document_not_representative"|"document_binding_unverified"|
-      "candidate_inventory_truncated"|"unnamed_controls"|"frame_inventory_incomplete"|"shadow_inventory_incomplete"|"unsupported_language"> = [];
-    if (!domInspection?.bodyPresent) limitationKeys.push("inventory_unavailable");
-    if (domInspection?.documentReadyState === "loading") limitationKeys.push("document_loading");
-    if (!representativeDocument) limitationKeys.push("document_not_representative");
-    if (!documentStable) limitationKeys.push("document_binding_unverified");
-    if (choiceCandidateEnumerationTruncated) limitationKeys.push("candidate_inventory_truncated");
-    if (domInspection?.unnamedControlCount) limitationKeys.push("unnamed_controls");
-    if (domInspection?.uninspectedFrameCount) limitationKeys.push("frame_inventory_incomplete");
-    if (domInspection?.uninspectedShadowRootCount) limitationKeys.push("shadow_inventory_incomplete");
-    if (!supportedDocumentLanguage) limitationKeys.push("unsupported_language");
-    // Reuse the current rendered DOM read. These are positive routes only;
-    // neither an empty list nor a visible link verifies a usable request flow.
-    const rightsMethods = rawCandidates.flatMap(candidate => {
-      if (candidate.cmpVendor || candidate.linkVisibility !== "visible" || !candidate.accessibleName ||
-          !candidate.accessibleNameSource || candidate.accessibleNameSource === "none" ||
-          candidate.linkSourcePageUrl !== renderedBaseUrl || !candidate.href ||
-          !classifyCaliforniaRightsMethod(candidate.accessibleName)) return [];
-      const destination = normalizeUrl(candidate.href, renderedBaseUrl);
-      if (!destination) return [];
-      try {
-        const parsed = new URL(destination);
-        if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) return [];
-        parsed.search = ""; parsed.hash = "";
-        return [{ label: candidate.accessibleName.slice(0, 200), destinationUrl: parsed.toString(),
-          accessibleNameSource: candidate.accessibleNameSource }];
-      } catch { return []; }
-    }).filter((row, index, rows) => rows.findIndex(other => other.destinationUrl === row.destinationUrl && other.label === row.label) === index).slice(0, 12);
-    const choiceInspection = domInspection ? privacyChoiceInspectionSchema.safeParse({
-      contractVersion: "certscore.privacy-choice-inspection.v5", homepageAccessPolicy: "representative_homepage.v1", documentUrl: renderedBaseUrl,
-      readinessPolicy: "document_bound_dom_inventory.v1", documentReadyState:domInspection.documentReadyState, limitationKeys,
-      capturedAt: new Date().toISOString(), sourceHash: createHash("sha256").update(JSON.stringify({domInspection, textInspection})).digest("hex"),
-      scope: "rendered_named_links_and_buttons",
-      coverage: inventoryComplete && limitationKeys.length === 0 ? "complete" : "limited",
-      namedChoiceCandidateCount: Math.min(1000, namedTopLevelChoiceCandidateCount + domInspection.namedFrameChoiceCandidateCount),
-      unnamedControlCount: domInspection.unnamedControlCount, hiddenUnnamedControlCount: domInspection.hiddenUnnamedControlCount,
-      candidateEnumerationTruncated: choiceCandidateEnumerationTruncated,
-      uninspectedFrameCount: domInspection.uninspectedFrameCount, uninspectedShadowRootCount: domInspection.uninspectedShadowRootCount,
-      frameCount: domInspection.frameCount, inspectedSameOriginFrameCount: domInspection.inspectedSameOriginFrameCount,
-      hiddenUninspectedFrameCount: domInspection.hiddenUninspectedFrameCount,
-      inaccessibleFrameCount: domInspection.inaccessibleFrameCount, unreadyFrameCount: domInspection.unreadyFrameCount,
-      unprojectableFrameCount: domInspection.unprojectableFrameCount,
-      frameBudgetLimitedCount: domInspection.frameBudgetLimitedCount,
-      namedFrameChoiceCandidateCount: Math.min(1000, domInspection.namedFrameChoiceCandidateCount),
-      frameInspectionWorkMs: domInspection.frameInspectionWorkMs, frameProofWorkMs: renderedPolicyRegion?.frameProofWorkMs ?? 0,
-      supportedDocumentLanguage, representativeDocument, documentStable,
-      rightsMethods,
-    }) : null;
-    return { candidates: dedupeCandidates([...candidates, ...(progress?.candidates ?? [])]), deadlineReached: false,
+    return { candidates: dedupeCandidates([
+        ...cmpConfigCandidates(didomiPolicyReference(didomiPublisherUrl, renderedBaseUrl), renderedBaseUrl),
+        ...candidates, ...(progress?.candidates ?? []),
+      ]), deadlineReached: false,
       ...(choiceInspection?.success ? { privacyChoiceInspection: choiceInspection.data } : {}),
       ...(inspectionComplete ? { inspection: { documentUrl: renderedBaseUrl,
         sourceHash: createHash("sha256").update(JSON.stringify({ domInspection, textInspection })).digest("hex") } } : {}) };
   } catch {
-    return { candidates: progress?.candidates ?? [], deadlineReached: false };
+    return { candidates: progress?.candidates ?? [], privacyChoiceInspection: progress?.privacyChoiceInspection, deadlineReached: false };
   } finally {
+    if (progress) progress.cancelCapture = undefined;
+    input.signal?.removeEventListener("abort", abortCheckpoint);
+    releaseFrameCheckpoint();
     nextStage("cleanup");
     releaseAbortContext?.();
     await context?.close().catch(() => undefined);
@@ -5216,6 +5358,15 @@ function bindAbortSignalToBrowserContext(
   return () => signal.removeEventListener("abort", closeContext);
 }
 
+interface RenderedPolicyDiscoveryProgress {
+  cancelCapture?: () => void;
+  stage: string;
+  startedAtMs: number;
+  candidates: PolicySurfaceCandidate[];
+  privacyChoiceInspection?: PrivacyChoiceInspection;
+  closed: boolean;
+}
+
 interface RenderedPolicyDiscoveryResult {
   privacyChoiceInspection?: PrivacyChoiceInspection;
   inspection?: { documentUrl: string; sourceHash: string };
@@ -5223,17 +5374,34 @@ interface RenderedPolicyDiscoveryResult {
   deadlineReached: boolean;
 }
 
+/** Local diagnostic reuse of the existing bounded rendered visit. No policy
+ * retrieval, model assist, optional CMP SDK read or retry is dispatched here.
+ * The caller owns target authorization, one-shot claims and browser teardown. */
+export async function capturePassivePrivacyChoiceDiagnostic(input: PolicySurfaceScannerInput): Promise<RenderedPolicyDiscoveryResult> {
+  const started = Date.now();
+  const budget = Math.min(POLICY_FAST_RENDERED_DISCOVERY_TIMEOUT_MS, input.internalBudgetMs,
+    (input.absoluteDeadlineAtMs ?? started + POLICY_FAST_RENDERED_DISCOVERY_TIMEOUT_MS) - started);
+  if (budget <= 0 || input.signal?.aborted) return { candidates: [], deadlineReached: true };
+  const runtime = createPolicyBrowserRuntime(input.browser);
+  try {
+    return await extractRenderedCandidatesBeforeSoftDeadline({ ...input, discoveryMode: "fast",
+      enableNanoPolicyAssist: false, internalBudgetMs: budget, absoluteDeadlineAtMs: started + budget },
+      started, runtime, undefined, true);
+  } finally { if (!input.browser) await boundedCleanup(runtime.close()); }
+}
+
 async function extractRenderedCandidatesBeforeSoftDeadline(
   input: PolicySurfaceScannerInput,
   moduleStartedAtMs: number,
   browserRuntime: PolicyBrowserRuntime,
   timingBreakdown?: ScanModuleRun["timingBreakdown"],
+  diagnosticOnly = false,
 ): Promise<RenderedPolicyDiscoveryResult> {
   // Freeze operational subtimings at the same terminal barrier. A browser
   // command finishing after the soft deadline must not mutate the returned run.
   const renderedTimings: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
-  const progress = { stage: "browser launch", startedAtMs: Date.now(), candidates: [] as PolicySurfaceCandidate[] };
-  const discoveryPromise = extractRenderedCandidates(input, moduleStartedAtMs, browserRuntime, renderedTimings, progress);
+  const progress: RenderedPolicyDiscoveryProgress = { stage: "browser launch", startedAtMs: Date.now(), candidates: [], closed: false };
+  const discoveryPromise = extractRenderedCandidates(input, moduleStartedAtMs, browserRuntime, renderedTimings, progress, diagnosticOnly);
   void discoveryPromise.catch(() => undefined);
   const remainingBudgetMs = Math.max(1, input.internalBudgetMs - (Date.now() - moduleStartedAtMs));
   const deadlineMs = input.discoveryMode === "fast"
@@ -5244,8 +5412,12 @@ async function extractRenderedCandidatesBeforeSoftDeadline(
   const deadlinePromise = new Promise<RenderedPolicyDiscoveryResult>((resolve) => {
     deadlineTimer = setTimeout(() => {
       deadlineReached = true;
+      progress.closed = true;
+      progress.cancelCapture?.();
+      const retained = structuredClone({ candidates: progress.candidates,
+        privacyChoiceInspection: progress.privacyChoiceInspection, deadlineReached: true });
       void browserRuntime.close();
-      resolve({ candidates: progress.candidates, deadlineReached: true });
+      resolve(retained);
     }, deadlineMs);
   });
 
@@ -5255,6 +5427,7 @@ async function extractRenderedCandidatesBeforeSoftDeadline(
       deadlinePromise,
     ]);
   } finally {
+    progress.closed = true;
     if (deadlineTimer) clearTimeout(deadlineTimer);
     timingBreakdown?.push(...renderedTimings);
     if (deadlineReached) timingBreakdown?.push({ label: `rendered discovery: ${progress.stage}`,

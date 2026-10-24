@@ -39,7 +39,7 @@ export {
 
 export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-22-protocol-hardening-v14";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-23-passive-cmp-v15";
 export const C3_COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-23-v5";
 export const COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-21-v4";
 
@@ -217,6 +217,23 @@ interface VendorRule {
 }
 
 const rules: VendorRule[] = [
+  {
+    identity: { entityId: "ent_f07f8f00fa6e", vendorId: "ven_53f95742c9b0", serviceId: "svc_bed917fc6707" },
+    entity: "Ensighten, Inc.", vendor: "Ensighten Privacy", product: "Ensighten Privacy CMP",
+    purpose: "consent_management", servicePurpose: "Consent management", regulatoryRelevance: ["consent_management"], confidence: 0.95,
+    domSelectorPatterns: [/^#(?:ensNotifyBanner|ensModalWrapper|tcf2__ensNotifyBanner|tcf2__ensModalWrapper)$/],
+    basisLabel: "ensighten_privacy_exact_consent_dom",
+    review: { reviewedAt: "2026-10-23", reviewer: "CertScore.ai source review", sourceUrls: ["https://vw-tam.lighthouselabs.eu/vwd6/gb_one/Bootstrap.js", "https://academy.ensighten.com/hc/en-us/articles/22832165668241-Enforce-Training-Course-Overview"] },
+  },
+  {
+    identity: { entityId: "ent_64629d0bbf6a", vendorId: "ven_870b849b8bc1", serviceId: "svc_821fe51ee47c" },
+    entity: "CCM19", vendor: "CCM19", product: "CCM19 Cookie Consent Manager",
+    purpose: "consent_management", servicePurpose: "Consent management", regulatoryRelevance: ["consent_management"], confidence: 0.95,
+    domSelectorPatterns: [/^(?:\.ccm-root|#ccm-widget)$/],
+    urlPatterns: [/^https:\/\/www\.fc-moto\.com\/rp\/cb\/app\.js(?:\?[^#]*)?$/],
+    basisLabel: "ccm19_reviewed_dom_or_fc_moto_loader",
+    review: { reviewedAt: "2026-10-23", reviewer: "CertScore.ai source review", sourceUrls: ["https://www.fc-moto.com/rp/cb/app.js", "https://www.ccm19.de/en/knowledge/api"] },
+  },
   {
     identity: {"entityId":"ent_ee650e0c5153","vendorId":"ven_bb30cbe2f9b8","serviceId":"svc_c547ec15fa52"},
     entity: "Heap Inc.", vendor: "Heap", product: "Heap Analytics",

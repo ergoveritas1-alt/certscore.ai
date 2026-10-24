@@ -2720,21 +2720,20 @@ test("policySurfaceScanner fast mode keeps rendered discovery when static links 
   });
 });
 
-test("policySurfaceScanner fast mode retains warmed static policy evidence after rendered discovery consumes the soft budget", async () => {
+test("policySurfaceScanner fast mode retains fetched static policy evidence without speculative analysis after the soft budget", async () => {
   await withPolicyScan("policy-footer-privacy", async ({ result }) => {
     const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
     const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
 
     assert.equal(labels.includes("static policy fetch warmup"), true);
-    assert.equal(labels.includes("static policy analysis warmup"), true);
+    assert.equal(labels.includes("static policy analysis warmup"), false);
     assert.equal(labels.includes("rendered discovery"), true);
     assert.equal(labels.some((label) => label.startsWith("policy prefetched text resolution")), true);
     assert.equal(labels.some((label) => label.startsWith("policy text resolution")), false);
     assert.equal(labels.some((label) => label.startsWith("policy url-stub follow")), false);
     assert.equal(privacy?.status, "fetched");
-    const diagnostics = await readPolicyCaptureDiagnostics(result);
-    assert.ok(diagnostics.deterministicAnalysisCacheHits >= 2,
-      "the selected late-budget policy must reuse content-bound sections and facts prepared during discovery");
+    assert.ok((privacy?.article13DisclosureSignals?.length ?? 0) > 0,
+      "selected-document analysis must preserve factual disclosures even when speculative preparation is discarded");
   }, {
     discoveryMode: "fast",
     enableNanoPolicyAssist: true,

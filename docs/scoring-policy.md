@@ -276,3 +276,17 @@ adds eligible, source-bound advertising/identity collection recipients to the sa
 choice-enforcement union as GPC and explicit opt-out. The existing 47-point shared
 cap and separate GPP family remain unchanged; EU presence scoring is independent.
 Historical requests without the required capture facts remain neutral.
+
+## California disclosure and required-link scoring — October 23, 2026
+
+The [versioned disclosure/choice policy](certscore-v2/california-disclosure-choice-scoring-policy-2026-10-23.md)
+sets a smaller effect for a sole proven non-discrimination omission and a conditional
+effect for a required opt-out link gap after permitted-alternative assessment.
+Only explicitly marked new captures opt in; historical scoring and all collection
+schedules remain unchanged. Local implementation only; no deployment or flag changes.
+
+The [runtime-corroborated link basis](certscore-v2/california-runtime-link-scoring-policy-2026-10-23.md)
+adds a new marked-capture version that can support the same once-per-scan link
+effect alongside independently eligible qualified GPC collection. It preserves
+the earlier declaration basis, rights amounts and historical scoring. Deployment
+preparation does not authorize promotion, flag changes or live scans.

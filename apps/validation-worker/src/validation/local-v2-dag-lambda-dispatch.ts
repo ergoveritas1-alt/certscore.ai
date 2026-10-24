@@ -1,10 +1,9 @@
 import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import {
   GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
-  SALE_SHARING_OPT_OUT_POLICY,
+  PRESENCE_ONLY_CAPTURE_PROFILE,
   buildPostActionObservationDispatchConfigs,
   readPersistedRuntimeGraphDispatch,
-  saleSharingOptOutDispatchSchema,
 } from "@certscore/contracts";
 import { query, withWriteTransaction, homepageMayStartAlongsideFullSite } from "@website-signal-risk-scanner/db";
 import { isFreshPriorScanAccelerationSource } from "@website-signal-risk-scanner/shared";
@@ -119,19 +118,6 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
     scanId: input.scanId,
     targetUrl,
   });
-  const parsedTarget = new URL(targetUrl);
-  const saleSharingOptOut = intent.orchestrationMode === "sharded" &&
-    intent.saleSharingOptOutEnabled === true &&
-    intent.saleSharingOptOutRolloutMode === "all_eligible" &&
-    parsedTarget.protocol === "https:" && !parsedTarget.port &&
-    parsedTarget.hostname.toLowerCase() === requiredString(input.scanConfig.hostname, "hostname").toLowerCase()
-      ? saleSharingOptOutDispatchSchema.parse({
-          policyVersion: SALE_SHARING_OPT_OUT_POLICY,
-          enabled: true,
-          scanId: input.scanId,
-          exactTargetUrl: targetUrl,
-        })
-      : undefined;
   const gpcObservation = intent.orchestrationMode === "sharded"
     ? {
         contractVersion: GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
@@ -166,7 +152,8 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
     processor: PROCESSOR,
     ...(seeds.length > 0 ? { policySurfaceSeeds: seeds } : {}),
     ...postActionObservation,
-    ...(saleSharingOptOut ? { saleSharingOptOut } : {}),
+    saleSharingOptOut: undefined,
+    ...(intent.orchestrationMode === "sharded" ? {privacyCaptureProfile:PRESENCE_ONLY_CAPTURE_PROFILE} : {}),
     ...(gpcObservation ? { gpcObservation } : {}),
     ...(runtimeGraph ? { runtimeGraph } : {}),
     productionFindingIntegration: false as const,

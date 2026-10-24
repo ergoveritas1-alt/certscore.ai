@@ -28,15 +28,24 @@ function mergeVisibleLinkProof(
   preferred: PolicySurfaceObservation,
   other: PolicySurfaceObservation | undefined,
 ): PolicySurfaceObservation {
-  if (preferred.linkVisibility === "visible" || other?.linkVisibility !== "visible" ||
-      other.linkObservationState !== "observed" || other.directlyLinkedFromScannedPage !== true) return preferred;
+  const hasVisibleControlProof = (row: PolicySurfaceObservation | undefined) =>
+    row?.linkVisibility === "visible" && row.clickable === true &&
+    row.linkObservationState === "observed" && row.directlyLinkedFromScannedPage === true &&
+    Boolean(row.linkSourcePageUrl && row.accessibleNameSource && row.accessibleNameSource !== "none");
+  if (!other || hasVisibleControlProof(preferred) || !hasVisibleControlProof(other)) return preferred;
+  // A label and its locator are one observation. Keeping an older ancestor's
+  // selector while copying a child's visible name produces a false binding.
   return {
     ...preferred,
     linkVisibility: "visible",
     accessibleNameSource: other.accessibleNameSource,
     linkSourcePageUrl: other.linkSourcePageUrl,
+    selector: other.selector,
+    clickable: other.clickable,
+    mayLeadToConsentControls: other.mayLeadToConsentControls,
     classifierProvenance: other.classifierProvenance,
     classifierReasonCodes: other.classifierReasonCodes,
+    matchedLocale: other.matchedLocale,
     linkText: other.linkText,
     linkObservationState: other.linkObservationState,
     directlyLinkedFromScannedPage: true,

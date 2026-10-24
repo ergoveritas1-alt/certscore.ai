@@ -1,3 +1,4 @@
+import {CALIFORNIA_RUNTIME_LINK_POLICY} from "@certscore/contracts";
 import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
 import { collectionRecipientPriorities } from "./collection-recipient-retention.js";
 import type { LocalGpcAdaptiveParticipant } from "./local-gpc-adaptive.js";
@@ -1395,6 +1396,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     negativeSearchEvidence: policySurfaceResult?.negativeSearchEvidence,
     privacyChoiceInspection: policySurfaceResult?.privacyChoiceInspection,
     californiaReviewPolicy: "california-privacy-review.v10",
+    californiaDisclosureChoicePolicy: CALIFORNIA_RUNTIME_LINK_POLICY,
     modulesRun: boundedModulesRun,
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
   });

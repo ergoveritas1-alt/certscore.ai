@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 import {buildCanonicalGpcResponseProjection} from "./gpc-response-projection";
 import { californiaPrivacyReviewFindingIds, californiaPrivacyReviewCopy } from "@certscore/contracts";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
@@ -8,11 +9,17 @@ export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDi
   const eligible = findings.filter(finding => finding.presentationDecision.status === "surface" && finding.surfacingDecision?.reportable &&
     finding.concernContext?.promotionEligibilities.includes("eligible") &&
     finding.concernContext?.externalSurfacingEligibilities.includes("eligible"));
+  const gpc=buildCanonicalGpcResponseProjection(eligible);
+  const gpcObservation=gpc?.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? gpc.assessment.observation : undefined;
   const result: Omit<SitePriorityFinding, "pages" | "rank">[] = [];
   for (const finding of eligible) {
     if (finding.details?.family !== "california_privacy_review" || !californiaPrivacyReviewFindingIds(finding.details.projection).includes(finding.unifiedFindingId)) continue;
     const projection = finding.details.projection;
     const copy = californiaPrivacyReviewCopy(finding.unifiedFindingId, projection);
+    const documentUrlSha256=createHash("sha256").update(projection.documentUrl).digest("hex");
+    const reject=eligible.flatMap(row=>row.unifiedFindingId === "california_post_reject_collection" && row.details?.family === "california_post_reject" ? [row.details.assessment] : [])
+      .find(a=>a.scanId===projection.scanId && a.targetSha256===documentUrlSha256 && a.status==="qualified_collection" &&
+        a.scope==="cookie_tracking_rejection" && a.sourcePacketSha256 && a.recipientIds.length>0);
     result.push({ id: finding.unifiedFindingId, title: copy.title, summary: copy.description,
       status: "Partial concern", evidence: [
         ...((projection.contractVersion === "certscore.california-privacy-review.v5" || projection.contractVersion === "certscore.california-privacy-review.v6" || (projection.contractVersion === "certscore.california-privacy-review.v7" || (projection.contractVersion === "certscore.california-privacy-review.v8" || (projection.contractVersion === "certscore.california-privacy-review.v9" || projection.contractVersion === "certscore.california-privacy-review.v10")))) && projection.rightsAssessment ? [
@@ -26,17 +33,27 @@ export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDi
         ...projection.controls.map(row => `${row.label}: ${row.destinationStatus}${row.httpStatus ? ` ${row.httpStatus}` : ""}`),
         ...(projection.optOutObservation?.evidence.requests ?? []).map(row => `${row.vendor} (${row.hostname}): HTTP ${row.httpStatus}, ${row.msAfterConfirmation} ms after recorded opt-out`),
       ],
-      evidenceJson: { findingId: finding.unifiedFindingId, californiaPrivacyReview: projection },
+      evidenceJson: { findingId: finding.unifiedFindingId, californiaPrivacyReview: projection,
+        ...(finding.unifiedFindingId === "california_privacy_choice_not_observed" ? {californiaPriorityBinding: {
+          version: "california_priority_binding.v1", scanId: projection.scanId, documentUrl: projection.documentUrl,
+          documentUrlSha256, sourceHash: projection.sourceHash,
+          ...(reject?{qualifiedPostReject:{sourcePacketSha256:reject.sourcePacketSha256,recipientIds:reject.recipientIds}}:{}),
+        }} : {}),
+      },
       correctionSteps: [copy.action] });
   }
   for(const finding of eligible) {
     if(finding.details?.family!=="california_collection_review")continue;
     result.push({id:finding.unifiedFindingId,title:finding.title,summary:finding.summary,status:"Partial concern",
       evidence:finding.details.assessments.flatMap(a=>a.rows.filter(r=>r.treatment==="potential_risk").map(r=>`${r.entity}: +${r.msFromAnchor} ms ${a.path==="gpc"?"from GPC visit start":"after Reject click"}; ${r.purpose} collection; sale/sharing purpose unresolved`)),
-      evidenceJson:{findingId:finding.unifiedFindingId,assessments:finding.details.assessments},
+      evidenceJson:{findingId:finding.unifiedFindingId,assessments:finding.details.assessments,
+        ...(gpcObservation?.scanId && gpcObservation.sourceSha256 && gpcObservation.sessionSha256 && gpcObservation.documentUrlSha256 ? {gpcPriorityBinding: {
+          version:"california_gpc_priority_binding.v1",scanId:gpcObservation.scanId,sourceSha256:gpcObservation.sourceSha256,
+          sessionSha256:gpcObservation.sessionSha256,documentUrlSha256:gpcObservation.documentUrlSha256,
+        }} : {}),
+      },
       correctionSteps:["Review effective recipient settings, processing arrangements and privacy-choice enforcement."]});
   }
-  const gpc=buildCanonicalGpcResponseProjection(eligible);
   if (gpc && gpc.californiaDeductionPoints > 0) result.push({id:"gpc_response",
     title:"GPC choice-enforcement risk observed",summary:gpc.summary,status:"Partial concern",
     evidence:gpc.observedFacts.map(row=>`${row.label}: ${row.value}`),

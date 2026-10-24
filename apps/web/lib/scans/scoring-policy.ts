@@ -91,3 +91,14 @@ export const CALIFORNIA_SCORING_RULES = [...CALIFORNIA_SCORING_RULES_V4_V7.filte
   {findingId:"california_sale_sharing_opt_out_activity",policyKey:"california.opt_out_collection",points:CALIFORNIA_OPT_OUT_COLLECTION_POINTS,
     label:"Verified advertising collection after a sale/sharing opt-out"},
 ] as const;
+
+/** Explicitly marked new captures only; all preceding registries stay frozen. */
+export const CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION = "california-regulatory-posture.v18-disclosure-choice" as const;
+export const CALIFORNIA_RUNTIME_LINK_SCORE_VERSION = "california-regulatory-posture.v19-runtime-link" as const;
+export const CALIFORNIA_NON_DISCRIMINATION_ONLY_POINTS = 3;
+export const CALIFORNIA_DISCLOSURE_CHOICE_SCORING_RULES = [
+  ...CALIFORNIA_SCORING_RULES.map(rule => ({...rule, ...(rule.findingId === "california_rights_disclosure_not_observed"
+    ? {nonDiscriminationOnlyPoints: CALIFORNIA_NON_DISCRIMINATION_ONLY_POINTS} : {})})),
+  {findingId:"california_privacy_choice_not_observed",policyKey:"california.required_choice_link_not_observed",points:6,
+    label:"Required sale/sharing opt-out link not found after permitted-alternative assessment"},
+] as const;

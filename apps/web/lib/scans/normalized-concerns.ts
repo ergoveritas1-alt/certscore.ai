@@ -1,3 +1,4 @@
+import { readSaleSharingLinkPresence, PRIVACY_CHOICE_PRESENCE_SIGNAL, PRIVACY_CHOICE_PRESENCE_TITLE } from "@certscore/contracts";
 import {retainedPotentialRisk, CA_POTENTIAL_RISK_FINDING} from "./california-potential-risk-policy";
 import { gpcVendorFindingSummary } from "./choice-vendor-findings";
 import {retainedCaliforniaPostReject} from "./california-post-reject-policy";
@@ -1873,6 +1874,7 @@ function deriveEvidenceStrengthFlags(input: {
 import type { ScanDomainContext } from "./scan-domain-context";
 
 function buildConcernFromSharedInput(input: {
+  californiaRuntimeGpcAssessment?: unknown;
   consentControlAssessment?: unknown;
   categoryId?: string;
   description: string;
@@ -1945,6 +1947,7 @@ function buildConcernFromSharedInput(input: {
     rawEvidence: policyRawEvidence
   });
   const eligibility = deriveConcernPolicy({
+    californiaRuntimeGpcAssessment: input.californiaRuntimeGpcAssessment,
     consentControlAssessment: input.consentControlAssessment,
     concern: {
       canonicalConcernKey,
@@ -4623,6 +4626,19 @@ function buildFormDestinationConcerns(runtimeArtifacts: Record<string, unknown> 
   })];
 }
 
+function buildPrivacyChoicePresenceConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const assessment = runtimeArtifacts?.consentControlAssessment;
+  const presence = readSaleSharingLinkPresence(assessment);
+  if (!presence) return [];
+  const description = `Observed: ${presence.links.map(link => `“${link.label}”`).join("; ")}.`;
+  return [buildConcernFromSharedInput({categoryId:"privacy",originType:"runtime_artifact",originKey:PRIVACY_CHOICE_PRESENCE_SIGNAL,
+    title:PRIVACY_CHOICE_PRESENCE_TITLE,description,observedValue:description,severity:"low",sourceType:"signal",
+    signalSource:"runtime_artifact_signal",signalKey:PRIVACY_CHOICE_PRESENCE_SIGNAL,signalLabel:PRIVACY_CHOICE_PRESENCE_TITLE,
+    evidence:[presence.review.documentUrl],rawEvidence:{consentControlAssessment:assessment,
+      unifiedFindingId:"targeted_advertising_choices_present",pageUrl:presence.review.documentUrl,
+      runtimeEvidenceArtifacts:presence.links.map(link=>link.evidenceRef)}})];
+}
+
 function buildCaliforniaPrivacyReviewConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   const assessment = runtimeArtifacts?.consentControlAssessment;
   const projection = readCaliforniaPrivacyReviewFromConsent(assessment);
@@ -4630,6 +4646,7 @@ function buildCaliforniaPrivacyReviewConcerns(runtimeArtifacts: Record<string, u
   return californiaPrivacyReviewFindingIds(projection).map(id => {
     const copy = californiaPrivacyReviewCopy(id, projection);
     return buildConcernFromSharedInput({categoryId: "privacy", originType: "runtime_artifact", originKey: `${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${id}`,
+      californiaRuntimeGpcAssessment:runtimeArtifacts?.gpcResponseAssessment ?? runtimeArtifacts?.gpc_response_assessment,
       title: copy.title, description: copy.description, observedValue: copy.description, severity: "medium",
       sourceType: "signal", signalSource: "runtime_artifact_signal", signalKey: `${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${id}`, signalLabel: copy.title,
       evidence: [projection.documentUrl], rawEvidence: {consentControlAssessment: assessment, californiaPrivacyReview: projection, unifiedFindingId: id, pageUrl: projection.documentUrl}});
@@ -4691,6 +4708,7 @@ export function buildNormalizedConcerns(input: {
     ...buildAccessibilityAuditConcerns(input.runtimeArtifacts),
     ...buildFormDestinationConcerns(input.runtimeArtifacts),
     ...buildCmsSecurityConcerns(input.runtimeArtifacts),
+    ...buildPrivacyChoicePresenceConcerns(input.runtimeArtifacts),
     ...buildCaliforniaPrivacyReviewConcerns(input.runtimeArtifacts),
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),

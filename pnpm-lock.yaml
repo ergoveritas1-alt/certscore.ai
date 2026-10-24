@@ -265,6 +265,9 @@ importers:
 
   packages/certscore-contracts:
     dependencies:
+      tldts:
+        specifier: 7.4.2
+        version: 7.4.2
       zod:
         specifier: ^3.25.76
         version: 3.25.76

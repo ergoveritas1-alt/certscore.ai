@@ -1,4 +1,7 @@
-import { saleSharingOptOutDispatchSchema, SALE_SHARING_OPT_OUT_POLICY, type SaleSharingOptOutDispatch } from "@certscore/contracts";
+import { PRESENCE_ONLY_CAPTURE_PROFILE } from "@certscore/contracts";
+import { SALE_SHARING_OPT_OUT_POLICY, type SaleSharingOptOutDispatch } from "@certscore/contracts";
+import {activeSaleSharingCanaryCampaign,assertSaleSharingCanary,consumeSaleSharingCanary,type SaleSharingCanaryCampaign,type SaleSharingCanaryLedger} from "@certscore/contracts";
+import {createSaleSharingCanaryStore} from "./sale-sharing-canary-store";
 import {
   isFreshPriorScanAccelerationSource,
   normalizeUrl,
@@ -62,6 +65,7 @@ export type LocalV2DagLambdaDispatchPayload = {
     SharedCrawlSeedHint,
     "confidence" | "hintType" | "source" | "sourceCompletedAt" | "sourceScanId" | "url"
   >>;
+  privacyCaptureProfile?: typeof PRESENCE_ONLY_CAPTURE_PROFILE;
   saleSharingOptOut?: SaleSharingOptOutDispatch;
   postAcceptObservation?: PostAcceptLambdaDispatchConfig;
   postRefusalObservation?: PostRefusalLambdaDispatchConfig;
@@ -404,6 +408,8 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
   localCallbackUrl?: string | null;
   scanConfig: SharedScanConfig | Record<string, unknown>;
   scanId: string;
+  /** Internal injection for offline tests/reviewed activation; never scanConfig. */
+  canaryCampaign?: SaleSharingCanaryCampaign|null;
 }): LocalV2DagLambdaDispatchPayload {
   const config = asRecord(input.scanConfig);
   const intent = asRecord(getLambdaIntent(input.scanConfig));
@@ -438,11 +444,9 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     scanId: input.scanId,
     targetUrl,
   });
-  // Independent authorization and rollout; never reuse cookie action flags.
-  const saleSharingOptOut = intent.orchestrationMode === "sharded" && intent.saleSharingOptOutEnabled === true &&
-    intent.saleSharingOptOutRolloutMode === "all_eligible" && process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED === "1" &&
-    new URL(targetUrl).protocol === "https:" && !new URL(targetUrl).port
-      ? saleSharingOptOutDispatchSchema.parse({ policyVersion: SALE_SHARING_OPT_OUT_POLICY, enabled: true, scanId: input.scanId, exactTargetUrl: targetUrl }) : undefined;
+  // New sharded materializations use core-lane presence evidence. Retained
+  // optional action packets remain readable, but are not dispatched here.
+  if (input.canaryCampaign) throw new Error("Presence-only capture excludes sale/sharing canary dispatch.");
   const gpcObservation = intent.orchestrationMode === "sharded"
     ? {
         contractVersion: GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
@@ -470,7 +474,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     ...(policySurfaceSeeds.length > 0 ? { policySurfaceSeeds } : {}),
     ...postActionObservation,
-    ...(saleSharingOptOut ? { saleSharingOptOut } : {}),
+    ...(intent.orchestrationMode === "sharded" ? { privacyCaptureProfile: PRESENCE_ONLY_CAPTURE_PROFILE } : {}),
     ...(gpcObservation ? { gpcObservation } : {}),
     ...(runtimeGraph ? { runtimeGraph } : {}),
     productionFindingIntegration: false,
@@ -487,6 +491,17 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
   };
 }
 
+export async function reserveSaleSharingCanaryDispatch(payload:LocalV2DagLambdaDispatchPayload,options:{signal:AbortSignal;campaign?:SaleSharingCanaryCampaign|null;ledger?:SaleSharingCanaryLedger;now?:()=>number}) {
+  const config=payload.saleSharingOptOut;
+  if(!config||config.policyVersion===SALE_SHARING_OPT_OUT_POLICY)return;
+  const campaign=options.campaign===undefined?activeSaleSharingCanaryCampaign():options.campaign;
+  const validate=()=>assertSaleSharingCanary({authorization:config.canaryAuthorization,scanId:payload.scanId,targetUrl:payload.targetUrl,region:payload.awsRegion,functionName:payload.functionName,policyVersion:config.policyVersion,route:config.exactRouteAuthorization},campaign,options.now?.()??Date.now());
+  options.signal.throwIfAborted();const authorization=validate();
+  if(!campaign)throw Error("sale_sharing_canary_inactive");
+  await consumeSaleSharingCanary(authorization,"dispatch",options.ledger??createSaleSharingCanaryStore(campaign,options.signal));
+  options.signal.throwIfAborted();validate();
+}
+
 export async function dispatchLocalV2DagLambdaScan(input: {
   dispatchTimeoutMs?: number;
   lambdaClient?: LambdaInvokeClient;
@@ -500,7 +515,7 @@ export async function dispatchLocalV2DagLambdaScan(input: {
   const { InvokeCommand, LambdaClient } = await import("@aws-sdk/client-lambda");
   const sdkImportMs = Date.now() - sdkImportStartedAtMs;
   const clientReadyStartedAtMs = Date.now();
-  let lambdaClient = input.lambdaClient ?? lambdaClientsByRegion.get(payload.awsRegion);
+  let lambdaClient = input.lambdaClient ?? (payload.saleSharingOptOut?.canaryAuthorization?new LambdaClient({region:payload.awsRegion,maxAttempts:1}):lambdaClientsByRegion.get(payload.awsRegion));
   if (!lambdaClient) {
     lambdaClient = new LambdaClient({ region: payload.awsRegion });
     lambdaClientsByRegion.set(payload.awsRegion, lambdaClient);
@@ -530,10 +545,14 @@ export async function dispatchLocalV2DagLambdaScan(input: {
   let requestSigningAndSendMs = 0;
   try {
     const credentialStartedAtMs = Date.now();
-    if (lambdaClient.config?.credentials) {
-      await Promise.race([lambdaClient.config.credentials(), aborted]);
+    const credentials = lambdaClient.config && "credentials" in lambdaClient.config ? lambdaClient.config.credentials : undefined;
+    if (typeof credentials === "function") {
+      await Promise.race([credentials(), aborted]);
     }
     credentialResolutionMs = Date.now() - credentialStartedAtMs;
+    if(payload.saleSharingOptOut?.canaryAuthorization){
+      await Promise.race([reserveSaleSharingCanaryDispatch(payload,{signal:abortController.signal}),aborted]);
+    }
     const requestStartedAtMs = Date.now();
     response = await Promise.race([
       lambdaClient.send(command, { abortSignal: abortController.signal }),

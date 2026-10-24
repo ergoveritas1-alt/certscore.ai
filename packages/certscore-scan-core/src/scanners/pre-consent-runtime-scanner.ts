@@ -5428,7 +5428,7 @@ async function captureCmpRuntimeProbeInputs(input: {
 }): Promise<VendorResolverInput[]> {
   const observed = await input.page.evaluate(() => {
     const markerPattern =
-      /(consent|cookie|cmp|privacy|drupal|eu_cookie_compliance|sliding-popup|onetrust|optanon|didomi|truste|trustarc|usercentrics|cookiebot|cybot|sourcepoint|sp_message|osano|ketch|quantcast|iubenda|termly|cookieyes|cky|coi)/i;
+      /(consent|cookie|cmp|privacy|drupal|eu_cookie_compliance|sliding-popup|onetrust|optanon|didomi|truste|trustarc|usercentrics|cookiebot|cybot|sourcepoint|sp_message|osano|ketch|quantcast|iubenda|termly|cookieyes|cky|coi)|^(?:ensNotifyBanner|ensModalWrapper|tcf2__ensNotifyBanner|tcf2__ensModalWrapper|ccm-root|ccm-widget)$/i;
     const globalNames = Object.getOwnPropertyNames(window)
       .filter((name) => markerPattern.test(name))
       .slice(0, 150);

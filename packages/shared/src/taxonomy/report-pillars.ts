@@ -1,3 +1,4 @@
+import { PRIVACY_CHOICE_PRESENCE_SIGNAL, PRIVACY_CHOICE_PRESENCE_TITLE } from "@certscore/contracts";
 import { FORM_DESTINATION_FINDING_ID, FORM_DESTINATION_SIGNAL } from "@certscore/contracts";
 import { CALIFORNIA_PRIVACY_REVIEW_IDS, CALIFORNIA_PRIVACY_REVIEW_SIGNAL, californiaPrivacyReviewCopy } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, CMS_SECURITY_SIGNAL } from "@certscore/contracts";
@@ -1124,6 +1125,7 @@ export const REPORT_EVIDENCE_CATEGORIES: ReportEvidenceCategoryDefinition[] = [
 ];
 
 export const REPORT_SIGNALS: ReportSignalDefinition[] = [
+  defineReportSignal("runtime_artifact_signal", PRIVACY_CHOICE_PRESENCE_SIGNAL, PRIVACY_CHOICE_PRESENCE_TITLE, "rights_request_mechanisms"),
   defineReportSignal("runtime_artifact_signal", FORM_DESTINATION_SIGNAL, "Form-data destination review", "collection_surface_entry_points_and_handling_context"),
   defineReportSignal("runtime_artifact_signal", CMS_SECURITY_SIGNAL, "CMS security review", "site_integrity_observations"),
   defineReportSignal("runtime_artifact_signal", SITE_INTEGRITY_SIGNAL, SITE_INTEGRITY_COPY.title, "site_integrity_observations"),
@@ -2822,7 +2824,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "rights_request_mechanisms",
     mirrors: ["data_handling_disclosures"],
     overlays: ["sale_sharing_targeted_advertising_controls", "consumer_rights_request_handling"],
-    signalMappings: [{ source: "snapshot_signal", key: "privacy.do_not_sell_link_present" }],
+    signalMappings: [{ source: "snapshot_signal", key: "privacy.do_not_sell_link_present" }, {source:"runtime_artifact_signal",key:PRIVACY_CHOICE_PRESENCE_SIGNAL}],
     aliases: ["Do-not-sell link present"]
   }),
   defineReportUnifiedFinding({
