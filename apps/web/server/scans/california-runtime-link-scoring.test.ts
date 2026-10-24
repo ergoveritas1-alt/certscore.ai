@@ -116,3 +116,13 @@ test("runtime proof source, session, request and inspection joins fail closed",(
   changed.disclosureChoiceAssessment.runtimeLinkProof!.inspectionSourceHash="d".repeat(64);
   assert.equal(californiaPrivacyReviewSchema.safeParse(changed).success,false);
 });
+
+
+test("a legacy complete inspection cannot gain runtime scoring or discard other valid evidence",()=>{
+  const f=fixture(),i=f.bundle.policySurfaceInspection!.privacyChoiceInspection!;
+  const fields=["documentUrl","capturedAt","sourceHash","scope","coverage","namedChoiceCandidateCount","unnamedControlCount",
+    "candidateEnumerationTruncated","uninspectedFrameCount","uninspectedShadowRootCount","supportedDocumentLanguage","representativeDocument","documentStable","rightsMethods"];
+  f.bundle.policySurfaceInspection!.privacyChoiceInspection={contractVersion:"certscore.privacy-choice-inspection.v1",
+    ...Object.fromEntries(Object.entries(i).filter(([key])=>fields.includes(key)))} as typeof i;
+  const review=project(f);assert.equal(canonical(review,f.bundle.gpcResponseAssessment).points,0);
+});

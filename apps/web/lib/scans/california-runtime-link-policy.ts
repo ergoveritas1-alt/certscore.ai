@@ -1,5 +1,5 @@
 import {createHash} from "node:crypto";
-import {CALIFORNIA_RUNTIME_LINK_POLICY,californiaRuntimeLinkProofSchema,gpcResponseAssessmentSchema,
+import {isCurrentCaliforniaChoiceInspection,CALIFORNIA_RUNTIME_LINK_POLICY,californiaRuntimeLinkProofSchema,gpcResponseAssessmentSchema,
   type CaliforniaPrivacyReview} from "@certscore/contracts";
 import {deriveCaliforniaGpcResponsePolicy,CALIFORNIA_GPC_RESPONSE_POLICY_VERSION} from "./california-gpc-response-policy";
 import {hasVerifiedCustomerGpcEvidence} from "./gpc-customer-policy";
@@ -8,7 +8,7 @@ import {hasVerifiedCustomerGpcEvidence} from "./gpc-customer-policy";
  * This is server-side assessment work over already verified retained evidence. */
 export function deriveCaliforniaRuntimeLinkProof(review:CaliforniaPrivacyReview,value:unknown) {
   if(review.contractVersion!=="certscore.california-privacy-review.v10" ||
-      review.choiceSurface!=="not_observed_in_inspected_scope" || !review.inspection || review.inspection.coverage!=="complete")return undefined;
+      review.choiceSurface!=="not_observed_in_inspected_scope" || !review.inspection || review.inspection.coverage!=="complete" || !isCurrentCaliforniaChoiceInspection(review.inspection))return undefined;
   const parsed=gpcResponseAssessmentSchema.safeParse(value);
   if(!parsed.success || parsed.data.contractVersion!=="certscore.gpc-response-assessment.v3" || !hasVerifiedCustomerGpcEvidence(parsed.data))return undefined;
   const a=parsed.data,o=a.observation,policy=deriveCaliforniaGpcResponsePolicy(a);
