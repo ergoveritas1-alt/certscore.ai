@@ -16,7 +16,7 @@ export function californiaPrivacyEvidence(value: unknown, scanId?: string) {
   });
   const rows = [
     ...(evidence?.controls ?? []).map((control, index) => row("controls", index, control.evidenceRef, PRIVACY_CONTROL_LABELS[control.kind],
-      `Visible, named link verified: “${control.label}”. Choice functionality was not tested.`, "Observed")),
+      `Visible privacy-choice ${control.evidenceRef.startsWith("policy-surface:") ? "link" : "control"} observed: “${control.label}”.`, "Observed")),
     ...candidates.map((control, index) => row("controlCandidates", index, control.evidenceRef, PRIVACY_CONTROL_LABELS[control.kind],
       `Link identified: “${control.label}”; ${control.verification === "visibility_unverified" ? "visibility" : "accessible name"} not verified.`, "Needs review")),
     ...(evidence?.notices ?? []).map((notice, index) => row("notices", index, notice.evidenceRef, notice.kind.replaceAll("_", " "),

@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { postRefusalReportProjectionSchema } from "@certscore/contracts";
-import { afterRejectClickProjection, afterRejectProjection } from "./test-fixtures/after-reject-scoring";
+import { afterRejectClickProjection, afterRejectProjection, highRiskAfterRejectAssessment } from "./test-fixtures/after-reject-scoring";
 import { AFTER_REJECT_SCORING_POLICY, assessAfterRejectScoring, retainedAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { buildPostRefusalRuntimeProjection } from "./post-refusal-runtime-projection";
 import { buildNormalizedConcerns } from "./normalized-concerns";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
-import { deriveGdprEprivacyDeductionBreakdown, deriveRegulatoryCoverageScore } from "./regulatory-coverage-score";
+import { deriveGdprEprivacyDeductionBreakdown, deriveRegulatoryCoverageScore, getGdprEprivacyRowDeduction } from "./regulatory-coverage-score";
 import {projectAdminScoringEntityCounts} from "../../server/admin/admin-scan-posture-score";
+import {deriveCanonicalOverallScoreExplanationForReport} from "../../server/scans/canonical-overall-score";
 import {SCAN_REPORT_PROJECTION_VERSION} from "../../server/scans/scan-report-projection-contract";
 
 export function cookieOnlyAfterReject() {
@@ -123,6 +124,21 @@ test("distinct canonical entities use the approved diminishing schedule, dedupli
   const result=canonical(p);
   assert.equal(deriveRegulatoryCoverageScore({framework:"gdpr_eprivacy",rows:result.rows}).score,100-totals[count-1]!);
   assert.equal(deriveGdprEprivacyDeductionBreakdown([...result.rows,...result.rows])[0]?.deductionPoints,totals[count-1]);
+  // Historical v22 introduced the same 30-point presence family, before v23 vendor coverage.
+  const legacy = assessAfterRejectScoring(p, "after_reject_nonessential_presence.v1")!;
+  const legacyRows = structuredClone(result.rows);
+  legacyRows[0]!.criticalEvidence!.retainedEvidence!.afterRejectScoringAssessment = legacy;
+  assert.equal(legacy.deductionPoints, totals[count - 1]);
+  for (const version of ["gdpr-eprivacy-posture.v22", "gdpr-eprivacy-posture.v23"] as const) {
+   assert.equal(getGdprEprivacyRowDeduction(legacyRows[0]!, version), totals[count - 1]);
+   assert.equal(deriveGdprEprivacyDeductionBreakdown([...legacyRows, ...legacyRows], version)[0]?.deductionPoints, totals[count - 1]);
+   const explanation = deriveCanonicalOverallScoreExplanationForReport({scanRecord: {runtimeArtifacts: null},
+    checklistRows: legacyRows, unifiedFindings: result.unifiedFindings, scorePolicyVersion: version});
+   assert.equal(explanation?.score, 100 - totals[count - 1]!);
+   assert.equal(explanation?.deductions.find(row => row.family === "post_refusal_enforcement")?.deductionPoints, totals[count - 1]);
+  }
+  assert.deepEqual(deriveGdprEprivacyDeductionBreakdown(legacyRows, "gdpr-eprivacy-posture.v21"), []);
+  assert.deepEqual(deriveGdprEprivacyDeductionBreakdown(result.rows, "gdpr-eprivacy-posture.v22"), []);
   const stored=structuredClone(result.retained);stored.afterRejectScoringAssessment!.entityEvidence!.observations[0]!.msAfterClick++;
   assert.equal(retainedAfterRejectScoringAssessment(stored),null,"Timing drift invalidates the stored assessment");
  }
@@ -167,4 +183,17 @@ test('historical presence assessments retain their evidence semantics and versio
  const runtime={postRefusalEvidenceProjection:p,afterRejectScoringAssessment:old};
  assert.equal(retainedAfterRejectScoringAssessment(runtime)?.policyVersion,'after_reject_nonessential_presence.v1');
  assert.equal(retainedAfterRejectScoringAssessment(runtime)?.deductionPoints,15);
+});
+
+
+test("pre-presence Reject policies retain their original 15-point family cap", () => {
+ const rows = canonical(afterRejectProjection("advertising")).rows;
+ rows[0]!.assessmentStatus = "gap_observed";
+ rows[0]!.criticalEvidence!.retainedEvidence!.rejectInteractionConfirmed = true;
+ rows[0]!.criticalEvidence!.retainedEvidence!.refusalSignalContradictsAction = true;
+ rows[0]!.criticalEvidence!.retainedEvidence!.afterRejectScoringAssessment = highRiskAfterRejectAssessment();
+ for (const version of ["gdpr-eprivacy-posture.v18", "gdpr-eprivacy-posture.v19", "gdpr-eprivacy-posture.v20", "gdpr-eprivacy-posture.v21"] as const) {
+  const breakdown = deriveGdprEprivacyDeductionBreakdown([...rows, ...rows], version);
+  assert.equal(breakdown.find(row => row.family === "post_refusal_enforcement")?.deductionPoints, 15, version);
+ }
 });

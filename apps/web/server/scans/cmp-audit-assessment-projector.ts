@@ -593,13 +593,33 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
   }
 }
 
+/** Core facts do not depend on an optional preference packet or lane outcome. */
+function deriveIndependentAuditAssessment(bundle: CanonicalEvidenceBundle, geometry: Record<string, unknown> | null | undefined, captures: ReturnType<typeof retainedChoiceCaptures>): CmpAuditAssessment | undefined {
+  const rows: CmpAuditAssessment["rows"] = ([...cmpAuditCriterionSchema.options, "implementation", "prominence"] as const)
+    .map(id => ({ id, status: "not_assessed", detail: "Evidence was not retained for this check.", evidenceRefs: [] }));
+  const set: AuditSet = (id, status, detail, evidenceRefs = []) => Object.assign(rows.find(row => row.id === id)!, { status, detail: detail.slice(0, 500), evidenceRefs });
+  const expiries = applyClientFacts(bundle, set, rows, captures.filter(capture => capture.storageCompleted));
+  if (expiries.length) rows.find(row => row.id === "duration")!.inventory = { expiries };
+  applyChoiceActivity(bundle, set, rows, captures.filter(capture => capture.networkCompleted));
+  applyActionLimitations(bundle, rows);
+  applyVisualLimitations(bundle, rows, geometry);
+  // Missing optional work is not a failed inspection or evidence of absence.
+  if (!rows.some(row => row.evidenceRefs.length)) return undefined;
+  return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
+    support: { state: "partial", provider: null, recipeVersion: null, reason: "independent_core_facts" }, rows,
+    sourceSha256: createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_core_facts.v1", scanId: bundle.scanId,
+      targetUrl: bundle.url, startedAt: bundle.startedAt, completedAt: bundle.completedAt, cookies: bundle.cookieSnapshots,
+      coverage: bundle.runtimeCoverage, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence, rows })).digest("hex") });
+}
+
 function deriveVerifiedCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geometry?: Record<string, unknown> | null): CmpAuditAssessment | undefined {
   // Validate action completion once and reuse it across both retained CMP sources.
   const captures = retainedChoiceCaptures(bundle);
   const observations = captures.filter(capture => capture.storageCompleted);
   const original = derivePreferenceAuditAssessment(bundle, geometry, observations);
+  const independent = () => original ?? deriveIndependentAuditAssessment(bundle, geometry, captures);
   const parsed = cmpBasicEvidenceSchema.safeParse(bundle.cmpBasicEvidence);
-  if (!parsed.success || parsed.data.scanId !== bundle.scanId || parsed.data.targetUrl !== bundle.url) return original;
+  if (!parsed.success || parsed.data.scanId !== bundle.scanId || parsed.data.targetUrl !== bundle.url) return independent();
   const basic = parsed.data;
   const duration = Date.parse(bundle.completedAt) - Date.parse(bundle.startedAt);
   const consent = bundle.consentUiObservations?.at(-1);
@@ -619,7 +639,7 @@ function deriveVerifiedCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geome
   const latest = snapshots[0];
   if (!Number.isFinite(duration) || basic.capturedAtMs > duration || !latest || latest.capturedAtMs < 0 || latest.capturedAtMs > duration ||
     latest.url !== basic.documentUrl || latest.documentIdentity?.token !== basic.documentToken ||
-    snapshots.some(snapshot => snapshot.capturedAtMs === latest.capturedAtMs && (snapshot.url !== latest.url || snapshot.documentIdentity?.token !== latest.documentIdentity?.token))) return original;
+    snapshots.some(snapshot => snapshot.capturedAtMs === latest.capturedAtMs && (snapshot.url !== latest.url || snapshot.documentIdentity?.token !== latest.documentIdentity?.token))) return independent();
   const assessment: CmpAuditAssessment = original ?? {
     version: "cmp_audit_assessment.v6" as const, scanId: bundle.scanId, sourceSha256: "0".repeat(64),
     support: { state: "partial" as const, provider: basic.provider, recipeVersion: basic.contractVersion, reason: "passive_first_layer_only" },

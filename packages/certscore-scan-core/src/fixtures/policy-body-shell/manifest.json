@@ -1,0 +1,85 @@
+{
+  "sourceScanId": "5315fb12-4183-4c1b-9c3a-3c483b6f6440",
+  "purpose": "Exact retained public text for CertScore.ai governing-policy false-positive regression; no live access required.",
+  "documents": [
+    {
+      "observationId": "policy_surface_95be840a",
+      "url": "https://www.peakdigitalstudio.com/privacy-policy",
+      "title": "Privacy Policy & Data Protection | Peak Digital Studio",
+      "documentRole": "policy_document",
+      "selection": {
+        "contractVersion": "governing_policy_selection.v1",
+        "state": "supporting",
+        "rank": 2,
+        "score": 75,
+        "reasonCodes": [
+          "eligible_supporting_policy_document",
+          "target_controller_document",
+          "policy_content_coverage_truncated",
+          "complete_policy_text_retention",
+          "governing_policy_body_evidence_retained",
+          "substantive_policy_retains_supplemental_privacy_links"
+        ]
+      },
+      "bodyAssessment": {
+        "contractVersion": "governing_policy_body_assessment.v1",
+        "state": "substantive",
+        "canonicalContextTermCount": 3,
+        "documentTextChars": 2703,
+        "evidenceBoundObservedTopicCount": 0,
+        "substantiveDisclosureSignalCount": 0,
+        "reasonCodes": [
+          "policy_body_target_owned",
+          "exact_privacy_policy_candidate",
+          "complete_policy_text_retention",
+          "minimum_substantive_policy_text_retained",
+          "canonical_classifier_confirmed_standalone_policy_body",
+          "canonical_multilingual_policy_context_retained"
+        ]
+      },
+      "sha256": "390f70834afff846363ac36867faca887979db068831762253bd5b3747c2abb1",
+      "chars": 2703,
+      "fixture": "policy_surface_95be840a.txt"
+    },
+    {
+      "observationId": "policy_surface_82763b37",
+      "url": "https://www.peakdigitalstudio.com/free-website-privacy-cookie-audit",
+      "title": "Free Website Privacy & Cookie Audit",
+      "documentRole": "policy_document",
+      "selection": {
+        "contractVersion": "governing_policy_selection.v1",
+        "state": "primary",
+        "rank": 1,
+        "score": 75,
+        "reasonCodes": [
+          "highest_ranked_eligible_governing_policy",
+          "target_controller_document",
+          "policy_content_coverage_truncated",
+          "complete_policy_text_retention",
+          "governing_policy_body_evidence_retained",
+          "substantive_policy_retains_supplemental_privacy_links"
+        ]
+      },
+      "bodyAssessment": {
+        "contractVersion": "governing_policy_body_assessment.v1",
+        "state": "substantive",
+        "canonicalContextTermCount": 3,
+        "documentTextChars": 3199,
+        "evidenceBoundObservedTopicCount": 0,
+        "substantiveDisclosureSignalCount": 0,
+        "reasonCodes": [
+          "policy_body_target_owned",
+          "exact_privacy_policy_candidate",
+          "complete_policy_text_retention",
+          "minimum_substantive_policy_text_retained",
+          "substantive_topic_match",
+          "canonical_classifier_confirmed_standalone_policy_body",
+          "canonical_multilingual_policy_context_retained"
+        ]
+      },
+      "sha256": "d673c9a56e55165035c46c4c7d641636cef586eab8e52dcc8f67cd347696b2a2",
+      "chars": 3199,
+      "fixture": "policy_surface_82763b37.txt"
+    }
+  ]
+}

@@ -49,8 +49,16 @@ export const gpcObservationSessionSchema = z.object({
     }).strict().optional() }).strict()).max(5000),
   /** Supplemental discovery only. Missing proof never vetoes URL evidence. */
   requestProofCapture: z.object({
-    contractVersion:z.literal("gpc_request_capture.v1"), inspected:time.max(48), skipped:time,
+    contractVersion:z.enum(["gpc_request_capture.v1", "gpc_request_capture.v2"]), inspected:time.max(48), skipped:time,
     pending:time.max(48), failed:time.max(48), retentionDropped:time.max(48),
+    /** Operational counts only; never supply collection, purpose or signal proof. */
+    diagnostics:z.object({
+      contractVersion:z.literal("gpc_request_capture_diagnostics.v1"),
+      documentFilterApplied:z.boolean(), obsoleteDocumentDropped:time.max(48), capEvicted:time.max(48),
+      // Count every completed proof before document filtering and the 32-row cap.
+      bodyOutcomes:z.object({absent:time.max(48),complete:time.max(48),unavailable:time.max(48),limited:time.max(48),unsupported:time.max(48)}).strict(),
+      failureOutcomes:z.object({noProof:time.max(48),captureException:time.max(48)}).strict(),
+    }).strict().optional(),
     rows:z.array(z.object({eventId:z.string().min(1).max(160),documentToken:z.string().min(1).max(160),
       capturedAtMs:time,proof:gpcRequestProofSchema}).strict()).max(32),
     // Keep known same-request restrictions even if detailed proof loses a slot.
@@ -84,6 +92,20 @@ export const gpcObservationSessionSchema = z.object({
 }).strict().superRefine((p, ctx) => {
   const capture=p.requestProofCapture;
   if(capture){
+    const d=capture.diagnostics;
+    if ((capture.contractVersion==="gpc_request_capture.v2") !== (d!==undefined) || d && (
+      d.obsoleteDocumentDropped+d.capEvicted!==capture.retentionDropped ||
+      !d.documentFilterApplied && d.obsoleteDocumentDropped!==0 ||
+      // Filtering records the producer's loader selection, not verified delivery.
+      // An incomplete session may retain a selected loader without mainDocument proof.
+      d.documentFilterApplied && (new Set(capture.rows.map(r=>r.documentToken)).size>1 ||
+        p.mainDocument && capture.rows.some(r=>r.documentToken!==p.mainDocument!.documentToken)) ||
+      d.capEvicted>0 && capture.rows.length!==32 ||
+      Object.values(d.bodyOutcomes).reduce((sum,n)=>sum+n,0)!==capture.rows.length+capture.retentionDropped ||
+      Object.values(d.failureOutcomes).reduce((sum,n)=>sum+n,0)!==capture.failed ||
+      capture.rows.some(r=>!r.proof.proof) ||
+      Object.entries(d.bodyOutcomes).some(([status,count])=>capture.rows.filter(r=>r.proof.proof?.bodyStatus===status).length>count)))
+      ctx.addIssue({code:z.ZodIssueCode.custom,message:"GPC proof diagnostics require versioned, reconciled outcome counts."});
     const bound=(eventId:string,url:string,at:number,captured:number)=>p.requests.some(r=>r.eventId===eventId&&r.urlSha256===url&&r.timestampMs===at)&&captured>=at&&captured<=p.captureEndedAtMs;
     if(p.contractVersion!=="certscore.gpc-observation-session.v2" ||
       capture.rows.length+capture.retentionDropped+capture.pending+capture.failed!==capture.inspected ||

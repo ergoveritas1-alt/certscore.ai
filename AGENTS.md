@@ -26,6 +26,188 @@ by read-only inspection. Production preference/menu flags remain unchanged until
 separate deployment authorization. See
 `docs/certscore-v2/msnbc-capture-quality-policy-2026-10-17.md`.
 
+## Local sale/sharing apex/www authorization — October 23, 2026
+
+The owner approved local implementation and tests of
+`bounded_sale_sharing_opt_out.v2-apex-www`: at most one server redirect between
+the exact HTTPS apex and www homepages of a public-suffix-validated registrable
+domain, excluding private tenant suffixes. Require public-network checks, native
+TLS validation, original dispatch binding and retained redirect ancestry before
+acting. Historical v1, other action lanes and scoring policies remain unchanged.
+Keep the existing Lambda configuration and all scan budgets; no 4 GB worker
+increase is approved. Incremental cost is limited to $10/month within the existing
+$50 envelope, not an additional allowance. No deployment, flag changes, live
+scans or historical rewrites are authorized. See
+`docs/certscore-v2/opt-out-apex-www-authorization-policy-2026-10-23.md`.
+
+## Local sale/sharing ten exact routes — October 23, 2026
+
+The owner approved local `bounded_sale_sharing_opt_out.v3-exact-routes` for the
+ten exact ordered routes in
+`docs/certscore-v2/opt-out-exact-route-policy-2026-10-23.md`, excluding Salomon.
+Only those source-specific grants may cross paths, named subdomains or domains;
+maximum two server hops, with Jaguar's single exact query exception. Require
+native TLS, public-network checks and complete per-hop request ancestry under
+the original dispatch hash. Preserve historical v1/v2, existing recipes, other
+lanes and canonical scoring. Share the existing $10/month inside $50 allowance;
+keep the current Lambda and all scan budgets. No deployment, flag changes,
+live scans or historical rewrites are authorized.
+
+## Local passive CMP binding and recognition — October 23, 2026
+
+The owner approved local ReadCube/Gimbal passive binding repairs and
+Volkswagen/FC-Moto recognition, with tests and bounded live checks where useful.
+Keep current budgets and action scope. Bind a visible policy control's label,
+locator and source together. Recognize exact reviewed Ensighten Privacy and
+CCM19 identities without adding action recipes, SDK opening, state adapters or
+tag-manager-wide CMP inference. Preserve passive worker checkpoints, canonical
+evidence flow and historical records. Expected incremental cost is below
+$0.50/month at 100,000 scans, sharing the existing $10 inside $50 allowance;
+local checks add no recurring AWS cost. No deployment or flag changes.
+See `docs/certscore-v2/passive-cmp-binding-recognition-2026-10-23.md`.
+
+## Local scoped opt-out canary gate — October 23, 2026
+
+The owner approved local `sale_sharing_canary.v1` gate implementation/tests and
+one bounded Gimbal category-state diagnostic. The trusted campaign source stays
+inactive. Ordinary dispatch preserves v1 exact-target selection; new redirect
+and Settings execution requires the exact two-slot ReadCube/Gimbal campaign,
+us-west-1, 3,008 MB, immutable version/build binding, expiry within 24 hours and
+durable conditional claims before dispatch, coordinator lanes and action work.
+The second scan requires an operator-reviewed first terminal result. Preserve
+all scan/action budgets, original route proof, GPP checks and canonical evidence
+verification. No production campaign, deployment or flag change is authorized.
+The one diagnostic is consumed: it returned `api_unavailable` at the bounded
+checkpoint, with zero SDK calls/actions. No retry, external form or non-GPP
+adapter is authorized. Local work adds $0 recurring AWS spend; proposed future
+ledger overhead is under $0.01 per two-scan campaign inside its $0.25 cap and the
+existing $10 within $50 allowance, subject to separate activation/preflight.
+See `docs/certscore-v2/scoped-canary-gate-and-category-diagnostic-2026-10-23.md`.
+
+## Local Gimbal availability diagnostic — October 23, 2026
+
+The owner approved local availability-diagnostic implementation/tests and one
+passive original-route Gimbal visit, with zero SDK calls or actions and no
+external forms. That visit is consumed. Within the unchanged 2,750 ms capture,
+the own OneTrust global was absent while the document was loading; exact script
+Resource Timing remained unknown. Do not infer permanent API absence or opt-out
+failure. No new visit, category read, broader lookup, non-GPP adapter, deployment,
+flag change or canary activation is authorized. Keep current Lambda and scan
+budgets. Local work adds $0 recurring AWS cost. See
+`docs/certscore-v2/gimbal-availability-diagnostic-2026-10-23.md`.
+
+## Local Gimbal setup overlap — October 23, 2026
+
+The owner approved local Gimbal-only blank-page/guard setup overlap with offline
+tests. Only the validated exact Gimbal v3 dispatch may overlap page creation
+with the ordered identity-then-public-network guard installation. Await both
+before remaining navigation/CDP guards and original-route navigation; retain
+isolated context, blank-page checks, cancellation cleanup, original absolute
+budgets and all action checks. Other routes remain serial. No public visits,
+deployment, flag changes or canary activation are authorized. Local work adds
+$0 recurring AWS cost; future activation remains within the existing shared
+$10/month inside $50 allowance. Speed/readiness improvement is unverified. See
+`docs/certscore-v2/gimbal-setup-overlap-2026-10-23.md`.
+
+The owner subsequently approved one passive original-route overlap validation;
+it is consumed. Guard installation overlapped page creation, but the one
+2,603 ms snapshot still saw a loading document with no own OneTrust global.
+Capture/cleanup finished at 2,640 ms within 2,750 ms, with zero SDK calls/actions.
+No further public visit or rollout is authorized; keep existing budgets and
+external-form exclusion. See
+`docs/certscore-v2/gimbal-overlap-passive-validation-2026-10-23.md`.
+
+## Local Gimbal request/lifecycle diagnostic — October 23, 2026
+
+The owner approved local implementation/tests and one bounded passive original-
+route visit. That visit is consumed. Retain seven exact resource roles and at
+most 32 candidate inspections, sharing the existing 10 ms cooperative processing,
+2,048-byte diagnostic and 32,000-byte packet caps within 2,750 ms capture. The final
+HTML finished at 1,416 ms; three reviewed scripts remained pending at the 2,601 ms
+checkpoint, with a loading document and absent own OneTrust global. Do not infer
+the cause, permanent absence or opt-out failure. Zero SDK calls/actions, external
+forms and AWS invocations; no production instrumentation, deployment or flag
+changes. Local recurring AWS cost is $0. Further visits need separate approval.
+See `docs/certscore-v2/gimbal-request-lifecycle-diagnostic-2026-10-23.md`.
+
+## Local Gimbal route-handler diagnostic — October 23, 2026
+
+The owner approved local implementation/tests and one passive original-route
+visit; that visit is consumed. Preserve existing routing behavior/order and all
+capture/processing/evidence caps. All three reviewed scripts finished; observed
+navigation-handler and guard-validation intervals rounded to zero milliseconds.
+No identity handler was installed in that session. The terminal page was complete
+but the own OneTrust global remained absent. Do not infer CMP/action readiness,
+a routing defect or earlier-session configuration. Zero SDK calls/actions,
+external-form visits and AWS invocations; no deployment or flag changes.
+Local recurring AWS cost is $0. Further visits require separate approval. See
+`docs/certscore-v2/gimbal-route-handler-diagnostic-2026-10-23.md`.
+
+## Local Gimbal CMP initialization diagnostic — October 23, 2026
+
+The owner approved local implementation/tests and one passive original-route
+visit; it is consumed. Seven exact slots share the existing 32-candidate allowance
+across Document/Script/XHR/Fetch, 10 ms processing, 2,048-byte diagnostic and
+2,750 ms capture. The visit finished at 2,630 ms; at 2,602 ms the page was loading
+with absent own OneTrust global and all five exact CMP request roles unknown.
+Only 14 candidates were inspected; this was not candidate truncation. No CMP
+failure or readiness is established. Zero SDK calls/actions, external-form visits
+and AWS invocations; no deployment or flag changes. Local recurring AWS cost is
+$0. Further visits require separate approval. See
+`docs/certscore-v2/gimbal-cmp-initialization-diagnostic-2026-10-23.md`.
+
+## Local Gimbal six-second diagnostic — October 23, 2026
+
+The owner approved one local passive original-route diagnostic with a 6,000 ms
+capture plus the existing 250 ms cleanup reserve; that visit is consumed. All
+other caps/guards remained unchanged. Five exact CMP resources completed by
+2,652 ms; at the sole 5,855 ms snapshot, the page was complete and its own
+OneTrust descriptor held an object. This does not establish the time the object
+appeared, SDK/state/action readiness, or a need for six-second production scans.
+35 offline tests and TypeScript passed. Zero SDK calls/actions, external forms
+or AWS invocations; no production budget, deployment or flag changes. Local
+recurring AWS cost is $0. Further visits require separate approval. See
+`docs/certscore-v2/gimbal-six-second-diagnostic-2026-10-23.md`.
+
+## Local Gimbal six-second category diagnostic — October 23, 2026
+
+The owner approved local implementation/tests and one six-second original-route
+visit with at most one reviewed GetDomainData call. The visit is consumed even
+though no getter call occurred: the 5,852 ms snapshot found a loading page and
+absent own OneTrust global, returning api_unavailable with zero groups visited.
+Keep all other caps/guards and zero actions/external forms. 44 offline tests and
+TypeScript passed. No category/state binding, production budget increase,
+deployment or flag change is justified by this result. Local recurring AWS cost
+is $0. Further visits require separate approval. See
+`docs/certscore-v2/gimbal-category-six-second-diagnostic-2026-10-23.md`.
+
+## Local Gimbal document-guard timing diagnostic — October 23, 2026
+
+The owner approved local implementation/tests and one passive original-route
+visit within the six-second diagnostic cap; the visit is consumed. Four fixed
+document-stage timing slots share existing processing/evidence caps, preserving
+all guard commands, validations, order and isolation. 46 offline tests and
+TypeScript passed. Navigation took 762 ms; document validations took 104/36/2 ms
+and each continuation acknowledgment 1 ms. The earlier slowdown did not recur;
+its cause remains unresolved. The 5,853 ms snapshot saw a complete page and own
+OneTrust object, without testing SDK/category/action readiness. Capture/cleanup
+finished at 5,889 ms. Zero SDK calls, actions, external forms and AWS invocations;
+no deployment, flag changes or production budget changes. Recurring AWS increment
+is $0. Further visits require separate approval. See
+`docs/certscore-v2/gimbal-document-guard-diagnostic-2026-10-23.md`.
+
+## ReadCube/Gimbal rollout hold — October 23, 2026
+
+The owner stopped Gimbal diagnostics for now and requested a retained-only
+rollout review. Keep the local two-route canary inactive and make no flag change.
+Neither Settings recipe has demonstrated live opt-out success within production
+budgets. Gimbal's six-second passive object presence does not establish category
+state/action readiness. Further Gimbal diagnostics require explicit resumption;
+all earlier one-visit grants are consumed. A ReadCube-only canary is not supported
+by the current two-target schema and requires separate local scope/tests and
+deployment/run approval. Preserve current budgets and external-form exclusion.
+See `docs/certscore-v2/readcube-gimbal-rollout-review-2026-10-23.md`.
+
 ## Absolute prohibition: Vercel
 
 WC01 and WS01 are AWS-only. Never use, inspect, load, recommend, or invoke any Vercel skill, plugin, documentation, CLI, API, integration, deployment, hosting, or build workflow for these repositories.

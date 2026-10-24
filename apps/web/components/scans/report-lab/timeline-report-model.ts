@@ -1,3 +1,4 @@
+import { projectCaliforniaChoicePresence } from "../../../lib/scans/california-choice-presence";
 import { retainedConsentVendor } from "../../../lib/scans/retained-consent-vendor";
 import { readCaliforniaPrivacyReviewFromConsent } from "@certscore/contracts";
 import { projectCaliforniaRegulatoryPriorities } from "../../../lib/scans/california-regulatory-priorities";
@@ -900,6 +901,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     gpcTimeline: projectGpcTimeline(gpcResponse),
     gpcLaneStatus,
     californiaPrivacyReview,
+    californiaChoicePresence: projectCaliforniaChoicePresence(canonical.ownerUnifiedFindings, scanRecord.scan.id, californiaPrivacyReview?.documentUrl),
     californiaScore,
     privacyAuditEvidence: readPrivacyAuditEvidence(runtimeArtifacts, scanRecord.scan.id),
     acceptPath,

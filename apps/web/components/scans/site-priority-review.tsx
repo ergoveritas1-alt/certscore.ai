@@ -1,7 +1,7 @@
 "use client";
 import { californiaAssessmentPresentation } from "../../lib/scans/california-assessment-presentation";
 import type { CaliforniaPrivacyReview } from "@certscore/contracts";
-import { useLayoutEffect, useRef, useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { FindingRow } from "./report-finding-row";
 import { CompactScrollHint } from "./compact-scroll-hint";
 import { selectRegulatoryReview, regulatoryReviewContext } from "../../lib/scans/regulatory-review-catalog";

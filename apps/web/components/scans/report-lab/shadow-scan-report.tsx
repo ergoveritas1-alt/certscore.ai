@@ -511,7 +511,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
             )}
           </ul>
         </details>
-        {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "ccpa_cpra" ? <CaliforniaCoverageSummary coverage={report.californiaScore?.reviewCoverage} /> : <GdprEprivacyCoverageSummary rows={report.gdprTransparencyRows} policyUrls={privacyUrls} />}
+        {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "ccpa_cpra" ? <CaliforniaCoverageSummary coverage={report.californiaScore?.reviewCoverage} choicePresence={report.californiaChoicePresence?.scanId === report.scan.id ? report.californiaChoicePresence : null} /> : <GdprEprivacyCoverageSummary rows={report.gdprTransparencyRows} policyUrls={privacyUrls} />}
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Transport security</span>

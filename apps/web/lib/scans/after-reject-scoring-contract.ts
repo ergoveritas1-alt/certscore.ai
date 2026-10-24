@@ -2,14 +2,15 @@ import { z } from "zod";
 import { POST_REJECT_SCORING_TIERS, postRejectEntityPoints } from "./scoring-policy";
 
 export const PRIOR_REJECT_PRESENCE_POLICY = "after_reject_nonessential_presence.v1" as const;
-export const AFTER_REJECT_SCORING_POLICY = "after_reject_nonessential_presence.v2-vendor-coverage" as const;
+export const VENDOR_COVERAGE_REJECT_PRESENCE_POLICY = "after_reject_nonessential_presence.v2-vendor-coverage" as const;
+export const AFTER_REJECT_SCORING_POLICY = "after_reject_nonessential_presence.v3-cookie-coverage" as const;
 export const REGISTRATION_INDEPENDENT_AFTER_REJECT_SCORING_POLICY = "after_reject_measurement_tiers.v2" as const;
 export const LEGACY_AFTER_REJECT_SCORING_POLICY = "after_reject_measurement_tiers.v1" as const;
 export function isRejectPresencePolicy(value:unknown):boolean {
- return value===AFTER_REJECT_SCORING_POLICY||value===PRIOR_REJECT_PRESENCE_POLICY;
+ return value===AFTER_REJECT_SCORING_POLICY||value===VENDOR_COVERAGE_REJECT_PRESENCE_POLICY||value===PRIOR_REJECT_PRESENCE_POLICY;
 }
 export const afterRejectScoringAssessmentSchema = z.object({
-  policyVersion: z.enum([AFTER_REJECT_SCORING_POLICY, PRIOR_REJECT_PRESENCE_POLICY, REGISTRATION_INDEPENDENT_AFTER_REJECT_SCORING_POLICY, LEGACY_AFTER_REJECT_SCORING_POLICY]),
+  policyVersion: z.enum([AFTER_REJECT_SCORING_POLICY, VENDOR_COVERAGE_REJECT_PRESENCE_POLICY, PRIOR_REJECT_PRESENCE_POLICY, REGISTRATION_INDEPENDENT_AFTER_REJECT_SCORING_POLICY, LEGACY_AFTER_REJECT_SCORING_POLICY]),
   cookieRefs: z.array(z.object({name:z.string().max(180),hostname:z.string().max(255).optional(),
     identityHash:z.string().regex(/^[a-f0-9]{64}$/).optional(),valueHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).max(96).optional(),
   entityEvidence: z.object({resolverVersion:z.string().max(160),
@@ -27,7 +28,7 @@ export const afterRejectScoringAssessmentSchema = z.object({
     "verified_performance_only", "registration_unconfirmed", "source_proof_incomplete", "purpose_or_identifier_unverified",
     "storage_coverage_incomplete", "no_eligible_activity", "verified_reject_click", "nonessential_cookies_after_reject", "nonessential_services_after_reject"])).min(1).max(14),
 }).strict().superRefine((value, ctx) => {
-  const current=[AFTER_REJECT_SCORING_POLICY,PRIOR_REJECT_PRESENCE_POLICY].some(v=>v===value.policyVersion);
+  const current=[AFTER_REJECT_SCORING_POLICY,VENDOR_COVERAGE_REJECT_PRESENCE_POLICY,PRIOR_REJECT_PRESENCE_POLICY].some(v=>v===value.policyVersion);
   const entities=value.entityEvidence?.entities??[], observations=value.entityEvidence?.observations??[];
   const expected=current?postRejectEntityPoints(entities.map(row=>row.entityId),value.tier==="high_risk"):POST_REJECT_SCORING_TIERS[value.tier];
   if (value.deductionPoints !== expected ||

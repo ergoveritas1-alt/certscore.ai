@@ -195,6 +195,12 @@ export function readCaliforniaPrivacyReviewFromConsent(value: unknown) {
   const parsed = consentControlAssessmentSchema.safeParse(value);
   return parsed.success ? parsed.data.californiaPrivacyReview ?? null : null;
 }
+/** Read the persisted canonical child; raw labels and older workpapers cannot upgrade presence. */
+export function readSaleSharingLinkPresence(value: unknown) {
+  const review = readCaliforniaPrivacyReviewFromConsent(value);
+  const links = review?.choicePresence?.links.filter(link => link.kind === "do_not_sell_or_share") ?? [];
+  return review && links.length ? {review, links} : null;
+}
 export type ConsentControlAssessmentControlResult = z.infer<typeof consentControlAssessmentControlResultSchema>;
 export type ConsentControlAssessmentEvidence = z.infer<typeof consentControlAssessmentEvidenceSchema>;
 

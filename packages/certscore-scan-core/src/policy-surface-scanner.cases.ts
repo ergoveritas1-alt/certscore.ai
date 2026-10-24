@@ -2029,7 +2029,8 @@ test("complete substantive policy bodies outrank supplemental child counts witho
     text: navigationText,
     title: "Website Privacy Notice - Example",
   });
-  assert.equal(explicitWebsiteNoticeAssessment.state, "substantive");
+  // An exact notice URL/title cannot upgrade the same retained navigation shell.
+  assert.equal(explicitWebsiteNoticeAssessment.state, "insufficient");
   assert.equal(
     explicitWebsiteNoticeAssessment.reasonCodes.includes("explicit_website_privacy_notice_identity"),
     true,
@@ -2719,21 +2720,20 @@ test("policySurfaceScanner fast mode keeps rendered discovery when static links 
   });
 });
 
-test("policySurfaceScanner fast mode retains warmed static policy evidence after rendered discovery consumes the soft budget", async () => {
+test("policySurfaceScanner fast mode retains fetched static policy evidence without speculative analysis after the soft budget", async () => {
   await withPolicyScan("policy-footer-privacy", async ({ result }) => {
     const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
     const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
 
     assert.equal(labels.includes("static policy fetch warmup"), true);
-    assert.equal(labels.includes("static policy analysis warmup"), true);
+    assert.equal(labels.includes("static policy analysis warmup"), false);
     assert.equal(labels.includes("rendered discovery"), true);
     assert.equal(labels.some((label) => label.startsWith("policy prefetched text resolution")), true);
     assert.equal(labels.some((label) => label.startsWith("policy text resolution")), false);
     assert.equal(labels.some((label) => label.startsWith("policy url-stub follow")), false);
     assert.equal(privacy?.status, "fetched");
-    const diagnostics = await readPolicyCaptureDiagnostics(result);
-    assert.ok(diagnostics.deterministicAnalysisCacheHits >= 2,
-      "the selected late-budget policy must reuse content-bound sections and facts prepared during discovery");
+    assert.ok((privacy?.article13DisclosureSignals?.length ?? 0) > 0,
+      "selected-document analysis must preserve factual disclosures even when speculative preparation is discarded");
   }, {
     discoveryMode: "fast",
     enableNanoPolicyAssist: true,

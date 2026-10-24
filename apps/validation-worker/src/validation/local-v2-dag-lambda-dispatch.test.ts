@@ -40,7 +40,7 @@ test("durable publisher reconstructs the typed regional dispatch from the commit
   });
 });
 
-test("durable publisher forwards the approved sale/sharing observer for every eligible regional scan", () => {
+test("durable publisher selects six workers for every region despite optional opt-out intent", () => {
   for (const [scanFrom, awsRegion] of [
     ["eu_ie", "eu-west-1"], ["eu_de", "eu-central-1"], ["california", "us-west-1"],
   ] as const) {
@@ -71,10 +71,8 @@ test("durable publisher forwards the approved sale/sharing observer for every el
         execution: { v2DagLambda: { ...scanConfig.execution.v2DagLambda,
           ...((patch.execution as { v2DagLambda?: Record<string, unknown> } | undefined)?.v2DagLambda ?? {}) } },
       } });
-    assert.deepEqual(build().saleSharingOptOut, {
-      policyVersion: "bounded_sale_sharing_opt_out.v1", enabled: true,
-      scanId, exactTargetUrl: "https://example.com/privacy",
-    });
+    assert.equal(build().saleSharingOptOut, undefined);
+    assert.equal(build().privacyCaptureProfile, "presence_only_six_workers.v1");
     assert.equal(build({ execution: { v2DagLambda: { saleSharingOptOutEnabled: false } } }).saleSharingOptOut, undefined);
     assert.equal(build({ execution: { v2DagLambda: { saleSharingOptOutRolloutMode: "off" } } }).saleSharingOptOut, undefined);
     assert.equal(build({ execution: { v2DagLambda: { orchestrationMode: "single" } } }).saleSharingOptOut, undefined);

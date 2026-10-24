@@ -7,6 +7,7 @@ import { projectCaliforniaPrivacyReview } from "./california-privacy-review-proj
 import { deriveCaliforniaRegulatoryScore } from "../../lib/scans/california-regulatory-score";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import { buildApiV2PostureScores } from "../../lib/api-v2/posture-scores";
+import { projectPrivacyAuditEvidence } from "./privacy-audit-projection";
 
 function fixture() {
   const f=californiaCoverageFixture();
@@ -18,6 +19,27 @@ function fixture() {
   f.policyEvidence.projection.documents=[];f.policyEvidence.texts=[];
   return f;
 }
+
+test("query and fragment identity survive typed California projection and parent persistence", () => {
+  const f=fixture();
+  const url=`${CA_FIXTURE_URL}?app=wos&return=%2Fhome#overview`;
+  f.bundle.runtimeMetadataSnapshots![0]!.url=url;
+  const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,url,f.policyEvidence)!;
+  assert.ok(child?.contractVersion==="certscore.california-privacy-review.v10");
+  assert.equal(child.documentUrl,url);
+  assert.equal(child.observedScoreBasis?.documentUrl,url);
+  assert.equal(projectPrivacyAuditEvidence(f.bundle,CA_FIXTURE_SOURCE,url)?.documentUrl,CA_FIXTURE_URL);
+  const parent=deriveConsentControlAssessment({scan:{scanId:f.bundle.scanId,finalUrl:url}});
+  const persisted=consentControlAssessmentSchema.parse(JSON.parse(JSON.stringify({...parent,californiaPrivacyReview:child})));
+  assert.equal(deriveCaliforniaRegulatoryScore({assessment:persisted.californiaPrivacyReview,checklistRows:[],unifiedFindings:[]}).score,100);
+  for(const wrong of [CA_FIXTURE_URL,`${CA_FIXTURE_URL}?app=other`,`${url}-different`]) {
+    assert.equal(projectCaliforniaObservedScoreBasis(f.bundle,CA_FIXTURE_SOURCE,wrong),undefined);
+    assert.equal(consentControlAssessmentSchema.safeParse({...parent,californiaPrivacyReview:{...child,documentUrl:wrong}}).success,false);
+  }
+  for(const invalid of ["https://user:secret@california-fixture.test/?app=wos","file:///tmp/retained",`https://example.test/?state=${"x".repeat(800)}`]) {
+    assert.equal(californiaPrivacyReviewSchema.safeParse({...child,documentUrl:invalid,observedScoreBasis:{...child.observedScoreBasis,documentUrl:invalid}}).success,false);
+  }
+});
 
 test("every usable report has a California score independently of policy, choices, region or eligible findings",()=>{
   for(const region of ["california","eu_de","eu_ie"] as const) {

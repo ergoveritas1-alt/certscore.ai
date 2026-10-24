@@ -60,6 +60,20 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
           source: "canonical_legal_surface_hint" as const, url: new URL("/privacy-policy", normalizedUrl).href }] } : {}) });
       const inspection = derivePolicySurfaceInspectionOutcome({ modulesRun: [result.moduleRun], normalizedUrl,
         privacyChoiceInspection: result.privacyChoiceInspection, negativeSearchEvidence: result.negativeSearchEvidence, policySurfaceObservations: result.policySurfaceObservations });
+      if (inspection.privacyChoiceInspection?.contractVersion === "certscore.privacy-choice-inspection.v5") {
+        const proof = inspection.privacyChoiceInspection;
+        assert.ok(proof.diagnostics, "Existing DOM reads retain bounded diagnostic metadata");
+        assert.equal(proof.diagnostics.inspectionSourceHash, proof.sourceHash);
+        assert.ok(Buffer.byteLength(JSON.stringify(proof.diagnostics)) <= 4096);
+        if (scenario === "uninspected_frame") {
+          assert.equal(proof.coverage, "limited");
+          assert.equal(proof.hiddenUninspectedFrameCount, 1);
+          assert.ok(proof.diagnostics.frames.some(row => row.first.reason === "display_none") || proof.diagnostics.limitations.includes("diagnostic_time_limit"));
+        }
+        if (scenario === "visible_unnamed_control") {
+          assert.ok(proof.diagnostics.unnamedControls.length === 1 || proof.diagnostics.limitations.includes("diagnostic_time_limit"));
+        }
+      }
       if (["missing", "seeded_missing", "inspected_shadow", "hidden_unnamed_control", "same_origin_empty_frame"].includes(scenario)) {
         assert.equal(result.moduleRun.status, "completed", JSON.stringify(result.moduleRun));
         assert.ok(result.policySurfaceObservations.filter(row => row.status === "failed").length > 0,
@@ -106,6 +120,13 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         assert.equal(choice?.accessibleNameSource,"text");
         assert.equal(choice?.linkSourcePageUrl,normalizedUrl);
         assert.equal(inspection.privacyChoiceInspection?.namedChoiceCandidateCount,1);
+      } else if (scenario === "uninspected_frame") {
+        const proof = inspection.privacyChoiceInspection;
+        assert.equal(proof?.contractVersion, "certscore.privacy-choice-inspection.v6");
+        assert.equal(proof?.coverage, "complete");
+        assert.equal(proof?.uninspectedFrameCount, 1);
+        assert.equal(inspection.outcome, "indeterminate_limited_coverage", "Choice exclusion does not complete the policy search");
+        assert.equal(result.negativeSearchEvidence, undefined);
       } else if (scenario === "opaque_frame") {
         assert.equal(inspection.privacyChoiceInspection?.coverage,"limited");
         if (inspection.privacyChoiceInspection?.contractVersion === "certscore.privacy-choice-inspection.v5") {

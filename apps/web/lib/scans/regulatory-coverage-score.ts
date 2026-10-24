@@ -381,10 +381,11 @@ export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow, policyVe
     return 0;
   }
   if (row.id === "post_reject_tracking_reduction") {
-    if (policyVersion === SCORING_POLICY_VERSION || policyVersion === "gdpr-eprivacy-posture.v22" || policyVersion === "gdpr-eprivacy-posture.v21" || policyVersion === "gdpr-eprivacy-posture.v20") {
+    if (policyVersion === SCORING_POLICY_VERSION || policyVersion === "gdpr-eprivacy-posture.v23" || policyVersion === "gdpr-eprivacy-posture.v22" || policyVersion === "gdpr-eprivacy-posture.v21" || policyVersion === "gdpr-eprivacy-posture.v20") {
       const assessment = readAfterRejectScoringAssessment(retained.afterRejectScoringAssessment);
-      if(policyVersion!==SCORING_POLICY_VERSION&&assessment?.policyVersion==="after_reject_nonessential_presence.v2-vendor-coverage")return 0;
-      if(policyVersion!==SCORING_POLICY_VERSION&&policyVersion!=="gdpr-eprivacy-posture.v22"&&assessment?.policyVersion==="after_reject_nonessential_presence.v1")return 0;
+      if(policyVersion!=="gdpr-eprivacy-posture.v24"&&assessment?.policyVersion==="after_reject_nonessential_presence.v3-cookie-coverage")return 0;
+      if(!["gdpr-eprivacy-posture.v23","gdpr-eprivacy-posture.v24"].includes(policyVersion)&&assessment?.policyVersion==="after_reject_nonessential_presence.v2-vendor-coverage")return 0;
+      if(!["gdpr-eprivacy-posture.v22","gdpr-eprivacy-posture.v23","gdpr-eprivacy-posture.v24"].includes(policyVersion)&&assessment?.policyVersion==="after_reject_nonessential_presence.v1")return 0;
       if (policyVersion === "gdpr-eprivacy-posture.v20" && assessment?.registration !== "confirmed") return 0;
       return ["gap_observed", "review_signal"].includes(row.assessmentStatus) ? assessment?.deductionPoints ?? 0 : 0;
     }
@@ -473,7 +474,9 @@ export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow
     familyDeductions.set(
       policy.family,
       Math.min(
-        policy.family === "post_refusal_enforcement" && policyVersion !== SCORING_POLICY_VERSION ? 15 : GDPR_EPRIVACY_FAMILY_DEDUCTION_CAPS[policy.family]!,
+        // Only the pre-presence policies retain the old 15-point cap (D8).
+        policy.family === "post_refusal_enforcement" && ["gdpr-eprivacy-posture.v18", "gdpr-eprivacy-posture.v19", "gdpr-eprivacy-posture.v20", "gdpr-eprivacy-posture.v21"].includes(policyVersion)
+          ? 15 : GDPR_EPRIVACY_FAMILY_DEDUCTION_CAPS[policy.family]!,
         policy.family === "post_refusal_enforcement"
           ? Math.max(familyDeductions.get(policy.family) ?? 0, deduction)
           : (familyDeductions.get(policy.family) ?? 0) + deduction

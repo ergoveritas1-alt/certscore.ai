@@ -1,3 +1,4 @@
+import type { CaliforniaChoicePresence } from "../../lib/scans/california-choice-presence";
 import { EvidenceJumpLink } from "./evidence-jump-link";
 import { DisclosureChevron } from "./report-finding-row";
 import { CaliforniaReviewCoverage as CaliforniaChoiceInspection } from "./california-review-coverage";
@@ -53,18 +54,21 @@ function californiaCoverageLabel(coverage: CaliforniaReviewCoverage) {
   return `${supported} supported${gaps ? ` · ${gaps} assessed ${gaps === 1 ? "gap" : "gaps"}` : ""} · ${review} to review${limited ? ` · ${limited} limited` : ""}`;
 }
 
-export function CaliforniaCoverageSummary({coverage}: Pick<CaliforniaCoverageProps, "coverage">) {
-  if (!coverage) return null;
-  const assessed = coverage.contractVersion === "certscore.california-review-coverage.v4"
+export function CaliforniaCoverageSummary({coverage, choicePresence}: Pick<CaliforniaCoverageProps, "coverage"> & {choicePresence?: CaliforniaChoicePresence | null}) {
+  const assessed = !coverage ? null : coverage.contractVersion === "certscore.california-review-coverage.v4"
     ? coverage.families.filter(row=>row.assessmentState === "completed").length
     : coverage.families.filter(row=>row.status === "observed" || row.status === "not_triggered_in_scope").length;
   return <details className="group/signal border-b border-zinc-200 py-2" data-california-coverage>
     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs leading-4 [&::-webkit-details-marker]:hidden">
       <span className="text-xs font-medium text-zinc-500">California coverage</span>
-      <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{assessed} {coverage.contractVersion === "certscore.california-review-coverage.v4" ? "assessed" : "supported"}<DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
+      <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{coverage ? `${assessed} ${coverage.contractVersion === "certscore.california-review-coverage.v4" ? "assessed" : "supported"}` : choicePresence?.state === "observed" ? "Link observed" : choicePresence?.state === "not_observed" ? "Link not observed" : "Unknown"}<DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
     </summary>
     <div className="mt-3 space-y-2 text-xs leading-5 text-zinc-600">
-      <p>{californiaCoverageLabel(coverage)}</p>
+      <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3" data-california-opt-out-presence>
+        <p className="text-sm font-semibold text-zinc-900">{choicePresence?.title ?? "Sale/sharing opt-out link unknown"}</p>
+        {choicePresence?.labels.length ? <p className="mt-1 text-xs text-zinc-600">{choicePresence.labels.map(label => `“${label}”`).join(" · ")}</p> : null}
+      </div>
+      {coverage ? <p>{californiaCoverageLabel(coverage)}</p> : null}
       <EvidenceJumpLink targetId="california-privacy-evidence" className="inline-block text-xs">View California privacy review ↓</EvidenceJumpLink>
     </div>
   </details>;
