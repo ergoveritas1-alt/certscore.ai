@@ -77,6 +77,18 @@ test("context provenance cannot promote weak purpose quotes without a substantiv
   }
 });
 
+test("a navigation-only excerpt does not veto a validated witness from an otherwise usable policy", () => {
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({isTargetRelevantPrivacyPolicy: true,
+    policyTextQuality: {usable: true}, surface: surface([
+      candidate({topic: "processing_purposes", matchedLocale: "en", matchedTerm: "purpose of the processing", evidenceText: DATA_BOUND_PURPOSE_TABLE}),
+    ], {textExcerpt: "Skip to main content Privacy Policy Overview Terms of Service Technologies FAQ Privacy Terms Search Menu",
+      article13DisclosureSignals: [{confidence:.9, disclosureType:"processing_purposes", status:"observed", source:"deterministic",
+        evidenceText:DATA_BOUND_PURPOSE_TABLE, selectedEvidenceStrength:"strong", selectedPolicySectionUrl:"https://example.test/privacy",
+        selectedPolicySectionExcerpt:DATA_BOUND_PURPOSE_TABLE}]})});
+  assert.equal(result.acceptedProductionSignals.length, 1);
+  assert.equal(result.acceptedProductionSignals[0]?.evidenceText, DATA_BOUND_PURPOSE_TABLE);
+});
+
 test("rights passages cannot supply legal-basis or retention disclosure credit", () => {
   const result = adaptGdprTransparencyTopicCandidatesForProduction({
     isTargetRelevantPrivacyPolicy: true,

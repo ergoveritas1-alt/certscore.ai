@@ -157,7 +157,7 @@ export function adaptGdprTransparencyTopicCandidatesForProduction(
     // Prefer the validated, URL-bound topic witness over a broad classifier
     // window, which may include another service's adjacent disclosure.
     const hardSurfaceRejection = candidateRejectReason === "non_privacy_policy_surface" ||
-      candidateRejectReason === "policy_surface_not_fetched" || candidateRejectReason === "policy_text_quality_not_usable";
+      candidateRejectReason === "policy_surface_not_fetched" || input.policyTextQuality?.usable === false;
     const retainedSignal = hardSurfaceRejection ? null : boundCanonicalRetainedSignal(input, candidate);
     const rejectReason = retainedSignal ? null : candidateRejectReason;
     if (rejectReason) {
