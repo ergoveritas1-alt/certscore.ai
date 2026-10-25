@@ -39,6 +39,11 @@ the existing 640-character compact-witness limit, and retries that section when
 sentence compaction loses the data category. The adapter applies the same shared
 criteria; a stronger retained quote cannot override ownership, retrieval or
 policy-quality rejection. No presentation fallback is added.
+Quality is evaluated per document when its full text is available. Missing or
+unverified full text remains unknown rather than a poor-quality verdict: verified
+retained bundle sections can independently support positive disclosures, while
+absence/completeness still requires verified complete text. Quality from another
+policy cannot supply the document's quality verdict.
 
 The canonical classifier adds bounded informal German clauses for comment-data
 spam prevention, an email-derived hash passed to a named service, explicit

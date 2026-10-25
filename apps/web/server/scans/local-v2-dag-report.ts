@@ -3035,9 +3035,6 @@ export function summarizePolicySurfaces(
     ]),
   });
   const policyTextQuality = assessArticle13PolicyTextQuality(text, { mode: "retained_report" });
-  const gdprTransparencyPolicyTextQuality = gdprTransparencyProductionEvidenceEnabled
-    ? assessArticle13PolicyTextQuality(text, { mode: "retained_report" })
-    : policyTextQuality;
   const observedPolicyTopicHints = uniqueStrings(article13Surfaces.flatMap((row) => row.surface.observedTopics ?? []));
   const article13SignalCandidates = article13Surfaces.flatMap((row) => {
     const fullPolicyText = readPolicySurfaceTextArtifact(row.surface, options.policyTextEvidenceContext);
@@ -3072,19 +3069,29 @@ export function summarizePolicySurfaces(
       };
     });
   });
-  const gdprTransparencyAdapterResults = article13Surfaces.map((row) => ({
-    result: adaptGdprTransparencyTopicCandidatesForProduction({
-      isTargetRelevantPrivacyPolicy: ["target_controller", "first_party_brand"].includes(
-        row.surface.targetRelationship ?? "unknown",
-      ),
-      pageUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
-      targetUrl: options.targetUrl,
-      policyTextQuality: { usable: gdprTransparencyPolicyTextQuality.usable },
-      profile: gdprTransparencyEvidenceProfile,
-      surface: row.surface
-    }),
-    row
-  }));
+  const gdprTransparencyAdapterResults = article13Surfaces.map((row) => {
+    const fullPolicyText = readPolicySurfaceTextArtifact(row.surface, options.policyTextEvidenceContext);
+    // Unavailable full text is not evidence of poor document quality. Verified
+    // retained bundle sections can still support positives; full-text integrity
+    // and completeness remain separately required for absence conclusions.
+    // Quality from a different policy must not supply this document's verdict.
+    const documentQuality = gdprTransparencyProductionEvidenceEnabled && fullPolicyText
+      ? assessArticle13PolicyTextQuality(fullPolicyText, { mode: "retained_report" })
+      : undefined;
+    return {
+      result: adaptGdprTransparencyTopicCandidatesForProduction({
+        isTargetRelevantPrivacyPolicy: ["target_controller", "first_party_brand"].includes(
+          row.surface.targetRelationship ?? "unknown",
+        ),
+        pageUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
+        targetUrl: options.targetUrl,
+        policyTextQuality: documentQuality ? { usable: documentQuality.usable } : undefined,
+        profile: gdprTransparencyEvidenceProfile,
+        surface: row.surface
+      }),
+      row
+    };
+  });
   const gdprTransparencyProductionEvidenceDiagnostics =
     gdprTransparencyAdapterDiagnostics(gdprTransparencyAdapterResults);
   const gdprTransparencyAcceptedArticle13Signals = gdprTransparencyAdapterResults.flatMap(({ result, row }) =>
