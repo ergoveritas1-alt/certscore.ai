@@ -5211,6 +5211,23 @@ test("runtime site metadata survives lane merge without entering consent DOM evi
   assert.deepEqual(merged.consentUiObservations, []);
 });
 
+test('new Gate runtime search survives canonical lane merge without replacing blocked consent evidence',async()=>{
+ const {retainRuntimeOptOutSearch}=await import('../../../packages/certscore-scan-core/src/runtime-opt-out-text');
+ const {GATE_RUNTIME_TEXT_PAGE:pageUrl,GATE_RUNTIME_TEXT_TARGET:targetUrl}=await import('@certscore/contracts');
+ const id='gate-runtime-lane-fixture',value='Public information, articles, services, products and contact details. '.repeat(12);
+ const documentIdentity={source:'cdp_loader_id' as const,token:'runtime-original-loader'};
+ const optOutSearch=retainRuntimeOptOutSearch({value,url:pageUrl,documentIdentity,capturedAtMs:100,documentReadyState:'complete',documentLanguage:'en'},targetUrl,value)!;
+ const runtimeSnapshot={artifactId:'dom_text_pre_consent',path:'/tmp/runtime/dom.txt',url:pageUrl,documentIdentity,capturedAtMs:150,pagePhase:'network_idle' as const,consentStateAtTime:'pre_consent' as const,optOutSearch};
+ const blocked={...runtimeSnapshot,optOutSearch:undefined,path:'/tmp/consent/dom.txt',documentIdentity:{...documentIdentity,token:'consent-challenge-loader'},textExcerpt:'Performing security verification'};
+ const consent=canonicalBundleFixture(id,{normalizedUrl:targetUrl,domSnapshots:[blocked]}),runtime=canonicalBundleFixture(id,{normalizedUrl:targetUrl,domSnapshots:[runtimeSnapshot],
+  runtimeCoverage:{coverageStatus:'usable',fallbackModesUsed:[],limitationKeys:[],notes:[],silentEmpty:false,
+   observationCounts:{cookieEvents:0,cookiesBeforeConsent:0,networkEvents:1,normalizedVendors:0,observedJourneys:0,thirdPartyRequests:0}}});
+ const merged=mergeLocalV2DagLambdaEvidenceLaneBundles({scanId:id,artifactRoot:'/tmp/gate-runtime-lanes',consentProof:consent,runtimeEvidence:runtime,policyEvidence:canonicalBundleFixture(id)});
+ assert.deepEqual(merged.runtimeMetadataSnapshots?.[0]?.optOutSearch,optOutSearch);
+ assert.deepEqual(merged.domSnapshots,consent.domSnapshots.map(s=>({...s,path:'/tmp/gate-runtime-lanes/worker-consent_proof-dom.txt'})));assert.equal(merged.domSnapshots[0]?.optOutSearch,undefined);
+ assert.equal(merged.runtimeMetadataSnapshots?.[0]?.documentIdentity?.token,'runtime-original-loader');
+});
+
 test("GPC coordinator publishes bounded comparison from the original verified worker pair", async () => {
   const { createGpcImpactCapture } = await import("../../../packages/certscore-scan-core/src/gpc-impact-capture");
   const scanId = "bounded-gpc-coordinator";
@@ -5279,7 +5296,7 @@ test("policy-lane negative-search proof survives the hash-bound early handoff", 
   } });
   assert.equal(packet.policySurfaceInspection.outcome, "no_privacy_policy_observed_complete_coverage");
   assert.equal(packet.policySurfaceInspection.californiaReviewPolicy,"california-privacy-review.v10");
-  assert.equal(packet.policySurfaceInspection.californiaDisclosureChoicePolicy,"california.disclosure-choice.v2-runtime");
+  assert.equal(packet.policySurfaceInspection.californiaDisclosureChoicePolicy,"california.disclosure-choice.v4-combined");
   assert.equal(packet.policySurfaceInspection.privacyChoiceInspection?.contractVersion,"certscore.privacy-choice-inspection.v4");
   assert.ok(packet.policySurfaceInspection.negativeSearchEvidence);
   const { sourceHash, ...unsigned } = packet;

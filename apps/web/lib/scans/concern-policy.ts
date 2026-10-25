@@ -1,3 +1,10 @@
+import {supportsCombinedOptOutRisk} from "./california-combined-opt-out-policy";
+import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
+import {BROAD_OPT_OUT_FINDING_ID} from "@certscore/contracts";
+import {OPT_OUT_SIGNAL_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID} from "@certscore/contracts";
+import {supportsFrictionlessGpcContradiction} from "./california-runtime-link-policy";
+import {FRICTIONLESS_GPC_FINDING_ID} from "@certscore/contracts";
+import {POLICY_CHOICE_METHOD_FINDING_ID} from "@certscore/contracts";
 import { readSaleSharingLinkPresence, PRIVACY_CHOICE_PRESENCE_SIGNAL } from "@certscore/contracts";
 import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
 import {retainedPotentialRisk,potentialRiskRecipients,CA_POTENTIAL_RISK_FINDING,CA_POTENTIAL_RISK_POLICY,potentialRiskPoints} from "./california-potential-risk-policy";
@@ -2622,11 +2629,18 @@ export function deriveConcernPolicy(input: {
       regulatoryChecklistEligibility: "none", scoreEffects: [] };
   }
   if (CALIFORNIA_PRIVACY_REVIEW_IDS.some(id => id === input.concern.suggestedUnifiedFindingId)) {
-    const eligible = input.concern.originType === "runtime_artifact" && californiaPrivacyReviewFindingIds(readCaliforniaPrivacyReviewFromConsent(input.rawEvidence?.consentControlAssessment)).includes(input.concern.suggestedUnifiedFindingId!);
+    const parsedReview=readCaliforniaPrivacyReviewFromConsent(input.rawEvidence?.consentControlAssessment);
+    const exception=parsedReview?.contractVersion === "certscore.california-privacy-review.v10" ? parsedReview.frictionlessGpcException : undefined;
+    const exceptionRuntimeVerified=input.concern.suggestedUnifiedFindingId!==FRICTIONLESS_GPC_FINDING_ID ||
+      exception?.basis!=="qualifying_collection_under_gpc" || Boolean(parsedReview&&supportsFrictionlessGpcContradiction(parsedReview,input.californiaRuntimeGpcAssessment));
+    const combinedRuntimeVerified=input.concern.suggestedUnifiedFindingId!=="california_privacy_choice_not_observed" ||
+      parsedReview?.contractVersion!=="certscore.california-privacy-review.v10" || parsedReview.disclosureChoiceAssessment?.policyVersion!==CALIFORNIA_COMBINED_OPT_OUT_POLICY ||
+      supportsCombinedOptOutRisk(parsedReview,input.californiaRuntimeGpcAssessment);
+    const eligible = combinedRuntimeVerified && exceptionRuntimeVerified && input.concern.originType === "runtime_artifact" && californiaPrivacyReviewFindingIds(parsedReview).includes(input.concern.suggestedUnifiedFindingId!);
     const assessment = readCaliforniaPrivacyReviewFromConsent(input.rawEvidence?.consentControlAssessment);
     return {allowedNarrativeTier: "moderate", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
       promotionEligibility: eligible ? "eligible" : "blocked", negativeEvidenceFlags: [], regulatoryChecklistEligibility: "none",
-      scoreEffects: eligible && assessment ? californiaFindingScoreEffect(input.concern.suggestedUnifiedFindingId!, assessment.sourceHash, assessment.contractVersion, assessment, input.californiaRuntimeGpcAssessment) : []};
+      scoreEffects: eligible && assessment && ![BROAD_OPT_OUT_FINDING_ID,POLICY_CHOICE_METHOD_FINDING_ID,FRICTIONLESS_GPC_FINDING_ID,OPT_OUT_SIGNAL_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID].includes(input.concern.suggestedUnifiedFindingId!) ? californiaFindingScoreEffect(input.concern.suggestedUnifiedFindingId!, assessment.sourceHash, assessment.contractVersion, assessment, input.californiaRuntimeGpcAssessment) : []};
   }
   if (input.concern.suggestedUnifiedFindingId === SITE_INTEGRITY_FINDING_ID) {
     const eligible = input.concern.originType === "runtime_artifact" && qualifiesSiteIntegrityReview(input.rawEvidence?.siteIntegrity);

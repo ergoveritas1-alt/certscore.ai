@@ -1,4 +1,4 @@
-import { projectCaliforniaChoicePresence } from "../../../lib/scans/california-choice-presence";
+import { projectCaliforniaChoicePresence, projectCaliforniaPolicyChoiceMethods, projectCaliforniaFrictionlessGpcException, projectCaliforniaOptOutPresence } from "../../../lib/scans/california-choice-presence";
 import { retainedConsentVendor } from "../../../lib/scans/retained-consent-vendor";
 import { readCaliforniaPrivacyReviewFromConsent } from "@certscore/contracts";
 import { projectCaliforniaRegulatoryPriorities } from "../../../lib/scans/california-regulatory-priorities";
@@ -901,6 +901,9 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     gpcTimeline: projectGpcTimeline(gpcResponse),
     gpcLaneStatus,
     californiaPrivacyReview,
+    californiaFrictionlessGpcException: projectCaliforniaFrictionlessGpcException(canonical.ownerUnifiedFindings, scanRecord.scan.id, californiaPrivacyReview?.documentUrl),
+    californiaPolicyChoiceMethods: projectCaliforniaPolicyChoiceMethods(canonical.ownerUnifiedFindings, scanRecord.scan.id, californiaPrivacyReview?.documentUrl),
+    californiaOptOutPresence: projectCaliforniaOptOutPresence(canonical.ownerUnifiedFindings, scanRecord.scan.id, californiaPrivacyReview?.documentUrl),
     californiaChoicePresence: projectCaliforniaChoicePresence(canonical.ownerUnifiedFindings, scanRecord.scan.id, californiaPrivacyReview?.documentUrl),
     californiaScore,
     privacyAuditEvidence: readPrivacyAuditEvidence(runtimeArtifacts, scanRecord.scan.id),

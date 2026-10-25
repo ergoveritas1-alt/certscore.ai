@@ -1,7 +1,18 @@
-import {californiaDisclosureChoiceAssessmentSchema,isExplicitCaliforniaSaleSharingDeclaration} from "./california-disclosure-choice-assessment";
+import {scopedOptOutSearchSchema,scopedOptOutSearchLimitations,scopedBodySearchLimitations,scopedBodyInspectionEligible,scopedRuntimeTextLimitations,GATE_RUNTIME_TEXT_PAGE} from "./scoped-opt-out-search";
+import {broadOptOutAssessmentSchema,assessBroadOptOutPresence,BROAD_OPT_OUT_FINDING_ID} from "./broad-opt-out-assessment";
+export * from "./broad-opt-out-assessment";
+import {optOutPresenceSignalSchema,OPT_OUT_SIGNAL_FINDING_ID} from "./opt-out-presence-signal";
+import {reviewedOptOutPolicyRedirect} from "./reviewed-opt-out-policy-redirect";
+import {reviewedOptOutPolicyOwner} from "./policy-document-brand-relationships";
+export * from "./opt-out-presence-signal";
+import {frictionlessGpcExceptionSchema,FRICTIONLESS_GPC_FINDING_ID} from "./frictionless-gpc-exception";
+export * from "./frictionless-gpc-exception";
+import {policyChoiceMethodsSchema,POLICY_CHOICE_METHOD_FINDING_ID} from "./policy-choice-methods";
+export * from "./policy-choice-methods";
+import {CALIFORNIA_COMBINED_OPT_OUT_POLICY,californiaDisclosureChoiceAssessmentSchema,isCaliforniaRuntimeLinkAssessment,isExplicitCaliforniaSaleSharingDeclaration} from "./california-disclosure-choice-assessment";
 import { privacyChoiceDiagnosticsSchema, PRIVACY_CHOICE_DIAGNOSTIC_BYTES } from "./privacy-choice-diagnostics";
 export * from "./privacy-choice-diagnostics";
-import { privacyChoicePresenceSchema } from "./privacy-choice-presence";
+import { privacyChoicePresenceSchema,saleSharingPresenceLinks } from "./privacy-choice-presence";
 import {californiaRightsClauseAssessmentSchema,californiaCollectionNoticeAssessmentSchema,californiaCollectionNoticeV2Schema,californiaCollectionNoticeV3Schema,californiaCollectionNoticeV4Schema,californiaCollectionNoticeV5Schema} from "./california-clause-assessment";
 import {californiaSaleSharingAssessmentSchema} from "./california-sale-sharing-assessment";
 export * from "./california-sale-sharing-assessment";
@@ -116,13 +127,21 @@ const privacyChoiceInspectionV5Base = frameInspectionSchema().extend({
   limitationKeys:z.array(z.enum(["document_loading","inventory_unavailable","document_not_representative","document_binding_unverified",
     "candidate_inventory_truncated","unnamed_controls","frame_inventory_incomplete","shadow_inventory_incomplete","unsupported_language"])).max(9),
 }).strict();
-const privacyChoiceInspectionV5Schema = privacyChoiceInspectionV5Base.superRefine((row,ctx)=>{
+function validateCurrentChoiceInspection(row: Omit<z.infer<typeof privacyChoiceInspectionV5Base>, "contractVersion">, ctx: z.RefinementCtx) {
   validateFrameCoverage(row,ctx);
   if (row.diagnostics && row.diagnostics.inspectionSourceHash !== row.sourceHash) ctx.addIssue({code:"custom",message:"Choice diagnostics must bind the original inspection hash."});
   if (row.coverage === "complete" && (row.documentReadyState === "loading" || row.limitationKeys.length)) {
     ctx.addIssue({code:"custom",message:"Complete choice inventory requires a parsed, bound document without inspection limitations."});
   }
-});
+}
+const privacyChoiceInspectionV5Schema = privacyChoiceInspectionV5Base.superRefine(validateCurrentChoiceInspection);
+/** V7 retains exact query/fragment document identities. It has the unchanged
+ * v5 complete-inventory rules; it does not grant a hidden-frame exclusion.
+ * v1-v6 continue to reject query identities under their historical contracts. */
+const privacyChoiceInspectionV7Schema = privacyChoiceInspectionV5Base.extend({
+  contractVersion: z.literal("certscore.privacy-choice-inspection.v7"),
+  documentUrl: documentIdentityUrl,
+}).strict().superRefine(validateCurrentChoiceInspection);
 /** V6 excludes only fully proved, self-hidden frames from the visible-link
  * absence scope. Raw capture counters/limitations remain intact. This is not
  * evidence that the contents of those frames were inspected. */
@@ -184,10 +203,10 @@ export function materializeSelfHiddenFrameInspection(value: unknown): z.infer<ty
 }
 export type PrivacyChoiceInspection = z.infer<typeof privacyChoiceInspectionV1Schema> | z.infer<typeof privacyChoiceInspectionV2Schema> |
   z.infer<typeof privacyChoiceInspectionV3Schema> | z.infer<typeof privacyChoiceInspectionV4Schema> |
-  z.infer<typeof privacyChoiceInspectionV5Schema> | z.infer<typeof privacyChoiceInspectionV6Schema>;
-export const privacyChoiceInspectionSchema: z.ZodType<PrivacyChoiceInspection> = z.union([privacyChoiceInspectionV1Schema, privacyChoiceInspectionV2Schema, privacyChoiceInspectionV3Schema, privacyChoiceInspectionV4Schema, privacyChoiceInspectionV5Schema, privacyChoiceInspectionV6Schema]);
+  z.infer<typeof privacyChoiceInspectionV5Schema> | z.infer<typeof privacyChoiceInspectionV6Schema> | z.infer<typeof privacyChoiceInspectionV7Schema>;
+export const privacyChoiceInspectionSchema: z.ZodType<PrivacyChoiceInspection> = z.union([privacyChoiceInspectionV1Schema, privacyChoiceInspectionV2Schema, privacyChoiceInspectionV3Schema, privacyChoiceInspectionV4Schema, privacyChoiceInspectionV5Schema, privacyChoiceInspectionV6Schema, privacyChoiceInspectionV7Schema]);
 export function isCurrentCaliforniaChoiceInspection(inspection:PrivacyChoiceInspection|null|undefined) {
-  return inspection?.contractVersion === "certscore.privacy-choice-inspection.v4" || inspection?.contractVersion === "certscore.privacy-choice-inspection.v5" || inspection?.contractVersion === "certscore.privacy-choice-inspection.v6";
+  return inspection?.contractVersion === "certscore.privacy-choice-inspection.v4" || inspection?.contractVersion === "certscore.privacy-choice-inspection.v5" || inspection?.contractVersion === "certscore.privacy-choice-inspection.v6" || inspection?.contractVersion === "certscore.privacy-choice-inspection.v7";
 }
 
 export const CALIFORNIA_CHOICE_ABSENCE_ID = "california_privacy_choice_not_observed";
@@ -195,7 +214,8 @@ export const CALIFORNIA_CHOICE_DESTINATION_ID = "california_privacy_choice_desti
 export const CALIFORNIA_OPT_OUT_ACTIVITY_ID = "california_sale_sharing_opt_out_activity";
 export const CALIFORNIA_NOTICE_DESTINATION_ID = "california_notice_at_collection_destination_error";
 export const CALIFORNIA_RIGHTS_DESTINATION_ID = "california_rights_information_destination_error";
-export const CALIFORNIA_PRIVACY_REVIEW_IDS = [CALIFORNIA_CHOICE_ABSENCE_ID, CALIFORNIA_CHOICE_DESTINATION_ID, CALIFORNIA_OPT_OUT_ACTIVITY_ID, CALIFORNIA_NOTICE_DESTINATION_ID, CALIFORNIA_RIGHTS_DESTINATION_ID, CALIFORNIA_RIGHTS_DISCLOSURE_ID] as const;
+export const OPT_OUT_ABSENCE_FINDING_ID="california_opt_out_not_observed_in_scope";
+export const CALIFORNIA_PRIVACY_REVIEW_IDS = [BROAD_OPT_OUT_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID,OPT_OUT_SIGNAL_FINDING_ID,FRICTIONLESS_GPC_FINDING_ID,POLICY_CHOICE_METHOD_FINDING_ID, CALIFORNIA_CHOICE_ABSENCE_ID, CALIFORNIA_CHOICE_DESTINATION_ID, CALIFORNIA_OPT_OUT_ACTIVITY_ID, CALIFORNIA_NOTICE_DESTINATION_ID, CALIFORNIA_RIGHTS_DESTINATION_ID, CALIFORNIA_RIGHTS_DISCLOSURE_ID] as const;
 export const CALIFORNIA_PRIVACY_REVIEW_SIGNAL = "privacy.california_privacy_review";
 
 const choiceSchema = z.object({
@@ -229,6 +249,7 @@ const californiaPrivacyReviewFields = {
   choiceSurface: z.enum(["observed", "not_observed_in_inspected_scope", "unknown"]),
   controls: choiceSchema.array().max(12),
   choicePresence: privacyChoicePresenceSchema.optional(),
+  policyChoiceMethods: policyChoiceMethodsSchema.optional(),
   controlsTruncated: z.boolean(),
   failedNoticeLinks: noticeLinkSchema.array().max(8).optional(),
   optOutObservation: verifiedSaleSharingOptOutSchema.optional(),
@@ -285,11 +306,80 @@ const californiaPrivacyReviewV10=californiaPrivacyReviewV9.extend({
   contractVersion:z.literal("certscore.california-privacy-review.v10"),policyVersion:z.literal("california-privacy-review.v10"),
   observedScoreBasis:californiaObservedScoreBasisSchema.optional(),
   disclosureChoiceAssessment:californiaDisclosureChoiceAssessmentSchema.optional(),
+  frictionlessGpcException:frictionlessGpcExceptionSchema.optional(),
+  optOutPresenceSignal:optOutPresenceSignalSchema.optional(),
+  broadOptOutAssessment:broadOptOutAssessmentSchema.optional(),
+  scopedOptOutSearch:scopedOptOutSearchSchema.optional(),
+  optOutNegativeSearch:z.object({version:z.enum(["sale_sharing_opt_out_negative_search.v1","sale_sharing_opt_out_negative_search.v2"]),scope:z.literal("starting_page_and_retained_policies"),inspectedPolicyCount:z.number().int().min(1).max(8),inspectionSourceHash:hash}).strict().optional(),
 }).strict();
 type CaliforniaPrivacyReviewShape = z.infer<typeof californiaPrivacyReviewV1> | z.infer<typeof californiaPrivacyReviewV2> | z.infer<typeof californiaPrivacyReviewV3> | z.infer<typeof californiaPrivacyReviewV4> | z.infer<typeof californiaPrivacyReviewV5> | z.infer<typeof californiaPrivacyReviewV6> | z.infer<typeof californiaPrivacyReviewV7> | z.infer<typeof californiaPrivacyReviewV8> | z.infer<typeof californiaPrivacyReviewV9> | z.infer<typeof californiaPrivacyReviewV10>;
 const californiaPrivacyReviewValidatedSchema: z.ZodType<CaliforniaPrivacyReviewShape> = z.discriminatedUnion("contractVersion",[californiaPrivacyReviewV1,californiaPrivacyReviewV2,californiaPrivacyReviewV3,californiaPrivacyReviewV4,californiaPrivacyReviewV5,californiaPrivacyReviewV6,californiaPrivacyReviewV7,californiaPrivacyReviewV8,californiaPrivacyReviewV9,californiaPrivacyReviewV10]).superRefine((row, ctx) => {
+  if(row.contractVersion==="certscore.california-privacy-review.v10"&&row.broadOptOutAssessment&&
+    JSON.stringify(row.broadOptOutAssessment)!==JSON.stringify(assessBroadOptOutPresence(row,row.broadOptOutAssessment.version)))
+    ctx.addIssue({code:"custom",message:"Broad opt-out state requires the same persisted positive, scoped-search or complete-negative evidence."});
+  if(row.contractVersion==="certscore.california-privacy-review.v10"&&row.scopedOptOutSearch){
+    const proof=row.scopedOptOutSearch,i=row.inspection;
+    const positive=Boolean(row.controls.length||row.controlsTruncated||row.optOutPresenceSignal||row.policyChoiceMethods||saleSharingPresenceLinks(row.choicePresence).length);
+    const valid=proof.version==='sale_sharing_opt_out_scoped_search.v1'
+      ? isCurrentCaliforniaChoiceInspection(i)&&i?.documentStable&&i.representativeDocument&&i.supportedDocumentLanguage&&!i.candidateEnumerationTruncated&&i.namedChoiceCandidateCount===0&&proof.inspectionSourceHash===i.sourceHash&&
+        JSON.stringify(proof.limitations)===JSON.stringify(scopedOptOutSearchLimitations(i,row.reviewCoverage.captureCoverage.policyTextComplete))
+      : proof.version==='sale_sharing_opt_out_scoped_search.v3'
+      ? proof.documentUrl===row.documentUrl&&row.documentUrl===GATE_RUNTIME_TEXT_PAGE&&proof.documentToken!==proof.consentCapture.documentToken&&
+        !(i?.namedChoiceCandidateCount??0)&&!(i?.unnamedControlCount??0)&&
+        JSON.stringify(proof.limitations)===JSON.stringify(scopedRuntimeTextLimitations(row.reviewCoverage.captureCoverage.policyTextComplete))
+      : (!i||isCurrentCaliforniaChoiceInspection(i))&&scopedBodyInspectionEligible(i)&&proof.inspectionSourceHash===i?.sourceHash&&
+        proof.checkpoint.documentUrl===row.documentUrl&&proof.checkpoint.documentToken===proof.documentToken&&
+        JSON.stringify(proof.limitations)===JSON.stringify(scopedBodySearchLimitations(i,row.reviewCoverage.captureCoverage.policyTextComplete,proof.checkpoint.inventoryOutcome));
+    if(positive||!valid)ctx.addIssue({code:'custom',message:'Scoped search must retain its original inspection or independent own-document proof and all limits.'});
+  }
+  if(row.contractVersion==="certscore.california-privacy-review.v10"&&row.optOutNegativeSearch){
+    const negative=row.optOutNegativeSearch;
+    if(row.choiceSurface!=="not_observed_in_inspected_scope"||row.inspection?.coverage!=="complete"||row.controlsTruncated||
+      negative.version==="sale_sharing_opt_out_negative_search.v2"&&(!isCurrentCaliforniaChoiceInspection(row.inspection)||row.controls.length>0||saleSharingPresenceLinks(row.choicePresence).length>0)||
+      row.optOutPresenceSignal||row.policyChoiceMethods||!row.reviewCoverage.captureCoverage.policyTextComplete||
+      negative.inspectionSourceHash!==row.inspection.sourceHash||negative.inspectedPolicyCount!==row.reviewCoverage.sourceDocuments.length||
+      row.reviewCoverage.sourceDocuments.some(d=>!d.complete))
+      ctx.addIssue({code:"custom",message:"Not observed requires complete starting-page and retained-policy inspection, without an alternative positive signal."});
+  }
+  if(row.contractVersion === "certscore.california-privacy-review.v10" && row.optOutPresenceSignal){
+    const a=row.optOutPresenceSignal;
+    const redirected=a.version==="sale_sharing_opt_out_signal.v8"&&a.sourceBinding?.kind==="reviewed_policy_redirect"&&
+      reviewedOptOutPolicyRedirect(row.documentUrl,[a.sourceBinding.requestedUrl,a.sourceDocumentUrl],a.sourceBinding.observedAt)?.id===a.sourceBinding.relationshipId&&
+      Date.parse(a.sourceBinding.observedAt)<=Date.parse(row.capturedAt);
+    const reviewed=(a.version==="sale_sharing_opt_out_signal.v3"||a.version==="sale_sharing_opt_out_signal.v4"||(a.version==="sale_sharing_opt_out_signal.v5"||(a.version==="sale_sharing_opt_out_signal.v6"||a.version==="sale_sharing_opt_out_signal.v7")))&&a.sourceBinding?.kind==="reviewed_owner_policy"&&
+      reviewedOptOutPolicyOwner(row.documentUrl,a.sourceDocumentUrl,row.capturedAt)?.id===a.sourceBinding.relationshipId&&
+      Date.parse(a.sourceBinding.observedAt)<=Date.parse(row.capturedAt);
+    const dom=(a.version==="sale_sharing_opt_out_signal.v4"||(a.version==="sale_sharing_opt_out_signal.v5"||(a.version==="sale_sharing_opt_out_signal.v6"||a.version==="sale_sharing_opt_out_signal.v7")))&&a.sourceBinding?.kind==="dom_snapshot"&&
+      new URL(row.documentUrl).hostname.replace(/^www\./,"")===new URL(a.sourceDocumentUrl).hostname.replace(/^www\./,"")&&
+      Date.parse(a.sourceBinding.observedAt)<=Date.parse(row.capturedAt);
+    const linked=(a.version==="sale_sharing_opt_out_signal.v4"||(a.version==="sale_sharing_opt_out_signal.v5"||(a.version==="sale_sharing_opt_out_signal.v6"||a.version==="sale_sharing_opt_out_signal.v7")))&&a.sourceBinding?.kind==="linked_policy_page"&&
+      Date.parse(a.sourceBinding.observedAt)<=Date.parse(row.capturedAt)&&row.reviewCoverage.sourceDocuments.some(d=>a.sourceBinding?.kind==="linked_policy_page"&&d.evidenceRef===a.sourceBinding.parentEvidenceRef);
+    const owned=(a.version==="sale_sharing_opt_out_signal.v5"||(a.version==="sale_sharing_opt_out_signal.v6"||a.version==="sale_sharing_opt_out_signal.v7"))&&a.sourceBinding?.kind==="owned_policy_surface"&&
+      Date.parse(a.sourceBinding.observedAt)<=Date.parse(row.capturedAt)&&new URL(a.sourceDocumentUrl).hostname.replace(/^www\./,"")===new URL(row.documentUrl).hostname.replace(/^www\./,"");
+    if(a.scanId!==row.scanId||a.documentUrl!==row.documentUrl||a.sourceHash!==row.sourceHash||
+       !redirected&&!reviewed&&!dom&&!linked&&!owned&&!row.reviewCoverage.sourceDocuments.some(source=>source.evidenceRef===a.passage.evidenceRef&&source.sha256===a.passage.textSha256&&source.url===a.sourceDocumentUrl))
+      ctx.addIssue({code:"custom",message:"Opt-out signal must retain the original scan, document and owned policy source."});
+  }
+  if (row.contractVersion === "certscore.california-privacy-review.v10" && row.frictionlessGpcException) {
+    const a=row.frictionlessGpcException,choice=row.disclosureChoiceAssessment;
+    const expected=a.gpcContradiction || isCaliforniaRuntimeLinkAssessment(choice) && choice.runtimeLinkProof
+      ? "qualifying_collection_under_gpc" : choice?.requiredLinkProof ? "required_signal_disclosures_missing" : "insufficient_evidence";
+    const runtime=isCaliforniaRuntimeLinkAssessment(choice)?choice.runtimeLinkProof:undefined;
+    if(runtime&&a.gpcContradiction&&(runtime.gpcSourceSha256!==a.gpcContradiction.sourceSha256||runtime.gpcSessionSha256!==a.gpcContradiction.sessionSha256||
+       runtime.documentUrlSha256!==a.gpcContradiction.documentUrlSha256||a.gpcContradiction.requests.some(r=>!runtime.requests.some(p=>p.evidenceId===r.evidenceId&&p.entityId===r.entityId))))
+      ctx.addIssue({code:"custom",message:"Exception counterexample must agree with the independently retained runtime link proof."});
+    if(a.scanId!==row.scanId||a.documentUrl!==row.documentUrl||a.sourceHash!==row.sourceHash||a.basis!==expected||
+       a.disclosures.some(d=>d.passage&&!row.reviewCoverage.sourceDocuments.some(source=>
+         source.evidenceRef===d.passage!.evidenceRef&&source.sha256===d.passage!.textSha256)))
+      ctx.addIssue({code:"custom",message:"Frictionless exception assessment must bind the original document, policy sources and independently established link basis."});
+  }
   if (row.contractVersion === "certscore.california-privacy-review.v10" && row.disclosureChoiceAssessment) {
     const a=row.disclosureChoiceAssessment,p=a.requiredLinkProof;
+    if(a.policyVersion===CALIFORNIA_COMBINED_OPT_OUT_POLICY && a.optOutRisk &&
+      (row.broadOptOutAssessment?.state!=="not_observed" || row.choiceSurface!=="not_observed_in_inspected_scope" ||
+       !isCurrentCaliforniaChoiceInspection(row.inspection) || row.inspection?.coverage!=="complete" ||
+       a.optOutRisk.status==="supported_gpc_missing_method" && !p))
+      ctx.addIssue({code:"custom",message:"Combined opt-out risk requires strict absence and independent required-method proof for supported GPC."});
     if(a.scanId!==row.scanId || a.documentUrl!==row.documentUrl || a.sourceHash!==row.sourceHash)
       ctx.addIssue({code:"custom",message:"Disclosure/choice assessment must bind the original scan, document and source."});
     if(p && (row.choiceSurface!=="not_observed_in_inspected_scope" || !isCurrentCaliforniaChoiceInspection(row.inspection) ||
@@ -303,7 +393,7 @@ const californiaPrivacyReviewValidatedSchema: z.ZodType<CaliforniaPrivacyReviewS
         !row.saleSharingAssessment.topics.some(t=>["sale","cross_context_sharing"].includes(t.topic) && t.status==="described" &&
           t.passages.some(passage=>JSON.stringify(passage)===JSON.stringify(p.declaration)))))
       ctx.addIssue({code:"custom",message:"Required link scoring needs complete absence, owned policy coverage and the exact California declaration."});
-    const runtime=a.policyVersion === "california.disclosure-choice.v2-runtime" ? a.runtimeLinkProof : undefined;
+    const runtime=isCaliforniaRuntimeLinkAssessment(a) ? a.runtimeLinkProof : undefined;
     if(runtime && (row.choiceSurface!=="not_observed_in_inspected_scope" || !isCurrentCaliforniaChoiceInspection(row.inspection) ||
         runtime.inspectionSourceHash!==row.inspection?.sourceHash ||
         row.reviewCoverage.families.some(f=>f.id==="privacy_choices"&&f.status==="not_triggered_in_scope")))
@@ -353,6 +443,9 @@ const californiaPrivacyReviewValidatedSchema: z.ZodType<CaliforniaPrivacyReviewS
     if(purpose.items.some(item=>item.readUse?.reads.some(read=>!purpose.retainedReadTrace?.observations.some(raw=>raw.id===read.evidenceRef&&raw.documentUrl===row.documentUrl))))ctx.addIssue({code:"custom",message:"Read-use observation must belong to this report document"});
     if(purpose.items.some(item=>item.declaredPurpose&&!row.disclosureInspection?.documents.some(source=>source.evidenceRef===item.declaredPurpose!.passage.evidenceRef&&source.textSha256===item.declaredPurpose!.passage.textSha256&&item.declaredPurpose!.passage.end<=source.inspectedChars)))ctx.addIssue({code:"custom",message:"Declared purposes require verified retained policy passages"});
   }
+  if (row.policyChoiceMethods && (row.policyChoiceMethods.sourceBundleSha256 !== row.sourceHash ||
+      row.policyChoiceMethods.scanId !== row.scanId || row.policyChoiceMethods.reportDocumentUrl !== row.documentUrl))
+    ctx.addIssue({code:"custom",message:"Policy method bundle binding mismatch."});
   if (row.choicePresence?.links.some(link => link.sourceDocumentUrl !== row.documentUrl ||
       !row.controls.some(control => control.evidenceRef === link.evidenceRef && control.label === link.label && control.kind === link.kind)))
     ctx.addIssue({code:"custom",message:"Presence proof must bind a retained control and the exact report document."});
@@ -373,11 +466,28 @@ export const californiaPrivacyReviewSchema:z.ZodType<CaliforniaPrivacyReview> = 
 export function californiaPrivacyReviewFindingIds(value: unknown): string[] {
   const result = californiaPrivacyReviewSchema.safeParse(value);
   if (!result.success) return [];
+  // Qualifying new absence evidence uses the existing required-choice finding
+  // and its versioned canonical policy. Keep the compact informational row only
+  // when that additional scoring basis has not been established. Runtime proof
+  // is still independently re-joined by WC01 concern policy and scoring.
+  const choice=result.data.contractVersion==="certscore.california-privacy-review.v10"?result.data.disclosureChoiceAssessment:undefined;
+  const combined=choice?.policyVersion===CALIFORNIA_COMBINED_OPT_OUT_POLICY;
+  const requiredChoiceBasis=combined?Boolean(choice.optOutRisk):Boolean(choice?.requiredLinkProof||isCaliforniaRuntimeLinkAssessment(choice)&&choice.runtimeLinkProof);
+  const signal=result.data.contractVersion==="certscore.california-privacy-review.v10"?result.data.optOutPresenceSignal:undefined;
+  // A named label from this exact page contradicts a missing-name finding.
+  // A provider-only choice cannot establish site-wide coverage or cancel it.
+  const observedNamedPage=(signal?.version==="sale_sharing_opt_out_signal.v4"||(signal?.version==="sale_sharing_opt_out_signal.v5"||(signal?.version==="sale_sharing_opt_out_signal.v6"||signal?.version==="sale_sharing_opt_out_signal.v7")))&&signal.basis==="visible_dom_opt_out_label"&&
+    signal.sourceDocumentUrl===result.data.documentUrl&&signal.scope==="observed_page";
   return [
+    ...(result.data.contractVersion==="certscore.california-privacy-review.v10"&&result.data.broadOptOutAssessment?[BROAD_OPT_OUT_FINDING_ID]:[]),
+    ...(result.data.contractVersion === "certscore.california-privacy-review.v10" && result.data.optOutNegativeSearch && !requiredChoiceBasis ? [OPT_OUT_ABSENCE_FINDING_ID] : []),
+    ...(result.data.contractVersion === "certscore.california-privacy-review.v10" && result.data.optOutPresenceSignal ? [OPT_OUT_SIGNAL_FINDING_ID] : []),
+    ...(result.data.contractVersion === "certscore.california-privacy-review.v10" && result.data.frictionlessGpcException ? [FRICTIONLESS_GPC_FINDING_ID] : []),
+    ...(result.data.policyChoiceMethods?.methods.length ? [POLICY_CHOICE_METHOD_FINDING_ID] : []),
     ...((result.data.contractVersion === "certscore.california-privacy-review.v5" || result.data.contractVersion === "certscore.california-privacy-review.v6" || (result.data.contractVersion === "certscore.california-privacy-review.v7" || (result.data.contractVersion === "certscore.california-privacy-review.v8" || (result.data.contractVersion === "certscore.california-privacy-review.v9" || result.data.contractVersion === "certscore.california-privacy-review.v10")))) && result.data.rightsAssessment?.topics.some(topic=>topic.status === "not_observed") ? [CALIFORNIA_RIGHTS_DISCLOSURE_ID] : []),
     ...(result.data.contractVersion === "certscore.california-privacy-review.v4" && result.data.disclosureInspection?.topics.some(topic => topic.status === "not_observed") ? [CALIFORNIA_RIGHTS_DISCLOSURE_ID] : []),
     ...(result.data.optOutEffectiveness === "bounded_observation" && result.data.optOutObservation?.evidence.status === "complete" && result.data.optOutObservation.evidence.requests.length > 0 ? [CALIFORNIA_OPT_OUT_ACTIVITY_ID] : []),
-    ...(result.data.choiceSurface === "not_observed_in_inspected_scope" &&
+    ...((!combined || requiredChoiceBasis) && result.data.choiceSurface === "not_observed_in_inspected_scope" && !observedNamedPage &&
       !(result.data.contractVersion !== "certscore.california-privacy-review.v1" && result.data.reviewCoverage.families.some(row=>row.id === "privacy_choices" && row.status === "not_triggered_in_scope")) ? [CALIFORNIA_CHOICE_ABSENCE_ID] : []),
     ...(result.data.controls.some(row => row.destinationStatus === "http_error") ? [CALIFORNIA_CHOICE_DESTINATION_ID] : []),
     ...(result.data.failedNoticeLinks?.some(row => row.kind === "notice_at_collection") ? [CALIFORNIA_NOTICE_DESTINATION_ID] : []),
@@ -386,6 +496,29 @@ export function californiaPrivacyReviewFindingIds(value: unknown): string[] {
 }
 
 export function californiaPrivacyReviewCopy(id: string, assessment?: CaliforniaPrivacyReview) {
+  if(id===BROAD_OPT_OUT_FINDING_ID)return {title:"Sale/sharing opt-out assessment",description:"Opt-out signals assessed within retained scan evidence.",action:"Review the retained opt-out evidence."};
+  if(id===OPT_OUT_ABSENCE_FINDING_ID)return {title:"Sale/sharing opt-out not observed",description:"No sale/sharing opt-out route was identified in the complete starting-page and retained-policy inspection.",action:"Review the inspected starting page and retained policy routes."};
+  if(id===OPT_OUT_SIGNAL_FINDING_ID){
+    const signal=assessment?.contractVersion==="certscore.california-privacy-review.v10"?assessment.optOutPresenceSignal:undefined;
+    return {
+    title:"Sale/sharing opt-out observed",
+    description:signal?.basis==="visible_dom_opt_out_label"?`A named opt-out label was retained on the observed page. Scope: ${signal.scopeLabel}.`:signal?.scope&&signal.scope!=="named_route"?`The retained policy describes an opt-out choice. Scope: ${signal.scopeLabel}.`:
+      "The retained privacy policy gives specific sale/sharing opt-out instructions and names a request route.",
+    action:"Review the retained opt-out instructions and their operation.",
+    };
+  }
+  if(id===FRICTIONLESS_GPC_FINDING_ID) return {
+    title:"Frictionless GPC exception review",
+    description:assessment?.contractVersion === "certscore.california-privacy-review.v10" && assessment.frictionlessGpcException?.status === "contradicted_in_assessed_scope"
+      ? "Retained evidence conflicts with a requirement for the frictionless GPC link exception. Policy declarations, observed behavior and unresolved requirements are assessed separately."
+      : "Eligibility for the frictionless GPC link exception remains unresolved. Retained policy declarations are assessed separately from verified behavior.",
+    action:"Review the retained disclosures and behavior for the frictionless GPC exception.",
+  };
+  if (id === POLICY_CHOICE_METHOD_FINDING_ID) return {
+    title: "Opt-out link listed in privacy policy",
+    description: `${assessment?.policyChoiceMethods?.methods.map(row => `“${row.label}” (${row.method === "email" ? "email link" : "web link"}) in ${row.sourceDocumentUrl}`).join("; ") ?? "An opt-out-labeled method is listed in a retained privacy policy"}. Homepage availability, sale/sharing scope and effectiveness are not established.`,
+    action: "Review the policy-listed method and what it covers. Its label alone does not establish a working sale/sharing opt-out.",
+  };
   const missingTopics=assessment?.contractVersion === "certscore.california-privacy-review.v5" || assessment?.contractVersion === "certscore.california-privacy-review.v6" || (assessment?.contractVersion === "certscore.california-privacy-review.v7" || (assessment?.contractVersion === "certscore.california-privacy-review.v8" || (assessment?.contractVersion === "certscore.california-privacy-review.v9" || assessment?.contractVersion === "certscore.california-privacy-review.v10"))) ? assessment.rightsAssessment?.topics :
     assessment?.contractVersion === "certscore.california-privacy-review.v4" ? assessment.disclosureInspection?.topics : undefined;
   const missingRights = missingTopics?.filter(topic=>topic.status === "not_observed").map(topic=>({
@@ -412,6 +545,14 @@ export function californiaPrivacyReviewCopy(id: string, assessment?: CaliforniaP
     description: "Advertising-classified requests received responses after a confirmed sale/sharing opt-out in the bounded visit. Review the recipients and data flows; this observation alone does not establish a legally defined sale or sharing.",
     action: "Check that the recorded choice reaches relevant services and governs applicable sale/sharing flows. Review the retained request purposes and contractual roles.",
   };
+  if(id===CALIFORNIA_CHOICE_ABSENCE_ID && assessment?.contractVersion==="certscore.california-privacy-review.v10" &&
+    assessment.disclosureChoiceAssessment?.policyVersion===CALIFORNIA_COMBINED_OPT_OUT_POLICY) {
+    const high=assessment.disclosureChoiceAssessment.optOutRisk?.status==="gpc_contradiction";
+    return {title:high?"Potential failure of California opt-out rights":"Potential missing sale/sharing opt-out method",
+      description:high?"Advertising observed with no identified opt-out and a conflicting GPC response."
+        :"Advertising observed; GPC opt-out recorded, but another required method not identified.",
+      action:"Review the retained opt-out search, advertising requests and GPC response. Check that applicable sale/sharing choices reach the relevant recipients."};
+  }
   return id === CALIFORNIA_CHOICE_ABSENCE_ID ? {
     title: "No named sale/sharing choice found in the inspected page",
     description: "The completed inspection did not identify a named sale/sharing choice among the rendered links and buttons. Review whether an opt-out method is required and whether an alternative method applies.",

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { assessCmsSignals, assessCmsPluginSignals, type CmsSecurityProjection, type CmsSignal } from "@certscore/contracts";
+import { assessCmsSignals, assessCmsPluginSignals, buildTechnologyInventory, type CmsSecurityProjection, type CmsSignal } from "@certscore/contracts";
 import { SHADOW_REPORT, type ShadowReportData } from "../../components/scans/report-lab/shadow-report-data";
 import { CmpDetails } from "../../components/scans/cmp-details";
 import { RegulatoryChecklistCorrectionSteps } from "../../components/scans/regulatory-checklist-evidence-details";
@@ -12,6 +12,7 @@ import { buildReportDisplayExport } from "../api-v2/report-display-export";
 import { selectReportEvidenceSection } from "../api-v2/report-evidence-selection";
 import { buildReportEvidencePage } from "../api-v2/report-evidence-page";
 import { reconstructReportEvidencePages } from "../../../../packages/certscore-sdk/src/detailed-evidence";
+Object.assign(globalThis, { React });
 
 function fixture(): ShadowReportData {
   const report = structuredClone(SHADOW_REPORT);
@@ -85,10 +86,27 @@ test("CMS export preserves existing version/advisory evidence and omits document
   assert.equal(output.cmsSecurity.sourceHash, report.cmsSecurity!.sourceHash);
   assert.equal(output.cmsSecurity.detections[0].version, "6.8.3");
   assert.equal(output.cmsSecurity.advisories.length, report.cmsSecurity!.assessment.matches.length);
-  assert.equal(output.detailedEvidence.sections[0].title, "CMS & version");
+  assert.equal(output.detailedEvidence.sections[0].title, "Tech stack observed");
   assert.doesNotMatch(JSON.stringify(output), /private-document-token|documentToken/);
   const wrong = structuredClone(report); wrong.cmsSecurity!.scanId = "other-scan";
   assert.equal(buildDetailedEvidenceExport(wrong).cmsSecurity, null);
+});
+test("technology inventory survives focused API pagination without adding finding rows", () => {
+  const report = fixture();
+  const cms = report.cmsSecurity!;
+  cms.technologyInventory = buildTechnologyInventory([
+    { kind: "header", value: "server: cloudflare", evidenceRef: "site_integrity:tech-signal:0", sourceRef: "response-1", sourceUrl: cms.documentUrl },
+  ], cms.documentUrl);
+  const findings = structuredClone(report.findings);
+  const prepared = { ...report, ...buildDetailedEvidenceExport(report) };
+  const exported = buildReportDisplayExport(selectReportEvidenceSection(prepared, "cms").report, { scanId: report.scan.id });
+  const page = buildReportEvidencePage({ scanId: report.scan.id, report: exported, section: "cms" });
+  const rebuilt = reconstructReportEvidencePages([{ ...page, entries: page.entries.map(entry => ({ ...entry, value: entry.value })) }]);
+  assert.equal(rebuilt.cmsSecurity?.technologyInventory?.detections[0]?.name, "Cloudflare");
+  assert.equal(rebuilt.cmsSecurity?.technologyInventory?.signals[0]?.sourceRef, "response-1");
+  assert.equal(rebuilt.detailedEvidence?.sections[0]?.displayStatus, null);
+  assert.equal(rebuilt.detailedEvidence?.sections[0]?.rows.length, cms.assessment.matches.length);
+  assert.deepEqual(report.findings, findings);
 });
 test("missing CMP and CMS evidence stays limited or unavailable and creates no findings", () => {
   const report = fixture(); delete report.cmpAudit; delete report.cmsSecurity;

@@ -1,0 +1,29 @@
+[
+  {
+    "host": "mail.tm",
+    "documentUrl": "https://mail.tm/en/",
+    "sourceUrl": "https://mail.tm/en/privacy/",
+    "scope": "browser_advertising",
+    "label": "Advertising-cookie opt-out instructions",
+    "kind": "specific_policy_opt_out_instructions",
+    "instruction": "For more information about this type of online advertising, about cookies, and about how to turn this feature off, please visit this link.",
+    "context": "Please note that turning off advertising cookies won’t mean that you are not served any advertising, merely that it will not be tailored to your interests.",
+    "template": "(COMPANY NAME)",
+    "limits": [
+      "instruction_destination_unverified",
+      "template_wording_retained"
+    ]
+  },
+  {
+    "host": "gdemoi.ru",
+    "documentUrl": "https://www.gdemoi.ru/",
+    "sourceUrl": "https://www.gdemoi.ru/documents/privacy/",
+    "scope": "browser_advertising",
+    "label": "Browser advertising-cookie refusal",
+    "kind": "specific_policy_opt_out_instructions",
+    "instruction": "На нашем сайте используются все виды файлов cookie. Отказаться от обработки cookie-файлов вы можете с помощью соответствующих настроек вашего браузера.",
+    "context": "Маркетинговые файлы cookie , которые используются для отслеживания посетителей на разных веб-сайтах. Они предназначены для того, чтобы показывать рекламу",
+    "template": "",
+    "limits": []
+  }
+]

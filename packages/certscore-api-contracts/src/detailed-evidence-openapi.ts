@@ -2150,6 +2150,173 @@ export const detailedEvidenceOpenApiSchemas = {
           }
         },
         "maxItems": 22
+      },
+      "technologyInventory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ruleset",
+          "documentUrl",
+          "truncated",
+          "detections",
+          "signals"
+        ],
+        "properties": {
+          "ruleset": {
+            "const": "certscore.technology-rules.v1",
+            "type": "string"
+          },
+          "documentUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "detections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "name",
+                "category",
+                "scope",
+                "confidence",
+                "version",
+                "versionStatus",
+                "observedVersions",
+                "ruleIds",
+                "evidenceRefs"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "category": {
+                  "type": "string",
+                  "enum": [
+                    "cms",
+                    "commerce",
+                    "framework",
+                    "server",
+                    "runtime",
+                    "cdn"
+                  ]
+                },
+                "scope": {
+                  "type": "string",
+                  "enum": [
+                    "page_platform",
+                    "page_component",
+                    "external_asset",
+                    "delivery"
+                  ]
+                },
+                "confidence": {
+                  "type": "string",
+                  "enum": [
+                    "high",
+                    "tentative"
+                  ]
+                },
+                "version": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "versionStatus": {
+                  "type": "string",
+                  "enum": [
+                    "declared",
+                    "not_detected",
+                    "conflicting"
+                  ]
+                },
+                "observedVersions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 40
+                  },
+                  "maxItems": 8
+                },
+                "ruleIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "maxItems": 8
+                },
+                "evidenceRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "maxItems": 16
+                }
+              }
+            },
+            "maxItems": 18
+          },
+          "signals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "value",
+                "evidenceRef",
+                "sourceRef",
+                "sourceUrl"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "generator",
+                    "asset",
+                    "marker",
+                    "header"
+                  ]
+                },
+                "value": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "evidenceRef": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "sourceRef": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "sourceUrl": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 512
+                }
+              }
+            },
+            "maxItems": 16
+          }
+        }
       }
     }
   },

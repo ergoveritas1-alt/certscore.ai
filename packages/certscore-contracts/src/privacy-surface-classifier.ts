@@ -413,11 +413,20 @@ export function classifyPrivacySurface(
   };
 }
 
-/** Explicit product/request identities cannot establish a governing disclosure. */
+/** Explicit product/request/reference identities cannot establish a governing disclosure. */
 export function nonPolicyDocumentReason(input: PrivacySurfaceClassifierInput): string | undefined {
   const label = normalizePrivacySurfaceText(input.title || input.linkText);
   let path = "";
   try { path = decodeURIComponent(new URL(input.url ?? "").pathname).toLowerCase().replace(/\/$/, ""); } catch {}
+  // Match a publication's own terminal slug/title, never a parent directory or
+  // surrounding copy. A research organisation's /research/privacy-policy and a
+  // study participant privacy notice remain eligible governing documents.
+  const publicationTopic = /\b(?:privacy polic(?:y|ies)|cookie polic(?:y|ies)) (?:transparency |comparative |comparison |benchmark )*(?:stud(?:y|ies)|research paper|white paper|guide|analysis|report)\b/i;
+  const terminalSlug = (path.split("/").at(-1) ?? "").replace(/\.(?:html?|pdf)$/, "").replace(/[-_]+/g, " ");
+  const publicationLabel = label.replace(/[-_]+/g, " ");
+  if (publicationTopic.test(terminalSlug) || publicationTopic.test(publicationLabel)) {
+    return "research_or_reference_not_policy_document";
+  }
   if (/\/(?:privacy|data-subject|dsar)[-_]requests?$/.test(path) || /\/(?:privacy|data-subject|dsar)\/(?:app|request)[-_]form$/.test(path) || /^(?:submit (?:a |your )?)?(?:privacy|data subject|data access) request$/.test(label)) return "privacy_request_surface_not_policy_document";
   // The terminal slug identifies a policy creation/reference product. A policy
   // document below that product (for example /privacy-policy-generator/privacy)

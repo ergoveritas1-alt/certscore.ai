@@ -1,3 +1,4 @@
+import {reviewedOptOutPolicyOwner,reviewedOptOutPolicyRedirect} from "@certscore/contracts";
 import {assessGpcPotentialRisk, type CaliforniaPotentialRiskAssessment} from "../../lib/scans/california-potential-risk-policy";
 import {withPropertySaleSharingSource} from "../../lib/scans/property-sale-sharing-source";
 import { buildFirstLayerRejectPathProjection } from "./scan-report-consent-projection";
@@ -3627,6 +3628,27 @@ function buildRetainedPolicyDisclosureText(text: string) {
   return normalized.slice(0, MAX_RETAINED_POLICY_DISCLOSURE_TEXT_CHARS).trimEnd();
 }
 
+/** Reuse the loaded artifact map; this positive-only handoff never expands
+ * governing-policy ownership/coverage, source reads or the eight-doc signal cap. */
+export function buildPositiveOptOutPolicyEvidence(bundle:CanonicalEvidenceBundle,canonicalDocumentUrl:string|null,context?:PolicyTextEvidenceContext){
+  // Positive choice evidence reuses the existing loaded text map. Keep it
+  // separate from governing policy coverage and never change general ownership.
+  const optOutPolicySurfaces=[...new Map((bundle.policySurfaceObservations??[]).map(surface=>[surface.observationId,{surface,pageUrl:surface.finalUrl??surface.normalizedUrl??surface.url??null}])).values()].filter(row=>{
+    const surface=row.surface,url=surface.finalUrl??surface.normalizedUrl??surface.url;
+    if(!url||!canonicalDocumentUrl)return false;
+    if(reviewedOptOutPolicyOwner(bundle.normalizedUrl,url,bundle.startedAt))return true;
+    if(reviewedOptOutPolicyRedirect(canonicalDocumentUrl,surface.redirectChain??[],bundle.startedAt))return true;
+    try {return ["privacy_policy","california_notice","cookie_policy"].includes(surface.surfaceType)&&
+      ["target_controller","first_party_brand"].includes(surface.targetRelationship??"")&&
+      new URL(url).hostname.replace(/^www\./,"")===new URL(canonicalDocumentUrl).hostname.replace(/^www\./,"");}catch{return false;}
+  }).slice(0,8);
+  const optOutPolicyProjection=buildPolicyTextEvidenceProjection(optOutPolicySurfaces,context);
+  return {projection:optOutPolicyProjection,texts:optOutPolicySurfaces.flatMap(row=>{
+    const retained=resolvePolicySurfaceTextEvidence(row.surface,context);
+    return retained?.verificationStatus==="verified"&&retained.text?[{observationId:row.surface.observationId,text:retained.text}]:[];
+  })};
+}
+
 function buildPolicyTextEvidenceProjection(
   article13Surfaces: ReturnType<typeof dedupePolicySurfaces>,
   context?: PolicyTextEvidenceContext,
@@ -5759,6 +5781,7 @@ export function buildMaterializedLocalV2Detail(
   const californiaPolicySurfaces = policySurfaces.filter(row => selectedPolicyIds.has(row.surface.observationId) ||
     ["california_notice","notice_at_collection"].includes(row.surface.surfaceType));
   const californiaPolicyProjection = buildPolicyTextEvidenceProjection(californiaPolicySurfaces,options.policyTextEvidenceContext);
+  const positiveOptOutPolicyEvidence=buildPositiveOptOutPolicyEvidence(bundle,canonicalDocumentUrl,options.policyTextEvidenceContext);
   const californiaPrivacyReview = runtimeEvidenceReportable && !consentControlAssessment.scan.noGo
     ? projectCaliforniaPrivacyReview(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl, {
       projection:californiaPolicyProjection,
@@ -5766,7 +5789,7 @@ export function buildMaterializedLocalV2Detail(
         const retained = resolvePolicySurfaceTextEvidence(row.surface,options.policyTextEvidenceContext);
         return retained?.verificationStatus === "verified" && retained.text ? [{observationId:row.surface.observationId,text:retained.text}] : [];
       }),
-    }) : null;
+    },positiveOptOutPolicyEvidence) : null;
   if (californiaPrivacyReview && consentControlAssessment.artifactVersion === "2.2") consentControlAssessment.californiaPrivacyReview = californiaPrivacyReview;
   const policyTextProjectionDocuments = policyTextProjection.documents;
   console.warn(JSON.stringify({

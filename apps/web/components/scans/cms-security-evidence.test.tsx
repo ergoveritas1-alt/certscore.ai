@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { assessCmsPluginSignals, assessCmsSignals, type CmsSecurityProjection, type CmsSignal } from "@certscore/contracts";
+import { assessCmsPluginSignals, assessCmsSignals, buildTechnologyInventory, type CmsSecurityProjection, type CmsSignal } from "@certscore/contracts";
 import { CmsSecurityEvidence } from "./cms-security-evidence";
 Object.assign(globalThis, { React });
 const projection = (signals: CmsSignal[]): CmsSecurityProjection => ({
@@ -12,11 +12,11 @@ const projection = (signals: CmsSignal[]): CmsSecurityProjection => ({
   pluginInventory: assessCmsPluginSignals(signals),
 });
 const signal = (value: string): CmsSignal => ({ evidenceRef: "site_integrity:dom:0", kind: "meta_generator", value, sourceUrl: "https://cms.example/", artifactRef: "runtime:dom:1" });
-test("unknown CMS has one neutral version label and no stacked disclaimers", () => {
+test("unknown CMS keeps neutral version labels and no stacked disclaimers", () => {
   const html = renderToStaticMarkup(<CmsSecurityEvidence projection={projection([signal("WordPress")])} />);
-  assert.equal((html.match(/Version not detected/g) ?? []).length, 1);
+  assert.match(html, /aria-label="Version not detected">—/);
   assert.match(html, /WordPress · Version not detected/);
-  assert.match(html, /How we identified this/);
+  assert.match(html, /All source evidence/);
   assert.doesNotMatch(html, /Limited|Version check unavailable|Version could not be checked|Confirm the installed|Page-reported versions/);
 });
 test("declared release is prominent and selected advisory warnings remain visible", () => {
@@ -35,18 +35,18 @@ test("asset version candidates and conflicting declarations are labelled distinc
   const conflict = renderToStaticMarkup(<CmsSecurityEvidence projection={projection([signal("WordPress 6.8"), { ...signal("WordPress 6.7"), evidenceRef: "site_integrity:dom:1" }])} />);
   assert.match(conflict, /Conflicting versions/);
 });
-test("plugins show separately from the unknown core version without extra warnings", () => {
+test("plugins have their own rows alongside the unknown core version", () => {
   const signals = [signal("WordPress"), { ...signal("WPML ver:4.8.6 stt:12,77,1,3;"), evidenceRef: "site_integrity:dom:1" },
     { ...signal("Powered by WPBakery Page Builder - drag and drop page builder for WordPress."), evidenceRef: "site_integrity:dom:2" },
     { ...signal("WP Rocket 3.20.2"), evidenceRef: "site_integrity:dom:3" }];
   const html = renderToStaticMarkup(<CmsSecurityEvidence projection={projection(signals)} />);
   assert.match(html, /WordPress · Version not detected/);
-  assert.match(html, /Plugins/); assert.match(html, /WPML/); assert.match(html, /4\.8\.6/);
+  assert.match(html, /Plugin/); assert.match(html, /WPML/); assert.match(html, /4\.8\.6/);
   assert.match(html, /WP Rocket/); assert.match(html, /3\.20\.2/); assert.match(html, /WPBakery Page Builder/);
   assert.match(html, /aria-label="Version not detected">—/);
   assert.doesNotMatch(html, /Support ended|Potential exposure|Limited|disclaimer/i);
   const legacy = projection(signals); delete legacy.pluginInventory;
-  assert.doesNotMatch(renderToStaticMarkup(<CmsSecurityEvidence projection={legacy} />), /<table/);
+  assert.doesNotMatch(renderToStaticMarkup(<CmsSecurityEvidence projection={legacy} />), /id="site_integrity:plugin:/);
 });
 
 test("multiple platform detections keep the header compact and the details intact", () => {
@@ -56,4 +56,20 @@ test("multiple platform detections keep the header compact and the details intac
   assert.match(html, /2 platforms detected/);
   assert.match(html, /WordPress/);
   assert.match(html, /Other platform/);
+});
+
+test("technology-only reports show source, version, confidence and scoped tentative evidence", () => {
+  const sample = projection([]);
+  sample.technologyInventory = buildTechnologyInventory([
+    { kind: "header", value: "server: nginx/1.26.1", sourceUrl: sample.documentUrl, evidenceRef: "site_integrity:tech-signal:0", sourceRef: "response-1" },
+    { kind: "asset", value: "/react.production.min.js", sourceUrl: "https://external.example/react.production.min.js", evidenceRef: "site_integrity:tech-signal:1", sourceRef: sample.evidenceRef },
+  ], sample.documentUrl);
+  const html = renderToStaticMarkup(<CmsSecurityEvidence projection={sample} />);
+  assert.match(html, /Tech stack observed/); assert.match(html, /nginx/); assert.match(html, /1\.26\.1 · Declared/);
+  assert.match(html, />High<\/td>/); assert.match(html, /Delivery infrastructure/);
+  assert.match(html, />Tentative<\/td>/); assert.match(html, /External asset · ownership unresolved/);
+  assert.match(html, /Supporting evidence/); assert.match(html, /response-1/);
+  assert.equal((html.match(/<table /g) ?? []).length, 1);
+  assert.match(html, /scope="col"[^>]*>Confidence/);
+  assert.doesNotMatch(html, /Support ended|Potential exposure|No issue matched/);
 });

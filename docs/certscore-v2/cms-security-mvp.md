@@ -1,5 +1,9 @@
 # CMS security MVP
 
+October 24 informational extension: [Tech stack observed](technology-inventory-mvp.md)
+preserves this CMS/plugin/advisory evidence and adds bounded supplemental technology
+observations, including explicit PHP declarations. Existing CMS rules are unchanged.
+
 ## Scope
 
 Passive detection of Joomla, Drupal, Magento / Adobe Commerce, PrestaShop,

@@ -5,6 +5,7 @@ import { projectCaliforniaPrivacyReview } from "./california-privacy-review-proj
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import { projectCaliforniaRegulatoryPriorities } from "../../lib/scans/california-regulatory-priorities";
 import { deriveCaliforniaRegulatoryScore, CALIFORNIA_REGULATORY_SCORE_VERSION } from "../../lib/scans/california-regulatory-score";
+import { projectCaliforniaChoicePresence } from "../../lib/scans/california-choice-presence";
 
 const url = "https://example.test/";
 const source = { verificationStatus: "verified", sha256: "a".repeat(64) };
@@ -245,7 +246,7 @@ test("all ten exact routes retain original identity, complete ancestry and canon
 test("presence-only link survives persistence, concern policy and unified reporting without effectiveness or score effects", () => {
   const input=bundle({policySurfaceInspection:undefined,policySurfaceObservations:[{...surface,documentFetchState:"not_attempted",status:"discovered",httpStatus:undefined,fetchFailureReason:undefined}]});
   const child=projectCaliforniaPrivacyReview(input,source,url)!;
-  assert.equal(child.choicePresence?.version,"privacy_choice_presence.v1");
+  assert.equal(child.choicePresence?.version,"privacy_choice_presence.v2");
   assert.equal(child.optOutEffectiveness,"not_assessed");
   const parent=deriveConsentControlAssessment({scan:{scanId:input.scanId,finalUrl:url}});
   parent.californiaPrivacyReview=child;
@@ -264,8 +265,7 @@ test("presence-only link survives persistence, concern policy and unified report
 test("presence-only claims reject ambiguous, hidden, unbound, secondary and no-go link evidence", () => {
   for (const patch of [{linkSourcePageUrl:undefined},{linkSourcePageUrl:`${url}?other=1`},{linkVisibility:"hidden"},
     {accessibleNameSource:"none"},{discoveryMethod:"guessed_common_path"},{parentObservationId:"secondary"},
-    {directlyLinkedFromScannedPage:false},{clickable:false},{linkText:"Cookie Settings",surfaceType:"cookie_settings"},
-    {linkText:"Your Privacy Choices",surfaceType:"your_privacy_choices"}]) {
+    {directlyLinkedFromScannedPage:false},{clickable:false},{linkText:"Cookie Settings",surfaceType:"cookie_settings"}]) {
     const child=projectCaliforniaPrivacyReview(bundle({policySurfaceInspection:undefined,policySurfaceObservations:[{...surface,...patch}]}),source,url)!;
     const parent=deriveConsentControlAssessment({scan:{scanId:"scan-fixture",finalUrl:url}});parent.californiaPrivacyReview=child;
     const packets=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),runtimeArtifacts:{consentControlAssessment:parent}});
@@ -381,4 +381,46 @@ for (const withIdentity of [false, true]) test(`bounded choice diagnostics persi
   const packets = buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),runtimeArtifacts:{consentControlAssessment:persisted}});
   assert.deepEqual(projectCaliforniaRegulatoryPriorities(packets), []);
   assert.deepEqual(deriveCaliforniaRegulatoryScore({assessment:diagnostic,checklistRows:[],unifiedFindings:packets}), deriveCaliforniaRegulatoryScore({assessment:baseline,checklistRows:[],unifiedFindings:packets}));
+});
+
+for (const label of ["Your Privacy Choices", "Your privacy choices", "Your Privacy Choices ↗"]) {
+  test(`alternative choice presence: ${label} survives canonical projection without a score effect`, () => {
+    const input=bundle({policySurfaceInspection:undefined,policySurfaceObservations:[{...surface,
+      linkText:label,surfaceType:"your_privacy_choices",documentFetchState:"not_attempted",status:"discovered",
+      httpStatus:undefined,fetchFailureReason:undefined}]});
+    const review=projectCaliforniaPrivacyReview(input,source,url)!;
+    const parent=deriveConsentControlAssessment({scan:{scanId:input.scanId,finalUrl:url}});
+    parent.californiaPrivacyReview=review;
+    const project=(assessment:unknown)=>buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],
+      validationFindingLookup:new Map(),runtimeArtifacts:{consentControlAssessment:consentControlAssessmentSchema.parse(assessment)}});
+    const packets=project(JSON.parse(JSON.stringify(parent)));
+    const presence=packets.find(row=>row.unifiedFindingId==="targeted_advertising_choices_present")!;
+    assert.ok(presence); assert.equal(presence.title,"Privacy choices link observed");
+    assert.deepEqual(presence.scoreEffects??[],[]);
+    assert.equal(projectCaliforniaChoicePresence(packets,input.scanId,url)?.state,"observed");
+    assert.equal(projectCaliforniaChoicePresence(packets,input.scanId,url)?.title,"Privacy choices link observed");
+    assert.equal(review.optOutEffectiveness,"not_assessed");
+    assert.deepEqual(deriveCaliforniaRegulatoryScore({assessment:review,checklistRows:[],unifiedFindings:packets}).deductions,[]);
+    // Historical v1 explicitly excluded alternative labels. Parsing/replaying
+    // that packet must not upgrade it to v2 or invent a presence finding.
+    parent.californiaPrivacyReview!.choicePresence!.version="privacy_choice_presence.v1";
+    assert.equal(project(parent).some(row=>row.unifiedFindingId==="targeted_advertising_choices_present"),false);
+  });
+}
+
+test("positive choice provenance preserves query and fragment; sanitized historical sources remain unbound", () => {
+  const exactUrl=url+"?redirect=%2F#home";
+  const project=(sourceUrl:string)=>{
+    const review=projectCaliforniaPrivacyReview(bundle({policySurfaceInspection:undefined,policySurfaceObservations:[{
+      ...surface,linkSourcePageUrl:sourceUrl,documentFetchState:"not_attempted",status:"discovered",httpStatus:undefined,
+      fetchFailureReason:undefined,
+    }]}),source,exactUrl)!;
+    const parent=deriveConsentControlAssessment({scan:{scanId:"scan-fixture",finalUrl:exactUrl}});parent.californiaPrivacyReview=review;
+    const packets=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),
+      runtimeArtifacts:{consentControlAssessment:consentControlAssessmentSchema.parse(parent)}});
+    return projectCaliforniaChoicePresence(packets,"scan-fixture",exactUrl);
+  };
+  assert.equal(project(exactUrl)?.state,"observed");
+  assert.equal(project(url),null);
+  assert.equal(project(url+"?redirect=%2Fother#home"),null);
 });

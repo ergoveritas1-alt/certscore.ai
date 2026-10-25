@@ -137,3 +137,31 @@ test("offline DOM fixtures distinguish hidden reasons, naming sources, frame sco
     assert.ok(truncated.limitations.includes('locator_limited'));
   } finally { await browser.close(); }
 });
+
+test('identity precedes expensive optional locators without resetting the shared allowance', {timeout:15_000}, async()=>{
+  const {createPrivacyFrameContinuityProof}=await import('./privacy-frame-continuity');
+  const browser=await chromium.launch({headless:true});
+  try {
+    const page=await browser.newPage();await page.route('**/*',route=>route.abort());
+    await page.setContent('<button></button><iframe style="display:none"></iframe>');
+    const result=await page.evaluate<{first:Raw;second:Raw;proofCalls:string[];slowReads:number}>(`(()=>{
+      const __name=fn=>fn;let clock=0,slowReads=0;const proofCalls=[];
+      Object.defineProperty(performance,'now',{value:()=>clock});
+      const button=document.querySelector('button');
+      Object.defineProperty(button,'previousElementSibling',{get(){slowReads++;clock+=3;return null;}});
+      const original=(${createPrivacyFrameContinuityProof.toString()})();
+      const proof={begin(...args){proofCalls.push('begin:'+clock);return original.begin(...args);},finish(...args){proofCalls.push('finish:'+clock);return original.finish(...args);}};
+      function read(checkpoint){const d=(${createPrivacyChoiceDomDiagnostics.toString()})(proof,checkpoint);
+        for(let n=0;n<8;n++)d.unnamed(button,Array(6).fill(['text','']),'main');
+        d.frame(document.querySelector('iframe'),0,clock+20);return d.result();}
+      const first=read('first'),second=read('second');return {first,second,proofCalls,slowReads};
+    })()`);
+    assert.deepEqual(result.proofCalls,['begin:0','finish:3']);
+    assert.equal(result.second.checkpointIdentity?.status,'matched');
+    assert.equal(result.slowReads,2,'one expensive locator consumes each cooperative allowance; later samples are skipped');
+    assert.ok(result.first.limitations.includes('diagnostic_time_limit'));
+    const built=buildPrivacyChoiceDiagnostics(result.first,result.second,sourceHash)!;
+    assert.equal(built.status,'limited');assert.ok(Buffer.byteLength(JSON.stringify(built))<=4096);
+    assert.equal(privacyChoiceInspectionSchema.safeParse({...inspection,diagnostics:built,coverage:'complete',limitationKeys:[]}).success,false);
+  }finally{await browser.close();}
+});

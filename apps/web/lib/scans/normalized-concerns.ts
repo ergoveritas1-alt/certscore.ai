@@ -1,4 +1,9 @@
-import { readSaleSharingLinkPresence, PRIVACY_CHOICE_PRESENCE_SIGNAL, PRIVACY_CHOICE_PRESENCE_TITLE } from "@certscore/contracts";
+import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
+import {BROAD_OPT_OUT_FINDING_ID} from "@certscore/contracts";
+import {OPT_OUT_SIGNAL_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID} from "@certscore/contracts";
+import {FRICTIONLESS_GPC_FINDING_ID} from "@certscore/contracts";
+import {POLICY_CHOICE_METHOD_FINDING_ID} from "@certscore/contracts";
+import { readSaleSharingLinkPresence, PRIVACY_CHOICE_PRESENCE_SIGNAL } from "@certscore/contracts";
 import {retainedPotentialRisk, CA_POTENTIAL_RISK_FINDING} from "./california-potential-risk-policy";
 import { gpcVendorFindingSummary } from "./choice-vendor-findings";
 import {retainedCaliforniaPostReject} from "./california-post-reject-policy";
@@ -4632,8 +4637,8 @@ function buildPrivacyChoicePresenceConcerns(runtimeArtifacts: Record<string, unk
   if (!presence) return [];
   const description = `Observed: ${presence.links.map(link => `“${link.label}”`).join("; ")}.`;
   return [buildConcernFromSharedInput({categoryId:"privacy",originType:"runtime_artifact",originKey:PRIVACY_CHOICE_PRESENCE_SIGNAL,
-    title:PRIVACY_CHOICE_PRESENCE_TITLE,description,observedValue:description,severity:"low",sourceType:"signal",
-    signalSource:"runtime_artifact_signal",signalKey:PRIVACY_CHOICE_PRESENCE_SIGNAL,signalLabel:PRIVACY_CHOICE_PRESENCE_TITLE,
+    title:presence.title,description,observedValue:description,severity:"low",sourceType:"signal",
+    signalSource:"runtime_artifact_signal",signalKey:PRIVACY_CHOICE_PRESENCE_SIGNAL,signalLabel:presence.title,
     evidence:[presence.review.documentUrl],rawEvidence:{consentControlAssessment:assessment,
       unifiedFindingId:"targeted_advertising_choices_present",pageUrl:presence.review.documentUrl,
       runtimeEvidenceArtifacts:presence.links.map(link=>link.evidenceRef)}})];
@@ -4647,9 +4652,11 @@ function buildCaliforniaPrivacyReviewConcerns(runtimeArtifacts: Record<string, u
     const copy = californiaPrivacyReviewCopy(id, projection);
     return buildConcernFromSharedInput({categoryId: "privacy", originType: "runtime_artifact", originKey: `${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${id}`,
       californiaRuntimeGpcAssessment:runtimeArtifacts?.gpcResponseAssessment ?? runtimeArtifacts?.gpc_response_assessment,
-      title: copy.title, description: copy.description, observedValue: copy.description, severity: "medium",
+      title: copy.title, description: copy.description, observedValue: copy.description, severity: id==="california_privacy_choice_not_observed" && projection.contractVersion==="certscore.california-privacy-review.v10" &&
+        projection.disclosureChoiceAssessment?.policyVersion===CALIFORNIA_COMBINED_OPT_OUT_POLICY && projection.disclosureChoiceAssessment.optOutRisk?.status==="gpc_contradiction" ? "high"
+        : [BROAD_OPT_OUT_FINDING_ID,POLICY_CHOICE_METHOD_FINDING_ID,FRICTIONLESS_GPC_FINDING_ID,OPT_OUT_SIGNAL_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID].includes(id) ? "low" : "medium",
       sourceType: "signal", signalSource: "runtime_artifact_signal", signalKey: `${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${id}`, signalLabel: copy.title,
-      evidence: [projection.documentUrl], rawEvidence: {consentControlAssessment: assessment, californiaPrivacyReview: projection, unifiedFindingId: id, pageUrl: projection.documentUrl}});
+      evidence: [projection.documentUrl], rawEvidence: {consentControlAssessment: assessment, californiaPrivacyReview: projection, gpcResponseAssessment:runtimeArtifacts?.gpcResponseAssessment ?? runtimeArtifacts?.gpc_response_assessment, unifiedFindingId: id, pageUrl: projection.documentUrl}});
   });
 }
 

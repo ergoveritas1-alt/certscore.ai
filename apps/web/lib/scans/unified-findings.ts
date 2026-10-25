@@ -1,3 +1,8 @@
+import {supportsCombinedOptOutRisk} from "./california-combined-opt-out-policy";
+import {BROAD_OPT_OUT_FINDING_ID,broadOptOutAssessmentSchema,type BroadOptOutAssessment} from "@certscore/contracts";
+import {OPT_OUT_SIGNAL_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID,optOutPresenceSignalSchema,type OptOutPresenceSignal} from "@certscore/contracts";
+import {POLICY_CHOICE_METHOD_FINDING_ID,policyChoiceMethodsSchema} from "@certscore/contracts";
+import {FRICTIONLESS_GPC_FINDING_ID,frictionlessGpcProjectionSchema,type FrictionlessGpcProjection} from "@certscore/contracts";
 import { readSaleSharingLinkPresence, PRIVACY_CHOICE_PRESENCE_SIGNAL, PRIVACY_CHOICE_PRESENCE_TITLE } from "@certscore/contracts";
 import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
 import {retainedPotentialRisk,type CaliforniaPotentialRiskAssessment} from "./california-potential-risk-policy";
@@ -6,7 +11,7 @@ import {californiaPostRejectAssessmentSchema,type CaliforniaPostRejectAssessment
 import { AFTER_REJECT_SCORING_POLICY, afterRejectScoringNarrative, readAfterRejectScoringAssessment, type AfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { FORM_DESTINATION_FINDING_ID, formDestinationProjectionSchema, type FormDestinationProjection } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, cmsSecurityProjectionSchema, type CmsSecurityProjection } from "@certscore/contracts";
-import { CALIFORNIA_PRIVACY_REVIEW_IDS, readCaliforniaPrivacyReviewFromConsent, type CaliforniaPrivacyReview } from "@certscore/contracts";
+import { CALIFORNIA_COMBINED_OPT_OUT_POLICY,californiaPrivacyReviewCopy,CALIFORNIA_PRIVACY_REVIEW_IDS, readCaliforniaPrivacyReviewFromConsent, type CaliforniaPrivacyReview } from "@certscore/contracts";
 import { SITE_INTEGRITY_FINDING_ID, siteIntegrityProjectionSchema, type SiteIntegrityProjection } from "@certscore/contracts";
 import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
 import { webmasterRemediation, webmasterRemediationText } from "./webmaster-remediation";
@@ -113,9 +118,14 @@ import { REJECT_TRACKING_CONFIRMATION_MIN_MS } from "./reject-tracking-policy";
 import { buildPromotionGradePreconsentRequests } from "./preconsent-public-evidence";
 
 export type UnifiedFindingDetails =
+  | {family:"broad_opt_out_assessment";projection:BroadOptOutAssessment}
   | { family: "form_destinations"; projection: FormDestinationProjection }
   | { family: "cms_security"; projection: CmsSecurityProjection }
-  | { family: "california_privacy_review"; projection: CaliforniaPrivacyReview }
+  | { family: "california_privacy_review"; projection: CaliforniaPrivacyReview; gpcAssessment?: import("@certscore/contracts").GpcResponseAssessment }
+  | { family: "opt_out_presence_signal"; projection: OptOutPresenceSignal }
+  | { family: "opt_out_absence"; projection: {scanId:string;documentUrl:string;sourceHash:string;scope:"starting_page_and_retained_policies"} }
+  | { family: "policy_choice_methods"; projection: ReturnType<typeof policyChoiceMethodsSchema.parse> }
+  | { family: "frictionless_gpc_exception"; projection: FrictionlessGpcProjection }
   | { family: "site_integrity"; projection: SiteIntegrityProjection }
   | {
       family: "coverage_gap";
@@ -249,7 +259,7 @@ export type UnifiedFindingPacket = {
   sourceRefs: Array<
     | { kind: "signal"; key: string; label?: string; source: ReportSignalSource }
     | { kind: "validation"; ruleKey: string; title?: string }
-    | { kind: "issue"; title: string }
+  | { kind: "issue"; title: string }
   >;
   evidence?: {
     counts?: Record<string, number>;
@@ -1841,9 +1851,37 @@ function buildUnifiedFindingDetails(input: {
     const presence = readSaleSharingLinkPresence(input.fallbackEvidence?.consentControlAssessment);
     if (presence) return {family:"california_privacy_review",projection:presence.review} satisfies UnifiedFindingDetails;
   }
+  if(input.findingId===BROAD_OPT_OUT_FINDING_ID){
+    const review=readCaliforniaPrivacyReviewFromConsent(input.fallbackEvidence?.consentControlAssessment);
+    const parsed=broadOptOutAssessmentSchema.safeParse(review?.contractVersion==="certscore.california-privacy-review.v10"?review.broadOptOutAssessment:undefined);
+    return parsed.success?{family:"broad_opt_out_assessment",projection:parsed.data} satisfies UnifiedFindingDetails:undefined;
+  }
+  if(input.findingId===OPT_OUT_SIGNAL_FINDING_ID){
+    const review=readCaliforniaPrivacyReviewFromConsent(input.fallbackEvidence?.consentControlAssessment);
+    const parsed=optOutPresenceSignalSchema.safeParse(review?.contractVersion==="certscore.california-privacy-review.v10"?review.optOutPresenceSignal:undefined);
+    return parsed.success?{family:"opt_out_presence_signal",projection:parsed.data} satisfies UnifiedFindingDetails:undefined;
+  }
+  if(input.findingId===OPT_OUT_ABSENCE_FINDING_ID){
+    const review=readCaliforniaPrivacyReviewFromConsent(input.fallbackEvidence?.consentControlAssessment);
+    return review?.contractVersion==="certscore.california-privacy-review.v10"&&review.optOutNegativeSearch?
+      {family:"opt_out_absence",projection:{scanId:review.scanId,documentUrl:review.documentUrl,sourceHash:review.sourceHash,scope:review.optOutNegativeSearch.scope}} satisfies UnifiedFindingDetails:undefined;
+  }
+  if(input.findingId===POLICY_CHOICE_METHOD_FINDING_ID){
+    const review=readCaliforniaPrivacyReviewFromConsent(input.fallbackEvidence?.consentControlAssessment);
+    const parsed=policyChoiceMethodsSchema.safeParse(review?.policyChoiceMethods);
+    return parsed.success?{family:"policy_choice_methods",projection:parsed.data} satisfies UnifiedFindingDetails:undefined;
+  }
+  if(input.findingId===FRICTIONLESS_GPC_FINDING_ID){
+    const review=readCaliforniaPrivacyReviewFromConsent(input.fallbackEvidence?.consentControlAssessment);
+    if(review?.contractVersion!=="certscore.california-privacy-review.v10"||!review.frictionlessGpcException)return undefined;
+    const parsed=frictionlessGpcProjectionSchema.safeParse({assessment:review.frictionlessGpcException,sources:review.reviewCoverage.sourceDocuments});
+    return parsed.success?{family:"frictionless_gpc_exception",projection:parsed.data} satisfies UnifiedFindingDetails:undefined;
+  }
   if (CALIFORNIA_PRIVACY_REVIEW_IDS.some(id => id === input.findingId)) {
     const projection = readCaliforniaPrivacyReviewFromConsent(input.fallbackEvidence?.consentControlAssessment);
-    return projection ? {family: "california_privacy_review", projection} satisfies UnifiedFindingDetails : undefined;
+    const parsedGpc=gpcResponseAssessmentSchema.safeParse(input.fallbackEvidence?.gpcResponseAssessment);
+    return projection ? {family: "california_privacy_review", projection,
+      ...(input.findingId==="california_privacy_choice_not_observed" && parsedGpc.success && supportsCombinedOptOutRisk(projection,parsedGpc.data)?{gpcAssessment:parsedGpc.data}:{})} satisfies UnifiedFindingDetails : undefined;
   }
   if (input.findingId === SITE_INTEGRITY_FINDING_ID) {
     const projection = siteIntegrityProjectionSchema.safeParse(input.fallbackEvidence?.siteIntegrity);
@@ -6940,13 +6978,16 @@ function createInitialUnifiedFindingPacket(
   candidate: ConcernBackedUnifiedFindingCandidate
 ): UnifiedFindingPacket {
   const scoring=readAfterRejectScoringAssessment(candidate.normalizedConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment);
+  const review=readCaliforniaPrivacyReviewFromConsent(candidate.normalizedConcern?.evidenceBundle.rawEvidence?.consentControlAssessment);
+  const combinedCopy=definition.id==="california_privacy_choice_not_observed" && review?.contractVersion==="certscore.california-privacy-review.v10" &&
+    review.disclosureChoiceAssessment?.policyVersion===CALIFORNIA_COMBINED_OPT_OUT_POLICY ? californiaPrivacyReviewCopy(definition.id,review):undefined;
   return {
     unifiedFindingId: definition.id,
-    title: candidate.normalizedConcern?.originKey === PRIVACY_CHOICE_PRESENCE_SIGNAL
-      ? PRIVACY_CHOICE_PRESENCE_TITLE
+    title: combinedCopy?.title ?? (candidate.normalizedConcern?.originKey === PRIVACY_CHOICE_PRESENCE_SIGNAL
+      ? readSaleSharingLinkPresence(candidate.normalizedConcern.evidenceBundle.rawEvidence?.consentControlAssessment)?.title ?? PRIVACY_CHOICE_PRESENCE_TITLE
       : definition.id === "post_refusal_non_essential_activity" || definition.id === "post_reject_click_tracking" && isRejectPresencePolicy(scoring?.policyVersion)
       ? afterRejectScoringNarrative(readAfterRejectScoringAssessment(candidate.normalizedConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment))?.title ?? definition.label
-      : definition.label,
+      : definition.label),
     severity: candidate.severity,
     summary: candidate.description,
     confidenceBand: "low",
@@ -7171,7 +7212,7 @@ function mergeUnifiedFindingCandidateEvidence(input: {
 }) {
   if (input.findingId === "targeted_advertising_choices_present" && input.candidate.normalizedConcern?.originKey === PRIVACY_CHOICE_PRESENCE_SIGNAL &&
       readSaleSharingLinkPresence(input.candidate.fallbackEvidence?.consentControlAssessment)) {
-    input.packet.title = PRIVACY_CHOICE_PRESENCE_TITLE;
+    input.packet.title = readSaleSharingLinkPresence(input.candidate.fallbackEvidence?.consentControlAssessment)!.title;
     input.packet.summary = input.candidate.description;
   }
   input.packet.evidence = mergeEvidence(

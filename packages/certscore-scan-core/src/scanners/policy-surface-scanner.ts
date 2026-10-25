@@ -16,6 +16,7 @@ import {
   assessArticle13PolicyTextQuality,
   looksLikeArticle13CodeOrConfigText,
   canonicalPolicyDocumentBrandRelationship,
+  reviewedOptOutPolicyIndexLink,
   classifyConsentSurfaceText,
   classifyConsentControlLabel,
   classifyGdprSupplementLink,
@@ -218,11 +219,18 @@ export function policySurfaceObservationsFromRetainedRenderedLinks(input: {
   return mergePolicySurfaceObservations([], [...observations, ...combinedAliases]);
 }
 
+/** Exact source identity is distinct from a sanitized report URL. Oversized
+ * identities remain unbound; truncating them could bind a different document. */
+function exactPolicySourceUrl(value: string): string | undefined {
+  return value.length <= 800 ? value : undefined;
+}
+
 function policySurfaceCandidatesFromRetainedRenderedLinks(
   links: RetainedRenderedPolicyLink[],
   observationOnly = true,
 ): PolicySurfaceCandidate[] {
   return links.flatMap((link, index): PolicySurfaceCandidate[] => {
+    if (nonPolicyDocumentReason({ url: link.href, linkText: link.linkText }) === "research_or_reference_not_policy_document") return [];
     const deterministicBase = classifySurface({
       linkText: link.linkText,
       url: link.href,
@@ -251,7 +259,7 @@ function policySurfaceCandidatesFromRetainedRenderedLinks(
       linkText: link.linkText || link.href,
       linkVisibility: link.linkVisibility,
       accessibleNameSource: link.accessibleNameSource,
-      linkSourcePageUrl: sanitizedSiteFacingUrl(link.pageUrl),
+      linkSourcePageUrl: exactPolicySourceUrl(link.pageUrl),
       selector: link.selector,
       renderedSourcePageUrl: link.pageUrl,
       domLocation: link.domLocation,
@@ -4343,6 +4351,9 @@ export function extractCandidates(baseUrl: string, html: string, visibleText: st
     if (!normalizedUrl) {
       continue;
     }
+    // Explicit research/reference identity must not enter assisted discovery
+    // or be revived by the generic PDF/index fallback.
+    if (nonPolicyDocumentReason({ url: normalizedUrl, linkText: candidateText }) === "research_or_reference_not_policy_document") continue;
     const surroundingTextExcerpt = surroundingText(visibleText, linkText, visibleTextLower);
     const domLocation = domLocationFor(html, match.index);
     const deterministicBase = classifySurface({
@@ -4445,6 +4456,7 @@ function sameSiteGenericPolicyPdfClassification(input: {
   domLocation: PolicySurfaceCandidate["domLocation"];
   normalizedUrl: string;
 }): ReturnType<typeof classifySurface> | undefined {
+  if (nonPolicyDocumentReason({ url: input.normalizedUrl, linkText: input.candidateText }) === "research_or_reference_not_policy_document") return undefined;
   if (!sameOrigin(input.baseUrl, input.normalizedUrl)) return undefined;
   if (!["footer", "header", "body"].includes(input.domLocation)) return undefined;
   let pathname: string;
@@ -4479,7 +4491,8 @@ function sameSitePolicyIndexClassification(input: {
   domLocation: PolicySurfaceCandidate["domLocation"];
   normalizedUrl: string;
 }): ReturnType<typeof classifySurface> | undefined {
-  if (!sameOrigin(input.baseUrl, input.normalizedUrl)) return undefined;
+  const reviewedOwnerIndex=reviewedOptOutPolicyIndexLink(input.baseUrl,input.normalizedUrl,input.candidateText,input.domLocation);
+  if (!sameOrigin(input.baseUrl, input.normalizedUrl) && !reviewedOwnerIndex) return undefined;
   if (!["footer", "header", "body"].includes(input.domLocation)) return undefined;
 
   const normalizedLabel = normalizeWhitespace(input.candidateText).normalize("NFKC").toLowerCase();
@@ -4487,7 +4500,7 @@ function sameSitePolicyIndexClassification(input: {
     (entry.policyIndexLabels ?? []).some((label) =>
       normalizedLabel === label.normalize("NFKC").toLowerCase()
     )
-  );
+  ) ?? (reviewedOwnerIndex ? PRIVACY_EVIDENCE_LOCALE_REGISTRY.find(entry=>entry.locale==="en") : undefined);
   if (!matchedEntry) return undefined;
 
   return {
@@ -4700,7 +4713,7 @@ async function extractRenderedCandidates(
         htmlToVisibleText(footerCheckpoint.html))
         .filter(candidate => candidate.discoveryMethod === "footer_link")
         .map(candidate => ({ ...candidate,
-          linkSourcePageUrl: sanitizedSiteFacingUrl(footerCheckpoint.documentUrl),
+          linkSourcePageUrl: exactPolicySourceUrl(footerCheckpoint.documentUrl),
           renderedSourcePageUrl: footerCheckpoint.documentUrl }));
     }
     nextStage("policy link readiness");
@@ -5123,6 +5136,10 @@ async function extractRenderedCandidates(
     };
     // Freeze first-checkpoint facts with the existing incomplete-inspection
     // rules. A failed/timed-out second read cannot turn them into absence.
+    // The two checkpoints classify the same retained DOM candidates. Reuse
+    // that deterministic work only while the exact page identity is unchanged;
+    // second-checkpoint HTML and frame proof are still read and checked anew.
+    let projectedDomCandidates: { documentUrl: string; candidates: PolicySurfaceCandidate[] } | undefined;
     const firstCheckpoint = projectCheckpoint(undefined);
     retainCheckpoint(firstCheckpoint);
     if (checkpointAborted || input.signal?.aborted || progress?.closed) {
@@ -5158,9 +5175,10 @@ async function extractRenderedCandidates(
       ];
       const visibleTextLower = visibleText.toLowerCase();
 
-      const candidates = dedupeCandidates([
-        ...renderedHtmlCandidates,
-        ...retainedRawCandidates.flatMap((candidate, index): PolicySurfaceCandidate[] => {
+      const checkpointDocumentUrl = page.url();
+      const domCandidates = projectedDomCandidates?.documentUrl === checkpointDocumentUrl
+        ? projectedDomCandidates.candidates
+        : retainedRawCandidates.flatMap((candidate, index): PolicySurfaceCandidate[] => {
         if ("cmpVendor" in candidate && candidate.cmpVendor) return [];
         const normalizedUrl = candidate.href ? normalizeUrl(candidate.href, renderedBaseUrl) : renderedBaseUrl;
         const candidateLinkText = candidate.accessibleName || candidate.text;
@@ -5208,7 +5226,9 @@ async function extractRenderedCandidates(
           ...(candidate.linkSourcePageUrl === renderedBaseUrl && page.url() === renderedBaseUrl ? {
             linkVisibility: candidate.linkVisibility,
             accessibleNameSource: candidate.accessibleNameSource,
-            linkSourcePageUrl: sanitizedSiteFacingUrl(candidate.linkSourcePageUrl),
+            // This is typed document identity, not a display URL. Removing a
+            // query/fragment breaks exact positive-control provenance joins.
+            linkSourcePageUrl: exactPolicySourceUrl(candidate.linkSourcePageUrl),
           } : {}),
           selector: candidate.selector,
           renderedSourcePageUrl: renderedBaseUrl,
@@ -5229,8 +5249,9 @@ async function extractRenderedCandidates(
               ? "header_link"
             : "page_text_link",
         }];
-        }),
-      ]);
+        });
+      projectedDomCandidates = { documentUrl: checkpointDocumentUrl, candidates: domCandidates };
+      const candidates = dedupeCandidates([...renderedHtmlCandidates, ...domCandidates]);
       const frameProofsMatch = Boolean(domInspection && renderedPolicyRegion &&
         JSON.stringify(domInspection.frameProofs) === JSON.stringify(renderedPolicyRegion.frameProofs));
       const namedTopLevelChoiceCandidateCount = candidates.filter(candidate =>
@@ -5282,7 +5303,9 @@ async function extractRenderedCandidates(
       const inspectionSourceHash = createHash("sha256").update(JSON.stringify({domInspection, textInspection, frameDiagnostics: renderedPolicyRegion?.diagnostic})).digest("hex");
       const diagnostics = buildPrivacyChoiceDiagnostics(domInspection?.diagnostic, renderedPolicyRegion?.diagnostic, inspectionSourceHash);
       const capturedChoiceInspection = domInspection ? privacyChoiceInspectionSchema.safeParse({
-        contractVersion: "certscore.privacy-choice-inspection.v5", homepageAccessPolicy: "representative_homepage.v1", documentUrl: renderedBaseUrl,
+        contractVersion: new URL(renderedBaseUrl).search || new URL(renderedBaseUrl).hash
+          ? "certscore.privacy-choice-inspection.v7" : "certscore.privacy-choice-inspection.v5",
+        homepageAccessPolicy: "representative_homepage.v1", documentUrl: renderedBaseUrl,
         readinessPolicy: "document_bound_dom_inventory.v1", documentReadyState:domInspection.documentReadyState, limitationKeys,
         capturedAt: new Date().toISOString(), sourceHash: inspectionSourceHash, ...(diagnostics ? {diagnostics} : {}),
         scope: "rendered_named_links_and_buttons",
@@ -11767,9 +11790,11 @@ export function isFetchablePolicyCandidateForPolicySurface(input: {
   matchStrength?: PrivacySurfaceMatchStrength;
   linkText: string;
 }): boolean {
+  if (nonPolicyDocumentReason({ url: input.normalizedUrl, linkText: input.linkText }) === "research_or_reference_not_policy_document") return false;
   if (isPlaceholderHref(input.href) || isPlaceholderHref(input.normalizedUrl)) {
     return false;
   }
+  if(input.surfaceType==="privacy_policy"&&reviewedOptOutPolicyIndexLink(input.baseUrl,input.normalizedUrl,input.linkText,"footer"))return true;
   if (isFetchablePolicyHrefForPolicySurface(
     input.baseUrl,
     input.href,

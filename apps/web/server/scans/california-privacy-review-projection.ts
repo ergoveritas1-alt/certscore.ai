@@ -1,5 +1,13 @@
+import {deriveCombinedOptOutRisk} from "../../lib/scans/california-combined-opt-out-policy";
+import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
+import {projectScopedOptOutSearch} from "./scoped-opt-out-search";
+import {assessBroadOptOutPresence} from "@certscore/contracts";
+import {projectOptOutNegativeSearch} from "./opt-out-negative-search";
+import {projectDomOptOutPresenceSignal,projectOptOutPresenceSignal,projectReviewedOwnerOptOutDocuments} from "./opt-out-presence-signal-projection";
+import {projectFrictionlessGpcException} from "./frictionless-gpc-exception-projection";
+import {projectPolicyChoiceMethods} from "./policy-choice-methods-projection";
 import {deriveCaliforniaRuntimeLinkProof} from "../../lib/scans/california-runtime-link-policy";
-import {CALIFORNIA_RUNTIME_LINK_POLICY} from "@certscore/contracts";
+import {isCaliforniaRuntimeLinkPolicy} from "@certscore/contracts";
 import {assessCaliforniaDisclosureChoice,CALIFORNIA_DISCLOSURE_CHOICE_POLICY} from "@certscore/contracts";
 import { privacyChoicePresenceSchema } from "@certscore/contracts";
 import {cmpPreferencesEvidenceSchema,hasBoundCmpPreferenceDocument} from "@certscore/contracts";
@@ -13,7 +21,7 @@ import { projectCaliforniaObservedScoreBasis } from "./california-observed-score
 
 /** Materialize only from the checksum-verified original policy-lane observations.
  * The workpaper supplies positive facts; its empty lists never establish absence. */
-export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, source: { sha256?: string; verificationStatus?: string } | undefined, documentUrl: string | null, policyEvidence?: CaliforniaPolicyEvidence) {
+export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, source: { sha256?: string; verificationStatus?: string } | undefined, documentUrl: string | null, policyEvidence?: CaliforniaPolicyEvidence,positivePolicyEvidence?:CaliforniaPolicyEvidence) {
   const workpaper = projectPrivacyAuditEvidence(bundle, source, documentUrl);
   const start = Date.parse(bundle.startedAt), end = Date.parse(bundle.completedAt);
   if (!workpaper || !documentUrl || !Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
@@ -23,6 +31,7 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
   const inspection = parsedInspection.success && parsedInspection.data.documentUrl === documentUrl &&
     Date.parse(parsedInspection.data.capturedAt) >= start && Date.parse(parsedInspection.data.capturedAt) <= end
       ? parsedInspection.data : null;
+  const policyChoiceMethods = projectPolicyChoiceMethods(bundle,source,documentUrl);
   const controls = workpaper.controls.filter(control => control.kind !== "cookie_settings").map(control => {
     const observed = bundle.policySurfaceObservations.find(row => `policy-surface:${row.observationId}` === control.evidenceRef);
     // Fetch errors, access blocks and redirects alone do not establish a broken
@@ -45,7 +54,7 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
         !surface.url || surface.clickable === false || bundle.scanNoGoAssessment?.decision === "no_go") return [];
     return [{label:control.label, kind:control.kind, evidenceRef:control.evidenceRef, sourceDocumentUrl:documentUrl}];
   }).slice(0, 12);
-  while (presenceLinks.length && !privacyChoicePresenceSchema.safeParse({version:"privacy_choice_presence.v1",effectiveness:"not_verified",links:presenceLinks}).success)
+  while (presenceLinks.length && !privacyChoicePresenceSchema.safeParse({version:"privacy_choice_presence.v2",effectiveness:"not_verified",links:presenceLinks}).success)
     presenceLinks.pop();
   // Independently verified, read-only linked settings can supply positive
   // named choice facts. They never establish homepage absence or execution.
@@ -125,6 +134,10 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
   // Positive clauses from verified, complete individual documents survive an
   // unresolved supplement. Only complete governing coverage permits negatives.
   let positivePassageLanguage = false;
+  // Specific English opt-out instructions remain positive evidence even when
+  // the page-level language tag differs. Other clause/absence policies retain
+  // their existing language gates. Reuse the same verified text/hash work.
+  const optOutSignalDocuments:import("@certscore/contracts").CaliforniaPolicyDocument[]=[];
   const positiveDocuments = (reviewCoverage?.sourceDocuments ?? []).flatMap(document => {
     if (!document.complete) return [];
     const observationId = document.evidenceRef.replace(/^policy-text:/, "");
@@ -132,6 +145,8 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
     const text = policyEvidence?.texts.find(row => row.observationId === observationId)?.text;
     if (!surface || surface.translationApplied || !text ||
         createHash("sha256").update(text).digest("hex") !== document.sha256) return [];
+    const verifiedDocument={evidenceRef:document.evidenceRef,textSha256:document.sha256,text,url:document.url,language:surface.documentLanguage};
+    optOutSignalDocuments.push(verifiedDocument);
     const language = surface.documentLanguage?.trim().toLowerCase();
     if (language && language.split("-")[0] !== "en") return [];
     // Current assessments may retain explicit English grant clauses even when
@@ -142,7 +157,7 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
       positivePassageLanguage = true;
     }
     return [{ evidenceRef: document.evidenceRef,
-      textSha256: createHash("sha256").update(text).digest("hex"), text, url: document.url }];
+      textSha256: createHash("sha256").update(text).digest("hex"), text, url: document.url,language:surface.documentLanguage }];
   });
   const rightsAssessment = clausePolicy && (disclosureInspection || transferPolicy) && positiveDocuments.length
     ? assessCaliforniaRightsClauses(positiveDocuments, source!.sha256!, {
@@ -228,7 +243,8 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
     scanId: bundle.scanId, documentUrl: documentUrl, capturedAt: bundle.completedAt,
     sourceHash: source!.sha256, verificationStatus: "verified", scoreEffect: "none", applicability: "not_determined",
     ...(transferPolicy ? {observedScoreBasis:projectCaliforniaObservedScoreBasis(bundle,source,documentUrl)} : {}),
-    ...(presenceLinks.length ? {choicePresence:{version:"privacy_choice_presence.v1",effectiveness:"not_verified",links:presenceLinks}} : {}),
+    ...(policyChoiceMethods ? {policyChoiceMethods} : {}),
+    ...(presenceLinks.length ? {choicePresence:{version:"privacy_choice_presence.v2",effectiveness:"not_verified",links:presenceLinks}} : {}),
     inspection, choiceSurface, controls, controlsTruncated: workpaper.truncated, failedNoticeLinks,
     ...(verifiedOptOut ? {optOutObservation: verifiedOptOut} : {}),
     optOutEffectiveness: verifiedOptOut?.evidence.status === "complete" ? "bounded_observation" : "not_assessed", noticeAdequacy: "not_assessed",
@@ -243,9 +259,9 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
   // The source-bound capture marker opts in future captures only. Old bundles,
   // persisted assessments and historical scoring are never silently upgraded.
   const capturePolicy=bundle.policySurfaceInspection?.californiaDisclosureChoicePolicy;
-  if (transferPolicy && (capturePolicy === CALIFORNIA_DISCLOSURE_CHOICE_POLICY || capturePolicy === CALIFORNIA_RUNTIME_LINK_POLICY)) {
+  if (transferPolicy && (capturePolicy === CALIFORNIA_DISCLOSURE_CHOICE_POLICY || isCaliforniaRuntimeLinkPolicy(capturePolicy))) {
     const declaration=assessCaliforniaDisclosureChoice(result.data,clauseDocuments);
-    const runtimeLinkProof=capturePolicy === CALIFORNIA_RUNTIME_LINK_POLICY ? deriveCaliforniaRuntimeLinkProof(result.data,bundle.gpcResponseAssessment) : undefined;
+    const runtimeLinkProof=isCaliforniaRuntimeLinkPolicy(capturePolicy) ? deriveCaliforniaRuntimeLinkProof(result.data,bundle.gpcResponseAssessment) : undefined;
     const assessment={...declaration,policyVersion:capturePolicy,...(runtimeLinkProof?{runtimeLinkProof}:{})};
     const review=result.data;
     // A negative policy claim cannot erase independently retained positive
@@ -256,7 +272,27 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
           reason:"Named choice and policy claims retained separately; verified execution and applicable opt-out requirements remain distinct checks."} : f)}
       : undefined;
     const current=californiaPrivacyReviewSchema.safeParse({...review,...(reviewCoverage?{reviewCoverage}:{}),disclosureChoiceAssessment:assessment});
-    return current.success ? current.data : null;
+    if(!current.success)return null;
+    const frictionlessGpcException=projectFrictionlessGpcException(current.data,positiveDocuments,bundle.gpcResponseAssessment);
+    // A retained structured method already supplies the broader positive signal;
+    // keep the original text/source but avoid duplicating its informational row.
+    const optOutPresenceSignal=current.data.policyChoiceMethods?.methods.length?undefined:projectDomOptOutPresenceSignal(current.data,bundle,source!.sha256!)??projectOptOutPresenceSignal(current.data,optOutSignalDocuments,
+      projectReviewedOwnerOptOutDocuments(bundle,source!.sha256!,positivePolicyEvidence??policyEvidence,current.data));
+    const final=californiaPrivacyReviewSchema.safeParse({...current.data,frictionlessGpcException,...(optOutPresenceSignal?{optOutPresenceSignal}:{})});
+    if(!final.success)return null;
+    const optOutNegativeSearch=projectOptOutNegativeSearch(final.data,positiveDocuments);
+    const negative=californiaPrivacyReviewSchema.safeParse({...final.data,...(optOutNegativeSearch?{optOutNegativeSearch}:{})});
+    if(!negative.success)return null;
+    const scopedOptOutSearch=projectScopedOptOutSearch(negative.data,bundle,positiveDocuments);
+    const scoped=californiaPrivacyReviewSchema.safeParse({...negative.data,...(scopedOptOutSearch?{scopedOptOutSearch}:{})});
+    if(!scoped.success)return null;
+    const broad=assessBroadOptOutPresence(scoped.data);
+    const complete=californiaPrivacyReviewSchema.safeParse({...scoped.data,broadOptOutAssessment:broad});
+    if(!complete.success)return null;
+    if(capturePolicy!==CALIFORNIA_COMBINED_OPT_OUT_POLICY)return complete.data;
+    const optOutRisk=deriveCombinedOptOutRisk(complete.data,bundle.gpcResponseAssessment);
+    const combined=californiaPrivacyReviewSchema.safeParse({...complete.data,disclosureChoiceAssessment:{...assessment,...(optOutRisk?{optOutRisk}:{})}});
+    return combined.success?combined.data:null;
   }
   return result.data;
 }

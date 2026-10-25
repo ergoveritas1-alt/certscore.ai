@@ -37,7 +37,7 @@ async function fixture(html: string, svgReadCostMs = 0) {
   const requests: string[] = [];
   const server=createServer((req,res)=>{
     requests.push(req.url??'');res.setHeader('content-type','text/html');
-    if(req.url==='/')res.end(`<html lang="en"><body><main>${"Cloud Security provides tools, documentation and local support for business websites. ".repeat(25)}</main><footer><a href="/privacy">Privacy Policy</a>${html}</footer></body></html>`);
+    if(new URL(req.url??'/', 'http://localhost').pathname==='/')res.end(`<html lang="en"><body><main>${"Cloud Security provides tools, documentation and local support for business websites. ".repeat(25)}</main><footer><a href="/privacy">Privacy Policy</a>${html}</footer></body></html>`);
     else if(req.url==='/privacy')res.end(`<html lang="en"><title>Privacy Policy</title><body>${redirectedPolicyText.repeat(4)}</body></html>`);
     else {res.statusCode=404;res.end('Not found');}
   });
@@ -87,17 +87,18 @@ for(const scenario of scenarios) test(`bounded name extraction: ${scenario.name}
   } finally {await f.close();}
 });
 
-for(const source of ['text','aria_labelledby'] as const) test(`${source} name retains normal positive source and document provenance`,{timeout:15000},async()=>{
-  const f=await fixture(source==='text'?svg(`<a href="/choices"><text y="25">${label}</text></a>`):`${refs}<button aria-labelledby=" a b c choice-name "></button>`);
+for(const source of ['text','aria_labelledby','query_identity'] as const) test(`${source} name retains normal positive source and document provenance`,{timeout:15000},async()=>{
+  const f=await fixture(source!=='aria_labelledby'?svg(`<a href="/choices"><text y="25">${label}</text></a>`):`${refs}<button aria-labelledby=" a b c choice-name "></button>`);
   const root=await mkdtemp(path.join(tmpdir(),'certscore-name-proof-'));
+  const exactUrl=source==='query_identity'?f.url+'?redirect=%2F':f.url;
   try {
-    const start=Date.now(),result=await policySurfaceScanner({url:f.url,normalizedUrl:f.url,scanStartedAtMs:start,
+    const start=Date.now(),result=await policySurfaceScanner({url:exactUrl,normalizedUrl:exactUrl,scanStartedAtMs:start,
       internalBudgetMs:6000,absoluteDeadlineAtMs:start+10000,discoveryMode:'fast',browser:f.browser,
       artifactWriter:await createArtifactWriter(root),enableNanoPolicyAssist:false,
       nanoAssistProvider:{async classifyLinks(){throw new Error('No model calls authorized in offline fixture');}}});
     const choice=result.policySurfaceObservations.find(row=>row.surfaceType==='do_not_sell_or_share'&&row.linkVisibility==='visible');
-    assert.ok(choice);assert.equal(choice.linkText,label);assert.equal(choice.accessibleNameSource,source);
-    assert.equal(choice.linkSourcePageUrl,f.url);assert.equal(choice.normalizedUrl,source==='text'?f.url+'choices':f.url);
+    assert.ok(choice);assert.equal(choice.linkText,label);assert.equal(choice.accessibleNameSource,source==='query_identity'?'text':source);
+    assert.equal(choice.linkSourcePageUrl,exactUrl);assert.equal(choice.normalizedUrl,source!=='aria_labelledby'?f.url+'choices':f.url);
     assert.equal(result.privacyChoiceInspection?.unnamedControlCount,0);
     assert.equal(f.counts().externalRequests,0);
   }finally{await f.close();await rm(root,{recursive:true,force:true});}

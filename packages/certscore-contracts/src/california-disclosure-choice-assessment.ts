@@ -4,7 +4,13 @@ import type {CaliforniaPrivacyReview} from "./california-privacy-review";
 
 export const CALIFORNIA_DISCLOSURE_CHOICE_POLICY = "california.disclosure-choice.v1" as const;
 export const CALIFORNIA_RUNTIME_LINK_POLICY = "california.disclosure-choice.v2-runtime" as const;
-export const californiaDisclosureChoiceCapturePolicySchema = z.enum([CALIFORNIA_DISCLOSURE_CHOICE_POLICY,CALIFORNIA_RUNTIME_LINK_POLICY]);
+/** New captures only; v1/v2 keep their historical six-point schedule. */
+export const CALIFORNIA_NINE_POINT_LINK_POLICY = "california.disclosure-choice.v3-nine-point" as const;
+export const CALIFORNIA_COMBINED_OPT_OUT_POLICY = "california.disclosure-choice.v4-combined" as const;
+export function isCaliforniaRuntimeLinkPolicy(value: unknown): value is typeof CALIFORNIA_RUNTIME_LINK_POLICY | typeof CALIFORNIA_NINE_POINT_LINK_POLICY | typeof CALIFORNIA_COMBINED_OPT_OUT_POLICY {
+  return value === CALIFORNIA_RUNTIME_LINK_POLICY || value === CALIFORNIA_NINE_POINT_LINK_POLICY || value === CALIFORNIA_COMBINED_OPT_OUT_POLICY;
+}
+export const californiaDisclosureChoiceCapturePolicySchema = z.enum([CALIFORNIA_DISCLOSURE_CHOICE_POLICY,CALIFORNIA_RUNTIME_LINK_POLICY,CALIFORNIA_NINE_POINT_LINK_POLICY,CALIFORNIA_COMBINED_OPT_OUT_POLICY]);
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 
 /** A possible signal/exception reference blocks the narrow negative conclusion.
@@ -45,10 +51,29 @@ export const californiaRuntimeLinkProofSchema=z.object({
 const californiaDisclosureChoiceAssessmentV2Schema=californiaDisclosureChoiceAssessmentV1Schema.extend({
   policyVersion:z.literal(CALIFORNIA_RUNTIME_LINK_POLICY),runtimeLinkProof:californiaRuntimeLinkProofSchema.optional(),
 }).strict();
+const californiaDisclosureChoiceAssessmentV3Schema=californiaDisclosureChoiceAssessmentV2Schema.extend({
+  policyVersion:z.literal(CALIFORNIA_NINE_POINT_LINK_POLICY),
+}).strict();
+export const californiaCombinedOptOutRiskSchema = z.object({
+  status:z.enum(["gpc_contradiction", "supported_gpc_missing_method"]),
+  gpcSourceSha256:hash, gpcSessionSha256:hash, documentUrlSha256:hash,
+  advertisingEvidenceIds:z.array(z.string().min(1).max(160)).min(1).max(32),
+  recipientIds:z.array(z.string().regex(/^ent_[a-f0-9]{12}$/)).max(32),
+}).strict().superRefine((r,ctx)=>{
+  if(new Set(r.advertisingEvidenceIds).size!==r.advertisingEvidenceIds.length || new Set(r.recipientIds).size!==r.recipientIds.length)
+    ctx.addIssue({code:"custom",message:"Combined assessment identities must be unique."});
+});
+const californiaDisclosureChoiceAssessmentV4Schema=californiaDisclosureChoiceAssessmentV3Schema.extend({
+  policyVersion:z.literal(CALIFORNIA_COMBINED_OPT_OUT_POLICY),
+  optOutRisk:californiaCombinedOptOutRiskSchema.optional(),
+}).strict();
 export const californiaDisclosureChoiceAssessmentSchema=z.discriminatedUnion("policyVersion",[
-  californiaDisclosureChoiceAssessmentV1Schema,californiaDisclosureChoiceAssessmentV2Schema,
+  californiaDisclosureChoiceAssessmentV1Schema,californiaDisclosureChoiceAssessmentV2Schema,californiaDisclosureChoiceAssessmentV3Schema,californiaDisclosureChoiceAssessmentV4Schema,
 ]);
 export type CaliforniaDisclosureChoiceAssessment = z.infer<typeof californiaDisclosureChoiceAssessmentSchema>;
+export function isCaliforniaRuntimeLinkAssessment(value: CaliforniaDisclosureChoiceAssessment | undefined): value is Exclude<CaliforniaDisclosureChoiceAssessment,{policyVersion:typeof CALIFORNIA_DISCLOSURE_CHOICE_POLICY}> {
+  return Boolean(value && isCaliforniaRuntimeLinkPolicy(value.policyVersion));
+}
 
 /** New materialization only, after verified complete owned source text has been
  * joined by the projector. Never call on a historical read or a bare snapshot. */

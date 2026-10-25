@@ -290,3 +290,14 @@ adds a new marked-capture version that can support the same once-per-scan link
 effect alongside independently eligible qualified GPC collection. It preserves
 the earlier declaration basis, rights amounts and historical scoring. Deployment
 preparation does not authorize promotion, flag changes or live scans.
+
+## Combined California sale/sharing opt-out policy — October 24, 2026
+
+New v4-marked captures use the [15/8 combined policy](certscore-v2/california-combined-opt-out-policy-2026-10-24.md)
+through the persisted assessment, concern policy and unified-finding pipeline.
+Verified GPC contradiction plus advertising activity and strict opt-out absence
+uses the existing shared 15–47 recipient family. A supported recorded GPC response
+plus independent proof another method is required uses eight, absorbed by a
+stronger family effect. Broader Observed opt-out evidence prevents the combined
+absence finding. Unknown evidence does not qualify; prior policy versions remain
+unchanged. Local only, with unchanged budgets and no deployment.

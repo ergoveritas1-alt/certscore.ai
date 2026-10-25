@@ -1,3 +1,6 @@
+import {retainDomOptOutLabel,retainDomOptOutSearch} from "../dom-opt-out-label.js";
+import {captureBoundRuntimeTextSnapshot,retainRuntimeOptOutSearch,type RuntimeTextCapture} from "../runtime-opt-out-text.js";
+import {isGateRuntimeTextTarget} from "@certscore/contracts";
 import { createResponseCompletionRecovery } from "../response-completion-recovery.js";
 import { classifyCanonicalCollectionEndpoint } from "@certscore/vendor-resolver";
 import { createCmpInitializationTracker, CMP_INITIALIZATION_SETTLE_POLICY } from "../cmp-initialization-settle.js";
@@ -8,6 +11,7 @@ import type { CmpBasicEvidence } from "@certscore/contracts";
 import { ACCESSIBILITY_AUDIT_BUDGET_MS } from "@certscore/contracts";
 import { EVIDENCE_WORK_POLICY, optionalEvidenceAllowance } from "../evidence-work-budget.js";
 import { readDocumentSiteMetadata as captureDocumentSiteMetadata, captureWordpressFeedVersion } from "../cms-version-capture.js";
+import { retainTechnologyResponse } from "../technology-response-capture.js";
 import { runAccessibilityAudit, unavailableAccessibilityAudit } from "../accessibility-audit.js";
 import type { AccessibilityAuditObservation } from "@certscore/contracts";
 import { installBorlabsDeferredDialogReveal, revealBorlabsDeferredDialog } from "../borlabs-passive-dialog-reveal.js";
@@ -427,8 +431,8 @@ export function buildLateConsentGeometryShadowArtifact(input: {
   };
 }
 
-export async function readDocumentSiteMetadata(page: Page) {
-  return captureDocumentSiteMetadata(page, () => currentBrowserDocumentIdentity(page));
+export async function readDocumentSiteMetadata(page: Page, captureTechnology = false) {
+  return captureDocumentSiteMetadata(page, () => currentBrowserDocumentIdentity(page), captureTechnology);
 }
 
 export async function readDeclaredDocumentLanguage(page: Page): Promise<string | null> {
@@ -653,6 +657,8 @@ export async function preConsentRuntimeScanner(
   const captureRuntimeEvidence = captureScope !== "consent_proof";
   const captureConsentEvidence = captureScope !== "runtime_evidence";
   const captureRenderedPolicyEvidence = captureScope === "combined";
+  const captureGateRuntimeText=captureScope==='runtime_evidence'&&!input.globalPrivacyControlEnabled&&
+    input.executionProfile!=='inventory_only'&&isGateRuntimeTextTarget(input.normalizedUrl);
   const requiredAccessibility = Boolean(input.accessibilityScanId && !input.globalPrivacyControlEnabled && input.executionProfile !== "inventory_only");
   const requiredTailReserveMs = requiredAccessibility ? ACCESSIBILITY_AUDIT_BUDGET_MS : 0;
   const passiveEvidenceActivity = createPassiveEvidenceActivityTracker();
@@ -1637,6 +1643,7 @@ export async function preConsentRuntimeScanner(
       }
     }
     initialNavigationHttpStatus = navigationResponse?.status();
+    const technologyNavigationBinding = { token: currentBrowserDocumentIdentity(page)?.token, url: page.url() };
     const finalDocumentParty = applyFinalDocumentPartyClassification({
       finalDocumentUrl: effectiveNavigationUrl,
       networkEvents,
@@ -2365,6 +2372,7 @@ export async function preConsentRuntimeScanner(
       "Atomic read-only storage, scripts, iframes, browser API, collection surface, and DOM text snapshot after the first structured consent inventory is retained.",
       () => Promise.all([captureRuntimeEvidence
         ? capturePostSettlePageEvidence({
+            bindRuntimeText:captureGateRuntimeText,
             captureSiteIntegrity: !input.globalPrivacyControlEnabled ? (input.executionProfile === "inventory_only" ? "additional_page_main_document" : "starting_page_main_document") : false,
             captureRenderedPolicyLinks: captureRenderedPolicyEvidence,
             firstPartyHostname,
@@ -2477,15 +2485,26 @@ export async function preConsentRuntimeScanner(
     retainedConsentUiObservation = consentObservation;
     startCmpBasicCapture();
     let domText = initialDomText;
-    let domTextCapture: DocumentBoundCapture<string> | undefined = "domTextCapture" in pageEvidence
-      ? pageEvidence.domTextCapture as DocumentBoundCapture<string> | undefined
+    let domTextCapture: (DocumentBoundCapture<string>&{documentReadyState?:string;documentLanguage?:string}) | undefined = "domTextCapture" in pageEvidence
+      ? pageEvidence.domTextCapture as (DocumentBoundCapture<string>&{documentReadyState?:string;documentLanguage?:string}) | undefined
       : undefined;
+    const readDomTextCapture=async()=>{
+      if(captureGateRuntimeText){
+        if(remainingModuleBudgetMs()<=0)return null;
+        const snapshot=await captureBoundRuntimeTextSnapshot({
+          capture:()=>recordBoundedTiming(timingBreakdown,'runtime text binding read',
+            'The existing body refresh retains readiness and its original cached document binding.',Math.min(2000,remainingModuleBudgetMs()),
+            ()=>page.evaluate(()=>({domText:document.body?.innerText??'',pageUrl:location.href,documentReadyState:document.readyState,documentLanguage:document.documentElement?.lang??''})),
+            ()=>({domText:'',pageUrl:'',documentReadyState:'loading'})),
+          readBinding:()=>({url:page.url(),documentIdentity:currentBrowserDocumentIdentity(page)}),scanStartedAtMs:input.scanStartedAtMs,
+        }).catch(()=>null);
+        return snapshot?.domTextCapture??null;
+      }
+      return captureDocumentBoundValue({capture:()=>page.locator('body').innerText({timeout:2000}),
+        readBinding:()=>({url:page.url(),documentIdentity:currentBrowserDocumentIdentity(page)}),scanStartedAtMs:input.scanStartedAtMs}).catch(()=>null);
+    };
     const refreshDomText = async () => {
-      const capture = await captureDocumentBoundValue({
-        capture: () => page.locator("body").innerText({ timeout: 2_000 }),
-        readBinding: () => ({ url: page.url(), documentIdentity: currentBrowserDocumentIdentity(page) }),
-        scanStartedAtMs: input.scanStartedAtMs,
-      }).catch(() => null);
+      const capture = await readDomTextCapture();
       if (capture) domTextCapture = capture;
       return capture?.value ?? domText;
     };
@@ -4176,11 +4195,7 @@ export async function preConsentRuntimeScanner(
         "Short, read-only second-look window for initially blank or loading pages.",
         () => page.waitForTimeout(confirmationWaitMs).catch(() => undefined),
       ));
-      const confirmedDomTextCapture = await captureDocumentBoundValue({
-        capture: () => page.locator("body").innerText({ timeout: 2_000 }),
-        readBinding: () => ({ url: page.url(), documentIdentity: currentBrowserDocumentIdentity(page) }),
-        scanStartedAtMs: input.scanStartedAtMs,
-      }).catch(() => null);
+      const confirmedDomTextCapture = await readDomTextCapture();
       const confirmedDomText = confirmedDomTextCapture?.value ?? domText;
       if (confirmedDomText.trim().length > domText.trim().length ||
           (captureScope === "consent_proof" && confirmedDomTextCapture && domTextCapture &&
@@ -4188,6 +4203,7 @@ export async function preConsentRuntimeScanner(
         domText = confirmedDomText;
         domTextCapture = confirmedDomTextCapture ?? domTextCapture;
       }
+      else if(captureGateRuntimeText)domTextCapture=undefined;
       const confirmedNoGoCandidateText = domText.replace(/\s+/g, " ").trim();
       if (
         captureConsentEvidence &&
@@ -4266,7 +4282,15 @@ export async function preConsentRuntimeScanner(
       ? gpcMetadataAllowanceMs > 0 ? await recordBoundedTiming(timingBreakdown,
         "page evidence: site metadata", "Passive metadata yields to the existing terminal GPC readback reserve.",
         gpcMetadataAllowanceMs, () => readDocumentSiteMetadata(page), () => null) : null
-      : await readDocumentSiteMetadata(page);
+      : await readDocumentSiteMetadata(page, captureScope === "runtime_evidence" && !input.globalPrivacyControlEnabled && input.executionProfile !== "inventory_only");
+    // Existing navigation response only. Same-URL reloads also invalidate this binding.
+    if (siteMetadata?.technology && navigationResponse && navigationResponse.status() >= 200 && navigationResponse.status() < 300 &&
+        technologyNavigationBinding.token && technologyNavigationBinding.token === metadataDocumentToken &&
+        technologyNavigationBinding.url === metadataDocumentUrl && navigationResponse.url() === metadataDocumentUrl) {
+      const requestId = requestIds.get(navigationResponse.request());
+      if (requestId) siteMetadata = { ...siteMetadata, technology: retainTechnologyResponse(siteMetadata.technology,
+        navigationResponse.headers(), requestId, metadataDocumentToken!) };
+    }
     // Only the starting-page baseline owns this fallback; GPC/additional pages do not repeat it.
     if (siteMetadata && !input.globalPrivacyControlEnabled && input.executionProfile !== "inventory_only") {
       const options = chromiumContextOptions();
@@ -4279,6 +4303,8 @@ export async function preConsentRuntimeScanner(
     }
     const documentLanguage = captureRuntimeEvidence ? siteMetadata?.language : await readDeclaredDocumentLanguage(page);
     const domSnapshot: DomSnapshotArtifact = {
+      ...(captureGateRuntimeText?{optOutSearch:retainRuntimeOptOutSearch(domTextCapture as RuntimeTextCapture|undefined,input.normalizedUrl,domText)}:{}),
+      ...(captureScope === "consent_proof" && domTextCapture ? {optOutLabel:retainDomOptOutLabel(domTextCapture,"dom_text_pre_consent"),optOutSearch:retainDomOptOutSearch(domTextCapture,"dom_text_pre_consent")} : {}),
       ...(siteMetadata ? { siteMetadata } : {}),
       artifactId: "dom_text_pre_consent",
       capturedAtMs: captureScope === "consent_proof" && domTextCapture ? domTextCapture.capturedAtMs : elapsed(input.scanStartedAtMs),
@@ -5604,6 +5630,8 @@ function signalTypeForMatchSource(
 }
 
 type ConsolidatedPageEvidenceSnapshot = {
+  domTextCapture?:RuntimeTextCapture;
+  documentLanguage?:string;
   workAllocation?: { version: string; inspectedFieldCount: number; totalFieldCandidates: number; discoveredAnchorCount: number;
     inspectedPolicyLinks: number; linkDiscoveryTruncated: boolean; localStorageKeyCount: number; sessionStorageKeyCount: number };
   documentReadyState: DocumentReadyState;
@@ -5681,6 +5709,7 @@ async function captureConsentProofPageEvidence(input: {
 }
 
 async function capturePostSettlePageEvidence(input: {
+  bindRuntimeText?:boolean;
   captureRenderedPolicyLinks: boolean;
   firstPartyHostname: string | undefined;
   captureSiteIntegrity?: false | "starting_page_main_document" | "additional_page_main_document";
@@ -5697,17 +5726,22 @@ async function capturePostSettlePageEvidence(input: {
   collectionSurfaceInventory?: CollectionSurfaceInventory;
   collectionSurfaceObservations: CollectionSurfaceObservation[];
   domText: string;
+  domTextCapture?:RuntimeTextCapture;
   frames: IframeEvent[];
   scripts: ScriptEvent[];
   storageSnapshot: StorageSnapshot;
   renderedPolicyLinks: RetainedRenderedPolicyLink[];
 }> {
+  const readSnapshot=()=>input.bindRuntimeText?captureBoundRuntimeTextSnapshot({
+    capture:()=>captureConsolidatedPageEvidenceSnapshot(input.page,input.captureSiteIntegrity,input.captureRenderedPolicyLinks),
+    readBinding:()=>({url:input.page.url(),documentIdentity:currentBrowserDocumentIdentity(input.page)}),scanStartedAtMs:input.scanStartedAtMs,
+  }):captureConsolidatedPageEvidenceSnapshot(input.page,input.captureSiteIntegrity,input.captureRenderedPolicyLinks);
   const snapshot = await recordBoundedTiming(
     input.timingBreakdown,
     "page evidence: consolidated snapshot",
     "One read-only main-document snapshot for storage keys, scripts, iframes, API probes, public collection surfaces, and bounded visible text.",
     2_500,
-    () => captureConsolidatedPageEvidenceSnapshot(input.page, input.captureSiteIntegrity, input.captureRenderedPolicyLinks),
+    readSnapshot,
     () => undefined,
   );
   if (snapshot) {
@@ -5750,7 +5784,7 @@ async function capturePostSettlePageEvidence(input: {
       "page evidence: consolidated snapshot retry",
       "One short atomic retry preserves storage, script, iframe, browser-API, collection-surface, and text evidence without restoring the six-call legacy fallback.",
       1_000,
-      () => captureConsolidatedPageEvidenceSnapshot(input.page, input.captureSiteIntegrity, input.captureRenderedPolicyLinks),
+      readSnapshot,
       () => undefined,
     );
     if (retrySnapshot) recordInstantTiming(input.timingBreakdown, "runtime detail allocation", JSON.stringify(retrySnapshot.workAllocation));
@@ -6389,6 +6423,7 @@ export async function captureConsolidatedPageEvidenceSnapshot(page: Page, captur
     return {
       ...core,
       documentReadyState: document.readyState,
+      documentLanguage: document.documentElement?.lang ?? "",
       workAllocation: { version: workPolicyVersion, inspectedFieldCount, totalFieldCandidates: allFieldCandidates.length,
         discoveredAnchorCount, inspectedPolicyLinks, linkDiscoveryTruncated,
         localStorageKeyCount: storageAreas[0]!.total, sessionStorageKeyCount: storageAreas[1]!.total },
@@ -6456,6 +6491,7 @@ function consolidatedPageEvidenceFromSnapshot(
     collectionSurfaceInventory,
     collectionSurfaceObservations: legacyCollectionSurfaceObservationsFromInventory(collectionSurfaceInventory),
     domText: snapshot.domText,
+    ...(snapshot.domTextCapture?{domTextCapture:snapshot.domTextCapture}:{}),
     renderedPolicyLinks: retainedRenderedPolicyLinks(snapshot.links, snapshot.pageUrl || input.normalizedUrl),
   };
 }

@@ -4,6 +4,7 @@ import type { PdfLine } from "./report-export-pdf";
 import { PDF_REPORT_TOPICS, pdfTopicForFinding, pdfTopicForRow, type PdfReportTopic } from "./report-pdf-topics";
 import { wrapPdfText } from "./report-pdf-fonts";
 import { evidenceSectionCounts, cmsEvidenceVersionLabel } from "../../lib/scans/detailed-evidence-presentation";
+import { TECHNOLOGY_NAMES, TECHNOLOGY_CATEGORY_LABELS, TECHNOLOGY_SCOPE_LABELS } from "@certscore/contracts";
 import { projectConsentControlReport } from "../../lib/scans/consent-control-report";
 import { pdfChoiceWindows, pdfInventoryRows, pdfTimingEvents, pdfRejectTimingEvents } from "./report-pdf-reader";
 
@@ -190,11 +191,21 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
   }
   if (cms) {
     const e = sections.security;
-    e.push(layout.heading("CMS, versions and plugins"), ...pdfEvidenceTable("cms-detections", ["Platform", "Retained version", "Identification evidence"], cms.assessment.detections.map(item => [item.name, cmsEvidenceVersionLabel(item), `${item.evidenceRefs.join(", ")}; ${item.versionBasis}; ${item.versionStatus}; confidence ${item.confidence}; observed versions ${item.observedVersions.join(", ")}; runtime version confirmed ${value(item.runtimeVersionConfirmed)}`]), [145, 155, 212]));
+    e.push(layout.heading("Tech stack observed"), ...pdfEvidenceTable("cms-detections", ["Platform", "Retained version", "Identification evidence"], cms.assessment.detections.map(item => [item.name, cmsEvidenceVersionLabel(item), `${item.evidenceRefs.join(", ")}; ${item.versionBasis}; ${item.versionStatus}; confidence ${item.confidence}; observed versions ${item.observedVersions.join(", ")}; runtime version confirmed ${value(item.runtimeVersionConfirmed)}`]), [145, 155, 212]));
     e.push(...pdfEvidenceTable("cms-plugins", ["Plugin", "Version / state", "Evidence references"], (cms.pluginInventory?.detections ?? []).map(item => [item.name, `${item.version ?? "Not detected"}; ${item.versionStatus}; observed versions ${item.observedVersions.join(", ")}`, item.evidenceRefs.join(", ")]), [180, 140, 192]));
     for (const match of cms.assessment.matches) e.push(...layout.text(`${match.record.id}: ${match.record.title}. ${match.record.qualification ?? ""}`, 9),
       ...layout.text(`Vendor fixes: ${match.record.fixedVersions?.join(", ") || "Not retained"}. Source: ${match.record.sourceUrl}. Evidence ${match.evidenceRef}; detection ${match.detectionRef}; confidence ${match.confidence}; matched range ${match.matchedRange}.`, 8));
     e.push(...pdfEvidenceTable("cms-signals", ["Identification source", "Value", "Source URL"], cms.signals.map(item => [label(item.kind), item.value, item.sourceUrl]), [120, 210, 182]));
+    if (cms.technologyInventory) {
+      e.push(...pdfEvidenceTable("technology-inventory", ["Technology / category", "Version / confidence", "Scope / evidence"], cms.technologyInventory.detections.map(item => [
+        `${TECHNOLOGY_NAMES[item.id]}; ${TECHNOLOGY_CATEGORY_LABELS[item.category]}`,
+        `${item.version ?? label(item.versionStatus)}; ${item.confidence}; ${item.observedVersions.join(", ")}`,
+        `${TECHNOLOGY_SCOPE_LABELS[item.scope]}; ${item.evidenceRefs.join(", ")}; ${item.ruleIds.join(", ")}`,
+      ]), [160, 140, 212]));
+      e.push(...pdfEvidenceTable("technology-signals", ["Source / reference", "Observed value", "Source URL"], cms.technologyInventory.signals.map(item => [
+        `${item.evidenceRef}; ${item.sourceRef}; ${item.kind}`, item.value, item.sourceUrl,
+      ]), [150, 180, 182]));
+    }
   }
   if (report.accessibilityEvidence) sections.accessibility.push(...chart("Affected nodes by automated rule", report.accessibilityEvidence.violations.map(rule => ({ label: rule.ruleId, value: rule.nodeCount }))));
   sections.policy.push(...pdfPolicyEvidenceLines(report, layout));

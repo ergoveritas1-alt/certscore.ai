@@ -1,5 +1,6 @@
 import { cmpAuditAssessmentSchema, type CmpAuditAssessment } from "./cmp-audit-evidence";
 import { californiaPrivacyReviewSchema } from "./california-privacy-review";
+import { saleSharingPresenceLinks, privacyChoicePresenceTitle } from "./privacy-choice-presence";
 import { CONTROL_INSPECTION_POLICY, LEGACY_CONTROL_INSPECTION_POLICY, consentControlInspectionSchema, initialConsentSelectionSchema, isControlInspectionComplete, type InitialConsentSelection, type ConsentControlInspection } from "./consent-control-inspection";
 import { z } from "zod";
 import { consentControlVisualComparisonSchema, type ConsentControlVisualComparison } from "./consent-control-visual-comparison";
@@ -198,8 +199,8 @@ export function readCaliforniaPrivacyReviewFromConsent(value: unknown) {
 /** Read the persisted canonical child; raw labels and older workpapers cannot upgrade presence. */
 export function readSaleSharingLinkPresence(value: unknown) {
   const review = readCaliforniaPrivacyReviewFromConsent(value);
-  const links = review?.choicePresence?.links.filter(link => link.kind === "do_not_sell_or_share") ?? [];
-  return review && links.length ? {review, links} : null;
+  const links = saleSharingPresenceLinks(review?.choicePresence);
+  return review && links.length ? {review, links, title: privacyChoicePresenceTitle(review.choicePresence)} : null;
 }
 export type ConsentControlAssessmentControlResult = z.infer<typeof consentControlAssessmentControlResultSchema>;
 export type ConsentControlAssessmentEvidence = z.infer<typeof consentControlAssessmentEvidenceSchema>;

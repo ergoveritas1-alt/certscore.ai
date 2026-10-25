@@ -4,7 +4,9 @@ import { classifyPrivacySurface } from "./privacy-surface-classifier";
 export const PRIVACY_CHOICE_PRESENCE_SIGNAL = "privacy.choice_link_presence.v1";
 export const PRIVACY_CHOICE_PRESENCE_TITLE = "Sale/sharing opt-out link observed";
 export const privacyChoicePresenceSchema = z.object({
-  version: z.literal("privacy_choice_presence.v1"),
+  // v1 retains its literal sale/sharing-link semantics on read. v2 also
+  // recognizes the explicitly named alternative privacy-choice surface.
+  version: z.enum(["privacy_choice_presence.v1", "privacy_choice_presence.v2"]),
   effectiveness: z.literal("not_verified"),
   links: z.array(z.object({
     label: z.string().min(1).max(200), evidenceRef: z.string().min(1).max(240),
@@ -17,3 +19,14 @@ export const privacyChoicePresenceSchema = z.object({
   for (const link of value.links) if (classifyPrivacySurface({linkText:link.label}).surfaceType !== link.kind)
     ctx.addIssue({code:"custom",message:"Presence label must retain its supported privacy meaning."});
 });
+
+export function saleSharingPresenceLinks(value: z.infer<typeof privacyChoicePresenceSchema> | undefined) {
+  return value?.links.filter(link => link.kind === "do_not_sell_or_share" ||
+    value.version === "privacy_choice_presence.v2" && link.kind === "your_privacy_choices") ?? [];
+}
+
+/** Presence describes the observed label, never effectiveness or legal adequacy. */
+export function privacyChoicePresenceTitle(value: z.infer<typeof privacyChoicePresenceSchema> | undefined) {
+  return saleSharingPresenceLinks(value).some(link => link.kind === "do_not_sell_or_share")
+    ? PRIVACY_CHOICE_PRESENCE_TITLE : "Privacy choices link observed";
+}

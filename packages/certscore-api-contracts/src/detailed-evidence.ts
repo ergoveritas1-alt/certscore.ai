@@ -110,6 +110,21 @@ export const publicCmpAuditSchema = z.object({
   if (new Set(audit.rows.map(row => row.id)).size !== 13) context.addIssue({ code: z.ZodIssueCode.custom, message: "CMP criteria must be unique." });
 });
 
+const publicTechnologyInventorySchema = z.object({
+  ruleset: z.literal("certscore.technology-rules.v1"), documentUrl: z.string().url(), truncated: z.boolean(),
+  detections: z.array(z.object({
+    id: z.string().max(40), name: z.string().max(80),
+    category: z.enum(["cms", "commerce", "framework", "server", "runtime", "cdn"]),
+    scope: z.enum(["page_platform", "page_component", "external_asset", "delivery"]),
+    confidence: z.enum(["high", "tentative"]), version: z.string().max(40).nullable(),
+    versionStatus: z.enum(["declared", "not_detected", "conflicting"]), observedVersions: z.array(z.string().max(40)).max(8),
+    ruleIds: z.array(z.string().max(80)).max(8), evidenceRefs: z.array(z.string().max(80)).max(16),
+  }).strict()).max(18),
+  signals: z.array(z.object({
+    kind: z.enum(["generator", "asset", "marker", "header"]), value: z.string().max(256),
+    evidenceRef: z.string().max(80), sourceRef: z.string().max(256), sourceUrl: z.string().url().max(512),
+  }).strict()).max(16),
+}).strict();
 export const publicCmsSecuritySchema = z.object({
   version: z.literal("certscore.cms-report.v1"), scanId: z.string(),
   assessmentContractVersion: z.string(), sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -132,6 +147,7 @@ export const publicCmsSecuritySchema = z.object({
     observedVersions: z.array(z.string()).max(8), versionStatus: z.string(), evidenceRefs: z.array(ref).max(30),
   }).strict()).max(22),
   identification: z.array(z.object({ evidenceRef: ref, kind: z.string(), value: z.string().max(512), sourceUrl: z.string().url(), artifactRef: ref }).strict()).max(22),
+  technologyInventory: publicTechnologyInventorySchema.optional(),
 }).strict();
 
 export type DetailedEvidenceCounts = z.infer<typeof detailedEvidenceCountsSchema>;

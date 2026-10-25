@@ -532,3 +532,34 @@ test("static notice and hub destinations are fetched even when labels describe c
  assert.equal(classifyPrivacySurface({linkText:"Privacy Center",url:"https://site.test/#preferences"}).surfaceType,"consent_preferences");
  assert.equal(classifyPrivacySurface({linkText:"Your Privacy Choices",url:"https://privacyportal.test/choice"}).surfaceType,"your_privacy_choices");
 });
+
+test("privacy-policy research publications cannot qualify through their topic words", () => {
+  const url = "https://certscore.ai/insights/privacy-policy-transparency-study-2026";
+  for (const input of [
+    { url },
+    { url, linkText: "Your data can outlast your account by years" },
+    { url, linkText: "Privacy policy", title: "Your data can outlast your account by years" },
+    { url: `${url}/?ref=privacy#privacy-policy`, linkText: "Read the privacy-policy study" },
+    { url: "https://example.test/research/privacy-policy-comparison-study.pdf", linkText: "Privacy policy" },
+    { url: "https://example.test/blog/cookie-policy-guide", linkText: "Cookie Policy" },
+    { url: "https://example.test/article/123", title: "Privacy Policy Transparency Study 2026" },
+  ]) {
+    const result = classifyPrivacySurface(input);
+    assert.equal(result.surfaceType, "unknown", JSON.stringify(input));
+    assert.deepEqual(result.reasonCodes, ["research_or_reference_not_policy_document"]);
+  }
+});
+
+test("research paths and study context do not exclude genuine governing notices", () => {
+  for (const url of [
+    "https://certscore.ai/privacy",
+    "https://example.test/research/privacy-policy",
+    "https://example.test/insights/privacy-policy",
+    "https://example.test/privacy-policy-transparency-study-2026/privacy-policy",
+    "https://example.test/research/study-participant-privacy-notice.pdf",
+    "https://example.test/privacy-policy-for-study-participants",
+  ]) {
+    assert.equal(classifyPrivacySurface({ url, linkText: "Privacy Policy", surroundingText: "Read our Privacy Policy Transparency Study 2026." }).surfaceType, "privacy_policy", url);
+  }
+  assert.equal(classifyPrivacySurface({ url: "https://example.test/research/privacy-notice", linkText: "Research study privacy notice" }).surfaceType, "privacy_policy");
+});

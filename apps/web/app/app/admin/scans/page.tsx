@@ -458,6 +458,9 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                   source: scan.source
                 });
                 const status = getOperationalStatus(scan);
+                const noGoReason = status.label === "No-go"
+                  ? scan.noGoReason || scan.interruptionLabel || (scan.captchaFlag ? "CAPTCHA" : scan.blockedFlag || scan.accessPostureClass === "early_loss" ? "Blocked" : "Reason unavailable")
+                  : null;
                 const freshness = getScanFreshnessBadge(scan);
                 const duration = scan.linkedScanId ? formatAdminScanDuration(scan) : null;
                 const scanFromMarker = getScanFromMarkerInput(scan.scanFromValue);
@@ -466,7 +469,13 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                 const accessLabel = getAccessLabel(scan);
                 return (
                   <tr key={scan.activityId} className="group h-[52px] hover:bg-slate-50/70">
-                    <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50" title={status.label}><span className="inline-flex items-center gap-1.5 font-semibold"><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /><span className={status.label === "No-go" ? "text-rose-700" : "text-slate-700"}>{status.label}</span></span></td>
+                    <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50 has-[details[open]]:z-40" title={status.label}>
+                      <span className="inline-flex items-center gap-1.5 font-semibold"><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /><span className={status.label === "No-go" ? "text-rose-700" : "text-slate-700"}>{status.label}</span></span>
+                      {noGoReason ? <details className="relative mt-0.5 min-w-0 text-[10px] leading-4 text-slate-500">
+                        <summary aria-label={`Expand no-go reason: ${noGoReason}`} className="block cursor-pointer list-none truncate rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden" title={noGoReason}>{noGoReason}</summary>
+                        <p className="absolute left-0 top-full z-40 mt-1 w-72 max-w-[calc(100vw-3rem)] whitespace-normal break-words rounded-md border border-slate-200 bg-white p-2 text-xs text-slate-700 shadow-lg">{noGoReason}</p>
+                      </details> : null}
+                    </td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={scan.requesterName ?? provenance.label}>{scan.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${requesterIpLabel(scan)} · ${scan.requesterIpSource.replaceAll("_", " ")}`}>{requesterIpLabel(scan)}</p></td>
                     <td className="px-2.5 py-1.5 text-[10px] leading-4 text-slate-600" title={formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}><p className="truncate">{requestedDateTime.date}</p><p className="truncate text-slate-500">{requestedDateTime.time}</p></td>
                     <td className="px-2.5 py-1.5">

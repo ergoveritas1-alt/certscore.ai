@@ -1,0 +1,162 @@
+[
+  {
+    "host": "matrox.com",
+    "documentUrl": "https://video.matrox.com/en/",
+    "sourceUrl": "https://video.matrox.com/en/legal/privacy-policy/",
+    "kind": "specific_policy_opt_out_instructions",
+    "label": "LinkedIn cookie opt-out",
+    "scope": "advertising_provider",
+    "instruction": "You can opt out of cookies from LinkedIn",
+    "context": "We use the LinkedIn Insight Tag to track conversions, retarget Site visitors, and unlock additional insights about members interacting with our LinkedIn adverts"
+  },
+  {
+    "host": "swappie.com",
+    "documentUrl": "https://swappie.com/",
+    "sourceUrl": "https://swappie.com/",
+    "kind": "visible_dom_opt_out_label",
+    "label": "Accept only essential cookies",
+    "scope": "personalized_advertising",
+    "instruction": "Accept only essential cookies",
+    "context": "personalized and non-personalized advertising"
+  },
+  {
+    "host": "winamax.fr",
+    "documentUrl": "https://www.winamax.fr/",
+    "sourceUrl": "https://www.winamax.fr/",
+    "kind": "visible_dom_opt_out_label",
+    "label": "gestion des cookies",
+    "scope": "personalized_advertising",
+    "instruction": "gestion des cookies",
+    "context": "publicités personnalisées"
+  },
+  {
+    "host": "stripchat.mov",
+    "documentUrl": "https://stripchat.mov/",
+    "sourceUrl": "https://stripchat.mov/privacy",
+    "kind": "specific_policy_opt_out_instructions",
+    "label": "Limit Ad Tracking",
+    "scope": "mobile_advertising",
+    "instruction": "You may opt out of interest-based advertising on mobile devices by activating the “Limit Ad Tracking” or equivalent feature offered by your mobile platform.",
+    "context": ""
+  },
+  {
+    "host": "just-eat.com",
+    "documentUrl": "https://www.just-eat.co.uk/",
+    "sourceUrl": "https://www.just-eat.co.uk/privacy-policy",
+    "kind": "specific_policy_opt_out_instructions",
+    "label": "Personalised advertising cookies / request form",
+    "scope": "personalized_advertising",
+    "instruction": "You can always withdraw your consent to any of the above by changing your settings or opting out of personalised cookies and contacting us via this form",
+    "context": "Personalised ads outside of JET may also be presented based on your consent to share data about your orders, general customer information and browsing habits to show you with the advertisements matching your interest profile the best"
+  },
+  {
+    "host": "backmarket.com",
+    "documentUrl": "https://www.backmarket.com/en-us",
+    "sourceUrl": "https://www.backmarket.com/en-us",
+    "kind": "visible_dom_opt_out_label",
+    "label": "Don't sell or share my personal information",
+    "scope": "observed_page",
+    "instruction": "Don't sell or share my personal information",
+    "context": ""
+  },
+  {
+    "host": "easyname.com",
+    "documentUrl": "https://www.easyname.com/en",
+    "sourceUrl": "https://www.easyname.com/en",
+    "kind": "visible_dom_opt_out_label",
+    "label": "Reject all",
+    "scope": "personalized_advertising",
+    "instruction": "Reject all",
+    "context": "personalized advertising"
+  },
+  {
+    "host": "arsenal.com",
+    "documentUrl": "https://www.arsenal.com/",
+    "sourceUrl": "https://www.arsenal.com/news/cookie-policy-aN1Hp2C0UpQ2",
+    "kind": "specific_policy_opt_out_instructions",
+    "label": "Cookie Preference Centre",
+    "scope": "personalized_advertising",
+    "instruction": "You can manage what Cookies are set on your device at any time by using our Cookie Preference Centre",
+    "context": "show you relevant content, including personalised advertisements"
+  },
+  {
+    "host": "ramnode.com",
+    "documentUrl": "https://ramnode.com/",
+    "sourceUrl": "https://www.inmotionhosting.com/legal/privacy-policy/",
+    "kind": "specific_policy_opt_out_instructions",
+    "label": "Do Not Sell My Personal Information",
+    "scope": "named_route",
+    "instruction": "Terms of Service | Privacy Policy | DPA | Accessibility Statement | Legal Inquiries Do Not Sell My Personal Information | Limit Use of My Sensitive Personal Information By continuing to visit any webpage within this website, each visitor agrees to the use of cookies and tracking technologies, and further agrees to abide by our Universal Terms of Service , Privacy Policy , Cookie Policy , and any other terms and policies posted on this website.",
+    "context": ""
+  },
+  {
+    "host": "logmeininc.com",
+    "documentUrl": "https://www.logmein.com/",
+    "sourceUrl": "https://www.logmein.com/",
+    "kind": "visible_dom_opt_out_label",
+    "label": "Do Not Sell or Share My Personal Info",
+    "scope": "observed_page",
+    "instruction": "Do Not Sell or Share My Personal Info",
+    "context": ""
+  },
+  {
+    "host": "discourse.group",
+    "documentUrl": "https://www.discourse.org/contact",
+    "sourceUrl": "https://www.discourse.org/privacy",
+    "kind": "specific_policy_opt_out_instructions",
+    "label": "NAI / DAA interest-based advertising opt-out",
+    "scope": "advertising_provider",
+    "instruction": "For information about interest-based advertising, and to opt out of this type of advertising by parties that participate in self-regulatory programs, please visit the Network Advertising Initiative at thenai.org/opt-out",
+    "context": ""
+  },
+  {
+    "host": "eni.com",
+    "documentUrl": "https://www.eni.com/en-IT/home.html",
+    "sourceUrl": "https://www.eni.com/en-IT/home.html",
+    "kind": "visible_dom_opt_out_label",
+    "label": "Cookies Settings",
+    "scope": "personalized_advertising",
+    "instruction": "Cookies Settings",
+    "context": "adverts and offer you services customised according to the preferences you have shown while browsing"
+  },
+  {
+    "host": "ufc.com",
+    "documentUrl": "https://www.ufc.com/",
+    "sourceUrl": "https://www.ufc.com/",
+    "kind": "visible_dom_opt_out_label",
+    "label": "Do Not Sell or Share",
+    "scope": "observed_page",
+    "instruction": "Do Not Sell or Share",
+    "context": ""
+  },
+  {
+    "host": "planetary.org",
+    "documentUrl": "https://www.planetary.org/",
+    "sourceUrl": "https://www.planetary.org/privacy-policy",
+    "kind": "specific_policy_opt_out_instructions",
+    "label": "Website marketing-cookie choices",
+    "scope": "eu_advertising",
+    "instruction": "you can adjust cookie consent options on our website to not accept marketing cookies when you visit from the E.U.",
+    "context": "We use pixels to track visitors and to serve ads for The Planetary Society"
+  },
+  {
+    "host": "ovoenergy.com",
+    "documentUrl": "https://www.ovoenergy.com/",
+    "sourceUrl": "https://www.ovoenergy.com/",
+    "kind": "visible_dom_opt_out_label",
+    "label": "Reject All",
+    "scope": "personalized_advertising",
+    "instruction": "Reject All",
+    "context": "personalised advertising"
+  },
+  {
+    "host": "snafu.de",
+    "documentUrl": "https://www.snafu.de/",
+    "sourceUrl": "https://www.snafu.de/datenschutz/",
+    "kind": "specific_policy_opt_out_instructions",
+    "label": "Facebook advertising preferences",
+    "scope": "advertising_provider",
+    "instruction": "Widerspruchsmöglichkeit (Opt-Out): https://www.facebook.com/settings?tab=ads",
+    "context": "Facebook-Pixel und Zielgruppenbildung (Custom Audiences)"
+  }
+]

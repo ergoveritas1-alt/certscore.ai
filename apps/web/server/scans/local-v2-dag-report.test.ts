@@ -9578,6 +9578,7 @@ test("materialization retains visual comparison only with the original image has
         { fileName: "proof.png", uri: "s3://test/proof", sizeBytes: fixture.screenshotBytes.length, sha256: geometry.visualComparison.screenshotSha256 },
       ];
       const scan = makeScanRecord();
+      scan.scan.id = bundle.scanId;
       scan.scan.scanConfigJson = { hostname: "consent-visual.test", normalizedUrl: geometry.pageUrl, processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
         execution: { localV2Dag: { outDir }, v2DagParallel: { artifactOnly: true, localOnly: true, profile: "standard", productionFindingIntegration: false } } };
       for (const valid of [true, false]) {

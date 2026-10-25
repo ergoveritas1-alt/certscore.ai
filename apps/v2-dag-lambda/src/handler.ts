@@ -1,4 +1,4 @@
-import {CALIFORNIA_RUNTIME_LINK_POLICY} from "@certscore/contracts";
+import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
 import { assertPrivacyCaptureProfile, PRESENCE_ONLY_CAPTURE_PROFILE } from "@certscore/contracts";
 import { describeCaptureFailure } from "@certscore/contracts";
 import { saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, saleSharingOptOutMatchesDispatch, SALE_SHARING_OPT_OUT_POLICY, SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, SALE_SHARING_OPT_OUT_ARTIFACT_BUDGET_MS, type SaleSharingOptOutDispatch } from "@certscore/contracts";
@@ -5820,7 +5820,7 @@ export function buildVerifiedPolicyEvidencePacket(input: {
       negativeSearchEvidence: input.result.negativeSearchEvidence,
       privacyChoiceInspection: input.result.privacyChoiceInspection,
       californiaReviewPolicy: "california-privacy-review.v10",
-      californiaDisclosureChoicePolicy: CALIFORNIA_RUNTIME_LINK_POLICY,
+      californiaDisclosureChoicePolicy: CALIFORNIA_COMBINED_OPT_OUT_POLICY,
       modulesRun: [input.result.moduleRun],
       policySurfaceObservations,
     }),

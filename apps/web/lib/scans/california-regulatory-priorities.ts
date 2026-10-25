@@ -1,6 +1,8 @@
+import {describeGpcObservedFacts} from "./gpc-observed-facts";
+import {supportsCombinedOptOutRisk} from "./california-combined-opt-out-policy";
 import {createHash} from "node:crypto";
 import {buildCanonicalGpcResponseProjection} from "./gpc-response-projection";
-import { californiaPrivacyReviewFindingIds, californiaPrivacyReviewCopy } from "@certscore/contracts";
+import { CALIFORNIA_COMBINED_OPT_OUT_POLICY,californiaPrivacyReviewFindingIds, californiaPrivacyReviewCopy } from "@certscore/contracts";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import type { SitePriorityFinding } from "./full-site-priority-review";
 
@@ -16,13 +18,16 @@ export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDi
     if (finding.details?.family !== "california_privacy_review" || !californiaPrivacyReviewFindingIds(finding.details.projection).includes(finding.unifiedFindingId)) continue;
     const projection = finding.details.projection;
     const copy = californiaPrivacyReviewCopy(finding.unifiedFindingId, projection);
+    const combined=finding.unifiedFindingId==="california_privacy_choice_not_observed" && supportsCombinedOptOutRisk(projection,finding.details.gpcAssessment);
     const documentUrlSha256=createHash("sha256").update(projection.documentUrl).digest("hex");
     const reject=eligible.flatMap(row=>row.unifiedFindingId === "california_post_reject_collection" && row.details?.family === "california_post_reject" ? [row.details.assessment] : [])
       .find(a=>a.scanId===projection.scanId && a.targetSha256===documentUrlSha256 && a.status==="qualified_collection" &&
         a.scope==="cookie_tracking_rejection" && a.sourcePacketSha256 && a.recipientIds.length>0);
     result.push({ id: finding.unifiedFindingId, title: copy.title, summary: copy.description,
+      severity:finding.severity,
+      priority: finding.severity==="high"?"high":undefined,
       status: "Partial concern", evidence: [
-        ...((projection.contractVersion === "certscore.california-privacy-review.v5" || projection.contractVersion === "certscore.california-privacy-review.v6" || (projection.contractVersion === "certscore.california-privacy-review.v7" || (projection.contractVersion === "certscore.california-privacy-review.v8" || (projection.contractVersion === "certscore.california-privacy-review.v9" || projection.contractVersion === "certscore.california-privacy-review.v10")))) && projection.rightsAssessment ? [
+        ...(!combined && (projection.contractVersion === "certscore.california-privacy-review.v5" || projection.contractVersion === "certscore.california-privacy-review.v6" || (projection.contractVersion === "certscore.california-privacy-review.v7" || (projection.contractVersion === "certscore.california-privacy-review.v8" || (projection.contractVersion === "certscore.california-privacy-review.v9" || projection.contractVersion === "certscore.california-privacy-review.v10")))) && projection.rightsAssessment ? [
           ...projection.rightsAssessment.topics.map(topic=>`${topic.topic.replaceAll("_"," ")}: ${topic.status.replaceAll("_"," ")} — ${topic.reason}`),
           ...projection.rightsAssessment.topics.flatMap(topic=>topic.passages.map(passage=>passage.excerpt)),
         ] : []),
@@ -34,6 +39,13 @@ export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDi
         ...(projection.optOutObservation?.evidence.requests ?? []).map(row => `${row.vendor} (${row.hostname}): HTTP ${row.httpStatus}, ${row.msAfterConfirmation} ms after recorded opt-out`),
       ],
       evidenceJson: { findingId: finding.unifiedFindingId, californiaPrivacyReview: projection,
+        ...(combined?{combinedGpcAssessment:finding.details.gpcAssessment,
+          combinedGpcFacts:finding.details.gpcAssessment?.contractVersion==="certscore.gpc-response-assessment.v3"
+            ? [{label:"Opt-out inspection",value:`Rendered named links and buttons on ${projection.documentUrl}`},
+              {label:"Advertising activity",value:`${projection.contractVersion==="certscore.california-privacy-review.v10" && projection.disclosureChoiceAssessment?.policyVersion===CALIFORNIA_COMBINED_OPT_OUT_POLICY ? projection.disclosureChoiceAssessment.optOutRisk?.advertisingEvidenceIds.length??0:0} successful advertising/marketing request records retained`},
+              ...describeGpcObservedFacts(finding.details.gpcAssessment.observation)]:[],
+          combinedGpcVendors:gpc?.vendorFindings?.map(row=>`${row.entity}${row.firstMs===undefined?"":` · first observed +${row.firstMs} ms from GPC visit start`}`)??[],
+        }:{}),
         ...(finding.unifiedFindingId === "california_privacy_choice_not_observed" ? {californiaPriorityBinding: {
           version: "california_priority_binding.v1", scanId: projection.scanId, documentUrl: projection.documentUrl,
           documentUrlSha256, sourceHash: projection.sourceHash,
@@ -54,7 +66,8 @@ export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDi
       },
       correctionSteps:["Review effective recipient settings, processing arrangements and privacy-choice enforcement."]});
   }
-  if (gpc && gpc.californiaDeductionPoints > 0) result.push({id:"gpc_response",
+  if (gpc && gpc.californiaDeductionPoints > 0 && !result.some(row=>row.id==="california_privacy_choice_not_observed" &&
+    row.evidenceJson?.combinedGpcAssessment && eligible.some(f=>f.unifiedFindingId===row.id && f.details?.family==="california_privacy_review" && supportsCombinedOptOutRisk(f.details.projection,gpc.assessment)))) result.push({id:"gpc_response",
     title:"GPC choice-enforcement risk observed",summary:gpc.summary,status:"Partial concern",
     evidence:gpc.observedFacts.map(row=>`${row.label}: ${row.value}`),
     evidenceJson:{findingId:"gpc_response",assessment:gpc.assessment},

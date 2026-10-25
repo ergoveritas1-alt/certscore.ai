@@ -102,3 +102,17 @@ export const CALIFORNIA_DISCLOSURE_CHOICE_SCORING_RULES = [
   {findingId:"california_privacy_choice_not_observed",policyKey:"california.required_choice_link_not_observed",points:6,
     label:"Required sale/sharing opt-out link not found after permitted-alternative assessment"},
 ] as const;
+
+/** October 24 owner calibration: only newly marked v3 captures use nine.
+ * v18/v19 rules above remain frozen for historical materializations. */
+export const CALIFORNIA_NINE_POINT_LINK_SCORE_VERSION = "california-regulatory-posture.v20-nine-point-link" as const;
+export const CALIFORNIA_NINE_POINT_LINK_SCORING_RULES = CALIFORNIA_DISCLOSURE_CHOICE_SCORING_RULES.map(rule =>
+  rule.findingId === "california_privacy_choice_not_observed" ? {...rule,points:9} : rule);
+
+/** New marked captures: combined enforcement uses the existing recipient family;
+ * the supported-response/missing-required-method branch is eight, never additive. */
+export const CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION = "california-regulatory-posture.v21-combined-opt-out" as const;
+export const CALIFORNIA_MISSING_OPT_OUT_METHOD_POINTS = 8;
+export const CALIFORNIA_COMBINED_OPT_OUT_SCORING_RULES = CALIFORNIA_DISCLOSURE_CHOICE_SCORING_RULES.map(rule =>
+  rule.findingId === "california_privacy_choice_not_observed" ? {...rule,points:CALIFORNIA_MISSING_OPT_OUT_METHOD_POINTS,
+    policyKey:"california.combined_opt_out",label:"Potential California sale/sharing opt-out issue"} : rule);

@@ -1,5 +1,9 @@
+import {supportsCombinedOptOutRisk} from "./california-combined-opt-out-policy";
+import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
+import {CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION,CALIFORNIA_COMBINED_OPT_OUT_SCORING_RULES} from "./scoring-policy";
+import {frictionlessGpcLinkEvidenceConsistent} from "@certscore/contracts";
 import {supportsCaliforniaRuntimeLink} from "./california-runtime-link-policy";
-import {CALIFORNIA_RUNTIME_LINK_POLICY} from "@certscore/contracts";
+import {CALIFORNIA_RUNTIME_LINK_POLICY,CALIFORNIA_NINE_POINT_LINK_POLICY} from "@certscore/contracts";
 import {californiaPotentialRiskSchema,potentialRiskRecipients,CA_POTENTIAL_RISK_FINDING,CA_POTENTIAL_RISK_POLICY,potentialRiskPoints,potentialRiskIncrement,CA_POTENTIAL_RISK_LEGACY_POLICY} from "./california-potential-risk-policy";
 import {deriveCaliforniaGpcResponsePolicy} from "./california-gpc-response-policy";
 import {californiaPostRejectAssessmentSchema,californiaPostRejectPoints,CALIFORNIA_POST_REJECT_POLICY,CALIFORNIA_POST_REJECT_FINDING} from "./california-post-reject-policy";
@@ -7,7 +11,7 @@ import {deriveGppPropagationPolicy, GPP_PROPAGATION_FINDING_ID, GPP_PROPAGATION_
 import { accessibilityFindingDeductionBreakdown } from "./accessibility-score-policy";
 import { californiaOptOutCollectionPolicy } from "./california-opt-out-collection-policy";
 import { californiaChoiceEnforcementPoints, CALIFORNIA_CHOICE_ENFORCEMENT_POLICY_KEY } from "./california-choice-enforcement-policy";
-import { CALIFORNIA_RUNTIME_LINK_SCORE_VERSION, CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION, CALIFORNIA_DISCLOSURE_CHOICE_SCORING_RULES, CALIFORNIA_NON_DISCRIMINATION_ONLY_POINTS, CALIFORNIA_SCORING_POLICY_VERSION, CALIFORNIA_SCORING_RULES, CALIFORNIA_SCORING_RULES_V1, CALIFORNIA_SCORING_RULES_V4_V7, CALIFORNIA_SCORING_RULES_V2_V3, CALIFORNIA_SHARED_NOTICE_POINTS } from "./scoring-policy";
+import { CALIFORNIA_NINE_POINT_LINK_SCORE_VERSION, CALIFORNIA_NINE_POINT_LINK_SCORING_RULES, CALIFORNIA_RUNTIME_LINK_SCORE_VERSION, CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION, CALIFORNIA_DISCLOSURE_CHOICE_SCORING_RULES, CALIFORNIA_NON_DISCRIMINATION_ONLY_POINTS, CALIFORNIA_SCORING_POLICY_VERSION, CALIFORNIA_SCORING_RULES, CALIFORNIA_SCORING_RULES_V1, CALIFORNIA_SCORING_RULES_V4_V7, CALIFORNIA_SCORING_RULES_V2_V3, CALIFORNIA_SHARED_NOTICE_POINTS } from "./scoring-policy";
 import {
   californiaPrivacyReviewFindingIds,
   californiaPrivacyReviewSchema,
@@ -30,15 +34,15 @@ const LEGACY_SCORE_VERSION = "california-regulatory-posture.v1" as const;
 export const CALIFORNIA_REGULATORY_SCORE_FLOOR = 0;
 export const CALIFORNIA_SHARED_PRIVACY_NOTICE_KEY = "california.shared_privacy_notice_unavailable";
 const LEGACY_SCORE_RULES = CALIFORNIA_SCORING_RULES_V1;
-export const CALIFORNIA_REGULATORY_SCORE_RULES = CALIFORNIA_DISCLOSURE_CHOICE_SCORING_RULES;
-export {CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION,CALIFORNIA_RUNTIME_LINK_SCORE_VERSION};
-const isDisclosureChoiceScore=(version:string)=>version === CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION || version === CALIFORNIA_RUNTIME_LINK_SCORE_VERSION;
+export const CALIFORNIA_REGULATORY_SCORE_RULES = CALIFORNIA_COMBINED_OPT_OUT_SCORING_RULES;
+export {CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION,CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION,CALIFORNIA_RUNTIME_LINK_SCORE_VERSION,CALIFORNIA_NINE_POINT_LINK_SCORE_VERSION};
+const isDisclosureChoiceScore=(version:string)=>version === CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION || version === CALIFORNIA_NINE_POINT_LINK_SCORE_VERSION || version === CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION || version === CALIFORNIA_RUNTIME_LINK_SCORE_VERSION;
 function rulesForVersion(version:string) {
-  return isDisclosureChoiceScore(version) ? CALIFORNIA_DISCLOSURE_CHOICE_SCORING_RULES : version === LEGACY_SCORE_VERSION ? LEGACY_SCORE_RULES : (version === CALIFORNIA_REGULATORY_SCORE_VERSION || version === PRE_OBSERVED_SCORE_VERSION) ? CALIFORNIA_SCORING_RULES : new Set<string>([PRE_TRANSFER_SCORE_VERSION,REFINED_SCORE_VERSION,CLAUSE_SCORE_VERSION,CLAUSE_PREDECESSOR_SCORE_VERSION]).has(version) ? CALIFORNIA_SCORING_RULES_V4_V7 : CALIFORNIA_SCORING_RULES_V2_V3;
+  return version === CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION ? CALIFORNIA_COMBINED_OPT_OUT_SCORING_RULES : version === CALIFORNIA_NINE_POINT_LINK_SCORE_VERSION ? CALIFORNIA_NINE_POINT_LINK_SCORING_RULES : isDisclosureChoiceScore(version) ? CALIFORNIA_DISCLOSURE_CHOICE_SCORING_RULES : version === LEGACY_SCORE_VERSION ? LEGACY_SCORE_RULES : (version === CALIFORNIA_REGULATORY_SCORE_VERSION || version === PRE_OBSERVED_SCORE_VERSION) ? CALIFORNIA_SCORING_RULES : new Set<string>([PRE_TRANSFER_SCORE_VERSION,REFINED_SCORE_VERSION,CLAUSE_SCORE_VERSION,CLAUSE_PREDECESSOR_SCORE_VERSION]).has(version) ? CALIFORNIA_SCORING_RULES_V4_V7 : CALIFORNIA_SCORING_RULES_V2_V3;
 }
 function scoreVersion(version:string, assessment?:CaliforniaPrivacyReview) {
   if (assessment?.contractVersion === "certscore.california-privacy-review.v10" && assessment.disclosureChoiceAssessment)
-    return assessment.disclosureChoiceAssessment.policyVersion === CALIFORNIA_RUNTIME_LINK_POLICY ? CALIFORNIA_RUNTIME_LINK_SCORE_VERSION : CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION;
+    return assessment.disclosureChoiceAssessment.policyVersion === CALIFORNIA_COMBINED_OPT_OUT_POLICY ? CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION : assessment.disclosureChoiceAssessment.policyVersion === CALIFORNIA_NINE_POINT_LINK_POLICY ? CALIFORNIA_NINE_POINT_LINK_SCORE_VERSION : assessment.disclosureChoiceAssessment.policyVersion === CALIFORNIA_RUNTIME_LINK_POLICY ? CALIFORNIA_RUNTIME_LINK_SCORE_VERSION : CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION;
   if (assessment?.contractVersion === "certscore.california-privacy-review.v10" && assessment.observedScoreBasis) return CALIFORNIA_REGULATORY_SCORE_VERSION;
   return version === "certscore.california-privacy-review.v1" ? LEGACY_SCORE_VERSION :
     version === "certscore.california-privacy-review.v2" ? COVERAGE_GATED_SCORE_VERSION :
@@ -46,7 +50,7 @@ function scoreVersion(version:string, assessment?:CaliforniaPrivacyReview) {
 }
 
 export type CaliforniaRegulatoryScore = {
-  policyVersion: typeof CALIFORNIA_RUNTIME_LINK_SCORE_VERSION | typeof CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION | "california-regulatory-posture.v17-reject-scope" | "california-regulatory-posture.v16-collection-review" | "california-regulatory-posture.v15-collection-review" | typeof CALIFORNIA_REJECT_SCORE_VERSION | typeof CALIFORNIA_GPP_SCORE_VERSION | typeof CALIFORNIA_REGULATORY_SCORE_VERSION | typeof PRE_OBSERVED_SCORE_VERSION | "california-regulatory-posture.v9" | typeof PRE_TRANSFER_SCORE_VERSION | typeof LEGACY_SCORE_VERSION | typeof COVERAGE_GATED_SCORE_VERSION | typeof CAPTURE_BASED_SCORE_VERSION | typeof CLAUSE_PREDECESSOR_SCORE_VERSION | typeof CLAUSE_SCORE_VERSION | typeof REFINED_SCORE_VERSION;
+  policyVersion: typeof CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION | typeof CALIFORNIA_NINE_POINT_LINK_SCORE_VERSION | typeof CALIFORNIA_RUNTIME_LINK_SCORE_VERSION | typeof CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION | "california-regulatory-posture.v17-reject-scope" | "california-regulatory-posture.v16-collection-review" | "california-regulatory-posture.v15-collection-review" | typeof CALIFORNIA_REJECT_SCORE_VERSION | typeof CALIFORNIA_GPP_SCORE_VERSION | typeof CALIFORNIA_REGULATORY_SCORE_VERSION | typeof PRE_OBSERVED_SCORE_VERSION | "california-regulatory-posture.v9" | typeof PRE_TRANSFER_SCORE_VERSION | typeof LEGACY_SCORE_VERSION | typeof COVERAGE_GATED_SCORE_VERSION | typeof CAPTURE_BASED_SCORE_VERSION | typeof CLAUSE_PREDECESSOR_SCORE_VERSION | typeof CLAUSE_SCORE_VERSION | typeof REFINED_SCORE_VERSION;
   score: number | null;
   scope: "starting_page";
   coverage: "bounded" | "limited" | "unavailable";
@@ -69,7 +73,10 @@ function disclosureChoicePoints(id:string, points:number, version:string, assess
   return points;
 }
 function requiredLinkProof(assessment?:CaliforniaPrivacyReview, runtimeGpc?:unknown) {
+  if(assessment?.contractVersion==="certscore.california-privacy-review.v10" && assessment.disclosureChoiceAssessment?.policyVersion===CALIFORNIA_COMBINED_OPT_OUT_POLICY)
+    return supportsCombinedOptOutRisk(assessment,runtimeGpc);
   return assessment?.contractVersion === "certscore.california-privacy-review.v10" &&
+    frictionlessGpcLinkEvidenceConsistent(assessment) &&
     (assessment.disclosureChoiceAssessment?.requiredLinkProof || supportsCaliforniaRuntimeLink(assessment,runtimeGpc));
 }
 
@@ -83,7 +90,11 @@ export function californiaFindingScoreEffect(id: string, evidenceRef: string, as
     ? californiaOptOutCollectionPolicy(assessment) : null;
   if (choice && !choice.supportedConcern) return [];
   return rule ? [{ appliesTo: "california_posture" as const, framework: "california" as const,
-    deductionPoints: choice?.points ?? disclosureChoicePoints(id, rule.points, version, assessment), evidenceRefs: [evidenceRef], observedActivity: choice?.recipientIds ?? [],
+    deductionPoints: version===CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION && id==="california_privacy_choice_not_observed" &&
+      assessment?.contractVersion==="certscore.california-privacy-review.v10" && assessment.disclosureChoiceAssessment?.policyVersion===CALIFORNIA_COMBINED_OPT_OUT_POLICY &&
+      assessment.disclosureChoiceAssessment.optOutRisk?.status==="gpc_contradiction"
+        ? californiaChoiceEnforcementPoints(assessment.disclosureChoiceAssessment.optOutRisk.recipientIds,true)
+        : choice?.points ?? disclosureChoicePoints(id, rule.points, version, assessment), evidenceRefs: [evidenceRef], observedActivity: choice?.recipientIds ?? [],
     policyKey: rule.policyKey, policyVersion: version,
     reasonCode: "verified_reportable_california_finding" }] : [];
 }
@@ -115,20 +126,23 @@ export function deriveCaliforniaRegulatoryScore(input: {
     f.presentationDecision.status === "surface" && f.surfacingDecision?.reportable === true &&
     f.concernContext?.promotionEligibilities.includes("eligible") && f.concernContext?.externalSurfacingEligibilities.includes("eligible") &&
     f.details?.family === "privacy_signal" && f.details.kind === "gpc_response" &&
-    supportsCaliforniaRuntimeLink(assessment,f.details.assessment) && f.scoreEffects?.some(e=>{
+    (policyVersion===CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION ? supportsCombinedOptOutRisk(assessment,f.details.assessment) : supportsCaliforniaRuntimeLink(assessment,f.details.assessment)) && f.scoreEffects?.some(e=>{
       if(f.details?.family !== "privacy_signal" || f.details.kind !== "gpc_response")return false;
       const p=deriveCaliforniaGpcResponsePolicy(f.details.assessment);
       return e.appliesTo === "california_posture" && e.framework === "california" && e.policyVersion === p.policyVersion &&
         e.policyKey === p.policyKey && e.deductionPoints === p.deductionPoints;
     }));
-  const runtimeLinkAssessment=runtimeLinkGpc?.details?.family === "privacy_signal" && runtimeLinkGpc.details.kind === "gpc_response"
+  const combinedPacket=input.unifiedFindings.find(f=>f.unifiedFindingId==="california_privacy_choice_not_observed" && f.details?.family==="california_privacy_review" && supportsCombinedOptOutRisk(assessment,f.details.gpcAssessment));
+  const runtimeLinkAssessment=combinedPacket?.details?.family==="california_privacy_review" ? combinedPacket.details.gpcAssessment : runtimeLinkGpc?.details?.family === "privacy_signal" && runtimeLinkGpc.details.kind === "gpc_response"
     ? runtimeLinkGpc.details.assessment : undefined;
   const eligibleRules=rules.filter(rule=>
     (!isDisclosureChoiceScore(policyVersion) || rule.findingId !== "california_privacy_choice_not_observed" || requiredLinkProof(assessment,runtimeLinkAssessment)) &&
     (rule.findingId !== "california_sale_sharing_opt_out_activity" || !recipientPolicy || assessment.optOutObservation?.evidence.requests.some(row=>row.collectionEvidence)));
   for (const rule of eligibleRules) {
     const isChoice = rule.findingId === "california_sale_sharing_opt_out_activity" && recipientPolicy;
-    const points = isChoice ? explicitChoice.points : disclosureChoicePoints(rule.findingId,rule.points,policyVersion,assessment);
+    const combinedRisk=policyVersion===CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION && rule.findingId==="california_privacy_choice_not_observed" &&
+      assessment.contractVersion==="certscore.california-privacy-review.v10" && assessment.disclosureChoiceAssessment?.policyVersion===CALIFORNIA_COMBINED_OPT_OUT_POLICY ? assessment.disclosureChoiceAssessment.optOutRisk:undefined;
+    const points = combinedRisk?.status==="gpc_contradiction" ? californiaChoiceEnforcementPoints(combinedRisk.recipientIds,true) : isChoice ? explicitChoice.points : disclosureChoicePoints(rule.findingId,rule.points,policyVersion,assessment);
     const projected = input.unifiedFindings.filter(finding =>
       finding.unifiedFindingId === rule.findingId &&
       finding.presentationDecision.status === "surface" && finding.surfacingDecision?.reportable === true &&
@@ -149,6 +163,10 @@ export function deriveCaliforniaRegulatoryScore(input: {
         effect.deductionPoints === points))) return unavailable;
     if (projected.length) {
       deductions.push({findingId: rule.findingId, policyKey: rule.policyKey, label: rule.label, points});
+      if(combinedRisk?.status==="gpc_contradiction") {
+        choiceSupported=true;
+        combinedRisk.recipientIds.forEach(id=>choiceRecipients.add(id));
+      }
       if (isChoice) {
         choiceSupported = explicitChoice.supportedConcern;
         explicitChoice.recipientIds.forEach(id => choiceRecipients.add(id));
@@ -190,7 +208,9 @@ export function deriveCaliforniaRegulatoryScore(input: {
     // includes the first recipient and a contradiction; neither is additive.
     const explicit = deductions.findIndex(row => row.findingId === "california_sale_sharing_opt_out_activity");
     if (explicit >= 0) deductions.splice(explicit, 1);
-    deductions.push({ findingId: gpcChoiceSupported ? "gpc_response" : rejectChoiceSupported && !explicitChoice.supportedConcern ? CALIFORNIA_POST_REJECT_FINDING : "california_sale_sharing_opt_out_activity",
+    const combined=policyVersion===CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION && deductions.some(d=>d.findingId==="california_privacy_choice_not_observed");
+    if(combined)deductions.splice(deductions.findIndex(d=>d.findingId==="california_privacy_choice_not_observed"),1);
+    deductions.push({ findingId: combined ? "california_privacy_choice_not_observed" : gpcChoiceSupported ? "gpc_response" : rejectChoiceSupported && !explicitChoice.supportedConcern ? CALIFORNIA_POST_REJECT_FINDING : "california_sale_sharing_opt_out_activity",
       policyKey: CALIFORNIA_CHOICE_ENFORCEMENT_POLICY_KEY, label: "Verified privacy-choice enforcement risk",
       points: californiaChoiceEnforcementPoints([...choiceRecipients], true) });
   }

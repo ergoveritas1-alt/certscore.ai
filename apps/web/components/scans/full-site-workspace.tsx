@@ -9,7 +9,7 @@ import { ReportCoverageTiming } from "./report-coverage-timing";
 import { useFullSiteReportContinuity } from "./full-site-report-continuity";
 import { isCompletedFullSiteReport, readFullSiteReportSessionCache, writeFullSiteReportSessionCache } from "./full-site-report-session-cache";
 import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice";
-import { describeSiteTechnology, type SiteMetadataProjection } from "@certscore/contracts";
+import type { SiteMetadataProjection } from "@certscore/contracts";
 import { useTableRowLimit } from "./use-table-row-limit";
 import { TableScrollHint } from "./compact-scroll-hint";
 import { FullSiteExecutiveSummary } from "./full-site-executive-summary";
@@ -133,7 +133,6 @@ export function FullSiteWorkspace({
   californiaScore,
   homepageRuntimeCards,
   homepageUrl,
-  siteMetadata,
   initialStartedAt,
   initialNotice,
   initialPending = false,
@@ -455,7 +454,6 @@ export function FullSiteWorkspace({
       ...(data?.discovery.beyond ?? []),
       ...(data?.discovery.widespread ?? []),
     ].find((r) => r.key === resource);
-  const technology = describeSiteTechnology(siteMetadata?.observation);
   const captureLimitations = failedPages.length ? <details className="mt-3 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-sm">
           <summary className="cursor-pointer font-medium text-amber-950">{failedPages.length} pages with capture limitations — view reasons</summary>
           <p className="mt-2 text-xs text-slate-600">These are page capture outcomes. A page can return an HTTP error even when some content renders.</p>
@@ -471,7 +469,6 @@ export function FullSiteWorkspace({
   const timing = <ReportCoverageTiming
     duration={scanDuration}
     showDurationInSummary={initialPending}
-    technology={technology}
     groups={[{ title: "Coverage", rows: [["Pages discovered", data?.coverage?.discovered ?? "Loading…"],
                   ["Robots-allowed", data?.coverage ? data.coverage.unknown === data.coverage.discovered - data.coverage.outOfScope && data.coverage.unknown > 0 ? "Not verified" : data.coverage.allowed : "Loading…"],
                   ["Robots-blocked", data?.coverage ? data.coverage.unknown === data.coverage.discovered - data.coverage.outOfScope && data.coverage.unknown > 0 ? "Not verified" : data.coverage.blocked : "Loading…"],

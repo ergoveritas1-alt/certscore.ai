@@ -9,6 +9,10 @@ export function createPrivacyChoiceDomDiagnostics(proof?: ReturnType<typeof crea
   const unnamedControls: Array<{locator:string;locatorLimited:boolean;scope:"main"|"frame";tag:string;role:string;nameStates:number[];labelledByTruncated:boolean}> = [];
   const frames: Frame[] = [];
   const frameNodes: Element[] = [];
+  // Queue only bounded references during inventory. Identity proof runs before
+  // optional style/locator/name diagnostics in result(), sharing the same cap.
+  const pendingFrames: Array<{element: Element; slot: number; deadline: number}> = [];
+  const pendingUnnamed: Array<{element: Element; states: number[]; scope: "main"|"frame"; deadline: number}> = [];
   let frameSlots = 0;
   let frameDeadline = Infinity;
   const limits = new Set<string>();
@@ -39,7 +43,7 @@ export function createPrivacyChoiceDomDiagnostics(proof?: ReturnType<typeof crea
     if (workMs >= 2 || performance.now() >= deadline) { limits.add("diagnostic_time_limit"); return true; }
     return false;
   }
-  function unnamed(element: Element, names: readonly (readonly [string, string | null | undefined])[], scope: "main"|"frame", deadline = Infinity) {
+  function captureUnnamed(element: Element, states: number[], scope: "main"|"frame", deadline: number) {
     if (unnamedControls.length >= 8) { limits.add("unnamed_sample_truncated"); return; }
     if (timedOut(deadline)) return;
     const start = performance.now();
@@ -47,13 +51,11 @@ export function createPrivacyChoiceDomDiagnostics(proof?: ReturnType<typeof crea
       const role = element.getAttribute("role");
       unnamedControls.push({...locator(element, Math.min(deadline, start + 2 - workMs)),scope,tag:element.tagName === "A" ? "a" : element.tagName === "BUTTON" ? "button" : "other",
         role:role === "button" || role === "link" ? role : role ? "other" : "none",
-        nameStates:names.map(([,value]) => value == null ? 0 : value.trim() ? 2 : 1),
+        nameStates:states,
         labelledByTruncated:(element.getAttribute("aria-labelledby")?.trim().split(/\s+/, 5).length ?? 0) > 4});
     } catch { limits.add("diagnostic_unavailable"); } finally { workMs += performance.now()-start; }
   }
-  function frame(element: Element, slot: number, deadline: number) {
-    frameSlots = Math.min(5, Math.max(frameSlots, slot + 1));
-    frameDeadline = Math.min(frameDeadline, deadline);
+  function captureFrame(element: Element, slot: number, deadline: number) {
     if (slot >= 4 || frames.length >= 4) { limits.add("frame_sample_truncated"); return; }
     if (timedOut(deadline)) return;
     const start = performance.now();
@@ -74,12 +76,29 @@ export function createPrivacyChoiceDomDiagnostics(proof?: ReturnType<typeof crea
       let frameDocument: string | null = null;
       try { const d=(element as HTMLIFrameElement).contentDocument; if(d?.defaultView) frameDocument=JSON.stringify([d.URL,d.defaultView.performance.timeOrigin]); } catch { /* Keep opaque identity unknown. */ }
       frames.push({...locator(element, Math.min(deadline, start + 2 - workMs)),frameDocument,reason,depth});
-      if (proof) frameNodes.push(element);
     } catch { limits.add("diagnostic_unavailable"); } finally { workMs += performance.now()-start; }
   }
+  function unnamed(element: Element, names: readonly (readonly [string, string | null | undefined])[], scope: "main"|"frame", deadline = Infinity) {
+    if (pendingUnnamed.length >= 8) { limits.add("unnamed_sample_truncated"); return; }
+    if (timedOut(deadline)) return;
+    const start = performance.now();
+    pendingUnnamed.push({element, states:names.slice(0,6).map(([,value]) => value == null ? 0 : value.trim() ? 2 : 1), scope, deadline});
+    workMs += performance.now()-start;
+  }
+  function frame(element: Element, slot: number, deadline: number) {
+    frameSlots = Math.min(5, Math.max(frameSlots, slot + 1));
+    frameDeadline = Math.min(frameDeadline, deadline);
+    if (slot >= 4 || pendingFrames.length >= 4) { limits.add("frame_sample_truncated"); return; }
+    const start = performance.now();
+    pendingFrames.push({element,slot,deadline});
+    // Retain the observed slot even when diagnostics expire. The identity helper
+    // must report a time limit, never mistake an incomplete sample for no frames.
+    frameNodes.push(element);
+    workMs += performance.now()-start;
+  }
   function result() {
-    // Identity consumes the remainder of the same two-millisecond diagnostic
-    // allowance and twenty-millisecond frame window, never a fresh budget.
+    // Identity gets first use of the remaining shared two-millisecond allowance.
+    // The original frame deadline still applies; optional detail gets no reset.
     let checkpointIdentity: ReturnType<ReturnType<typeof createPrivacyFrameContinuityProof>["finish"]> | undefined;
     if (proof) {
       if (frameSlots > 4) frameNodes.length = 5; // Overflow marker; no fifth reference/read.
@@ -94,6 +113,9 @@ export function createPrivacyChoiceDomDiagnostics(proof?: ReturnType<typeof crea
       frameNodes.length = 0;
       if (checkpointIdentity?.limitations.includes("time_limit")) limits.add("diagnostic_time_limit");
     }
+    for (const row of pendingFrames) captureFrame(row.element,row.slot,row.deadline);
+    for (const row of pendingUnnamed) captureUnnamed(row.element,row.states,row.scope,row.deadline);
+    pendingFrames.length = 0; pendingUnnamed.length = 0; frameNodes.length = 0;
     return {document:JSON.stringify([document.URL,performance.timeOrigin]),unnamedControls,frames,limitations:[...limits],
       ...(checkpointIdentity ? {checkpointIdentity} : {})};
   }

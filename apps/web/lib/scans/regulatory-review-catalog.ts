@@ -115,9 +115,12 @@ export const REGULATORY_REVIEW_TOPICS: RegulatoryReviewTopic[] = [
   { id: "consent-record", title: "Consent record contradicts the choice", findingIds: ["acceptance_signal_contradicts_action"], contexts: { gdpr_eprivacy: { why: "Services rely on the recorded decision to apply a visitor’s choice. A contradictory record warrants checking how that choice is saved and communicated.", rule: "GDPR Arts. 5(2), 7", ruleUrl: gdpr, cases: [], priority: 80 } } },
 ];
 
-export function regulatoryReviewContext(id: string, focus: ReportReviewFocus) {
+export function regulatoryReviewContext(id: string, focus: ReportReviewFocus, combinedOptOut = false) {
   const topic = REGULATORY_REVIEW_TOPICS.find(topic => topic.findingIds.includes(id));
-  const context = topic?.contexts[focus];
+  const base = topic?.contexts[focus];
+  const context=base && combinedOptOut && id==="california_privacy_choice_not_observed" && focus==="ccpa_cpra"
+    ? {...base,priority:100,why:"Visitors need a usable choice that reaches advertising recipients.",
+      rule:"CCPA §1798.135; regulations §§7025–7026",cases:["sephora"]}:base;
   return topic && context ? { ...context, topicId: topic.id, examples: context.cases.map(id => ENFORCEMENT_EXAMPLES[id]!).filter(example => example?.mode === focus) } : null;
 }
 
@@ -127,7 +130,7 @@ export function selectRegulatoryReview<T extends { id: string; status: string; r
   const relevant = priorityFindings.filter(finding => regulatoryReviewContext(finding.id, focus));
   const regulatory = [...relevant].sort((a, b) =>
     Number(b.status === "Potential gap") - Number(a.status === "Potential gap") ||
-    regulatoryReviewContext(b.id, focus)!.priority - regulatoryReviewContext(a.id, focus)!.priority
+    regulatoryReviewContext(b.id, focus,Boolean(b.evidenceJson?.combinedGpcAssessment))!.priority - regulatoryReviewContext(a.id, focus,Boolean(a.evidenceJson?.combinedGpcAssessment))!.priority
   ).map((finding, index) => ({ ...finding, rank: index + 1 }));
   const other = priorityFindings.filter(finding => finding.id !== "gpc_response" && !REGULATORY_REVIEW_TOPICS.some(topic => topic.findingIds.includes(finding.id)))
     .map((finding, index) => ({ ...finding, rank: index + 1 }));

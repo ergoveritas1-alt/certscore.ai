@@ -1,8 +1,9 @@
+import { TECHNOLOGY_NAMES, type CmsSecurityProjection } from "@certscore/contracts";
 export type EvidenceSummaryRow = { status: string; priority?: "high" };
 export const EVIDENCE_SECTION_TITLES = {
   cmp: "CMP details", consent: "Consent choices", tracking: "Tracking & embeds", policy: "Policies & disclosures",
   runtime: "Cookies & tracking", transport: "Connection security", accessibility: "Accessibility (WCAG)",
-  cms: "CMS & version", gpc: "Global Privacy Control", privacy: "California privacy review",
+  cms: "Tech stack observed", gpc: "Global Privacy Control", privacy: "California privacy review",
 } as const;
 export const EVIDENCE_SECTION_ORDER = ["cmp", "consent", "tracking", "policy", "accessibility", "runtime", "privacy", "transport", "gpc", "cms"] as const;
 /** Summarize existing row statuses only; never promote missing evidence to a concern. */
@@ -58,6 +59,17 @@ export function cmsEvidenceRecap(detections: readonly CmsVersion[], pluginCount:
   return detections.length > 1 ? `${detections.length} platforms detected`
     : first ? `${first.name}${first.version ? " " : " · "}${cmsEvidenceVersionLabel(first)}`
       : `${pluginCount} ${pluginCount === 1 ? "plugin" : "plugins"} detected`;
+}
+export function technologyEvidenceRecap(projection: CmsSecurityProjection) {
+  const technologies = projection.technologyInventory?.detections ?? [];
+  const plugins = projection.pluginInventory?.detections.length ?? 0;
+  if (!technologies.length) return cmsEvidenceRecap(projection.assessment.detections, plugins);
+  const high = [...new Set(technologies.filter(row => row.confidence === "high").map(row => TECHNOLOGY_NAMES[row.id]))];
+  const tentative = technologies.filter(row => row.confidence === "tentative").length;
+  return [projection.assessment.detections.length ? cmsEvidenceRecap(projection.assessment.detections, 0) : null,
+    ...high.slice(0, 3), high.length > 3 ? `+${high.length - 3} technologies` : null,
+    plugins ? `${plugins} ${plugins === 1 ? "plugin" : "plugins"}` : null,
+    tentative ? `${tentative} tentative` : null].filter(Boolean).join(" · ");
 }
 export const CMS_CORRECTION_STEPS = [
   "Confirm the deployed version against the retained declaration and vendor advisory.",

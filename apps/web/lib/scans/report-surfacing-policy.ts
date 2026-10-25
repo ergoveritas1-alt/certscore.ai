@@ -1,4 +1,8 @@
-import { PRIVACY_CHOICE_PRESENCE_SIGNAL, californiaPrivacyReviewSchema } from "@certscore/contracts";
+import {BROAD_OPT_OUT_FINDING_ID,broadOptOutAssessmentSchema} from "@certscore/contracts";
+import {OPT_OUT_SIGNAL_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID,optOutPresenceSignalSchema} from "@certscore/contracts";
+import {FRICTIONLESS_GPC_FINDING_ID,frictionlessGpcProjectionSchema,CALIFORNIA_PRIVACY_REVIEW_SIGNAL} from "@certscore/contracts";
+import {POLICY_CHOICE_METHOD_FINDING_ID,policyChoiceMethodsSchema} from "@certscore/contracts";
+import { PRIVACY_CHOICE_PRESENCE_SIGNAL, californiaPrivacyReviewSchema, saleSharingPresenceLinks } from "@certscore/contracts";
 import {CALIFORNIA_POST_REJECT_FINDING} from "./california-post-reject-policy";
 import {hasVerifiedCustomerGpcEvidence} from "./gpc-customer-policy";
 import {deriveGppPropagationPolicy} from "./gpp-propagation-policy";
@@ -56,6 +60,11 @@ export type SurfacingPolicyRuleId =
   | "family.accessibility.default"
   | "evidence.positive_surface.support_only"
   | "evidence.privacy_choice_presence.observed"
+  | "evidence.policy_choice_method.observed"
+  | "evidence.frictionless_gpc.assessed"
+  | "evidence.broad_opt_out.assessed"
+  | "evidence.opt_out_signal.observed"
+  | "evidence.opt_out_absence.complete"
   | "evidence.positive_surface.review_high_value_policy_path"
   | "evidence.positive_surface.review_high_value_privacy_disclosure"
   | "evidence.coverage_gap.keep_review"
@@ -1869,16 +1878,57 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
   if (packet.unifiedFindingId === "targeted_advertising_choices_present" && packet.details?.family === "california_privacy_review") {
     const assessment = californiaPrivacyReviewSchema.safeParse(packet.details.projection);
-    const eligible = assessment.success && assessment.data.choicePresence?.links.some(link => link.kind === "do_not_sell_or_share") &&
+    const eligible = assessment.success && saleSharingPresenceLinks(assessment.data.choicePresence).length > 0 &&
       packet.sourceRefs.some(ref => ref.kind === "signal" && ref.source === "runtime_artifact_signal" && ref.key === PRIVACY_CHOICE_PRESENCE_SIGNAL) &&
       packet.concernContext?.promotionEligibilities.includes("eligible") && packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
     overrideDecision(decision, {state:eligible?"support_only":"suppressed",lane:eligible?"confidence_and_coverage":"suppressed",tier:"support",
       reason:"Source-bound opt-out link presence belongs in the California coverage snapshot.",ruleId:"evidence.privacy_choice_presence.observed"});
     return;
   }
+  if(packet.unifiedFindingId===POLICY_CHOICE_METHOD_FINDING_ID&&packet.details?.family==="policy_choice_methods"){
+    const eligible=policyChoiceMethodsSchema.safeParse(packet.details.projection).success&&
+      packet.sourceRefs.some(ref=>ref.kind==="signal"&&ref.source==="runtime_artifact_signal"&&ref.key===`${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${POLICY_CHOICE_METHOD_FINDING_ID}`)&&
+      packet.concernContext?.promotionEligibilities.includes("eligible")&&packet.concernContext.externalSurfacingEligibilities.includes("eligible");
+    overrideDecision(decision,{state:eligible?"support_only":"suppressed",lane:eligible?"confidence_and_coverage":"suppressed",tier:"support",
+      reason:"Policy-listed method is scoped informational evidence; homepage presence and effectiveness remain separate.",ruleId:"evidence.policy_choice_method.observed"});return;
+  }
+  if(packet.unifiedFindingId===OPT_OUT_ABSENCE_FINDING_ID){
+    const eligible=packet.details?.family==="opt_out_absence"&&
+      packet.sourceRefs.some(ref=>ref.kind==="signal"&&ref.source==="runtime_artifact_signal"&&ref.key===`${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${OPT_OUT_ABSENCE_FINDING_ID}`)&&
+      packet.concernContext?.promotionEligibilities.includes("eligible")&&packet.concernContext.externalSurfacingEligibilities.includes("eligible");
+    overrideDecision(decision,{state:eligible?"support_only":"suppressed",lane:eligible?"confidence_and_coverage":"suppressed",tier:"support",
+      reason:"Complete starting-page and retained-policy inspection supports scoped Not observed, independently of legal applicability.",ruleId:"evidence.opt_out_absence.complete"});return;
+  }
+  if(packet.unifiedFindingId===BROAD_OPT_OUT_FINDING_ID){
+    const parsed=broadOptOutAssessmentSchema.safeParse(packet.details?.family==="broad_opt_out_assessment"?packet.details.projection:undefined);
+    const supported=parsed.success&&packet.sourceRefs.some(ref=>ref.kind==="signal"&&ref.source==="runtime_artifact_signal"&&ref.key===`${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${BROAD_OPT_OUT_FINDING_ID}`)&&!packet.scoreEffects?.length;
+    const eligible=supported&&packet.concernContext?.promotionEligibilities.includes("eligible")&&packet.concernContext.externalSurfacingEligibilities.includes("eligible");
+    overrideDecision(decision,{state:eligible?"support_only":"suppressed",lane:eligible?"confidence_and_coverage":"suppressed",tier:"support",
+      reason:"Versioned opt-out status retains positive signals, scoped negative observations and capture limits.",ruleId:"evidence.broad_opt_out.assessed"});return;
+  }
+  if(packet.unifiedFindingId===OPT_OUT_SIGNAL_FINDING_ID){
+    const eligible=packet.details?.family==="opt_out_presence_signal"&&optOutPresenceSignalSchema.safeParse(packet.details.projection).success&&
+      packet.sourceRefs.some(ref=>ref.kind==="signal"&&ref.source==="runtime_artifact_signal"&&ref.key===`${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${OPT_OUT_SIGNAL_FINDING_ID}`)&&
+      packet.concernContext?.promotionEligibilities.includes("eligible")&&packet.concernContext.externalSurfacingEligibilities.includes("eligible");
+    overrideDecision(decision,{state:eligible?"support_only":"suppressed",lane:eligible?"confidence_and_coverage":"suppressed",tier:"support",
+      reason:"Specific retained opt-out instructions meet the owner-approved positive signal threshold.",ruleId:"evidence.opt_out_signal.observed"});return;
+  }
+  if(packet.unifiedFindingId===FRICTIONLESS_GPC_FINDING_ID){
+    const eligible=packet.details?.family==="frictionless_gpc_exception"&&frictionlessGpcProjectionSchema.safeParse(packet.details.projection).success&&
+      packet.sourceRefs.some(ref=>ref.kind==="signal"&&ref.source==="runtime_artifact_signal"&&ref.key===`${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${FRICTIONLESS_GPC_FINDING_ID}`)&&
+      packet.concernContext?.promotionEligibilities.includes("eligible")&&packet.concernContext.externalSurfacingEligibilities.includes("eligible");
+    overrideDecision(decision,{state:eligible?"support_only":"suppressed",lane:eligible?"confidence_and_coverage":"suppressed",tier:"support",
+      reason:"Versioned exception assessment retains declarations, contradictions and unresolved requirements independently.",ruleId:"evidence.frictionless_gpc.assessed"});
+    return;
+  }
   if (CALIFORNIA_PRIVACY_REVIEW_IDS.some(id => id === packet.unifiedFindingId)) {
     const eligible = packet.details?.family === "california_privacy_review" && californiaPrivacyReviewFindingIds(packet.details.projection).includes(packet.unifiedFindingId) &&
       packet.concernContext?.promotionEligibilities.includes("eligible") && packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
+    if (packet.unifiedFindingId === POLICY_CHOICE_METHOD_FINDING_ID) {
+      overrideDecision(decision,{state:eligible?"support_only":"suppressed",lane:eligible?"confidence_and_coverage":"suppressed",tier:"support",
+        reason:"Policy-listed method is scoped informational evidence; homepage presence and effectiveness remain separate.",ruleId:"evidence.policy_choice_method.observed"});
+      return;
+    }
     overrideDecision(decision, {state: eligible ? "review" : "suppressed", lane: eligible ? "main" : "suppressed", tier: "headline",
       reason: "Verified California privacy assessment; scoped factual findings with versioned California-only score effects where eligible.", ruleId: "evidence.context.keep_review"});
     return;
@@ -2974,7 +3024,7 @@ function applyCrossFindingRules(decisionsById: Map<string, MutableDecision>, pac
     const policy = UNIFIED_FINDING_SURFACING_POLICY_REGISTRY[findingId as ReportUnifiedFindingId];
     const fallback = policy?.orphanedSupportFallback ?? (decision.family === "positive_surface" ? "suppressed" : "review");
 
-    if (decision.appliedRules.includes("evidence.privacy_choice_presence.observed")) {
+    if (decision.appliedRules.includes("evidence.broad_opt_out.assessed") || decision.appliedRules.includes("evidence.privacy_choice_presence.observed") || decision.appliedRules.includes("evidence.policy_choice_method.observed") || decision.appliedRules.includes("evidence.frictionless_gpc.assessed") || decision.appliedRules.includes("evidence.opt_out_signal.observed") || decision.appliedRules.includes("evidence.opt_out_absence.complete")) {
       decision.reportLane = "confidence_and_coverage";
       continue;
     }

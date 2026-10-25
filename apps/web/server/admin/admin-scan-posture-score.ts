@@ -1,3 +1,5 @@
+import {supportsCombinedOptOutRisk} from "../../lib/scans/california-combined-opt-out-policy";
+import {CALIFORNIA_CHOICE_ENFORCEMENT_POLICY_KEY} from "../../lib/scans/california-choice-enforcement-policy";
 import {isRejectPresencePolicy} from "../../lib/scans/after-reject-scoring-contract";
 import { californiaPrivacyReviewSchema } from "@certscore/contracts";
 import { gpcResponseAssessmentSchema } from "@certscore/contracts";
@@ -52,7 +54,9 @@ export function projectAdminScoringEntityCounts(scanId:string,snapshot:ScoreSnap
         const assessment=californiaPrivacyReviewSchema.safeParse(input.assessment);
         const score=assessment.success && assessment.data.scanId===scanId ? deriveCaliforniaRegulatoryScore({assessment:assessment.data,
           checklistRows:input.checklistRows,unifiedFindings:input.unifiedFindings}):null;
-        if(score?.score!==null && score?.deductions.some(row=>row.findingId==="gpc_response")) {
+        if(score?.score!==null && score?.deductions.some(row=>row.findingId==="gpc_response" ||
+          row.findingId==="california_privacy_choice_not_observed" && row.policyKey===CALIFORNIA_CHOICE_ENFORCEMENT_POLICY_KEY &&
+          assessment.success && supportsCombinedOptOutRisk(assessment.data,gpc.data))) {
           const ids=new Set(policy.recipientIds??[]);
           counts.gpc=(ids.size>0 || policy.reasonCode==="verified_gpc_choice_contradiction")?ids.size:null;
         }

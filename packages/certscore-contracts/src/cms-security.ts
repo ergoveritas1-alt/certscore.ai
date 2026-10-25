@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { technologyInventorySchema } from "./technology-inventory";
 import { cmsVersionEvidenceSchema, WORDPRESS_RELEASE } from "./cms-version-evidence";
 import { CMS_CATALOGUE_VERSION, CMS_CATALOGUE_V1, CMS_CATALOGUE_V2, CMS_CATALOGUE_V3, CMS_CATALOGUE_REVIEWED_AT, CMS_CATALOGUE_LEGACY_REVIEWED_AT, CMS_SECURITY_RULES, CMS_SECURITY_RULES_V1, CMS_SECURITY_RULES_V2, type CmsProduct, type CmsRange } from "./cms-security-catalog";
 export { CMS_CATALOGUE_VERSION, CMS_CATALOGUE_REVIEWED_AT, CMS_SECURITY_RULES } from "./cms-security-catalog";
@@ -165,6 +166,7 @@ const projectionBase = z.object({
   evidenceRef: z.string().min(1).max(256), signals: z.array(cmsSignalSchema).max(22),
   assessment: z.custom<CmsAssessment>(),
   pluginInventory: cmsPluginInventorySchema.optional(),
+  technologyInventory: technologyInventorySchema.optional(),
 }).strict();
 // JSONB may reorder object keys. Compare the bounded expected shape, not serialization order.
 function sameAssessment(actual: unknown, expected: unknown): boolean {
@@ -190,6 +192,8 @@ export const cmsSecurityProjectionSchema = projectionBase.superRefine((value, ct
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "CMS plugin inventory must reproduce retained declarations and paths" });
   const refs = value.signals.map(row => row.evidenceRef);
   const documentOrigin = new URL(value.documentUrl).origin;
+  if (value.technologyInventory && value.technologyInventory.documentUrl !== value.documentUrl)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Technology inventory must belong to the CMS evidence document" });
   const invalidSignal = value.signals.some(row => {
     if (row.kind === "meta_generator") return row.versionEvidence !== undefined || row.sourceUrl !== value.documentUrl || !row.evidenceRef.startsWith("site_integrity:dom:");
     if (row.kind === "asset_path") return row.versionEvidence !== undefined || new URL(row.sourceUrl).origin !== documentOrigin || new URL(row.sourceUrl).pathname !== row.value || !row.evidenceRef.startsWith("site_integrity:asset:");
@@ -216,5 +220,5 @@ export function cmsSecurityCopy(projection: CmsSecurityProjection) {
 }
 /** All references are scoped to this scan/document and resolve to retained values or catalogue records. */
 export function resolveCmsEvidence(projection: CmsSecurityProjection, reference: string) {
-  return projection.signals.find(row => row.evidenceRef === reference) ?? projection.assessment.detections.find(row => row.evidenceRef === reference) ?? projection.assessment.matches.find(row => row.evidenceRef === reference) ?? projection.pluginInventory?.detections.find(row => row.evidenceRef === reference) ?? null;
+  return projection.signals.find(row => row.evidenceRef === reference) ?? projection.assessment.detections.find(row => row.evidenceRef === reference) ?? projection.assessment.matches.find(row => row.evidenceRef === reference) ?? projection.pluginInventory?.detections.find(row => row.evidenceRef === reference) ?? projection.technologyInventory?.signals.find(row => row.evidenceRef === reference) ?? null;
 }

@@ -155,3 +155,29 @@ function hostnameMatchesDomain(hostnameValue: string, domain: string): boolean {
   const normalizedDomain = domain.toLowerCase().replace(/^www\./, "");
   return hostnameValue === normalizedDomain || hostnameValue.endsWith(`.${normalizedDomain}`);
 }
+
+/** Reviewed owner-policy routes for positive opt-out signals only. These grants
+ * do not upgrade general policy ownership, negative coverage or scoring. */
+export const REVIEWED_OPT_OUT_POLICY_OWNERS = [
+  {id:"ramnode_inmotion_opt_out.v1",targetDomain:"ramnode.com",policyDomain:"inmotionhosting.com",
+    paths:["/legal/privacy-policy/"],indexPaths:[] as string[],owner:"InMotion Hosting",
+    verifiedAt:"2026-10-24",sourceUrl:"https://ramnode.com/"},
+  {id:"bournemouth_newsquest_opt_out.v1",targetDomain:"bournemouthecho.co.uk",policyDomain:"newsquest.co.uk",
+    paths:["/our-policies/privacy-policy/"],indexPaths:["/our-policies/"],owner:"Newsquest Media Group",
+    verifiedAt:"2026-10-24",sourceUrl:"https://www.bournemouthecho.co.uk/"},
+] as const;
+export function reviewedOptOutPolicyOwner(targetUrl:string,documentUrl:string,observedAt:string){
+  try {
+    const target=new URL(targetUrl),document=new URL(documentUrl),at=Date.parse(observedAt);
+    if(target.protocol!=="https:"||document.protocol!=="https:"||target.username||target.password||target.port||document.username||document.password||document.search||document.hash||document.port)return undefined;
+    return REVIEWED_OPT_OUT_POLICY_OWNERS.find(row=>hostname(targetUrl)===row.targetDomain&&hostname(documentUrl)===row.policyDomain&&
+      row.paths.some(path=>document.pathname.replace(/\/$/,"")===path.replace(/\/$/,""))&&Number.isFinite(at)&&at>=Date.parse(row.verifiedAt+"T00:00:00.000Z"));
+  }catch{return undefined;}
+}
+export function reviewedOptOutPolicyIndexLink(targetUrl:string,documentUrl:string,label:string,location:string){
+  if(!["footer","header"].includes(location)||!/^policies$|^our policies$/i.test(label.trim()))return false;
+  try {const url=new URL(documentUrl);return url.protocol==="https:"&&!url.username&&!url.password&&!url.search&&!url.hash&&!url.port&&
+    REVIEWED_OPT_OUT_POLICY_OWNERS.some(row=>hostname(targetUrl)===row.targetDomain&&hostname(documentUrl)===row.policyDomain&&
+      row.indexPaths.some(path=>url.pathname.replace(/\/$/,"")===path.replace(/\/$/,"")));
+  }catch{return false;}
+}

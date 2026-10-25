@@ -1,6 +1,8 @@
-import type { CaliforniaChoicePresence } from "../../lib/scans/california-choice-presence";
+import { FindingDisclosureSummary } from "./finding-disclosure-summary";
+import type { CaliforniaChoicePresence, CaliforniaPolicyChoiceMethods, CaliforniaFrictionlessGpcException, CaliforniaOptOutPresence } from "../../lib/scans/california-choice-presence";
 import { EvidenceJumpLink } from "./evidence-jump-link";
 import { DisclosureChevron } from "./report-finding-row";
+import { EvidenceStatusBadge } from "./evidence-status-badge";
 import { CaliforniaReviewCoverage as CaliforniaChoiceInspection } from "./california-review-coverage";
 import type { CaliforniaPrivacyReview } from "@certscore/contracts";
 import { EvidenceHeaderStatus } from "./evidence-header-status";
@@ -54,19 +56,67 @@ function californiaCoverageLabel(coverage: CaliforniaReviewCoverage) {
   return `${supported} supported${gaps ? ` · ${gaps} assessed ${gaps === 1 ? "gap" : "gaps"}` : ""} · ${review} to review${limited ? ` · ${limited} limited` : ""}`;
 }
 
-export function CaliforniaCoverageSummary({coverage, choicePresence}: Pick<CaliforniaCoverageProps, "coverage"> & {choicePresence?: CaliforniaChoicePresence | null}) {
+export function CaliforniaCoverageSummary({coverage, choicePresence, policyChoiceMethods, frictionlessGpcException, optOutPresence}: Pick<CaliforniaCoverageProps, "coverage"> & {choicePresence?: CaliforniaChoicePresence | null; policyChoiceMethods?: CaliforniaPolicyChoiceMethods | null; frictionlessGpcException?: CaliforniaFrictionlessGpcException | null; optOutPresence?: CaliforniaOptOutPresence}) {
+  const optOutState=optOutPresence?.state ?? choicePresence?.state ?? "unknown";
+  const optOutLabel=optOutState === "observed" ? "Observed" : optOutState === "not_observed" ? "Not observed" : "Unknown";
+  const optOutSummary=<><span className="min-w-0 flex-1 font-medium text-zinc-900">Sale/sharing opt-out</span><span className="shrink-0" data-opt-out-status={optOutState}><EvidenceStatusBadge label={optOutLabel} tone={optOutState === "observed" ? "positive" : optOutState === "not_observed" ? "neutral" : "context"} /></span></>;
+  const exceptionReason = !frictionlessGpcException ? "" : frictionlessGpcException.assessment.basis === "qualifying_collection_under_gpc"
+    ? "Advertising collection observed under GPC." : frictionlessGpcException.assessment.basis === "required_signal_disclosures_missing"
+    ? "Required signal disclosure absent from the complete policy assessment." : "GPC handling and full scope unverified.";
   const assessed = !coverage ? null : coverage.contractVersion === "certscore.california-review-coverage.v4"
     ? coverage.families.filter(row=>row.assessmentState === "completed").length
     : coverage.families.filter(row=>row.status === "observed" || row.status === "not_triggered_in_scope").length;
   return <details className="group/signal border-b border-zinc-200 py-2" data-california-coverage>
     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs leading-4 [&::-webkit-details-marker]:hidden">
       <span className="text-xs font-medium text-zinc-500">California coverage</span>
-      <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{coverage ? `${assessed} ${coverage.contractVersion === "certscore.california-review-coverage.v4" ? "assessed" : "supported"}` : choicePresence?.state === "observed" ? "Link observed" : choicePresence?.state === "not_observed" ? "Link not observed" : "Unknown"}<DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
+      <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{coverage ? `${assessed} ${coverage.contractVersion === "certscore.california-review-coverage.v4" ? "assessed" : "supported"}` : optOutLabel}<DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
     </summary>
     <div className="mt-3 space-y-2 text-xs leading-5 text-zinc-600">
-      <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3" data-california-opt-out-presence>
-        <p className="text-sm font-semibold text-zinc-900">{choicePresence?.title ?? "Sale/sharing opt-out link unknown"}</p>
-        {choicePresence?.labels.length ? <p className="mt-1 text-xs text-zinc-600">{choicePresence.labels.map(label => `“${label}”`).join(" · ")}</p> : null}
+      <div className="border-b border-zinc-200 pb-1" data-california-opt-out-presence>
+        {optOutPresence?.signal || optOutPresence?.absenceScope || choicePresence?.labels.length || frictionlessGpcException || policyChoiceMethods?.methods.length ? <details className="group/opt-out-evidence" data-opt-out-evidence>
+          <summary className="flex cursor-pointer list-none items-center gap-3 rounded hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden">{optOutSummary}<span aria-hidden="true" className="inline-flex h-7 w-8 shrink-0 items-center justify-center rounded border border-zinc-200 bg-white text-base font-semibold text-sky-800">…</span><span className="sr-only group-open/opt-out-evidence:hidden">Show opt-out assessment details</span><span className="sr-only hidden group-open/opt-out-evidence:inline">Hide opt-out assessment details</span></summary>
+          <div className="space-y-1 pt-2 text-xs">
+            {optOutPresence?.absenceScope?<><p>Scope: {optOutPresence.absenceScope}</p><p>No qualifying opt-out signal was found in the captured evidence.</p></>:null}
+            {optOutPresence?.absenceLimitations?.map(limit=><p key={limit}>{limit}</p>)}
+            {optOutPresence?.absenceSourceUrl?<a className="break-all text-sky-800 underline underline-offset-2" href={optOutPresence.absenceSourceUrl} target="_blank" rel="noreferrer">Source page ↗</a>:null}
+            {choicePresence?.labels.map(label=><p key={label}>“{label}”</p>)}
+            {optOutPresence?.signal ? <>
+              {optOutPresence.signal.scopeLabel?<p className="font-medium text-zinc-800">Scope: {optOutPresence.signal.scopeLabel}</p>:null}
+              {optOutPresence.signal.evidenceLimitations?.map(limit=><p key={limit}>{{instruction_destination_unverified:'Instruction link destination was not retained.',template_wording_retained:'Policy contains template wording.'}[limit]}</p>)}
+              {optOutPresence.signal.sourceQualityPassage?<blockquote className="border-l-2 border-sky-200 pl-2">Template text retained: {optOutPresence.signal.sourceQualityPassage.excerpt}</blockquote>:null}
+              {optOutPresence.signal.contextPassage?<blockquote className="border-l-2 border-sky-200 pl-2">{optOutPresence.signal.contextPassage.excerpt}</blockquote>:null}
+              <blockquote className="border-l-2 border-sky-200 pl-2">{optOutPresence.signal.passage.excerpt}</blockquote><a className="break-all text-sky-800 underline underline-offset-2" href={optOutPresence.signal.sourceDocumentUrl} target="_blank" rel="noreferrer">{optOutPresence.signal.basis==="visible_dom_opt_out_label"||optOutPresence.signal.scope==="localized_page"?`Source page: ${optOutPresence.signal.sourceDocumentUrl} ↗`:"Source policy ↗"}</a></> : null}
+            {policyChoiceMethods?.methods.length ? <section className="mt-3 border-t border-zinc-200 pt-3" data-policy-choice-methods>
+              <h3 className="text-xs font-medium text-zinc-600">Methods listed in policy · {policyChoiceMethods.methods.length}</h3>
+              <div className="space-y-2 py-2">
+                <p>Listed in a linked privacy policy. Homepage availability, sale/sharing scope and effectiveness are not established.</p>
+                {policyChoiceMethods.methods.map(method=><div key={method.evidenceRef} className="border-t border-zinc-200 pt-2">
+                  <p className="font-medium text-zinc-900">“{method.label}” · {method.method === "email" ? "Email link" : "Web link"}</p>
+                  <p className="break-all">{method.destination}</p>
+                  <a href={method.sourceDocumentUrl} target="_blank" rel="noreferrer" className="break-all text-sky-800 underline underline-offset-2">Source policy ↗</a>
+                </div>)}
+              </div>
+            </section> : null}
+            {frictionlessGpcException ? <section className="mt-3 border-t border-zinc-200 pt-3" data-frictionless-gpc-exception>
+              <h3 className="text-xs font-medium text-zinc-600">Frictionless GPC exception</h3>
+              <div className="mt-1" data-frictionless-evidence>
+                <p><strong className="font-medium text-zinc-800">{frictionlessGpcException.assessment.status === "unresolved" ? "Unresolved" : "Conflicting evidence"}</strong><span className="ml-1.5">· {exceptionReason}</span></p>
+                <div className="mt-2 space-y-2">
+                  <table className="w-full text-left text-xs"><caption className="sr-only">Frictionless GPC policy declarations</caption>
+                    <thead><tr><th scope="col" className="py-1">Policy disclosure</th><th scope="col">Evidence</th></tr></thead>
+                    <tbody>{frictionlessGpcException.assessment.disclosures.map(row=><tr key={row.id} className="border-t border-zinc-200">
+                      <td className="py-1 pr-2">{{opt_out_right:"Opt-out right described in policy",frictionless_processing:"Frictionless processing statement",signal_setup:"Instructions to enable the signal",other_request_methods:"Other request instructions"}[row.id]}</td>
+                      <td>{row.status === "declared" ? "Declared" : "Unresolved"}</td>
+                    </tr>)}</tbody>
+                  </table>
+                  {frictionlessGpcException.assessment.disclosures.flatMap(row=>row.passage?[<blockquote key={row.id} className="border-l-2 border-sky-200 pl-2">{row.passage.excerpt}</blockquote>]:[])}
+                  <p>Remaining checks: signal processing, fees, equivalent experience, signal-triggered interruptions and full sale/sharing scope.</p>
+                  {frictionlessGpcException.sources.map(source=><a key={source.evidenceRef} href={source.url} target="_blank" rel="noreferrer" className="mr-3 text-sky-800 underline underline-offset-2">Source policy ↗</a>)}
+                </div>
+              </div>
+            </section> : null}
+          </div>
+        </details> : <div className="flex items-center justify-between gap-3">{optOutSummary}</div>}
       </div>
       {coverage ? <p>{californiaCoverageLabel(coverage)}</p> : null}
       <EvidenceJumpLink targetId="california-privacy-evidence" className="inline-block text-xs">View California privacy review ↓</EvidenceJumpLink>

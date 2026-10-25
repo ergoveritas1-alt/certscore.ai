@@ -39,14 +39,19 @@ for (const scenario of ["complete", "unnamed", "hidden_frame", "inventory_failur
       });
       const newPage = context.newPage.bind(context);
       context.newPage = async () => {
-        const page = await newPage(), evaluate = page.evaluate.bind(page);
-        page.evaluate = (async (fn: unknown, arg: unknown) => {
+        const page = await newPage(), evaluate = page.evaluate.bind(page), evaluateHandle = page.evaluateHandle.bind(page);
+        // Inventory now retains endpoint DOM identities in a handle. Inject
+        // failures into the real inventory call, not the old evaluate path.
+        page.evaluateHandle = (async (fn: unknown, arg: unknown) => {
           if (typeof fn === "string" && fn.includes("unnamedControlCount")) {
             inventoryReads++;
             if (scenario === "inventory_failure") throw new Error("Offline inventory failure");
             if (scenario === "cancelled") { controller.abort(); throw new Error("Offline cancellation"); }
             if (scenario === "inventory_timeout") await hold;
           }
+          return evaluateHandle(fn as never, arg as never);
+        }) as typeof page.evaluateHandle;
+        page.evaluate = (async (fn: unknown, arg: unknown) => {
           if (scenario === "optional_timeout" && typeof fn === "function" && fn.name === "readDidomiPublisherPolicy") await hold;
           return evaluate(fn as never, arg as never);
         }) as typeof page.evaluate;
@@ -67,7 +72,8 @@ for (const scenario of ["complete", "unnamed", "hidden_frame", "inventory_failur
       if (allow) {
         assert.ok(warmIndex > timings.findIndex(row => row.label === "rendered discovery"));
         assert.equal(privacyChoiceInspectionSchema.parse(result.privacyChoiceInspection).coverage,
-          scenario === "complete" ? "complete" : "limited");
+          scenario === "unnamed" ? "limited" : "complete");
+        if (scenario === "hidden_frame") assert.equal(result.privacyChoiceInspection?.contractVersion,"certscore.privacy-choice-inspection.v6");
       } else if (scenario === "optional_timeout") {
         assert.equal(result.privacyChoiceInspection?.coverage, "complete", "Retain valid evidence even though timed-out capture discards speculation");
       } else assert.notEqual(result.privacyChoiceInspection?.coverage, "complete");

@@ -3,7 +3,7 @@ import {
   detailedEvidenceReportSchema, publicCmpAuditSchema, publicCmsSecuritySchema,
   type DetailedEvidenceReport, type DetailedEvidenceRow, type DetailedEvidenceSection,
 } from "@certscore/api-contracts";
-import { cmsSecurityProjectionSchema } from "@certscore/contracts";
+import { cmsSecurityProjectionSchema, TECHNOLOGY_NAMES } from "@certscore/contracts";
 import type { ShadowEvidenceRow, ShadowReportData } from "../../components/scans/report-lab/shadow-report-data";
 import { californiaPrivacyEvidence } from "./california-privacy-evidence";
 import { resolveReportReviewFocus } from "./report-review-focus";
@@ -16,7 +16,7 @@ import { getCorrectionGuidance } from "./checklist-correction-guidance";
 import { detailedEvidenceLayout, type SharedEvidenceLink } from "./detailed-evidence-layout";
 import { evidenceRowAnchor, HIDDEN_DETAILED_EVIDENCE_ROW_IDS } from "./report-evidence-navigation";
 import {
-  EVIDENCE_SECTION_TITLES, EVIDENCE_SECTION_ORDER, accessibilityEvidenceRecap, cmsEvidenceRecap, cmsEvidenceVersionLabel,
+  EVIDENCE_SECTION_TITLES, EVIDENCE_SECTION_ORDER, accessibilityEvidenceRecap, technologyEvidenceRecap, cmsEvidenceVersionLabel,
   evidenceHeaderStatus, evidenceSectionCounts, evidenceSectionRecap,
   CMS_CORRECTION_STEPS, cmsAdvisoryDisplayCopy,
 } from "./detailed-evidence-presentation";
@@ -60,6 +60,8 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
     })),
     plugins: cms.pluginInventory?.detections ?? [],
     identification: cms.signals.map(({ evidenceRef, kind, value, sourceUrl, artifactRef }) => ({ evidenceRef, kind, value, sourceUrl, artifactRef })),
+    technologyInventory: cms.technologyInventory ? { ...cms.technologyInventory,
+      detections: cms.technologyInventory.detections.map(row => ({ ...row, name: TECHNOLOGY_NAMES[row.id] })) } : undefined,
   }) : null;
 
   function rowDisplay(row: ShadowEvidenceRow, field: string, sharedEvidence?: SharedEvidenceLink, policy = false): DetailedEvidenceRow {
@@ -127,8 +129,8 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
       counts: { checks: issues + review, review: issues + review, limited: 0, observed: 0, unsupported: 0 }, rows });
   }
 
-  if (cms && cmsSecurity && (cms.assessment.detections.length || cmsSecurity.plugins.length)) sections.push({
-    id: "cms", title: EVIDENCE_SECTION_TITLES.cms, recap: cmsEvidenceRecap(cms.assessment.detections, cmsSecurity.plugins.length),
+  if (cms && cmsSecurity && (cms.assessment.detections.length || cmsSecurity.plugins.length || cms.technologyInventory?.detections.length)) sections.push({
+    id: "cms", title: EVIDENCE_SECTION_TITLES.cms, recap: technologyEvidenceRecap(cms),
     displayStatus: cms.assessment.matches.length ? "Review" : null,
     counts: { checks: cms.assessment.detections.length, review: new Set(cms.assessment.matches.map(row => row.detectionRef)).size, limited: 0, observed: cms.assessment.detections.length, unsupported: 0 },
     rows: cmsSecurity.advisories.map(row => {

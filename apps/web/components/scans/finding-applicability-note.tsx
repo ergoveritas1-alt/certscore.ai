@@ -1,23 +1,34 @@
 import React from "react";
 import type { ReportReviewFocus } from "@certscore/api-contracts";
 import { findingApplicabilityContext } from "../../lib/scans/finding-applicability-context";
+import { APPLICABILITY_REVIEWED_AT } from "../../lib/scans/finding-applicability-registry";
+import { FindingDisclosureSummary } from "./finding-disclosure-summary";
 
 export function FindingApplicabilityNote({ findingId, reviewFocus, presentationGroup }: {
   findingId: string; reviewFocus: ReportReviewFocus; presentationGroup?: unknown;
 }) {
   const note = findingApplicabilityContext(findingId, reviewFocus, presentationGroup);
-  return <>
-    {note.reference ? <a href={note.reference.url} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">{note.reference.label} ↗</a> : null}
-    <details className="group/applicability mt-3" aria-label="Regulatory applicability">
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 text-sm font-semibold text-zinc-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500 [&::-webkit-details-marker]:hidden">
-        <span>Applicability <span className="font-normal text-zinc-500">· Not assessed</span></span>
-        <svg aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 transition-transform group-open/applicability:rotate-180" fill="none" viewBox="0 0 20 20"><path d="m6 8 4 4 4-4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" /></svg>
-      </summary>
-      <div className="mt-3 max-w-3xl space-y-2 text-sm leading-6 text-zinc-600">
-        <p>{note.explanation}</p>
-        <p><span className="font-medium text-zinc-800">What to check: </span>{note.checks}</p>
-        <ul className="space-y-1">{note.lookups.map(link => <li key={link.url}><a href={link.url} target="_blank" rel="noreferrer" className="text-xs text-sky-800 underline underline-offset-2">{link.label} ↗</a></li>)}</ul>
+  return <details className="group/finding-disclosure mt-3" aria-label="Regulatory applicability">
+    <FindingDisclosureSummary>Applicability</FindingDisclosureSummary>
+    <div className="mt-2 space-y-3 rounded-lg border border-sky-100 bg-white p-3 text-sm leading-6 text-zinc-600" data-applicability-key={note.key ?? "unmapped"}>
+      <div>
+        <h4 className="font-semibold text-zinc-900">When this matters</h4>
+        <p className="mt-1 max-w-3xl">{note.when}</p>
       </div>
-    </details>
-  </>;
+      <div>
+        <h4 className="font-semibold text-zinc-900">What to check</h4>
+        <ol className="mt-1 space-y-1.5">{note.checks.map((check, index) => <li key={check} className="flex items-start gap-2.5">
+          <span aria-hidden="true" className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-sky-50 text-[0.65rem] font-semibold text-sky-800">{index + 1}</span>
+          <span className="max-w-3xl">{check}</span>
+        </li>)}</ol>
+      </div>
+      <div className="border-t border-zinc-100 pt-3">
+        <p className="max-w-3xl text-xs leading-5"><span className="font-semibold text-zinc-700">Scope to confirm: </span>{note.scopeCheck}</p>
+        {note.sources.length ? <ul aria-label="Applicability sources" className="mt-2 flex flex-wrap gap-x-4 gap-y-1">{note.sources.map(link => <li key={link.url}>
+          <a href={link.url} target="_blank" rel="noreferrer" className="text-xs text-sky-800 underline underline-offset-2 hover:text-sky-950">{link.label} ↗</a>
+        </li>)}</ul> : null}
+        <p className="mt-2 text-[0.65rem] text-zinc-500">Guidance reviewed {APPLICABILITY_REVIEWED_AT}</p>
+      </div>
+    </div>
+  </details>;
 }

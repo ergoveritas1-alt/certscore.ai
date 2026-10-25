@@ -12,6 +12,7 @@ import { topFindingReaderSummary, topFindingWhyItMatters } from "../../lib/scans
 import { ENFORCEMENT_REVIEWED_AT, regulatoryReviewContext } from "../../lib/scans/regulatory-review-catalog";
 import type { ReportReviewFocus } from "@certscore/api-contracts";
 import { FindingApplicabilityNote } from "./finding-applicability-note";
+import { FindingDisclosureSummary } from "./finding-disclosure-summary";
 const monoClass = "font-mono tabular-nums";
 
 export function DisclosureChevron({ className = "" }: { className?: string }) {
@@ -46,11 +47,11 @@ export function JsonEvidence({ value }: { value: Record<string, unknown> }) {
 
 export function EvidenceToolDisclosure({ label, children }: { label: string; children: ReactNode }) {
   return <details className="group/evidence-tool min-w-0 max-w-full open:basis-full" aria-label={label}>
-    <summary className="inline-flex h-7 !min-h-0 w-fit cursor-pointer list-none items-center gap-1.5 whitespace-nowrap rounded-md bg-zinc-100/70 px-2.5 text-xs font-medium leading-5 text-zinc-600 transition-colors hover:bg-sky-50 hover:text-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 group-open/evidence-tool:bg-sky-50 group-open/evidence-tool:text-sky-800 [&::-webkit-details-marker]:hidden">
-      <svg aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-zinc-400 group-open/evidence-tool:text-sky-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <summary className="inline-flex h-7 !min-h-0 w-fit cursor-pointer list-none items-center gap-1.5 whitespace-nowrap rounded-md border border-sky-200 bg-white px-2.5 text-xs font-medium leading-5 text-sky-800 transition-colors hover:border-sky-300 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 group-open/evidence-tool:bg-sky-50 group-open/evidence-tool:text-sky-800 [&::-webkit-details-marker]:hidden">
+      <svg aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-sky-700 group-open/evidence-tool:text-sky-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <path d={label === "JSON evidence" ? "m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16" : "M14.5 6.5a5 5 0 0 0-6.8 6.8L3 18a2.1 2.1 0 0 0 3 3l4.7-4.7a5 5 0 0 0 6.8-6.8L14 13l-3-3 3.5-3.5Z"} />
       </svg>
-      {label}<DisclosureChevron className="!h-3.5 !w-3.5 text-zinc-400 group-open/evidence-tool:rotate-180 group-open/evidence-tool:text-sky-600" />
+      {label}<DisclosureChevron className="!h-3.5 !w-3.5 text-sky-700 group-open/evidence-tool:rotate-180 group-open/evidence-tool:text-sky-600" />
     </summary>
     <div className="mt-3 min-w-0 border-l-2 border-sky-100 pl-3">{children}</div>
   </details>;
@@ -73,6 +74,9 @@ export function EvidenceTools({
   recommendedFixes?: ReactNode;
 }) {
   const observations = projectRejectPresenceDetails(evidenceJson);
+  const gpcFacts=Array.isArray(evidenceJson.combinedGpcFacts)?evidenceJson.combinedGpcFacts.flatMap(row=>
+    row && typeof row==="object" && typeof row.label==="string" && typeof row.value==="string"?[{label:row.label as string,value:row.value as string}]:[]):[];
+  const gpcVendors=Array.isArray(evidenceJson.combinedGpcVendors)?evidenceJson.combinedGpcVendors.filter((v):v is string=>typeof v==="string"):[];
   let factualJson = canonicalEvidenceJson;
   if (canonicalEvidenceJson) {
     try { factualJson = JSON.stringify(factualCustomerEvidence(JSON.parse(canonicalEvidenceJson))); } catch { /* Preserve malformed historical diagnostics. */ }
@@ -82,6 +86,12 @@ export function EvidenceTools({
     ? hasRegulatoryChecklistCorrectionSteps(canonicalEvidenceJson) : steps.length > 0);
   return (
     <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-3">
+      {gpcFacts.length ? <EvidenceToolDisclosure label="GPC evidence · …">
+        <dl className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-[auto_minmax(0,1fr)]">
+          {gpcFacts.map((fact,index)=><React.Fragment key={`${fact.label}:${index}`}><dt className="font-medium text-zinc-800">{fact.label}</dt><dd className="text-zinc-600">{fact.value}</dd></React.Fragment>)}
+        </dl>
+        {gpcVendors.length?<ul className="mt-3 space-y-1 text-xs text-zinc-600">{gpcVendors.map(v=><li key={v}>{v}</li>)}</ul>:null}
+      </EvidenceToolDisclosure>:null}
       {observations.length ? <div className="w-full min-w-0 space-y-2" data-reject-entity-observations>
         <p className="text-xs text-zinc-600">Non-essential entities and observations after the Reject click. Cookie times describe snapshot presence; request times describe request start.</p>
         <div className="max-h-96 overflow-auto"><table className="w-full text-left text-xs">
@@ -127,10 +137,12 @@ export function EvidenceTools({
 }
 
 export function FindingRow({ finding, dense = false, priority = false, pages, observations, idPrefix = "", regulatoryContext, reviewFocus = "gdpr_eprivacy" }: { regulatoryContext?: ReturnType<typeof regulatoryReviewContext>; reviewFocus?: ReportReviewFocus; finding: ShadowFinding; dense?: boolean; priority?: boolean; pages?: Array<{id: string; url: string; homepage: boolean}>; observations?: SitePriorityFinding["observations"]; idPrefix?: string }) {
-  const context = regulatoryContext ?? (priority ? regulatoryReviewContext(finding.id, reviewFocus) : null);
+  const combinedOptOut = finding.id === "california_privacy_choice_not_observed" && Boolean(finding.evidenceJson.combinedGpcAssessment);
+  const combinedContext = priority && combinedOptOut ? regulatoryReviewContext(finding.id, reviewFocus, true) : null;
+  const context = regulatoryContext ?? (priority ? combinedContext ?? regulatoryReviewContext(finding.id, reviewFocus) : null);
   const evidenceAnchor = findingEvidenceAnchor(finding.id, finding.evidenceJson.presentationGroup);
   const readerSummary = priority || finding.id === "gpc_response" ? topFindingReaderSummary(finding) : finding.summary;
-  const why = context?.why ?? (priority ? topFindingWhyItMatters(finding) : null);
+  const why = combinedContext?.why ?? context?.why ?? (priority ? topFindingWhyItMatters(finding) : null);
   return (
     <details className={`group border-b border-zinc-200 last:border-b-0 ${priority ? "transition-colors hover:bg-zinc-50 open:bg-white" : ""}`} id={`${idPrefix}${finding.id}`}>
       <summary className={`grid cursor-pointer list-none gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden ${priority ? "relative grid-cols-[2.25rem_minmax(0,1fr)] items-start px-2 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto_auto] sm:px-3" : dense ? "grid-cols-[2rem_minmax(0,1fr)_auto] py-4" : "grid-cols-[2.5rem_minmax(0,1fr)] py-4 sm:grid-cols-[3rem_minmax(0,1fr)_auto_auto]"}`}>
@@ -138,13 +150,16 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
         <span className={`min-w-0 ${priority ? "pr-7 sm:pr-0" : ""}`}>
           <span className={`${dense ? "text-sm" : "text-base"} block font-semibold text-zinc-950`}>{finding.title}{pages?.length ? <span className="ml-2 inline-block text-xs font-normal text-zinc-500">{pages.length === 1 && pages[0]?.homepage ? "Starting page" : `${pages.length} ${pages.length === 1 ? "page" : "pages"}`}</span> : null}</span>
           {!dense ? <span className={`${priority ? "mt-0.5 text-xs leading-5 text-zinc-500 sm:pr-4" : "mt-1 text-sm leading-6 text-zinc-600"} overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] group-open:[display:block] group-open:[-webkit-line-clamp:unset]`}>{readerSummary}</span> : null}
-          {why ? <span className="mt-2 block max-w-3xl text-sm leading-6 text-zinc-700"><span className="font-semibold text-zinc-900">Why it matters: </span>{why}</span> : null}
+          {why ? <span className={`block max-w-3xl text-zinc-700 ${combinedOptOut ? "mt-1 text-xs leading-5" : "mt-2 text-sm leading-6"}`}><span className="font-semibold text-zinc-900">Why it matters: </span>{why}</span> : null}
           {!dense ? <span className="mt-3 inline-flex sm:hidden"><StatusBadge status={finding.status} priority={finding.priority} /></span> : null}
         </span>
         {!dense && finding.focus ? <span className={`${priority ? "hidden self-start rounded-md border border-zinc-200 bg-white px-2 py-1 text-[0.65rem] font-semibold uppercase text-zinc-500 lg:block" : "hidden self-start text-xs font-medium text-zinc-500 sm:block"}`}>{finding.focus}</span> : null}
         <span className={priority ? "absolute right-2 top-3 flex items-center gap-2 sm:static" : dense ? "flex items-start gap-2" : "hidden items-start gap-2 sm:flex"}>
           {!dense ? <span className={priority ? "hidden sm:inline-flex" : ""}><StatusBadge status={finding.status} priority={finding.priority} /></span> : null}
-          <DisclosureChevron className="mt-1 text-zinc-400 group-open:rotate-180" />
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">
+            <span aria-hidden="true" className="hidden text-xs font-medium sm:inline"><span className="group-open:hidden">Show details</span><span className="hidden group-open:inline">Hide details</span></span>
+            <DisclosureChevron className="group-open:rotate-180" />
+          </span>
         </span>
       </summary>
       <div className={`${dense ? "pl-0 sm:pl-11" : priority ? "px-3 sm:pl-[4.75rem] sm:pr-4" : "pl-0 sm:pl-12"} pb-6`}>
@@ -153,8 +168,8 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
         {context || priority ? <div className="mb-4 rounded-lg border border-sky-100 bg-sky-50/40 px-4 py-3">
           {context ? <a href={context.ruleUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">{context.rule} ↗</a> : null}
           {priority ? <FindingApplicabilityNote findingId={finding.id} reviewFocus={reviewFocus} presentationGroup={finding.evidenceJson.presentationGroup} /> : null}
-          {context?.examples.length ? <details className="group/enforcement mt-3">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500 [&::-webkit-details-marker]:hidden">Related enforcement <DisclosureChevron className="group-open/enforcement:rotate-180" /></summary>
+          {context?.examples.length ? <details className="group/finding-disclosure mt-3">
+            <FindingDisclosureSummary>Related enforcement</FindingDisclosureSummary>
             <div className="mt-3 space-y-4">{context.examples.map(example => <article key={example.id}>
               <p className="text-sm font-semibold">{example.name} <span className="font-normal text-zinc-500">· {example.date.slice(0, 4)}</span></p>
               <p className="mt-1 text-xs text-zinc-500">{example.authority}</p>
@@ -165,14 +180,14 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
             </article>)}<p className="text-xs text-zinc-500">Examples reviewed {ENFORCEMENT_REVIEWED_AT}.</p></div>
           </details> : null}
         </div> : null}
-        {pages?.length ? <details className="group/pages mb-4 border-b border-zinc-200 pb-3">
-          <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold [&::-webkit-details-marker]:hidden">Affected pages <DisclosureChevron className="text-zinc-400 group-open/pages:rotate-180" /></summary>
+        {pages?.length ? <details className="group/finding-disclosure mb-4 border-b border-zinc-200 pb-3">
+          <FindingDisclosureSummary>Affected pages</FindingDisclosureSummary>
           <ul className="mt-3 max-h-36 space-y-1 overflow-auto text-sm">{pages.map(page => <li key={page.id}><a className="break-all text-sky-700 underline" href={page.url} target="_blank" rel="noreferrer">{page.url}</a>{page.homepage ? " · Starting page" : ""}</li>)}</ul>
         </details> : null}
         {observations?.length ? <div className="mb-4 space-y-3">{observations.map(observation => <section key={observation.id} className="border-l-2 border-sky-300 pl-3">
           <h3 className="text-sm font-semibold">{observation.title}</h3><p className="mt-1 text-sm text-zinc-600">{observation.summary}</p>
           <p className="mt-1 text-xs text-zinc-500">{observation.pages.length === 1 && observation.pages[0]?.homepage ? "Starting page only" : observation.pages.length ? `${observation.pages.length} pages with this observation` : "Page attribution unavailable"}</p>
-          {observation.pages.length ? <details className="mt-1 text-xs"><summary className="cursor-pointer text-sky-700">Observed pages</summary><ul className="mt-1 max-h-28 overflow-auto break-all">{observation.pages.map(page => <li key={page.id}>{page.url}{page.homepage ? " · Starting page" : ""}</li>)}</ul></details> : null}
+          {observation.pages.length ? <details className="group/finding-disclosure mt-2 text-xs"><FindingDisclosureSummary>Observed pages</FindingDisclosureSummary><ul className="mt-1 max-h-28 overflow-auto break-all">{observation.pages.map(page => <li key={page.id}>{page.url}{page.homepage ? " · Starting page" : ""}</li>)}</ul></details> : null}
         </section>)}</div> : null}
         {finding.vendors.length > 0 ? (
           <div className="mb-4 flex flex-wrap gap-2">

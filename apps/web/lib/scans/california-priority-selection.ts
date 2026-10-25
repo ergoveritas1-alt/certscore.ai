@@ -1,8 +1,20 @@
+import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
+
 import {z} from "zod";
 import {californiaPrivacyReviewSchema, gpcResponseAssessmentSchema, type CaliforniaPrivacyReview} from "@certscore/contracts";
 import {californiaPotentialRiskSchema, type CaliforniaPotentialRiskAssessment} from "./california-potential-risk-contract";
 import {deriveCaliforniaGpcResponsePolicy} from "./california-gpc-response-policy";
 import {isDetailedOnlyCaliforniaDisclosure} from "./california-disclosure-priority";
+
+/** Editorial join over already-projected combined evidence; no new findings. */
+function combinedPriorityEvidence(review:CaliforniaPrivacyReview,value:unknown) {
+  const p=gpcResponseAssessmentSchema.safeParse(value);
+  if(review.contractVersion!=="certscore.california-privacy-review.v10" || review.disclosureChoiceAssessment?.policyVersion!==CALIFORNIA_COMBINED_OPT_OUT_POLICY ||
+    !review.disclosureChoiceAssessment.optOutRisk || !p.success || p.data.contractVersion!=="certscore.gpc-response-assessment.v3")return false;
+  const risk=review.disclosureChoiceAssessment.optOutRisk,o=p.data.observation;
+  return o.scanId===review.scanId && o.sourceSha256===risk.gpcSourceSha256 && o.sessionSha256===risk.gpcSessionSha256 &&
+    o.documentUrlSha256===risk.documentUrlSha256 && o.sourceSha256===p.data.comparison.gpcArtifact?.sha256;
+}
 
 type Finding = {id?: string; evidenceJson?: Record<string, unknown>};
 export const californiaPriorityBindingSchema = z.object({
@@ -39,12 +51,20 @@ function explicitChoiceCorroboration(review: CaliforniaPrivacyReview) {
   return review.optOutObservation?.verificationStatus === "verified" && review.optOutObservation.evidence.registration === "confirmed" &&
     review.optOutObservation.evidence.requests.some(row => row.collectionEvidence && row.httpStatus < 400);
 }
-export type CaliforniaPriorityDemotion = "non_discrimination_only" | "uncorroborated_choice_absence" | "analytics_only_collection" | "same_gpc_recipients";
+export type CaliforniaPriorityDemotion = "non_discrimination_only" | "uncorroborated_choice_absence" | "analytics_only_collection" | "same_gpc_recipients" | "combined_opt_out";
 
 /** Editorial selection of canonical projected findings only. Never mutates
  * packets, coverage, snapshot state or score inputs. A malformed record cannot
  * become the basis for demoting another finding. */
 export function californiaPriorityDemotion(finding: Finding, findings: readonly Finding[]): CaliforniaPriorityDemotion | null {
+  if(finding.id==="gpc_response") {
+    const parsed=gpcResponseAssessmentSchema.safeParse(finding.evidenceJson?.assessment);
+    if(parsed.success && findings.some(row=>{
+      if(row.id!=="california_privacy_choice_not_observed")return false;
+      const r=californiaPrivacyReviewSchema.safeParse(row.evidenceJson?.californiaPrivacyReview);
+      return r.success && combinedPriorityEvidence(r.data,parsed.data) && combinedPriorityEvidence(r.data,row.evidenceJson?.combinedGpcAssessment);
+    }))return "combined_opt_out";
+  }
   if (isDetailedOnlyCaliforniaDisclosure(finding)) return "non_discrimination_only";
   if (finding.id !== "california_privacy_choice_not_observed" && finding.id !== "california_collection_review") return null;
   const gpc = findings.flatMap(row => {const value = gpcEvidence(row); return value ? [value] : [];});
@@ -52,6 +72,7 @@ export function californiaPriorityDemotion(finding: Finding, findings: readonly 
     const parsed = californiaPrivacyReviewSchema.safeParse(finding.evidenceJson?.californiaPrivacyReview);
     if (!parsed.success || parsed.data.choiceSurface !== "not_observed_in_inspected_scope") return null;
     const review = parsed.data;
+    if(combinedPriorityEvidence(review,finding.evidenceJson?.combinedGpcAssessment))return null;
     if (explicitChoiceCorroboration(review)) return null;
     const sourceBinding = californiaPriorityBindingSchema.safeParse(finding.evidenceJson?.californiaPriorityBinding);
     const bound = sourceBinding.success && sourceBinding.data.scanId === review.scanId &&

@@ -5,6 +5,7 @@ import { RegulatoryChecklistCorrectionSteps, RegulatoryChecklistEvidenceDetails 
 import type { ShadowEvidenceStatus, ShadowFinding } from "./report-lab/shadow-report-data";
 import { topFindingReaderSummary } from "../../lib/scans/top-finding-reader-summary";
 import { FindingApplicabilityNote } from "../scans/finding-applicability-note";
+import { FindingDisclosureSummary } from "../scans/finding-disclosure-summary";
 import { regulatoryReviewContext } from "../../lib/scans/regulatory-review-catalog";
 const monoClass = "font-mono tabular-nums";
 
@@ -121,7 +122,10 @@ export function FindingRow({ finding, dense = false, priority = false, pages, id
         {!dense && finding.focus ? <span className={`${priority ? "hidden self-center rounded-md border border-zinc-200 bg-white px-2 py-1 text-[0.65rem] font-semibold uppercase text-zinc-500 lg:block" : "hidden self-start text-xs font-medium text-zinc-500 sm:block"}`}>{finding.focus}</span> : null}
         <span className={priority ? "absolute right-2 top-3 flex items-center gap-2 sm:static" : dense ? "flex items-start gap-2" : "hidden items-start gap-2 sm:flex"}>
           {!dense ? <span className={priority ? "hidden sm:inline-flex" : ""}><StatusBadge status={finding.status} /></span> : null}
-          <DisclosureChevron className="mt-1 text-zinc-400 group-open:rotate-180" />
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">
+            <span aria-hidden="true" className="hidden text-xs font-medium sm:inline"><span className="group-open:hidden">Show details</span><span className="hidden group-open:inline">Hide details</span></span>
+            <DisclosureChevron className="group-open:rotate-180" />
+          </span>
         </span>
       </summary>
       <div className={`${dense ? "pl-0 sm:pl-11" : priority ? "px-3 sm:pl-[4.75rem] sm:pr-4" : "pl-0 sm:pl-12"} pb-6`}>
@@ -131,8 +135,8 @@ export function FindingRow({ finding, dense = false, priority = false, pages, id
           {context ? <a href={context.ruleUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">{context.rule} ↗</a> : null}
           <FindingApplicabilityNote findingId={finding.id} reviewFocus="gdpr_eprivacy" presentationGroup={finding.evidenceJson.presentationGroup} />
         </div> : null}
-        {pages?.length ? <details className="group/pages mb-4 border-b border-zinc-200 pb-3">
-          <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold [&::-webkit-details-marker]:hidden">Affected pages <DisclosureChevron className="text-zinc-400 group-open/pages:rotate-180" /></summary>
+        {pages?.length ? <details className="group/finding-disclosure mb-4 border-b border-zinc-200 pb-3">
+          <FindingDisclosureSummary>Affected pages</FindingDisclosureSummary>
           <ul className="mt-3 max-h-36 space-y-1 overflow-auto text-sm">{pages.map(page => <li key={page.id}><a className="break-all text-sky-700 underline" href={page.url} target="_blank" rel="noreferrer">{page.url}</a>{page.homepage ? " · Homepage" : ""}</li>)}</ul>
         </details> : null}
         {finding.vendors.length > 0 ? (

@@ -3,6 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FindingRow } from "./report-finding-row";
+import { SitePriorityReview } from "./site-priority-review";
 import { FindingRow as AlternateFindingRow } from "../scanso2/report-finding-row";
 import { evidenceRowAnchor, findingEvidenceAnchor } from "../../lib/scans/report-evidence-navigation";
 
@@ -68,4 +69,21 @@ test("all priority issues have context, including accessibility, and GPC detail 
     summary: "GPC was observed on the main-document request and browser property. The CMP's sale/sharing opt-out state was unavailable. Paired activity comparison: indeterminate." }} />);
   assert.match(html, /GPC delivery was verified/);
   assert.doesNotMatch(html, /indeterminate|state was unavailable|Assessment detail:/);
+});
+
+
+test("combined opt-out findings stay compact in the report flow with GPC evidence collapsed",()=>{
+  const summary="Advertising observed with no identified opt-out and a conflicting GPC response.";
+  const html=renderToStaticMarkup(<SitePriorityReview pending={false} sitewideAvailable scannedPages={1} reviewFocus="ccpa_cpra" findings={[{
+    id:"california_privacy_choice_not_observed",rank:1,title:"Potential failure of California opt-out rights",summary,
+    status:"Partial concern",priority:"high",pages:[],evidence:[],correctionSteps:[],
+    evidenceJson:{combinedGpcAssessment:{fixture:true},combinedGpcFacts:[{label:"GPC signal",value:"Observed on the page request and in the browser"}],
+      combinedGpcVendors:["Fixture Ads · first observed +200 ms from GPC visit start"],scoreEffects:[{deductionPoints:15}]},
+  }]} />);
+  const details=html.match(/<details\b([^>]*)aria-label="GPC evidence · …"[^>]*>(.*?)<\/details>/s);
+  assert.ok(details,"GPC has an obvious expander");assert.doesNotMatch(details[1]!,/\bopen(?:=|\s|$)/);
+  assert.match(details[2]!,/GPC signal/);assert.match(details[2]!,/Fixture Ads/);
+  assert.match(html,/Visitors need a usable choice that reaches advertising recipients\./);
+  assert.equal(html.split(summary).length-1,1,"Summary appears once in the finding");
+  assert.doesNotMatch(html,/Review the business’s activities|Assessment detail:|deductionPoints|scoreEffects|15 points|deduct/i);
 });

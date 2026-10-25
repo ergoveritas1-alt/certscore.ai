@@ -511,7 +511,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
             )}
           </ul>
         </details>
-        {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "ccpa_cpra" ? <CaliforniaCoverageSummary coverage={report.californiaScore?.reviewCoverage} choicePresence={report.californiaChoicePresence?.scanId === report.scan.id ? report.californiaChoicePresence : null} /> : <GdprEprivacyCoverageSummary rows={report.gdprTransparencyRows} policyUrls={privacyUrls} />}
+        {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "ccpa_cpra" ? <CaliforniaCoverageSummary optOutPresence={report.californiaOptOutPresence} frictionlessGpcException={report.californiaFrictionlessGpcException?.assessment.scanId === report.scan.id ? report.californiaFrictionlessGpcException : null} policyChoiceMethods={report.californiaPolicyChoiceMethods?.scanId === report.scan.id ? report.californiaPolicyChoiceMethods : null} coverage={report.californiaScore?.reviewCoverage} choicePresence={report.californiaChoicePresence?.scanId === report.scan.id ? report.californiaChoicePresence : null} /> : <GdprEprivacyCoverageSummary rows={report.gdprTransparencyRows} policyUrls={privacyUrls} />}
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Transport security</span>
@@ -1238,7 +1238,7 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
         <div><FullSiteIdentity scanId={report.scan.id} host={report.scan.host} url={report.scan.url} createdAt={<><ReviewFocusCoverageNote report={report} /><ReportCreatedAt scan={report.scan} /></>} duration={<span className="ml-2 tabular-nums">({report.scan.duration} scan)</span>} visualEvidenceHref={report.scan.visualEvidenceHref}
           region={<span className="rounded-md border border-zinc-300 bg-white px-2 py-1">Scanned from {report.scan.origin}</span>}
           reviewFocusControl={<RegulatoryReviewFocus focus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} />}
-          timing={<ReportCoverageTiming duration={report.scan.duration} showDurationInSummary={false} technology={describeSiteTechnology(report.siteMetadata?.observation)}
+          timing={<ReportCoverageTiming duration={report.scan.duration} showDurationInSummary={false}
             groups={[
               { title: "Coverage", rows: [["Scan scope", "Single page"], ["Pages scanned", 1], ["Scan region", report.scan.origin]] },
               { title: "Timing", rows: [["Observation window", report.scan.duration]] },
@@ -1635,7 +1635,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
               </details>
             ) : null}
             {GPC_CUSTOMER_RESULTS_ENABLED && (report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} california={report.reviewFocus === "ccpa_cpra"} /> : <details id="gpc-evidence" className="group/gpc border-b border-r border-zinc-200 p-5"><EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.gpc} recap="Evidence unavailable" badge={<EvidenceHeaderStatus rows={[{status: "Limited"}]} />} /><p className="mt-4 text-sm text-zinc-600">No verified GPC assessment is available in this report. Response remains unknown.</p></details>)}
-            {report.cmsSecurity && (report.cmsSecurity.assessment.detections.length > 0 || (report.cmsSecurity.pluginInventory?.detections.length ?? 0) > 0) ? <CmsSecurityEvidence projection={report.cmsSecurity} /> : null}
+            <CmsSecurityEvidence projection={report.cmsSecurity} />
           </EvidenceColumns>
         </div>
         {!compact ? <>

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { buildTechnologyInventory } from "@certscore/contracts";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 import { accessibilityAuditFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
 import { reportCmpEvidenceFixture, reportTechnicalEvidenceFixture, reportVisualEvidenceFixture } from "./report-appendix-evidence.fixture";
@@ -359,6 +360,10 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
   const cmpAudit = projectCmpAudit({ scanId: report.scan.id, consentControlAssessment: cmpFixture.assessment, consentVendor: "OneTrust", normalizedConcerns: cmpFixture.normalizedConcerns });
   const cmpRow = (id: string) => cmpAudit.rows.find(row => row.id === id)!;
   const technical = reportTechnicalEvidenceFixture(report.scan.id);
+  technical.cms.technologyInventory = buildTechnologyInventory([{
+    kind: "header", value: "x-powered-by: PHP/8.3.12", sourceUrl: technical.cms.documentUrl,
+    sourceRef: "response-php", evidenceRef: "site_integrity:tech-signal:0",
+  }], technical.cms.documentUrl);
   richReport.appendix.evidenceDossier = { cmp: { provider: "OneTrust", audit: cmpAudit }, cmsSecurity: technical.cms, formDestinations: technical.forms, checklistDetails: [{ id: "transport_security_tls_certificate", topic: "tls", label: "TLS certificate", status: "Observed", explanation: "Verified origin certificate.", note: "", evidenceRefs: ["transport:tls:1"], correctionSteps: [], subchecks: [], facts: [{ label: "issuer", value: "Example Certificate Authority" }, { label: "validTo", value: "2027-08-24T00:00:00Z" }] }, { id: "controller_contact_disclosure", topic: "policy", label: "Controller contact disclosure", status: "Observed", explanation: "Contact details in the retained privacy notice.", note: "", evidenceRefs: ["policy:notice:1"], correctionSteps: [], subchecks: [], facts: [{ label: "selectedPolicySectionExcerpt", value: "For questions about personal data, contact the controller at privacy@example.test." }, { label: "sourceUrl", value: "https://example.test/privacy" }] }] };
   const tracker = structuredClone(richReport.appendix.cookieAndTrackerInventory.rows[0]!);
   Object.assign(tracker, { rowNumber: 2, type: "tracker", vendor: "Example Metrics", domains: ["metrics.example.test"], cookieNames: [], resourceNames: ["Example Metrics"], requestDetails: [{ method: "POST", hostname: "metrics.example.test", path: "/collect", vendor: "Example Metrics", responseObserved: true, responseStorageAttempted: false, cookieNamesSent: [], responseCookieNamesSet: [], identifierParameterNames: ["client_id"], essentiality: "non_essential" }], relationship: { party: "third_party", site: "cross_site", entity: "external_entity" } });
@@ -420,6 +425,8 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
   assert.ok(richVisibleText.includes("Timing association only"));
   assert.doesNotMatch(richText, /Exact field-value match|undefined/);
   assert.ok(richVisibleText.includes("Drupal") && richVisibleText.includes("7.98"));
+  assert.ok(richVisibleText.includes("Tech stack observed") && richVisibleText.includes("PHP") && richVisibleText.includes("8.3.12"));
+  assert.ok(richVisibleText.includes("x-powered-by: PHP/8.3.12"));
   assert.equal((richText.match(/checks:/g) ?? []).length, 3, "CMP, policy and consolidated transport each show one checklist status strip");
   assert.doesNotMatch(richText, /No checklist rows retained for this topic/);
   assert.match(richText, /\/PageMode \/UseOutlines/);

@@ -1,5 +1,6 @@
 import { assessCmsPluginSignals, assessCmsSignals, cmsSafeUrl, cmsSecurityProjectionSchema, siteMetadataSchema, type CanonicalEvidenceBundle, type CmsSignal } from "@certscore/contracts";
 import { isDeepStrictEqual } from "node:util";
+import { projectTechnologyInventory } from "./technology-inventory-projection";
 
 /** No fetches: only metadata in the already verified, document-bound runtime artifact. */
 export function projectCmsSecurity(bundle: CanonicalEvidenceBundle, source: { sha256?: string; verificationStatus?: string } | undefined, documentUrl: string | null) {
@@ -46,6 +47,8 @@ export function projectCmsSecurity(bundle: CanonicalEvidenceBundle, source: { sh
     sourceHash: source.sha256, documentUrl: url, documentToken: snapshot.documentIdentity!.token,
     capturedAt, evidenceRef: artifactRef, signals, assessment: assessCmsSignals(signals, capturedAt, undefined, policy),
     pluginInventory: assessCmsPluginSignals(signals),
+    technologyInventory: projectTechnologyInventory({ bundle, metadata: metadata.data, signals, documentUrl: url, requestDocumentUrl: documentUrl,
+      documentToken, artifactRef, capturedAtMs: snapshot.capturedAtMs }),
   });
   return result.success ? result.data : null;
 }

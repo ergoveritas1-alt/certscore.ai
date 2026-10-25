@@ -3,7 +3,7 @@ import { trackFullSiteCompletion } from "../../lib/analytics/scan-conversions";
 import { ReportInventorySummary } from "../scans/report-inventory-summary";
 import { useFullSiteReportContinuity } from "./full-site-report-continuity";
 import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice";
-import { describeSiteTechnology, type SiteMetadataProjection } from "@certscore/contracts";
+import type { SiteMetadataProjection } from "@certscore/contracts";
 import { useTableRowLimit } from "./use-table-row-limit";
 import { FullSiteExecutiveSummary } from "./full-site-executive-summary";
 import { SitePriorityReview } from "./site-priority-review";
@@ -111,7 +111,6 @@ export function FullSiteWorkspace({
   homepageLimitedCount,
   homepageFindings = [],
   homepageUrl,
-  siteMetadata,
   initialStartedAt,
   initialNotice,
   initialPending = false,
@@ -380,7 +379,6 @@ export function FullSiteWorkspace({
       ...(data?.discovery.beyond ?? []),
       ...(data?.discovery.widespread ?? []),
     ].find((r) => r.key === resource);
-  const technology = describeSiteTechnology(siteMetadata?.observation);
   const timing = (
         <details className="text-xs text-zinc-600 sm:relative">
           <summary className="cursor-pointer font-medium">
@@ -392,10 +390,6 @@ export function FullSiteWorkspace({
             )}
           </summary>
           <div className="absolute left-4 right-4 z-20 mt-2 max-h-[70vh] overflow-y-auto rounded-lg border border-zinc-200 bg-white p-3 shadow-lg sm:left-0 sm:right-auto sm:top-full sm:w-[min(38rem,85vw)]">
-            <dl className="mb-3 grid gap-2 border-b border-zinc-200 pb-3 text-xs sm:grid-cols-2">
-              <div className="flex items-baseline justify-between gap-3"><dt className="text-zinc-500">CMS / generator</dt><dd className="text-right font-medium text-zinc-800">{technology.platform}</dd></div>
-              <div className="flex items-baseline justify-between gap-3"><dt className="text-zinc-500">Declared version</dt><dd className="text-right font-medium tabular-nums text-zinc-800">{technology.version === "Unknown" ? "Not available" : technology.version}</dd></div>
-            </dl>
             <div className="grid gap-4 sm:grid-cols-2">
               {[
                 { title: "Coverage", rows: [

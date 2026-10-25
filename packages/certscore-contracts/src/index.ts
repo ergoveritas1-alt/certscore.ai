@@ -1,3 +1,10 @@
+import {domOptOutSearchSchema} from "./scoped-opt-out-search";
+export * from "./scoped-opt-out-search";
+export * from "./broad-opt-out-assessment";
+export * from "./reviewed-opt-out-routes";
+export * from "./reviewed-opt-out-policy-redirect";
+import {domOptOutLabelSchema} from "./dom-opt-out-label";
+export * from "./dom-opt-out-label";
 import {californiaDisclosureChoiceCapturePolicySchema, type CaliforniaDisclosureChoiceAssessment} from "./california-disclosure-choice-assessment";
 export * from "./california-disclosure-choice-assessment";
 export * from "./exact-cookie-write-evidence";
@@ -46,6 +53,7 @@ export * from "./collection-field-review";
 export * from "./collection-field-labels";
 import { siteMetadataSchema } from "./site-metadata";
 export * from "./site-metadata";
+export * from "./technology-inventory";
 export * from "./google-tag-context";
 export * from "./property-sale-sharing";
 import { accessibilityAuditObservationSchema, type AccessibilityAuditObservation } from "./accessibility-audit";
@@ -1820,6 +1828,8 @@ export const blockingFrameChallengeSchema = z.object({
 });
 
 export const domSnapshotArtifactSchema = z.object({
+  optOutLabel: domOptOutLabelSchema.optional(),
+  optOutSearch: domOptOutSearchSchema.optional(),
   blockingFrameChallenge: blockingFrameChallengeSchema.optional(),
   siteMetadata: siteMetadataSchema.optional(),
   artifactId: z.string(),

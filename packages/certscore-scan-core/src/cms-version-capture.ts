@@ -1,14 +1,14 @@
 import { createHash } from "node:crypto";
 import type { Page } from "playwright";
-import { CMS_ASSET_PATTERNS, siteMetadataSchema, WORDPRESS_RELEASE, wordpressFeedGeneratorVersion, type SiteMetadata, type CmsVersionEvidence } from "@certscore/contracts";
+import { CMS_ASSET_PATTERNS, TECHNOLOGY_ASSET_PATTERNS, technologyCaptureSchema, siteMetadataSchema, WORDPRESS_RELEASE, wordpressFeedGeneratorVersion, type SiteMetadata, type CmsVersionEvidence, type TechnologyObservation } from "@certscore/contracts";
 import { proxyFetch } from "./proxy-fetch";
 import { retainGoogleTagContext } from "./google-tag-context";
 
 /** One existing document read. No requests, clicks or renderer waits. */
-export async function readDocumentSiteMetadata(page: Page, documentIdentity: () => { token?: string } | undefined = () => undefined): Promise<SiteMetadata | null> {
+export async function readDocumentSiteMetadata(page: Page, documentIdentity: () => { token?: string } | undefined = () => undefined, captureTechnology = false): Promise<SiteMetadata | null> {
   const url = page.url();
   const identity = documentIdentity();
-  const metadata = await page.evaluate((assetPatterns) => {
+  const metadata = await page.evaluate(({ assetPatterns, technologyAssetPatterns, captureTechnology }) => {
     // Match the existing browser-capture serialization helper; no site SDK call.
     const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
     globalWithNameHelper.__name ??= function(target) { return target; };
@@ -122,6 +122,34 @@ export async function readDocumentSiteMetadata(page: Page, documentIdentity: () 
         return [feed.href];
       } catch { return []; }
     }).slice(0, 1);
+    // Reuse the existing DOM read and element list. Yield after 2 ms; no SDK/global reads.
+    const technology = captureTechnology ? (() => {
+      try {
+        const observations: TechnologyObservation[] = [];
+        const stopAt = performance.now() + 2;
+        let truncated = false;
+        const add = (row: TechnologyObservation) => {
+          if (observations.some(item => item.kind === row.kind && item.value === row.value && item.sourceUrl === row.sourceUrl)) return;
+          if (observations.length >= 6 || row.value.length > 256 || new TextEncoder().encode(JSON.stringify([...observations, row])).length > 600) { truncated = true; return; }
+          observations.push(row);
+        };
+        for (const selector of ['script#__NEXT_DATA__[type="application/json"]', 'script#__NUXT_DATA__[type="application/json"]', 'html[data-wf-site][data-wf-page]']) {
+          if (performance.now() >= stopAt) { truncated = true; break; }
+          if (document.querySelector(selector)) add({ kind: "marker", value: selector });
+        }
+        const patterns = technologyAssetPatterns.map(pattern => new RegExp(pattern, "i"));
+        for (const element of elements) {
+          if (performance.now() >= stopAt) { truncated = true; break; }
+          try {
+            const url = new URL(element.getAttribute("src") || element.getAttribute("href") || "", document.baseURI);
+            if (!/^https?:$/.test(url.protocol) || url.username || url.password || !patterns.some(pattern => pattern.test(url.pathname))) continue;
+            url.search = ""; url.hash = "";
+            if (url.href.length <= 256) add({ kind: "asset", value: url.pathname, sourceUrl: url.href });
+          } catch { /* Unsupported asset URLs supply no observation. */ }
+        }
+        return { version: "certscore.technology-capture.v1" as const, observations, truncated };
+      } catch { return { version: "certscore.technology-capture.v1" as const, observations: [], truncated: true }; }
+    })() : undefined;
     return {
       contractVersion: "certscore.site-metadata.v1" as const,
       title: document.title.slice(0, 240),
@@ -134,13 +162,15 @@ export async function readDocumentSiteMetadata(page: Page, documentIdentity: () 
       wordpressAssetObserved: assets.some(asset => /^\/(?:wp-content|wp-includes)\//.test(asset.pathname)),
       versionEvidence, feedLinks,
       rawGoogleTagContext,
+      ...(technology ? { technology } : {}),
     };
-  }, Object.values(CMS_ASSET_PATTERNS)).catch(() => null);
+  }, { assetPatterns: Object.values(CMS_ASSET_PATTERNS), technologyAssetPatterns: TECHNOLOGY_ASSET_PATTERNS, captureTechnology }).catch(() => null);
   if (page.url() !== url || identity?.token !== documentIdentity()?.token) return null;
   const googleTagContext = retainGoogleTagContext(metadata?.rawGoogleTagContext, {
     documentToken: identity?.token, documentUrl: url, capturedAtEpochMs: Date.now(),
   });
-  const parsed = siteMetadataSchema.safeParse(metadata && { ...metadata, ...(googleTagContext ? { googleTagContext } : {}) });
+  const technology = technologyCaptureSchema.safeParse(metadata?.technology);
+  const parsed = siteMetadataSchema.safeParse(metadata && { ...metadata, technology: technology.success ? technology.data : undefined, ...(googleTagContext ? { googleTagContext } : {}) });
   return parsed.success ? parsed.data : null;
 }
 
