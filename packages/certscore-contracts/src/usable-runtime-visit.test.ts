@@ -8,6 +8,7 @@ import type { CanonicalEvidenceBundle } from "./index";
 function fixture() {
   const bundle = gpcRuntimeFixture({ enabled: false });
   bundle.domSnapshots = [{ artifactId: "runtime-dom", path: "/retained/runtime.txt", url: bundle.url,
+    pagePhase: "network_idle", consentStateAtTime: "pre_consent",
     capturedAtMs: 100, documentIdentity: { source: "cdp_loader_id", token: "runtime-loader" }, textExcerpt: "公開資料と辞典" }];
   return bundle;
 }
