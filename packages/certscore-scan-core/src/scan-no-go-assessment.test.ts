@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { brandedSoft404, brandedInterruption } from "../../certscore-contracts/src/test-fixtures/runtime-error-pages";
 import type {
   ConsentUiObservation,
   DomSnapshotArtifact,
@@ -959,6 +960,24 @@ function usablePolicySurface(): PolicySurfaceObservation {
 // Exact retained starting-document text; no artifact read or browser run in these tests.
 const retainedCharacterChallengeText = "Enter the characters seen in the image below:\n\nDownload audio CAPTCHA\nAnswer\nSubmit";
 const retainedCapacityHoldingText = "Sit tight\n\nWe’ve got our hands full at the moment but we should be up and moving shortly.\nThis page will automatically refresh and bring you into the website as soon as we can handle it.\n\n \t\nU.S. & CANADA\n\t \n\nIf you live in the United States or Canada and need to contact us immediately, please call 1.800.638.6464 or email customer_service@patagonia.com.\n\n \t\nEUROPE\n\t \n\nEuropean customers can email directsales.europe@patagonia.com or reach us by phone.\n\nAustria : (+43) 512 219 532\nDenmark : 804 04 938\nFrance : (+33) 450 88 44 92\nGermany : (+49) 89 2620 79666\nIreland : (+353) 766 705 887\nItaly : (+39) 047 48 61 000\nSwitzerland : (+41) 215 60 61 10\nNetherlands : (+31) 202 990 787\nUnited Kingdom : (+44) 203 636 9222\nSpain : (+34) 518 89 92 53\n \t\nJAPAN\n\t \n\nご迷惑をお掛けしておりますが、現在ウェブサイトがご利用いただけません。\n恐れ入りますがしばらくのあいだご静観願います。準備でき次第、ページが自動的に更新されてサイトが表示されます。\n\nお急ぎの場合は、電話またはメールにてお問い合わせください。\n電話 ： 受付時間 9：00-17：00（日・祝日も営業）\n0800-8887-447（フリーコール・通話料無料）\n045-435-6100（IP電話/携帯電話専用・通話料有料）\nメール： customerservice.japan@patagonia.com\n\nPHOTO: Sonnie Trotter";
+
+test("HTTP200 branded runtime errors remain no-go beyond the short retained quote", () => {
+  for (const [text, reason] of [[brandedSoft404, "not_found_404"], [brandedInterruption, "maintenance_or_unavailable"]] as const) {
+    assert.equal(classifyScanNoGoTextForCalibration(text)?.reasonCode, reason);
+    const input = scanEvidence({ text, screenshots: [], firstPartySuccesses: 8 });
+    const result = buildScanNoGoAssessment(input);
+    assert.equal(result?.scanNoGoAssessment.decision, "no_go");
+    assert.equal(result?.primaryReasonCode, reason);
+    assert.match(result!.visualAccessReview.key_visual_evidence.join(" "), reason === "not_found_404" ? /404.*This page/ : /Temporary service interruption/);
+  }
+});
+
+test("a recovered final document does not inherit an earlier branded runtime error", () => {
+  const input = scanEvidence({ text: "Public products and documentation. Our products help teams analyze user journeys and understand their customers. Explore our plans, resources and company information, or contact the team for support.", screenshots: [], firstPartySuccesses: 8 });
+  input.domSnapshots[0]!.capturedAtMs = 100;
+  input.domSnapshots.unshift({ ...input.domSnapshots[0]!, capturedAtMs: 0, textExcerpt: brandedSoft404 });
+  assert.notEqual(buildScanNoGoAssessment(input)?.scanNoGoAssessment.decision, "no_go");
+});
 
 test("explicit character-entry challenge and capacity-holding pages remain no-go with successful HTTP", () => {
   for (const [text, reason] of [

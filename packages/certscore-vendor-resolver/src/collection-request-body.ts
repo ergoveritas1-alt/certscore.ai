@@ -1,6 +1,7 @@
 import { decodeMixpanelBody, isMixpanelTrack } from "./mixpanel-collection-body";
 import {isAdvertisingIdentityValue} from './advertising-identifiers';
 import {readBoundedProtocolJson,type ProtocolJson} from './bounded-protocol-json';
+import { decodeIndexExchangeCollectionBody, isIndexExchangeCollection, readIndexExchangeProcessing } from "./index-exchange-collection-body";
 
 /** Reviewed collector envelopes. This module observes shape and processing
  * declarations; accepting an envelope never establishes a sale/sharing role. */
@@ -40,6 +41,7 @@ export function collectionBodyPrivacySignals(url:URL,fields:URLSearchParams):boo
    protocol(url)==='reddit' && ['dpm','dpcc','dprc'].includes(k) && !['','0','false'].includes(v)||['rdp','npa','ltd','dpo','data_processing_options'].includes(k)||restricted.has(k)&&!['0','false'].includes(v));
 }
 export function decodeCanonicalCollectionBody(url:URL,body:string):{fields:URLSearchParams;format:'json'|'form'}|null{
+ if(isIndexExchangeCollection(url))return decodeIndexExchangeCollectionBody(url,body);
  const p=protocol(url);if(!p)return null;
  if(p==='mixpanel')return decodeMixpanelBody(url,body);
  let text=body.trim(),format:'json'|'form'='json';
@@ -122,6 +124,7 @@ export function decodeCanonicalCollectionBody(url:URL,body:string):{fields:URLSe
  * metadata is unsupported. Only reviewed root/event locations are inspected;
  * no absence or role is inferred from this independent partial read. */
 export function readCanonicalBodyProcessing(url:URL,body:string):URLSearchParams|null{
+ if(isIndexExchangeCollection(url))return readIndexExchangeProcessing(url,body);
  const p=protocol(url);if(!p||new TextEncoder().encode(body).length>32768)return null;
  try{
   if(p==='mixpanel')return decodeMixpanelBody(url,body,true)?.fields??null;

@@ -6,7 +6,7 @@ import {activeSaleSharingCanaryCampaign,assertSaleSharingCanary,consumeSaleShari
 import {createSaleSharingCanaryStore} from "./sale-sharing-canary-store";
 import { cmpPreferenceBudgetMs, cmpPreferenceDispatchSchema, cmpPreferencesEvidenceSchema, CMP_PREFERENCE_JOIN_MS, CMP_PREFERENCE_POLICY_VERSION, type CmpPreferenceDispatch } from "@certscore/contracts";
 import { actionWorkerCheckpoints } from "./action-worker-checkpoints.js";
-import { assertOriginalRuntimeVisitForReport, hasRepresentativeRuntimeEvidence } from "./runtime-representative-evidence.js";
+import { assertOriginalRuntimeVisitForReport, buildRuntimeVisitEligibilityDiagnostic, hasRepresentativeRuntimeEvidence } from "./runtime-representative-evidence.js";
 import { createOpenAiScreenshotSafetyClassifier as createFormSnapshotSafetyClassifier } from "./screenshot-safety";
 import { FULL_SITE_PAGE_DISPATCH } from "./full-site-dispatch-contract.js";
 import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
@@ -2921,8 +2921,9 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     // Reuse the already verified downloads. A non-reportable visit must not
     // trigger another read, invocation, retry or independent publication.
     error.terminalLaneEvidence = terminalLaneEvidenceSchema.parse({
-      contractVersion: "certscore.failed-terminal-lane-evidence.v1", scanId: payload.scanId,
+      contractVersion: "certscore.failed-terminal-lane-evidence.v2", scanId: payload.scanId,
       mode: "internal_only", productionProjectable: false, scoreEffect: "none",
+      runtimeVisitEligibility: buildRuntimeVisitEligibilityDiagnostic(runtimeEvidenceBundle),
       lanes: workerResults.map((result, index) => ({
         lane: result.workerLane,
         status: workerBundles[index] ? "verified_retained" : result.status === "failed" ? "failed" : "unverifiable",
@@ -5240,6 +5241,7 @@ async function writeAndUploadFailureDiagnostic(input: {
   s3Client?: S3PutClient;
   scannerWorkTimeoutMs: number;
   terminalPublicationReserveMs: number;
+  terminalLaneEvidence?: TerminalLaneEvidence;
 }): Promise<{ artifactMetadata: LocalV2DagLambdaArtifactMetadata; artifactPointers: LocalV2DagLambdaArtifactPointers }> {
   const phaseRecord: Record<string, unknown> = await readFile(path.join(input.artifactRoot, "V2ScanCorePhases.json"), "utf8")
     .then((value) => asRecord(JSON.parse(value)))
@@ -5298,7 +5300,8 @@ async function writeAndUploadFailureDiagnostic(input: {
     : null;
   const body = Buffer.from(`${JSON.stringify({
     artifactOnly: true,
-    artifactVersion: "certscore.v2_lambda_failure_diagnostic.2",
+    artifactVersion: "certscore.v2_lambda_failure_diagnostic.3",
+    ...(input.terminalLaneEvidence ? { terminalLaneEvidence: terminalLaneEvidenceSchema.parse(input.terminalLaneEvidence) } : {}),
     cancellationReason: input.cancellationReason.slice(0, 240),
     ...(input.publicNetworkGuard ? { publicNetworkGuard: input.publicNetworkGuard } : {}),
     cancellationObservedAt: input.cancellationObservedAt.toISOString(),
@@ -6509,6 +6512,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
             artifactChainTimeoutMs,
             cancellationReason: failureMessage,
             publicNetworkGuard,
+            ...(error instanceof PassiveLaneFailure && error.terminalLaneEvidence ? { terminalLaneEvidence: error.terminalLaneEvidence } : {}),
             cancellationObservedAt,
             cancellationRequestedAt: scannerCancellationRequestedAt,
             handlerStartedAt,

@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
+import { terminalLaneEvidenceSchema } from "@certscore/contracts";
 import { parseLocalV2DagLambdaResultMessage } from "../../../web/server/scans/local-v2-dag-lambda-dispatch";
 import { verifiedCanonicalBundleBytes } from "./verified-canonical-bundle-bytes";
 import { VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION } from "@certscore/contracts";
@@ -25,6 +26,31 @@ import {
   verifyProductionArtifactChain,
   type LambdaRuntimePreviewMessage,
 } from "./local-v2-dag-lambda-results";
+
+test("web and validation retain failed runtime sources and bounded eligibility reasons only on the matching failed attempt", () => {
+  const terminalLaneEvidence = {
+    contractVersion: "certscore.failed-terminal-lane-evidence.v2", scanId: "failed-runtime", mode: "internal_only",
+    productionProjectable: false, scoreEffect: "none", lanes: [{ lane: "runtime_evidence", status: "verified_retained",
+      source: { uri: "s3://fixture/runtime.json", sha256: "a".repeat(64), sizeBytes: 128 } }],
+    runtimeVisitEligibility: { policyVersion: "runtime_visit_eligibility.v1", reasonCode: "runtime_no_go",
+      snapshotCount: 0, snapshotCountTruncated: false },
+  };
+  const message = { artifactOnly: true, productionFindingIntegration: false,
+    contractVersion: "certscore.v2.lambda-dag-result.v1", processor: "local-certscore-v2-dag-parallel-v1",
+    scanId: "failed-runtime", completedAt: "2026-10-25T00:00:00.000Z", status: "failed", targetEnvironment: "local", terminalLaneEvidence };
+  for (const parse of [
+    (value: unknown) => parseLambdaResultMessage(JSON.stringify(value), "local"),
+    (value: unknown) => parseLocalV2DagLambdaResultMessage(value, { expectedTargetEnvironment: "local" }),
+  ]) {
+    assert.deepEqual(parse(message).terminalLaneEvidence, terminalLaneEvidence);
+    for (const altered of [{ ...message, status: "completed" }, { ...message, scanId: "other" },
+      { ...message, terminalLaneEvidence: { ...terminalLaneEvidence, productionProjectable: true } },
+      { ...message, terminalLaneEvidence: { ...terminalLaneEvidence, runtimeVisitEligibility: { ...terminalLaneEvidence.runtimeVisitEligibility, rawText: "secret" } } },
+    ]) assert.equal(parse(altered).terminalLaneEvidence, undefined);
+  }
+  assert.equal(terminalLaneEvidenceSchema.safeParse({ ...terminalLaneEvidence, lanes: [] }).success, false);
+  assert.equal(terminalLaneEvidenceSchema.safeParse({ ...terminalLaneEvidence, contractVersion: "certscore.failed-terminal-lane-evidence.v1" }).success, false);
+});
 
 test("web and validation retain historical four/five and current six-lane timing without accepting incomplete inventories", () => {
   const parse = (lanes: string[]) => {

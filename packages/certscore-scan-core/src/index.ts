@@ -1,4 +1,4 @@
-import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
+import {CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage} from "@certscore/contracts";
 import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
 import { collectionRecipientPriorities } from "./collection-recipient-retention.js";
 import type { LocalGpcAdaptiveParticipant } from "./local-gpc-adaptive.js";
@@ -2627,12 +2627,16 @@ export function buildScanNoGoAssessment(input: {
   // visitor saw. Consent probes can contain large inline scripts whose source
   // mentions blocking or challenge behavior without representing page state.
   // Only fall back to consent-surface text when no settled DOM text survived.
-  const textPageState = longestDomText
+  const terminalDomText = [...input.domSnapshots]
+    .filter(snapshot => snapshot.artifactId !== "dom_blocking_frame_challenge" && !snapshot.blockingFrameChallenge)
+    .sort((a, b) => b.capturedAtMs - a.capturedAtMs)[0]?.textExcerpt;
+  const brandedErrorPageState = classifyBrandedRuntimeError(terminalDomText);
+  const textPageState = brandedErrorPageState ?? (longestDomText
     ? classifyScanNoGoText(longestDomText)
-    : classifyScanNoGoText(longestText);
+    : classifyScanNoGoText(longestText));
   const consentSurfaceTextPageState = classifyScanNoGoText(longestConsentSurfaceText);
   const substantiveDomTextObserved =
-    !classifyScanNoGoText(longestDomText) &&
+    !brandedErrorPageState && !classifyScanNoGoText(longestDomText) &&
     longestDomText.length >= 180 &&
     substantiveDomWordCount >= 24;
   const substantiveCapturedPageTextObserved =
@@ -3060,7 +3064,18 @@ const SCAN_NO_GO_CLIENT_CHALLENGE_SHELL_PATTERN =
 const SCAN_NO_GO_REQUEST_REJECTION_SHELL_PATTERN =
   /^(?:request rejected[.!]?\s+)?the requested url was rejected[.!]?\s+please consult with your administrator[.!]?(?:\s+your support id is\s+[a-z0-9-]{1,160})?(?:\s+\[?go back\]?)?[.!\s]*$/i;
 
+function classifyBrandedRuntimeError(text: string | null | undefined): ClassifiedNoGoPageState | null {
+  const reasonCode = classifyRuntimeErrorPage(text);
+  if (!reasonCode) return null;
+  const errorOffset = reasonCode === "not_found_404" ? text!.search(/\b404\s*\|?\s*OOPS!/i) : 0;
+  return { confidence: 0.97, evidenceText: boundedScanNoGoText(text!.slice(Math.max(0, errorOffset))) ?? "Retained branded error page.",
+    hardTerminal: true, reasonCode,
+    visualPageState: reasonCode === "not_found_404" ? "wrong_site_or_soft_404" : "maintenance_or_unavailable" };
+}
+
 function classifyScanNoGoText(text: string): ClassifiedNoGoPageState | null {
+  const branded = classifyBrandedRuntimeError(text);
+  if (branded) return branded;
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) {
     return null;
@@ -3125,7 +3140,7 @@ function classifyScanNoGoText(text: string): ClassifiedNoGoPageState | null {
 }
 
 export function classifyScanNoGoTextForCalibration(text: string) {
-  const classified = classifyScanNoGoText(boundedScanNoGoText(text) ?? "");
+  const classified = classifyBrandedRuntimeError(text) ?? classifyScanNoGoText(boundedScanNoGoText(text) ?? "");
   return classified
     ? {
         confidence: classified.confidence,

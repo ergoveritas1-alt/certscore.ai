@@ -1,4 +1,25 @@
-import { getUsableRuntimeVisitSnapshot, type CanonicalEvidenceBundle } from "@certscore/contracts";
+import { createHash } from "node:crypto";
+import { getUsableRuntimeVisitSnapshot, assessRuntimeVisitSnapshot, runtimeVisitEligibilityDiagnosticSchema,
+  classifyRuntimeErrorPage, type CanonicalEvidenceBundle } from "@certscore/contracts";
+
+/** Reuses the verified runtime worker already downloaded by the coordinator.
+ * Raw text, URLs and loader tokens remain in that original source only. */
+export function buildRuntimeVisitEligibilityDiagnostic(bundle: CanonicalEvidenceBundle) {
+  const assessment = assessRuntimeVisitSnapshot(bundle, bundle.domSnapshots);
+  if (assessment.status === "usable") return undefined;
+  const snapshot = [...bundle.domSnapshots].sort((a, b) => b.capturedAtMs - a.capturedAtMs)[0];
+  const sha = (value: string) => createHash("sha256").update(value).digest("hex");
+  return runtimeVisitEligibilityDiagnosticSchema.parse({
+    policyVersion: "runtime_visit_eligibility.v1", reasonCode: assessment.reasonCode,
+    snapshotCount: Math.min(10000, bundle.domSnapshots.length), snapshotCountTruncated: bundle.domSnapshots.length > 10000,
+    ...(snapshot && Number.isFinite(snapshot.capturedAtMs) && snapshot.capturedAtMs >= 0 ? { selectedSnapshot: {
+      capturedAtMs: snapshot.capturedAtMs, documentUrlSha256: sha(snapshot.url),
+      ...(snapshot.documentIdentity?.token ? { documentTokenSha256: sha(snapshot.documentIdentity.token) } : {}),
+      cdpLoaderBound: snapshot.documentIdentity?.source === "cdp_loader_id" && !!snapshot.documentIdentity.token,
+      hasText: !!snapshot.textExcerpt?.trim(), hasTitle: !!snapshot.siteMetadata?.title?.trim(),
+    } } : {}),
+  });
+}
 
 /** A usable consent session remains retained evidence, but cannot supply the
  * original runtime visit required to publish a report with both scores. */
@@ -35,6 +56,7 @@ export function hasRepresentativeRuntimeEvidence(bundle: CanonicalEvidenceBundle
   const inventory = bundle.collectionSurfaceInventory;
   if (inventory && inventory.observedAtMs >= snapshot.capturedAtMs && inventory.pageUrl !== snapshot.url) return false;
   const text = snapshot.textExcerpt?.replace(/\s+/g, " ").trim() ?? "";
+  if (classifyRuntimeErrorPage(snapshot.textExcerpt)) return false;
   const title = snapshot.siteMetadata?.title?.trim();
   // A short or non-whitespace-delimited page need not meet an English word
   // count. Retained title AND body content are positive page evidence; title

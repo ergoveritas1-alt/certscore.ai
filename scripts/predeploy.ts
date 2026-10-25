@@ -131,6 +131,8 @@ const GPC_OBSERVATION_RELEASE_CHECK: Check = {
     "packages/certscore-scan-core/src/cross-lane-access.test.ts",
     "packages/certscore-scan-core/src/gpc-observation-finalization.test.ts",
     "packages/certscore-scan-core/src/gpc-request-header-readback.test.ts",
+    "packages/certscore-scan-core/src/collector-envelope-coverage.test.ts",
+    "packages/certscore-scan-core/src/index-exchange-coverage.test.ts",
     "scripts/replay-gpc-impact.test.ts",
     "scripts/replay-gpc-impact-cohort.test.ts",
     "packages/certscore-scan-core/src/gpc-observation-completion.test.ts",

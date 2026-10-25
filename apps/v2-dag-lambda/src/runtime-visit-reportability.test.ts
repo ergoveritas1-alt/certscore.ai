@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { buildLocalV2DagLambdaLaneRun } from "./handler";
-import { assertOriginalRuntimeVisitForReport } from "./runtime-representative-evidence";
+import { assertOriginalRuntimeVisitForReport, buildRuntimeVisitEligibilityDiagnostic, hasRepresentativeRuntimeEvidence } from "./runtime-representative-evidence";
+import { brandedSoft404, brandedInterruption } from "../../../packages/certscore-contracts/src/test-fixtures/runtime-error-pages";
 
 function fixture(): CanonicalEvidenceBundle {
   return {
@@ -17,6 +18,22 @@ function fixture(): CanonicalEvidenceBundle {
     scanLaneRuns:[{laneId:"runtime_evidence",accessOutcome:"representative_page",executionOutcome:"success",challengeDetected:false}],
   } as unknown as CanonicalEvidenceBundle;
 }
+
+test("branded runtime errors cannot borrow a usable independent consent document", () => {
+  for (const text of [brandedSoft404, brandedInterruption]) {
+    const runtime = fixture(), consent = fixture();
+    runtime.domSnapshots[0]!.textExcerpt = text;
+    const before = JSON.stringify(runtime);
+    assert.equal(hasRepresentativeRuntimeEvidence(runtime), false);
+    assert.throws(() => assertOriginalRuntimeVisitForReport(runtime, consent), /original_runtime_visit_unavailable/);
+    const diagnostic = buildRuntimeVisitEligibilityDiagnostic(runtime)!;
+    assert.equal(diagnostic.reasonCode, "runtime_error_page");
+    assert.equal(diagnostic.selectedSnapshot?.cdpLoaderBound, true);
+    assert.ok(JSON.stringify(diagnostic).length < 768);
+    assert.doesNotMatch(JSON.stringify(diagnostic), /example\.test|runtime-loader|This page|overloaded/);
+    assert.equal(JSON.stringify(runtime), before);
+  }
+});
 
 test("a recovered final runtime document supplies access status without rewriting the first 404 diagnostic", () => {
   const bundle=fixture();const before=JSON.stringify(bundle);

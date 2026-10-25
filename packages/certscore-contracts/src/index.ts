@@ -47,7 +47,8 @@ import { gpcActivityComparisonSchema, type GpcActivityComparison } from "./gpc-a
 export * from "./gpc-activity-comparison";
 const canonicalGpcActivityComparisonSchema: z.ZodType<GpcActivityComparison> = gpcActivityComparisonSchema;
 import { gpcOptOutObservationSchema } from "./gpc-opt-out-prototype";
-export { terminalLaneEvidenceSchema, type TerminalLaneEvidence } from "./terminal-lane-evidence";
+export { terminalLaneEvidenceSchema, runtimeVisitEligibilityDiagnosticSchema, type TerminalLaneEvidence, type RuntimeVisitEligibilityDiagnostic } from "./terminal-lane-evidence";
+export { classifyRuntimeErrorPage } from "./runtime-error-page";
 export * from "./gpc-impact";
 export * from "./collection-field-review";
 export * from "./collection-field-labels";
@@ -61,7 +62,7 @@ export * from "./accessibility-audit";
 const canonicalAccessibilityAuditSchema: z.ZodType<AccessibilityAuditObservation> = accessibilityAuditObservationSchema;
 export * from "./cms-version-evidence";
 import { z } from "zod";
-export { getUsableRuntimeVisitSnapshot } from "./usable-runtime-visit";
+export { getUsableRuntimeVisitSnapshot, assessRuntimeVisitSnapshot, RUNTIME_VISIT_REJECTION_REASONS, type RuntimeVisitRejectionReason } from "./usable-runtime-visit";
 import { consentControlLinkDestinationSchema } from "./consent-control-link";
 import { vendorServicePurposeSchema } from "./vendor-service-purpose";
 import { vendorRegistryAttributionSchema } from "./vendor-registry-attribution";

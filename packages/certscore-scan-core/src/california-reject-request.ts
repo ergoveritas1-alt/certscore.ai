@@ -2,6 +2,7 @@ import {createHash} from "node:crypto";
 import {californiaRejectRequestEvidenceSchema,isQualifyingSaleSharingRequest,type CaliforniaRejectRequestEvidence} from "@certscore/contracts";
 import {resolveCanonicalVendor,inspectGpcRequestQualification,isAdvertisingIdentityValue,CANONICAL_VENDOR_RESOLVER_VERSION,isCanonicalAdvertisingCollectionCandidate,readBoundedProtocolJson,decodeCanonicalCollectionBody,canonicalCollectionBodyFields,collectionBodyPrivacySignals,isCanonicalProtocolIdentityField,readCanonicalBodyProcessing,usesExpandedCollectionBody} from "@certscore/vendor-resolver";
 import {decodeLinkedInWaBody} from "./linkedin-wa-body";
+import { isIndexExchangeCollection } from "@certscore/vendor-resolver";
 const sha=(value:string|Uint8Array)=>createHash("sha256").update(value).digest("hex");
 const identifiers=["li_adsId","li_adsid","li_fat_id","liFatId","hem","ud[em]","ud[ph]","li_sugr","lms_ads","fbp","fbc","external_id","vid","msclkid","cid","auid","gacid","gclid","d_cid","d_cid_ic","d_uuid","vi","first_party_id","eid_pubcid.org","eid_sharedid.org","eid_id5-sync.com","eid_liveramp.com","uuid","click_id","ttp","ttclid","u_c1","epik"] as const;
 const fields=new Set([...identifiers,"pid","fmt","time","event_id","conversion_id","url","referrer","page","v","ev","id","tid","en","google_nid","d","p","publisherId","ttd_pid","xcid","rid","gpp","gpp_sid","us_privacy","rdp","npa","ltd","dpo","data_processing_options","event","ttp","ttclid","sc_cookie1","sc_click_id","epik","ti","dl","rl","ts","sw","sh","cd","noscript","it","coo","first_party_id","eid_pubcid.org","eid_sharedid.org","eid_id5-sync.com","eid_liveramp.com"]);
@@ -36,6 +37,7 @@ export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
    proof.bodySha256=sha(input.body);
    try {
     const body=input.body.trim();
+    if(isIndexExchangeCollection(url) && input.method!=="POST")throw Error("unsupported_body");
     const canonical=decodeCanonicalCollectionBody(url,input.body);
     const linkedin=decodeLinkedInWaBody(url,input.method,input.body);
     if(linkedin){
@@ -150,6 +152,7 @@ export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
  if(!v2 && qualification.activity==="unresolved")return null;
  if(collectionBodyPrivacySignals(url,new URLSearchParams([...url.searchParams,...bodyFields]))&&!qualification.processingSignals.includes("privacy_signal_invalid"))qualification.processingSignals.push("privacy_signal_invalid");
  if(v2 && input.hasBody && usesExpandedCollectionBody(url,bodyFields))proof.policyVersion="bounded_ca_request_proof.v6";
+ if(v2 && input.hasBody && input.method==="POST" && isIndexExchangeCollection(url))proof.policyVersion="bounded_ca_request_proof.v7";
  const combined=new URLSearchParams(url.searchParams);if(proof.bodyStatus==="complete")for(const [k,v]of bodyFields)combined.append(k,v);
  const propertyId=combined.getAll("tid").length===1?combined.get("tid"):null;
  const propertyBinding=v2&&["google-analytics.com","www.google-analytics.com"].includes(url.hostname)&&url.pathname==="/g/collect"&&

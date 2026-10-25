@@ -1,0 +1,3 @@
+/** Synthetic navigation around the two reviewed, retained error components. */
+export const brandedSoft404 = `${"Products Resources Documentation Pricing\n".repeat(12)}404\n|\nOOPS! WE’RE SORRY.\nThis page doesn’t exist, or you can’t access it.\nMain Page\n|\nYour Apps\n|\nHelp Center\n|\nResources\nCompany\nPrivacy policy\nTerms of use`;
+export const brandedInterruption = "Skip to main content\nTemporary service interruption\nOur systems are currently overloaded. To protect your data, we've paused this feature.\nRefresh\n\uf1fd\nDownload\n\ue5f0\nNotifications\n\ue601\nChats\n\ue7c0\nFeedback";

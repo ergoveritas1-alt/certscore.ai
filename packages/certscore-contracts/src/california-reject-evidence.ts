@@ -9,7 +9,7 @@ export const californiaRejectRequestEvidenceSchema=z.object({
  urlSha256:z.string().regex(/^[a-f0-9]{64}$/),
  httpStatus:z.number().int().min(100).max(599).nullable(),
  payload:z.enum(["no_body","uninspected_body","inspected_body"]),
- proof:z.object({policyVersion:z.enum(["bounded_ca_request_proof.v1","bounded_ca_request_proof.v2","bounded_ca_request_proof.v3","bounded_ca_request_proof.v4","bounded_ca_request_proof.v5","bounded_ca_request_proof.v6"]),
+ proof:z.object({policyVersion:z.enum(["bounded_ca_request_proof.v1","bounded_ca_request_proof.v2","bounded_ca_request_proof.v3","bounded_ca_request_proof.v4","bounded_ca_request_proof.v5","bounded_ca_request_proof.v6","bounded_ca_request_proof.v7"]),
   bodyStatus:z.enum(["absent","complete","unavailable","unsupported","limited"]),
   bodyFormat:z.enum(["none","form","json","linkedin_wa_json","unknown"]),bodySha256:z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   bodyEncoding:z.enum(["identity","base64","base64_gzip"]).optional(),decodedBodySha256:z.string().regex(/^[a-f0-9]{64}$/).optional(),
@@ -22,18 +22,22 @@ export const californiaRejectRequestEvidenceSchema=z.object({
  qualification:saleSharingRequestQualificationSchema,
  propertyBinding:z.object({policyVersion:z.literal("google_analytics_property.v1"),propertyIdSha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict().optional(),
 }).strict().superRefine((row,ctx)=>{
+ if(row.proof?.policyVersion==="bounded_ca_request_proof.v7" && (row.origin!=="https://htlb.casalemedia.com" ||
+  row.path!=="/openrtb/pbjs" || row.method!=="POST" || row.qualification.activity!=="unresolved" ||
+  row.proof.bodyStatus==="complete" && row.proof.bodyFormat!=="json"))
+  ctx.addIssue({code:z.ZodIssueCode.custom,message:"Index Exchange v7 inspection remains exact-endpoint bound and purpose-unresolved."});
  if((row.contractVersion==="california_reject_request.v2")!==Boolean(row.proof) ||
   row.contractVersion==="california_reject_request.v1" && row.payload==="inspected_body" || row.proof && (
   (row.payload==="inspected_body")!==(row.proof.bodyStatus==="complete") || (row.payload==="no_body")!==(row.proof.bodyStatus==="absent") ||
   row.proof.bodyStatus==="complete" && !["form","json","linkedin_wa_json"].includes(row.proof.bodyFormat) ||
-  row.proof.bodyFormat==="linkedin_wa_json" && (!["bounded_ca_request_proof.v2","bounded_ca_request_proof.v3","bounded_ca_request_proof.v4","bounded_ca_request_proof.v5","bounded_ca_request_proof.v6"].includes(row.proof.policyVersion)||!row.proof.bodyEncoding||!row.proof.decodedBodySha256||row.method!=="POST"||row.origin!=="https://px.ads.linkedin.com"||!/^\/wa\/?$/.test(row.path)) ||
+  row.proof.bodyFormat==="linkedin_wa_json" && (!["bounded_ca_request_proof.v2","bounded_ca_request_proof.v3","bounded_ca_request_proof.v4","bounded_ca_request_proof.v5","bounded_ca_request_proof.v6","bounded_ca_request_proof.v7"].includes(row.proof.policyVersion)||!row.proof.bodyEncoding||!row.proof.decodedBodySha256||row.method!=="POST"||row.origin!=="https://px.ads.linkedin.com"||!/^\/wa\/?$/.test(row.path)) ||
   row.proof.policyVersion==="bounded_ca_request_proof.v1" && (row.proof.bodyEncoding!==undefined||row.proof.decodedBodySha256!==undefined||row.proof.identifiers.some(id=>id.field==="liFatId")) ||
   row.proof.identifiers.some(id=>["liFatId","hem"].includes(id.field)&&(id.source!=="body"||row.proof?.bodyFormat!=="linkedin_wa_json"||row.origin!=="https://px.ads.linkedin.com"||!/^\/wa\/?$/.test(row.path))) ||
-  !["bounded_ca_request_proof.v3","bounded_ca_request_proof.v4","bounded_ca_request_proof.v5","bounded_ca_request_proof.v6"].includes(row.proof.policyVersion) && (row.proof.identifierDispositions!==undefined || row.proof.identifiers.some(id=>["hem","ud[em]","ud[ph]"].includes(id.field)) || ["linkedin_hashed_email","meta_advanced_matching_identifier"].includes(row.qualification.basis)) ||
+  !["bounded_ca_request_proof.v3","bounded_ca_request_proof.v4","bounded_ca_request_proof.v5","bounded_ca_request_proof.v6","bounded_ca_request_proof.v7"].includes(row.proof.policyVersion) && (row.proof.identifierDispositions!==undefined || row.proof.identifiers.some(id=>["hem","ud[em]","ud[ph]"].includes(id.field)) || ["linkedin_hashed_email","meta_advanced_matching_identifier"].includes(row.qualification.basis)) ||
   row.proof.identifierDispositions && (row.proof.bodyFormat!=="linkedin_wa_json" || new Set(row.proof.identifierDispositions.map(r=>r.field)).size!==3 || row.proof.identifierDispositions.some(r=>r.field==="liGiant"&&r.status==="valid" || r.field!=="liGiant"&&r.status==="excluded")) ||
   (row.proof.bodyStatus==="complete"&&row.proof.bodyFormat!=="linkedin_wa_json" || !(row.origin==="https://px.ads.linkedin.com"&&/^\/wa\/?$/.test(row.path))) && (row.proof.bodyEncoding!==undefined||row.proof.decodedBodySha256!==undefined) ||
-  !["bounded_ca_request_proof.v4","bounded_ca_request_proof.v5","bounded_ca_request_proof.v6"].includes(row.proof.policyVersion)&&row.proof.identifiers.some(id=>["first_party_id","eid_pubcid.org","eid_sharedid.org","eid_id5-sync.com","eid_liveramp.com"].includes(id.field)) ||
-  !["bounded_ca_request_proof.v5","bounded_ca_request_proof.v6"].includes(row.proof.policyVersion)&&row.proof.identifiers.some(id=>["uuid","click_id","ttp","ttclid","u_c1","epik"].includes(id.field)) ||
+  !["bounded_ca_request_proof.v4","bounded_ca_request_proof.v5","bounded_ca_request_proof.v6","bounded_ca_request_proof.v7"].includes(row.proof.policyVersion)&&row.proof.identifiers.some(id=>["first_party_id","eid_pubcid.org","eid_sharedid.org","eid_id5-sync.com","eid_liveramp.com"].includes(id.field)) ||
+  !["bounded_ca_request_proof.v5","bounded_ca_request_proof.v6","bounded_ca_request_proof.v7"].includes(row.proof.policyVersion)&&row.proof.identifiers.some(id=>["uuid","click_id","ttp","ttclid","u_c1","epik"].includes(id.field)) ||
   row.proof.bodyStatus==="absent" && (row.proof.bodyFormat!=="none" || row.proof.bodySha256!==null) ||
   row.proof.headersStatus==="complete"&&!row.proof.headersSha256 || row.proof.bodyStatus==="complete"&&!row.proof.bodySha256))
   ctx.addIssue({code:z.ZodIssueCode.custom,message:"California v2 body/header proof must retain consistent dispositions and hashes."});
@@ -42,7 +46,7 @@ export const californiaRejectRequestEvidenceSchema=z.object({
    (d.status==="valid")!==row.proof!.identifiers.some(id=>id.source==="body"&&id.field===d.field))))
   ctx.addIssue({code:z.ZodIssueCode.custom,message:"Decoded matching field dispositions must agree with retained positive identifiers."});
  const matchingBasis=["linkedin_hashed_email","meta_advanced_matching_identifier"].includes(row.qualification.basis);
- if(matchingBasis && (!row.proof || !["bounded_ca_request_proof.v3","bounded_ca_request_proof.v4","bounded_ca_request_proof.v5","bounded_ca_request_proof.v6"].includes(row.proof.policyVersion) || !row.proof.identifiers.some(id=>
+ if(matchingBasis && (!row.proof || !["bounded_ca_request_proof.v3","bounded_ca_request_proof.v4","bounded_ca_request_proof.v5","bounded_ca_request_proof.v6","bounded_ca_request_proof.v7"].includes(row.proof.policyVersion) || !row.proof.identifiers.some(id=>
   row.qualification.basis==="linkedin_hashed_email" ? id.field==="hem"&&id.source==="body" : ["ud[em]","ud[ph]"].includes(id.field)&&id.source!=="cookie_header")))
   ctx.addIssue({code:z.ZodIssueCode.custom,message:"Matching-identity qualification requires v3 retained field proof."});
  if(row.proof?.identifiers.some(id=>["ud[em]","ud[ph]"].includes(id.field) &&
@@ -54,7 +58,7 @@ export const californiaRejectRequestEvidenceSchema=z.object({
   row.qualification.basis==="snap_pixel_identifier"?row.origin==="https://tr.snapchat.com"&&/^\/p\/?$/.test(row.path):
   row.qualification.basis==="pinterest_tag_identifier"?row.origin==="https://ct.pinterest.com"&&/^\/v3\/?$/.test(row.path):
   row.qualification.basis==="reddit_pixel_identifier"?row.origin==="https://alb.reddit.com"&&/^\/rp(?:\.gif)?$/.test(row.path):true;
- if(protocolFields&&(!protocolCarrier||!row.proof||!["bounded_ca_request_proof.v5","bounded_ca_request_proof.v6"].includes(row.proof.policyVersion)||!row.proof.identifiers.some(id=>protocolFields.includes(id.field))))
+ if(protocolFields&&(!protocolCarrier||!row.proof||!["bounded_ca_request_proof.v5","bounded_ca_request_proof.v6","bounded_ca_request_proof.v7"].includes(row.proof.policyVersion)||!row.proof.identifiers.some(id=>protocolFields.includes(id.field))))
   ctx.addIssue({code:z.ZodIssueCode.custom,message:"Protocol advertising collection requires v5 endpoint-bound identity proof."});
  if(row.proof?.identifiers.some(id=>
   ["uuid","click_id"].includes(id.field)?row.origin!=="https://alb.reddit.com"||!/^\/rp(?:\.gif)?$/.test(row.path):

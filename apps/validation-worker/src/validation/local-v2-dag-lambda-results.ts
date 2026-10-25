@@ -17,6 +17,8 @@ import {
   classifyV2DagLambdaResultDisposition,
   verifiedPreConsentRuntimePreviewPacketSchema,
   verifiedPolicyEvidencePacketSchema,
+  terminalLaneEvidenceSchema,
+  type TerminalLaneEvidence,
   type VerifiedPreConsentRuntimePreviewPacket,
   type VerifiedPolicyEvidencePacket,
 } from "@certscore/contracts";
@@ -97,6 +99,7 @@ type ScannerRuntimeProvenance = {
 };
 
 type LambdaResultMessage = {
+  terminalLaneEvidence?: TerminalLaneEvidence;
   artifactMetadata?: Record<string, unknown>;
   artifactPointers?: Record<string, unknown>;
   completedAt: string;
@@ -1484,6 +1487,9 @@ export function parseLambdaResultMessage(
     throw new Error("Lambda result is missing scanId or completedAt.");
   }
   const errorRecord = asRecord(record.error);
+  const terminalEvidence = terminalLaneEvidenceSchema.safeParse(record.terminalLaneEvidence);
+  const terminalLaneEvidence = status === "failed" && terminalEvidence.success && terminalEvidence.data.scanId === scanId
+    ? terminalEvidence.data : undefined;
   const errorMessage = stringValue(errorRecord.message);
   const handlerTiming = parseLambdaHandlerTiming(record.handlerTiming);
   const laneTimingSummary = parseLambdaLaneTimingSummary(record.laneTimingSummary);
@@ -1509,6 +1515,7 @@ export function parseLambdaResultMessage(
   return {
     artifactMetadata,
     artifactPointers,
+    ...(terminalLaneEvidence ? { terminalLaneEvidence } : {}),
     completedAt,
     ...(errorMessage
       ? { error: { ...(stringValue(errorRecord.code) ? { code: stringValue(errorRecord.code) as string } : {}), message: errorMessage } }
@@ -2151,6 +2158,8 @@ export async function recordLocalV2DagLambdaResult(
             : {}),
           productionFindingIntegration: false,
           resultStatus: parsedMessage.status,
+          ...(parsedMessage.status === "failed" && parsedMessage.terminalLaneEvidence
+            ? { terminalLaneEvidence: parsedMessage.terminalLaneEvidence } : {}),
           ...(parsedMessage.scannerGitSha ? { scannerGitSha: parsedMessage.scannerGitSha } : {}),
           ...(parsedMessage.scannerImageTag ? { scannerImageTag: parsedMessage.scannerImageTag } : {}),
           ...(parsedMessage.scannerRuntimeProvenance

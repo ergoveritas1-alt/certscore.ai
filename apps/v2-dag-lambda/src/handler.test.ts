@@ -2544,6 +2544,8 @@ test("unusable original runtime ends the attempt with verified lane pointers and
       assert.equal(error.code,"original_runtime_visit_unavailable");
       assert.equal(error.message,"The starting page could not be verified, so a report could not be generated.");
       assert.equal(error.terminalLaneEvidence?.lanes.length,3);
+      assert.equal(error.terminalLaneEvidence?.contractVersion,"certscore.failed-terminal-lane-evidence.v2");
+      assert.equal(error.terminalLaneEvidence?.runtimeVisitEligibility?.reasonCode,"runtime_no_go");
       assert.ok(error.terminalLaneEvidence?.lanes.every(lane=>lane.status==="verified_retained" && lane.source));
       return true;
     });
@@ -3546,6 +3548,40 @@ test("a late partial scan can use artifact handoff reserve after scanner cancell
   assert.equal(artifactSignal?.aborted, false);
 });
 
+test("handler preserves verified runtime rejection diagnostics in its existing failure artifact and terminal message", async () => {
+  const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "failure-diagnostic-test";
+  const uploads: string[] = [];
+  const payload = validPayload();
+  const failure = new OriginalRuntimeVisitFailure("The starting page could not be verified, so a report could not be generated.", []);
+  failure.terminalLaneEvidence = {
+    contractVersion: "certscore.failed-terminal-lane-evidence.v2", scanId: payload.scanId,
+    mode: "internal_only", scoreEffect: "none", productionProjectable: false,
+    lanes: [{ lane: "runtime_evidence", status: "verified_retained", source: { uri: "s3://fixture/runtime.json", sha256: "a".repeat(64), sizeBytes: 128 } }],
+    runtimeVisitEligibility: { policyVersion: "runtime_visit_eligibility.v1", reasonCode: "runtime_no_go", snapshotCount: 0, snapshotCountTruncated: false },
+  };
+  try {
+    const result = await handler(payload, {
+      handlerSafetyTimeoutMs: 10000, resultPublishTimeoutMs: 100,
+      runArtifactChain: async () => { throw failure; },
+      s3Client: { async send(command: PutObjectCommand) { uploads.push(Buffer.from(command.input.Body as Uint8Array).toString("utf8")); return {}; } },
+      sqsClient: { async send() { return {}; } },
+    });
+    assert.equal(result.status, "failed");
+    assert.equal(result.error?.code, "original_runtime_visit_unavailable");
+    assert.deepEqual(result.terminalLaneEvidence, failure.terminalLaneEvidence);
+    assert.equal(uploads.length, 1, "reuse the existing diagnostic upload");
+    const diagnostic = JSON.parse(uploads[0]!);
+    assert.equal(diagnostic.artifactVersion, "certscore.v2_lambda_failure_diagnostic.3");
+    assert.deepEqual(diagnostic.terminalLaneEvidence, failure.terminalLaneEvidence);
+    assert.doesNotMatch(uploads[0]!, /cookieValue|documentText|requestBody|nanoReasoning/i);
+    assert.ok(Buffer.byteLength(JSON.stringify(failure.terminalLaneEvidence)) < 2048);
+  } finally {
+    if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+  }
+});
+
 test("handler uploads a bounded artifact-only failure diagnostic on scanner timeout", async () => {
   const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "failure-diagnostic-test";
@@ -3576,7 +3612,7 @@ test("handler uploads a bounded artifact-only failure diagnostic on scanner time
     assert.match(result.artifactPointers?.failureDiagnosticUri ?? "", /FailureDiagnostic\.json$/);
     assert.equal(uploads.length, 1);
     assert.ok(uploads[0]?.body.length && uploads[0].body.length < 20_000);
-    assert.match(uploads[0]?.body ?? "", /certscore\.v2_lambda_failure_diagnostic\.2/);
+    assert.match(uploads[0]?.body ?? "", /certscore\.v2_lambda_failure_diagnostic\.3/);
     assert.match(uploads[0]?.body ?? "", /cancellationRequestedAt/);
     assert.match(uploads[0]?.body ?? "", /terminalPublicationReserveMs/);
     assert.doesNotMatch(uploads[0]?.body ?? "", /cookieValue|documentText|requestBody|nanoReasoning/i);
@@ -3636,7 +3672,7 @@ test("handler retains bounded egress diagnostics for an immediate preflight fail
     assert.equal(result.status, "failed");
     assert.equal(uploads.length, 1);
     const diagnostic = JSON.parse(uploads[0]!.body);
-    assert.equal(diagnostic.artifactVersion, "certscore.v2_lambda_failure_diagnostic.2");
+    assert.equal(diagnostic.artifactVersion, "certscore.v2_lambda_failure_diagnostic.3");
     assert.equal(diagnostic.egressPreflight.probeStatus, "failed");
     assert.equal(diagnostic.egressPreflight.attempts[0].provider, "checkip.amazonaws.com");
     assert.match(diagnostic.egressPreflight.attempts[0].observedPublicIpHash, /^sha256:[a-f0-9]{64}$/);
@@ -3677,7 +3713,7 @@ test("runtime worker retains a bounded failure diagnostic when no canonical part
     assert.equal(result.error?.code, "v2_dag_lambda_safety_timeout");
     assert.match(result.artifactPointers?.failureDiagnosticUri ?? "", /lanes\/runtime_evidence\/failure\/FailureDiagnostic\.json$/);
     assert.equal(uploads.length, 1);
-    assert.match(uploads[0]?.body ?? "", /certscore\.v2_lambda_failure_diagnostic\.2/);
+    assert.match(uploads[0]?.body ?? "", /certscore\.v2_lambda_failure_diagnostic\.3/);
     assert.doesNotMatch(uploads[0]?.body ?? "", /cookieValue|documentText|requestBody|nanoReasoning/i);
   } finally {
     if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
