@@ -121,6 +121,13 @@ was bounded after an initially slow query; it does not run in the product path.
 Production latency improvement remains unmeasured until a separately authorized
 AWS deployment. This change does not promise a particular seconds-to-load target.
 
+Release verification also exercises two concurrent loopback HTTP report reads
+blocked on a real PostgreSQL cache-row lock. Changing the retained page source
+before releasing the writes makes those old-source entries inaccessible to the
+next request. A fresh module prepares and reads the updated source correctly,
+without expanding the cache's slot allowance. This test uses an isolated schema
+in the disposable localhost `full_site_test` database.
+
 ### Second cotp.group retained replay: EU-IR
 
 The second requested scan, `29ca78cf-bc59-43d5-a10b-a92c7466cdd7`, retained
