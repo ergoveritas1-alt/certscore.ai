@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { DATA_BOUND_PURPOSE_TABLE, INADEQUATE_PURPOSE_WITNESSES } from "../../../../packages/certscore-contracts/src/test-fixtures/policy-topic-witnesses";
 
 import {
   classifyGdprTransparencyTopics,
@@ -52,6 +53,29 @@ function surface(candidates: Candidate[], input: Partial<Pick<
     ...input,
   };
 }
+
+test("a strong retained purpose witness cannot override ownership, fetch or quality gates", () => {
+  const topicCandidate = candidate({topic: "processing_purposes", matchedLocale: "en", matchedTerm: "purpose of the processing", evidenceText: DATA_BOUND_PURPOSE_TABLE});
+  const retained = {confidence: .9, disclosureType: "processing_purposes" as const, status: "observed" as const,
+    source: "deterministic" as const, evidenceText: DATA_BOUND_PURPOSE_TABLE, selectedEvidenceStrength: "strong" as const,
+    selectedPolicySectionUrl: "https://example.test/privacy", selectedPolicySectionExcerpt: DATA_BOUND_PURPOSE_TABLE};
+  for (const variant of ["owner", "fetch", "quality"] as const) {
+    const result = adaptGdprTransparencyTopicCandidatesForProduction({isTargetRelevantPrivacyPolicy: variant !== "owner",
+      policyTextQuality: {usable: variant !== "quality"}, surface: surface([topicCandidate], {
+        status: variant === "fetch" ? "failed" : "fetched", article13DisclosureSignals: [retained],
+      })});
+    assert.deepEqual(result.acceptedProductionSignals, [], variant);
+  }
+});
+
+test("context provenance cannot promote weak purpose quotes without a substantive retained witness", () => {
+  for (const evidenceText of INADEQUATE_PURPOSE_WITNESSES) {
+    const result = adaptGdprTransparencyTopicCandidatesForProduction({isTargetRelevantPrivacyPolicy: true, policyTextQuality: {usable: true},
+      surface: surface([candidate({topic: "processing_purposes", evidenceText, matchedLocale: "en", matchedTerm: "purpose of the processing",
+        classifierReasonCodes: ["matched_processing_purposes", "variant_requires_privacy_context"]})])});
+    assert.deepEqual(result.acceptedProductionSignals, []);
+  }
+});
 
 test("rights passages cannot supply legal-basis or retention disclosure credit", () => {
   const result = adaptGdprTransparencyTopicCandidatesForProduction({

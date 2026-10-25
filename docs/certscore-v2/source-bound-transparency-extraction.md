@@ -27,3 +27,49 @@ Local tests cover 80 affirmative translated passages, 40 aggregate-analytics cou
 A local benchmark on the retained 49,841-character policy measured the localized rule sweep at approximately 0.67 ms and complete section extraction at 83.56 ms, versus 90.94 ms with the added locale rules disabled. A conservative allowance for 200 additional bounded 640-character validations estimates incremental compute at approximately $0.05/month at 100,000 scans (3008 MB Lambda, $0.0000166667/GB-second). The disclosed operating estimate remains below $0.50/month to allow measurement variability. These are estimates, not production cohort measurements. No request, browser lane, model call, timeout extension or retention increase is introduced. Deployment remains on hold.
 
 Final verification: 437 focused extraction, multilingual projection, adapter, rationale and scoring regressions passed; the full shared-contract suite passed 530 tests. Contracts build, web typecheck and diff whitespace checks passed. Localhost verification retained the green source-quoted profiling row and unchanged score.
+
+## Policy witness repairs — October 25, 2026
+
+Purpose headings, table headers and references to a previously consented purpose
+do not themselves identify a processing purpose. The shared validator requires a
+concrete outcome while preserving substantive nominal purpose lists, application
+processing and source-bound data-category/purpose pairs. Scanner selection keeps
+the named data and its purpose together from the same retained section, within
+the existing 640-character compact-witness limit, and retries that section when
+sentence compaction loses the data category. The adapter applies the same shared
+criteria; a stronger retained quote cannot override ownership, retrieval or
+policy-quality rejection. No presentation fallback is added.
+
+The canonical classifier adds bounded informal German clauses for comment-data
+spam prevention, an email-derived hash passed to a named service, explicit
+comment/data retention and personal-data export/deletion requests. Headings alone
+and negated clauses remain insufficient. These variants do not infer legal
+basis, controller identity, DPO appointment, transfers or profiling. Generic
+conditional profiling rights retain the existing practice-evidence requirement.
+
+Sanitized fixtures live in
+`packages/certscore-contracts/src/test-fixtures/policy-topic-witnesses.ts` and
+exercise source extraction, native quotations/hashes, the production evidence
+adapter, normalized concerns, concern policy and canonical checklist. The
+`policy-source-witnesses` preflight check runs them with existing contract and
+canary regressions. They are part of the existing calibration program, not an
+adjudicated accuracy benchmark. Full-text counterfactual replay can verify the
+new extractor; it cannot reconstruct missing historical HTML or rewrite a report.
+
+Retained local replay recovers four disclosure topics from Aykut's complete
+German website notice, retains a concrete Tanki purpose witness, and finds a
+Matrox purpose witness when re-extracting its complete saved text. Matrox's older
+bounded section set alone does not contain that witness. The separate app notice
+does not acquire website disclosures; unowned and non-policy sources remain
+ineligible. Parent/platform ownership questions and DPO entity scope remain
+separate follow-up work. No production fix is verified by these local results.
+
+No request, visit, model call, capture timeout, worker size, object upload or
+retention period is added. A local 13-document paired benchmark, five iterations
+per document through extraction and canonical checklist, measured approximately
+15.3 ms mean added processing per policy on the retained mix. At 100,000 scans,
+1.5 policies per scan, 3008 MB and $0.0000166667 per GB-second this estimates
+$0.12/month compute. Allowing bounded additional JSON in existing artifacts, the
+expected incremental estimate is below $0.50/month. This is a workload assumption
+and local measurement, not a production-latency guarantee. Local verification
+adds $0 AWS usage. Deployment and ordinary-production verification are pending.

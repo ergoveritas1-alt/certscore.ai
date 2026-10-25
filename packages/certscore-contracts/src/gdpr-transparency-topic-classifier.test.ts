@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { decodeCommonHtmlEntities } from "./gdpr-transparency-topic-classifier";
 import { article13DisclosureRejectReason } from "./article13-disclosure-rejection";
+import { INFORMAL_GERMAN_POLICY_CLAUSES } from "./test-fixtures/policy-topic-witnesses";
 import {
   classifyGdprSupplementLink,
   classifyGdprTransparencyTopics,
@@ -10,6 +11,29 @@ import {
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type GdprTransparencyTopic,
 } from "./index.js";
+
+test("informal German disclosures retain topic-specific native clauses without relying on the HTML language", () => {
+  const text = "Datenschutzerklärung. " + INFORMAL_GERMAN_POLICY_CLAUSES.map(c => c.text).join(" ");
+  for (const localeHints of [undefined, ["de"] as const]) {
+    const matches = classifyGdprTransparencyTopics({text, localeHints: localeHints ? [...localeHints] : undefined}).matches;
+    for (const clause of INFORMAL_GERMAN_POLICY_CLAUSES) {
+      const match = matches.find(m => m.topic === clause.topic);
+      assert.ok(match, clause.topic); assert.equal(match.matchedLocale, "de");
+      assert.ok(text.includes(match.evidenceExcerpt), clause.topic);
+      assert.equal(article13DisclosureRejectReason(match.evidenceExcerpt, clause.topic, {mode: "multilingual_classifier"}), null, clause.topic);
+    }
+    assert.ok(matches.every(m => !["legal_basis", "controller_contact", "dpo_contact", "international_transfers", "automated_decision_making_or_profiling"].includes(m.topic)));
+  }
+});
+
+test("informal German headings and negated practices cannot supply affirmative disclosure credit", () => {
+  for (const text of [
+    "Datenschutzerklärung. Welche Rechte du an deinen Daten hast. Wie lange wir deine Daten speichern. Mit wem wir deine Daten teilen.",
+    ...INFORMAL_GERMAN_POLICY_CLAUSES.map(c => "Datenschutzerklärung. " + c.text.replace(/(unterstützen|übergeben|gespeichert|anfordern)/, "nicht $1")),
+  ]) {
+    assert.equal(classifyGdprTransparencyTopics({text, localeHints: ["de"]}).matches.length, 0, text);
+  }
+});
 
 test("French purpose lists, named processors and a CNIL complaint route retain their own witnesses", () => {
   const clauses = [

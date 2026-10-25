@@ -46,6 +46,18 @@ const SCAN_NO_GO_RELEASE_CHECK: Check = {
   command: ["pnpm", "test:scan-no-go"],
 };
 
+const POLICY_SOURCE_WITNESS_CHECK: Check = {
+  key: "policy-source-witnesses",
+  label: "source-bound policy citations and German canonical disclosure regressions",
+  command: ["pnpm", "exec", "tsx", "--tsconfig", "tsconfig.base.json", "--test",
+    "packages/certscore-contracts/src/article13-disclosure-rejection.test.ts",
+    "packages/certscore-contracts/src/gdpr-transparency-topic-classifier.test.ts",
+    "packages/certscore-scan-core/src/policy-topic-witnesses.test.ts",
+    "apps/web/lib/scans/gdpr-transparency-topic-evidence-adapter.test.ts",
+    "apps/web/lib/scans/policy-topic-witnesses.test.ts",
+    "apps/web/lib/scans/ergoveritas-test1-transparency.test.ts"],
+};
+
 const REPORT_PUBLICATION_CHECK: Check = {
   key: "report-publication",
   label: "report publication ownership, artifact transfer and recovery contracts",
@@ -218,6 +230,7 @@ const ROOT_FULL_CHECKS: Check[] = [
   CALIFORNIA_REVIEW_CHECK,
   CMP_INITIALIZATION_CAPTURE_CHECK,
   REPRESENTATIVE_PROOF_CHECK,
+  POLICY_SOURCE_WITNESS_CHECK,
   {
     key: "deploy-topology",
     label: "deployment topology check",
@@ -319,6 +332,7 @@ const TARGETS: Target[] = [
       file.startsWith("packages/ui/") ||
       file.startsWith("packages/validation-shared/"),
     checks: [
+      POLICY_SOURCE_WITNESS_CHECK,
       { key: "assessment-highlights", label: "reviewed assessment highlights and bounded expansion", command: ["pnpm", "test:assessment-highlights"] },
       CALIFORNIA_REVIEW_CHECK,
       RUNTIME_GRAPH_RELEASE_CHECK,
@@ -400,6 +414,7 @@ const TARGETS: Target[] = [
       file.startsWith("scripts/local-v2-dag-lambda/") ||
       file === ".github/workflows/v2-regulatory-gold-corpus.yml",
     checks: [
+      POLICY_SOURCE_WITNESS_CHECK,
       CALIFORNIA_REVIEW_CHECK,
       ACCESSIBILITY_AUDIT_CHECK,
       RUNTIME_GRAPH_CAPTURE_CHECK,

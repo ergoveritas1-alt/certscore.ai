@@ -1,5 +1,7 @@
 import {
   AUTOMATED_DECISION_PRACTICES_PATTERN,
+  NAMED_DATA_SERVICE_PURPOSE_PATTERN,
+  STRUCTURED_DATA_PURPOSE_PATTERN,
   findBehavioralProfilingDisclosure,
   classifyGdprTransparencyTopics,
   hasIncidentalGermanDisclosureTerms,
@@ -59,10 +61,23 @@ export function isDataSubjectRightsDisclosureEvidenceUsable(value: string) {
     ) && isArticle13DisclosureEvidenceUsable(value, "data_subject_rights", { mode: "multilingual_classifier" }));
 }
 
+/** Data named in the same retained witness, including structural table cells. */
+export function hasProcessingPurposeDataContext(value: string) {
+  return /\b(?:personal data|personal information|your data|your information|this information|account data|information we collect|data we collect|cookies|processing of data|data will be processed|contact information|financial information|digital information|contact details|email address|device data)\b|\bdata categories\s*:\s*\S/i.test(value);
+}
+
 export function hasSubstantiveProcessingPurposesEvidence(value: string) {
   const text = normalizeArticle13Whitespace(value);
   const purposeOutcomePattern =
-    /\b(?:provide|deliver|operate|maintain|improve|develop|personalize|communicate|respond|answer|process|fulfil|fulfill|protect|secure|prevent|detect|measure|analy[sz]e|understand|verify|diagnose|comply|send|administer|manage|support|facilitate|handle|perform|conduct|ensure|keep records?|follow[- ]?up|authenticate|optimise|optimize)\b/i;
+    /\b(?:provide|deliver|operate|maintain|improve|develop|personalize|communicate|respond|answer|process(?:ing)?(?=\s+(?:(?:your|the|an?)\s+)?(?:enquir\w*|inquir\w*|applications?|payments?|orders?|transactions?|requests?)\b)|fulfil|fulfill|protect|secure|prevent|detect|measure|analy[sz]e|understand|verify|validate|diagnose|comply|send|administer|manage|support|facilitate|handle|perform|conduct|ensure|keep records?|follow[- ]?up|authenticate|optimise|optimize)\b/i;
+  // A purpose heading/table header, or a reference to processing for purposes
+  // previously consented to, does not say what the data is actually used for.
+  // Require an outcome before any heading or grammatical form may qualify.
+  const listedNominalPurpose = /\b(?:following purposes|purposes? of (?:the )?processing)\s*:\s*(?:website delivery|communication|security|fraud prevention|customer support|payment processing|order fulfilment)\b/i.test(text);
+  if (!purposeOutcomePattern.test(text) && !listedNominalPurpose) return false;
+  if (NAMED_DATA_SERVICE_PURPOSE_PATTERN.test(normalizeGdprTransparencyText(text))) return true;
+  if (STRUCTURED_DATA_PURPOSE_PATTERN.test(text)) return true;
+  if (listedNominalPurpose) return true;
   if (
     /\b(?:privacy shield|data privacy framework|\bdpf\b|standard contractual clauses?|\bsccs?\b|adequacy decision|international data transfer|cross-border transfer)\b/i.test(text) &&
     !/\b(?:purpose(?:s)? of (?:the )?(?:processing|collection|use)|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for))\b/i.test(text)
@@ -77,7 +92,7 @@ export function hasSubstantiveProcessingPurposesEvidence(value: string) {
       purposeOutcomePattern.test(text)
     ) ||
     (
-      /\b(?:we|[a-z][a-z0-9&.'’-]*(?:\s+[a-z][a-z0-9&.'’-]*){0,5})\s+(?:(?:use|uses|process|processes|collect|collects|store|stores)\s+(?:and\s+use\s+)?|describes?\s+processing\s+)(?:(?:your|this) )?(?:(?:personal )?(?:data|information)|details|email address|contact details|name|payment information|donation information)\b.{0,100}\b(?:to|for(?: the purpose of)?)\b.{1,160}/i.test(text) &&
+      /\b(?:we|[a-z][a-z0-9&.'’-]*(?:\s+[a-z][a-z0-9&.'’-]*){0,5})\s+(?:(?:use|uses|process|processes|collect|collects|store|stores)\s+(?:and\s+use\s+)?|describes?\s+processing\s+)(?:(?:your|this) )?(?:(?:personal )?(?:data|information)|account data|details|email address|contact details|name|payment information|donation information)\b.{0,100}\b(?:to|for(?: the purpose of)?)\b.{1,160}/i.test(text) &&
       purposeOutcomePattern.test(text)
     ) ||
     (
@@ -230,6 +245,7 @@ export function article13CrossTopicRejectReason(value: string, topic: Article13D
   const actualPurpose = /\b(?:we|the company|the controller)\s+(?:(?:may|will|also)\s+){0,2}(?:use|process|collect|store)\b[^.!?]{0,100}\b(?:data|information|details|email address)\b[^.!?]{0,80}\b(?:to|for)\s+(?:(?:the|our|your)\s+)?(?:provid\w*|deliver\w*|operat\w*|maintain\w*|improv\w*|respond\w*|answer\w*|fulfil\w*|protect\w*|prevent\w*|detect\w*|measur\w*|analy[sz]\w*|verif\w*|send\w*|administ\w*|manag\w*|support\w*|authenticat\w*)\b|\b(?:personal data|personal information|your data|your information)\b[^.!?]{0,80}\b(?:is|are|will be)\s+(?:used|processed|collected)\s+to\s+(?:provide|respond|deliver|manage|improve|protect|prevent)\b/i;
   const listedPurpose = /\bfollowing purposes\s*:\s*(?:to\s+)?(?:register|manage|confirm|validate|activate|provide|respond|send|protect|prevent)\b/i.test(text);
   if (topic === "processing_purposes" && !actualPurpose.test(text) && !listedPurpose &&
+      !NAMED_DATA_SERVICE_PURPOSE_PATTERN.test(normalizeGdprTransparencyText(text)) && !STRUCTURED_DATA_PURPOSE_PATTERN.test(text) &&
       /\b(?:this (?:privacy )?(?:policy|notice) (?:explains|describes|sets out)|business purposes|we collect[^.!?]{0,120}when you provide|information directly to us|to achieve.{0,30}purposes|shall not be regarded as recipients|data minimi[sz]ation|directly from you|information (?:you (?:provide|give)|provided (?:directly|by you))|(?:collect|receive)(?:d|s)?[^.!?]{0,100}\bfrom\b|personal (?:data|information) (?:means|is any|can be used)|(?:right|request)[^.!?]{0,80}(?:how we use|uses of)|data subject[^.!?]{0,100}entitled|upon written request|information about the ways in which|information regarding whether|necessary for (?:the )?(?:performance|execution) of (?:a |the )?contract)\b/i.test(text)) return "insufficient_row_specific_terms";
   if (topic === "legal_basis" && !explicitBasis.test(text) &&
       /\b(?:legal bas(?:is|es)|lawful basis|require[^.!?]{0,80}basis|basis[^.!?]{0,80}processing)\b/i.test(text)) return "insufficient_row_specific_terms";
@@ -714,7 +730,12 @@ function hasLocalizedArticle13EvidenceContext(
     section: { body: normalized },
   }).matches
     .find((match) => match.topic === disclosureType);
+  if (disclosureType === "processing_purposes" && !canonicalMatch &&
+      /\b(?:purposes?|personal data|personal information|processing)\b/i.test(normalized)) {
+    return hasSubstantiveProcessingPurposesEvidence(normalized);
+  }
   if (canonicalMatch?.matchedLocale === "en") {
+    if (disclosureType === "processing_purposes") return hasSubstantiveProcessingPurposesEvidence(normalized);
     if (disclosureType === "recipients_or_vendor_categories") return hasSubstantiveRecipientsEvidence(normalized);
     if (disclosureType === "data_retention") return hasSubstantiveRetentionEvidence(normalized);
     if (disclosureType === "automated_decision_making_or_profiling") return hasSubstantiveAutomatedDecisionOrProfilingEvidence(normalized);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyGdprTransparencyTopics } from "./gdpr-transparency-topic-classifier";
+import { INADEQUATE_PURPOSE_WITNESSES, DATA_BOUND_PURPOSE_TABLE } from "./test-fixtures/policy-topic-witnesses";
 
 import {
   article13DisclosureRejectReason,
@@ -15,6 +16,15 @@ import {
   looksLikeArticle13TableOfContents,
   type Article13DisclosureRejectionMode,
 } from "./article13-disclosure-rejection";
+
+test("purpose table headers and consent-withdrawal references need a concrete outcome in every mode", () => {
+  for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+    for (const text of INADEQUATE_PURPOSE_WITNESSES)
+      assert.equal(article13DisclosureRejectReason(text, "processing_purposes", {mode}), "insufficient_row_specific_terms", `${mode}: ${text}`);
+    assert.equal(article13DisclosureRejectReason(DATA_BOUND_PURPOSE_TABLE, "processing_purposes", {mode}), null, mode);
+    assert.equal(article13DisclosureRejectReason("We use your personal information to process your application and answer your questions.", "processing_purposes", {mode}), null, mode);
+  }
+});
 
 test("cross-topic retained witnesses stay ineligible across producer, report and multilingual gates", () => {
   const cases = [

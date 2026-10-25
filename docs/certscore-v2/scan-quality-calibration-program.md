@@ -7,6 +7,16 @@ the latest few scans as an acceptance sample.
 The program is internal diagnostic infrastructure. It does not create production
 findings, alter customer-facing scoring, or establish legal conclusions.
 
+The GDPR transparency lane includes the October 25 policy-witness regressions:
+`packages/certscore-contracts/src/test-fixtures/policy-topic-witnesses.ts`,
+`packages/certscore-scan-core/src/policy-topic-witnesses.test.ts` and
+`apps/web/lib/scans/policy-topic-witnesses.test.ts`. The preflight
+`policy-source-witnesses` check covers them together with the existing classifier,
+validator, adapter and owned-canary source fixtures. These deterministic cases
+cover concrete purpose citations, informal German wording, source hashes and
+unowned/insufficient evidence. They initiate no public traffic and do not replace
+the adjudicated benchmark or passive ordinary-production verification.
+
 ## Ownership
 
 - **Luna owns calibration quality:** benchmark composition, lane expectations,

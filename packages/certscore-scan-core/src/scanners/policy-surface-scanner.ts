@@ -26,6 +26,9 @@ import {
   classifyLocalizedPolicyControllerScope,
   nonPolicyDocumentReason,
   hasSubstantiveProcessingPurposesEvidence,
+  hasProcessingPurposeDataContext,
+  NAMED_DATA_SERVICE_PURPOSE_PATTERN,
+  STRUCTURED_DATA_PURPOSE_PATTERN,
   type DirectVsInferred,
   type EvidenceRef,
   isSupportedPrivacyEvidenceLocale,
@@ -10770,7 +10773,18 @@ function bestSectionExcerptForProfile(
     cached = new Map();
     sectionExcerptCache.set(section, cached);
   }
-  const selected = selectSectionExcerptForProfile(section, profile, canonicalMatches);
+  let selected = selectSectionExcerptForProfile(section, profile, canonicalMatches);
+  if (profile.disclosureType === "processing_purposes" &&
+      !canonicalMatches.some(match => match.topic === profile.disclosureType && match.matchedLocale !== "en") &&
+      (!hasSubstantiveProcessingPurposesEvidence(selected) || !hasProcessingPurposeDataContext(selected))) {
+    // A purpose cell can lose its named data category during sentence
+    // compaction. Retry the same retained section, within the compact signal
+    // budget, before considering this witness unsupported. No other document
+    // or classifier label may supply the missing context.
+    const boundSection = completePolicyExcerpt(normalizeWhitespace(section.textExcerpt), 640);
+    if (hasProcessingPurposeDataContext(boundSection) &&
+        isArticle13DisclosureEvidenceUsable(boundSection, profile.disclosureType)) selected = boundSection;
+  }
   cached.set(profile.disclosureType, selected);
   return selected;
 }
@@ -10788,6 +10802,20 @@ function selectSectionExcerptForProfile(
   const structuralExcerpt = sourceHeading && !text.startsWith(section.heading)
     ? normalizeWhitespace(`${section.heading} ${text}`)
     : text;
+  if (profile.disclosureType === "processing_purposes") {
+    // Preserve the data-category/purpose pair rather than choosing a heading,
+    // a standalone purpose cell, or a nearby rights paragraph. Both anchors
+    // and the quote must come from this exact retained section.
+    for (const pattern of [STRUCTURED_DATA_PURPOSE_PATTERN, NAMED_DATA_SERVICE_PURPOSE_PATTERN]) {
+      const match = pattern.exec(text);
+      if (!match) continue;
+      const afterAnchor = match.index + match[0].length;
+      const sentenceEnd = text.indexOf(". ", afterAnchor);
+      const end = sentenceEnd < 0 ? text.length : sentenceEnd + 1;
+      const bound = completePolicyExcerpt(text.slice(match.index, end), 640);
+      if (hasProcessingPurposeDataContext(bound) && isArticle13DisclosureEvidenceUsable(bound, profile.disclosureType)) return bound;
+    }
+  }
   const preferredPatterns: Partial<Record<Article13DisclosureType, RegExp[]>> = {
     controller_contact: [
       /information on (?:the )?controller.{0,360}(?:e-?mail|email|tel(?:ephone)?|address|@[a-z0-9.-]+\.[a-z]{2,})/i,

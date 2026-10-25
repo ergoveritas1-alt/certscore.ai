@@ -70,6 +70,7 @@ type GdprTransparencySemanticRule = {
   matchedTerm: string;
   pattern?: RegExp;
   sectionOnly?: boolean;
+  rejectNegatedClause?: boolean;
   topic: GdprTransparencyTopic;
   behavioralRule?: BehavioralProfilingLocaleRule;
   variant?: "semantic_clause" | "section_semantic_clause" | "behavioral_profiling_disclosure_v1" | "behavioral_profiling_disclosure_v2";
@@ -109,6 +110,10 @@ export const AUTOMATED_DECISION_PRACTICES_PATTERN = /\b(?:we|[\p{L}][\p{L}\d'-]*
 // enough, and this does not establish significant automated decisions.
 export const BEHAVIORAL_PROFILING_DISCLOSURE_PATTERN = /\bwe use cookies to (?:track|record|analyse|analyze)\b.{0,100}\b(?:which (?:of )?our pages are visited and of interest to you|your (?:browsing|website) (?:behaviour|behavior) and interests)\b|\b(?:our|the) newsletter\b.{0,60}\b(?:contains?|uses?) tracking pixels?\b.{0,250}\b(?:recording|record)\b.{0,140}\blinks\b.{0,100}\banalysis\b.{0,300}\b(?:topics|offers|content)\b.{0,90}\b(?:match|based on) your interests\b/i;
 
+/** Named data and its concrete table/list purpose stay in one bounded source. */
+export const NAMED_DATA_SERVICE_PURPOSE_PATTERN = /\b(?:(?:contact|financial|digital) information (?:such as|including)|device data including)\b.{0,500}\bto (?:provide you with|verify your|authenticate you|analy[sz]e our|protect our|prevent fraud)\b/i;
+export const STRUCTURED_DATA_PURPOSE_PATTERN = /\bdata categories\s*:?\s+.{1,140}\bpurpose of (?:the )?processing\s*:?\s+(?:to )?(?:send|provide|protect|prevent|verify|authenticate|maintain|support)\b/i;
+
 export function findBehavioralProfilingDisclosure(value: string, locales?: readonly SupportedGdprTransparencyLocale[]) {
   const localized = findLocalizedBehavioralProfilingDisclosure(value, locales);
   if (localized) return localized;
@@ -133,6 +138,60 @@ const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] 
     topic: "automated_decision_making_or_profiling" as const,
     variant: "behavioral_profiling_disclosure_v2" as const,
   })),
+  {
+    locale: "de",
+    matchedTerm: "kommentardaten zur spam-erkennung",
+    rejectNegatedClause: true,
+    pattern: /\b(?:sammeln|erheben|verarbeiten) wir (?:die|deine|ihre|personenbezogene) daten\b.{0,320}\bum (?:die erkennung von spam zu unterstutzen|spam zu erkennen|anfragen zu beantworten)\b/i,
+    topic: "processing_purposes",
+  },
+  {
+    locale: "de",
+    matchedTerm: "e-mail-hash an einen benannten dienst",
+    rejectNegatedClause: true,
+    pattern: /\baus (?:deiner|ihrer) e-mail-adresse\b.{0,100}\b(?:zeichenfolge|hash)\b.{0,100}\b(?:dem|einem|an den)\b.{0,80}\b(?:dienst|anbieter)\b.{0,40}\b(?:ubergeben|ubermittelt|weitergegeben)\b/i,
+    topic: "recipients_or_vendor_categories",
+  },
+  {
+    locale: "en",
+    matchedTerm: "named data categories used for a concrete service purpose",
+    pattern: NAMED_DATA_SERVICE_PURPOSE_PATTERN,
+    topic: "processing_purposes",
+  },
+  {
+    locale: "en",
+    matchedTerm: "data category bound to its processing-purpose cell",
+    pattern: STRUCTURED_DATA_PURPOSE_PATTERN,
+    topic: "processing_purposes",
+  },
+  {
+    locale: "de",
+    matchedTerm: "kommentar und metadaten zeitlich unbegrenzt gespeichert",
+    rejectNegatedClause: true,
+    pattern: /\b(?:kommentar(?:e)?|personenbezogene daten|deine daten)\b.{0,100}\bzeitlich unbegrenzt gespeichert\b/i,
+    topic: "data_retention",
+  },
+  {
+    locale: "de",
+    matchedTerm: "daten nach bestimmter vorhaltezeit geloscht",
+    rejectNegatedClause: true,
+    pattern: /\bdie daten werden (?:einen monat|eine woche|ein jahr|\d+ (?:tage|wochen|monate|jahre)) vorgehalten und dann (?:unwiderruflich )?geloscht\b/i,
+    topic: "data_retention",
+  },
+  {
+    locale: "de",
+    matchedTerm: "export deiner personenbezogenen daten anfordern",
+    rejectNegatedClause: true,
+    pattern: /\b(?:kannst du|konnen sie)\b.{0,50}\b(?:einen )?export (?:deiner|ihrer) personenbezogenen daten\b.{0,60}\b(?:bei uns )?anfordern\b/i,
+    topic: "data_subject_rights",
+  },
+  {
+    locale: "de",
+    matchedTerm: "loschung deiner gespeicherten personenbezogenen daten anfordern",
+    rejectNegatedClause: true,
+    pattern: /\b(?:kannst du|konnen sie)\b.{0,50}\bdie loschung\b.{0,60}\bpersonenbezogenen daten\b.{0,100}\banfordern\b/i,
+    topic: "data_subject_rights",
+  },
   {
     locale: "de",
     matchedTerm: "benannte zwecke der verarbeitung",
@@ -2130,7 +2189,8 @@ export function classifyGdprTransparencyTopics(
       if (rule.variant === "behavioral_profiling_disclosure_v1") {
         return findEnglishBehavioralProfilingDisclosure(normalizedText) !== null;
       }
-      return rule.pattern.test(normalizedText);
+      const clause = rule.pattern.exec(normalizedText)?.[0];
+      return Boolean(clause && (!rule.rejectNegatedClause || !/\b(?:nicht|nie|niemals|kein(?:e[nmrs]?)?)\b/i.test(clause)));
     });
   const evidenceSourceText = matches.length > 0 || semanticMatches.length > 0
     ? decodedEvidenceText(sourceText)

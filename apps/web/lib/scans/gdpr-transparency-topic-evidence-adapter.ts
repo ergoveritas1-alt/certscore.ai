@@ -1,5 +1,7 @@
 import {
   hasUnsupportedGenericPrivacyContact,
+  hasProcessingPurposeDataContext,
+  hasSubstantiveProcessingPurposesEvidence,
   article13DisclosureRejectReason,
   looksLikeArticle13CodeOrConfigText,
   looksLikeArticle13PageChrome,
@@ -154,7 +156,9 @@ export function adaptGdprTransparencyTopicCandidatesForProduction(
     const candidateRejectReason = rejectReasonForCandidate(input, candidate);
     // Prefer the validated, URL-bound topic witness over a broad classifier
     // window, which may include another service's adjacent disclosure.
-    const retainedSignal = boundCanonicalRetainedSignal(input, candidate);
+    const hardSurfaceRejection = candidateRejectReason === "non_privacy_policy_surface" ||
+      candidateRejectReason === "policy_surface_not_fetched" || candidateRejectReason === "policy_text_quality_not_usable";
+    const retainedSignal = hardSurfaceRejection ? null : boundCanonicalRetainedSignal(input, candidate);
     const rejectReason = retainedSignal ? null : candidateRejectReason;
     if (rejectReason) {
       dispositions.push({
@@ -384,7 +388,7 @@ function candidateMatchesKnownCrossTopicFalsePositive(candidate: GdprTransparenc
     case "processing_purposes":
       return (
         (candidate.matchedLocale === "en" &&
-          !/\b(?:personal data|personal information|your data|your information|this information|account data|information we collect|data we collect|cookies|processing of data)\b/i.test(text)) ||
+          (!hasProcessingPurposeDataContext(text) || !hasSubstantiveProcessingPurposesEvidence(text))) ||
         (candidate.matchedLocale === "ru" &&
           /определя(?:ет|ющие) цели обработки персональных данных.{0,240}персональные данные\s*[—–-]/iu.test(text)) ||
         (candidate.matchedLocale === "it" &&
