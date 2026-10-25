@@ -484,16 +484,16 @@ export function FullSiteWorkspace({
                   ["Start interval", `${state?.effective.waitSeconds ?? requested.waitSeconds}s`],
                 ] },
                 { title: "Timing", rows: [
-                  ["Starting-page audit", duration(state?.homepageDurationMs)],
+                  ...(state?.homepageDurationMs != null ? [["Starting-page audit", duration(state.homepageDurationMs)]] : []),
                   ["Resource crawl", duration(data?.timing.crawlStartedAt && timingEnd !== null
                     ? Math.max(0, Math.floor((timingEnd - Date.parse(data.timing.crawlStartedAt)) / 1000) * 1000) : null)],
                   ["Median page", duration(s?.timing.medianPageMs)],
                   ["Slowest page", duration(s?.timing.slowestPageMs)],
                   ["Page samples", s?.timing.sampleCount ?? 0],
-                  ["Backoff", duration(state?.pauseMs)],
                 ] },
               ]}
     started={timestamp(state?.startedAt)} completed={timestamp(state?.completedAt)}
+    pagesCsvHref={`/api/scans/${encodeURIComponent(scanId)}/full-site/coverage.csv`}
   />;
   const reportStatus = running ? progressLabel : !state ? "Loading report…" : retainedAssessment ? "Starting page completed · Crawl limited" : crawlLimited ? "Crawl limited" : state?.status === "cancelled" ? "Cancelled" : state?.status === "stopped" ? "Unsuccessful" : state?.status === "completed" ? "Completed" : state?.status.replaceAll("_", " ") ?? "Loading";
   const previewMetrics = initialPending && valuesUpdating && !overview?.score && (scannedPages ?? 0) === 0

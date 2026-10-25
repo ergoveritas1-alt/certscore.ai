@@ -1,16 +1,21 @@
 import type { ReactNode } from "react";
 
 /** Shared disclosure; callers supply retained coverage and timing facts. */
-export function ReportCoverageTiming({ duration, showDurationInSummary = true, groups, started, completed }: {
+export function ReportCoverageTiming({ duration, showDurationInSummary = true, groups, started, completed, pagesCsvHref }: {
   duration: string;
   showDurationInSummary?: boolean;
   groups: { title: string; rows: (readonly [string, ReactNode] | ReactNode[])[] }[];
   started: string;
   completed: string;
+  pagesCsvHref?: string;
 }) {
   return <details className="text-xs text-zinc-600 sm:relative">
     <summary className="cursor-pointer font-medium">Coverage{showDurationInSummary ? ` · ${duration}` : null}</summary>
     <div className="absolute left-4 right-4 z-20 mt-2 max-h-[70vh] overflow-y-auto rounded-lg border border-zinc-200 bg-white p-3 shadow-lg sm:left-0 sm:right-auto sm:top-full sm:w-[min(38rem,85vw)]">
+      {pagesCsvHref ? <div className="mb-3 border-b border-zinc-200 pb-3">
+        <a href={pagesCsvHref} download className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">Download covered pages CSV</a>
+        <p className="mt-1.5 text-[11px] text-zinc-500">All discovered URLs, including unscanned pages, with capture status and reasons. In-progress scans export the current state.</p>
+      </div> : null}
       <div className="grid gap-4 sm:grid-cols-2">
         {groups.map(group => <div key={group.title}>
           <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">{group.title}</h3>
