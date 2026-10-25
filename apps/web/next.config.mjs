@@ -231,6 +231,8 @@ const nextConfig = {
     resolveAlias: {
       "@certscore/api-contracts": "../../packages/certscore-api-contracts/src/index.ts",
       "./api-v2.js": "../../packages/certscore-api-contracts/src/api-v2.ts",
+      "./posture-scores.js": "../../packages/certscore-api-contracts/src/posture-scores.ts",
+      "./posture-scores-openapi.js": "../../packages/certscore-api-contracts/src/posture-scores-openapi.ts",
       "./scan-report-summary.js": "../../packages/certscore-api-contracts/src/scan-report-summary.ts",
       "./accessibility-audit.js": "../../packages/certscore-api-contracts/src/accessibility-audit.ts",
       "./scan-report-summary-openapi.js": "../../packages/certscore-api-contracts/src/scan-report-summary-openapi.ts",
@@ -242,6 +244,7 @@ const nextConfig = {
         "../../packages/certscore-api-contracts/src/openapi-chatgpt.ts",
       "./openapi-v2.js": "../../packages/certscore-api-contracts/src/openapi-v2.ts",
       "./report-page.js": "../../packages/certscore-api-contracts/src/report-page.ts",
+      "./report-evidence-links.js": "../../packages/certscore-api-contracts/src/report-evidence-links.ts",
       "./detailed-evidence.js": "../../packages/certscore-api-contracts/src/detailed-evidence.ts",
       "./detailed-evidence-openapi.js": "../../packages/certscore-api-contracts/src/detailed-evidence-openapi.ts",
       "./report-page-openapi.js":
@@ -251,6 +254,7 @@ const nextConfig = {
       "./runtime-evidence-graph-openapi.js": "../../packages/certscore-api-contracts/src/runtime-evidence-graph-openapi.ts",
       "./gpc-bounded-observation.js":
         "../../packages/certscore-api-contracts/src/gpc-bounded-observation.ts",
+      "./property-sale-sharing.js": "../../packages/certscore-contracts/src/property-sale-sharing.ts",
       "./gpc-bounded-observation-openapi.js":
         "../../packages/certscore-api-contracts/src/gpc-bounded-observation-openapi.ts",
       "./gpc-activity-comparison.js":

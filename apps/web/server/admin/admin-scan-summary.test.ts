@@ -151,7 +151,7 @@ test("Admin Scans separates requester identity from outbound scanner egress", as
   const listSource = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
   const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
 
-  assert.match(pageSource, /\{ label: "Requester IP" \}, \{ label: "Requested" \}, \{ label: "Page" \}, \{ label: "Created via" \}/);
+  assert.match(pageSource, /\{ label: "Requester IP" \}, \{ label: "Requested" \}, \{ label: "Page" \}, \{ label: "# Pages", title: "[^"]+" \}, \{ label: "Created via" \}/);
   assert.match(pageSource, /\{ label: "Scan ID" \}, \{ label: "Scanner egress" \},/);
   assert.match(pageSource, /\{ label: "Scanner egress" \},\s+\{ label: "Open"/);
   assert.match(pageSource, /formatRequestedDateTime/);
@@ -167,7 +167,7 @@ test("Admin Scans separates requester identity from outbound scanner egress", as
 test("Admin Scans gives access outcomes room for at most two visible lines", async () => {
   const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
 
-  assert.match(pageSource, /w-\[3882px\] min-w-\[3882px\] table-fixed/);
+  assert.match(pageSource, /w-\[3957px\] min-w-\[3957px\] table-fixed/);
   assert.match(pageSource, /<ScanSizeCell matrix=\{matrix\} \/>/);
   assert.match(pageSource, /Site load \{website \? `\$\{website\.megabytes\.toFixed\(2\)\} MB` : "—"\}/);
   assert.match(pageSource, /Policy \{policy\?\.compressedKilobytes/);

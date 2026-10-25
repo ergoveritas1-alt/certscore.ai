@@ -6,8 +6,9 @@ import { ServicesSnapshotContext } from "./services-signal-snapshot";
 
 import { INVENTORY_METRIC_LABELS } from "../../lib/scans/inventory-resource-semantics";
 import { ReportCoverageTiming } from "./report-coverage-timing";
+import { focusReportEvidence } from "./evidence-jump-link";
 import { useFullSiteReportContinuity } from "./full-site-report-continuity";
-import { isCompletedFullSiteReport, readFullSiteReportSessionCache, writeFullSiteReportSessionCache } from "./full-site-report-session-cache";
+import { isCompletedFullSitePreview, readFullSitePreviewSessionCache, writeFullSitePreviewSessionCache, isCompletedFullSiteReport, readFullSiteReportSessionCache, writeFullSiteReportSessionCache } from "./full-site-report-session-cache";
 import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice";
 import type { SiteMetadataProjection } from "@certscore/contracts";
 import { useTableRowLimit } from "./use-table-row-limit";
@@ -44,7 +45,7 @@ import type { ApiRuntimeEvidenceGraphProjection, ApiV2PreConsentRuntimePreview }
 
 import { readFullSiteReportStream } from "../../lib/scans/full-site-report-stream";
 import { clearFullSiteReportCooldown, readFullSiteReportCooldown, saveFullSiteReportCooldown } from "../../lib/scans/full-site-report-cooldown";
-import type { FullSiteReportOverview, FullSiteReportResponse, FullSiteReportSupporting } from "../../server/scans/full-site-report";
+import type { FullSiteReportPreview, FullSiteReportOverview, FullSiteReportResponse, FullSiteReportSupporting } from "../../server/scans/full-site-report";
 
 type Filters = {
   kind: string;
@@ -182,12 +183,32 @@ export function FullSiteWorkspace({
     [offset, setOffset] = useState(0);
   const [data, setData] = useState<FullSiteReportResponse | null>(() => retainedReport?.scanId === scanId ? retainedReport.data : null),
     [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<FullSiteReportPreview | null>(() => retainedReport?.scanId === scanId ? retainedReport.preview : null);
+  const [detailsRequested, setDetailsRequested] = useState(() => Boolean(retainedReport?.scanId === scanId && retainedReport.data));
+  const [detailAnchor, setDetailAnchor] = useState<string | null>(null);
+  const requestDetails = (anchor?: string) => { setDetailsRequested(true); if (anchor) setDetailAnchor(anchor); };
+  useEffect(() => {
+    const followHash = () => {
+      let id: string;
+      try { id = decodeURIComponent(window.location.hash.slice(1)); } catch { return; }
+      if (id && !["report-overview", "report-top-issues", "page-event-timeline"].includes(id)) requestDetails(id);
+    };
+    followHash();
+    window.addEventListener("hashchange", followHash);
+    return () => window.removeEventListener("hashchange", followHash);
+  }, [scanId]);
+  useEffect(() => {
+    if (!data || !detailAnchor) return;
+    focusReportEvidence(detailAnchor);
+    setDetailAnchor(null);
+  }, [data, detailAnchor]);
   const [partialOverview, setPartialOverview] = useState<FullSiteReportOverview | null>(null);
   const [partialSupporting, setPartialSupporting] = useState<FullSiteReportSupporting | null>(null);
   const [reportPauseUntil, setReportPauseUntil] = useState(0);
   const reportPauseRef = useRef(0);
   const reportPauseScanRef = useRef(scanId);
-  const overview = data ?? partialOverview;
+  const overview = data ?? partialOverview ?? preview;
+  const inventoryOverview = data?.networkOverview ?? preview?.networkOverview;
   const [detailPage, setDetailPage] = useState(""),
     [resource, setResource] = useState(""),
     [detailOffset, setDetailOffset] = useState(0);
@@ -202,14 +223,21 @@ export function FullSiteWorkspace({
     if (!retainedReport || retainedReport.scanId !== scanId || retainedReport.data) return;
     let cached: FullSiteReportResponse | null = null;
     try {
+      const saved = readFullSitePreviewSessionCache(window.sessionStorage, scanId, retainedReport.cacheScope);
+      if (saved) { retainedReport.preview = saved; setPreview(saved); }
       cached = readFullSiteReportSessionCache(window.sessionStorage, scanId, retainedReport.cacheScope);
     } catch { /* Browser storage is optional; fresh report reads remain authoritative. */ }
     if (cached) {
       retainedReport.data = cached;
       setData(previous => previous ?? cached);
+      setDetailsRequested(true);
     }
   }, [scanId, retainedReport]);
   useEffect(() => {
+    if (!detailsRequested && !initialPending && !refreshVersion && retainedReport?.preview && isCompletedFullSitePreview(retainedReport.preview)) {
+      setPreview(retainedReport.preview); setIsFetching(false); setError(null); terminal.current = true;
+      return;
+    }
     if (!initialPending && filters === initialFilters && !offset && !detailPage && !refreshVersion &&
       retainedReport?.scanId === scanId && retainedReport.data && isCompletedFullSiteReport(retainedReport.data)) {
       terminal.current = true;
@@ -270,7 +298,7 @@ export function FullSiteWorkspace({
         });
         for (const [key, value] of [...params]) if (!value) params.delete(key);
         const response = await fetch(
-          `/api/scans/${scanId}/full-site?${params}`,
+          `/api/scans/${scanId}/full-site?${detailsRequested ? params : "view=overview"}`,
           { cache: "no-store", signal: requestSignal },
         );
         if (!response.ok) {
@@ -284,36 +312,46 @@ export function FullSiteWorkspace({
             response.status === 429 ? "Report read cooldown" : "Inventory updates are temporarily unavailable.",
           );
         }
-        const next = response.headers.get("content-type")?.includes("application/x-ndjson")
-          ? await readFullSiteReportStream(response, nextOverview => {
-              if (!controller.signal.aborted) setPartialOverview(nextOverview);
-            }, supporting => {
-              if (!controller.signal.aborted) setPartialSupporting(supporting);
-            })
-          : (await response.json()) as FullSiteReportResponse;
-        if (controller.signal.aborted) return;
+        if (!detailsRequested) {
+          const next = await response.json() as FullSiteReportPreview;
+          if (controller.signal.aborted) return;
+          setPreview(next);
+          if (retainedReport?.scanId === scanId) {
+            retainedReport.preview = next;
+            try { writeFullSitePreviewSessionCache(window.sessionStorage, scanId, retainedReport.cacheScope, next); } catch { /* Storage is optional. */ }
+          }
+          trackFullSiteCompletion(scanId, next.summary, homepageUrl);
+          terminal.current = !["waiting_homepage", "running"].includes(next.summary.state.status) && next.summary.counts.active === 0;
+        } else {
+          const next = response.headers.get("content-type")?.includes("application/x-ndjson")
+            ? await readFullSiteReportStream(response, nextOverview => {
+                if (!controller.signal.aborted) setPartialOverview(nextOverview);
+              }, supporting => {
+                if (!controller.signal.aborted) setPartialSupporting(supporting);
+              })
+            : (await response.json()) as FullSiteReportResponse;
+          if (controller.signal.aborted) return;
+          // Bind completion to this response and request, not stale component state after navigation.
+          trackFullSiteCompletion(scanId, next.summary, homepageUrl);
+          if (retainedReport?.scanId === scanId && filters === initialFilters && !offset && !detailPage) {
+            retainedReport.data = next;
+            try {
+              writeFullSiteReportSessionCache(window.sessionStorage, scanId, retainedReport.cacheScope, next);
+            } catch { /* Browser storage must not interrupt a successful report read. */ }
+          }
+          setData(previous => offset && previous ? {
+            ...next,
+            resources: { ...next.resources, rows: [...new Map([...previous.resources.rows, ...next.resources.rows].map(row => [row.key, row])).values()] },
+            pages: { ...next.pages, rows: [...new Map([...previous.pages.rows, ...next.pages.rows].map(row => [row.id, row])).values()] },
+          } : next);
+          terminal.current =
+            !["waiting_homepage", "running"].includes(
+              next.summary.state.status,
+            ) && next.summary.counts.active === 0;
+        }
         reportPauseRef.current = 0;
         clearFullSiteReportCooldown(cooldownStorage, scanId);
-        setReportPauseUntil(0);
-        // Bind completion to this response and request, not stale component state after navigation.
-        trackFullSiteCompletion(scanId, next.summary, homepageUrl);
-        if (retainedReport?.scanId === scanId && filters === initialFilters && !offset && !detailPage) {
-          retainedReport.data = next;
-          try {
-            writeFullSiteReportSessionCache(window.sessionStorage, scanId, retainedReport.cacheScope, next);
-          } catch { /* Browser storage must not interrupt a successful report read. */ }
-        }
-        setData(previous => offset && previous ? {
-          ...next,
-          resources: { ...next.resources, rows: [...new Map([...previous.resources.rows, ...next.resources.rows].map(row => [row.key, row])).values()] },
-          pages: { ...next.pages, rows: [...new Map([...previous.pages.rows, ...next.pages.rows].map(row => [row.id, row])).values()] },
-        } : next);
-        setError(null);
-        failures = 0;
-        terminal.current =
-          !["waiting_homepage", "running"].includes(
-            next.summary.state.status,
-          ) && next.summary.counts.active === 0;
+        setReportPauseUntil(0); setError(null); failures = 0;
       } catch (e) {
         if (rateLimited) {
           failures = 0;
@@ -350,7 +388,7 @@ export function FullSiteWorkspace({
       window.removeEventListener("pageshow", resume);
       if (timer) clearTimeout(timer);
     };
-  }, [scanId, filters, offset, detailPage, resource, detailOffset, refreshVersion, retainedReport, initialPending]);
+  }, [scanId, detailsRequested, filters, offset, detailPage, resource, detailOffset, refreshVersion, retainedReport, initialPending]);
   async function stopCrawl() {
     if (stopInFlight.current) return;
     stopInFlight.current = true;
@@ -434,7 +472,9 @@ export function FullSiteWorkspace({
   const finalizationDelayed = finalizing && fullSiteFinalizationDelayed(overview?.finalizationStartedAt, now);
   const stoppingWorkers = state?.status === "cancelled" && running;
   const progressLabel = stoppingWorkers ? "Stopping" : finalizationDelayed ? "Finalization delayed" : finalizing ? "Finalizing results" : "In progress";
-  const failedPages = data?.pageChoices.filter(page => ["partial", "failed", "blocked"].includes(page.status)) ?? [];
+  const failedPages = data?.pageChoices.filter(page => ["partial", "failed", "blocked"].includes(page.status)) ?? preview?.failedPages ?? [];
+  const coverage = data?.coverage ?? preview?.coverage;
+  const reportTiming = data?.timing ?? preview?.timing;
   const outcomeText = counts ? `${counts.completed} succeeded · ${counts.partial} partial · ${counts.blockedFailed} failed or blocked` : "";
   const timingEnd = state?.completedAt ? Date.parse(state.completedAt) : now;
   const shortPage = (url: string) => url.length > 30 ? `${url.slice(0, 29)}…` : url;
@@ -469,14 +509,14 @@ export function FullSiteWorkspace({
   const timing = <ReportCoverageTiming
     duration={scanDuration}
     showDurationInSummary={initialPending}
-    groups={[{ title: "Coverage", rows: [["Pages discovered", data?.coverage?.discovered ?? "Loading…"],
-                  ["Robots-allowed", data?.coverage ? data.coverage.unknown === data.coverage.discovered - data.coverage.outOfScope && data.coverage.unknown > 0 ? "Not verified" : data.coverage.allowed : "Loading…"],
-                  ["Robots-blocked", data?.coverage ? data.coverage.unknown === data.coverage.discovered - data.coverage.outOfScope && data.coverage.unknown > 0 ? "Not verified" : data.coverage.blocked : "Loading…"],
-                  ...(data?.coverage?.unknown ? [["Robots not verified", data.coverage.unknown]] : []),
-                  ...(data?.coverage?.outOfScope ? [["Outside crawl scope", data.coverage.outOfScope]] : []),
+    groups={[{ title: "Coverage", rows: [["Pages discovered", coverage?.discovered ?? "Loading…"],
+                  ["Robots-allowed", coverage ? coverage.unknown === coverage.discovered - coverage.outOfScope && coverage.unknown > 0 ? "Not verified" : coverage.allowed : "Loading…"],
+                  ["Robots-blocked", coverage ? coverage.unknown === coverage.discovered - coverage.outOfScope && coverage.unknown > 0 ? "Not verified" : coverage.blocked : "Loading…"],
+                  ...(coverage?.unknown ? [["Robots not verified", coverage.unknown]] : []),
+                  ...(coverage?.outOfScope ? [["Outside crawl scope", coverage.outOfScope]] : []),
                   ["Page limit", requested.maxPages],
                   ...(sitemapLimited ? [["Sitemap discovery", "Limited — using discovered page links"]] : []),
-                  ["Pages with capture limitations", data ? failedPages.length : "Loading…"],
+                  ["Pages with capture limitations", data || preview ? failedPages.length : "Loading…"],
                   ["Excluded links", counts?.excluded ?? 0],
                   ["Stop reason", state?.stopReason === "max_pages" ? "Page limit reached" : state?.stopReason?.replaceAll("_", " ") ?? (running ? "In progress" : "Not stopped")],
                   ["Worker limit", state?.effective.concurrency ?? requested.concurrency],
@@ -485,8 +525,8 @@ export function FullSiteWorkspace({
                 ] },
                 { title: "Timing", rows: [
                   ...(state?.homepageDurationMs != null ? [["Starting-page audit", duration(state.homepageDurationMs)]] : []),
-                  ["Resource crawl", duration(data?.timing.crawlStartedAt && timingEnd !== null
-                    ? Math.max(0, Math.floor((timingEnd - Date.parse(data.timing.crawlStartedAt)) / 1000) * 1000) : null)],
+                  ["Resource crawl", duration(reportTiming?.crawlStartedAt && timingEnd !== null
+                    ? Math.max(0, Math.floor((timingEnd - Date.parse(reportTiming.crawlStartedAt)) / 1000) * 1000) : null)],
                   ["Median page", duration(s?.timing.medianPageMs)],
                   ["Slowest page", duration(s?.timing.slowestPageMs)],
                   ["Page samples", s?.timing.sampleCount ?? 0],
@@ -501,11 +541,13 @@ export function FullSiteWorkspace({
   // The overview counts observations; final inventory cards count distinct resources.
   // Wait for the canonical inventory projection rather than switching count semantics.
   const inventoryMetrics = previewMetrics ?? [
-          { label: INVENTORY_METRIC_LABELS.storage, value: data ? data.summary.totals.cookies + data.summary.totals.storage : null, group: "cookies" },
-          { label: INVENTORY_METRIC_LABELS.requests, value: data?.summary.totals.requestEvents, group: "requests" },
-          { label: INVENTORY_METRIC_LABELS.frames, value: data?.summary.totals.embedInstances, group: "embeds" },
-        ].map(metric => ({ ...metric, counts: data?.priorityTotals?.[metric.group], overview: metric.group === "requests" ? data?.networkOverview : undefined }));
-  const inventorySummary = <ReportInventorySummary formCountStatus={formCountStatus((data?.collectionSurfaces?.rows.length ?? 0) + afterAcceptForms.length, !data?.collectionSurfaces || Boolean(data.collectionSurfaces.limitedPages || data.collectionSurfaces.pagesWithoutInventory || afterAcceptFormsLimited))} forms={[...(data?.collectionSurfaces?.rows ?? []), ...afterAcceptForms]} onViewEvidence={() => flushSync(() => setTab("resources"))} formCount={data?.collectionSurfaces?.rows.length} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={overview?.score?.siteIntegrity} />;
+          { label: INVENTORY_METRIC_LABELS.storage, value: inventoryOverview?.distinctStorage, group: "cookies" },
+          { label: INVENTORY_METRIC_LABELS.requests, value: inventoryOverview?.distinctResources, group: "requests" },
+          { label: INVENTORY_METRIC_LABELS.frames, value: inventoryOverview?.distinctEmbeds, group: "embeds" },
+        ].map(metric => ({ ...metric, counts: data?.priorityTotals?.[metric.group], overview: metric.group === "requests" ? inventoryOverview : undefined }));
+  const formCount = data?.collectionSurfaces?.rows.length ?? preview?.forms.count;
+  const formsLimited = data ? Boolean(data.collectionSurfaces.limitedPages || data.collectionSurfaces.pagesWithoutInventory) : preview?.forms.limited ?? true;
+  const inventorySummary = <ReportInventorySummary formCountStatus={formCountStatus((formCount ?? 0) + afterAcceptForms.length, formsLimited || afterAcceptFormsLimited)} forms={[...(data?.collectionSurfaces?.rows ?? []), ...afterAcceptForms]} onLoadDetails={() => requestDetails()} detailsLoading={!data && detailsRequested} onViewEvidence={anchor => { flushSync(() => { setTab("resources"); requestDetails(anchor ?? "report-forms"); }); }} formCount={formCount} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={overview?.score?.siteIntegrity} hiddenLinkSummary={preview?.hiddenLinks} hiddenLinkDestinations={preview?.hiddenLinkDestinations} />;
   const homePriorities = homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }));
   const cachedPriorities = overview?.score?.priorityReview;
   const priorityFindings = cachedPriorities ? [...cachedPriorities, ...homePriorities.filter(row => (row.id.startsWith("california_privacy_choice_") || row.id === "california_sale_sharing_opt_out_activity" || row.id === "california_notice_at_collection_destination_error" || row.id === "california_rights_information_destination_error") && !cachedPriorities.some(existing => existing.id === row.id))] : homePriorities;
@@ -514,10 +556,15 @@ export function FullSiteWorkspace({
     <FullSiteRegionContext.Provider value={state?.region ?? initialNotice?.region}>
     <FullSiteScanDurationContext.Provider value={scanDuration}>
     <FullSiteTimingContext.Provider value={timing}>
-    <ServicesSnapshotContext.Provider value={{ overview: data?.networkOverview, navigate: () => { setInventoryView("services"); setFilters(initialFilters); setOffset(0); document.getElementById("site-resource-table")?.scrollIntoView({ behavior: "smooth", block: "start" }); } }}>
+    <ServicesSnapshotContext.Provider value={{ overview: inventoryOverview, navigate: () => { requestDetails("site-resource-inventory"); setInventoryView("services"); setFilters(initialFilters); setOffset(0); document.getElementById("site-resource-table")?.scrollIntoView({ behavior: "smooth", block: "start" }); } }}>
     <div
       className="mx-auto max-w-[1500px] px-4 py-4 text-zinc-900 sm:px-6"
       data-full-site-report
+      onClickCapture={event => {
+        const link = (event.target as HTMLElement).closest?.("a[href^='#']");
+        const id = link?.getAttribute("href")?.slice(1);
+        if (id && !["report-overview", "report-top-issues", "page-event-timeline"].includes(id)) requestDetails(id);
+      }}
     >
       <header className="pb-1">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -580,7 +627,7 @@ export function FullSiteWorkspace({
             </p>
           </div>
         ) : null}
-        {partialOverview && !data && !error ? <p role="status" className="text-sm text-slate-600">Loading supporting details…</p> : null}
+        {detailsRequested && overview && !data && !error ? <p role="status" className="text-sm text-slate-600">Loading supporting details…</p> : null}
         {reportPauseUntil > Date.now() ? <p role="status" className="text-sm text-slate-600">Report updates are paused by a temporary read limit and will resume automatically.{running ? " The scan itself continues." : ""}</p> : null}
         {error ? (
           <p role="status" className="text-sm text-amber-800">
@@ -595,6 +642,10 @@ export function FullSiteWorkspace({
           {!(initialPending && !overview?.score) ? <SitePriorityReview californiaAssessment={californiaAssessment} reviewFocus={reviewFocus} scannedPages={scannedPages} findings={priorityFindings} pending={!overview || valuesUpdating} sitewideAvailable={Boolean(overview?.score)} /> : null}
           {homepageTimeline}
           </> : null}
+          {!detailsRequested && !data ? <section id="site-resource-inventory" className="my-5 rounded-xl border border-zinc-200 bg-white p-5">
+            <h2 className="text-xl font-semibold">Supporting details</h2>
+            <button type="button" className={`${button} mt-3`} onClick={() => requestDetails()}>View services, resources & evidence</button>
+          </section> : <>
           <section id="site-resource-inventory" className="my-5 min-w-0 rounded-xl border border-zinc-200 bg-white p-4 lg:p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div>{tab !== "pages" ? <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Pre-consent supporting evidence</p> : null}<h2 className="text-xl font-semibold tracking-tight text-zinc-950">{tab === "pages" ? "Page observations and coverage" : "Services & Resources"}</h2></div>{tab !== "pages" ? <div className="flex shrink-0 gap-1" role="group" aria-label="Inventory view">{(["services", "resources"] as const).map(view => <button key={view} type="button" aria-pressed={inventoryView === view} className={`rounded-md px-2.5 py-1 text-xs font-medium capitalize transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${inventoryView === view ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`} onClick={() => { setInventoryView(view); setOffset(0); }}>{view}</button>)}</div> : null}</div>
 
@@ -719,6 +770,7 @@ export function FullSiteWorkspace({
           {tab === "resources" ? <CollectionSurfacesTable afterAcceptLimited={afterAcceptFormsLimited} rows={[...(data?.collectionSurfaces?.rows ?? partialSupporting?.collectionSurfaces.rows ?? []), ...afterAcceptForms]} loading={!data && !partialSupporting} scanning={valuesUpdating} pagesWithoutInventory={data?.collectionSurfaces?.pagesWithoutInventory ?? partialSupporting?.collectionSurfaces.pagesWithoutInventory} limitedPages={data?.collectionSurfaces?.limitedPages ?? partialSupporting?.collectionSurfaces.limitedPages} /> : null}
           {tab === "resources" ? formDestinationEvidence : null}
           {tab === "resources" ? <SitewideEvidenceContext.Provider value={overview?.score?.evidencePages ? { pages: overview.score.evidencePages, limitedPages: overview.score.limitedPages } : null}><SiteIntegritySiteContext.Provider value={overview?.score?.siteIntegrity ?? null}>{evidenceDirectory}</SiteIntegritySiteContext.Provider></SitewideEvidenceContext.Provider> : null}
+          </>}
           {detailPage ? (
             <section
               ref={detailRef}

@@ -133,17 +133,25 @@ export async function claimFullSitePage(input: {
   attemptId: string;
   token: string;
   region: string;
+  /** The worker's original absolute HTTP deadline; never extend it after queuing. */
+  claimDeadlineAtMs?: number;
 }) {
   if (!fullSiteInternalEnabled()) return null;
+  if (input.claimDeadlineAtMs !== undefined && !Number.isSafeInteger(input.claimDeadlineAtMs)) return null;
+  const startedAt = performance.now();
+  let transactionReadyMs = 0, siteLockMs = 0, expired = false;
   return withWriteTransaction(async (client) => {
+    transactionReadyMs = performance.now() - startedAt;
     const initial = (
-      await client.query<FullSiteCrawlRow>(
-        `select c.* from full_site_crawls c join full_site_pages p on p.scan_id=c.scan_id where p.id=$1`,
+      await client.query<Pick<FullSiteCrawlRow, "scan_id" | "site_keys">>(
+        `select c.scan_id,c.site_keys from full_site_crawls c join full_site_pages p on p.scan_id=c.scan_id where p.id=$1`,
         [input.pageId],
       )
     ).rows[0];
     if (!initial) return null;
+    const lockingAt = performance.now();
     await lockFullSiteKeys(client, initial.site_keys);
+    siteLockMs = performance.now() - lockingAt;
     const c = (
       await client.query<FullSiteCrawlRow>(
         `select * from full_site_crawls where scan_id=$1 for update`,
@@ -198,6 +206,22 @@ export async function claimFullSitePage(input: {
       await stopCrawl(client, c.scan_id, "wall_clock_limit");
       return null;
     }
+    const deadlineExpired = () => input.claimDeadlineAtMs !== undefined && Date.now() >= input.claimDeadlineAtMs;
+    async function expireClaim() {
+      expired = true;
+      // Count the authenticated failed start against the existing retry limit.
+      // Do not create a browser observation or wait for a phantom worker lease.
+      await client.query(`insert into full_site_attempts(id,page_id,ordinal,status,started_at,completed_at,limitation)
+        values($1,$2,$3,'failed',now(),clock_timestamp(),'claim_deadline_expired')
+        on conflict(id) do update set status='failed',completed_at=clock_timestamp(),limitation='claim_deadline_expired'`,
+      [input.attemptId, p.id, p.attempt_count + 1]);
+      await client.query(`update full_site_pages set status=$2,attempt_count=$3,limitation='claim_deadline_expired',
+        completed_at=clock_timestamp(),token_hash=null,dispatch_lease_until=null,worker_lease_until=null,
+        next_attempt_at=clock_timestamp()+interval '30 seconds' where id=$1`,
+      [p.id, p.attempt_count < c.policy_json.maxRetries ? "queued" : "failed", p.attempt_count + 1]);
+      return null;
+    }
+    if (deadlineExpired()) return expireClaim();
     const active = (
       await client.query<{
         scan_id: string;
@@ -259,6 +283,7 @@ export async function claimFullSitePage(input: {
       );
       return null;
     }
+    if (deadlineExpired()) return expireClaim();
     await client.query(
       `update full_site_safety set last_start_at=now() where site_key=any($1::text[])`,
       [c.site_keys],
@@ -275,6 +300,7 @@ export async function claimFullSitePage(input: {
       `update full_site_crawls set peak_workers=greatest(peak_workers,$2),crawl_started_at=coalesce(crawl_started_at,now()) where scan_id=$1`,
       [c.scan_id, Number(slots.own) + 1],
     );
+    if (deadlineExpired()) return expireClaim();
     return {
       scanId: c.scan_id,
       pageId: p.id,
@@ -288,6 +314,11 @@ export async function claimFullSitePage(input: {
       bucket: c.bucket,
       artifactPrefix: c.artifact_prefix,
     };
+  }).finally(() => {
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    if (elapsedMs >= 1000 || expired) console.info(JSON.stringify({ event: "full_site.claim_timing",
+      pageId: input.pageId, attemptId: input.attemptId, elapsedMs,
+      transactionReadyMs: Math.round(transactionReadyMs), siteLockMs: Math.round(siteLockMs), expired }));
   });
 }
 async function stopCrawl(client: PoolClient, scanId: string, reason: string) {

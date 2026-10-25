@@ -18,6 +18,7 @@ test("failed pages explain the retained main-document status without changing th
 
 test("worker failures stay distinct from website responses", () => {
   assert.equal(describeFullSitePageFailure({ status: "failed", limitation: "worker_lease_expired" }), "Worker result not received before deadline; capture unavailable");
+  assert.equal(describeFullSitePageFailure({ status: "failed", limitation: "claim_deadline_expired" }), "Worker start was not acknowledged before deadline; capture unavailable");
   assert.equal(describeFullSitePageFailure({ status: "failed", limitation: "dispatch_admission_timeout" }), "Worker did not start before deadline; capture unavailable");
   assert.equal(describeFullSitePageFailure({ status: "failed", limitation: "worker_lease_expired", httpStatus: 403 }), "HTTP 403");
 });

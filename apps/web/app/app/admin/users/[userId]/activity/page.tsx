@@ -2,15 +2,17 @@ import { UserActivityEventDetails } from "../../../../../../components/admin/use
 import { activityPageLink } from "../../../../../../lib/product-analytics/activity-page-context";
 import { activityActionLabel, activitySourceLabel } from "../../../../../../lib/admin/user-activity-presentation";
 import Link from "next/link";
+import { Suspense } from "react";
+import { AdminDataBoundary, AdminDataLoading } from "../../../../../../components/admin/admin-data-panel";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../../../components/ui/pagination-controls";
 import { formatAdminCompactDateTime, formatAdminDateTime } from "../../../../../../lib/admin/date-time";
-import { loadAdminUserActivity } from "../../../../../../server/admin/list-admin-user-activity";
+import { loadAdminUserActivity, type AdminUserActivityTab } from "../../../../../../server/admin/list-admin-user-activity";
 
 type AdminUserActivityPageProps = {
   params: Promise<{ userId: string }>;
-  searchParams?: Promise<{ page?: string; perPage?: string; eventPage?: string; eventPerPage?: string }>;
+  searchParams?: Promise<{ tab?: string; page?: string; perPage?: string; eventPage?: string; eventPerPage?: string }>;
 };
 
 function formatStatus(status: string) {
@@ -21,136 +23,167 @@ function formatChannels(channels: string[]) {
   return channels.length > 0 ? channels.join(", ") : "—";
 }
 
-export default async function AdminUserActivityPage({ params, searchParams }: AdminUserActivityPageProps) {
-  const { userId } = await params;
-  const resolvedSearchParams = searchParams ? await searchParams : {};
-  const eventPage = normalizePage(resolvedSearchParams.eventPage);
+type ActivitySearchParams = Awaited<NonNullable<AdminUserActivityPageProps["searchParams"]>>;
+
+async function ActivityContent({ userId, resolvedSearchParams, tab }: {
+  userId: string;
+  resolvedSearchParams: ActivitySearchParams;
+  tab: AdminUserActivityTab;
+}) {
+  const requestedEventPage = normalizePage(resolvedSearchParams.eventPage);
   const eventPageSize = normalizePageSize(resolvedSearchParams.eventPerPage, 20);
   const pageSize = normalizePageSize(resolvedSearchParams.perPage);
   const requestedPage = normalizePage(resolvedSearchParams.page);
-  const requestedActivity = await loadAdminUserActivity(userId, pageSize, (requestedPage - 1) * pageSize, eventPageSize, (eventPage - 1) * eventPageSize);
-
-  if (!requestedActivity) {
-    notFound();
-  }
-
-  const pageCount = Math.max(1, Math.ceil(requestedActivity.metrics.associatedScans / pageSize));
-  const page = Math.min(requestedPage, pageCount);
-  const activity = page === requestedPage
-    ? requestedActivity
-    : await loadAdminUserActivity(userId, pageSize, (page - 1) * pageSize, eventPageSize, (eventPage - 1) * eventPageSize);
-
-  if (!activity) {
-    notFound();
-  }
+  const activity = await loadAdminUserActivity(userId, pageSize, (requestedPage - 1) * pageSize, eventPageSize, (requestedEventPage - 1) * eventPageSize, tab);
+  if (!activity) notFound();
+  const page = activity.tab === "scans" ? activity.page : requestedPage;
+  const eventPage = activity.tab === "events" ? activity.page : requestedEventPage;
+  const pageCount = activity.tab === "scans" ? Math.max(1, Math.ceil(activity.metrics.associatedScans / pageSize)) : 1;
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Link className="text-sm font-medium text-sky-700 hover:text-sky-900" href="/app/admin/users?dir=desc&sort=lastLogin">← Back to Users</Link>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">User activity</h2>
-          <p className="mt-1 text-sm text-slate-600">{activity.user.email}{activity.user.organizationName ? ` · ${activity.user.organizationName}` : " · Unassigned"}</p>
-        </div>
-      </div>
+      <p className="text-sm text-slate-600">{activity.user.email}{activity.user.organizationName ? ` · ${activity.user.organizationName}` : " · Unassigned"}</p>
 
-      <Card className="border-slate-200 bg-white">
-        <CardContent className="p-0">
-          <div className="grid divide-y divide-slate-200 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
-            <section className="min-w-0 p-4" aria-labelledby="scan-status-summary">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-slate-900" id="scan-status-summary">Scan status</h3>
-                <p className="text-right text-xs text-slate-500">{activity.metrics.totalScans} submitted · {activity.metrics.associatedScans} associated · {activity.metrics.scanRequestCount} requested<br />{activity.metrics.lastScanRequestedAt ? `Last ${formatAdminCompactDateTime(activity.metrics.lastScanRequestedAt)}` : "No requests"}</p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-xs">
-                  <thead className="border-b border-slate-200 uppercase tracking-wide text-slate-500"><tr><th className="pb-1.5 pr-3">Status</th><th className="pb-1.5 text-right">Count</th></tr></thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {activity.scanStatusCounts.map((item) => <tr key={item.status}><td className="py-1.5 pr-3 text-slate-700">{formatStatus(item.status)}</td><td className="py-1.5 text-right font-medium tabular-nums text-slate-900">{item.count}</td></tr>)}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-            <section className="min-w-0 p-4" aria-labelledby="api-route-summary">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-slate-900" id="api-route-summary">API activity routes</h3>
-                <p className="text-xs text-slate-500">Pulse · SDK · MCP · Other</p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-xs">
-                  <thead className="border-b border-slate-200 uppercase tracking-wide text-slate-500"><tr><th className="pb-1.5 pr-3">Route</th><th className="pb-1.5 pr-3 text-right">Requests</th><th className="pb-1.5 pr-3">Channels</th><th className="pb-1.5">Last request</th></tr></thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {activity.apiRoutes.map((item) => <tr key={item.route}><td className="py-1.5 pr-3 font-medium text-slate-700">{item.route}</td><td className="py-1.5 pr-3 text-right tabular-nums text-slate-900">{item.count}</td><td className="py-1.5 pr-3 text-slate-600">{formatChannels(item.channels)}</td><td className="whitespace-nowrap py-1.5 text-slate-600">{item.lastRequestedAt ? formatAdminCompactDateTime(item.lastRequestedAt) : "—"}</td></tr>)}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        </CardContent>
-      </Card>
+      {activity.tab === "scans" ? (
+        <Card className="border-slate-200 bg-white">
+          <CardContent className="p-0">
+            <div className="grid divide-y divide-slate-200 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+              <section className="min-w-0 p-4" aria-labelledby="scan-status-summary">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-slate-900" id="scan-status-summary">Scan status</h3>
+                  <p className="text-right text-xs text-slate-500">{activity.metrics.totalScans} submitted · {activity.metrics.associatedScans} associated · {activity.metrics.scanRequestCount} requested<br />{activity.metrics.lastScanRequestedAt ? `Last ${formatAdminCompactDateTime(activity.metrics.lastScanRequestedAt)}` : "No requests"}</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-xs">
+                    <thead className="border-b border-slate-200 uppercase tracking-wide text-slate-500"><tr><th className="pb-1.5 pr-3">Status</th><th className="pb-1.5 text-right">Count</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {activity.scanStatusCounts.map((item) => <tr key={item.status}><td className="py-1.5 pr-3 text-slate-700">{formatStatus(item.status)}</td><td className="py-1.5 text-right font-medium tabular-nums text-slate-900">{item.count}</td></tr>)}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+              <section className="min-w-0 p-4" aria-labelledby="api-route-summary">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-slate-900" id="api-route-summary">API activity routes</h3>
+                  <p className="text-xs text-slate-500">Pulse · SDK · MCP · Other</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-xs">
+                    <thead className="border-b border-slate-200 uppercase tracking-wide text-slate-500"><tr><th className="pb-1.5 pr-3">Route</th><th className="pb-1.5 pr-3 text-right">Requests</th><th className="pb-1.5 pr-3">Channels</th><th className="pb-1.5">Last request</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {activity.apiRoutes.map((item) => <tr key={item.route}><td className="py-1.5 pr-3 font-medium text-slate-700">{item.route}</td><td className="py-1.5 pr-3 text-right tabular-nums text-slate-900">{item.count}</td><td className="py-1.5 pr-3 text-slate-600">{formatChannels(item.channels)}</td><td className="whitespace-nowrap py-1.5 text-slate-600">{item.lastRequestedAt ? formatAdminCompactDateTime(item.lastRequestedAt) : "—"}</td></tr>)}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </CardContent>
+        </Card>
+
+      ) : null}
 
       <Card className="border-slate-200 bg-white">
         <CardHeader><CardTitle>Account details</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 text-sm sm:grid-cols-4">
+        <CardContent className={`grid gap-3 text-sm ${activity.tab === "scans" ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
           <div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Name</p><p className="mt-1 text-slate-900">{activity.user.fullName ?? "—"}</p></div>
           <div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Created</p><p className="mt-1 text-slate-900">{formatAdminDateTime(activity.user.createdAt)}</p></div>
           <div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Last login</p><p className="mt-1 text-slate-900">{formatAdminDateTime(activity.user.lastLoginAt)}</p></div>
-          <div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Last scan requested</p><p className="mt-1 text-slate-900">{formatAdminDateTime(activity.metrics.lastScanRequestedAt)}</p></div>
+          {activity.tab === "scans" ? <div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Last scan requested</p><p className="mt-1 text-slate-900">{formatAdminDateTime(activity.metrics.lastScanRequestedAt)}</p></div> : null}
         </CardContent>
       </Card>
 
-      <Card className="border-slate-200 bg-white">
-        <CardHeader><CardTitle>Logged-in activity</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-slate-600">Recorded activity from the last 90 days. Browser events report interactions; server events record requests. Older anonymous events cannot be attributed retroactively.</p>
-          <PaginationControls basePath={`/app/admin/users/${userId}/activity`} itemLabel="events"
-            page={eventPage} pageCount={Math.max(1, Math.ceil(activity.eventCount / eventPageSize))}
-            pageSize={eventPageSize} pageParamName="eventPage" perPageParamName="eventPerPage"
-            searchParams={{ page: String(page), perPage: String(pageSize) }}
-            totalCount={activity.eventCount} visibleCount={activity.events.length} />
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead><tr><th className="p-2">Time</th><th className="p-2">Action</th><th className="p-2">Page / control</th><th className="p-2">Scan</th><th className="p-2">Outcome</th><th className="p-2">Source</th><th className="p-2">Details</th></tr></thead>
-              <tbody>{activity.events.map((event) => <tr className="border-t border-slate-100" key={event.event_id}>
-                <td className="whitespace-nowrap p-2">{formatAdminDateTime(event.occurred_at)}</td>
-                <td className="p-2">{activityActionLabel(event)}</td>
-                <td className="p-2">{activityPageLink(event) ? <Link prefetch={false} className="break-all text-sky-700 underline" href={activityPageLink(event)!}><code>{activityPageLink(event)}</code></Link> : <code>{event.normalized_route}</code>}<p className="text-xs text-slate-500">{event.element_id ?? event.feature}</p></td>
-                <td className="p-2">{event.scan_id ? <Link className="text-sky-700" href={`/app/scans/${event.scan_id}`}>{event.hostname ?? "Scan"}<span className="block font-mono text-xs">{event.scan_id}</span></Link> : "—"}</td>
-                <td className="p-2">{formatStatus(event.outcome)}</td>
-                <td className="p-2">{activitySourceLabel(event)}</td>
-                <td className="p-2"><UserActivityEventDetails event={event} /></td>
-              </tr>)}</tbody>
-            </table>
-            {!activity.events.length && <p className="py-3 text-sm text-slate-600">No attributed events in this period.</p>}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-slate-200 bg-white">
-        <CardHeader><CardTitle>Scan activity</CardTitle></CardHeader>
-        <CardContent>
-          <PaginationControls
-            basePath={`/app/admin/users/${userId}/activity`}
-            searchParams={{ eventPage: String(eventPage), eventPerPage: String(eventPageSize) }}
-            itemLabel="scan activity items"
-            page={page}
-            pageCount={pageCount}
-            pageSize={pageSize}
-            totalCount={activity.metrics.associatedScans}
-            visibleCount={activity.scans.length}
-          />
-          {activity.scans.length === 0 ? <p className="text-sm text-slate-600">No scans submitted by this user.</p> : (
+      {activity.tab === "events" ? (
+        <Card className="border-slate-200 bg-white">
+          <CardHeader><CardTitle>Logged-in activity</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-slate-600">Recorded activity from the last 90 days. Browser events report interactions; server events record requests. Older anonymous events cannot be attributed retroactively.</p>
+            <PaginationControls basePath={`/app/admin/users/${userId}/activity`} itemLabel="events"
+              page={eventPage} pageCount={Math.max(1, Math.ceil(activity.eventCount / eventPageSize))}
+              pageSize={eventPageSize} pageParamName="eventPage" perPageParamName="eventPerPage"
+              searchParams={{ tab: "events", page: String(page), perPage: String(pageSize) }}
+              totalCount={activity.eventCount} visibleCount={activity.events.length} />
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500"><tr><th className="pb-2 pr-4">Domain</th><th className="pb-2 pr-4">Association</th><th className="pb-2 pr-4">Status</th><th className="pb-2 pr-4">Pages</th><th className="pb-2 pr-4">Submitted</th><th className="pb-2 pr-4">Completed</th><th className="pb-2"> </th></tr></thead>
-                <tbody className="divide-y divide-slate-100">
-                  {activity.scans.map((scan) => <tr key={scan.id}><td className="py-3 pr-4 font-medium text-slate-900">{scan.domainHostname ?? "Unknown domain"}</td><td className="py-3 pr-4 text-slate-600">{scan.association === "claimed" ? "Claimed after signup" : "Submitted by user"}</td><td className="py-3 pr-4 text-slate-600">{formatStatus(scan.status)}</td><td className="py-3 pr-4 text-slate-600">{scan.pagesScanned}</td><td className="whitespace-nowrap py-3 pr-4 text-slate-600">{formatAdminDateTime(scan.createdAt)}</td><td className="whitespace-nowrap py-3 pr-4 text-slate-600">{formatAdminDateTime(scan.completedAt)}</td><td className="py-3"><Link className="font-medium text-sky-700 hover:text-sky-900" href={`/app/scans/${scan.id}`}>View scan</Link></td></tr>)}
-                </tbody>
+                <thead><tr><th className="p-2">Time</th><th className="p-2">Action</th><th className="p-2">Page / control</th><th className="p-2">Scan</th><th className="p-2">Outcome</th><th className="p-2">Source</th><th className="p-2">Details</th></tr></thead>
+                <tbody>{activity.events.map((event) => <tr className="border-t border-slate-100" key={event.event_id}>
+                  <td className="whitespace-nowrap p-2">{formatAdminDateTime(event.occurred_at)}</td>
+                  <td className="p-2">{activityActionLabel(event)}</td>
+                  <td className="p-2">{activityPageLink(event) ? <Link prefetch={false} className="break-all text-sky-700 underline" href={activityPageLink(event)!}><code>{activityPageLink(event)}</code></Link> : <code>{event.normalized_route}</code>}<p className="text-xs text-slate-500">{event.element_id ?? event.feature}</p></td>
+                  <td className="p-2">{event.scan_id ? <Link prefetch={false} className="text-sky-700" href={`/app/scans/${event.scan_id}`}>{event.hostname ?? "Scan"}<span className="block font-mono text-xs">{event.scan_id}</span></Link> : "—"}</td>
+                  <td className="p-2">{formatStatus(event.outcome)}</td>
+                  <td className="p-2">{activitySourceLabel(event)}</td>
+                  <td className="p-2"><UserActivityEventDetails event={event} /></td>
+                </tr>)}</tbody>
               </table>
+              {!activity.events.length && <p className="py-3 text-sm text-slate-600">No attributed events in this period.</p>}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+      ) : (
+        <Card className="border-slate-200 bg-white">
+          <CardHeader><CardTitle>Scan activity</CardTitle></CardHeader>
+          <CardContent>
+            <PaginationControls
+              basePath={`/app/admin/users/${userId}/activity`}
+              searchParams={{ tab: "scans", eventPage: String(eventPage), eventPerPage: String(eventPageSize) }}
+              itemLabel="scan activity items"
+              page={page}
+              pageCount={pageCount}
+              pageSize={pageSize}
+              totalCount={activity.metrics.associatedScans}
+              visibleCount={activity.scans.length}
+            />
+            {activity.scans.length === 0 ? <p className="text-sm text-slate-600">No scans submitted by this user.</p> : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500"><tr><th className="pb-2 pr-4">Domain</th><th className="pb-2 pr-4">Association</th><th className="pb-2 pr-4">Status</th><th className="pb-2 pr-4">Pages</th><th className="pb-2 pr-4">Submitted</th><th className="pb-2 pr-4">Completed</th><th className="pb-2"> </th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {activity.scans.map((scan) => <tr key={scan.id}><td className="py-3 pr-4 font-medium text-slate-900">{scan.domainHostname ?? "Unknown domain"}</td><td className="py-3 pr-4 text-slate-600">{scan.association === "claimed" ? "Claimed after signup" : "Submitted by user"}</td><td className="py-3 pr-4 text-slate-600">{formatStatus(scan.status)}</td><td className="py-3 pr-4 text-slate-600">{scan.pagesScanned}</td><td className="whitespace-nowrap py-3 pr-4 text-slate-600">{formatAdminDateTime(scan.createdAt)}</td><td className="whitespace-nowrap py-3 pr-4 text-slate-600">{formatAdminDateTime(scan.completedAt)}</td><td className="py-3"><Link prefetch={false} className="font-medium text-sky-700 hover:text-sky-900" href={`/app/scans/${scan.id}`}>View scan</Link></td></tr>)}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
+}
+
+export default async function AdminUserActivityPage({ params, searchParams }: AdminUserActivityPageProps) {
+  const { userId } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const tab: AdminUserActivityTab = resolvedSearchParams.tab === "events" ? "events" : "scans";
+  const tabHref = (nextTab: AdminUserActivityTab) => {
+    const query = new URLSearchParams({
+      tab: nextTab,
+      page: String(normalizePage(resolvedSearchParams.page)),
+      perPage: String(normalizePageSize(resolvedSearchParams.perPage)),
+      eventPage: String(normalizePage(resolvedSearchParams.eventPage)),
+      eventPerPage: String(normalizePageSize(resolvedSearchParams.eventPerPage, 20))
+    });
+    return `/app/admin/users/${userId}/activity?${query}`;
+  };
+  const label = tab === "scans" ? "Scan activity" : "Logged-in activity";
+
+  return <div className="space-y-5">
+    <header>
+      <Link prefetch={false} className="text-sm font-medium text-sky-700 hover:text-sky-900" href="/app/admin/users?dir=desc&sort=lastLogin">← Back to Users</Link>
+      <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">User activity</h2>
+    </header>
+    <nav aria-label="User activity views" className="flex gap-2 border-b border-slate-200">
+      {([{ value: "scans", label: "Scan activity" }, { value: "events", label: "Logged-in activity" }] as const).map((item) => (
+        <Link key={item.value} prefetch={false} aria-current={tab === item.value ? "page" : undefined} href={tabHref(item.value)}
+          className={`border-b-2 px-3 py-2 text-sm font-semibold ${tab === item.value ? "border-sky-600 text-sky-700" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"}`}>
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+    <AdminDataBoundary label={label} key={tab}>
+      <Suspense key={JSON.stringify(resolvedSearchParams)} fallback={<AdminDataLoading label={label} />}>
+        <ActivityContent userId={userId} resolvedSearchParams={resolvedSearchParams} tab={tab} />
+      </Suspense>
+    </AdminDataBoundary>
+  </div>;
 }

@@ -49,14 +49,18 @@ export function ReportRuntimeSummary({ cards }: { cards: ExecutiveRuntimeCard[] 
 }
 
 /** Inventory only. Risk and remediation remain in canonical priority findings. */
-export function ReportInventorySummary({ metrics, updating = false, siteIntegrity, formCount, formsSummary, formCountStatus, forms = [], onViewEvidence }: {
+export function ReportInventorySummary({ metrics, updating = false, siteIntegrity, formCount, formsSummary, formCountStatus, forms = [], onViewEvidence, onLoadDetails, detailsLoading = false, hiddenLinkSummary, hiddenLinkDestinations: retainedDestinations }: {
   metrics: ReportInventoryMetric[];
   updating?: boolean;
   formCount?: number;
   formsSummary?: import("@certscore/api-contracts").ScanFormsSummary | null;
   formCountStatus?: "captured" | "limited" | "not_captured";
   forms?: import("./collection-surfaces-table").CollectionSurfaceTableRow[];
-  onViewEvidence?: () => void;
+  onViewEvidence?: (anchor?: string) => void;
+  onLoadDetails?: () => void;
+  detailsLoading?: boolean;
+  hiddenLinkSummary?: ReturnType<typeof summarizeSiteIntegrityLinks> | null;
+  hiddenLinkDestinations?: Array<[string, number]>;
   siteIntegrity?: SiteIntegritySiteReport;
 }) {
   const afterAcceptCount = formsSummary?.afterAcceptObserved ?? forms.filter(isAfterAcceptForm).length;
@@ -69,13 +73,13 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
     { label: INVENTORY_METRIC_LABELS.storage, value: overview.distinctStorage, counts: overview.distinctClassifications?.storage },
     { label: INVENTORY_METRIC_LABELS.frames, value: overview.distinctEmbeds, counts: overview.distinctClassifications?.embeds },
   ] : metrics.map(metric => ({ ...metric, label: inventoryMetricLabel(metric.label) })).sort((a, b) => inventoryMetricOrder(a.label) - inventoryMetricOrder(b.label));
-  const hiddenLinks = siteIntegrity ? summarizeSiteIntegrityLinks(siteIntegrity) : null;
+  const hiddenLinks = siteIntegrity ? summarizeSiteIntegrityLinks(siteIntegrity) : hiddenLinkSummary ?? null;
   const destinationCounts = new Map<string, number>();
   const findings = new Map((siteIntegrity?.findings ?? []).map(finding => [finding.evidence.observation.documentUrl, finding]));
   for (const finding of findings.values()) for (const link of finding.evidence.observation.links) {
     destinationCounts.set(link.destinationDomain, (destinationCounts.get(link.destinationDomain) ?? 0) + 1);
   }
-  const hiddenLinkDestinations = [...destinationCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const hiddenLinkDestinations = siteIntegrity ? [...destinationCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])) : retainedDestinations ?? [];
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="Inventory summary">
     {technical.length ? <details className="group/technical border-b border-slate-200 bg-slate-50/70">
       <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-2 text-xs marker:hidden hover:bg-slate-100/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden">
@@ -91,10 +95,11 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
     </details> : null}
     <div className="grid grid-cols-3 items-stretch divide-x divide-slate-200 border-b border-slate-200 bg-white">
       <ServicesSignalSnapshot overview={overview} card />
-      {formObservationCount > 0 ? <details className="group/forms min-w-0">
+      {formObservationCount > 0 ? <details className="group/forms min-w-0" onToggle={event => { if (event.currentTarget.open) onLoadDetails?.(); }}>
         <summary className={inventoryTileDisclosure}><InventoryTileHeading label="Forms" value={formObservationCount} chevron={<DisclosureChevron className="group-open/forms:rotate-180" />} /></summary>
         <div className="border-t border-slate-100 px-3 pb-3 sm:px-4">
         {afterAcceptCount ? <p className="mt-3 text-xs text-slate-500">{preConsentCount} pre-consent · {afterAcceptCount} after Accept click</p> : null}
+        {detailsLoading ? <p role="status" className="mt-3 text-xs text-slate-500">Loading form details…</p> : null}
         <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto text-xs leading-5 text-slate-600" aria-label="Observed forms">{forms.map(({ id, form, capturePhase }) => <li key={id}><p className="break-words font-medium">{form.title || form.surfaceType.replaceAll("_", " ")}</p><p>{form.retainedFieldCount} {form.retainedFieldCount === 1 ? "field" : "fields"} · {form.method}{capturePhase ? " · After Accept click" : ""}</p></li>)}</ul>
         <a href="#report-forms" className="mt-3 inline-block text-xs text-sky-700 hover:underline" onClick={event => { event.preventDefault(); onViewEvidence?.(); document.getElementById("report-forms")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>View forms ↗</a>
         </div>
@@ -113,7 +118,7 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
           {hiddenLinks?.lowerBound ? <p>Capture was limited; more links may be present.</p> : null}
           {hiddenLinks?.count ? <a href="#site-integrity-evidence" className="inline-block pt-1 text-sky-700 hover:underline" onClick={event => {
             event.preventDefault();
-            onViewEvidence?.();
+            onViewEvidence?.("site-integrity-evidence");
             const section = document.getElementById("site-integrity-evidence");
             if (!section) return;
             section.querySelectorAll("details").forEach((details, index) => { if (index === 0) details.open = true; });

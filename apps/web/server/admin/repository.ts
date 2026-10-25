@@ -4,6 +4,7 @@ import { scanOriginalRequesterQaSql, scanOriginalRequesterMacMiniSql, scanOrigin
 import { loadScanTrafficClassification } from "./scan-traffic-classification";
 import { scanCanaryTargetSql } from "../../lib/admin/canary-scan-target";
 import { activityTrafficDefaultVisibilitySql } from "../../lib/admin/activity-provenance";
+import { ADMIN_FULL_SITE_PAGES_SCANNED_SQL } from "../../lib/admin/scan-page-count-sql";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { scanCreatedViaSql, scanCreatorSql, scanCreationSourceSql, type ScanCreationAttribution, type ScanCreationSource } from "../../lib/admin/scan-creation-source";
 import { SCAN_FROM_VALUES, SCAN_NO_GO_SNAPSHOT_OUTCOMES, formatScanFromLabel } from "@website-signal-risk-scanner/shared";
@@ -53,6 +54,7 @@ export type AdminScanQueryRow = {
   organization_id: string | null;
   pages_requested?: number;
   pages_scanned: number;
+  full_site_pages_scanned?: number | null;
   page_language?: string | null;
   page_languages?: string[] | null;
   scan_config_json?: Record<string, unknown> | null;
@@ -1339,6 +1341,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
   const scansResult = await query<AdminScanQueryRow>(
     `select id, organization_id, domain_id, scan_type, status, created_at, started_at, completed_at, pages_scanned, scan_config_json,
             egress_id, egress_provider,
+            ${ADMIN_FULL_SITE_PAGES_SCANNED_SQL} as full_site_pages_scanned,
             (select sp.page_language
                from scan_pages sp
               where sp.scan_id = scans.id

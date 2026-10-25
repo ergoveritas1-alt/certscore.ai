@@ -55,7 +55,7 @@ const additionalRuntimeSchema = z.object({
   runtimeTimeline: runtimeEvidenceEventSchema.array(),
   collectionSurfaceObservations: collectionSurfaceObservationSchema.array(),
 });
-const cache = new Map<string, { expiresAt: number; result: Promise<FullSiteScore | null> }>();
+const cache = new Map<string, { expiresAt: number; result: Promise<FullSiteScore | null>; complete: boolean }>();
 export type FullSiteScore = {
   version: string;
   value: number | null;
@@ -147,7 +147,7 @@ export function isFullSiteScoringCaptureComplete(page: {
     !observation.failureKind && (observation.httpStatus === null || observation.httpStatus < 400);
 }
 
-export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPage[]): Promise<FullSiteScore | null> {
+export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPage[], options: { onIncompleteEvidence?: () => void } = {}): Promise<FullSiteScore | null> {
   if (!canAssessRetainedCrawl(crawl)) return null;
   const { rows: [snapshot] } = await query<Record<string, unknown>>(
     "select report_projection_payload,report_projection_payload_sha256,report_projection_payload_size_bytes,report_projection_status,report_projection_version,report_projection_computed_at from scan_snapshots where scan_id=$1", [crawl.scan_id]);
@@ -180,7 +180,12 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     }
   }
   const existing = cache.get(key);
-  if (existing && existing.expiresAt > Date.now()) return existing.result;
+  if (existing && existing.expiresAt > Date.now()) {
+    const result = await existing.result;
+    if (!existing.complete) options.onIncompleteEvidence?.();
+    return result;
+  }
+  const entry = { expiresAt: Date.now() + 10 * 60_000, result: Promise.resolve(null) as Promise<FullSiteScore | null>, complete: true };
   const pending = (async () => {
     const homePageEvidence = pages.find(page => page.source === "homepage");
     const evidencePages: SitewideEvidencePage[] = [projectSitewideEvidencePage({
@@ -275,13 +280,17 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     // Failed/partial scan pages are permanent coverage limitations, not failed reads.
     // Persist their honest limited result; retryable/unverifiable evidence reads must not
     // become a durable cache entry that prevents a later verified assessment.
+    entry.complete = !evidenceReadFailed;
     if (!evidenceReadFailed) await query("update full_site_crawls set policy_json=jsonb_set(policy_json,'{fullSiteScore}',$2::jsonb) where scan_id=$1 and status='completed'", [crawl.scan_id, JSON.stringify({sourceHash: key, score: result})]);
     return result;
   })();
-  cache.set(key, { expiresAt: Date.now() + 10 * 60_000, result: pending });
+  entry.result = pending;
+  cache.set(key, entry);
   if (cache.size > 32) cache.delete(cache.keys().next().value!);
   pending.catch(() => cache.delete(key));
-  return pending;
+  const result = await pending;
+  if (!entry.complete) options.onIncompleteEvidence?.();
+  return result;
 }
 
 export function projectFullSiteScoringEvidence(evidence: Record<string, unknown>, pageId: string, sourceHash: string, documentUrl?: string) {

@@ -4,13 +4,13 @@ import {
   finishFullSiteCompletionEmail,
 } from "@website-signal-risk-scanner/db";
 import { createGmailTransport, getGmailConfig } from "../email/gmail";
-import { loadFullSiteReport } from "./full-site-report";
+import { loadFullSiteReportPreview } from "./full-site-report";
 import { buildScanCompletionEmail } from "./completion-email-content";
 
 const defaults = {
   begin: beginFullSiteCompletionEmail,
   finish: finishFullSiteCompletionEmail,
-  load: loadFullSiteReport,
+  load: loadFullSiteReportPreview,
   config: getGmailConfig,
   transport: createGmailTransport,
 };
@@ -19,27 +19,29 @@ export async function sendScanCompletionEmail(
   token: string,
   dependencies = defaults,
 ) {
-  const config = dependencies.config();
-  if (!config) throw new Error("Completion email delivery is not configured.");
   const recipient = await dependencies.begin(scanId, token);
   if (!recipient) return;
   let deliveryStarted = false;
   let transporter: ReturnType<typeof createGmailTransport> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.email))
-      throw new Error("Recipient email unavailable.");
+    // Reuse the existing completion claim to prepare the first view, even when
+    // notification delivery is unavailable. No extra job or capture is needed.
     const report = await dependencies.load(scanId);
     if (!report || report.summary.counts.pending)
       throw new Error("Terminal inventory unavailable.");
+    const config = dependencies.config();
+    if (!config) throw new Error("Completion email delivery is not configured.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.email))
+      throw new Error("Recipient email unavailable.");
     const reportUrl = new URL(`/app/scans/${scanId}`, config.appUrl);
     if (
       process.env.NODE_ENV === "production" &&
       reportUrl.protocol !== "https:"
     )
       throw new Error("Report origin requires HTTPS.");
-    const domain = report.pages.rows[0]
-      ? new URL(report.pages.rows[0].url).hostname
+    const domain = report.homepageUrl
+      ? new URL(report.homepageUrl).hostname
       : "your website";
     const content = buildScanCompletionEmail({
       summary: report.summary,

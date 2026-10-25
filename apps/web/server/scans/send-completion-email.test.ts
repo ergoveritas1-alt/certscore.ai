@@ -15,7 +15,7 @@ test("delivery addresses only the persisted account and records SMTP acceptance"
       appPassword: "fixture",
     }),
     begin: async () => ({ email: "owner@example.test" }),
-    load: async () => ({ summary: aggregate, pages: { rows: [] } }),
+    load: async () => ({ summary: aggregate, homepageUrl: "https://example.test/" }),
     transport: () => ({
       sendMail: async (message: unknown) => {
         messages.push(message);
@@ -31,6 +31,7 @@ test("delivery addresses only the persisted account and records SMTP acceptance"
   assert.equal(messages.length, 1);
   assert.equal(messages[0].to, "owner@example.test");
   assert.match(messages[0].text, new RegExp(state.scanId));
+  assert.match(messages[0].text, /example\.test/);
   assert.equal(outcomes[0]![2], "sent");
   dependencies.begin = async () => null;
   await sendScanCompletionEmail(state.scanId, "token", dependencies);
@@ -39,6 +40,23 @@ test("delivery addresses only the persisted account and records SMTP acceptance"
     1,
     "Duplicate or unauthorized claims never reach SMTP",
   );
+});
+
+test("the existing completion claim prepares the first view before notification configuration, without unauthenticated work", async () => {
+  const calls: string[] = [];
+  const dependencies: any = {
+    begin: async () => { calls.push("claim"); return {email:"owner@example.test"}; },
+    load: async () => { calls.push("prepare"); return {summary:aggregateFullSite({...state,status:"completed"},[])}; },
+    config: () => { calls.push("config"); return null; },
+    transport: () => { throw new Error("No SMTP expected"); },
+    finish: async (_scan: string, _token: string, result: string) => { calls.push(result); },
+  };
+  await sendScanCompletionEmail(state.scanId,"token",dependencies);
+  assert.deepEqual(calls,["claim","prepare","config","retry"]);
+  calls.length=0;
+  dependencies.begin=async()=>null;
+  await sendScanCompletionEmail(state.scanId,"bad-token",dependencies);
+  assert.deepEqual(calls,[]);
 });
 
 test("pre-delivery failures can retry; ambiguous DATA failures cannot duplicate mail", async () => {

@@ -1303,17 +1303,12 @@ function normalizeHostname(value: string | null | undefined) {
   if (!trimmed) {
     return null;
   }
-  try {
+  // Bare hostnames are expected inputs. Avoid constructing an exception for
+  // every registry comparison while retaining the exact URL/fallback semantics.
+  if (URL.canParse(trimmed)) {
     return new URL(trimmed).hostname.toLowerCase().replace(/^www\./, "");
-  } catch {
-    return trimmed.replace(/^https?:\/\//i, "").split("/")[0]?.replace(/:\d+$/, "").toLowerCase().replace(/^www\./, "") ?? null;
   }
-}
-
-function hostMatches(candidate: string, domain: string) {
-  const normalizedCandidate = normalizeHostname(candidate);
-  const normalizedDomain = normalizeHostname(domain);
-  return Boolean(normalizedCandidate && normalizedDomain && (normalizedCandidate === normalizedDomain || normalizedCandidate.endsWith(`.${normalizedDomain}`)));
+  return trimmed.replace(/^https?:\/\//i, "").split("/")[0]?.replace(/:\d+$/, "").toLowerCase().replace(/^www\./, "") ?? null;
 }
 
 function textMatches(value: string, pattern: RegExp) {
@@ -1347,7 +1342,11 @@ function selectorTokens(value: string) {
   return (value.toLowerCase().match(/[a-z0-9_-]{3,}/g) ?? []).filter((token) => !GENERIC_SELECTOR_TOKENS.has(token));
 }
 
-function collectSignalsForDefinition(definition: KnownCmpDefinition, input: KnownCmpDetectionInput) {
+function collectSignalsForDefinition(definition: KnownCmpDefinition, input: KnownCmpDetectionInput, normalizeHost: typeof normalizeHostname) {
+  const hostMatches = (candidate: string, domain: string) => {
+    const normalizedCandidate = normalizeHost(candidate), normalizedDomain = normalizeHost(domain);
+    return Boolean(normalizedCandidate && normalizedDomain && (normalizedCandidate === normalizedDomain || normalizedCandidate.endsWith(`.${normalizedDomain}`)));
+  };
   const signals: KnownCmpSignal[] = [];
   const push = (source: KnownCmpSignalSource, value: string) => {
     const trimmed = value.trim();
@@ -1356,14 +1355,14 @@ function collectSignalsForDefinition(definition: KnownCmpDefinition, input: Know
     }
   };
 
-  for (const domain of uniqueStrings([...(input.domains ?? []), ...(input.urls ?? []).map((url) => normalizeHostname(url) ?? "")])) {
+  for (const domain of uniqueStrings([...(input.domains ?? []), ...(input.urls ?? []).map((url) => normalizeHost(url) ?? "")])) {
     if (definition.domains.some((knownDomain) => hostMatches(domain, knownDomain))) {
       push("host", domain);
     }
   }
 
   for (const url of uniqueStrings(input.urls ?? [])) {
-    const host = normalizeHostname(url);
+    const host = normalizeHost(url);
     if (host && definition.domains.some((knownDomain) => hostMatches(host, knownDomain))) {
       push("url", url);
     } else if ((definition.urlPatterns ?? []).some((pattern) => textMatches(url, pattern))) {
@@ -1372,7 +1371,7 @@ function collectSignalsForDefinition(definition: KnownCmpDefinition, input: Know
   }
 
   for (const iframeUrl of uniqueStrings(input.iframeUrls ?? [])) {
-    const host = normalizeHostname(iframeUrl);
+    const host = normalizeHost(iframeUrl);
     if (host && definition.domains.some((knownDomain) => hostMatches(host, knownDomain))) {
       push("iframe", iframeUrl);
     } else if ((definition.iframePatterns ?? definition.urlPatterns ?? []).some((pattern) => textMatches(iframeUrl, pattern))) {
@@ -1545,8 +1544,14 @@ export function getKnownCmpCapabilityMatrix() {
 }
 
 export function detectKnownCmps(input: KnownCmpDetectionInput) {
+  // Request-local memoization: retain no customer URLs between detections.
+  const hostnames = new Map<string | null | undefined, string | null>();
+  const normalizeHost: typeof normalizeHostname = value => {
+    if (!hostnames.has(value)) hostnames.set(value, normalizeHostname(value));
+    return hostnames.get(value) ?? null;
+  };
   return KNOWN_CMP_REGISTRY.flatMap((definition): KnownCmpDetection[] => {
-    const matchedSignals = collectSignalsForDefinition(definition, input);
+    const matchedSignals = collectSignalsForDefinition(definition, input, normalizeHost);
     if (matchedSignals.length === 0) {
       return [];
     }
