@@ -57,6 +57,9 @@ function bundle(
     completedAt: "2026-07-27T18:04:10.000Z",
     url,
     normalizedUrl: url,
+    // Canonical parsing defaults this inventory to []; this direct unit fixture
+    // must supply it before exercising the California child projection.
+    policySurfaceObservations: [],
     domSnapshots: [{
       artifactId: "dom-pre-consent",
       capturedAtMs: 6_500,

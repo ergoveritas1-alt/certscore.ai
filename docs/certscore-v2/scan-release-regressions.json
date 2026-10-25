@@ -1,0 +1,385 @@
+{
+  "schemaVersion": "certscore.scan_release_regressions.v1",
+  "cases": [
+    {
+      "id": "runtime-branded-error",
+      "risk": "A branded HTTP200 error must not authorize a scored report.",
+      "issues": [
+        "D14"
+      ],
+      "regression": {
+        "file": "packages/certscore-scan-core/src/scan-no-go-assessment.test.ts",
+        "test": "HTTP200 branded runtime errors remain no-go beyond the short retained quote",
+        "expectation": "Both retained error shapes are terminal, including text beyond the short diagnostic quotation.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/index.ts"
+        ]
+      },
+      "control": {
+        "file": "packages/certscore-scan-core/src/scan-no-go-assessment.test.ts",
+        "test": "a recovered final document does not inherit an earlier branded runtime error",
+        "expectation": "An earlier error cannot veto the supported final document.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/index.ts"
+        ]
+      }
+    },
+    {
+      "id": "runtime-short-page",
+      "risk": "Error-shell recognition must preserve legitimate concise pages and quoted examples.",
+      "issues": [
+        "D9",
+        "U1"
+      ],
+      "regression": {
+        "file": "packages/certscore-scan-core/src/scan-no-go-assessment.test.ts",
+        "test": "an HTTP 200 request-rejection shell is no-go without classifying quotations or short public pages as blocked",
+        "expectation": "The actual rejection shell is no-go; quotations and short public pages stay usable.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/index.ts"
+        ]
+      },
+      "control": {
+        "file": "packages/certscore-scan-core/src/scan-no-go-assessment.test.ts",
+        "test": "ordinary usable runtime remains usable without policy evidence",
+        "expectation": "Policy incompleteness does not alone reject substantive runtime.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/index.ts"
+        ]
+      }
+    },
+    {
+      "id": "runtime-final-response",
+      "risk": "Earlier failed responses and third-party failures cannot replace terminal same-document proof.",
+      "issues": [
+        "D7",
+        "D11"
+      ],
+      "regression": {
+        "file": "packages/certscore-scan-core/src/scan-no-go-assessment.test.ts",
+        "test": "all retained main-document 5xx responses are terminal, including Cloudflare origin timeouts",
+        "expectation": "Final main-document server errors remain unscored no-go evidence.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/index.ts"
+        ]
+      },
+      "control": {
+        "file": "packages/certscore-scan-core/src/scan-no-go-assessment.test.ts",
+        "test": "subresource 522, quoted timeout guidance and an earlier recovered 522 do not block the public page",
+        "expectation": "Subresources, quoted guidance and recovered earlier failures are neutral.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/index.ts"
+        ]
+      }
+    },
+    {
+      "id": "exact-document-identity",
+      "risk": "Query/fragment identities and browser document tokens must not be lost or borrowed.",
+      "issues": [
+        "D4",
+        "D10"
+      ],
+      "regression": {
+        "file": "apps/web/server/scans/consent-control-assessment-projector.test.ts",
+        "test": "materialized consent retains exact query and fragment for its California child while document comparison stays normalized",
+        "expectation": "Child receives the exact original final URL, with historical comparison semantics preserved.",
+        "fastChanges": [
+          "apps/web/server/scans/consent-control-assessment-projector.ts"
+        ]
+      },
+      "control": {
+        "file": "apps/web/server/scans/consent-control-assessment-projector.test.ts",
+        "test": "query-changing consent evidence with a different browser document token stays unknown",
+        "expectation": "A different browser document token cannot bind controls to the target.",
+        "fastChanges": [
+          "apps/web/server/scans/consent-control-assessment-projector.ts"
+        ]
+      }
+    },
+    {
+      "id": "independent-runtime",
+      "risk": "An independent consent visit cannot establish a usable runtime session.",
+      "issues": [
+        "D12",
+        "U1"
+      ],
+      "regression": {
+        "file": "apps/v2-dag-lambda/src/handler.test.ts",
+        "test": "unusable original runtime ends the attempt with verified lane pointers and no additional artifact reads",
+        "expectation": "Unusable original runtime fails before report publication and retains bounded verified diagnostics.",
+        "fastChanges": [
+          "apps/v2-dag-lambda/src/handler.ts"
+        ]
+      },
+      "control": {
+        "file": "apps/web/server/scans/consent-control-assessment-projector.test.ts",
+        "test": "verified independent consent binding is not overwritten by a later runtime DOM from the same URL",
+        "expectation": "Positive controls retain their own verified session rather than inheriting runtime DOM.",
+        "fastChanges": [
+          "apps/web/server/scans/consent-control-assessment-projector.ts"
+        ]
+      }
+    },
+    {
+      "id": "artifact-integrity",
+      "risk": "Missing, corrupt or cross-source bytes must not create report evidence.",
+      "issues": [
+        "D12",
+        "U3"
+      ],
+      "regression": {
+        "file": "apps/web/server/scans/local-v2-dag-report.test.ts",
+        "test": "verified S3 fallback enforces Lambda artifact checksum and size",
+        "expectation": "Hash/size mismatch rejects source bytes rather than repairing them.",
+        "fastChanges": [
+          "apps/web/server/scans/local-v2-dag-report.ts"
+        ]
+      },
+      "control": {
+        "file": "apps/web/server/scans/local-v2-dag-report.test.ts",
+        "test": "transferred artifacts and original S3 artifacts produce the same complete canonical report",
+        "expectation": "Valid local transferred and remote source bytes have equivalent canonical output.",
+        "fastChanges": [
+          "apps/web/server/scans/local-v2-dag-report.ts"
+        ]
+      }
+    },
+    {
+      "id": "policy-document-coverage",
+      "risk": "Retained sections can support positives without inventing complete-document absence.",
+      "issues": [
+        "D5",
+        "U3"
+      ],
+      "regression": {
+        "file": "apps/web/server/scans/local-v2-dag-report.test.ts",
+        "test": "summarizePolicySurfaces does not promote joined retained sections to whole-document coverage",
+        "expectation": "A bounded section set cannot authorize absence findings.",
+        "fastChanges": [
+          "apps/web/server/scans/local-v2-dag-report.ts"
+        ]
+      },
+      "control": {
+        "file": "apps/web/server/scans/local-v2-dag-report.test.ts",
+        "test": "owned short-policy positive topics survive without authorizing missing-disclosure conclusions",
+        "expectation": "An owned short substantive notice still supports retained positive disclosures.",
+        "fastChanges": [
+          "apps/web/server/scans/local-v2-dag-report.ts"
+        ]
+      }
+    },
+    {
+      "id": "policy-citation-owner",
+      "risk": "A strong quote cannot bypass source ownership, fetch or explicit document quality.",
+      "issues": [
+        "U3"
+      ],
+      "regression": {
+        "file": "apps/web/lib/scans/gdpr-transparency-topic-evidence-adapter.test.ts",
+        "test": "a strong retained purpose witness cannot override ownership, fetch or quality gates",
+        "expectation": "Each hard source gate independently blocks quote rescue.",
+        "fastChanges": [
+          "apps/web/lib/scans/gdpr-transparency-topic-evidence-adapter.ts"
+        ]
+      },
+      "control": {
+        "file": "apps/web/lib/scans/gdpr-transparency-topic-evidence-adapter.test.ts",
+        "test": "a navigation-only excerpt does not veto a validated witness from an otherwise usable policy",
+        "expectation": "A short navigation excerpt is not an explicit bad-document verdict.",
+        "fastChanges": [
+          "apps/web/lib/scans/gdpr-transparency-topic-evidence-adapter.ts"
+        ]
+      }
+    },
+    {
+      "id": "failed-publication",
+      "risk": "Failed canonical publication cannot leak stale numeric scores.",
+      "issues": [
+        "D12",
+        "D13"
+      ],
+      "regression": {
+        "file": "apps/web/lib/pulse/projection.test.ts",
+        "test": "failed canonical publication exposes no stale API or summary scores",
+        "expectation": "Report/API/Pulse fail closed on failed publication even with stale stored scores.",
+        "fastChanges": [
+          "apps/web/server/scans/local-v2-dag-report.ts",
+          "apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts"
+        ]
+      },
+      "control": {
+        "file": "apps/web/server/scans/score-materialization-failure.test.ts",
+        "test": "new reports require both real posture scores without rejecting valid independent routes",
+        "expectation": "Valid dual postures remain publishable across independent routes.",
+        "fastChanges": [
+          "apps/web/server/scans/canonical-scan-report-publisher.ts",
+          "apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts"
+        ]
+      }
+    },
+    {
+      "id": "canonical-dual-postures",
+      "risk": "Every new scored report needs both genuine canonical posture scores.",
+      "issues": [
+        "D2",
+        "D13"
+      ],
+      "regression": {
+        "file": "apps/web/server/scans/canonical-scan-report-publisher.test.ts",
+        "test": "redirected retained evidence publishes once through assessment, concerns, persisted report, API and PDF",
+        "expectation": "Exact publication source and score invariants survive redirect and missing-score controls.",
+        "fastChanges": [
+          "apps/web/server/scans/canonical-scan-report-publisher.ts",
+          "apps/v2-dag-lambda/src/handler.ts",
+          "apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts"
+        ]
+      },
+      "control": {
+        "file": "apps/web/lib/pulse/projection.test.ts",
+        "test": "Pulse summary variants expose the same canonical posture scores as API v2",
+        "expectation": "Compact and detailed summaries agree with API v2 on the persisted canonical scores.",
+        "fastChanges": [
+          "apps/web/server/scans/local-v2-dag-report.ts",
+          "apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts"
+        ]
+      }
+    },
+    {
+      "id": "reject-positive-and-neutral",
+      "risk": "Reject findings need completed bound evidence; unknown paths remain neutral.",
+      "issues": [
+        "C3"
+      ],
+      "regression": {
+        "file": "apps/web/lib/scans/post-refusal-canonical-projection.test.ts",
+        "test": "new click policy fails closed for incomplete, unsupported, ambiguous or pre-click evidence",
+        "expectation": "Unverified or pre-click material cannot produce a Reject finding.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/post-refusal-observer.ts",
+          "apps/web/server/scans/local-v2-dag-report.ts"
+        ]
+      },
+      "control": {
+        "file": "apps/web/lib/scans/post-refusal-canonical-projection.test.ts",
+        "test": "verified generic Reject click receives the canonical non-essential service presence effect",
+        "expectation": "A verified completed click and classified positive evidence retain the canonical finding.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/post-refusal-observer.ts",
+          "apps/web/server/scans/local-v2-dag-report.ts"
+        ]
+      }
+    },
+    {
+      "id": "california-recipient-union",
+      "risk": "Repeated requests and overlapping choice paths must not multiply recipient effects.",
+      "issues": [
+        "C2"
+      ],
+      "regression": {
+        "file": "apps/web/lib/scans/california-opt-out-collection-scoring.test.ts",
+        "test": "GPC collection scores only the CA posture through canonical concern/policy/findings; overlapping opt-out charges once",
+        "expectation": "One canonical recipient union is charged once across eligible paths and leaves EU independent.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts",
+          "apps/web/server/scans/local-v2-dag-report.ts"
+        ]
+      },
+      "control": {
+        "file": "apps/web/lib/scans/california-opt-out-collection-scoring.test.ts",
+        "test": "v7 restricted or unresolved collection stays neutral while verified CMP contradictions remain independent",
+        "expectation": "Restrictions/unknown purposes stay neutral while independently qualifying evidence survives.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts",
+          "apps/web/server/scans/local-v2-dag-report.ts"
+        ]
+      }
+    },
+    {
+      "id": "accessibility-source-and-frame",
+      "risk": "A WCAG finding cannot borrow a different attempt, source, document or child-frame completeness.",
+      "issues": [],
+      "regression": {
+        "file": "apps/web/server/scans/accessibility-audit-projection.test.ts",
+        "test": "mismatched independent document proof or timing discards findings and reports limited coverage",
+        "expectation": "Mismatched original document/time proof prevents a finding.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/accessibility-audit.ts",
+          "apps/web/server/scans/accessibility-audit-projection.ts"
+        ]
+      },
+      "control": {
+        "file": "apps/web/server/scans/accessibility-audit-projection.test.ts",
+        "test": "main-document positives survive canonical persistence while child-frame coverage stays limited",
+        "expectation": "Main-document positives persist without turning limited child frames into complete coverage.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/accessibility-audit.ts",
+          "apps/web/server/scans/accessibility-audit-projection.ts"
+        ]
+      }
+    },
+    {
+      "id": "transport-unknown",
+      "risk": "TLS network failures and missing transport evidence must remain unknown.",
+      "issues": [],
+      "regression": {
+        "file": "packages/certscore-scan-core/src/transport-security-scanner.test.ts",
+        "test": "strict TLS probe keeps timeouts and network failures unknown instead of invalid",
+        "expectation": "A timeout does not become a certificate failure.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts"
+        ]
+      },
+      "control": {
+        "file": "apps/web/lib/pulse/projection.test.ts",
+        "test": "Pulse represents missing canonical transport-security evidence as unavailable",
+        "expectation": "Missing canonical transport evidence creates neither a clean result nor an invented failure.",
+        "fastChanges": [
+          "apps/web/server/scans/local-v2-dag-report.ts"
+        ]
+      }
+    },
+    {
+      "id": "transport-positive",
+      "risk": "Concrete transport findings need retained resource identity and canonical public projection.",
+      "issues": [],
+      "regression": {
+        "file": "packages/certscore-scan-core/src/transport-security-scanner.test.ts",
+        "test": "mixed-content console evidence identifies the HTTP resource instead of the HTTPS document",
+        "expectation": "The retained insecure resource is identified without treating the HTTPS document as insecure.",
+        "fastChanges": [
+          "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts"
+        ]
+      },
+      "control": {
+        "file": "apps/web/lib/pulse/projection.test.ts",
+        "test": "Pulse projects canonical transport-security rows with bounded detail semantics",
+        "expectation": "Supported canonical transport rows survive bounded public projection.",
+        "fastChanges": [
+          "apps/web/server/scans/local-v2-dag-report.ts"
+        ]
+      }
+    },
+    {
+      "id": "public-surface-parity",
+      "risk": "Report, API, PDF, Pulse and MCP must preserve canonical final results without creating findings.",
+      "issues": [],
+      "regression": {
+        "file": "apps/web/server/scans/canonical-scan-report-publisher.test.ts",
+        "test": "seven retained canary shapes preserve consent eligibility through canonical publication and all report projections",
+        "expectation": "Retained positive/limited consent shapes preserve canonical eligibility across projections.",
+        "fastChanges": [
+          "apps/web/server/scans/canonical-scan-report-publisher.ts"
+        ]
+      },
+      "control": {
+        "file": "packages/certscore-mcp/src/server.test.ts",
+        "test": "completed Light tools preserve one final canonical score and metadata",
+        "expectation": "MCP tools preserve the final canonical result and metadata.",
+        "fastChanges": [
+          "apps/web/server/scans/local-v2-dag-report.ts",
+          "packages/certscore-mcp/src/server.ts"
+        ]
+      }
+    }
+  ]
+}

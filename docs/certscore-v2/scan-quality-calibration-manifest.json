@@ -18,7 +18,8 @@
   "layers": {
     "deterministicFixtures": {
       "requiredForEveryScannerChange": true,
-      "initiatesPublicTraffic": false
+      "initiatesPublicTraffic": false,
+      "releaseRegressionMatrix": "docs/certscore-v2/scan-release-regressions.json"
     },
     "retainedReplay": {
       "requiredForEveryScannerChange": true,

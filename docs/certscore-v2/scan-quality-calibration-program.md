@@ -4,6 +4,47 @@ This is the canonical operating process for ongoing scanner-quality calibration.
 It exists to turn real-site review into repeatable evidence checks rather than treating
 the latest few scans as an acceptance sample.
 
+The deterministic release review is registered in this program's manifest as
+`docs/certscore-v2/scan-release-regressions.json`. Its 16 risk cases link existing
+sanitized regression tests and legitimate/neutral controls to the expected
+canonical result and representative changed source files. It covers runtime
+eligibility, exact document/session binding, artifact recovery, policy evidence,
+score availability, Reject/GPC, accessibility/transport and public projections.
+This is a coverage index for the existing fixtures, not another corpus or a
+human-adjudicated accuracy benchmark. Do not label every unknown as a defect.
+
+`pnpm test:scan-release-regressions` verifies actual test declarations and follows
+the checked-in pnpm script chains, workspace paths, globs and test-name filters.
+Missing, renamed, skipped or filtered-out references fail the review, as does a
+case missing either its regression or its control. It checks selection by both
+full preflight and fast preflight for the documented source changes. References
+must name independently addressable top-level tests; nested tests need their
+own explicit runner coverage before they can enter this index. The review does
+not execute those tests or claim they pass. Preflight then runs the selected
+suites normally, so a valid coverage index cannot hide a failing assertion.
+The review itself runs in every nonempty deploy-targeted preflight plan.
+
+The October 25 review found existing consent-document and artifact/policy
+recovery tests outside the release gate, plus scanner-only/worker-only fast
+plans that omitted downstream no-go/publication checks and MCP-only plans that
+omitted canonical surface parity. The gate now includes those checks, including
+the full consent materialization and local report evidence-recovery files.
+Three newly exercised redirect-binding assertions initially stopped before
+their assertions because their direct test fixture omitted the canonical
+parser's default empty policy inventory. The fixture now supplies that empty
+inventory; the document/query/fragment and mismatch assertions are unchanged.
+No production behavior or score policy was changed to make those tests pass.
+
+Fast preflight also rejects a missing local comparison revision or an empty
+`--base` argument. A missing base previously discarded the committed diff and
+could return a successful empty result from a clean checkout. The gate now
+requires an available ref; it never fetches or silently substitutes a base.
+
+This review initiates no public visits, cloud reads, model calls or scans and
+does not change live calibration authorization. The affected preflight commands
+run locally; no CI workflow, production runtime, storage or capture budget is
+expanded. Expected recurring infrastructure increment is $0.
+
 The program is internal diagnostic infrastructure. It does not create production
 findings, alter customer-facing scoring, or establish legal conclusions.
 

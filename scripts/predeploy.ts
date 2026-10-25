@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
+import { existsSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-type Check = {
+export type Check = {
   key: string;
   label: string;
   command: string[];
@@ -17,6 +19,26 @@ type Args = {
   allTargets: boolean;
   baseRef: string | null;
   mode: "fast" | "full";
+};
+
+const RELEASE_REGRESSION_REVIEW_CHECK: Check = {
+  key: "scan-release-regression-review",
+  label: "calibration regression cases remain selected by full and targeted preflight",
+  command: ["pnpm", "test:scan-release-regressions"],
+};
+
+const EVIDENCE_RECOVERY_CHECK: Check = {
+  key: "report-evidence-recovery",
+  label: "verified artifact recovery, exact consent documents and policy completeness",
+  command: ["pnpm", "exec", "tsx", "--tsconfig", "apps/web/tsconfig.test.json", "--test",
+    "apps/web/server/scans/local-v2-dag-report.test.ts",
+    "apps/web/server/scans/consent-control-assessment-projector.test.ts"],
+};
+
+const CANONICAL_PROJECTION_CHECK: Check = {
+  key: "canonical-projection-parity",
+  label: "canonical projection parity",
+  command: ["pnpm", "test:canonical-projection-parity"],
 };
 
 const RUNTIME_GRAPH_RELEASE_CHECK: Check = {
@@ -209,6 +231,7 @@ const ACCESSIBILITY_SCORING_CHECK: Check = {
 };
 
 const ROOT_FULL_CHECKS: Check[] = [
+  RELEASE_REGRESSION_REVIEW_CHECK,
   {
     key: "workspace-package-build",
     label: "bootstrap workspace package exports for clean-checkout tests and typechecks",
@@ -225,6 +248,7 @@ const ROOT_FULL_CHECKS: Check[] = [
   GPC_OBSERVATION_RELEASE_CHECK,
   SCAN_NO_GO_RELEASE_CHECK,
   REPORT_PUBLICATION_CHECK,
+  EVIDENCE_RECOVERY_CHECK,
   RUNTIME_GRAPH_RELEASE_CHECK,
   RUNTIME_GRAPH_CAPTURE_CHECK,
   CALIFORNIA_REVIEW_CHECK,
@@ -276,11 +300,7 @@ const ROOT_FULL_CHECKS: Check[] = [
     label: "v2 DAG Lambda tests",
     command: ["pnpm", "--filter", "@website-signal-risk-scanner/v2-dag-lambda", "test"]
   },
-  {
-    key: "canonical-projection-parity",
-    label: "canonical projection parity",
-    command: ["pnpm", "test:canonical-projection-parity"]
-  },
+  CANONICAL_PROJECTION_CHECK,
   {
     key: "post-refusal-release",
     label: "post-refusal release contracts",
@@ -294,6 +314,7 @@ const TARGETS: Target[] = [
     matches: file => file.startsWith("apps/mcp/") || file.startsWith("packages/certscore-mcp/") ||
       file.startsWith("packages/certscore-api-contracts/") || file.startsWith("packages/certscore-sdk/"),
     checks: [
+      CANONICAL_PROJECTION_CHECK,
       { key: "mcp-http-typecheck", label: "MCP dependency build and HTTP typecheck", command: ["pnpm", "--filter", "@certscore/mcp-http", "typecheck"] },
       { key: "mcp-http-tests", label: "MCP HTTP integration and telemetry", command: ["pnpm", "--filter", "@certscore/mcp-http", "test"] },
     ],
@@ -339,6 +360,7 @@ const TARGETS: Target[] = [
       SCAN_NO_GO_RELEASE_CHECK,
       ACCESSIBILITY_SCORING_CHECK,
       REPORT_PUBLICATION_CHECK,
+      EVIDENCE_RECOVERY_CHECK,
       {
         key: "web-typecheck",
         label: "public web typecheck",
@@ -359,11 +381,7 @@ const TARGETS: Target[] = [
           "scripts/web-deploy-migration-order.test.ts"
         ]
       },
-      {
-        key: "canonical-projection-parity",
-        label: "canonical projection parity",
-        command: ["pnpm", "test:canonical-projection-parity"]
-      },
+      CANONICAL_PROJECTION_CHECK,
       {
         key: "post-refusal-release",
         label: "post-refusal release contracts",
@@ -388,6 +406,10 @@ const TARGETS: Target[] = [
       file.startsWith("packages/web-bot-auth/"),
     checks: [
       RUNTIME_GRAPH_RELEASE_CHECK,
+      SCAN_NO_GO_RELEASE_CHECK,
+      REPORT_PUBLICATION_CHECK,
+      EVIDENCE_RECOVERY_CHECK,
+      CANONICAL_PROJECTION_CHECK,
       {
         key: "validation-worker-typecheck",
         label: "validation worker typecheck",
@@ -415,6 +437,10 @@ const TARGETS: Target[] = [
       file === ".github/workflows/v2-regulatory-gold-corpus.yml",
     checks: [
       POLICY_SOURCE_WITNESS_CHECK,
+      SCAN_NO_GO_RELEASE_CHECK,
+      REPORT_PUBLICATION_CHECK,
+      EVIDENCE_RECOVERY_CHECK,
+      CANONICAL_PROJECTION_CHECK,
       CALIFORNIA_REVIEW_CHECK,
       ACCESSIBILITY_AUDIT_CHECK,
       RUNTIME_GRAPH_CAPTURE_CHECK,
@@ -491,16 +517,30 @@ function isGlobalBuildInput(file: string) {
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
     "scripts/predeploy.ts",
+    "scripts/lib/scan-release-regressions.ts",
+    "scripts/review-scan-release-regressions.ts",
+    "scripts/scan-release-regressions.test.ts",
+    "docs/certscore-v2/scan-release-regressions.json",
+    "docs/certscore-v2/scan-quality-calibration-manifest.json",
+    "scripts/verify-scan-quality-calibration-registry.ts",
     "tsconfig.base.json",
     "turbo.json"
   ].includes(file);
+}
+
+/** The same plan is inspected by the calibration coverage review and executed below. */
+export function getPredeployPlan(changedFiles: string[], options: { full?: boolean; allTargets?: boolean } = {}) {
+  if (options.full) return { targets: ["full"], checks: ROOT_FULL_CHECKS };
+  const targets = options.allTargets ? TARGETS : TARGETS.filter(target => changedFiles.some(target.matches));
+  return { targets: targets.map(target => target.key), checks: targets.length
+    ? dedupeChecks([RELEASE_REGRESSION_REVIEW_CHECK, ...targets.flatMap(target => target.checks)]) : [] };
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.mode === "full") {
-    await runChecks(ROOT_FULL_CHECKS);
+    await runChecks(getPredeployPlan([], { full: true }).checks);
     return;
   }
 
@@ -526,7 +566,7 @@ async function main() {
   console.log("");
   console.log(`${args.allTargets ? "Fast deploy-all" : "Fast predeploy"} targets: ${selectedTargets.map((target) => target.label).join(", ")}`);
 
-  const checks = dedupeChecks(selectedTargets.flatMap((target) => target.checks));
+  const checks = getPredeployPlan(changedFiles, { allTargets: args.allTargets }).checks;
   await runChecks(checks);
 }
 
@@ -536,7 +576,7 @@ function parseArgs(argv: string[]): Args {
   let allTargets = false;
 
   for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
+    const arg = argv[index]!;
     if (arg === "--") {
       continue;
     }
@@ -554,8 +594,8 @@ function parseArgs(argv: string[]): Args {
     }
     if (arg === "--base") {
       const value = argv[index + 1];
-      if (!value) {
-        throw new Error("--base requires a git ref");
+      if (!value?.trim()) {
+        throw new Error("--base requires a nonempty git ref");
       }
       baseRef = value;
       index += 1;
@@ -563,6 +603,7 @@ function parseArgs(argv: string[]): Args {
     }
     if (arg.startsWith("--base=")) {
       baseRef = arg.slice("--base=".length);
+      if (!baseRef.trim()) throw new Error("--base requires a nonempty git ref");
       continue;
     }
     throw new Error(`Unknown argument: ${arg}`);
@@ -574,7 +615,10 @@ function parseArgs(argv: string[]): Args {
 async function collectChangedFiles(baseRef: string | null) {
   const files = new Set<string>();
 
-  if (baseRef && await gitRefExists(baseRef)) {
+  if (baseRef) {
+    if (!await gitRefExists(baseRef)) {
+      throw new Error(`Preflight base is not available locally: ${baseRef}. Fetch the revision or supply an available --base ref.`);
+    }
     const mergeBase = await git(["merge-base", baseRef, "HEAD"]);
     addLines(files, await git(["diff", "--name-only", `${mergeBase.trim()}..HEAD`]));
   }
@@ -663,7 +707,9 @@ function run(command: string[], options: { quiet?: boolean; reject?: boolean } =
   });
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

@@ -25,6 +25,7 @@ type Manifest = {
     deterministicFixtures: {
       requiredForEveryScannerChange: boolean;
       initiatesPublicTraffic: boolean;
+      releaseRegressionMatrix: string;
     };
     retainedReplay: {
       requiredForEveryScannerChange: boolean;
@@ -138,9 +139,10 @@ async function main() {
   }
   if (
     manifest.layers?.deterministicFixtures?.requiredForEveryScannerChange !== true ||
-    manifest.layers.deterministicFixtures.initiatesPublicTraffic !== false
+    manifest.layers.deterministicFixtures.initiatesPublicTraffic !== false ||
+    manifest.layers.deterministicFixtures.releaseRegressionMatrix !== "docs/certscore-v2/scan-release-regressions.json"
   ) {
-    errors.push("Deterministic fixtures must gate every scanner change without public traffic");
+    errors.push("Deterministic fixtures must gate every scanner change without public traffic and retain the canonical release regression matrix");
   }
   if (
     manifest.layers?.retainedReplay?.requiredForEveryScannerChange !== true ||
