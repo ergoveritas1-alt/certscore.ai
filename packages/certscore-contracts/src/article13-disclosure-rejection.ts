@@ -74,10 +74,11 @@ export function hasSubstantiveProcessingPurposesEvidence(value: string) {
   // previously consented to, does not say what the data is actually used for.
   // Require an outcome before any heading or grammatical form may qualify.
   const listedNominalPurpose = /\b(?:following purposes|purposes? of (?:the )?processing)\s*:\s*(?:website delivery|communication|security|fraud prevention|customer support|payment processing|order fulfilment)\b/i.test(text);
-  if (!purposeOutcomePattern.test(text) && !listedNominalPurpose) return false;
+  const declaredNominalPurpose = /\b(?:we|the controller|the company|[a-z][a-z0-9&.'’-]*(?:\s+[a-z][a-z0-9&.'’-]*){0,5})\s+(?:process|processes|use|uses|collect|collects)\s+(?:your |the )?(?:personal data|personal information|account data)\s+for\s+(?:(?:the )?purpose of\s+)?(?!(?:(?:the|these|those|such|our|any)\s+)?(?:purposes?|reasons?|which|what|that|anything|example)\b)[a-z][a-z -]{2,100}/i.test(text);
+  if (!purposeOutcomePattern.test(text) && !listedNominalPurpose && !declaredNominalPurpose) return false;
   if (NAMED_DATA_SERVICE_PURPOSE_PATTERN.test(normalizeGdprTransparencyText(text))) return true;
   if (STRUCTURED_DATA_PURPOSE_PATTERN.test(text)) return true;
-  if (listedNominalPurpose) return true;
+  if (listedNominalPurpose || declaredNominalPurpose) return true;
   if (
     /\b(?:privacy shield|data privacy framework|\bdpf\b|standard contractual clauses?|\bsccs?\b|adequacy decision|international data transfer|cross-border transfer)\b/i.test(text) &&
     !/\b(?:purpose(?:s)? of (?:the )?(?:processing|collection|use)|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for))\b/i.test(text)

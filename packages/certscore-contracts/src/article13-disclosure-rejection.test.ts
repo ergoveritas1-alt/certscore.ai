@@ -26,6 +26,16 @@ test("purpose table headers and consent-withdrawal references need a concrete ou
   }
 });
 
+test("concrete nominal processing purposes remain valid without an outcome verb", () => {
+  for (const purpose of ["billing", "research", "advertising", "marketing", "account administration", "statistical analysis", "fundraising", "legal compliance", "the provision of services", "the purpose of research"]) {
+    const text = `How we use your personal data. We process your personal data for ${purpose}.`;
+    for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const)
+      assert.equal(article13DisclosureRejectReason(text, "processing_purposes", {mode}), null, `${mode}: ${text}`);
+  }
+  for (const text of ["We process your personal data for the purposes to which you consented.", "We process your personal information for those purposes."])
+    assert.equal(hasSubstantiveProcessingPurposesEvidence(text), false, text);
+});
+
 test("cross-topic retained witnesses stay ineligible across producer, report and multilingual gates", () => {
   const cases = [
     ["data_subject_rights", "We respect others' intellectual property rights, and we reserve the right to delete Content alleged to infringe copyright under the DMCA."],
