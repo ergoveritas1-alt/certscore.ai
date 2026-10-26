@@ -51,7 +51,8 @@ test("both postures apply 13/18/23/28/33/37 to the same verified occurrences", (
 
 test("repeated packets deduplicate; distinct occurrences on different pages share one cap in both targets", () => {
   const home=packets(1),other=packets(2,SITE_INTEGRITY_POLICY_VERSION,"20000000-0000-4000-8000-000000000001");
-  for(const [findings,points] of [[[...home,...home],13],[[...home,...other,...other],23],[[...packets(6),...other],37]] as const) {
+  const cases: Array<[UnifiedFindingDisplayPacket[], number]> = [[[...home,...home],13],[[...home,...other,...other],23],[[...packets(6),...other],37]];
+  for(const [findings,points] of cases) {
     assert.equal(ca(findings).score,100-points);
     assert.equal(eu(findings)?.score,100-points);
   }
