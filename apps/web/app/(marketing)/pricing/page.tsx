@@ -219,8 +219,8 @@ export default function PricingPage() {
                     <p className="mt-0.5 leading-5 font-medium text-slate-900">Included</p>
                   </div>
                   <div className="rounded-xl bg-violet-50 px-2.5 py-2.5 ring-1 ring-violet-100">
-                    <p className="text-[10px] leading-tight uppercase tracking-[0.1em] text-slate-500">Scan volume</p>
-                    <p className="mt-0.5 leading-5 font-semibold text-violet-950">Volume Discount Available</p>
+                    <p className="text-[10px] leading-tight uppercase tracking-[0.1em] text-slate-500">Volume discount</p>
+                    <p className="mt-0.5 leading-5 font-semibold text-violet-950">Available</p>
                   </div>
                   <div className="rounded-xl bg-white px-2.5 py-2.5 ring-1 ring-sky-100">
                     <p className="text-[10px] leading-tight uppercase tracking-[0.1em] text-slate-500">Frequency</p>
