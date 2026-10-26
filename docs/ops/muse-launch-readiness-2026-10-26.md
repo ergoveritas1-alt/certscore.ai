@@ -62,3 +62,21 @@ Fresh LinkedIn/X PNGs, post copy, alt text, provenance, editable SVGs and a ZIP
 are at /Users/benmasek/WC01/output/muse-social-2026-10-26/. X copy is 246 weighted
 characters, with a platform-tagged guide link. No social posts were published.
 Only the public web guide is selected for AWS deployment.
+
+## Production verification
+
+AWS web workflow succeeded for 1086efdb97897072b9ceadca92e30c78d3d8391a:
+https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/40407148829
+
+The public /api/version confirms that exact SHA on ECS/Fargate. Web task
+certscore-web-certscore:780 is stable at 2/2, materializer task
+certscore-web-certscore-materializer:343 at 1/1; both deployments COMPLETED, zero
+pending. Live HTML/Markdown, new demo links/prompt/date, FAQ/HowTo parity, canonical
+and social metadata, LLM discovery, robots/sitemap, download headers and exact
+ZIP/source parity all pass. The new demo section was also inspected in a browser.
+
+The stable 1.0.4 ZIP is unchanged and working. Refreshed announcement assets are
+ready for owner publication, using the October 26 test1 report (32 GDPR /
+35 California), with no visible scan ID. Current test2 is 40 GDPR / 53 California;
+older target-score assumptions were not reused. No social posts were published,
+no owner canary changes or unrelated unfinished local work were deployed.
