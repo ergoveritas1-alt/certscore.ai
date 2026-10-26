@@ -28,7 +28,7 @@ test("every catalog identity is unique and cases match the selected jurisdiction
   const ids = REGULATORY_REVIEW_TOPICS.flatMap(topic => topic.findingIds);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(REGULATORY_REVIEW_TOPICS.filter(topic => topic.contexts.gdpr_eprivacy).length, 32);
-  assert.equal(REGULATORY_REVIEW_TOPICS.filter(topic => topic.contexts.ccpa_cpra).length, 8);
+  assert.equal(REGULATORY_REVIEW_TOPICS.filter(topic => topic.contexts.ccpa_cpra).length, 9);
   for (const topic of REGULATORY_REVIEW_TOPICS) for (const mode of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
     for (const caseId of topic.contexts[mode]?.cases ?? []) assert.equal(ENFORCEMENT_EXAMPLES[caseId]?.mode, mode, `${topic.id}: ${caseId}`);
     const context = regulatoryReviewContext(topic.findingIds[0]!, mode);

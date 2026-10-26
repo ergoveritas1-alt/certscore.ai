@@ -4,6 +4,8 @@ import type { CaliforniaPrivacyReview } from "@certscore/contracts";
 
 // Presentation fixtures only: no observation, concern, finding, score or scan is persisted.
 const summaries: Record<string, string> = {
+  "reviewed-notice-omissions": "A substantive review of the illustrative complete governing notice identified multiple missing privacy disclosures. The finding remains scoped to the reviewed documents.",
+  "california-agent-registration": "The illustrative retained California request instructions require an authorized agent to register with the Secretary of State. Review the condition and the available authorization routes for individuals.",
   "california-gpc-choice":"The illustrative canonical finding retains verified GPC receipt with an applicable opt-out remaining off. Review how the recorded choice reaches relevant services.",
   "california-rights-disclosure":"Complete retained English policy inspection found no candidate wording for a core privacy-rights disclosure topic. The California posture assumes CCPA applies; request handling remains untested.",
   "california-opt-out-activity": "Advertising-classified responses were retained after an explicit, recorded sale/sharing opt-out in this illustrative 500 ms window. Legal sale/sharing status requires review.",
