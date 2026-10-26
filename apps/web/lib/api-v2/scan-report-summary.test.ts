@@ -7,6 +7,7 @@ import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { collectionSurfaceAssessmentSchema, postAcceptReportProjectionSchema, COLLECTION_SURFACE_ASSESSMENT_VERSION } from "@certscore/contracts";
 import { CANONICAL_OVERALL_SCORE_VERSION } from "../scans/california-gpc-response-policy";
+import { SCORING_POLICY_VERSION } from "../scans/scoring-policy";
 import { observedControlAssessment } from "../scans/test-fixtures/observed-control-assessment";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { projectScanFormsSummary, projectScanScoreExplanation } from "./scan-report-summary";
@@ -430,7 +431,7 @@ test("current Reject presence yields the same score through persisted findings, 
   Object.assign(scan,{canonicalReportProjection:canonical});scan.snapshot!.certscore_overall=85;
   const api=buildApiV2ScanResource(scan),status=buildApiV2ScanStatus(scan,{canonicalScan:api}),report=buildTimelineReportModel(scan);
   assert.equal(api.score,85);assert.equal(status.score,85);assert.equal(report.score.value,85);
-  assert.equal(api.scoreExplanation?.policyVersion,"gdpr-eprivacy-posture.v24");assert.equal(api.scoreExplanation?.totalPolicyDeductionPoints,15);
+  assert.equal(api.scoreExplanation?.policyVersion,SCORING_POLICY_VERSION);assert.equal(api.scoreExplanation?.totalPolicyDeductionPoints,15);
   assert.ok(findings.some(f=>f.presentation.findingName==="Non-essential cookies or services after Reject"));
   assert.doesNotMatch(canonical.checklistRows.map(r=>[r.label,r.explanation,r.note,r.limitation].join(" ")).join(" "),/deduction|points deducted|identifier.*required/i);
  }
