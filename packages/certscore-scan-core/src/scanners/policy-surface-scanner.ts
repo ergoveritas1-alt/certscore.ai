@@ -1329,7 +1329,7 @@ export async function policySurfaceScanner(
     }))).filter((candidate):candidate is PolicySurfaceCandidate=>candidate!==null);
     if(warmedPrimaryCandidates.length) {
       const limit=rankedCandidates.every(isCommonPathFallbackCandidate)?MAX_COMMON_PATH_CANDIDATES_TO_FETCH:policyFetchLimit(input);
-      rankedCandidates=dedupeCandidates([...warmedPrimaryCandidates,...rankedCandidates]).slice(0,limit);
+      rankedCandidates=capPolicyCandidatesWithSurfaceDiversity(dedupeCandidates([...warmedPrimaryCandidates,...rankedCandidates]),limit);
     }
     const policyResults = await fetchPolicyCandidateGroup({
       input,
@@ -5804,8 +5804,8 @@ function classifyCommonPathSurface(path: string, normalizedUrl: string): ReturnT
   return classified;
 }
 
-function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): PolicySurfaceCandidate[] {
-  return candidates
+export function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): PolicySurfaceCandidate[] {
+  return dedupeCandidates(candidates)
     .filter((candidate) =>
       (candidate.fetchable || candidate.observationOnly) &&
       !isObviousCommercePolicyFalsePositive(candidate) &&
@@ -5814,6 +5814,7 @@ function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): Polic
     )
     .sort((left, right) =>
       surfacePriority(left.deterministicSurfaceType) - surfacePriority(right.deterministicSurfaceType) ||
+      Number(isObservedFetchablePrivacyCandidate(right)) - Number(isObservedFetchablePrivacyCandidate(left)) ||
       policyDocumentScopePriority(left) - policyDocumentScopePriority(right) ||
       materialPolicySupplementPriority(left) - materialPolicySupplementPriority(right) ||
       policyCandidateDiscoveryPriority(left) - policyCandidateDiscoveryPriority(right) ||
@@ -6095,7 +6096,7 @@ function policyFetchLimit(input: PolicySurfaceScannerInput): number {
   return input.discoveryMode === "fast" ? 6 : MAX_CANDIDATES_TO_FETCH;
 }
 
-function mergeSupplementalPolicyCandidates(
+export function mergeSupplementalPolicyCandidates(
   rankedCandidates: PolicySurfaceCandidate[],
   allCandidates: PolicySurfaceCandidate[],
   limit: number,
@@ -6104,8 +6105,15 @@ function mergeSupplementalPolicyCandidates(
   const existingUrls = new Set(existingObservations
     .map((observation) => observation.normalizedUrl ?? observation.url)
     .filter((value): value is string => Boolean(value)));
+  const dedupedCandidates = dedupeCandidates(allCandidates);
   const selected = new Map<string, PolicySurfaceCandidate>();
-  for (const candidate of rankedCandidates) {
+  const rankedCandidateKeys = new Set(rankedCandidates.map(candidateKey));
+  // An earlier ranking may contain a seed for a URL also observed in the full
+  // inventory. Resolve that duplicate before capping, retaining the link proof.
+  for (const candidate of dedupeCandidates([
+    ...rankedCandidates,
+    ...dedupedCandidates.filter(candidate => rankedCandidateKeys.has(candidateKey(candidate))),
+  ])) {
     const key = candidateKey(candidate);
     if (!existingUrls.has(candidate.normalizedUrl)) {
       selected.set(key, candidate);
@@ -6113,7 +6121,7 @@ function mergeSupplementalPolicyCandidates(
   }
 
   const rankedKeys = new Set(selected.keys());
-  const supplements = allCandidates
+  const supplements = dedupedCandidates
     .filter((candidate) =>
       !rankedKeys.has(candidateKey(candidate)) &&
       !existingUrls.has(candidate.normalizedUrl) &&
@@ -6138,7 +6146,18 @@ function materialPolicySupplementPriority(candidate: PolicySurfaceCandidate): nu
   return isMaterialGdprNoticeSupplementCandidate(candidate) ? 0 : 1;
 }
 
-function capPolicyCandidatesWithSurfaceDiversity(
+function isObservedFetchablePrivacyCandidate(candidate: PolicySurfaceCandidate): boolean {
+  // Selection priority only: these are eligible retrieval candidates, not yet
+  // verified target-owned policy documents. All fetch/content gates still apply.
+  return candidate.deterministicSurfaceType === "privacy_policy" &&
+    candidate.fetchable && !candidate.observationOnly &&
+    candidate.deterministicScore >= 0.5 && candidate.clickable &&
+    ["footer_link", "header_link", "page_text_link"].includes(candidate.discoveryMethod) &&
+    !isCommonPathFallbackCandidate(candidate) &&
+    !isObviousCommercePolicyFalsePositive(candidate);
+}
+
+export function capPolicyCandidatesWithSurfaceDiversity(
   candidates: PolicySurfaceCandidate[],
   limit: number,
 ): PolicySurfaceCandidate[] {
@@ -6153,11 +6172,23 @@ function capPolicyCandidatesWithSurfaceDiversity(
   const selectedSurfaceTypes = new Set<PolicySurfaceCandidate["deterministicSurfaceType"]>();
   const diverse: PolicySurfaceCandidate[] = [];
 
+  // Reserve observed privacy destinations before diversity consumes the cap.
+  // Preserve incoming rank among them, then use the remaining slots for other
+  // surfaces and fallbacks. Reapplying the cap cannot put guesses ahead of them.
+  for (const candidate of candidates) {
+    if (diverse.length >= limit) break;
+    const key = candidateKey(candidate);
+    if (!isObservedFetchablePrivacyCandidate(candidate) || selected.has(key)) continue;
+    selected.add(key);
+    selectedSurfaceTypes.add(candidate.deterministicSurfaceType);
+    diverse.push(candidate);
+  }
+
   for (const candidate of candidates) {
     if (diverse.length >= limit) {
       break;
     }
-    if (selectedSurfaceTypes.has(candidate.deterministicSurfaceType)) {
+    if (selectedSurfaceTypes.has(candidate.deterministicSurfaceType) || selected.has(candidateKey(candidate))) {
       continue;
     }
     const key = candidateKey(candidate);
@@ -11943,7 +11974,8 @@ export function dedupeCandidates(candidates: PolicySurfaceCandidate[]): PolicySu
     const existing = byUrl.get(key);
     // Seed hints must not outrank an observed link to the same URL.
     const provenanceRelevant = Boolean(candidate.cmpDiscovery?.length || existing?.cmpDiscovery?.length ||
-      candidate.seedSource || existing?.seedSource);
+      candidate.seedSource || existing?.seedSource || isCommonPathFallbackCandidate(candidate) ||
+      (existing && isCommonPathFallbackCandidate(existing)));
     const preferCandidate = !existing || (candidate.fetchable && !existing.fetchable) ||
       (!provenanceRelevant && candidate.deterministicScore > existing.deterministicScore) ||
       (provenanceRelevant && candidate.fetchable === existing.fetchable && (
