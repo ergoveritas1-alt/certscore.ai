@@ -294,13 +294,23 @@ const californiaPrivacyReviewV9=californiaPrivacyReviewV8.extend({
 /** Score availability is independent of policy/choice completeness. This proof
  * is materialized only from a verified, representative starting-page visit;
  * it never establishes a policy pass, absence, applicability or finding. */
-export const californiaObservedScoreBasisSchema = z.object({
+const californiaObservedScoreBasisV1Schema = z.object({
   policyVersion:z.literal("usable_starting_page_score.v1"),
   scanId:z.string().min(1).max(160), documentUrl:documentIdentityUrl, sourceHash:hash,
   documentToken:z.string().min(1).max(256), domArtifactId:z.string().min(1).max(200),
   sourceLane:z.literal("runtime_evidence"), accessOutcome:z.literal("representative_page"),
   evidenceRef:z.literal("CanonicalEvidenceBundle.json#runtimeMetadataSnapshots"),
 }).strict();
+// Independent starting-page visits may finish at different paths or ephemeral
+// login queries. Bind the report document separately; retain only a hash of the
+// runtime URL so this additive proof does not copy sensitive query values.
+export const californiaObservedScoreBasisSchema = z.discriminatedUnion("policyVersion", [
+  californiaObservedScoreBasisV1Schema,
+  californiaObservedScoreBasisV1Schema.extend({
+    policyVersion:z.literal("usable_starting_page_score.v2-independent-visit"),
+    runtimeDocumentUrlSha256:hash,
+  }).strict(),
+]);
 export type CaliforniaObservedScoreBasis = z.infer<typeof californiaObservedScoreBasisSchema>;
 const californiaPrivacyReviewV10=californiaPrivacyReviewV9.extend({
   contractVersion:z.literal("certscore.california-privacy-review.v10"),policyVersion:z.literal("california-privacy-review.v10"),

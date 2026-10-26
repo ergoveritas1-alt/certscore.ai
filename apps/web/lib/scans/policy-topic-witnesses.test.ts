@@ -55,3 +55,15 @@ test("a correct purpose quote survives the canonical pipeline after weak quotes 
   assert.doesNotMatch(signal.evidenceText, /withdraw your consent/);
   assert.equal(rows.find(r => r.id === "processing_purposes_disclosure")?.status, "Observed");
 });
+
+test("a source-bound account-active retention criterion remains Observed after canonical policy review", () => {
+  for (const clause of [
+    "We retain your data for as long as your account is active, or as long as is needed to provide you with the Service.",
+    "We retain your information for as long as we need it for the purposes described in this Privacy Policy, and no longer.",
+  ]) {
+    const {rows}=project(`Privacy policy. Data retention. ${clause}`);
+    assert.equal(rows.find(row=>row.id==="retention_disclosure_observed")?.status,"Observed",clause);
+  }
+  const {rows}=project("Privacy policy. We rely on compliance with a legal obligation to retain records and to respond to lawful requests.");
+  assert.notEqual(rows.find(row=>row.id==="retention_disclosure_observed")?.status,"Observed");
+});

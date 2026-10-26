@@ -204,7 +204,7 @@ export function hasSubstantiveRetentionEvidence(value: string) {
   }
   const dataContext = /\b(?:personal data|personal information|your data|your information|the data|data (?:you enter|in|collected)|account (?:data|information)|profile information|technical data|transaction data|records?|recordings?|comments?|metadata|server logs?|ip addresses?)\b/i;
   const lifecycleAction = /\b(?:retain(?:ed|ing)?|keep|kept|store(?:d)?|delete(?:d)?|erase(?:d)?|anonymi[sz](?:e|ed|ation))\b/i;
-  const periodOrCriterion = /\b(?:for \d+\s*(?:days?|weeks?|months?|years?)|for (?:one|two|three|four|five|six|seven|eight|nine|ten) (?:days?|weeks?|months?|years?)|(?:set at|period (?:is|of)) \d+\s*(?:days?|weeks?|months?|years?)|indefinitely|as long as (?:is )?(?:necessary|required|you (?:use|maintain)|the account)|until (?:the account|you|closure|termination)|account (?:lifetime|closure|termination)|no longer (?:than )?(?:necessary|required)|purposes? for which (?:it|they|the data|the information) (?:was|were) (?:collected|processed)|legal obligations?|resolve disputes?|enforce (?:our )?agreements?)\b/i;
+  const periodOrCriterion = /\b(?:for \d+\s*(?:days?|weeks?|months?|years?)|for (?:one|two|three|four|five|six|seven|eight|nine|ten) (?:days?|weeks?|months?|years?)|(?:set at|period (?:is|of)) \d+\s*(?:days?|weeks?|months?|years?)|indefinitely|as long as (?:is )?(?:necessary|required|we (?:need|require)|you (?:use|maintain)|(?:your |the )?account)|until (?:the account|you|closure|termination)|account (?:lifetime|closure|termination)|no longer (?:than )?(?:necessary|required)|purposes? for which (?:it|they|the data|the information) (?:was|were) (?:collected|processed))\b/i;
   const explicitStoragePeriod = /\b(?:retention|storage) period of (?:the |your |personal )?(?:data|information)\b.{0,100}\b(?:is (?:set at )?|of )\d+\s*(?:days?|weeks?|months?|years?)\b/i.test(text);
   const completedPurpose = /\b(?:the data|data you enter|your data|personal data)\b.{0,160}\b(?:remain|stored?|kept|retained?)\b.{0,160}\buntil\b.{0,220}\b(?:purpose.{0,80}no longer applies|completed processing (?:your|the) (?:enquiry|inquiry|request))\b/i.test(text);
   // Retention tables state the lifecycle in their header, not in every cell.
@@ -241,6 +241,18 @@ function hasSubstantivePrivacyContactPoint(value: string) {
  * credit them. A rejected witness is uncertainty, never a missing disclosure. */
 export function article13CrossTopicRejectReason(value: string, topic: Article13DisclosureType | string | undefined): Article13DisclosureRejectReason | null {
   const text = normalizeArticle13Whitespace(value);
+  const normalized = normalizeGdprTransparencyText(text);
+  // Notifying existing recipients about a rights request does not identify a
+  // recipient/category. Keep independent category disclosures eligible.
+  if (topic === "recipients_or_vendor_categories" &&
+      /\binform(?:er|era|eront|ons|e|ent)\b.{0,100}\bdestinataires\b/.test(normalized) &&
+      /\b(?:effacement|rectification|limitation de traitement)\b/.test(normalized) &&
+      !/\b(?:prestataires|partenaires|conseillers|sous.traitants|autorites|filiales)\b/.test(normalized))
+    return "insufficient_row_specific_terms";
+  // A legal reason to retain records is not a retention period or criterion.
+  if (topic === "data_retention" && /\blegal obligations?\b/i.test(text) &&
+      /\bretain(?:ed|ing)? records?\b/i.test(text) && !hasSubstantiveRetentionEvidence(text))
+    return "insufficient_row_specific_terms";
   const explicitBasis = /\b(?:art(?:icle)?\.?\s*6|consent|contract(?:ual)?|legal obligations?|legitimate interests?|public (?:task|interest)|vital interests?|consentimiento|contrato|obligaci[oó]n legal|inter[eé]s leg[ií]timo)\b/i;
   const outbound = /\b(?:we|the company|the controller)\s+(?:(?:may|will|also)\s+){0,2}(?:share|disclose|send|transfer|provide|give)\b[^.!?]{0,160}\b(?:data|information)\b|\b(?:data|information)\b[^.!?]{0,100}\b(?:is|are|may be|will be)\s+(?:shared|disclosed|transferred|provided)\b/i;
   const actualPurpose = /\b(?:we|the company|the controller)\s+(?:(?:may|will|also)\s+){0,2}(?:use|process|collect|store)\b[^.!?]{0,100}\b(?:data|information|details|email address)\b[^.!?]{0,80}\b(?:to|for)\s+(?:(?:the|our|your)\s+)?(?:provid\w*|deliver\w*|operat\w*|maintain\w*|improv\w*|respond\w*|answer\w*|fulfil\w*|protect\w*|prevent\w*|detect\w*|measur\w*|analy[sz]\w*|verif\w*|send\w*|administ\w*|manag\w*|support\w*|authenticat\w*)\b|\b(?:personal data|personal information|your data|your information)\b[^.!?]{0,80}\b(?:is|are|will be)\s+(?:used|processed|collected)\s+to\s+(?:provide|respond|deliver|manage|improve|protect|prevent)\b/i;
@@ -248,6 +260,10 @@ export function article13CrossTopicRejectReason(value: string, topic: Article13D
   if (topic === "processing_purposes" && !actualPurpose.test(text) && !listedPurpose &&
       !NAMED_DATA_SERVICE_PURPOSE_PATTERN.test(normalizeGdprTransparencyText(text)) && !STRUCTURED_DATA_PURPOSE_PATTERN.test(text) &&
       /\b(?:this (?:privacy )?(?:policy|notice) (?:explains|describes|sets out)|business purposes|we collect[^.!?]{0,120}when you provide|information directly to us|to achieve.{0,30}purposes|shall not be regarded as recipients|data minimi[sz]ation|directly from you|information (?:you (?:provide|give)|provided (?:directly|by you))|(?:collect|receive)(?:d|s)?[^.!?]{0,100}\bfrom\b|personal (?:data|information) (?:means|is any|can be used)|(?:right|request)[^.!?]{0,80}(?:how we use|uses of)|data subject[^.!?]{0,100}entitled|upon written request|information about the ways in which|information regarding whether|necessary for (?:the )?(?:performance|execution) of (?:a |the )?contract)\b/i.test(text)) return "insufficient_row_specific_terms";
+  const explicitDataUse = /\b(?:we|the company|the controller)\s+(?:(?:may|will|also)\s+){0,2}(?:use|process|collect)\b[^.!?]{0,100}\b(?:data|information)\b[^.!?]{0,80}\b(?:to|for)\b/i.test(text);
+  if (topic === "processing_purposes" && hasSubstantiveRetentionEvidence(text) &&
+      !actualPurpose.test(text) && !explicitDataUse && !listedPurpose && !NAMED_DATA_SERVICE_PURPOSE_PATTERN.test(normalizeGdprTransparencyText(text)) &&
+      !STRUCTURED_DATA_PURPOSE_PATTERN.test(text)) return "insufficient_row_specific_terms";
   if (topic === "legal_basis" && !explicitBasis.test(text) &&
       /\b(?:legal bas(?:is|es)|lawful basis|require[^.!?]{0,80}basis|basis[^.!?]{0,80}processing)\b/i.test(text)) return "insufficient_row_specific_terms";
   if (topic === "legal_basis" && /\b(?:derecho|derechos|retirar|revocar)\b/i.test(text) &&

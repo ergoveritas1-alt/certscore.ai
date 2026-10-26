@@ -3,6 +3,17 @@ import test from "node:test";
 import { classifyRuntimeErrorPage } from "./runtime-error-page";
 import { brandedSoft404, brandedInterruption } from "./test-fixtures/runtime-error-pages";
 
+test("the complete retained regional-unavailability shell is an access block", () => {
+  const shell = "OOPS!!!\nWE ARE CURRENTLY NOT AVAILABLE IN YOUR REGION.";
+  assert.equal(classifyRuntimeErrorPage(shell), "unsupported_region");
+  for (const text of [
+    `Regional troubleshooting guide: ${shell}`,
+    `${shell} Browse our available products below.`,
+    `“${shell}”`,
+    `${shell}${" ".repeat(4096)}Our public content remains available.`,
+  ]) assert.equal(classifyRuntimeErrorPage(text), undefined);
+});
+
 test("reviewed branded page states survive navigation longer than the evidence quote", () => {
   assert.ok(brandedSoft404.indexOf("404") > 360);
   assert.equal(classifyRuntimeErrorPage(brandedSoft404), "not_found_404");

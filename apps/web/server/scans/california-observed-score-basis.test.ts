@@ -122,3 +122,34 @@ test("an earlier usable runtime snapshot cannot supply a basis after a later emp
    assert.equal(projectCaliforniaObservedScoreBasis(b,CA_FIXTURE_SOURCE,CA_FIXTURE_URL),undefined);
  }
 });
+
+test("independent ordinary visits retain their separate exact identities for score availability", () => {
+  for (const runtimeUrl of ["https://california-fixture.test/th/home", "https://california-fixture.test/login?state=runtime-session"]) {
+    const f=fixture();
+    const reportUrl=runtimeUrl.includes("login") ? "https://california-fixture.test/login?state=consent-session" : "https://california-fixture.test/th";
+    f.bundle.runtimeMetadataSnapshots![0]!.url=runtimeUrl;
+    f.bundle.domSnapshots=[{...f.bundle.runtimeMetadataSnapshots![0]!,url:reportUrl,documentIdentity:{source:"cdp_loader_id",token:"consent-loader"}}];
+    f.bundle.scanLaneRuns![0]!.navigationAttempts=[{sequence:1,mode:"initial_https_navigation",outcome:"success",httpStatus:200,durationMs:10,effectiveUrl:f.bundle.normalizedUrl}];
+    const before=JSON.stringify(f.bundle);
+    const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,reportUrl,f.policyEvidence)!;
+    assert.ok(child?.contractVersion==="certscore.california-privacy-review.v10");
+    assert.equal(child?.observedScoreBasis?.policyVersion,"usable_starting_page_score.v2-independent-visit");
+    assert.equal(child.documentUrl,reportUrl);
+    assert.equal(child.observedScoreBasis?.documentUrl,reportUrl);
+    assert.equal(child.observedScoreBasis?.documentToken,"runtime-loader");
+    assert.ok(!JSON.stringify(child.observedScoreBasis).includes("runtime-session"));
+    assert.equal(deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:[]}).score,100);
+    assert.equal(JSON.stringify(f.bundle),before);
+    assert.equal(projectCaliforniaObservedScoreBasis(f.bundle,CA_FIXTURE_SOURCE,reportUrl+"-other"),undefined);
+    for (const mutate of [
+      ()=>{f.bundle.scanLaneRuns![0]!.navigationAttempts=[];},
+      ()=>{f.bundle.runtimeMetadataSnapshots![0]!.url="https://unrelated.test/";},
+      ()=>{f.bundle.runtimeMetadataSnapshots![0]!.documentIdentity=undefined;},
+      ()=>{f.bundle.runtimeMetadataSnapshots![0]!.textExcerpt="OOPS!!!\nWE ARE CURRENTLY NOT AVAILABLE IN YOUR REGION.";},
+    ]) {
+      const saved=structuredClone(f.bundle);mutate();
+      assert.equal(projectCaliforniaObservedScoreBasis(f.bundle,CA_FIXTURE_SOURCE,reportUrl),undefined);
+      Object.assign(f.bundle,saved);
+    }
+  }
+});

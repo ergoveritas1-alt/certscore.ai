@@ -10331,46 +10331,72 @@ export function extractPolicyCookieDisclosures(input: {
 }
 
 function extractPolicyTableRowsFromHtml(cleanHtml: string, sourceUrl: string): RetainedPolicySection[] {
-  return Array.from(cleanHtml.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)).flatMap((tableMatch, tableIndex) => {
-    const tableHtml = tableMatch[1] ?? "";
-    const rows = Array.from(tableHtml.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)).map((rowMatch) => {
-      const rowHtml = rowMatch[1] ?? "";
-      const cells = Array.from(rowHtml.matchAll(/<(th|td)\b[^>]*>([\s\S]*?)<\/(?:th|td)>/gi)).map((cellMatch) => ({
-        isHeader: (cellMatch[1] ?? "").toLowerCase() === "th",
-        text: htmlToVisibleText(cellMatch[2] ?? "")
-      })).filter((cell) => cell.text.length > 0);
-      return { cells };
-    }).filter((row) => row.cells.length > 0);
-    if (rows.length === 0) {
-      return [];
+  type Cell = { isHeader: boolean; text: string; ambiguousSpan: boolean };
+  type Row = { cells: Cell[]; start: number; end: number };
+  type Table = { rows: Row[]; nested: boolean; context?: string; row?: Row; cell?: { start: number; isHeader: boolean; ambiguousSpan: boolean } };
+  const stack: Table[] = [];
+  const tables: Table[] = [];
+  // Balance table boundaries before interpreting rows. A non-greedy table/row
+  // regex can join an outer header with a different nested table's data.
+  for (const tag of cleanHtml.matchAll(/<\/?(?:table|tr|th|td)\b[^>]*>/gi)) {
+    const name = /^<\/?(\w+)/.exec(tag[0])![1]!.toLowerCase();
+    const closing = tag[0].startsWith("</");
+    const index = tag.index!;
+    if (name === "table") {
+      if (!closing) {
+        if (stack.length) stack.at(-1)!.nested = true;
+        const parent = stack.at(-1);
+        const context = parent?.row?.cells.length === 1 && !parent.row.cells[0]!.ambiguousSpan && parent.row.cells[0]!.text.length <= 160
+          ? parent.row.cells[0]!.text : undefined;
+        stack.push({ rows: [], nested: false, context });
+      } else {
+        const table = stack.pop();
+        if (table && !table.nested) tables.push(table);
+      }
+      continue;
     }
-
-    const firstRow = rows[0];
-    const firstRowLooksLikeHeader = firstRow !== undefined && (
-      firstRow.cells.some((cell) => cell.isHeader) ||
-      firstRow.cells.length > 1 && firstRow.cells.every((cell) => cell.text.length <= 100)
-    );
-    const headers = firstRowLooksLikeHeader ? firstRow?.cells.map((cell) => cell.text) ?? [] : [];
-    const dataRows = firstRowLooksLikeHeader ? rows.slice(1) : rows;
-
-    return dataRows.map((row, rowIndex) => {
-      const mappedCells = row.cells.map((cell, cellIndex) => {
-        const header = headers[cellIndex];
-        return header ? `${header}: ${cell.text}` : cell.text;
-      });
-      const textExcerpt = normalizeWhitespace(mappedCells.join(". "));
-      const firstValue = row.cells[0]?.text ?? `row ${rowIndex + 1}`;
-      const headingPrefix = headers.length > 0 ? headers.join(" | ") : `Table ${tableIndex + 1}`;
-      return {
-        sourceUrl,
-        heading: normalizeWhitespace(`${headingPrefix} — ${firstValue}`).slice(0, 160),
-        textExcerpt,
-        extractionMethod: "html_table_row" as const,
-        sourceOffsetBasis: "sanitized_html" as const,
-        charStart: (tableMatch.index ?? 0),
-        charEnd: (tableMatch.index ?? 0) + tableMatch[0].length,
-        quality: textExcerpt.length >= 120 ? "partial" as const : "limited" as const,
+    const table = stack.at(-1);
+    if (!table) continue;
+    if (name === "tr") {
+      if (!closing) { table.row = { cells: [], start: index, end: index }; table.cell = undefined; }
+      else if (table.row) {
+        table.row.end = index + tag[0].length;
+        if (table.row.cells.length) table.rows.push(table.row);
+        table.row = undefined; table.cell = undefined;
+      }
+    } else if (table.row) {
+      if (!closing) table.cell = {
+        start: index + tag[0].length,
+        isHeader: name === "th" && !/\bscope\s*=\s*["']?row\b/i.test(tag[0]),
+        ambiguousSpan: /\b(?:rowspan|colspan)\s*=\s*["']?(?!1(?:["'\s>]|$))\d+/i.test(tag[0]),
       };
+      else if (table.cell) {
+        const text = htmlToVisibleText(cleanHtml.slice(table.cell.start, index));
+        // Preserve empty columns so a later value cannot shift under a header.
+        table.row.cells.push({ text, isHeader: table.cell.isHeader, ambiguousSpan: table.cell.ambiguousSpan });
+        table.cell = undefined;
+      }
+    }
+  }
+  const headerLabel = /^(?:purpose(?:\/activity| of (?:the )?processing)?|activity|lawful basis|legal basis|type of (?:personal )?data|data categor(?:y|ies)|retention(?: period)?|storage period|recipient(?:s| categories)?|service provider|cookie name|duration)$/i;
+  return tables.flatMap((table, tableIndex) => {
+    const first = table.rows[0];
+    const header = first && first.cells.length > 1 && first.cells.every(cell => !cell.ambiguousSpan &&
+      (cell.isHeader || headerLabel.test(cell.text)));
+    const headers = header ? first.cells.map(cell => cell.text) : [];
+    return (header ? table.rows.slice(1) : table.rows).flatMap((row, rowIndex) => {
+      // Ambiguous spanning layouts remain available through ordinary policy
+      // text/heading extraction; do not manufacture a column relationship.
+      if (row.cells.some(cell => cell.ambiguousSpan)) return [];
+      const aligned = headers.length === row.cells.length;
+      const textExcerpt = normalizeWhitespace(row.cells.map((cell, index) =>
+        aligned && headers[index] ? `${headers[index]}: ${cell.text}` : cell.text).filter(Boolean).join(". "));
+      return [{ sourceUrl,
+        heading: normalizeWhitespace(`${table.context || (headers.length ? headers.join(" | ") : `Table ${tableIndex + 1}`)} — ${row.cells[0]?.text || `row ${rowIndex + 1}`}`).slice(0, 160),
+        textExcerpt, extractionMethod: "html_table_row" as const, sourceOffsetBasis: "sanitized_html" as const,
+        charStart: row.start, charEnd: row.end,
+        quality: textExcerpt.length >= 120 ? "partial" as const : "limited" as const,
+      }];
     });
   });
 }

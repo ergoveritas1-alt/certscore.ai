@@ -132,6 +132,20 @@ function findEnglishBehavioralProfilingDisclosure(normalized: string) {
 
 /** Canonical precision-first clause rules for wording too variable to list as literal headings. */
 const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] = [
+  {
+    locale: "en",
+    matchedTerm: "information retained for as long as needed or account active",
+    pattern: /\bwe (?:retain|keep) (?:your |the )?(?:personal )?(?:data|information)\b.{0,100}\bfor as long as (?:we (?:need|require)|(?:your |the )?account (?:remains|is) active)\b/i,
+    topic: "data_retention",
+  },
+
+  {
+    locale: "fr",
+    matchedTerm: "donnees communiquees aux partenaires conseillers et prestataires",
+    pattern: /\bvos donnees\b.{0,240}\b(?:peuvent (?:egalement )?etre|sont) communiquees\b.{0,100}\baux (?:partenaires|conseillers|prestataires)\b/i,
+    topic: "recipients_or_vendor_categories",
+  },
+
   ...BEHAVIORAL_PROFILING_LOCALE_RULES.map(rule => ({
     locale: rule.locale, pattern: rule.pattern, behavioralRule: rule,
     matchedTerm: `behavioral profiling disclosure: ${rule.basis}`,

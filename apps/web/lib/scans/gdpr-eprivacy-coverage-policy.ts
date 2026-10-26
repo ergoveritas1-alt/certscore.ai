@@ -9431,7 +9431,7 @@ function calibratePolicyDisclosureOutcome(outcome: GdprEprivacyCoverageOutcome) 
     outcome.rowId === "retention_disclosure_observed" &&
     outcome.status === "Observed" &&
     /\b(?:retain|keep|store)\b[\s\S]{0,80}\b(?:as long as|required by law|required under applicable law)\b/i.test(evidenceText) &&
-    !/\b(?:as long as necessary|as long as (?:we )?need.{0,100}(?:fulfil|fulfill|meet|serve).{0,60}(?:the )?purposes?|for the purposes?|account remains active|delete|deletion|erase|anonymi[sz]e|limitation period|legal claims?|disputes?|contractual|fraud|security|tax|accounting|specific retention period|retention schedule)\b/i.test(evidenceText)
+    !/\b(?:as long as necessary|as long as (?:we )?need.{0,100}(?:fulfil|fulfill|meet|serve).{0,60}(?:the )?purposes?|for the purposes?|account (?:remains|is) active|delete|deletion|erase|anonymi[sz]e|limitation period|legal claims?|disputes?|contractual|fraud|security|tax|accounting|specific retention period|retention schedule)\b/i.test(evidenceText)
   ) {
     return makeOutcome(
       outcome.rowId,

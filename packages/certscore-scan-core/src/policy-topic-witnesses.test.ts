@@ -40,3 +40,55 @@ test("a concrete data-category purpose after collection-source sentences survive
   assert.match(witness!.selectedPolicySectionExcerpt, /To provide you with/);
   assert.ok(text.includes(witness!.selectedPolicySectionExcerpt));
 });
+
+test("topic selection replaces rights/obligation mentions with actual source disclosures", () => {
+  const rights = "Conformément à la Réglementation, MGEN informera les destinataires de vos données de tout effacement, rectification de vos données, ou limitation de traitement de vos données.";
+  const categories = "Vos données sont destinées aux personnels habilités de MGEN dans le cadre de leurs missions. Elles peuvent également être communiquées lorsque cela est strictement nécessaire aux partenaires, conseillers juridiques et financiers, et prestataires de MGEN.";
+  const basis = "We rely on compliance with a legal obligation to retain records and to respond to lawful requests.";
+  const retention = "We retain your information for as long as we need it for the purposes described in this Privacy Policy, and no longer.";
+  const html = `<h2>Your rights</h2><p>${rights}</p><h2>Qui peut avoir accès à vos données ?</h2><p>${categories}</p><h2>Legal bases</h2><p>${basis}</p><h2>Data retention</h2><p>${retention}</p>`;
+  const sections = extractPolicySections({html, sourceUrl, visibleText:[rights,categories,basis,retention].join(" ")});
+  const witnesses = retainedArticle13SectionEvidenceFromSections(sections, sourceUrl);
+  const recipients = witnesses.find(w=>w.coverageArea==="recipients_or_vendor_categories")!;
+  const retained = witnesses.find(w=>w.coverageArea==="data_retention")!;
+  assert.equal(recipients.signalObserved,"observed");
+  assert.match(recipients.selectedPolicySectionExcerpt,/aux partenaires/);
+  assert.doesNotMatch(recipients.selectedPolicySectionExcerpt,/informera les destinataires/);
+  assert.equal(retained.signalObserved,"observed");
+  assert.match(retained.selectedPolicySectionExcerpt,/for as long as we need/);
+  assert.doesNotMatch(retained.selectedPolicySectionExcerpt,/legal obligation/);
+});
+
+test("nested policy tables keep each activity with its own lawful basis", () => {
+  const website = "Legitimate interests: we process personal data to operate and secure our public websites and provide relevant product information to visitors.";
+  const inquiries = "Contract performance: we need to process your personal data under the terms of a contract we have with you, including your requests before entering into a contract.";
+  const html = `<table><tr><td>Access and use of our websites</td><td><table><tr><td>Lawful Basis</td><td>${website}</td></tr></table></td></tr><tr><td>Product inquiries</td><td><table><tr><td>Lawful Basis</td><td>${inquiries}</td></tr></table></td></tr></table>`;
+  const tables = extractPolicySections({html,sourceUrl,visibleText:`Access and use of our websites Lawful Basis ${website} Product inquiries Lawful Basis ${inquiries}`}).filter(s=>s.extractionMethod==="html_table_row");
+  assert.equal(tables.length,2);
+  assert.match(tables[0]!.heading,/Access and use/);
+  assert.match(tables[0]!.textExcerpt,/Legitimate interests/);
+  assert.doesNotMatch(tables[0]!.textExcerpt,/Contract performance/);
+  assert.match(tables[1]!.heading,/Product inquiries/);
+  assert.doesNotMatch(tables[1]!.textExcerpt,/Access and use/);
+  assert.match(tables[1]!.textExcerpt,/Contract performance/);
+  for (const row of tables) assert.ok(html.slice(row.charStart,row.charEnd).includes(row.textExcerpt.split(". ").at(-1)!));
+});
+
+test("empty cells and spanning layouts do not shift values into another column", () => {
+  const html = '<table><tr><th>Purpose</th><th>Legal basis</th><th>Retention</th></tr><tr><td>Account data</td><td></td><td>We retain your personal data for six months after account closure, then delete the records from our service.</td></tr><tr><td rowspan="2">Other activity</td><td>Consent</td><td>One year</td></tr><tr><td>Contract performance</td><td>Two years</td></tr></table>';
+  const rows = extractPolicySections({html,sourceUrl,visibleText:""}).filter(s=>s.extractionMethod==="html_table_row");
+  assert.match(rows[0]!.textExcerpt,/Legal basis: \. Retention: We retain/);
+  assert.doesNotMatch(rows[0]!.textExcerpt,/Legal basis: We retain/);
+  assert.ok(rows.every(row=>!row.textExcerpt.includes("Other activity")));
+});
+
+test("late full-text retention criteria survive unrelated earlier legal-basis references", () => {
+  const basis="We rely on compliance with a legal obligation to retain records and to respond to lawful requests.";
+  const retention="We retain your information for as long as we need it for the purposes described in this Privacy Policy, and no longer.";
+  const text=`Privacy policy. ${basis} ${"This privacy notice explains the processing of personal data and the choices available to visitors. ".repeat(500)} Data Retention ${retention} We delete personal data after account closure unless statutory retention periods apply.`;
+  const witness=retainedArticle13SectionEvidenceFromSections(extractPolicySections({html:"",sourceUrl,visibleText:text}),sourceUrl).find(w=>w.coverageArea==="data_retention")!;
+  assert.equal(witness.signalObserved,"observed");
+  assert.match(witness.selectedPolicySectionExcerpt,/for as long as we need|after account closure/);
+  assert.doesNotMatch(witness.selectedPolicySectionExcerpt,/legal obligation to retain/);
+  assert.ok(text.includes(witness.selectedPolicySectionExcerpt));
+});
