@@ -1,5 +1,6 @@
 "use client";
 
+import { applyVisitorScanFromDefault } from "../../lib/scans/visitor-scan-default";
 import { useBrowserMarketplaceScope } from "../marketplace-browser/scope";
 import { type FullSiteFormValue } from "../scans/full-site-controls";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
@@ -430,7 +431,7 @@ function StandardDomainScanForm({
   allowRestrictedScanOptions = false,
   buttonLabel = "Start full scan",
   compact = false,
-  defaultScanFrom = "eu_ie",
+  defaultScanFrom,
   emptySubmitDomain = "",
   helperText,
   inputLabel = "Website domain",
@@ -449,7 +450,7 @@ function StandardDomainScanForm({
   const allowedDefaultScanFrom = restrictLocalExtensionScanFrom({
     allowLocalExtensionScan,
     allowRestrictedScanOptions,
-    scanFrom: defaultScanFrom
+    scanFrom: defaultScanFrom ?? "eu_ie"
   });
   const [domain, setDomain] = useState("");
   const [showSearchResultsWarning, setShowSearchResultsWarning] = useState(false);
@@ -476,6 +477,29 @@ function StandardDomainScanForm({
   }, [requestSource]);
   const staticPlaceholder = inputPlaceholder ?? HERO_IDLE_PLACEHOLDER;
   const isSubmittingRef = useRef(false);
+  const scanFromManuallySelectedRef = useRef(false);
+  useEffect(() => {
+    // Preserve explicit account/report settings and the existing preview flow.
+    if (mode !== "full" || defaultScanFrom !== undefined) return;
+    const controller = new AbortController();
+    let active = true;
+    const timeout = window.setTimeout(() => controller.abort(), 1_500);
+    void fetch("/api/public/scan-defaults", {
+      cache: "no-store", credentials: "same-origin", signal: controller.signal,
+    }).then(async response => {
+      if (!response.ok) return;
+      const payload: unknown = await response.json();
+      if (!active || !payload || typeof payload !== "object") return;
+      const suggested = "scanFrom" in payload ? payload.scanFrom : undefined;
+      setScanFrom(current => applyVisitorScanFromDefault({
+        current, initialDefault: allowedDefaultScanFrom, suggested,
+        manuallySelected: scanFromManuallySelectedRef.current,
+        submitting: isSubmittingRef.current,
+      }));
+    }).catch(() => { /* Keep the existing default when the hint is unavailable. */ })
+      .finally(() => window.clearTimeout(timeout));
+    return () => { active = false; controller.abort(); window.clearTimeout(timeout); };
+  }, [mode, defaultScanFrom, allowedDefaultScanFrom]);
   const submissionProgressValueRef = useRef(0);
   const effectiveSubmitDomain = (domain || emptySubmitDomain).trim();
   const searchResultsTarget = searchResultsScanTarget(effectiveSubmitDomain);
@@ -1033,7 +1057,7 @@ function StandardDomainScanForm({
                 includeLocalExtension={canUseLocalExtensionScan}
                 localV2ScanProfileValue={localV2ScanProfile}
                 localV2RunViaLambdaValue={localV2RunViaLambda}
-                onChange={setScanFrom}
+                onChange={(value) => { scanFromManuallySelectedRef.current = true; setScanFrom(value); }}
                 onFreshRescanChange={setFreshRescan}
                 onLocalV2ScanProfileChange={(value) => setLocalV2ScanProfile(normalizeLocalV2ScanProfile(value))}
                 onLocalV2RunViaLambdaChange={setLocalV2RunViaLambda}
