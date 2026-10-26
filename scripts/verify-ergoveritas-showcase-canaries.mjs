@@ -21,7 +21,16 @@ for(const n of [1,2]) for(const gpc of [false,true]) for(const manualChoice of [
   for(const code of inline)vm.runInContext(code,context);
   if(n===2&&manualChoice){assert.equal(context.__CERTSCORE_CANARY_RESULT__.manualOptOut,true);assert.equal(requests.length,0);continue;}
   vm.runInContext(runtime,context);
-  assert.equal(requests.length,n===2&&gpc?4:5);
+  assert.equal(requests.length,n===1?6:gpc?4:5);
+  const linkedin=requests.filter(url=>new URL(url).hostname==='px.ads.linkedin.com');
+  assert.equal(linkedin.length,n===1?1:0,'One synthetic LinkedIn request on test1, with or without GPC');
+  if(n===1){
+    const url=new URL(linkedin[0]);
+    assert.equal(url.pathname,'/collect/');
+    assert.equal(url.searchParams.get('pid'),'certscore-test1-synthetic');
+    assert.equal(url.searchParams.get('li_adsId'),'certscore-test1-synthetic');
+    assert.equal([...url.searchParams].length,2,'No form values or browser-derived identifiers');
+  }
   assert.equal(requests.some(url=>new URL(url).hostname==='www.facebook.com'),true);
   assert.ok(requests.every(url=>!url.includes('ud%5Bem%5D')&&!url.includes('hem=')),'No real or hashed personal details');
   assert.equal(requests.some(url=>new URL(url).hostname==='ct.pinterest.com'),n===1||!gpc);
@@ -29,6 +38,7 @@ for(const n of [1,2]) for(const gpc of [false,true]) for(const manualChoice of [
   listeners.get('onetrust-reject-all-handler:click')();
   while(timers.length)timers.shift()();
   assert.equal(requests.length-before,n===1?1:2);
+  assert.equal(requests.slice(before).some(url=>new URL(url).hostname==='px.ads.linkedin.com'),false,'Reject does not add LinkedIn activity');
   assert.equal(cookies.has(n===1?'_fbp':'_fbc'),false);
   assert.equal(cookies.has(n===1?'_clck':'_clsk'),n===2);
   assert.equal(get('onetrust-banner-sdk').hidden,true);
