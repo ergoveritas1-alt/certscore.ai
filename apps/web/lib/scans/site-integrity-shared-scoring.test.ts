@@ -86,3 +86,11 @@ test("unreportable, guessed and source-mismatched effects cannot create either d
   assert.equal(siteIntegrityScoreEffectSchema.safeParse({...legacy,appliesTo:"california_posture"}).success,false);
   assert.doesNotMatch(siteIntegrityScoreDescription(original.scoreEffects!),/\d|point|deduct|cap|scor/i);
 });
+
+// A pending report may carry an earlier preliminary score version across a deploy.
+test("new policy effects stay equal when finalizing an in-flight scan with old snapshot metadata", () => {
+  const findings=packets(1);
+  assert.equal(eu(findings,"overall-posture.v13")?.score,87);
+  assert.equal(eu(findings,"overall-posture.v13")?.scoreVersion,"overall-posture.v14-shared-integrity");
+  assert.equal(ca(findings).score,87);
+});

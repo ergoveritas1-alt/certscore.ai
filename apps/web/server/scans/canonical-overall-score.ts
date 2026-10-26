@@ -1,4 +1,5 @@
-import { siteIntegrityDeduction, siteIntegrityFindingEffects, siteIntegrityPolicyForScoreVersion } from "../../lib/scans/site-integrity-score-policy";
+import { siteIntegrityDeduction, siteIntegrityFindingEffects } from "../../lib/scans/site-integrity-score-policy";
+import { SITE_INTEGRITY_POLICY_VERSION } from "@certscore/contracts";
 import { accessibilityFindingDeductionBreakdown } from "../../lib/scans/accessibility-score-policy";
 import { SCORE_FLOOR, SCORE_BASE, SCORING_POLICY_VERSION, type GdprEprivacyScoringPolicyVersion, SCORING_RULE_BY_ID, SCORING_FAMILIES } from "../../lib/scans/scoring-policy";
 import { projectScanReportNoGo, type ScanReportAccessContext } from "../../lib/scans/scan-report-disposition";
@@ -33,7 +34,7 @@ export function deriveCanonicalOverallScoreExplanationForReport(input: {
   if (accessibility.deductionPoints) {
     deductions.push({ family: accessibility.family, label: accessibility.label, deductionPoints: accessibility.deductionPoints, rules: accessibility.rules });
   }
-  for (const [ruleId, points] of [["site_integrity_hidden_outbound_links", siteIntegrityDeduction(integrityEffects, { policyVersion: siteIntegrityPolicyForScoreVersion(input.scanRecord.snapshot?.score_version) })]] as const) {
+  for (const [ruleId, points] of [["site_integrity_hidden_outbound_links", siteIntegrityDeduction(integrityEffects)]] as const) {
     if (!points) continue;
     const rule = SCORING_RULE_BY_ID.get(ruleId)!;
     deductions.push({ family: rule.family, label: SCORING_FAMILIES[rule.family].label, deductionPoints: points,
@@ -47,7 +48,8 @@ export function deriveCanonicalOverallScoreExplanationForReport(input: {
       : input.scorePolicyVersion === "gdpr-eprivacy-posture.v19" ? "overall-posture.v9"
       : input.scorePolicyVersion === "gdpr-eprivacy-posture.v20" ? "overall-posture.v11"
       : input.scorePolicyVersion === "gdpr-eprivacy-posture.v21" ? "overall-posture.v12"
-      : input.scanRecord.snapshot?.score_version === "overall-posture.v13" ? "overall-posture.v13" : CANONICAL_OVERALL_SCORE_VERSION,
+      : input.scanRecord.snapshot?.score_version === "overall-posture.v13" && !integrityEffects.some(effect => effect.policyVersion === SITE_INTEGRITY_POLICY_VERSION)
+        ? "overall-posture.v13" : CANONICAL_OVERALL_SCORE_VERSION,
     policyVersion: input.scorePolicyVersion ?? SCORING_POLICY_VERSION, deductions };
 }
 
