@@ -97,8 +97,8 @@ function integrityFindings(count: number, page?: string) {
 }
 const scoreIntegrity = (unifiedFindings: UnifiedFindingDisplayPacket[]) => deriveCanonicalOverallScoreForReport({scanRecord: {runtimeArtifacts: null}, checklistRows: checkedChecklist, unifiedFindings});
 
-test("verified hidden links use 17 then 5 with a 40-point site cap", () => {
-  for (const [count, expected] of [[0,100],[1,83],[2,78],[3,73],[5,63],[6,60],[7,60],[12,60]]) assert.equal(scoreIntegrity(integrityFindings(count!)), expected);
+test("verified hidden links use 13 then 5 with a 37-point site cap", () => {
+  for (const [count, expected] of [[0,100],[1,87],[2,82],[3,77],[4,72],[5,67],[6,63],[7,63],[12,63]]) assert.equal(scoreIntegrity(integrityFindings(count!)), expected);
 });
 test("transfer-framework review retains the canonical consent, embed, and hidden-link deductions", () => {
   const checklistRows = [
@@ -108,15 +108,15 @@ test("transfer-framework review retains the canonical consent, embed, and hidden
     })),
     { id: "outdated_transfer_framework_reference", assessmentStatus: "review_signal", evidenceState: "observed", status: "Review signal" },
   ] as GdprEprivacyCoverageChecklistItem[];
-  assert.equal(deriveCanonicalOverallScoreForReport({ scanRecord: { runtimeArtifacts: null }, checklistRows, unifiedFindings: integrityFindings(8) }), 33);
+  assert.equal(deriveCanonicalOverallScoreForReport({ scanRecord: { runtimeArtifacts: null }, checklistRows, unifiedFindings: integrityFindings(8) }), 36);
 });
 test("site-wide link identities union across pages and duplicate projections do not multiply deductions", () => {
   const home = integrityFindings(1);
   const page = integrityFindings(2, "20000000-0000-4000-8000-000000000001");
-  assert.equal(scoreIntegrity([...home, ...home]), 83);
-  assert.equal(scoreIntegrity([...home, ...page, ...page]), 73);
-  assert.equal(scoreIntegrity([...integrityFindings(6), ...page]), 60);
-  assert.equal(scoreIntegrity([...integrityFindings(12),gpcFinding(15)]),60);
+  assert.equal(scoreIntegrity([...home, ...home]), 87);
+  assert.equal(scoreIntegrity([...home, ...page, ...page]), 77);
+  assert.equal(scoreIntegrity([...integrityFindings(6), ...page]), 63);
+  assert.equal(scoreIntegrity([...integrityFindings(12),gpcFinding(15)]),63);
 });
 test("missing, stale, and malformed integrity score effects fail closed", () => {
   const finding = integrityFindings(1)[0]!;

@@ -7,7 +7,8 @@ const codeProofBytes = 2048;
 export const SITE_INTEGRITY_LIMITS = { inspectedLinks: 1000, retainedLinks, ancestorDepth: 6, captureBudgetMs: 20, codeProofBytes, codeProofPageBytes: retainedLinks * codeProofBytes } as const;
 export const SITE_INTEGRITY_FINDING_ID = "site_integrity_hidden_outbound_links";
 export const SITE_INTEGRITY_SIGNAL = "site_integrity.hidden_outbound_links";
-export const SITE_INTEGRITY_POLICY_VERSION = "certscore.site-integrity-policy.v4";
+export const LEGACY_SITE_INTEGRITY_POLICY_VERSION = "certscore.site-integrity-policy.v4";
+export const SITE_INTEGRITY_POLICY_VERSION = "certscore.site-integrity-policy.v5-shared-postures";
 // Owner-approved September 17, 2026: verified hidden links receive an overall-score effect.
 export const SITE_INTEGRITY_SEVERITY = "high" as const;
 export const SITE_INTEGRITY_COPY = {

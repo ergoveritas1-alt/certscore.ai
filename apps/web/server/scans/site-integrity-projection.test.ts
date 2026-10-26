@@ -80,7 +80,7 @@ test("additional page provenance reaches an eligible scored unified finding and 
   assert.match(priority!.evidence[0]!, /3 concealed link occurrences/);
   const concern = buildNormalizedConcerns({ runtimeArtifacts: { siteIntegrity: projection }, reviewFindingCandidates: [], validationFindings: [] })[0]!;
   assert.equal(concern.regulatoryChecklistEligibility, "none");
-  assert.equal(concern.scoreEffects?.[0]?.deductionPoints, 27);
+  assert.equal(concern.scoreEffects?.[0]?.deductionPoints, 23);
 });
 
 test("additional-page capture fails closed on hash, attempt, parent, configuration, document, timing and coverage mismatch", () => {
@@ -183,7 +183,7 @@ test("code proof survives verified persistence and canonical finding projection 
   assert.deepEqual(projection?.observation.links[0]?.codeProof, siteIntegrityCodeProofFixture);
   const finding = selectSiteIntegrityFinding(buildUnifiedFindingDisplayPackets({runtimeArtifacts: {siteIntegrity: projection!}, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map()}));
   assert.deepEqual(finding?.evidence.observation.links[0]?.codeProof, siteIntegrityCodeProofFixture);
-  assert.equal(finding?.scoreEffects?.[0]?.deductionPoints, 27);
+  assert.equal(finding?.scoreEffects?.[0]?.deductionPoints, 23);
   const evidence = {...pageEvidence, siteIntegrityObservation: {...pageEvidence.siteIntegrityObservation, links: bundle.siteIntegrityObservation.links}};
   assert.deepEqual(projectAdditionalPageSiteIntegrity(evidence, {...packet, sourceHash: hash(evidence)}, scanId)?.observation.links[0]?.codeProof, siteIntegrityCodeProofFixture);
   assert.equal(projectAdditionalPageSiteIntegrity(evidence, packet, scanId), null, "changed proof bytes require matching retained hash");
@@ -200,7 +200,7 @@ test("all twelve code excerpts survive verified homepage and additional-page fin
     const finding = selectSiteIntegrityFinding(buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { siteIntegrity: projection }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() }));
     assert.ok(finding);
     assert.deepEqual(finding.evidence.observation.links, codeObservation.links);
-    assert.equal(finding.scoreEffects?.[0]?.deductionPoints, 40);
+    assert.equal(finding.scoreEffects?.[0]?.deductionPoints, 37);
     const withoutCode = { ...projection, observation: { ...projection.observation, links: projection.observation.links.map(({ codeProof, ...link }) => link) } };
     const baseline = selectSiteIntegrityFinding(buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { siteIntegrity: withoutCode }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() }));
     assert.deepEqual(finding.scoreEffects, baseline?.scoreEffects);
