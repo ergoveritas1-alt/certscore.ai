@@ -4,7 +4,7 @@ import { EvidenceJumpLink } from "./evidence-jump-link";
 import { DisclosureChevron } from "./report-finding-row";
 import { EvidenceStatusBadge } from "./evidence-status-badge";
 import { CaliforniaReviewCoverage as CaliforniaChoiceInspection } from "./california-review-coverage";
-import type { CaliforniaPrivacyReview } from "@certscore/contracts";
+import { californiaPrivacyReviewSchema, type CaliforniaPrivacyReview } from "@certscore/contracts";
 import { EvidenceHeaderStatus } from "./evidence-header-status";
 import React from "react";
 import type { PrivacyAuditEvidence, ReportReviewFocus } from "@certscore/api-contracts";
@@ -178,6 +178,9 @@ export function CaliforniaPrivacyWorkpaper({ evidence: retainedEvidence, focus, 
 }) {
   if (focus !== "ccpa_cpra") return null;
   const { evidence, candidates, section } = californiaPrivacyEvidence(retainedEvidence, scanId);
+  const parsedAssessment = californiaPrivacyReviewSchema.safeParse(assessment);
+  const registration = parsedAssessment.success && parsedAssessment.data.contractVersion === "certscore.california-privacy-review.v10" &&
+    (!scanId || parsedAssessment.data.scanId === scanId) ? parsedAssessment.data.agentRegistrationAssessment : undefined;
   const topics = evidence ? [...new Set(evidence.notices.flatMap(notice => notice.passages.map(passage => passage.topic)))] : [];
   const rightsLabels = { right_to_know: "Access", right_to_delete: "Deletion", right_to_correct: "Correction", non_discrimination: "Non-discrimination" } as const;
   const rights = coverageProps.rightsAssessment?.topics.filter(topic => topic.status === "disclosed" && topic.passages.length)
@@ -199,6 +202,13 @@ export function CaliforniaPrivacyWorkpaper({ evidence: retainedEvidence, focus, 
         <summary className="cursor-pointer font-medium text-zinc-600">Evidence &amp; assessment details</summary>
         <div className="mt-4 space-y-6">
           <CaliforniaCoverageDetails {...coverageProps} />
+          {registration ? <section data-california-agent-registration>
+            <h3 className="font-semibold">Authorized-agent registration requirement</h3>
+            <blockquote className="mt-2 border-l-2 border-zinc-200 pl-3">{registration.excerpt}</blockquote>
+            <p className="mt-2 text-xs">Review the stated registration condition and available authorization routes for individuals acting as agents.</p>
+            <a className="mt-1 inline-block break-all text-sky-800 underline" href={registration.sourceDocumentUrl} target="_blank" rel="noreferrer">Retained policy source</a>
+            <p className="text-xs text-zinc-500">Evidence: {registration.evidenceRef}</p>
+          </section> : null}
           <CaliforniaChoiceInspection assessment={assessment && (!scanId || assessment.scanId === scanId) ? assessment : undefined} homepage={homepage} />
           {!evidence ? <p>No verified privacy-choice or notice evidence was retained for this scan. This does not establish that these items are absent.</p> : <>
             <dl className="space-y-2">{Object.entries(controlLabels).map(([kind, label]) => {

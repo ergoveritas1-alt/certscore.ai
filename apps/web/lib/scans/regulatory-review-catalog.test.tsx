@@ -27,7 +27,7 @@ test("mode switching partitions canonical identities without changing evidence, 
 test("every catalog identity is unique and cases match the selected jurisdiction", () => {
   const ids = REGULATORY_REVIEW_TOPICS.flatMap(topic => topic.findingIds);
   assert.equal(new Set(ids).size, ids.length);
-  assert.equal(REGULATORY_REVIEW_TOPICS.filter(topic => topic.contexts.gdpr_eprivacy).length, 31);
+  assert.equal(REGULATORY_REVIEW_TOPICS.filter(topic => topic.contexts.gdpr_eprivacy).length, 32);
   assert.equal(REGULATORY_REVIEW_TOPICS.filter(topic => topic.contexts.ccpa_cpra).length, 8);
   for (const topic of REGULATORY_REVIEW_TOPICS) for (const mode of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
     for (const caseId of topic.contexts[mode]?.cases ?? []) assert.equal(ENFORCEMENT_EXAMPLES[caseId]?.mode, mode, `${topic.id}: ${caseId}`);
@@ -81,8 +81,8 @@ test("California overview and priority list omit EU-only findings while retainin
 test("all mapped findings remain available without a 30-item truncation", () => {
   const eu = REGULATORY_PREVIEW_FINDINGS.filter(finding => regulatoryReviewContext(finding.id,"gdpr_eprivacy"));
   const result = selectRegulatoryReview(eu,"gdpr_eprivacy");
-  assert.equal(result.regulatory.length, 31);
-  assert.deepEqual(result.regulatory.map(row => row.rank), Array.from({length:31},(_,i)=>i+1));
+  assert.equal(result.regulatory.length, 32);
+  assert.deepEqual(result.regulatory.map(row => row.rank), Array.from({length:32},(_,i)=>i+1));
 });
 
 test("California coverage separates supported evidence from unresolved review areas",async()=>{

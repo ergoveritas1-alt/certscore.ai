@@ -1,4 +1,5 @@
 import { PRIVACY_CHOICE_PRESENCE_SIGNAL, PRIVACY_CHOICE_PRESENCE_TITLE } from "@certscore/contracts";
+import { GDPR_NARROW_KINDS, GDPR_NARROW_RULES, gdprNarrowFindingId, GDPR_NARROW_SIGNAL } from "@certscore/contracts";
 import { FORM_DESTINATION_FINDING_ID, FORM_DESTINATION_SIGNAL } from "@certscore/contracts";
 import { CALIFORNIA_PRIVACY_REVIEW_IDS, CALIFORNIA_PRIVACY_REVIEW_SIGNAL, californiaPrivacyReviewCopy } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, CMS_SECURITY_SIGNAL } from "@certscore/contracts";
@@ -1125,6 +1126,8 @@ export const REPORT_EVIDENCE_CATEGORIES: ReportEvidenceCategoryDefinition[] = [
 ];
 
 export const REPORT_SIGNALS: ReportSignalDefinition[] = [
+  ...GDPR_NARROW_KINDS.map(kind => defineReportSignal("runtime_artifact_signal", `${GDPR_NARROW_SIGNAL}.${kind}`,
+    GDPR_NARROW_RULES[kind].title, GDPR_NARROW_RULES[kind].consent ? "consent_interface_control_availability" : "data_handling_disclosures")),
   defineReportSignal("runtime_artifact_signal", PRIVACY_CHOICE_PRESENCE_SIGNAL, PRIVACY_CHOICE_PRESENCE_TITLE, "rights_request_mechanisms"),
   defineReportSignal("runtime_artifact_signal", FORM_DESTINATION_SIGNAL, "Form-data destination review", "collection_surface_entry_points_and_handling_context"),
   defineReportSignal("runtime_artifact_signal", CMS_SECURITY_SIGNAL, "CMS security review", "site_integrity_observations"),
@@ -2390,6 +2393,10 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
 ];
 
 export const REPORT_UNIFIED_FINDINGS = [
+  ...GDPR_NARROW_KINDS.map(kind => defineReportUnifiedFinding({ id: gdprNarrowFindingId(kind),
+    label: GDPR_NARROW_RULES[kind].title,
+    owner: GDPR_NARROW_RULES[kind].consent ? "consent_interface_control_availability" : "data_handling_disclosures",
+    signalMappings: [{ source: "runtime_artifact_signal", key: `${GDPR_NARROW_SIGNAL}.${kind}` }] })),
   ...CALIFORNIA_PRIVACY_REVIEW_IDS.map(id => defineReportUnifiedFinding({id, label: californiaPrivacyReviewCopy(id).title,
     owner: "consent_interface_control_availability", signalMappings: [{source: "runtime_artifact_signal", key: `${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${id}`}] })),
   defineReportUnifiedFinding({ id: FORM_DESTINATION_FINDING_ID, label: "Form-data destination review", owner: "collection_surface_entry_points_and_handling_context", signalMappings: [{ source: "runtime_artifact_signal", key: FORM_DESTINATION_SIGNAL }] }),

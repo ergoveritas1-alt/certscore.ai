@@ -1,7 +1,9 @@
 import { readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
+import { narrowKindForRow, readBoundGdprNarrow } from "./gdpr-narrow-evidence";
+import { isActiveGdprNarrowKind } from "@certscore/contracts";
 import { EMBED_SCORE_ROW_IDS, readEmbedScoringGroups } from "./embed-scoring-evidence";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
-import { SCORING_POLICY_VERSION, type GdprEprivacyScoringPolicyVersion, SCORING_RULE_BY_ID, SCORING_FAMILIES, SCORE_FLOOR, SCORE_BASE } from "./scoring-policy";
+import { SCORING_POLICY_VERSION, HISTORICAL_NARROW_POLICY_VERSION, HISTORICAL_NARROW_OMISSION_RULES, type GdprEprivacyScoringPolicyVersion, SCORING_RULE_BY_ID, SCORING_FAMILIES, SCORE_FLOOR, SCORE_BASE } from "./scoring-policy";
 import { readRejectClickTrackingAssessment } from "./reject-click-tracking-policy";
 
 type RegulatoryCoverageFramework = "california" | "gdpr_eprivacy";
@@ -42,14 +44,20 @@ export const CALIFORNIA_EVIDENCE_SCORE_VERSION = "california-evidence.v2";
 export const GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION = SCORING_POLICY_VERSION;
 
 type GdprEprivacyRiskFamily = keyof typeof SCORING_FAMILIES;
-const GDPR_EPRIVACY_POSTURE_POLICIES = Object.fromEntries(
-  [...SCORING_RULE_BY_ID.values()].filter(rule => !["gpc", "site_integrity", "accessibility"].includes(rule.family)).map(rule => [rule.id, {
-    family: rule.family, gapDeduction: rule.points, confirmedContradictionDeduction: rule.points,
-  }])
-);
 const GDPR_EPRIVACY_FAMILY_DEDUCTION_CAPS = Object.fromEntries(
   Object.entries(SCORING_FAMILIES).map(([id, family]) => [id, family.cap])
 );
+const historicalNarrowRules = new Map(HISTORICAL_NARROW_OMISSION_RULES.map(rule => [rule.id, rule]));
+const isNarrowPolicy = (version: GdprEprivacyScoringPolicyVersion) =>
+  version === SCORING_POLICY_VERSION || version === HISTORICAL_NARROW_POLICY_VERSION;
+function ruleForVersion(rowId: string, version: GdprEprivacyScoringPolicyVersion) {
+  return SCORING_RULE_BY_ID.get(rowId) ?? (version === HISTORICAL_NARROW_POLICY_VERSION ? historicalNarrowRules.get(rowId) : undefined);
+}
+function policyForVersion(rowId: string, version: GdprEprivacyScoringPolicyVersion) {
+  const rule = ruleForVersion(rowId, version);
+  return rule && !["gpc", "site_integrity", "accessibility"].includes(rule.family)
+    ? { family: rule.family, gapDeduction: rule.points, confirmedContradictionDeduction: rule.points } : undefined;
+}
 
 const CALIFORNIA_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   cipa_sensitive_communication_interception: { weight: 7 },
@@ -77,6 +85,8 @@ export function getCaliforniaEvidenceRowPoints(rowId: string): number | null {
 }
 
 const GDPR_EPRIVACY_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
+  consent_optional_defaults_on: { weight: 8 },
+  consent_browsing_as_consent: { weight: 6 },
   accessibility_consent_controls: { weight: 4 },
   accept_consent_control: { weight: 7 },
   advertising_retargeting_vendor_signal_observed: { weight: 5 },
@@ -321,10 +331,18 @@ function getFingerprintingHostCount(retained: Record<string, unknown>) {
 
 export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow, policyVersion: GdprEprivacyScoringPolicyVersion = SCORING_POLICY_VERSION) {
   if (isExcludedFromDenominator(row) || isCoverageLimited(row)) return 0;
-  const policy = GDPR_EPRIVACY_POSTURE_POLICIES[row.id];
+  const policy = policyForVersion(row.id, policyVersion);
   if (!policy) return 0;
 
   const retained = getRetainedEvidence(row);
+  const narrowKind = narrowKindForRow(row.id);
+  if (narrowKind) {
+    return isNarrowPolicy(policyVersion) &&
+      (policyVersion === HISTORICAL_NARROW_POLICY_VERSION || isActiveGdprNarrowKind(narrowKind)) && row.assessmentStatus === "gap_observed" &&
+      readBoundGdprNarrow(retained)?.issues.some(issue => issue.kind === narrowKind &&
+        (policyVersion !== HISTORICAL_NARROW_POLICY_VERSION || issue.method !== "explicit_advertising_assent.v2-paragraph"))
+      ? policy.gapDeduction : 0;
+  }
   if (retained.scoreEffect === "none" && !hasConfirmedPostRefusalContradiction(row)) return 0;
   if (row.id === "outdated_transfer_framework_reference") {
     const concern = asRecord(retained.gdprTransparencyLegalFrameworkValidityConcern);
@@ -381,11 +399,11 @@ export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow, policyVe
     return 0;
   }
   if (row.id === "post_reject_tracking_reduction") {
-    if (policyVersion === SCORING_POLICY_VERSION || policyVersion === "gdpr-eprivacy-posture.v23" || policyVersion === "gdpr-eprivacy-posture.v22" || policyVersion === "gdpr-eprivacy-posture.v21" || policyVersion === "gdpr-eprivacy-posture.v20") {
+    if (isNarrowPolicy(policyVersion) || policyVersion === "gdpr-eprivacy-posture.v24" || policyVersion === "gdpr-eprivacy-posture.v23" || policyVersion === "gdpr-eprivacy-posture.v22" || policyVersion === "gdpr-eprivacy-posture.v21" || policyVersion === "gdpr-eprivacy-posture.v20") {
       const assessment = readAfterRejectScoringAssessment(retained.afterRejectScoringAssessment);
-      if(policyVersion!=="gdpr-eprivacy-posture.v24"&&assessment?.policyVersion==="after_reject_nonessential_presence.v3-cookie-coverage")return 0;
-      if(!["gdpr-eprivacy-posture.v23","gdpr-eprivacy-posture.v24"].includes(policyVersion)&&assessment?.policyVersion==="after_reject_nonessential_presence.v2-vendor-coverage")return 0;
-      if(!["gdpr-eprivacy-posture.v22","gdpr-eprivacy-posture.v23","gdpr-eprivacy-posture.v24"].includes(policyVersion)&&assessment?.policyVersion==="after_reject_nonessential_presence.v1")return 0;
+      if(!isNarrowPolicy(policyVersion)&&policyVersion!=="gdpr-eprivacy-posture.v24"&&assessment?.policyVersion==="after_reject_nonessential_presence.v3-cookie-coverage")return 0;
+      if(!isNarrowPolicy(policyVersion)&&!["gdpr-eprivacy-posture.v23","gdpr-eprivacy-posture.v24"].includes(policyVersion)&&assessment?.policyVersion==="after_reject_nonessential_presence.v2-vendor-coverage")return 0;
+      if(!isNarrowPolicy(policyVersion)&&!["gdpr-eprivacy-posture.v22","gdpr-eprivacy-posture.v23","gdpr-eprivacy-posture.v24"].includes(policyVersion)&&assessment?.policyVersion==="after_reject_nonessential_presence.v1")return 0;
       if (policyVersion === "gdpr-eprivacy-posture.v20" && assessment?.registration !== "confirmed") return 0;
       return ["gap_observed", "review_signal"].includes(row.assessmentStatus) ? assessment?.deductionPoints ?? 0 : 0;
     }
@@ -449,11 +467,11 @@ export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow
         groups.forEach(group => chargedEmbedGroups.add(group));
       }
     }
-    if (row.id === "outdated_transfer_framework_reference") {
+    if (row.id === "outdated_transfer_framework_reference" || (isNarrowPolicy(policyVersion) && narrowKindForRow(row.id))) {
       if (scoredFlatRows.has(row.id)) continue;
       scoredFlatRows.add(row.id);
     }
-    const policy = GDPR_EPRIVACY_POSTURE_POLICIES[row.id];
+    const policy = policyForVersion(row.id, policyVersion);
     if (!policy) continue;
     if (
       confirmedPrivacyNoticeGap &&
@@ -464,7 +482,7 @@ export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow
     }
     const rules = familyRules.get(policy.family) ?? [];
     const retained = getRetainedEvidence(row);
-    rules.push({ ruleId: row.id, label: SCORING_RULE_BY_ID.get(row.id)!.label,
+    rules.push({ ruleId: row.id, label: ruleForVersion(row.id, policyVersion)!.label,
       policyDeductionPoints: deduction,
       decisionVerification: row.id !== "post_reject_tracking_reduction" ? "not_applicable" as const
         : retained.rejectInteractionConfirmed === true || retained.refusalExercised === true ? "confirmed" as const
@@ -477,7 +495,7 @@ export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow
         // Only the pre-presence policies retain the old 15-point cap (D8).
         policy.family === "post_refusal_enforcement" && ["gdpr-eprivacy-posture.v18", "gdpr-eprivacy-posture.v19", "gdpr-eprivacy-posture.v20", "gdpr-eprivacy-posture.v21"].includes(policyVersion)
           ? 15 : GDPR_EPRIVACY_FAMILY_DEDUCTION_CAPS[policy.family]!,
-        policy.family === "post_refusal_enforcement"
+        policy.family === "post_refusal_enforcement" || (isNarrowPolicy(policyVersion) && policy.family === "consent_controls")
           ? Math.max(familyDeductions.get(policy.family) ?? 0, deduction)
           : (familyDeductions.get(policy.family) ?? 0) + deduction
       )

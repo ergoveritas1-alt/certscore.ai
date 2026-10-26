@@ -1722,3 +1722,19 @@ never follow a redirected destination or mutate a privacy choice. Keep linked
 privacy controls separate from cookie categories and choice effectiveness.
 See `docs/certscore-v2/weather-notice-linked-preferences-policy-2026-10-18.md`.
 No deployment is authorized.
+
+
+## Privacy-posture release authorization — October 26, 2026
+
+The owner authorized preparing and deploying the reviewed privacy-posture release
+through the existing AWS web workflow after release checks pass. Include only
+GDPR candidates 1–2 (8/6 points, strongest consent-family effect), the three-point
+California authorized-agent registration rule with existing rights deductions
+absorbing its amount, and the GDPR surfacing-registry repair. Preserve historical
+policy reads. GDPR candidates 3–5, opt-out verification and request-frequency
+deductions remain inactive. Optional restriction research remains local,
+score-neutral and nonpersistent; no production caller enables it. No new capture,
+model calls, flags, scanner deployment or historical rewrite is authorized.
+The registration/restriction estimate remains approximately $0.48/month under
+the documented 100,000-scan/30-day assumptions, within its $0.50 envelope.
+See docs/operations/2026-10-26-privacy-posture-release.md.

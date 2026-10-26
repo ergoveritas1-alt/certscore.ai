@@ -1,3 +1,4 @@
+import { CALIFORNIA_AGENT_REGISTRATION_ID, californiaAgentRegistrationProjectionSchema } from "@certscore/contracts";
 import {describeGpcObservedFacts} from "./gpc-observed-facts";
 import {supportsCombinedOptOutRisk} from "./california-combined-opt-out-policy";
 import {createHash} from "node:crypto";
@@ -15,6 +16,17 @@ export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDi
   const gpcObservation=gpc?.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? gpc.assessment.observation : undefined;
   const result: Omit<SitePriorityFinding, "pages" | "rank">[] = [];
   for (const finding of eligible) {
+    if (finding.unifiedFindingId === CALIFORNIA_AGENT_REGISTRATION_ID && finding.details?.family === "california_agent_registration") {
+      const parsed = californiaAgentRegistrationProjectionSchema.safeParse(finding.details.projection);
+      if (!parsed.success) continue;
+      const proof = parsed.data.assessment, copy = californiaPrivacyReviewCopy(CALIFORNIA_AGENT_REGISTRATION_ID);
+      result.push({id: CALIFORNIA_AGENT_REGISTRATION_ID, title: copy.title, summary: copy.description,
+        severity: finding.severity, status: "Partial concern",
+        evidence: [proof.excerpt, `${proof.sourceDocumentUrl} · Evidence: ${proof.evidenceRef}`],
+        evidenceJson: {findingId: CALIFORNIA_AGENT_REGISTRATION_ID, agentRegistrationProjection: parsed.data},
+        correctionSteps: [copy.action]});
+      continue;
+    }
     if (finding.details?.family !== "california_privacy_review" || !californiaPrivacyReviewFindingIds(finding.details.projection).includes(finding.unifiedFindingId)) continue;
     const projection = finding.details.projection;
     const copy = californiaPrivacyReviewCopy(finding.unifiedFindingId, projection);

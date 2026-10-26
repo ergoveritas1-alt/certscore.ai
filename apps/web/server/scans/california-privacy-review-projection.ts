@@ -18,10 +18,16 @@ import { californiaPrivacyReviewSchema, classifyPrivacySurface, isCurrentCalifor
 import { projectPrivacyAuditEvidence } from "./privacy-audit-projection";
 import { projectCaliforniaReviewCoverage, type CaliforniaPolicyEvidence } from "./california-review-coverage-projection";
 import { projectCaliforniaObservedScoreBasis } from "./california-observed-score-basis";
+import { hardenCaliforniaOptOutShadow, CALIFORNIA_RESTRICTION_SHADOW_LIMITS, materializeCaliforniaAgentRegistration, assessCaliforniaRestrictionShadow, type CaliforniaRestrictionShadow } from "@certscore/contracts";
+
+export type CaliforniaShadowOptions = {
+  /** Local diagnostic opt-in only. Never persisted or included in report data. */
+  onRestrictionShadow?: (result: CaliforniaRestrictionShadow) => void;
+};
 
 /** Materialize only from the checksum-verified original policy-lane observations.
  * The workpaper supplies positive facts; its empty lists never establish absence. */
-export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, source: { sha256?: string; verificationStatus?: string } | undefined, documentUrl: string | null, policyEvidence?: CaliforniaPolicyEvidence,positivePolicyEvidence?:CaliforniaPolicyEvidence) {
+export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, source: { sha256?: string; verificationStatus?: string } | undefined, documentUrl: string | null, policyEvidence?: CaliforniaPolicyEvidence,positivePolicyEvidence?:CaliforniaPolicyEvidence, shadowOptions?: CaliforniaShadowOptions) {
   const workpaper = projectPrivacyAuditEvidence(bundle, source, documentUrl);
   const start = Date.parse(bundle.startedAt), end = Date.parse(bundle.completedAt);
   if (!workpaper || !documentUrl || !Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
@@ -237,7 +243,31 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
       }
       return {...family,assessmentState,followUp};
     })}:undefined;
-  const result = californiaPrivacyReviewSchema.safeParse({
+  // One bounded analysis feeds both the persisted registration clause and the
+  // optional research observer. Other restriction families remain score-neutral.
+  let restrictionAnalysis: CaliforniaRestrictionShadow | undefined;
+  let agentRegistrationAssessment: ReturnType<typeof materializeCaliforniaAgentRegistration>;
+  try {
+    const observerDeadline = shadowOptions?.onRestrictionShadow
+      ? performance.now() + CALIFORNIA_RESTRICTION_SHADOW_LIMITS.processingMs : undefined;
+    if (transferPolicy || shadowOptions?.onRestrictionShadow)
+      restrictionAnalysis = assessCaliforniaRestrictionShadow(positiveDocuments, source!.sha256!);
+    if (transferPolicy)
+      agentRegistrationAssessment = materializeCaliforniaAgentRegistration(restrictionAnalysis, positiveDocuments, bundle.scanId, source!.sha256!);
+    if (restrictionAnalysis && observerDeadline !== undefined) {
+      // Registration already consumed its unchanged v1 basis. Only the local
+      // observer gets refinement, within the remaining original budget.
+      try {
+        restrictionAnalysis = hardenCaliforniaOptOutShadow(restrictionAnalysis, positiveDocuments, observerDeadline);
+      } catch {
+        restrictionAnalysis = {...restrictionAnalysis,
+          candidates: restrictionAnalysis.candidates.filter(row => row.kind !== "opt_out_verification")};
+      }
+    }
+  } catch {
+    // Optional clause analysis cannot make an otherwise usable report unavailable.
+  }
+  let result = californiaPrivacyReviewSchema.safeParse({
     contractVersion: transferPolicy ? "certscore.california-privacy-review.v10" : readUsePolicy ? "certscore.california-privacy-review.v9" : runtimePurposePolicy ? "certscore.california-privacy-review.v8" : categoryPolicy ? "certscore.california-privacy-review.v7" : refinedPolicy ? "certscore.california-privacy-review.v6" : clausePolicy ? "certscore.california-privacy-review.v5" : disclosurePolicy ? "certscore.california-privacy-review.v4" : captureBasedPolicy ? "certscore.california-privacy-review.v3" : newCoverage ? "certscore.california-privacy-review.v2" : "certscore.california-privacy-review.v1",
     policyVersion: transferPolicy ? "california-privacy-review.v10" : readUsePolicy ? "california-privacy-review.v9" : runtimePurposePolicy ? "california-privacy-review.v8" : categoryPolicy ? "california-privacy-review.v7" : refinedPolicy ? "california-privacy-review.v6" : clausePolicy ? "california-privacy-review.v5" : disclosurePolicy ? "california-privacy-review.v4" : captureBasedPolicy ? "california-privacy-review.v3" : newCoverage ? "california-privacy-review.v2" : "california-privacy-review.v1",
     scanId: bundle.scanId, documentUrl: documentUrl, capturedAt: bundle.completedAt,
@@ -256,6 +286,20 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
     ...(refinedPolicy?{saleSharingAssessment}:{}),
   });
   if (!result.success) return null;
+  if (agentRegistrationAssessment) {
+    const registered = californiaPrivacyReviewSchema.safeParse({...result.data, agentRegistrationAssessment});
+    if (registered.success) result = registered;
+  }
+  if (shadowOptions?.onRestrictionShadow && restrictionAnalysis) {
+    // Reuse complete individually verified sources, including existing language
+    // and ownership gates. The observer receives only detached bounded facts;
+    // errors cannot alter the canonical assessment or create findings.
+    try {
+      shadowOptions.onRestrictionShadow(structuredClone(restrictionAnalysis));
+    } catch {
+      // Internal diagnostics must never fail or mutate report materialization.
+    }
+  }
   // The source-bound capture marker opts in future captures only. Old bundles,
   // persisted assessments and historical scoring are never silently upgraded.
   const capturePolicy=bundle.policySurfaceInspection?.californiaDisclosureChoicePolicy;

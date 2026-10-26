@@ -35,6 +35,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { getDomain as getTldtsDomain } from "tldts";
+import { projectGdprNarrowPosture } from "./gdpr-narrow-projection";
+import { bindNarrowGeometry } from "./gdpr-narrow-geometry";
 import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   assessArticle13PolicyTextQuality,
@@ -1639,11 +1641,13 @@ async function readLocalV2DagManifest(
   }
 }
 
-async function readLocalV2ConsentControlGeometry(outDir: string, manifest: Record<string, unknown> | null = null): Promise<Record<string, unknown> | null> {
+async function readLocalV2ConsentControlGeometry(outDir: string, manifest: Record<string, unknown> | null = null, verifiedManifest = false): Promise<Record<string, unknown> | null> {
   try {
     const raw = await readFile(path.join(resolveLocalV2OutDir(outDir), "ConsentControlGeometryEvidence.json"), "utf8");
     const parsed: unknown = JSON.parse(raw);
-    return withVerifiedConsentVisualSource(isRecord(parsed) ? parsed : null, manifest, createHash("sha256").update(raw).digest("hex"));
+    const digest = createHash("sha256").update(raw).digest("hex");
+    return bindNarrowGeometry(withVerifiedConsentVisualSource(isRecord(parsed) ? parsed : null, manifest, digest),
+      verifiedManifest ? manifest : null, digest, Buffer.byteLength(raw));
   } catch {
     return null;
   }
@@ -5525,6 +5529,9 @@ export function buildMaterializedLocalV2Detail(
     localOutDir?: string | null;
     policyTextEvidenceContext?: PolicyTextEvidenceContext;
     scanArtifactUri?: string | null;
+    gdprNoticeOmissionReview?: unknown;
+    /** Local retained-evidence evaluation only; no production caller enables it. */
+    onCaliforniaRestrictionShadow?: (result: import("@certscore/contracts").CaliforniaRestrictionShadow) => void;
   } = {}
 ): ScanDetailResponse {
   const requestedHost = scanRecord.scan.domainHostname ?? hostnameFromUrl(bundle.normalizedUrl ?? bundle.url);
@@ -5796,7 +5803,7 @@ export function buildMaterializedLocalV2Detail(
         const retained = resolvePolicySurfaceTextEvidence(row.surface,options.policyTextEvidenceContext);
         return retained?.verificationStatus === "verified" && retained.text ? [{observationId:row.surface.observationId,text:retained.text}] : [];
       }),
-    },positiveOptOutPolicyEvidence) : null;
+    },positiveOptOutPolicyEvidence,{onRestrictionShadow: options.onCaliforniaRestrictionShadow}) : null;
   if (californiaPrivacyReview && consentControlAssessment.artifactVersion === "2.2") consentControlAssessment.californiaPrivacyReview = californiaPrivacyReview;
   const policyTextProjectionDocuments = policyTextProjection.documents;
   console.warn(JSON.stringify({
@@ -6269,6 +6276,19 @@ export function buildMaterializedLocalV2Detail(
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
   const runtimeArtifacts = {
     ...inheritedRuntimeArtifacts,
+    gdprNarrowPosture: runtimeEvidenceReportable && !consentControlAssessment.scan.noGo ? projectGdprNarrowPosture({
+      bundle, source: options.policyTextEvidenceContext?.sourceBundle, documentUrl: canonicalDocumentUrl,
+      geometry: options.consentControlGeometryEvidence,
+      noticeReview: options.gdprNoticeOmissionReview,
+      resolvePolicyText: observationId => {
+        const surface = bundle.policySurfaceObservations.find(s => s.observationId === observationId);
+        if (!surface) return null;
+        const retained = resolvePolicySurfaceTextEvidence(surface, options.policyTextEvidenceContext);
+        return retained?.verificationStatus === "verified" ? retained.text ?? null : null;
+      },
+    }) : null,
+    gdprNarrowPostureSource: { verificationStatus: options.policyTextEvidenceContext?.sourceBundle.verificationStatus,
+      sha256: options.policyTextEvidenceContext?.sourceBundle.sha256, scanId: bundle.scanId, targetUrl: canonicalDocumentUrl },
     accessibilityAudit: projectAccessibilityAudit(bundle, options.policyTextEvidenceContext?.sourceBundle,
       runtimeEvidenceReportable ? getLocalV2AccessibilityDocumentUrl(bundle, canonicalDocumentUrl) : null),
     preferenceAccessibilityAudit: projectPreferenceAccessibilityAudit(bundle, options.policyTextEvidenceContext?.sourceBundle),
@@ -6742,7 +6762,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v39";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v42";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({
@@ -6836,7 +6856,7 @@ async function materializeLocalV2DagScanDetailUncached(
             expectedSizeBytes: input.scanArtifactSizeBytes,
             strictPublication: options.requireBundle,
           } : {}),
-          localManifestPromise.then(manifest => readLocalV2ConsentControlGeometry(input.outDir!, manifest)),
+          localManifestPromise.then(manifest => readLocalV2ConsentControlGeometry(input.outDir!, manifest, verifiedArtifactChainAvailable)),
           localManifestPromise,
         ]);
         return [localBundle, localGeometryEvidence, localManifest] as const;
@@ -6876,7 +6896,8 @@ async function materializeLocalV2DagScanDetailUncached(
           );
           return geometryArtifact
             ? timed("app.scan_detail.local_v2_artifact.geometry", async () =>
-                withVerifiedConsentVisualSource(await readLocalV2ConsentControlGeometryFromS3(geometryArtifact), manifest, geometryArtifact.sha256 ?? null)
+                bindNarrowGeometry(withVerifiedConsentVisualSource(await readLocalV2ConsentControlGeometryFromS3(geometryArtifact), manifest, geometryArtifact.sha256 ?? null),
+                  verifiedArtifactChainAvailable ? manifest : null, geometryArtifact.sha256 ?? null, geometryArtifact.sizeBytes ?? null)
               )
             : Promise.resolve(null);
         },

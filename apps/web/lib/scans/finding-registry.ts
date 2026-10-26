@@ -1,4 +1,6 @@
 import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
+import { GDPR_NARROW_KINDS, GDPR_NARROW_RULES, gdprNarrowFindingId } from "@certscore/contracts";
+import { GDPR_NARROW_REMEDIATION } from "./gdpr-narrow-evidence";
 export type CertScoreFindingSection =
   | "Privacy & Tracking"
   | "Consent Experience"
@@ -305,6 +307,14 @@ export type CertScoreFinding = CertScoreFindingDefinition & {
 };
 
 export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinition> = {
+  ...Object.fromEntries(GDPR_NARROW_KINDS.map(kind => [gdprNarrowFindingId(kind), {
+    id: gdprNarrowFindingId(kind), label: GDPR_NARROW_RULES[kind].title,
+    section: GDPR_NARROW_RULES[kind].consent ? "Consent Experience" : "Privacy & Tracking",
+    defaultSurfacePriority: GDPR_NARROW_RULES[kind].consent ? 82 : 38,
+    whyItMatters: GDPR_NARROW_RULES[kind].consent ? "The retained first-layer consent request warrants review of affirmative choice."
+      : "The reviewed governing notice does not state this information about personal-data processing.",
+    remediation: GDPR_NARROW_REMEDIATION[kind],
+  } satisfies CertScoreFindingDefinition])),
   pre_consent_tracking_detected: {
     id: "pre_consent_tracking_detected",
     label: "Non-essential tracking observed before a recorded affirmative choice",
