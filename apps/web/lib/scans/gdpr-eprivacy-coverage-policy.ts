@@ -1,4 +1,6 @@
 import { readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
+import { GDPR_NARROW_RULES, gdprNarrowFindingId, GDPR_NARROW_SIGNAL, isActiveGdprNarrowKind } from "@certscore/contracts";
+import { readBoundGdprNarrow, gdprNarrowSummary } from "./gdpr-narrow-evidence";
 import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import { buildEmbedScoringEvidence, type EmbedScoringEvidence } from "./embed-scoring-evidence";
 import { retainedRejectClickCapture } from "./retained-reject-click-capture";
@@ -11740,6 +11742,25 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     concern.promotionEligibility === "eligible" &&
     concern.externalSurfacingEligibility === "eligible"
   );
+  if (!noGo) for (const concern of concerns) {
+    if (!concern.originKey.startsWith(`${GDPR_NARROW_SIGNAL}.`) || concern.promotionEligibility !== "eligible" ||
+      concern.externalSurfacingEligibility !== "eligible") continue;
+    const raw = concern.evidenceBundle.rawEvidence;
+    const assessment = readBoundGdprNarrow(raw);
+    const issue = assessment?.issues.find(i => concern.originKey === `${GDPR_NARROW_SIGNAL}.${i.kind}`);
+    if (!issue || !isActiveGdprNarrowKind(issue.kind)) continue;
+    const rule = GDPR_NARROW_RULES[issue.kind];
+    const outcome = makeOutcome(rule.rowId, "Gap observed", gdprNarrowSummary(issue),
+      [issue.sourceUrl, issue.evidenceRef], { retainedEvidence: {
+        gdprNarrowPosture: assessment, gdprNarrowPostureSource: raw?.gdprNarrowPostureSource,
+        gdprNarrowKind: issue.kind, sourceUrl: issue.sourceUrl,
+      } });
+    outcome.criticalEvidence.pipeline = { projectionStage: "unified_finding",
+      concernPolicyKey: concern.originKey, wc01NormalizedConcernKey: concern.canonicalConcernKey,
+      ws01EvidenceRole: "verified retained consent observation or reviewed complete governing notice" };
+    outcome.criticalEvidence.projectedFindings = [{ id: gdprNarrowFindingId(issue.kind), label: rule.title }];
+    byRow[rule.rowId] = outcome;
+  }
   if (noGo) {
     // Apply the already-policy-approved coverage concern here, not in a report
     // component. Independent TLS/HTTP probes and positive runtime facts survive.

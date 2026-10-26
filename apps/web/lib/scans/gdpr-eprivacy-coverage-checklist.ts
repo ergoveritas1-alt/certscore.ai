@@ -1,4 +1,6 @@
 import { afterRejectScoringNarrative, readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
+import { GDPR_NARROW_RULES, gdprNarrowFindingId, isActiveGdprNarrowKind } from "@certscore/contracts";
+import { narrowKindForRow, readBoundGdprNarrow } from "./gdpr-narrow-evidence";
 import { readRejectClickTrackingAssessment } from "./reject-click-tracking-policy";
 import { canonicalEvidenceVendorName as normalizeEvidenceVendorName } from "./canonical-evidence-vendor-name";
 import { projectPreconsentTrackingTiming, readPreconsentTrackingTiming } from "./preconsent-tracking-timing";
@@ -367,6 +369,20 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     defaultFindingStatus: "Observed",
     notObservedText: "No canonical retention disclosure evidence was retained for this scan context.",
     requiresPublicWebCoverage: true
+  },
+  {
+    id: "consent_optional_defaults_on",
+    label: GDPR_NARROW_RULES.optional_defaults.title,
+    explanation: "Whether source-bound fresh first-layer evidence retained optional cookie purposes selected by default.",
+    findingIds: [gdprNarrowFindingId("optional_defaults")], defaultFindingStatus: "Gap observed",
+    notObservedText: "No supported optional-default assessment was retained.", requiresCanonicalCoverageOutcome: true,
+  },
+  {
+    id: "consent_browsing_as_consent",
+    label: GDPR_NARROW_RULES.implied_consent.title,
+    explanation: "Whether retained first-layer wording presented ordinary browsing as consent to advertising cookies.",
+    findingIds: [gdprNarrowFindingId("implied_consent")], defaultFindingStatus: "Gap observed",
+    notObservedText: "No supported browsing-as-consent assessment was retained.", requiresCanonicalCoverageOutcome: true,
   },
   {
     id: "consent_choice_quality",
@@ -3455,6 +3471,9 @@ function collapseSessionReplayDiagnosticRows(items: GdprEprivacyCoverageChecklis
 function canonicalizeGdprTransparencyChecklistItem(
   item: GdprEprivacyCoverageChecklistItem,
 ): GdprEprivacyCoverageChecklistItem {
+  const narrowKind = narrowKindForRow(item.id);
+  if (isActiveGdprNarrowKind(narrowKind) && item.status === "Gap observed" &&
+    readBoundGdprNarrow(item.criticalEvidence.retainedEvidence)?.issues.some(i => i.kind === narrowKind)) return item;
   // A policy-surface absence is a discovery result, not a failed topic match.
   // Preserve the gap already established by the owning coverage policy.
   if (!isGdprTransparencyReportRowId(item.id) || item.status === "Observed" ||
@@ -3516,7 +3535,8 @@ export function deriveGdprEprivacyCoverageChecklist(
   const publicCoverageIsTestable = input.scanCompleted && !input.coverageLimited;
   const visualNoGoObserved = scanQualityVisualNoGoObserved(input);
 
-  const rows = CHECKLIST_ROWS.filter((definition) => definition.id !== "outdated_transfer_framework_reference" || Boolean(input.coverageOutcomes?.[definition.id])).map((definition) => {
+  const conditionalRows = new Set(["outdated_transfer_framework_reference", "consent_optional_defaults_on", "consent_browsing_as_consent"]);
+  const rows = CHECKLIST_ROWS.filter((definition) => !conditionalRows.has(definition.id) || Boolean(input.coverageOutcomes?.[definition.id])).map((definition) => {
     const directCoverageOutcome = input.coverageOutcomes?.[definition.id];
     const canonicalPreconsentStorageOutcome =
       definition.id === "pre_consent_cookies_storage" &&
@@ -3556,6 +3576,8 @@ export function deriveGdprEprivacyCoverageChecklist(
     if (
       coverageOutcome &&
       (
+        Boolean(isActiveGdprNarrowKind(narrowKindForRow(definition.id)) && readBoundGdprNarrow(coverageOutcome.criticalEvidence.retainedEvidence)?.issues.some(i =>
+          i.kind === narrowKindForRow(definition.id))) ||
         Boolean(canonicalPreconsentStorageOutcome) ||
         (matchingFindings.length === 0 && shouldPreferCoverageOutcomeForMissingReject(definition.id, coverageOutcome)) ||
         shouldPreferCoverageOutcomeForConsentChoiceQuality(definition.id, coverageOutcome) ||

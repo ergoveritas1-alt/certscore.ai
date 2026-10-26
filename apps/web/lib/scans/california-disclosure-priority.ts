@@ -1,4 +1,4 @@
-import { CALIFORNIA_RIGHTS_DISCLOSURE_ID, californiaPrivacyReviewSchema } from "@certscore/contracts";
+import { CALIFORNIA_AGENT_REGISTRATION_ID, californiaAgentRegistrationProjectionSchema, CALIFORNIA_RIGHTS_DISCLOSURE_ID, californiaPrivacyReviewSchema } from "@certscore/contracts";
 
 /** Editorial selection over an already-projected finding. The underlying
  * finding, eligibility, evidence and score effects remain available in detail.
@@ -7,6 +7,8 @@ export function isDetailedOnlyCaliforniaDisclosure(finding: {
   id?: string;
   evidenceJson?: Record<string, unknown>;
 }): boolean {
+  if (finding.id === CALIFORNIA_AGENT_REGISTRATION_ID)
+    return californiaAgentRegistrationProjectionSchema.safeParse(finding.evidenceJson?.agentRegistrationProjection).success;
   if (finding.id !== CALIFORNIA_RIGHTS_DISCLOSURE_ID) return false;
   const parsed = californiaPrivacyReviewSchema.safeParse(finding.evidenceJson?.californiaPrivacyReview);
   if (!parsed.success) return false;

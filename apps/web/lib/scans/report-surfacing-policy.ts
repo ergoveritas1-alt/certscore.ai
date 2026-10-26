@@ -1,3 +1,5 @@
+import { CALIFORNIA_AGENT_REGISTRATION_ID, californiaAgentRegistrationProjectionSchema } from "@certscore/contracts";
+import { GDPR_NARROW_KINDS, gdprNarrowFindingId, isActiveGdprNarrowKind } from "@certscore/contracts";
 import {BROAD_OPT_OUT_FINDING_ID,broadOptOutAssessmentSchema} from "@certscore/contracts";
 import {OPT_OUT_SIGNAL_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID,optOutPresenceSignalSchema} from "@certscore/contracts";
 import {FRICTIONLESS_GPC_FINDING_ID,frictionlessGpcProjectionSchema,CALIFORNIA_PRIVACY_REVIEW_SIGNAL} from "@certscore/contracts";
@@ -93,6 +95,8 @@ export type SurfacingPolicyRuleId =
   | "evidence.sensitive.confirmed_when_payload_or_runtime_backed"
   | "evidence.sensitive.review_when_context_only"
   | "evidence.normalized_concern.audit_only"
+  | "evidence.gdpr_narrow.checklist_projection"
+  | "evidence.gdpr_narrow.inactive"
   | "evidence.accessibility.summary_review"
   | "evidence.accessibility.task_blocking_review"
   | "evidence.accessibility.suppress_score_only_context"
@@ -556,6 +560,17 @@ function createPolicyEntries<const TIds extends readonly ReportUnifiedFindingId[
 }
 
 export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFindingId, UnifiedFindingSurfacingPolicyEntry> = {
+  // These IDs remain explicit even when their standalone unified representation
+  // is suppressed. Active narrow findings already own canonical checklist cards
+  // and scoring; registering them must not create a second report card.
+  ...createPolicyEntries(["gdpr_narrow_optional_defaults", "gdpr_narrow_implied_consent"], {
+    family: "consent_tracking", initialState: "support_only", initialTier: "support",
+    initialLane: "suppressed", orphanedSupportFallback: "suppressed"
+  }),
+  ...createPolicyEntries(["gdpr_narrow_legal_basis", "gdpr_narrow_retention", "gdpr_narrow_complaint"], {
+    family: "rights_gap", initialState: "support_only", initialTier: "support",
+    initialLane: "suppressed", orphanedSupportFallback: "suppressed"
+  }),
   ...createPolicyEntries(POSITIVE_SURFACE_IDS, {
     family: "positive_surface",
     initialState: "support_only",
@@ -1847,6 +1862,17 @@ function overrideDecision(
 
 function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   const { packet, decision } = context;
+  const narrowKind = GDPR_NARROW_KINDS.find(kind => gdprNarrowFindingId(kind) === packet.unifiedFindingId);
+  if (narrowKind) {
+    // Presentation only: no raw packet or historical eligibility flag may
+    // reactivate an omission or bypass the checklist's evidence and score gates.
+    const active = isActiveGdprNarrowKind(narrowKind);
+    overrideDecision(decision, {state: "suppressed", lane: "suppressed", tier: "support",
+      reason: active ? "Active narrow consent findings are presented through the canonical checklist projection; duplicate unified cards remain suppressed."
+        : "This narrow transparency candidate is inactive for current materializations.",
+      ruleId: active ? "evidence.gdpr_narrow.checklist_projection" : "evidence.gdpr_narrow.inactive"});
+    return;
+  }
   if(packet.unifiedFindingId==="california_collection_review") {
     const eligible=packet.details?.family==="california_collection_review"&&packet.details.assessments.some(a=>a.rows.some(r=>r.treatment==="potential_risk"))&&
       packet.concernContext?.promotionEligibilities.includes("eligible")&&packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
@@ -1919,6 +1945,14 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       packet.concernContext?.promotionEligibilities.includes("eligible")&&packet.concernContext.externalSurfacingEligibilities.includes("eligible");
     overrideDecision(decision,{state:eligible?"support_only":"suppressed",lane:eligible?"confidence_and_coverage":"suppressed",tier:"support",
       reason:"Versioned exception assessment retains declarations, contradictions and unresolved requirements independently.",ruleId:"evidence.frictionless_gpc.assessed"});
+    return;
+  }
+  if (packet.unifiedFindingId === CALIFORNIA_AGENT_REGISTRATION_ID) {
+    const eligible = packet.details?.family === "california_agent_registration" &&
+      californiaAgentRegistrationProjectionSchema.safeParse(packet.details.projection).success &&
+      packet.concernContext?.promotionEligibilities.includes("eligible") && packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
+    overrideDecision(decision, {state: eligible ? "review" : "suppressed", lane: eligible ? "main" : "suppressed", tier: "headline",
+      reason: "Verified retained authorized-agent registration clause.", ruleId: "evidence.context.keep_review"});
     return;
   }
   if (CALIFORNIA_PRIVACY_REVIEW_IDS.some(id => id === packet.unifiedFindingId)) {

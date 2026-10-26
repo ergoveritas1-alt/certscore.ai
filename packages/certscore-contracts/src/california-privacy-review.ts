@@ -1,3 +1,5 @@
+import { californiaAgentRegistrationProjectionSchema, californiaAgentRegistrationSchema, CALIFORNIA_AGENT_REGISTRATION_ID } from "./california-agent-registration";
+export * from "./california-agent-registration";
 import {scopedOptOutSearchSchema,scopedOptOutSearchLimitations,scopedBodySearchLimitations,scopedBodyInspectionEligible,scopedRuntimeTextLimitations,GATE_RUNTIME_TEXT_PAGE} from "./scoped-opt-out-search";
 import {broadOptOutAssessmentSchema,assessBroadOptOutPresence,BROAD_OPT_OUT_FINDING_ID} from "./broad-opt-out-assessment";
 export * from "./broad-opt-out-assessment";
@@ -215,7 +217,7 @@ export const CALIFORNIA_OPT_OUT_ACTIVITY_ID = "california_sale_sharing_opt_out_a
 export const CALIFORNIA_NOTICE_DESTINATION_ID = "california_notice_at_collection_destination_error";
 export const CALIFORNIA_RIGHTS_DESTINATION_ID = "california_rights_information_destination_error";
 export const OPT_OUT_ABSENCE_FINDING_ID="california_opt_out_not_observed_in_scope";
-export const CALIFORNIA_PRIVACY_REVIEW_IDS = [BROAD_OPT_OUT_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID,OPT_OUT_SIGNAL_FINDING_ID,FRICTIONLESS_GPC_FINDING_ID,POLICY_CHOICE_METHOD_FINDING_ID, CALIFORNIA_CHOICE_ABSENCE_ID, CALIFORNIA_CHOICE_DESTINATION_ID, CALIFORNIA_OPT_OUT_ACTIVITY_ID, CALIFORNIA_NOTICE_DESTINATION_ID, CALIFORNIA_RIGHTS_DESTINATION_ID, CALIFORNIA_RIGHTS_DISCLOSURE_ID] as const;
+export const CALIFORNIA_PRIVACY_REVIEW_IDS = [CALIFORNIA_AGENT_REGISTRATION_ID,BROAD_OPT_OUT_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID,OPT_OUT_SIGNAL_FINDING_ID,FRICTIONLESS_GPC_FINDING_ID,POLICY_CHOICE_METHOD_FINDING_ID, CALIFORNIA_CHOICE_ABSENCE_ID, CALIFORNIA_CHOICE_DESTINATION_ID, CALIFORNIA_OPT_OUT_ACTIVITY_ID, CALIFORNIA_NOTICE_DESTINATION_ID, CALIFORNIA_RIGHTS_DESTINATION_ID, CALIFORNIA_RIGHTS_DISCLOSURE_ID] as const;
 export const CALIFORNIA_PRIVACY_REVIEW_SIGNAL = "privacy.california_privacy_review";
 
 const choiceSchema = z.object({
@@ -315,6 +317,7 @@ export type CaliforniaObservedScoreBasis = z.infer<typeof californiaObservedScor
 const californiaPrivacyReviewV10=californiaPrivacyReviewV9.extend({
   contractVersion:z.literal("certscore.california-privacy-review.v10"),policyVersion:z.literal("california-privacy-review.v10"),
   observedScoreBasis:californiaObservedScoreBasisSchema.optional(),
+  agentRegistrationAssessment:californiaAgentRegistrationSchema.optional(),
   disclosureChoiceAssessment:californiaDisclosureChoiceAssessmentSchema.optional(),
   frictionlessGpcException:frictionlessGpcExceptionSchema.optional(),
   optOutPresenceSignal:optOutPresenceSignalSchema.optional(),
@@ -324,6 +327,14 @@ const californiaPrivacyReviewV10=californiaPrivacyReviewV9.extend({
 }).strict();
 type CaliforniaPrivacyReviewShape = z.infer<typeof californiaPrivacyReviewV1> | z.infer<typeof californiaPrivacyReviewV2> | z.infer<typeof californiaPrivacyReviewV3> | z.infer<typeof californiaPrivacyReviewV4> | z.infer<typeof californiaPrivacyReviewV5> | z.infer<typeof californiaPrivacyReviewV6> | z.infer<typeof californiaPrivacyReviewV7> | z.infer<typeof californiaPrivacyReviewV8> | z.infer<typeof californiaPrivacyReviewV9> | z.infer<typeof californiaPrivacyReviewV10>;
 const californiaPrivacyReviewValidatedSchema: z.ZodType<CaliforniaPrivacyReviewShape> = z.discriminatedUnion("contractVersion",[californiaPrivacyReviewV1,californiaPrivacyReviewV2,californiaPrivacyReviewV3,californiaPrivacyReviewV4,californiaPrivacyReviewV5,californiaPrivacyReviewV6,californiaPrivacyReviewV7,californiaPrivacyReviewV8,californiaPrivacyReviewV9,californiaPrivacyReviewV10]).superRefine((row, ctx) => {
+  if (row.contractVersion === "certscore.california-privacy-review.v10" && row.agentRegistrationAssessment) {
+    const proof = row.agentRegistrationAssessment;
+    if (!californiaAgentRegistrationProjectionSchema.safeParse({assessment: proof, documentUrl: row.documentUrl}).success ||
+        proof.scanId !== row.scanId || proof.sourceBundleSha256 !== row.sourceHash ||
+        !row.reviewCoverage.sourceDocuments.some(document => document.complete &&
+          document.evidenceRef === proof.evidenceRef && document.sha256 === proof.textSha256 && document.url === proof.sourceDocumentUrl))
+      ctx.addIssue({code:"custom",message:"Registration clause must bind this scan, bundle and complete verified policy document."});
+  }
   if(row.contractVersion==="certscore.california-privacy-review.v10"&&row.broadOptOutAssessment&&
     JSON.stringify(row.broadOptOutAssessment)!==JSON.stringify(assessBroadOptOutPresence(row,row.broadOptOutAssessment.version)))
     ctx.addIssue({code:"custom",message:"Broad opt-out state requires the same persisted positive, scoped-search or complete-negative evidence."});
@@ -489,6 +500,7 @@ export function californiaPrivacyReviewFindingIds(value: unknown): string[] {
   const observedNamedPage=(signal?.version==="sale_sharing_opt_out_signal.v4"||(signal?.version==="sale_sharing_opt_out_signal.v5"||(signal?.version==="sale_sharing_opt_out_signal.v6"||signal?.version==="sale_sharing_opt_out_signal.v7")))&&signal.basis==="visible_dom_opt_out_label"&&
     signal.sourceDocumentUrl===result.data.documentUrl&&signal.scope==="observed_page";
   return [
+    ...(result.data.contractVersion === "certscore.california-privacy-review.v10" && result.data.agentRegistrationAssessment ? [CALIFORNIA_AGENT_REGISTRATION_ID] : []),
     ...(result.data.contractVersion==="certscore.california-privacy-review.v10"&&result.data.broadOptOutAssessment?[BROAD_OPT_OUT_FINDING_ID]:[]),
     ...(result.data.contractVersion === "certscore.california-privacy-review.v10" && result.data.optOutNegativeSearch && !requiredChoiceBasis ? [OPT_OUT_ABSENCE_FINDING_ID] : []),
     ...(result.data.contractVersion === "certscore.california-privacy-review.v10" && result.data.optOutPresenceSignal ? [OPT_OUT_SIGNAL_FINDING_ID] : []),
@@ -506,6 +518,11 @@ export function californiaPrivacyReviewFindingIds(value: unknown): string[] {
 }
 
 export function californiaPrivacyReviewCopy(id: string, assessment?: CaliforniaPrivacyReview) {
+  if (id === CALIFORNIA_AGENT_REGISTRATION_ID) return {
+    title: "State registration required for authorized agents",
+    description: "The retained California request instructions require Secretary of State registration for an authorized agent. Review whether this condition restricts consumers’ use of an agent.",
+    action: "Review the retained registration requirement and the available authorization routes for individuals acting as agents.",
+  };
   if(id===BROAD_OPT_OUT_FINDING_ID)return {title:"Sale/sharing opt-out assessment",description:"Opt-out signals assessed within retained scan evidence.",action:"Review the retained opt-out evidence."};
   if(id===OPT_OUT_ABSENCE_FINDING_ID)return {title:"Sale/sharing opt-out not observed",description:"No sale/sharing opt-out route was identified in the complete starting-page and retained-policy inspection.",action:"Review the inspected starting page and retained policy routes."};
   if(id===OPT_OUT_SIGNAL_FINDING_ID){

@@ -1,4 +1,7 @@
+import { CALIFORNIA_AGENT_REGISTRATION_ID } from "@certscore/contracts";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
+import { GDPR_NARROW_RULES, gdprNarrowFindingId, GDPR_NARROW_SIGNAL, isActiveGdprNarrowKind } from "@certscore/contracts";
+import { readBoundGdprNarrow, gdprNarrowSummary } from "./gdpr-narrow-evidence";
 import {BROAD_OPT_OUT_FINDING_ID} from "@certscore/contracts";
 import {OPT_OUT_SIGNAL_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID} from "@certscore/contracts";
 import {FRICTIONLESS_GPC_FINDING_ID} from "@certscore/contracts";
@@ -4650,13 +4653,18 @@ function buildCaliforniaPrivacyReviewConcerns(runtimeArtifacts: Record<string, u
   if (!projection) return [];
   return californiaPrivacyReviewFindingIds(projection).map(id => {
     const copy = californiaPrivacyReviewCopy(id, projection);
+    const registration = id === CALIFORNIA_AGENT_REGISTRATION_ID && projection.contractVersion === "certscore.california-privacy-review.v10"
+      ? projection.agentRegistrationAssessment : undefined;
     return buildConcernFromSharedInput({categoryId: "privacy", originType: "runtime_artifact", originKey: `${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${id}`,
+      ...(registration ? {consentControlAssessment: assessment} : {}),
       californiaRuntimeGpcAssessment:runtimeArtifacts?.gpcResponseAssessment ?? runtimeArtifacts?.gpc_response_assessment,
       title: copy.title, description: copy.description, observedValue: copy.description, severity: id==="california_privacy_choice_not_observed" && projection.contractVersion==="certscore.california-privacy-review.v10" &&
         projection.disclosureChoiceAssessment?.policyVersion===CALIFORNIA_COMBINED_OPT_OUT_POLICY && projection.disclosureChoiceAssessment.optOutRisk?.status==="gpc_contradiction" ? "high"
         : [BROAD_OPT_OUT_FINDING_ID,POLICY_CHOICE_METHOD_FINDING_ID,FRICTIONLESS_GPC_FINDING_ID,OPT_OUT_SIGNAL_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID].includes(id) ? "low" : "medium",
       sourceType: "signal", signalSource: "runtime_artifact_signal", signalKey: `${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${id}`, signalLabel: copy.title,
-      evidence: [projection.documentUrl], rawEvidence: {consentControlAssessment: assessment, californiaPrivacyReview: projection, gpcResponseAssessment:runtimeArtifacts?.gpcResponseAssessment ?? runtimeArtifacts?.gpc_response_assessment, unifiedFindingId: id, pageUrl: projection.documentUrl}});
+      evidence: [projection.documentUrl], rawEvidence: registration
+        ? {agentRegistrationProjection: {assessment: registration, documentUrl: projection.documentUrl}, unifiedFindingId: id, pageUrl: projection.documentUrl}
+        : {consentControlAssessment: assessment, californiaPrivacyReview: projection, gpcResponseAssessment:runtimeArtifacts?.gpcResponseAssessment ?? runtimeArtifacts?.gpc_response_assessment, unifiedFindingId: id, pageUrl: projection.documentUrl}});
   });
 }
 
@@ -4690,6 +4698,22 @@ function buildSiteIntegrityConcerns(runtimeArtifacts: Record<string, unknown> | 
   })];
 }
 
+function buildGdprNarrowConcerns(runtime: Record<string, unknown> | null | undefined) {
+  const assessment = readBoundGdprNarrow(runtime);
+  if (!assessment) return [];
+  return assessment.issues.filter(issue => isActiveGdprNarrowKind(issue.kind)).map(issue => buildConcernFromSharedInput({
+    categoryId: "privacy", originType: "runtime_artifact", originKey: `${GDPR_NARROW_SIGNAL}.${issue.kind}`,
+    title: GDPR_NARROW_RULES[issue.kind].title, description: gdprNarrowSummary(issue),
+    observedValue: "supported_narrow_review", severity: GDPR_NARROW_RULES[issue.kind].consent ? "high" : "medium",
+    sourceType: "signal", signalSource: "runtime_artifact_signal", signalKey: `${GDPR_NARROW_SIGNAL}.${issue.kind}`,
+    signalLabel: GDPR_NARROW_RULES[issue.kind].title, evidence: [issue.sourceUrl],
+    rawEvidence: { unifiedFindingId: gdprNarrowFindingId(issue.kind), gdprNarrowPosture: assessment,
+      gdprNarrowPostureSource: runtime?.gdprNarrowPostureSource, gdprNarrowKind: issue.kind,
+      sourceUrl: issue.sourceUrl, sourceUrls: [issue.sourceUrl], runtimeEvidenceArtifacts: [issue.evidenceRef],
+      ...(GDPR_NARROW_RULES[issue.kind].consent ? {} : { policyIsPrimarySource: true, pageType: "privacy_policy" }) },
+  }));
+}
+
 export function buildNormalizedConcerns(input: {
   domainContext?: ScanDomainContext;
   reviewFindingCandidates: ReviewFindingCandidateInput[];
@@ -4704,6 +4728,7 @@ export function buildNormalizedConcerns(input: {
     hybrid?.consent_control_assessment,
   ].find((assessment) => assessment !== undefined);
   const concerns = [
+    ...buildGdprNarrowConcerns(input.runtimeArtifacts),
     ...input.reviewFindingCandidates.map((candidate) =>
       normalizeConcernFromReviewFindingCandidate(candidate, input.domainContext, consentControlAssessment)
     ),

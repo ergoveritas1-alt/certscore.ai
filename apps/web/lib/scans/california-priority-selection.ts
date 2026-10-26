@@ -1,4 +1,4 @@
-import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
+import {CALIFORNIA_AGENT_REGISTRATION_ID,CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
 
 import {z} from "zod";
 import {californiaPrivacyReviewSchema, gpcResponseAssessmentSchema, type CaliforniaPrivacyReview} from "@certscore/contracts";
@@ -51,7 +51,7 @@ function explicitChoiceCorroboration(review: CaliforniaPrivacyReview) {
   return review.optOutObservation?.verificationStatus === "verified" && review.optOutObservation.evidence.registration === "confirmed" &&
     review.optOutObservation.evidence.requests.some(row => row.collectionEvidence && row.httpStatus < 400);
 }
-export type CaliforniaPriorityDemotion = "non_discrimination_only" | "uncorroborated_choice_absence" | "analytics_only_collection" | "same_gpc_recipients" | "combined_opt_out";
+export type CaliforniaPriorityDemotion = "agent_registration_detail" | "non_discrimination_only" | "uncorroborated_choice_absence" | "analytics_only_collection" | "same_gpc_recipients" | "combined_opt_out";
 
 /** Editorial selection of canonical projected findings only. Never mutates
  * packets, coverage, snapshot state or score inputs. A malformed record cannot
@@ -65,7 +65,7 @@ export function californiaPriorityDemotion(finding: Finding, findings: readonly 
       return r.success && combinedPriorityEvidence(r.data,parsed.data) && combinedPriorityEvidence(r.data,row.evidenceJson?.combinedGpcAssessment);
     }))return "combined_opt_out";
   }
-  if (isDetailedOnlyCaliforniaDisclosure(finding)) return "non_discrimination_only";
+  if (isDetailedOnlyCaliforniaDisclosure(finding)) return finding.id === CALIFORNIA_AGENT_REGISTRATION_ID ? "agent_registration_detail" : "non_discrimination_only";
   if (finding.id !== "california_privacy_choice_not_observed" && finding.id !== "california_collection_review") return null;
   const gpc = findings.flatMap(row => {const value = gpcEvidence(row); return value ? [value] : [];});
   if (finding.id === "california_privacy_choice_not_observed") {

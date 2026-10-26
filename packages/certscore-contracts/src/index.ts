@@ -19,6 +19,8 @@ export * from "./sale-sharing-opt-out";
 import { cookieClassificationSchema } from "./cookie-classification";
 import { privacyChoiceInspectionSchema, type PrivacyChoiceInspection } from "./california-privacy-review";
 export * from "./california-privacy-review";
+export * from "./california-restriction-shadow";
+export * from "./california-opt-out-shadow";
 import { consentAccessibilityDomBindingSchema } from "./consent-accessibility-dom-binding";
 export * from "./consent-accessibility-dom-binding";
 export * from "./cookie-classification";
@@ -3832,3 +3834,4 @@ export * from "./california-reject-evidence";
 
 export * from "./privacy-capture-profile";
 export * from "./privacy-choice-presence";
+export * from "./gdpr-narrow-posture";

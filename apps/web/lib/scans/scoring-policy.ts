@@ -1,8 +1,9 @@
 
 /** Owner-approved September 6/17 and October 10/11, 2026. Shared by scoring and review UI. */
-export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v24";
+export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v26-consent-only";
+export const HISTORICAL_NARROW_POLICY_VERSION = "gdpr-eprivacy-posture.v25-narrow" as const;
 export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v12";
-export type GdprEprivacyScoringPolicyVersion = typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v23" | "gdpr-eprivacy-posture.v22" | "gdpr-eprivacy-posture.v21" | "gdpr-eprivacy-posture.v20" | "gdpr-eprivacy-posture.v19" | "gdpr-eprivacy-posture.v18";
+export type GdprEprivacyScoringPolicyVersion = typeof SCORING_POLICY_VERSION | typeof HISTORICAL_NARROW_POLICY_VERSION | "gdpr-eprivacy-posture.v24" | "gdpr-eprivacy-posture.v23" | "gdpr-eprivacy-posture.v22" | "gdpr-eprivacy-posture.v21" | "gdpr-eprivacy-posture.v20" | "gdpr-eprivacy-posture.v19" | "gdpr-eprivacy-posture.v18";
 export const POST_REJECT_ENTITY_TOTALS = [0, 15, 20, 23, 25, 27, 28, 29, 30] as const;
 /** Initial effect includes the first entity; unknown ownership cannot add increments. */
 export function postRejectEntityPoints(entityIds: readonly string[], supported: boolean) {
@@ -32,7 +33,15 @@ export type ScoringRule = {
   entityTotals?: readonly number[];
   identity?: { first: number; second: number; subsequentEach: number; unit: string };
 };
+/** Frozen explicit-v25 interpretation only; absent from the current registry. */
+export const HISTORICAL_NARROW_OMISSION_RULES: readonly ScoringRule[] = [
+  { id: "legal_basis_disclosure_observed", anchor: "legal-basis", label: "Reviewed processing legal-basis explanation omission", family: "policy_transparency", siteWide: false, points: 6 },
+  { id: "retention_disclosure_observed", anchor: "retention", label: "Reviewed retention disclosure omission", family: "policy_transparency", siteWide: false, points: 4 },
+  { id: "supervisory_authority_complaint_disclosure", anchor: "complaint", label: "Reviewed supervisory-complaint disclosure omission", family: "policy_transparency", siteWide: false, points: 2 },
+];
 export const SCORING_RULES: readonly ScoringRule[] = [
+  { id: "consent_optional_defaults_on", anchor: "consent-quality", label: "Optional cookie purposes selected by default", family: "consent_controls", siteWide: false, points: 8 },
+  { id: "consent_browsing_as_consent", anchor: "consent-quality", label: "Browsing presented as consent to optional cookies", family: "consent_controls", siteWide: false, points: 6 },
   { id: "outdated_transfer_framework_reference", anchor: "outdated-transfer-disclosure", label: "Obsolete transfer framework presented as current guidance", family: "policy_transparency", siteWide: true, points: 3 },
   {"id": "pre_consent_cookies_storage", "anchor": "storage", "label": "Pre-consent cookies / storage", "family": "pre_consent_storage", "siteWide": true, "points": 8, "identity": {"first": 8, "second": 4, "subsequentEach": 2, "unit": "identity"}},
   {"id": "pre_consent_third_party_tracking", "anchor": "tracking", "label": "Pre-consent tracking", "family": "pre_consent_tracking", "siteWide": true, "points": 8, "identity": {"first": 8, "second": 4, "subsequentEach": 2, "unit": "vendor"}},
@@ -83,6 +92,17 @@ export const CALIFORNIA_SCORING_RULES_V4_V7 = [...CALIFORNIA_SCORING_RULES_V2_V3
     label:"Core rights disclosure not found in completely inspected policy text"},
 ] as const;
 export const CALIFORNIA_SHARED_NOTICE_POINTS = 10;
+
+/** Positive retained agent-registration clause. Absorbed by existing rights
+ * disclosure/destination deductions; historical schedules remain unchanged. */
+export const CALIFORNIA_AGENT_REGISTRATION_SCORE_VERSION = "california-regulatory-posture.v22-agent-registration" as const;
+export const CALIFORNIA_AGENT_REGISTRATION_RULE = {
+  findingId: "california_agent_registration_required", policyKey: "california.agent_registration",
+  points: 3, label: "State registration required for authorized agents",
+} as const;
+export const CALIFORNIA_REGISTRATION_ABSORBING_RIGHTS_IDS = [
+  "california_rights_disclosure_not_observed", "california_rights_information_destination_error",
+] as const;
 
 /** Advertising-classified contacts remain review evidence. Only verified
  * collection carries the shared California choice-enforcement risk weight. */
