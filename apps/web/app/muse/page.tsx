@@ -147,6 +147,17 @@ export default function MusePage() {
                 <CopyMcpValue label="example scan prompt" value={guide.firstAsk} />
               </CardContent>
             </Card>
+            <div className="rounded-2xl border border-sky-200 bg-white p-5 sm:p-6" aria-labelledby="demo-title">
+              <h3 id="demo-title" className="text-xl font-semibold text-slate-900">Try the demos, then use your own URL</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-600">{guide.demoIntro}</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {guide.demoReports.map(({ label, path }) => <Link key={path} href={path} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-sky-800 underline underline-offset-4 hover:bg-sky-50">{label}<span aria-hidden="true"> →</span></Link>)}
+              </div>
+              <p className="mt-3 text-xs leading-6 text-slate-500">{guide.demoVerified}</p>
+              <p className="mb-2 mt-5 text-sm font-semibold text-slate-900">After test1, ask Muse</p>
+              <p className="mb-3 rounded-xl bg-sky-50 p-4 text-sm leading-7 text-sky-950">{guide.demoComparePrompt}</p>
+              <CopyMcpValue label="demo comparison prompt" value={guide.demoComparePrompt} />
+            </div>
             <details className="rounded-2xl border border-slate-200 bg-white p-5">
               <summary className="cursor-pointer font-semibold text-slate-900">For agents: the four-tool workflow</summary>
               <ol className="mt-5 grid gap-4 sm:grid-cols-2">

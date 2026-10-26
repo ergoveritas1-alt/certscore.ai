@@ -11,7 +11,7 @@ export const museGuide = {
     ["Service", "CertScore.ai MCP Light"],
     ["Transport", "Streamable HTTP"],
     ["Authentication", "None. No account, API key, OAuth flow, or Authorization header."],
-    ["Hosted release", "0.2.31 (verified October 23, 2026)"],
+    ["Hosted release", "0.2.31 (verified October 26, 2026)"],
     ["Registry identity", "ai.certscore/mcp-light"],
     ["Cost", "Free to use, with a scoped daily allowance."],
     ["Scope", "Public websites only. The scanner cannot sign in to login-protected pages."]
@@ -27,6 +27,13 @@ export const museGuide = {
   connectPrompt: "Connect CertScore.ai MCP Light at https://mcp.certscore.ai/mcp/light using Streamable HTTP with no authentication. Reuse an existing connection if available. List its tools to verify the connection; do not start a scan until I ask.",
   agentConnect: "If you are an agent that can add MCP servers, use the endpoint above as a remote Streamable HTTP server with no auth headers.",
   firstAsk: "Use CertScore.ai to review https://ergoveritas.com/test1.html. Give me the top three things to check, their evidence, the labeled scores and coverage, and the full report link. Keep this scan as a baseline.",
+  demoIntro: "These are owned demo pages with deliberately failing privacy and accessibility examples. Their findings and scores change when the pages or assessment policies change; they are not examples of a typical website.",
+  demoVerified: "Example reports checked October 26, 2026. Each report preserves its scan date, location and coverage.",
+  demoReports: [
+    { label: "Test1: tracking, GPC and hidden links", path: "/scan/14ee70d1-05a3-4f6d-b7a2-5bfc4ef5b3ab?reviewFocus=gdpr_eprivacy" },
+    { label: "Test2: privacy choices and accessibility", path: "/scan/a3c8b1a2-b8d2-4808-964d-3b07ec3095ae?reviewFocus=gdpr_eprivacy" }
+  ],
+  demoComparePrompt: "Use CertScore.ai to review https://ergoveritas.com/test2.html from the same location as the test1 baseline. Compare the same review focus briefly, keep coverage limits visible, and link both reports.",
   scanSteps: [
     { name: "Start the scan", tool: "certscore_scan_site", text: "Call certscore_scan_site with the site URL. Declare a purpose when one fits: prelaunch_review, vendor_review, tracking_check, consent_gpc_check, policy_review, recheck." },
     { name: "Wait for completion", tool: "certscore_get_scan_status", text: "Poll the returned scan ID only while queued, running or finalizing. Honor retry guidance, wait at least five seconds between polls, and stop at a terminal state." },
@@ -85,6 +92,7 @@ export const museGuide = {
   scanPermission: "Only run scans the user has asked for or approved as a recurring pattern. Never scan sites on your own initiative.",
   oauth: "With MCP Light, keep a scan ID or report link to revisit that result. For saved workspace history, access across conversations, or team work, connect Hosted MCP OAuth. It links Muse to your CertScore.ai workspace without copying an API key. A CertScore.ai account and workspace authorization are required.",
   faqs: [
+    ["Can I try it before scanning my own website?", "Yes. Try ergoveritas.com/test1.html, then test2.html, or open the example reports on this page. They are owned demo pages with deliberate defects. Scores and findings can change after updates; request a fresh scan when checking a change."],
     ["Do I need an account or API key?", "No. MCP Light works without an account, API key or OAuth sign-in, within its scoped daily allowance. The skill download is free."],
     ["Does switching to the California view create a scan?", "No. EU and California report views use the same visit's evidence. To test a visit from Ireland, Germany or California, request a new scan from that location."],
     ["Can I return to a report later?", "Yes. Keep its report link or scan ID. Ask Muse to retrieve that existing result; request a fresh scan when you want to check a later site change."],
@@ -113,6 +121,9 @@ export function museGuideMarkdown() {
     "## Connect Muse and run your first scan", "### Connect Muse", museGuide.connectIntro,
     `\`\`\`text\n${museGuide.connectPrompt}\n\`\`\``, museGuide.agentConnect,
     "### Ask for a scan", `\`\`\`text\n${museGuide.firstAsk}\n\`\`\``,
+    "### Try the demo pages", museGuide.demoIntro, museGuide.demoVerified,
+    ...museGuide.demoReports.map(({ label, path }) => `[${label}](https://certscore.ai${path})`),
+    `\`\`\`text\n${museGuide.demoComparePrompt}\n\`\`\``,
     "### The four-tool workflow", numbered(museGuide.scanSteps.map((step) => step.text)), museGuide.reuse,
     "### Share the results", pairs(museGuide.reportItems), museGuide.reportRule, museGuide.rateLimit,
     "## Go deeper with the same scan", museGuide.followUpIntro,
