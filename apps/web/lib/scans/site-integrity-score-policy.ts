@@ -80,5 +80,5 @@ export function siteIntegrityFindingEffects(findings: readonly UnifiedFindingDis
 export function siteIntegrityScoreDescription(effects: readonly unknown[]) {
   return effects.some(effect => siteIntegrityScoreEffectSchema.safeParse(effect).success)
     ? "Verified concealed outbound link occurrences were retained for review."
-    : "No verified concealed outbound link evidence was retained.";
+    : "Review the retained concealed outbound link evidence and capture coverage.";
 }

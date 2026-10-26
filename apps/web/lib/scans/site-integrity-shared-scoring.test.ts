@@ -86,6 +86,7 @@ test("unreportable, guessed and source-mismatched effects cannot create either d
   const legacy=packets(1,LEGACY_SITE_INTEGRITY_POLICY_VERSION)[0]!.scoreEffects![0]!;
   assert.equal(siteIntegrityScoreEffectSchema.safeParse({...legacy,appliesTo:"california_posture"}).success,false);
   assert.doesNotMatch(siteIntegrityScoreDescription(original.scoreEffects!),/\d|point|deduct|cap|scor/i);
+  assert.equal(siteIntegrityScoreDescription([]),"Review the retained concealed outbound link evidence and capture coverage.");
 });
 
 // A pending report may carry an earlier preliminary score version across a deploy.
