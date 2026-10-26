@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "certscore.homepage-sample-reports.v1",
+  "product": "CertScore.ai",
+  "ownerApproval": {
+    "date": "2026-10-26",
+    "scope": "Local implementation of homepage sample refreshes and location previews",
+    "estimatedIncrementalUsdPerMonth": [6, 10],
+    "response": "Approve the estimated $6–$10/month increase",
+    "planningBasis": "Up to one fresh sample attempt per rolling 24 hours in each of three selectable regions, at a conservative planning allowance of $0.10 per full scan; existing infrastructure and retention",
+    "billingCap": false,
+    "deploymentAuthorized": false
+  },
+  "targetUrl": "https://ergoveritas.com/test1.html",
+  "entryPoints": ["Homepage View sample report", "Homepage See Sample Report"],
+  "requestMethod": "POST",
+  "refreshRules": {
+    "reuseWindowHours": 24,
+    "reuseScope": "Canonical eligible completed public scans of the exact URL and selected region",
+    "inFlightBehavior": "Open the existing same-target, same-region public scan",
+    "duplicateProtection": "Nonblocking PostgreSQL session lock per region; writer reads under the lock",
+    "maximumFreshAttemptsPerRegionPerRolling24Hours": 1,
+    "failedOrUnusableAttemptsConsumeRefreshAllowance": true,
+    "lookupFailureBehavior": "Return an error without starting a scan",
+    "historicalReportRewrites": false,
+    "normalDnsQuotaCaptureAndEvidenceGuards": "Preserved through createAnonymousFullScan"
+  },
+  "locationRules": {
+    "precedence": ["Manual scan-region selection", "Homepage loc parameter", "Existing country header", "Ireland fallback"],
+    "US": { "defaultScanFrom": "california", "audienceOrder": ["CCPA", "GDPR/ePrivacy"] },
+    "EU": { "defaultScanFrom": "eu_ie", "audienceOrder": ["GDPR/ePrivacy", "CCPA"] },
+    "otherManualRegion": "eu_de",
+    "manualRegionChangesAudienceOrder": false,
+    "locChangesAuthentication": false,
+    "signedInWithoutLoc": "Preserve the existing static sample destination"
+  },
+  "localVerification": {
+    "focusedTestsPassed": 52,
+    "browserCases": ["Automatic US", "Automatic non-US", "loc=US over a non-US country", "loc=EU over a US country", "Manual Ireland selection over loc=US", "Recent and fresh sample navigation using local API fixtures"],
+    "productionScansLaunched": 0,
+    "paidModelCallsLaunched": 0
+  }
+}

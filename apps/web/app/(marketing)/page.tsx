@@ -6,6 +6,8 @@ import { ApiReadRatePolicyNotice } from "../../components/api-read-rate-policy-n
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
 import { DomainScanForm } from "../../components/marketing/domain-scan-form";
+import { HomepageAudienceLine, HomepageScanPreferencesProvider } from "../../components/marketing/homepage-scan-preferences";
+import { SampleReportButton } from "../../components/marketing/sample-report-button";
 import { HomepageFindingsOverview } from "../../components/marketing/homepage-findings-overview";
 import { ScannerSolutionAnimation } from "../../components/marketing/scanner-solution-animation";
 import { ReleaseCard } from "../../components/releases/release-card";
@@ -19,7 +21,6 @@ import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
 import { getPublishedReleases } from "../../lib/releases";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
-import { AUTHENTIC_SAMPLE_REPORT_URL as SAMPLE_REPORT_URL } from "../../lib/marketing/sample-report";
 const BOOK_DEMO_URL = "/contact-sales";
 export const metadata: Metadata = {
   ...createPageMetadata({
@@ -173,7 +174,7 @@ export default async function MarketingHomePage() {
   };
 
   return (
-    <main className="min-h-screen overflow-x-clip bg-slate-50">
+    <HomepageScanPreferencesProvider><main className="min-h-screen overflow-x-clip bg-slate-50">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(findingRegistrySchema) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(scannerSolutionsSchema) }} />
@@ -195,9 +196,7 @@ export default async function MarketingHomePage() {
               <p className="text-base leading-8 text-slate-300 sm:text-xl">
                 Scan public pages for cookies, trackers, session-replay signals, privacy policy signals, and consent behavior. Review what appears before consent and after eligible Accept or Reject clicks, with retained evidence and clear coverage limits.
               </p>
-              <p className="relative top-[15px] mt-[20px] text-sm font-semibold text-sky-400">
-                Built for developers and agencies reviewing websites for GDPR/ePrivacy and CCPA concerns.
-              </p>
+              <HomepageAudienceLine />
             </div>
             <div id="homepage-scan" className="max-w-[650px] scroll-mt-24 pt-2">
               <div className="rounded-[1.4rem] border border-sky-300/30 bg-slate-950/35 p-2 shadow-[0_20px_45px_rgba(2,132,199,0.16)] backdrop-blur-sm sm:p-2.5">
@@ -232,13 +231,8 @@ export default async function MarketingHomePage() {
               </span>
             </div>
             <div className="relative flex flex-col gap-3 sm:flex-row">
-              <PendingButtonLink
+              <SampleReportButton
                 className="w-full border border-sky-400/50 bg-sky-500 text-white shadow-[0_12px_30px_rgba(14,165,233,0.22)] hover:bg-sky-400 focus-visible:ring-sky-300 sm:w-auto"
-                data-analytics-cta-type="sample_report"
-                data-analytics-event="hero_sample_report_clicked"
-                href={SAMPLE_REPORT_URL}
-                idleContent="View sample report"
-                pendingContent="Opening..."
               />
               <PendingButtonLink
                 className="w-full border border-slate-500/70 bg-slate-900/45 text-white backdrop-blur-sm hover:border-sky-400/70 hover:bg-slate-800/70 focus-visible:ring-sky-300 sm:w-auto"
@@ -374,13 +368,9 @@ export default async function MarketingHomePage() {
                   idleContent="Schedule demo"
                   pendingContent="Opening..."
                 />
-                <PendingButtonLink
+                <SampleReportButton
                   className="w-full border border-white/12 bg-white/8 text-white hover:bg-white/12 sm:w-auto"
-                  data-analytics-cta-type="sample_report"
-                  data-analytics-event="hero_sample_report_clicked"
-                  href={SAMPLE_REPORT_URL}
-                  idleContent="See Sample Report"
-                  pendingContent="Opening..."
+                  label="See Sample Report"
                   variant="secondary"
                 />
               </div>
@@ -399,6 +389,6 @@ export default async function MarketingHomePage() {
       </section>
 
       <SiteFooter />
-    </main>
+    </main></HomepageScanPreferencesProvider>
   );
 }
