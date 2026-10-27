@@ -1855,10 +1855,32 @@
       "note": "Owner-authorized one-attempt production policy-evidence validation after recovery/witness release 819fe9931. Run key: policy-recovery-production-validation-2026-10-26. YY and Tapmad retained usable primary policies; Tujugada text insufficient; Radcom ownership unresolved. Tapmad transfer witness source-verified. No retries, consent actions, budget changes or customer findings.",
       "state": "cooldown",
       "url": "https://radcom.hosting"
+    },
+    "https://jta.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-24T19:36:56.679Z",
+      "lastContactAt": "2026-10-27T19:36:56.679Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://jta.org/",
+      "note": "Owner-authorized October27 retained-protocol diagnostic re-scans; not rotating-inventory acceptance. Receipt: /Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261027T193105Z-manual-openrtb-coverage/contact-summary.json"
+    },
+    "https://bournemouthecho.co.uk/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-24T19:38:09.215Z",
+      "lastContactAt": "2026-10-27T19:38:09.215Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://bournemouthecho.co.uk/",
+      "note": "Owner-authorized October27 retained-protocol diagnostic re-scans; not rotating-inventory acceptance. Receipt: /Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261027T193105Z-manual-openrtb-coverage/contact-summary.json"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-27T00:41:05.011Z",
+  "updatedAt": "2026-10-27T19:39:23.160Z",
   "contactOnlyUrls": [
     "https://abc.xyz/",
     "https://acuitybrands.com/",
@@ -1922,6 +1944,8 @@
     "https://swappie.com",
     "https://tapmad.com",
     "https://tujugada.com.ar",
-    "https://yy.com"
+    "https://yy.com",
+    "https://jta.org/",
+    "https://bournemouthecho.co.uk/"
   ]
 }
