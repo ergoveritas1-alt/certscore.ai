@@ -1877,10 +1877,24 @@
       "state": "cooldown",
       "url": "https://bournemouthecho.co.uk/",
       "note": "Owner-authorized October27 retained-protocol diagnostic re-scans; not rotating-inventory acceptance. Receipt: /Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261027T193105Z-manual-openrtb-coverage/contact-summary.json"
+    },
+    "https://tasteatlas.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-24T20:13:54.893Z",
+      "lastContactAt": "2026-10-27T20:13:54.893Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "access_denied_or_forbidden_page",
+        "scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://tasteatlas.com/",
+      "note": "Owner-authorized one-visit Magnite protocol diagnostic; access denied, no retry and no release-acceptance claim. Receipt: /Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261027T200534Z-manual-magnite-auction-qualification/live-once/result.json"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-27T19:39:23.160Z",
+  "updatedAt": "2026-10-27T20:14:51.291Z",
   "contactOnlyUrls": [
     "https://abc.xyz/",
     "https://acuitybrands.com/",
@@ -1946,6 +1960,7 @@
     "https://tujugada.com.ar",
     "https://yy.com",
     "https://jta.org/",
-    "https://bournemouthecho.co.uk/"
+    "https://bournemouthecho.co.uk/",
+    "https://tasteatlas.com/"
   ]
 }
