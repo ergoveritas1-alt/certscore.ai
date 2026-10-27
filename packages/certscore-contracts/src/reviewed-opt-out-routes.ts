@@ -47,7 +47,7 @@ export function matchReviewedOptOutRoute(instruction:string,context:string,exten
 export function* reviewedOptOutRouteCandidates(text:string,extended=false,cookieRefusal=false,ukCookieRefusal=false){
  for(const rule of [...REVIEWED_OPT_OUT_ROUTE_RULES,...(extended?REVIEWED_SCOPED_OPT_OUT_RULES:[]),...(cookieRefusal?REVIEWED_COOKIE_REFUSAL_RULES:[]),...(ukCookieRefusal?[REVIEWED_UK_COOKIE_REFUSAL_RULE]:[])]){
   const purpose='purpose' in rule?rule.purpose.exec(text):null;if('purpose' in rule&&!purpose)continue;
-  const candidates=[];for(const match of text.matchAll(new RegExp(rule.route.source,rule.route.flags+'g'))){candidates.push(match);if(candidates.length===8)break;}
+  const candidates:RegExpExecArray[]=[];for(const match of text.matchAll(new RegExp(rule.route.source,rule.route.flags+'g'))){candidates.push(match);if(candidates.length===8)break;}
   const eligible=candidates.filter(m=>!disqualifiedLead(text,m.index!));
   const route=eligible.find(m=>!purpose||m.index!>=purpose.index)??eligible[0];if(!route)continue;
   yield {excerpt:route[0],start:route.index!,context:purpose?{excerpt:purpose[0],start:purpose.index,end:purpose.index+purpose[0].length}:undefined};
