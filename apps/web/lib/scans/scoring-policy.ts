@@ -2,7 +2,7 @@
 /** Owner-approved September 6/17 and October 10/11, 2026. Shared by scoring and review UI. */
 export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v26-consent-only";
 export const HISTORICAL_NARROW_POLICY_VERSION = "gdpr-eprivacy-posture.v25-narrow" as const;
-export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v12";
+export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v13-shared-integrity";
 export type GdprEprivacyScoringPolicyVersion = typeof SCORING_POLICY_VERSION | typeof HISTORICAL_NARROW_POLICY_VERSION | "gdpr-eprivacy-posture.v24" | "gdpr-eprivacy-posture.v23" | "gdpr-eprivacy-posture.v22" | "gdpr-eprivacy-posture.v21" | "gdpr-eprivacy-posture.v20" | "gdpr-eprivacy-posture.v19" | "gdpr-eprivacy-posture.v18";
 export const POST_REJECT_ENTITY_TOTALS = [0, 15, 20, 23, 25, 27, 28, 29, 30] as const;
 /** Initial effect includes the first entity; unknown ownership cannot add increments. */
@@ -22,7 +22,7 @@ export const SCORING_FAMILIES = {
   embedded_third_party: { label: "Embeds", cap: 20 },
   policy_transparency: { label: "Policy transparency", cap: 12 },
   transport_security: { label: "Transport", cap: 20 },
-  site_integrity: { label: "Site integrity", cap: 40 },
+  site_integrity: { label: "Site integrity", cap: 37 },
   accessibility: { label: "Accessibility (WCAG)", cap: 12 },
   gpc: { label: "GPC (California posture only)", cap: 0 },
 } as const;
@@ -59,7 +59,7 @@ export const SCORING_RULES: readonly ScoringRule[] = [
   {"id": "transport_security_form_transport", "anchor": "forms", "label": "Insecure form transport", "family": "transport_security", "siteWide": false, "points": 10},
   {"id": "transport_security_mixed_content", "anchor": "mixed-content", "label": "Mixed content", "family": "transport_security", "siteWide": false, "points": 8},
   {"id": "transport_security_http_redirect", "anchor": "redirect", "label": "HTTP redirect handling", "family": "transport_security", "siteWide": false, "points": 2},
-  { id: "site_integrity_hidden_outbound_links", anchor: "hidden-links", label: "Hidden outbound links", family: "site_integrity", siteWide: true, points: 17, identity: { first: 17, second: 5, subsequentEach: 5, unit: "link occurrence" } },
+  { id: "site_integrity_hidden_outbound_links", anchor: "hidden-links", label: "Hidden outbound links", family: "site_integrity", siteWide: true, points: 13, identity: { first: 13, second: 5, subsequentEach: 5, unit: "link occurrence" } },
   { id: "text_alternative_accessibility_issue", anchor: "accessibility-evidence", label: "Text alternatives", family: "accessibility", siteWide: true, points: 3 },
   { id: "semantic_labeling_accessibility_issue", anchor: "accessibility-evidence", label: "Accessible names, labels and semantics", family: "accessibility", siteWide: true, points: 4 },
   { id: "visual_contrast_accessibility_issue", anchor: "accessibility-evidence", label: "Visual contrast", family: "accessibility", siteWide: true, points: 3 },

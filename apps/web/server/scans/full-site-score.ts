@@ -1,3 +1,4 @@
+import { siteIntegrityPolicyForScoreVersion } from "../../lib/scans/site-integrity-score-policy";
 import { EMBED_SCORE_ROW_IDS, mergeEmbedScoringEvidence } from "../../lib/scans/embed-scoring-evidence";
 import { orderedEvidencePrefetch } from "./ordered-evidence-prefetch";
 import { projectAdditionalPageSiteIntegrity } from "./site-integrity-projection";
@@ -33,9 +34,9 @@ import { groupStoredReportScorePriorities } from "../../lib/scans/accessibility-
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 const VERSION = FULL_SITE_SCORING_POLICY_VERSION;
 const PRIORITY_VERSION = "site-priority-review.v19";
-const HISTORICAL_VERSIONS = [["full-site-distinct-findings.v11", "gdpr-eprivacy-posture.v21"], ["full-site-distinct-findings.v10", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v9", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v8", "gdpr-eprivacy-posture.v19"], ["full-site-distinct-findings.v7", "gdpr-eprivacy-posture.v18"], ["full-site-distinct-findings.v6", "gdpr-eprivacy-posture.v17"]] as const;
+const HISTORICAL_VERSIONS = [["full-site-distinct-findings.v12", "gdpr-eprivacy-posture.v26-consent-only"], ["full-site-distinct-findings.v11", "gdpr-eprivacy-posture.v21"], ["full-site-distinct-findings.v10", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v9", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v8", "gdpr-eprivacy-posture.v19"], ["full-site-distinct-findings.v7", "gdpr-eprivacy-posture.v18"], ["full-site-distinct-findings.v6", "gdpr-eprivacy-posture.v17"]] as const;
 const persistedScoreSchema = z.object({
-  version: z.enum([VERSION, "full-site-distinct-findings.v11", "full-site-distinct-findings.v10", "full-site-distinct-findings.v9", "full-site-distinct-findings.v8", "full-site-distinct-findings.v7", "full-site-distinct-findings.v6"]), value: z.number().int().min(0).max(100).nullable(),
+  version: z.enum([VERSION, "full-site-distinct-findings.v12", "full-site-distinct-findings.v11", "full-site-distinct-findings.v10", "full-site-distinct-findings.v9", "full-site-distinct-findings.v8", "full-site-distinct-findings.v7", "full-site-distinct-findings.v6"]), value: z.number().int().min(0).max(100).nullable(),
   scoredPages: z.number().int().min(1), limitedPages: z.number().int().nonnegative(), scope: z.string(),
   priorityReview: z.array(sitePriorityFindingSchema),
   deductions: z.array(z.object({
@@ -245,7 +246,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
           coverage.status = integrityProjection.observation.truncated ? "limited" : "captured"; coverage.sourceHash = observation.sourceHash;
           coverage.retainedLinkCount = integrityProjection.observation.links.length;
           const integrityPackets = buildUnifiedFindingDisplayPackets({
-            runtimeArtifacts: { siteIntegrity: integrityProjection }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
+            runtimeArtifacts: { siteIntegrity: integrityProjection, siteIntegrityPolicyVersion: siteIntegrityPolicyForScoreVersion(home.snapshot?.score_version) }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
           });
           scoringFindings.push(...integrityPackets);
           const finding = selectSiteIntegrityFinding(integrityPackets);

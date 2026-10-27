@@ -223,6 +223,7 @@ const ACCESSIBILITY_SCORING_CHECK: Check = {
   label: "canonical accessibility scoring, caps, persistence and API parity",
   command: ["pnpm", "exec", "tsx", "--tsconfig", "apps/web/tsconfig.test.json", "--test",
     "apps/web/lib/scans/accessibility-score-policy.test.ts",
+    "apps/web/lib/scans/site-integrity-shared-scoring.test.ts",
     "apps/web/lib/scans/scoring-policy.test.ts",
     "apps/web/server/scans/accessibility-audit-projection.test.ts",
     "apps/web/server/scans/persisted-canonical-report-projection.test.ts",

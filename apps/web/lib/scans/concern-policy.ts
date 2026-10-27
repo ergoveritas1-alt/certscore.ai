@@ -1,3 +1,4 @@
+import { SITE_INTEGRITY_POLICY_VERSION, LEGACY_SITE_INTEGRITY_POLICY_VERSION } from "@certscore/contracts";
 import { CALIFORNIA_AGENT_REGISTRATION_ID, californiaAgentRegistrationProjectionSchema } from "@certscore/contracts";
 import {supportsCombinedOptOutRisk} from "./california-combined-opt-out-policy";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
@@ -2669,9 +2670,11 @@ export function deriveConcernPolicy(input: {
   }
   if (input.concern.suggestedUnifiedFindingId === SITE_INTEGRITY_FINDING_ID) {
     const eligible = input.concern.originType === "runtime_artifact" && qualifiesSiteIntegrityReview(input.rawEvidence?.siteIntegrity);
+    const version = input.rawEvidence?.siteIntegrityPolicyVersion;
+    const knownPolicy = version === undefined || version === SITE_INTEGRITY_POLICY_VERSION || version === LEGACY_SITE_INTEGRITY_POLICY_VERSION;
     return { allowedNarrativeTier: "moderate", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
       promotionEligibility: eligible ? "eligible" : "blocked", negativeEvidenceFlags: [],
-      regulatoryChecklistEligibility: "none", scoreEffects: eligible ? buildSiteIntegrityScoreEffects(input.rawEvidence?.siteIntegrity) : [] };
+      regulatoryChecklistEligibility: "none", scoreEffects: eligible && knownPolicy ? buildSiteIntegrityScoreEffects(input.rawEvidence?.siteIntegrity, version === LEGACY_SITE_INTEGRITY_POLICY_VERSION ? version : SITE_INTEGRITY_POLICY_VERSION) : [] };
   }
   if (["zoom_restriction_accessibility_issue", "target_size_accessibility_issue"].includes(input.concern.suggestedUnifiedFindingId ?? "")) {
     const effects = input.concern.originType === "runtime_artifact"

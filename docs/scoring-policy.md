@@ -94,6 +94,31 @@ score-neutral, local research. No production observer is enabled. See
 [registration policy](certscore-v2/california-agent-registration-policy.md) and
 [release record](operations/2026-10-26-privacy-posture-release.md).
 
+## Hidden outbound links — October 26, 2026 shared-score update
+
+The owner approved 13 points for the first verified concealed outbound link,
+5 for each additional occurrence, capped at 37 once per report. The totals for
+1/2/3/4/5/6+ occurrences are 13/18/23/28/33/37. Apply the same verified
+occurrence union to the EU-view overall score and the California posture score.
+The general site-integrity finding remains separate from regulatory checklist
+and legal-gap classification.
+
+New concern-policy effects use `certscore.site-integrity-policy.v5-shared-postures`
+with explicit overall and California targets. New overall scores use
+`overall-posture.v14-shared-integrity`; California scores carrying the shared
+effect use `california-regulatory-posture.v23-shared-integrity`. New full-site
+calculations use `full-site-distinct-findings.v13-shared-integrity`. Existing
+California report scope remains the starting page; full-site overall reports
+retain their existing verified additional-page scope and one shared family cap.
+
+Preserve v4's overall-only 17/+5/40 interpretation and existing source-bound
+historical scores/caches. No production backfill, historical report rewrite,
+new capture, model call or scan is included. Duplicate evidence never stacks;
+unknown, unverified and mismatched evidence remains neutral. Customer reports
+show the resulting scores and factual evidence without point deductions or
+formulas. Added typed metadata is estimated below $0.10/month at 100,000 scans;
+no capture budget, capacity or retention increase is introduced.
+
 ## Hidden outbound links — September 17, 2026 update
 
 The owner approved an overall-score deduction of 17 points for the first verified

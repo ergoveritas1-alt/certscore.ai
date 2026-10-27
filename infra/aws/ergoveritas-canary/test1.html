@@ -31,6 +31,7 @@
       <p>This page combines positive privacy disclosures with deliberately failing controls and accessibility examples. A linked policy describes the actual test behavior rather than claiming that optional tracking is successfully blocked.</p>
       <p><a href="/test1-privacy-policy.html">Privacy Policy for this test page</a> · <a href="/test1-do-not-sell-or-share.html">Do Not Sell or Share My Personal Information</a></p>
       <p class="fine">The sale/sharing choice link deliberately leads to an unavailable page. Reject clears most optional cookies, but one advertising request and cookie remain. These are owned test defects.</p>
+      <p class="fine">A LinkedIn advertising request uses a fixed invented publisher and visitor identifier even when Global Privacy Control (GPC) is enabled. It does not read enquiry values or browser identifiers.</p>
       <p>The illustration and icon control below intentionally lack accessible names. The enquiry form also contains an unlabelled email field. These are rendered WCAG test defects, not pre-written report findings.</p>
       <img id="test1-missing-alt" class="sample-image" width="160" height="56" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='56'%3E%3Crect width='160' height='56' fill='%23075985'/%3E%3Ctext x='14' y='34' fill='white' font-size='18'%3EDemo services%3C/text%3E%3C/svg%3E">
       <button id="test1-unnamed-button" class="icon-control" type="button"><svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 20 20"><path d="M4 10h12M10 4l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
@@ -79,6 +80,7 @@
     "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-TEST000001&cid=certscore-test1-synthetic&en=page_view",
     "https://www.facebook.com/tr?id=000000000000001&ev=PageView&fbp=fb.1.1700000000000.100000001&noscript=1",
     "https://bat.bing.com/action/0?ti=000000001&vid=certscore-test1-synthetic&evt=pageLoad",
+    "https://px.ads.linkedin.com/collect/?pid=certscore-test1-synthetic&li_adsId=certscore-test1-synthetic",
     "https://ct.pinterest.com/v3/?tid=000000001&event=pagevisit&external_id=certscore-test1-synthetic",
     "https://www.clarity.ms/collect?tid=certscore-test1-synthetic"
   ],

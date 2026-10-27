@@ -20,7 +20,7 @@ import { describeAccessibilityEvidence, getAccessibilityFindingIdForRuleCode } f
 import { formDestinationProjectionSchema, formDestinationCopy, qualifiesFormDestinationReview, FORM_DESTINATION_FINDING_ID, FORM_DESTINATION_SIGNAL } from "@certscore/contracts";
 import { cmsSecurityProjectionSchema, cmsSecurityCopy, CMS_SECURITY_FINDING_ID, CMS_SECURITY_SIGNAL, readCaliforniaPrivacyReviewFromConsent, californiaPrivacyReviewFindingIds, californiaPrivacyReviewCopy, CALIFORNIA_PRIVACY_REVIEW_SIGNAL } from "@certscore/contracts";
 import { projectConsentControlBehavior } from "./consent-control-behavior";
-import { siteIntegrityProjectionSchema, SITE_INTEGRITY_FINDING_ID, SITE_INTEGRITY_SIGNAL, SITE_INTEGRITY_COPY, SITE_INTEGRITY_POLICY_VERSION, SITE_INTEGRITY_SEVERITY } from "@certscore/contracts";
+import { siteIntegrityProjectionSchema, SITE_INTEGRITY_FINDING_ID, SITE_INTEGRITY_SIGNAL, SITE_INTEGRITY_COPY, SITE_INTEGRITY_POLICY_VERSION, LEGACY_SITE_INTEGRITY_POLICY_VERSION, SITE_INTEGRITY_SEVERITY } from "@certscore/contracts";
 import { describeGpcBoundedObservation } from "@certscore/contracts";
 import { readGpcActivityComparison } from "./gpc-activity-comparison";
 import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
@@ -4692,7 +4692,8 @@ function buildSiteIntegrityConcerns(runtimeArtifacts: Record<string, unknown> | 
     severity: SITE_INTEGRITY_SEVERITY, sourceType: "signal", signalSource: "runtime_artifact_signal",
     signalKey: SITE_INTEGRITY_SIGNAL, signalLabel: SITE_INTEGRITY_COPY.title,
     evidence: [projection.observation.documentUrl],
-    rawEvidence: { siteIntegrity: projection, siteIntegrityPolicyVersion: SITE_INTEGRITY_POLICY_VERSION,
+    rawEvidence: { siteIntegrity: projection, siteIntegrityPolicyVersion: runtimeArtifacts?.siteIntegrityPolicyVersion === LEGACY_SITE_INTEGRITY_POLICY_VERSION
+      ? LEGACY_SITE_INTEGRITY_POLICY_VERSION : SITE_INTEGRITY_POLICY_VERSION,
       unifiedFindingId: SITE_INTEGRITY_FINDING_ID, pageUrl: projection.observation.documentUrl,
       runtimeEvidenceArtifacts: [projection.evidenceRef, ...projection.observation.links.map(link => link.evidenceRef)] },
   })];
