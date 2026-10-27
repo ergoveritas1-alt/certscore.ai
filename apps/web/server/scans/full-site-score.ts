@@ -34,7 +34,19 @@ import { groupStoredReportScorePriorities } from "../../lib/scans/accessibility-
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 const VERSION = FULL_SITE_SCORING_POLICY_VERSION;
 const PRIORITY_VERSION = "site-priority-review.v19";
-const HISTORICAL_VERSIONS = [["full-site-distinct-findings.v12", "gdpr-eprivacy-posture.v26-consent-only"], ["full-site-distinct-findings.v11", "gdpr-eprivacy-posture.v21"], ["full-site-distinct-findings.v10", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v9", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v8", "gdpr-eprivacy-posture.v19"], ["full-site-distinct-findings.v7", "gdpr-eprivacy-posture.v18"], ["full-site-distinct-findings.v6", "gdpr-eprivacy-posture.v17"]] as const;
+const HISTORICAL_VERSIONS = [
+  ["full-site-distinct-findings.v12", "gdpr-eprivacy-posture.v26-consent-only"],
+  ["full-site-distinct-findings.v12", "gdpr-eprivacy-posture.v25-narrow"],
+  ["full-site-distinct-findings.v12", "gdpr-eprivacy-posture.v24"],
+  ["full-site-distinct-findings.v12", "gdpr-eprivacy-posture.v23"],
+  ["full-site-distinct-findings.v12", "gdpr-eprivacy-posture.v22"],
+  ["full-site-distinct-findings.v11", "gdpr-eprivacy-posture.v21"],
+  ["full-site-distinct-findings.v10", "gdpr-eprivacy-posture.v20"],
+  ["full-site-distinct-findings.v9", "gdpr-eprivacy-posture.v20"],
+  ["full-site-distinct-findings.v8", "gdpr-eprivacy-posture.v19"],
+  ["full-site-distinct-findings.v7", "gdpr-eprivacy-posture.v18"],
+  ["full-site-distinct-findings.v6", "gdpr-eprivacy-posture.v17"],
+] as const;
 const persistedScoreSchema = z.object({
   version: z.enum([VERSION, "full-site-distinct-findings.v12", "full-site-distinct-findings.v11", "full-site-distinct-findings.v10", "full-site-distinct-findings.v9", "full-site-distinct-findings.v8", "full-site-distinct-findings.v7", "full-site-distinct-findings.v6"]), value: z.number().int().min(0).max(100).nullable(),
   scoredPages: z.number().int().min(1), limitedPages: z.number().int().nonnegative(), scope: z.string(),
@@ -162,11 +174,15 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     crawl.configuration_hash, pages.map(p => [p.id, p.status, p.observation?.sourceHash]),
   ])).digest("hex");
   const key = scoreKey(VERSION, GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION);
-  const historicalKeys = new Map(HISTORICAL_VERSIONS.map(([version, posture]) => [version as string, scoreKey(version, posture)]));
+  // A full-site version can have several historical posture versions. Keep
+  // every exact pair rather than overwriting earlier keys in a version-only map.
+  const historicalKeys = HISTORICAL_VERSIONS.map(([version, posture]) => ({ version, key: scoreKey(version, posture) }));
   const saved = z.object({ fullSiteScore: z.object({sourceHash: z.string(), score: z.unknown()}) }).safeParse(crawl.policy_json);
-  if (saved.success && [key, ...historicalKeys.values()].includes(saved.data.fullSiteScore.sourceHash)) {
+  if (saved.success && [key, ...historicalKeys.map(row => row.key)].includes(saved.data.fullSiteScore.sourceHash)) {
     const parsed = persistedScoreSchema.safeParse(saved.data.fullSiteScore.score);
-    if (parsed.success && parsed.data.deductions && !parsed.data.deductions.some(row => row.family === "gpc" || row.rules.some(rule => rule.ruleId === "gpc_response")) && saved.data.fullSiteScore.sourceHash === (parsed.data.version === VERSION ? key : historicalKeys.get(parsed.data.version))) {
+    const historical = parsed.success && historicalKeys.some(row => row.version === parsed.data.version && row.key === saved.data.fullSiteScore.sourceHash);
+    if (parsed.success && parsed.data.deductions && !parsed.data.deductions.some(row => row.family === "gpc" || row.rules.some(rule => rule.ruleId === "gpc_response")) &&
+        ((parsed.data.version === VERSION && saved.data.fullSiteScore.sourceHash === key) || historical)) {
       // Preserve the source-bound historical amount when a scoring weight changes.
       if (parsed.data.version !== VERSION) return groupStoredReportScorePriorities({ ...parsed.data, priorityReview: parsed.data.priorityReview.filter(row => row.id !== "gpc_response") });
       const homeScore = deriveCanonicalOverallScoreForReport({

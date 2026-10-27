@@ -45,6 +45,45 @@ test("completed crawls persist permanent page limitations but never persist fail
     const cached = await require(output).loadFullSiteScore({...crawl,policy_json:{fullSiteScore:globals.scoreWrites[0]}},[home,failed]);
     assert.deepEqual(cached,first);
     assert.equal(globals.scoreWrites.length,1);
+    const v12 = { ...first, version: "full-site-distinct-findings.v12", value: 80,
+      deductions: [{ family: "policy_transparency", label: "Policy transparency", deductionPoints: 20,
+        rules: [{ ruleId: "privacy_notice_availability", label: "Historical privacy notice finding", policyDeductionPoints: 20,
+          decisionVerification: "not_applicable" }] }] };
+    const v12Key = (posture: string, source = globals.snapshotHash, configuration = crawl.configuration_hash,
+      pageRows: unknown[] = [home, failed].map(page => [page.id, page.status, undefined])) =>
+      createHash("sha256").update(JSON.stringify([v12.version, "site-priority-review.v19", posture,
+        source, configuration, pageRows])).digest("hex");
+    for (const posture of ["gdpr-eprivacy-posture.v26-consent-only", "gdpr-eprivacy-posture.v25-narrow",
+      "gdpr-eprivacy-posture.v24", "gdpr-eprivacy-posture.v23", "gdpr-eprivacy-posture.v22"]) {
+      const sourceHash = v12Key(posture);
+      for (const value of [80, null]) {
+        const score = { ...v12, value };
+        assert.deepEqual(await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: { sourceHash, score } } }, [home, failed]), score,
+          `exact v12/${posture} cache keeps its historical amount or unknown value`);
+      }
+      assert.deepEqual(await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: {
+        sourceHash, score: { ...v12, version: first.version },
+      } } }, [home, failed]), first, "a v12 key cannot authenticate current-version scoring");
+      assert.deepEqual(await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: {
+        sourceHash, score: { ...v12, version: "full-site-distinct-findings.v11" },
+      } } }, [home, failed]), first, "historical keys cannot authenticate a different historical version");
+    }
+    for (const sourceHash of [
+      v12Key("gdpr-eprivacy-posture.v21"),
+      v12Key("gdpr-eprivacy-posture.v25-narrow", "d".repeat(64)),
+      v12Key("gdpr-eprivacy-posture.v25-narrow", globals.snapshotHash, "different-config"),
+      v12Key("gdpr-eprivacy-posture.v25-narrow", globals.snapshotHash, crawl.configuration_hash,
+        [[home.id, home.status, undefined], [failed.id, "completed", "e".repeat(64)]]),
+    ]) {
+      assert.deepEqual(await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: { sourceHash, score: v12 } } }, [home, failed]), first,
+        "unknown posture or changed source/configuration/page evidence cannot reuse historical scoring");
+    }
+    const v12Gpc = { ...v12, deductions: [{ family: "gpc", label: "GPC", deductionPoints: 20,
+      rules: [{ ruleId: "gpc_response", label: "GPC", policyDeductionPoints: 20, decisionVerification: "not_applicable" }] }] };
+    assert.deepEqual(await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: {
+      sourceHash: v12Key("gdpr-eprivacy-posture.v25-narrow"), score: v12Gpc,
+    } } }, [home, failed]), first, "newly recognized historical pairs retain the existing GPC exclusion");
+    assert.equal(globals.scoreWrites.length, 1, "historical cache reads and rejected cache keys do not rewrite reports");
     const historical = { ...first, version: "full-site-distinct-findings.v6", value: 88,
       deductions: [{ family: "policy_transparency", label: "Policy transparency", deductionPoints: 12,
         rules: [{ ruleId: "privacy_notice_availability", label: "Privacy policy not found", policyDeductionPoints: 12,
