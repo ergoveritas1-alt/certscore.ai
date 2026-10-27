@@ -1891,10 +1891,21 @@
       "state": "blocked",
       "url": "https://tasteatlas.com/",
       "note": "Owner-authorized one-visit Magnite protocol diagnostic; access denied, no retry and no release-acceptance claim. Receipt: /Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261027T200534Z-manual-magnite-auction-qualification/live-once/result.json"
+    },
+    "https://listesdemots.net/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-24T20:23:01.676Z",
+      "lastContactAt": "2026-10-27T20:23:01.676Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://listesdemots.net/",
+      "note": "Owner-authorized single Magnite diagnostic follow-up; six matching requests, parser member/depth limits and unverified responses; not live qualification or release acceptance. Receipt: /Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261027T202048Z-manual-magnite-live-followup/live-once/result.json"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-27T20:14:51.291Z",
+  "updatedAt": "2026-10-27T20:26:05.794Z",
   "contactOnlyUrls": [
     "https://abc.xyz/",
     "https://acuitybrands.com/",
@@ -1961,6 +1972,7 @@
     "https://yy.com",
     "https://jta.org/",
     "https://bournemouthecho.co.uk/",
-    "https://tasteatlas.com/"
+    "https://tasteatlas.com/",
+    "https://listesdemots.net/"
   ]
 }
