@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
-import { readFullSiteReportSessionCache, writeFullSiteReportSessionCache } from "./full-site-report-session-cache";
+import { readFullSiteReportSessionCache, writeFullSiteReportSessionCache, readFullSitePreviewSessionCache, writeFullSitePreviewSessionCache } from "./full-site-report-session-cache";
+import type { FullSiteReportPreview } from "../../server/scans/full-site-report";
 
 function fixture(status = "completed", score: number | null = 78) {
   return { score: score === null ? null : { value: score, priorityReview: [] }, summary: { state: { status }, counts: { active: 0 } } } as FullSiteReportResponse;
@@ -15,6 +16,24 @@ function memoryStorage() {
     removeItem: (key: string) => { values.delete(key); },
   };
 }
+
+test("compact first view is scoped, expiring and excludes transient or oversized results", () => {
+  const storage = memoryStorage();
+  const preview = { ...fixture(), version: "full-site-report-preview.v1", cacheable: true,
+    summary: { ...fixture().summary, state: { ...fixture().summary.state, scanId: "scan-a" } },
+    forms: {count:0,limited:false}, hiddenLinks:null, hiddenLinkDestinations:[], failedPages:[], homepageUrl:null,
+  } as FullSiteReportPreview;
+  assert.equal(writeFullSitePreviewSessionCache(storage, "scan-a", "scope", preview, 1000), true);
+  assert.deepEqual(readFullSitePreviewSessionCache(storage, "scan-a", "scope", 2000), preview);
+  for (const [scan, scope, now] of [["scan-b", "scope", 2000], ["scan-a", "other", 2000], ["scan-a", "scope", 999], ["scan-a", "scope", 3_601_001]] as const)
+    assert.equal(readFullSitePreviewSessionCache(storage, scan, scope, now), null);
+  assert.equal(writeFullSitePreviewSessionCache(storage, "scan-a", "scope", {...preview, cacheable:false}, 2000), false);
+  assert.equal(writeFullSitePreviewSessionCache(storage, "scan-a", "scope", {...preview, score:null}, 2000), false);
+  assert.equal(writeFullSitePreviewSessionCache(storage, "scan-a", "scope", {...preview, extra:"x".repeat(500_000)} as FullSiteReportPreview, 2000), false);
+  assert.equal(writeFullSitePreviewSessionCache({setItem(){throw new Error("Quota");}}, "scan-a", "scope", preview, 2000), false);
+  storage.setItem("certscore:full-site-overview:v1", "malformed");
+  assert.equal(readFullSitePreviewSessionCache(storage, "scan-a", "scope", 2000), null);
+});
 
 test("completed report survives a reload only for the same scan and signed-in scope", () => {
   const storage = memoryStorage();

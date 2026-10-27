@@ -130,7 +130,7 @@ test("redirected retained evidence publishes once through assessment, concerns, 
   try {
     const { pipeline, state } = harness;
     // Proen and Varify URL shapes, plus unchanged root/non-slash controls.
-    for (const [index, pathname] of ["/web/", "/en/", "/", "/en"].entries()) {
+    for (const [index, pathname] of ["/web/", "/en/", "/", "/en", "/th", "/login?state=consent-session"].entries()) {
       const scanId = `00000000-0000-4000-8000-00000000000${index}`;
       const requestedUrl = "https://redirect-fixture.test/";
       const finalUrl = `https://redirect-fixture.test${pathname}`;
@@ -151,6 +151,12 @@ test("redirected retained evidence publishes once through assessment, concerns, 
           supportedDocumentLanguage:true,representativeDocument:true,documentStable:true,
         }},
       };
+      if (index >= 4) {
+        withOriginalRuntimeForPublication(bundle as any);
+        delete (bundle as any).policySurfaceInspection.privacyChoiceInspection;
+        (bundle as any).runtimeMetadataSnapshots[0].url = index === 4 ? "https://redirect-fixture.test/th/home" : "https://redirect-fixture.test/login?state=runtime-session";
+      }
+      const expectedCaliforniaScore = index >= 4 ? 100 : 94;
       const bundleBytes = JSON.stringify(bundle);
       const manifestBytes = JSON.stringify({auxiliaryArtifacts:[]});
       await writeFile(path.join(outDir,"CanonicalEvidenceBundle.json"),bundleBytes);
@@ -184,15 +190,15 @@ test("redirected retained evidence publishes once through assessment, concerns, 
       const readback = pipeline.readPersistedScanReportProjection({scan:record.scan,snapshot});
       assert.ok(readback,"checksum-verified persisted readback");
       const projection = readback.canonicalReportProjection;
-      assert.ok(projection.normalizedConcerns.some((row: {id:string}) => JSON.stringify(row).includes(CALIFORNIA_CHOICE_ABSENCE_ID)));
-      assert.ok(projection.globalUnifiedFindings.some((row: {unifiedFindingId:string}) => row.unifiedFindingId===CALIFORNIA_CHOICE_ABSENCE_ID));
+      if (index < 4) assert.ok(projection.normalizedConcerns.some((row: {id:string}) => JSON.stringify(row).includes(CALIFORNIA_CHOICE_ABSENCE_ID)));
+      if (index < 4) assert.ok(projection.globalUnifiedFindings.some((row: {unifiedFindingId:string}) => row.unifiedFindingId===CALIFORNIA_CHOICE_ABSENCE_ID));
       const api = pipeline.buildApiV2ScanResource(readback);
       assert.equal(api.status,"completed"); assert.equal(api.scoreStatus,"final");
-      assert.equal(api.postureScores.ccpaCpra.score,94);
+      assert.equal(api.postureScores.ccpaCpra.score,expectedCaliforniaScore);
       assert.equal(pipeline.buildApiV2ScanStatus(readback,{canonicalScan:api}).status,"completed");
       const report = pipeline.buildCanonicalReportExport(readback,undefined,"ccpa_cpra");
       assert.ok(report);
-      assert.equal(report.californiaScore.score,94);
+      assert.equal(report.californiaScore.score,expectedCaliforniaScore);
       assert.match(pipeline.renderCanonicalReportPdf(report).toString("latin1"),/CCPA\/CPRA evidence report/);
       // Integrity failures stay terminal; optional child failures preserve verified parent results.
       assert.equal(pipeline.readPersistedScanReportProjection({scan:record.scan,snapshot:{...snapshot,report_projection_payload_sha256:"0".repeat(64)}}),null);

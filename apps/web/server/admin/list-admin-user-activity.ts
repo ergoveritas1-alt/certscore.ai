@@ -2,12 +2,12 @@
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { ADMIN_API_ROUTES, adminApiRouteSql, type AdminApiRoute } from "../../lib/admin/api-route";
-import { ensureScanRequestLogTable } from "../scans/scan-request-log";
+import { ADMIN_FULL_SITE_PAGES_SCANNED_SQL } from "../../lib/admin/scan-page-count-sql";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 const ADMIN_SCAN_STATUSES = ["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited", "no_go"] as const;
 
-export type AdminUserActivity = {
+type AdminUserActivityData = {
   user: {
     createdAt: string;
     email: string;
@@ -39,6 +39,13 @@ export type AdminUserActivity = {
     status: string;
   }>;
 };
+
+export type AdminUserActivityTab = "scans" | "events";
+
+export type AdminUserActivity = { user: AdminUserActivityData["user"]; page: number } & (
+  | ({ tab: "scans" } & Pick<AdminUserActivityData, "metrics" | "scanStatusCounts" | "apiRoutes" | "scans">)
+  | ({ tab: "events" } & Pick<AdminUserActivityData, "events" | "eventCount">)
+);
 
 export type AdminUserEvent = {
   event_id: string;
@@ -97,6 +104,7 @@ type AdminUserActivityScanRow = {
   domain_hostname: string | null;
   id: string;
   pages_scanned: number;
+  full_site_pages_scanned: number | null;
   scan_type: string;
   status: string;
 };
@@ -113,7 +121,7 @@ type AdminUserActivityApiRouteRow = {
   last_requested_at: string | null;
 };
 
-export async function loadAdminUserActivity(userId: string, limit = 10, offset = 0, eventLimit = 20, eventOffset = 0): Promise<AdminUserActivity | null> {
+export async function loadAdminUserActivity(userId: string, limit = 10, offset = 0, eventLimit = 20, eventOffset = 0, tab: AdminUserActivityTab = "scans"): Promise<AdminUserActivity | null> {
   await requirePlatformAdminContext();
 
   const normalizedUserId = userId.trim();
@@ -121,12 +129,10 @@ export async function loadAdminUserActivity(userId: string, limit = 10, offset =
     return null;
   }
 
-  await ensureScanRequestLogTable();
   const normalizedLimit = Math.min(Math.max(limit, 1), 100);
   const normalizedOffset = Math.max(offset, 0);
 
-  const [user, metrics, scans, statusCounts, requestMetrics, apiRoutes, events, eventCount] = await Promise.all([
-    queryOne<AdminUserActivityUserRow>(
+  const user = await queryOne<AdminUserActivityUserRow>(
       `with selected_membership as (
          select organization_id
            from organization_members
@@ -153,7 +159,70 @@ export async function loadAdminUserActivity(userId: string, limit = 10, offset =
         where users.id = $1`,
       [normalizedUserId],
       { readOnly: true }
+    );
+  if (!user) return null;
+  const mappedUser = {
+    createdAt: user.created_at,
+    email: user.email,
+    fullName: user.full_name,
+    id: user.id,
+    lastLoginAt: user.last_login_at,
+    organizationName: user.organization_name
+  };
+
+  if (tab === "events") {
+    const normalizedEventLimit = Math.min(Math.max(eventLimit, 1), 100);
+    const normalizedEventOffset = Math.max(eventOffset, 0);
+    const loadEvents = (pageOffset: number) => query<AdminUserEvent>(
+      `select e.event_id, e.occurred_at, e.event_name, e.normalized_route,
+              e.feature, e.outcome, e.scan_id, e.element_id, e.browser_family, d.hostname,
+              e.page_path, e.target_path, e.previous_route, e.entry_route, e.form_id,
+              e.os_family, e.device_class, e.viewport_band, e.language, e.country_code,
+              e.referring_domain, e.duration_ms, e.numeric_value, e.consent_state,
+              e.is_authenticated, e.browser_confirmed_at
+         from product_analytics_events e
+         left join scans s on s.id = e.scan_id
+         left join domains d on d.id = s.domain_id
+        where e.user_id = $1 and e.occurred_at >= now() - interval '90 days'
+        order by e.occurred_at desc, e.event_id desc
+        limit $2 offset $3`,
+      [normalizedUserId, normalizedEventLimit, pageOffset],
+      { readOnly: true }
+    ).then((result) => result.rows);
+    const [eventCount, requestedEvents] = await Promise.all([
+      queryOne<{ count: number }>(
+      `select count(*)::int as count from product_analytics_events
+        where user_id = $1 and occurred_at >= now() - interval '90 days'`,
+      [normalizedUserId], { readOnly: true }
     ),
+      loadEvents(normalizedEventOffset)
+    ]);
+    const count = Number(eventCount?.count ?? 0);
+    const lastOffset = Math.max(0, Math.ceil(count / normalizedEventLimit) - 1) * normalizedEventLimit;
+    const pageOffset = Math.min(normalizedEventOffset, lastOffset);
+    const events = pageOffset === normalizedEventOffset ? requestedEvents : await loadEvents(pageOffset);
+    return { user: mappedUser, tab: "events", events, eventCount: count, page: Math.floor(pageOffset / normalizedEventLimit) + 1 };
+  }
+
+  const loadScans = (scanOffset: number) => query<AdminUserActivityScanRow>(
+      `select scans.id,
+              scans.created_at,
+              scans.completed_at,
+              scans.status,
+              scans.scan_type,
+              scans.pages_scanned,
+              ${ADMIN_FULL_SITE_PAGES_SCANNED_SQL} as full_site_pages_scanned,
+              domains.hostname as domain_hostname,
+              case when scans.claimed_by_user_id = $1 then 'claimed' else 'submitted' end as association
+         from scans
+         left join domains on domains.id = scans.domain_id
+        where scans.submitted_by_user_id = $1 or scans.claimed_by_user_id = $1
+        order by scans.created_at desc, scans.id desc
+        limit $2 offset $3`,
+      [normalizedUserId, normalizedLimit, scanOffset],
+      { readOnly: true }
+    ).then((result) => result.rows);
+  const [metrics, statusCounts, requestMetrics, apiRoutes, requestedScans] = await Promise.all([
     queryOne<AdminUserActivityMetricsRow>(
       `select count(*) filter (where scans.submitted_by_user_id = $1)::int as total_scans,
               count(*) filter (where scans.completed_at is not null)::int as completed_scans,
@@ -164,23 +233,6 @@ export async function loadAdminUserActivity(userId: string, limit = 10, offset =
       [normalizedUserId],
       { readOnly: true }
     ),
-    query<AdminUserActivityScanRow>(
-      `select scans.id,
-              scans.created_at,
-              scans.completed_at,
-              scans.status,
-              scans.scan_type,
-              scans.pages_scanned,
-              domains.hostname as domain_hostname,
-              case when scans.claimed_by_user_id = $1 then 'claimed' else 'submitted' end as association
-         from scans
-         left join domains on domains.id = scans.domain_id
-        where scans.submitted_by_user_id = $1 or scans.claimed_by_user_id = $1
-        order by scans.created_at desc, scans.id desc
-        limit $2 offset $3`,
-      [normalizedUserId, normalizedLimit, normalizedOffset],
-      { readOnly: true }
-    ).then((result) => result.rows),
     query<AdminUserActivityStatusRow>(
       `select scans.status, count(*)::int as count
          from scans
@@ -216,44 +268,17 @@ export async function loadAdminUserActivity(userId: string, limit = 10, offset =
       [normalizedUserId],
       { readOnly: true }
     ).then((result) => result.rows),
-    query<AdminUserEvent>(
-      `select e.event_id, e.occurred_at, e.event_name, e.normalized_route,
-              e.feature, e.outcome, e.scan_id, e.element_id, e.browser_family, d.hostname,
-              e.page_path, e.target_path, e.previous_route, e.entry_route, e.form_id,
-              e.os_family, e.device_class, e.viewport_band, e.language, e.country_code,
-              e.referring_domain, e.duration_ms, e.numeric_value, e.consent_state,
-              e.is_authenticated, e.browser_confirmed_at
-         from product_analytics_events e
-         left join scans s on s.id = e.scan_id
-         left join domains d on d.id = s.domain_id
-        where e.user_id = $1 and e.occurred_at >= now() - interval '90 days'
-        order by e.occurred_at desc, e.event_id desc
-        limit $2 offset $3`,
-      [normalizedUserId, Math.min(Math.max(eventLimit, 1), 100), Math.max(eventOffset, 0)],
-      { readOnly: true }
-    ).then((result) => result.rows),
-    queryOne<{ count: number }>(
-      `select count(*)::int as count from product_analytics_events
-        where user_id = $1 and occurred_at >= now() - interval '90 days'`,
-      [normalizedUserId], { readOnly: true }
-    )
+    loadScans(normalizedOffset)
   ]);
-
-  if (!user) {
-    return null;
-  }
+  const associatedScans = Number(metrics?.associated_scans ?? 0);
+  const lastOffset = Math.max(0, Math.ceil(associatedScans / normalizedLimit) - 1) * normalizedLimit;
+  const pageOffset = Math.min(normalizedOffset, lastOffset);
+  const scans = pageOffset === normalizedOffset ? requestedScans : await loadScans(pageOffset);
 
   return {
-    events,
-    eventCount: Number(eventCount?.count ?? 0),
-    user: {
-      createdAt: user.created_at,
-      email: user.email,
-      fullName: user.full_name,
-      id: user.id,
-      lastLoginAt: user.last_login_at,
-      organizationName: user.organization_name
-    },
+    user: mappedUser,
+    tab: "scans",
+    page: Math.floor(pageOffset / normalizedLimit) + 1,
     metrics: {
       associatedScans: Number(metrics?.associated_scans ?? 0),
       completedScans: Number(metrics?.completed_scans ?? 0),
@@ -281,7 +306,7 @@ export async function loadAdminUserActivity(userId: string, limit = 10, offset =
       createdAt: scan.created_at,
       domainHostname: scan.domain_hostname,
       id: scan.id,
-      pagesScanned: Number(scan.pages_scanned ?? 0),
+      pagesScanned: Number(scan.full_site_pages_scanned ?? scan.pages_scanned ?? 0),
       scanType: scan.scan_type,
       status: scan.status
     }))

@@ -75,8 +75,12 @@ test("completed crawls persist permanent page limitations but never persist fail
     assert.deepEqual(mismatched, first, "a historical key cannot authenticate current-version deductions");
     globals.snapshotHash = "c".repeat(64);
     const missing = {...failed,status:"completed",observation:{status:"completed",httpStatus:200,attemptId:"attempt",parentScanId:"scan",pageJobId:"child",configurationHash:"config",sourceHash:"a".repeat(64),runtimeGraph:{sourceSizeBytes:100}}};
-    const limited = await loadFullSiteScore(crawl,[home,missing]);
+    let incomplete = 0;
+    const options = {onIncompleteEvidence(){incomplete++;}};
+    const limited = await loadFullSiteScore(crawl,[home,missing],options);
     assert.equal(limited.limitedPages,1);
     assert.equal(globals.scoreWrites.length,1,"temporary read failure must remain retryable, not durably cached");
+    await loadFullSiteScore(crawl,[home,missing],options);
+    assert.equal(incomplete,2,"both fresh and shared in-memory reads tell callers not to persist incomplete evidence");
   } finally { await rm(directory,{recursive:true,force:true}); }
 });

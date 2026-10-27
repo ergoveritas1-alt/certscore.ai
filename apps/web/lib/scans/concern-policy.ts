@@ -1,5 +1,9 @@
+import { SITE_INTEGRITY_POLICY_VERSION, LEGACY_SITE_INTEGRITY_POLICY_VERSION } from "@certscore/contracts";
+import { CALIFORNIA_AGENT_REGISTRATION_ID, californiaAgentRegistrationProjectionSchema } from "@certscore/contracts";
 import {supportsCombinedOptOutRisk} from "./california-combined-opt-out-policy";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
+import { GDPR_NARROW_KINDS, gdprNarrowFindingId, GDPR_NARROW_SIGNAL, isActiveGdprNarrowKind } from "@certscore/contracts";
+import { readBoundGdprNarrow } from "./gdpr-narrow-evidence";
 import {BROAD_OPT_OUT_FINDING_ID} from "@certscore/contracts";
 import {OPT_OUT_SIGNAL_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID} from "@certscore/contracts";
 import {supportsFrictionlessGpcContradiction} from "./california-runtime-link-policy";
@@ -2610,6 +2614,16 @@ export function deriveConcernPolicy(input: {
   regulatoryChecklistEligibility?: NormalizedConcernRegulatoryChecklistEligibility;
   scoreEffects?: NormalizedConcernScoreEffect[];
 } {
+  const narrowKind = GDPR_NARROW_KINDS.find(kind => input.concern.suggestedUnifiedFindingId === gdprNarrowFindingId(kind));
+  if (narrowKind) {
+    const assessment = readBoundGdprNarrow(input.rawEvidence);
+    const eligible = isActiveGdprNarrowKind(narrowKind) && input.concern.originType === "runtime_artifact" &&
+      input.concern.originKey === `${GDPR_NARROW_SIGNAL}.${narrowKind}` &&
+      Boolean(assessment?.issues.some(issue => issue.kind === narrowKind));
+    return { allowedNarrativeTier: eligible ? "moderate" : "weak", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
+      promotionEligibility: eligible ? "eligible" : "blocked", regulatoryChecklistEligibility: eligible ? "gap_observed" : "none",
+      negativeEvidenceFlags: [] };
+  }
   if (input.concern.originKey === PRIVACY_CHOICE_PRESENCE_SIGNAL) {
     const eligible = input.concern.originType === "runtime_artifact" && input.concern.suggestedUnifiedFindingId === "targeted_advertising_choices_present" &&
       Boolean(readSaleSharingLinkPresence(input.rawEvidence?.consentControlAssessment));
@@ -2628,6 +2642,18 @@ export function deriveConcernPolicy(input: {
       promotionEligibility: eligible ? "eligible" : "blocked", negativeEvidenceFlags: [],
       regulatoryChecklistEligibility: "none", scoreEffects: [] };
   }
+  if (input.concern.suggestedUnifiedFindingId === CALIFORNIA_AGENT_REGISTRATION_ID) {
+    // Full parent is transient policy input, not copied into the new concern.
+    const review = readCaliforniaPrivacyReviewFromConsent(input.consentControlAssessment);
+    const compact = californiaAgentRegistrationProjectionSchema.safeParse(input.rawEvidence?.agentRegistrationProjection);
+    const eligible = input.concern.originType === "runtime_artifact" && compact.success &&
+      review?.contractVersion === "certscore.california-privacy-review.v10" && Boolean(review.agentRegistrationAssessment) &&
+      compact.data.documentUrl === review.documentUrl &&
+      JSON.stringify(compact.data.assessment) === JSON.stringify(review.agentRegistrationAssessment);
+    return {allowedNarrativeTier: "moderate", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
+      promotionEligibility: eligible ? "eligible" : "blocked", negativeEvidenceFlags: [], regulatoryChecklistEligibility: "none",
+      scoreEffects: eligible && review ? californiaFindingScoreEffect(CALIFORNIA_AGENT_REGISTRATION_ID, review.sourceHash, review.contractVersion, review) : []};
+  }
   if (CALIFORNIA_PRIVACY_REVIEW_IDS.some(id => id === input.concern.suggestedUnifiedFindingId)) {
     const parsedReview=readCaliforniaPrivacyReviewFromConsent(input.rawEvidence?.consentControlAssessment);
     const exception=parsedReview?.contractVersion === "certscore.california-privacy-review.v10" ? parsedReview.frictionlessGpcException : undefined;
@@ -2644,9 +2670,11 @@ export function deriveConcernPolicy(input: {
   }
   if (input.concern.suggestedUnifiedFindingId === SITE_INTEGRITY_FINDING_ID) {
     const eligible = input.concern.originType === "runtime_artifact" && qualifiesSiteIntegrityReview(input.rawEvidence?.siteIntegrity);
+    const version = input.rawEvidence?.siteIntegrityPolicyVersion;
+    const knownPolicy = version === undefined || version === SITE_INTEGRITY_POLICY_VERSION || version === LEGACY_SITE_INTEGRITY_POLICY_VERSION;
     return { allowedNarrativeTier: "moderate", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
       promotionEligibility: eligible ? "eligible" : "blocked", negativeEvidenceFlags: [],
-      regulatoryChecklistEligibility: "none", scoreEffects: eligible ? buildSiteIntegrityScoreEffects(input.rawEvidence?.siteIntegrity) : [] };
+      regulatoryChecklistEligibility: "none", scoreEffects: eligible && knownPolicy ? buildSiteIntegrityScoreEffects(input.rawEvidence?.siteIntegrity, version === LEGACY_SITE_INTEGRITY_POLICY_VERSION ? version : SITE_INTEGRITY_POLICY_VERSION) : [] };
   }
   if (["zoom_restriction_accessibility_issue", "target_size_accessibility_issue"].includes(input.concern.suggestedUnifiedFindingId ?? "")) {
     const effects = input.concern.originType === "runtime_artifact"

@@ -1,6 +1,6 @@
-import { siteIntegrityDeduction } from "../../lib/scans/site-integrity-score-policy";
+import { siteIntegrityDeduction, siteIntegrityFindingEffects } from "../../lib/scans/site-integrity-score-policy";
+import { SITE_INTEGRITY_POLICY_VERSION } from "@certscore/contracts";
 import { accessibilityFindingDeductionBreakdown } from "../../lib/scans/accessibility-score-policy";
-import { SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
 import { SCORE_FLOOR, SCORE_BASE, SCORING_POLICY_VERSION, type GdprEprivacyScoringPolicyVersion, SCORING_RULE_BY_ID, SCORING_FAMILIES } from "../../lib/scans/scoring-policy";
 import { projectScanReportNoGo, type ScanReportAccessContext } from "../../lib/scans/scan-report-disposition";
 import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
@@ -28,9 +28,7 @@ export function deriveCanonicalOverallScoreExplanationForReport(input: {
     rows: input.checklistRows
   }).score;
   if (postureScore === null) return null;
-  const integrityEffects = input.unifiedFindings
-    .filter(finding => finding.unifiedFindingId === SITE_INTEGRITY_FINDING_ID)
-    .flatMap(finding => finding.scoreEffects ?? []);
+  const integrityEffects = siteIntegrityFindingEffects(input.unifiedFindings);
   const deductions = deriveGdprEprivacyDeductionBreakdown(input.checklistRows, input.scorePolicyVersion);
   const accessibility = accessibilityFindingDeductionBreakdown(input.unifiedFindings);
   if (accessibility.deductionPoints) {
@@ -50,7 +48,8 @@ export function deriveCanonicalOverallScoreExplanationForReport(input: {
       : input.scorePolicyVersion === "gdpr-eprivacy-posture.v19" ? "overall-posture.v9"
       : input.scorePolicyVersion === "gdpr-eprivacy-posture.v20" ? "overall-posture.v11"
       : input.scorePolicyVersion === "gdpr-eprivacy-posture.v21" ? "overall-posture.v12"
-      : CANONICAL_OVERALL_SCORE_VERSION,
+      : input.scanRecord.snapshot?.score_version === "overall-posture.v13" && !integrityEffects.some(effect => effect.policyVersion === SITE_INTEGRITY_POLICY_VERSION)
+        ? "overall-posture.v13" : CANONICAL_OVERALL_SCORE_VERSION,
     policyVersion: input.scorePolicyVersion ?? SCORING_POLICY_VERSION, deductions };
 }
 

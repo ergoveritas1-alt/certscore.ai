@@ -68,6 +68,37 @@ test("policy validator passes for the current explicit registry", () => {
   assert.deepEqual(result.issues, []);
 });
 
+test("all five GDPR narrow IDs have explicit policies without activating duplicate or inactive cards", () => {
+  for (const [id, family, rule] of [
+    ["gdpr_narrow_optional_defaults", "consent_tracking", "evidence.gdpr_narrow.checklist_projection"],
+    ["gdpr_narrow_implied_consent", "consent_tracking", "evidence.gdpr_narrow.checklist_projection"],
+    ["gdpr_narrow_legal_basis", "rights_gap", "evidence.gdpr_narrow.inactive"],
+    ["gdpr_narrow_retention", "rights_gap", "evidence.gdpr_narrow.inactive"],
+    ["gdpr_narrow_complaint", "rights_gap", "evidence.gdpr_narrow.inactive"],
+  ] as const) {
+    const entry = UNIFIED_FINDING_SURFACING_POLICY_REGISTRY[id];
+    assert.ok(entry);
+    assert.equal(entry.findingId, id); assert.equal(entry.family, family);
+    // Even forged strong eligibility cannot bypass the inactive/duplicate gate.
+    for (const eligible of [true, false]) {
+      const packet = makePacket(id, {severity: "high", confidenceBand: "high",
+        concernContext: {assertionLevels: [], evidenceStrengthFlags: [], negativeEvidenceFlags: [], originTypes: ["runtime_artifact"],
+          promotionEligibilities: [eligible ? "eligible" : "blocked"], externalSurfacingEligibilities: [eligible ? "eligible" : "suppress"]}});
+      const result = evaluateUnifiedFindingSurfacing({packets: [packet]});
+      const decision = result.debugDecisions[0]!;
+      assert.equal(decision.family, family);
+      assert.equal(decision.decisionState, "suppressed");
+      assert.equal(decision.reportable, false);
+      assert.equal(decision.reportLane, "suppressed");
+      assert.equal(decision.surfaceTier, "support");
+      assert.ok(decision.appliedRules.includes(rule));
+      assert.ok(!decision.appliedRules.includes("unknown.conservative_fallback"));
+      assert.deepEqual(result.surfacedFindings, []);
+      assert.deepEqual(result.supportLinks, []);
+    }
+  }
+});
+
 test("policy validator fails when a required finding entry is missing", () => {
   const partialRegistry = { ...UNIFIED_FINDING_SURFACING_POLICY_REGISTRY };
   delete partialRegistry.preconsent_tracking;

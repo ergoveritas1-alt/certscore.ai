@@ -147,6 +147,14 @@ test("different paths on the same domain never reuse each other's scans", () => 
   assert.equal(result.eligible, false);
 });
 
+test("sample report exact URL matching rejects scheme and query variants without changing ordinary reuse", () => {
+  const variant = candidate({ normalizedUrl: "https://example.com/?variant=other" });
+  assert.equal(eligibility({}, [variant]).eligible, true);
+  assert.equal(eligibility({ requireExactUrl: true }, [variant]).eligible, false);
+  assert.equal(eligibility({ requireExactUrl: true }, [candidate({ normalizedUrl: "http://example.com/" })]).eligible, false);
+  assert.equal(eligibility({ requireExactUrl: true }, [candidate()]).eligible, true);
+});
+
 test("the same canonical path can reuse across scheme, www, and trailing-slash variants", () => {
   const result = eligibility(
     { normalizedDomain: "example.com", normalizedUrl: "http://www.example.com/test/consent/" },

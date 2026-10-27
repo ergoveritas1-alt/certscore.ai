@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { getPublicScanStatusProjection } from "../../../../../server/scans/scan-status-projection";
 import { enforceApiV2ScanReadThrottle } from "../../../../../server/pulse/api-v2-read-throttle";
 import { runtimeGraphQuotaRequest } from "../../../../../server/scans/runtime-evidence-graph-access";
-import { loadFullSiteReport } from "../../../../../server/scans/full-site-report";
+import { loadFullSiteReport, loadFullSiteReportPreview } from "../../../../../server/scans/full-site-report";
 import { loadFullSiteCrawl } from "@website-signal-risk-scanner/db";
 import { loadFullSiteGraph } from "../../../../../server/scans/full-site-graph";
 export const dynamic = "force-dynamic";
@@ -33,6 +33,10 @@ export async function GET(
   // Internal browser session and rollout gate are required; API credentials cannot enable inventory.
   if (!(await getPublicScanStatusProjection(scanId)))
     return new Response(null, { status: 404 });
+  if (params.get("view") === "overview") {
+    const preview = await loadFullSiteReportPreview(scanId, crawl);
+    return NextResponse.json(preview, { status: preview ? 200 : 404, headers: { "Cache-Control": "private, no-store" } });
+  }
   if (params.has("formPage")) {
     try {
       const bytes = await loadFullSiteFormSnapshot(scanId, params.get("formPage")!, params.get("formRef") ?? "");

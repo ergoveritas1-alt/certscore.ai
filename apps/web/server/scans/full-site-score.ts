@@ -1,3 +1,4 @@
+import { siteIntegrityPolicyForScoreVersion } from "../../lib/scans/site-integrity-score-policy";
 import { EMBED_SCORE_ROW_IDS, mergeEmbedScoringEvidence } from "../../lib/scans/embed-scoring-evidence";
 import { orderedEvidencePrefetch } from "./ordered-evidence-prefetch";
 import { projectAdditionalPageSiteIntegrity } from "./site-integrity-projection";
@@ -33,9 +34,9 @@ import { groupStoredReportScorePriorities } from "../../lib/scans/accessibility-
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 const VERSION = FULL_SITE_SCORING_POLICY_VERSION;
 const PRIORITY_VERSION = "site-priority-review.v19";
-const HISTORICAL_VERSIONS = [["full-site-distinct-findings.v11", "gdpr-eprivacy-posture.v21"], ["full-site-distinct-findings.v10", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v9", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v8", "gdpr-eprivacy-posture.v19"], ["full-site-distinct-findings.v7", "gdpr-eprivacy-posture.v18"], ["full-site-distinct-findings.v6", "gdpr-eprivacy-posture.v17"]] as const;
+const HISTORICAL_VERSIONS = [["full-site-distinct-findings.v12", "gdpr-eprivacy-posture.v26-consent-only"], ["full-site-distinct-findings.v11", "gdpr-eprivacy-posture.v21"], ["full-site-distinct-findings.v10", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v9", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v8", "gdpr-eprivacy-posture.v19"], ["full-site-distinct-findings.v7", "gdpr-eprivacy-posture.v18"], ["full-site-distinct-findings.v6", "gdpr-eprivacy-posture.v17"]] as const;
 const persistedScoreSchema = z.object({
-  version: z.enum([VERSION, "full-site-distinct-findings.v11", "full-site-distinct-findings.v10", "full-site-distinct-findings.v9", "full-site-distinct-findings.v8", "full-site-distinct-findings.v7", "full-site-distinct-findings.v6"]), value: z.number().int().min(0).max(100).nullable(),
+  version: z.enum([VERSION, "full-site-distinct-findings.v12", "full-site-distinct-findings.v11", "full-site-distinct-findings.v10", "full-site-distinct-findings.v9", "full-site-distinct-findings.v8", "full-site-distinct-findings.v7", "full-site-distinct-findings.v6"]), value: z.number().int().min(0).max(100).nullable(),
   scoredPages: z.number().int().min(1), limitedPages: z.number().int().nonnegative(), scope: z.string(),
   priorityReview: z.array(sitePriorityFindingSchema),
   deductions: z.array(z.object({
@@ -55,7 +56,7 @@ const additionalRuntimeSchema = z.object({
   runtimeTimeline: runtimeEvidenceEventSchema.array(),
   collectionSurfaceObservations: collectionSurfaceObservationSchema.array(),
 });
-const cache = new Map<string, { expiresAt: number; result: Promise<FullSiteScore | null> }>();
+const cache = new Map<string, { expiresAt: number; result: Promise<FullSiteScore | null>; complete: boolean }>();
 export type FullSiteScore = {
   version: string;
   value: number | null;
@@ -147,7 +148,7 @@ export function isFullSiteScoringCaptureComplete(page: {
     !observation.failureKind && (observation.httpStatus === null || observation.httpStatus < 400);
 }
 
-export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPage[]): Promise<FullSiteScore | null> {
+export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPage[], options: { onIncompleteEvidence?: () => void } = {}): Promise<FullSiteScore | null> {
   if (!canAssessRetainedCrawl(crawl)) return null;
   const { rows: [snapshot] } = await query<Record<string, unknown>>(
     "select report_projection_payload,report_projection_payload_sha256,report_projection_payload_size_bytes,report_projection_status,report_projection_version,report_projection_computed_at from scan_snapshots where scan_id=$1", [crawl.scan_id]);
@@ -180,7 +181,12 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     }
   }
   const existing = cache.get(key);
-  if (existing && existing.expiresAt > Date.now()) return existing.result;
+  if (existing && existing.expiresAt > Date.now()) {
+    const result = await existing.result;
+    if (!existing.complete) options.onIncompleteEvidence?.();
+    return result;
+  }
+  const entry = { expiresAt: Date.now() + 10 * 60_000, result: Promise.resolve(null) as Promise<FullSiteScore | null>, complete: true };
   const pending = (async () => {
     const homePageEvidence = pages.find(page => page.source === "homepage");
     const evidencePages: SitewideEvidencePage[] = [projectSitewideEvidencePage({
@@ -240,7 +246,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
           coverage.status = integrityProjection.observation.truncated ? "limited" : "captured"; coverage.sourceHash = observation.sourceHash;
           coverage.retainedLinkCount = integrityProjection.observation.links.length;
           const integrityPackets = buildUnifiedFindingDisplayPackets({
-            runtimeArtifacts: { siteIntegrity: integrityProjection }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
+            runtimeArtifacts: { siteIntegrity: integrityProjection, siteIntegrityPolicyVersion: siteIntegrityPolicyForScoreVersion(home.snapshot?.score_version) }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
           });
           scoringFindings.push(...integrityPackets);
           const finding = selectSiteIntegrityFinding(integrityPackets);
@@ -275,13 +281,17 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     // Failed/partial scan pages are permanent coverage limitations, not failed reads.
     // Persist their honest limited result; retryable/unverifiable evidence reads must not
     // become a durable cache entry that prevents a later verified assessment.
+    entry.complete = !evidenceReadFailed;
     if (!evidenceReadFailed) await query("update full_site_crawls set policy_json=jsonb_set(policy_json,'{fullSiteScore}',$2::jsonb) where scan_id=$1 and status='completed'", [crawl.scan_id, JSON.stringify({sourceHash: key, score: result})]);
     return result;
   })();
-  cache.set(key, { expiresAt: Date.now() + 10 * 60_000, result: pending });
+  entry.result = pending;
+  cache.set(key, entry);
   if (cache.size > 32) cache.delete(cache.keys().next().value!);
   pending.catch(() => cache.delete(key));
-  return pending;
+  const result = await pending;
+  if (!entry.complete) options.onIncompleteEvidence?.();
+  return result;
 }
 
 export function projectFullSiteScoringEvidence(evidence: Record<string, unknown>, pageId: string, sourceHash: string, documentUrl?: string) {

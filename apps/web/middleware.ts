@@ -4,17 +4,8 @@ import { isPublicDocumentRequest, isDocumentNavigation, PUBLIC_PAGE_TIMING_NAME 
 import { issuePublicPageToken } from "./server/product-analytics/public-page-token";
 import { BROWSER_WORKSPACE_COOKIE, entersOrdinaryWorkspace } from "./lib/marketplace-browser-navigation";
 
-const sessionCookieNames = new Set([
-  "session_token",
-  "__Secure-session_token",
-  "certscore.session_token",
-  "__Secure-certscore.session_token",
-  "certscore_session"
-]);
-
-export function isRecognizedSessionCookieName(cookieName: string) {
-  return sessionCookieNames.has(cookieName);
-}
+import { isRecognizedSessionCookieName } from "./lib/auth/session-cookie";
+export { isRecognizedSessionCookieName } from "./lib/auth/session-cookie";
 
 function hasSessionCookie(request: NextRequest) {
   return request.cookies.getAll().some((cookie) => isRecognizedSessionCookieName(cookie.name));

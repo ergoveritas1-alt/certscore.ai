@@ -65,6 +65,14 @@ test("a complete connection/adblock error shell is a challenge, while quoted art
   assert.notEqual(buildScanNoGoAssessment(scanEvidence({text: `Troubleshooting guide. A browser may display: ${shell} Our article explains how to fix this message and browse products.`, finalMainDocumentStatus: 200, screenshots: []}))?.scanNoGoAssessment.decision, "no_go");
 });
 
+test("a 200 regional-unavailability shell is no-go despite positive transport activity", () => {
+  const shell = "OOPS!!!\nWE ARE CURRENTLY NOT AVAILABLE IN YOUR REGION.";
+  const result = buildScanNoGoAssessment(scanEvidence({text:shell, finalMainDocumentStatus:200, screenshots:[], firstPartySuccesses:8}));
+  assert.equal(result?.scanNoGoAssessment.decision, "no_go");
+  assert.equal(result?.primaryReasonCode, "unsupported_region");
+  assert.notEqual(buildScanNoGoAssessment(scanEvidence({text:`Our guide explains the message: ${shell} Public product information follows.`, finalMainDocumentStatus:200, screenshots:[]}))?.scanNoGoAssessment.decision, "no_go");
+});
+
 test("overlong retained policy identities do not invalidate the compact lane summary", () => {
   const policy = usablePolicySurface();
   policy.url = `https://example.test/privacy?state=${"x".repeat(850)}`;

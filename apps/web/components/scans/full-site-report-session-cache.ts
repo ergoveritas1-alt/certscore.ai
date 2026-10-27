@@ -50,3 +50,31 @@ export function writeFullSiteReportSessionCache(storage: Pick<Storage, "setItem"
     return false;
   }
 }
+
+// The first view has its own small browser entry; detailed inventories remain optional.
+const PREVIEW_KEY = "certscore:full-site-overview:v1";
+type Preview = import("../../server/scans/full-site-report").FullSiteReportPreview;
+export function isCompletedFullSitePreview(data: Preview) {
+  return Boolean(data.cacheable && data.score && Number.isFinite(data.score.value) &&
+    !["waiting_homepage", "running"].includes(data.summary.state.status) && data.summary.counts.active === 0);
+}
+export function readFullSitePreviewSessionCache(storage: Pick<Storage, "getItem">, scanId: string, scope: string, now = Date.now()): Preview | null {
+  try {
+    const raw = storage.getItem(PREVIEW_KEY);
+    if (!raw || raw.length > 500_000) return null;
+    const cached = JSON.parse(raw) as { scanId: string; scope: string; savedAt: number; data: Preview };
+    return cached.scanId === scanId && cached.scope === scope && Number.isFinite(cached.savedAt) &&
+      cached.savedAt <= now && now - cached.savedAt <= MAX_AGE_MS &&
+      cached.data?.version === "full-site-report-preview.v1" && cached.data.summary.state.scanId === scanId &&
+      isCompletedFullSitePreview(cached.data) ? cached.data : null;
+  } catch { return null; }
+}
+export function writeFullSitePreviewSessionCache(storage: Pick<Storage, "setItem">, scanId: string, scope: string, data: Preview, now = Date.now()) {
+  if (!isCompletedFullSitePreview(data)) return false;
+  try {
+    const raw = JSON.stringify({ scanId, scope, savedAt: now, data });
+    if (raw.length > 500_000) return false;
+    storage.setItem(PREVIEW_KEY, raw);
+    return true;
+  } catch { return false; }
+}

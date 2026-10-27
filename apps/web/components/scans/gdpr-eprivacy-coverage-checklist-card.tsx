@@ -1,5 +1,6 @@
 "use client";
 import { readPreconsentTrackingTiming } from "../../lib/scans/preconsent-tracking-timing";
+import { gdprNarrowCustomerEvidence } from "../../lib/scans/gdpr-narrow-evidence";
 
 import React from "react";
 import { cn } from "@website-signal-risk-scanner/ui";
@@ -121,6 +122,8 @@ const REPORT_ROW_GROUPS = [
       "accept_consent_control",
       "options_settings_preferences_control",
       "consent_choice_quality",
+      "consent_optional_defaults_on",
+      "consent_browsing_as_consent",
       "cookie_notice_policy_availability"
     ]
   },
@@ -975,7 +978,8 @@ function getEvidenceJson(item: GdprEprivacyCoverageChecklistItem) {
     evidenceState: item.evidenceState,
     status: item.status,
     subchecks: item.subchecks,
-    ...item.criticalEvidence
+    ...item.criticalEvidence,
+    retainedEvidence: gdprNarrowCustomerEvidence(item.criticalEvidence.retainedEvidence),
   };
 }
 

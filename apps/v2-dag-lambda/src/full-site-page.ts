@@ -85,7 +85,8 @@ export async function requestFullSiteControl(controlUrl: URL, message: z.infer<t
       if (remaining <= 0) throw new Error("Inventory publication deadline reached.");
       const response = await proxyFetch(controlUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(body.operation === "claim"
+          ? { "x-certscore-claim-deadline-ms": String(operationDeadline) } : {}) },
         body: JSON.stringify({ ...message, ...body }),
         signal: AbortSignal.timeout(remaining),
         redirect: "error",
@@ -99,7 +100,7 @@ export async function requestFullSiteControl(controlUrl: URL, message: z.infer<t
       const result = await response.json();
       if (body.operation === "finish" && result.accepted !== true)
         throw new Error("Full site result was not accepted.");
-      if (body.operation === "finish" || attempt > 1) console.info(JSON.stringify({ event: "full_site_control_completed",
+      if (body.operation === "finish" || attempt > 1 || Date.now() - controlStartedAt >= 1000) console.info(JSON.stringify({ event: "full_site_control_completed",
         page_id: message.pageId, attempt_id: message.attemptId, operation: body.operation,
         elapsed_ms: Date.now() - controlStartedAt, http_status: httpStatus, request_count: attempt }));
       return result;

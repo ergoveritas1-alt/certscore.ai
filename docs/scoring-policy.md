@@ -5,8 +5,8 @@ The owner-approved September 6, 2026 scoring table is defined in
 this registry directly. Change the registry rather than copying policy numbers
 into report components or documentation.
 
-Local versions: `gdpr-eprivacy-posture.v22`, `overall-posture.v13`, and
-`full-site-distinct-findings.v12`. These changes have not been deployed.
+Local versions: `gdpr-eprivacy-posture.v26-consent-only`, `overall-posture.v13`, and
+`full-site-distinct-findings.v12`. See the October 26 privacy-posture release record for the deployed scope.
 The separately approved California recipient schedule is unchanged. New GPC
 observations use [sale/sharing qualification](certscore-v2/gpc-sale-sharing-qualification-policy.md),
 including request-level restricted-processing signals, under
@@ -70,6 +70,54 @@ when the missing-policy deduction applies. A supported missing-policy finding
 also appears in the site assessment, scoped to its retained homepage evidence.
 Stored historical scores retain their recorded versions and amounts. Transport and eligible California GPC retain the
 registry's existing deductions. Zero-deduction checks are omitted from the table.
+
+The October 26 privacy-posture release enables only GDPR candidates 1–2:
+verified optional-cookie defaults (8 points) and explicit browsing-as-advertising-
+cookie consent (6 points). The consent-control family uses its strongest eligible
+effect; these together count as 8, and an existing 12-point missing-Reject finding
+absorbs them. Duplicate rows do not increase the effect. The current policy is
+`gdpr-eprivacy-posture.v26-consent-only`; historical v25 remains readable.
+
+GDPR candidates 3–5 remain inactive in current materialization, normalized
+concerns, concern policy, checklist, scoring and top findings. No omission-review
+model extension or budget migration is included in this release. Active consent
+findings use the existing Consent Surface evidence box; the strongest supported
+consent finding may appear in top findings. Customer reports show factual evidence
+and resulting scores, without point explanations.
+
+New supported California authorized-agent registration findings use the canonical
+`california-regulatory-posture.v22-agent-registration` policy. The three-point
+effect is absorbed by existing rights-disclosure or rights-information destination
+deductions; factual findings remain in detailed California evidence and outside
+top findings. Opt-out verification and request-frequency observations remain
+score-neutral, local research. No production observer is enabled. See
+[registration policy](certscore-v2/california-agent-registration-policy.md) and
+[release record](operations/2026-10-26-privacy-posture-release.md).
+
+## Hidden outbound links — October 26, 2026 shared-score update
+
+The owner approved 13 points for the first verified concealed outbound link,
+5 for each additional occurrence, capped at 37 once per report. The totals for
+1/2/3/4/5/6+ occurrences are 13/18/23/28/33/37. Apply the same verified
+occurrence union to the EU-view overall score and the California posture score.
+The general site-integrity finding remains separate from regulatory checklist
+and legal-gap classification.
+
+New concern-policy effects use `certscore.site-integrity-policy.v5-shared-postures`
+with explicit overall and California targets. New overall scores use
+`overall-posture.v14-shared-integrity`; California scores carrying the shared
+effect use `california-regulatory-posture.v23-shared-integrity`. New full-site
+calculations use `full-site-distinct-findings.v13-shared-integrity`. Existing
+California report scope remains the starting page; full-site overall reports
+retain their existing verified additional-page scope and one shared family cap.
+
+Preserve v4's overall-only 17/+5/40 interpretation and existing source-bound
+historical scores/caches. No production backfill, historical report rewrite,
+new capture, model call or scan is included. Duplicate evidence never stacks;
+unknown, unverified and mismatched evidence remains neutral. Customer reports
+show the resulting scores and factual evidence without point deductions or
+formulas. Added typed metadata is estimated below $0.10/month at 100,000 scans;
+no capture budget, capacity or retention increase is introduced.
 
 ## Hidden outbound links — September 17, 2026 update
 

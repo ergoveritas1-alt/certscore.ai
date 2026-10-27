@@ -48,7 +48,7 @@ export async function readFullSiteReportCache(scanId: string, sourceKey: string)
   } catch { return null; }
 }
 
-export async function writeFullSiteReportCache(scanId: string, sourceKey: string, report: unknown) {
+export async function writeFullSiteReportCache(scanId: string, sourceKey: string, report: unknown, scope: "report" | "overview" = "report") {
   const json = JSON.stringify(report);
   const jsonBytes = Buffer.byteLength(json);
   if (jsonBytes > MAX_JSON_BYTES) {
@@ -61,11 +61,11 @@ export async function writeFullSiteReportCache(scanId: string, sourceKey: string
     return false;
   }
   // A changed source during assembly must never be saved under the earlier identity.
-  if (await fullSiteReportSourceKey(scanId) !== sourceKey) {
+  if ((await fullSiteReportSourceKey(scanId)) + (scope === "overview" ? ":overview.v1" : "") !== sourceKey) {
     console.info("[full-site-report] cache skipped", { scanId, reason: "source_changed", jsonBytes, compressedBytes: payload.length });
     return false;
   }
-  const slot = Number.parseInt(hash(scanId).slice(0, 8), 16) % 128;
+  const slot = Number.parseInt(hash(scope === "report" ? scanId : `${scanId}:overview`).slice(0, 8), 16) % 128;
   await query(`insert into full_site_report_cache(slot,scan_id,source_key,payload,payload_sha256)
     values($1,$2,$3,$4,$5) on conflict(slot) do update set scan_id=excluded.scan_id,
     source_key=excluded.source_key,payload=excluded.payload,payload_sha256=excluded.payload_sha256,created_at=now()`,

@@ -36,6 +36,8 @@ export type RecentScanReuseCandidate = {
 };
 
 export type RecentScanReuseInput = {
+  readFromWriter?: boolean;
+  requireExactUrl?: boolean;
   minPagesRequested: number;
   normalizedDomain: string;
   normalizedUrl: string;
@@ -300,7 +302,8 @@ export function evaluateRecentScanReuseCandidates(
         : row.organizationId === null || row.organizationId === input.organizationId;
       const targetMatches =
         normalizeDomainForReuse(row.hostname) === requestedDomain &&
-        normalizedPathForReuse(row.normalizedUrl) === normalizedPathForReuse(requestedUrl);
+        normalizedPathForReuse(row.normalizedUrl) === normalizedPathForReuse(requestedUrl) &&
+        (!input.requireExactUrl || row.normalizedUrl === input.normalizedUrl);
 
       return (
         scopeAllowed &&
@@ -410,10 +413,12 @@ async function loadRecentScanReuseCandidates(input: RecentScanReuseInput) {
             end = $4
         and s.pages_requested >= $5
         and lower(regexp_replace(d.hostname, '^www\\.', '')) = lower(regexp_replace($6, '^www\\.', ''))
+        ${input.requireExactUrl ? "and coalesce(s.scan_config_json->>'normalizedUrl', d.normalized_url) = $7" : ""}
       order by s.completed_at desc, s.created_at desc
       limit 200`,
-    [input.organizationId, now.toISOString(), windowHours, effectiveScanFrom, minPagesRequested, input.normalizedDomain],
-    { readOnly: true }
+    [input.organizationId, now.toISOString(), windowHours, effectiveScanFrom, minPagesRequested, input.normalizedDomain,
+      ...(input.requireExactUrl ? [input.normalizedUrl] : [])],
+    { readOnly: !input.readFromWriter }
   );
 
   return candidates.rows;

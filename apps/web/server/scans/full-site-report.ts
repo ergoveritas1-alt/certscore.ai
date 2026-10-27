@@ -1,3 +1,4 @@
+import { summarizeSiteIntegrityLinks } from "../../lib/scans/site-integrity-report";
 import { projectSiteExecutiveRuntimeCards } from "../../lib/scans/executive-runtime-cards";
 import { buildNetworkInventoryOverview } from "../../lib/scans/network-inventory-overview";
 import { reconcileStorageInventory } from "../../lib/scans/storage-inventory-reconciliation";
@@ -104,14 +105,8 @@ export async function loadFullSiteReport(
   return entry.result;
 }
 
-async function buildFullSiteReport(
-  scanId: string,
-  params = new URLSearchParams(),
-  exportAllPages = false,
-  options: ReportOptions = {},
-) {
-  const buildStarted = performance.now();
-  const crawl = options.crawl === undefined ? await loadFullSiteCrawl(scanId) : options.crawl;
+async function loadFullSiteReportInputs(scanId: string, retainedCrawl?: FullSiteCrawlRow | null, onIncompleteEvidence?: () => void) {
+  const crawl = retainedCrawl === undefined ? await loadFullSiteCrawl(scanId) : retainedCrawl;
   if (!crawl || crawl.scan_id !== scanId) return null;
   const records = await loadFullSitePages(scanId);
   const pagesLoadedAt = performance.now();
@@ -170,16 +165,26 @@ async function buildFullSiteReport(
       : null,
   }));
   const aggregate = aggregateFullSite(state, pages);
-  const score = await loadFullSiteScore(crawl, pages);
+  const score = await loadFullSiteScore(crawl, pages, { onIncompleteEvidence });
+  return { crawl, records, pagesLoadedAt, state, pages, aggregate, score };
+}
+
+async function buildFullSiteReport(
+  scanId: string,
+  params = new URLSearchParams(),
+  exportAllPages = false,
+  options: ReportOptions = {},
+) {
+  const buildStarted = performance.now();
+  const inputs = await loadFullSiteReportInputs(scanId, options.crawl, options.onIncompleteDetails);
+  if (!inputs) return null;
+  const { crawl, records, pagesLoadedAt, state, pages, aggregate, score } = inputs;
   // Publish the canonical assessment before fetching supporting policy/graph details.
   options.onOverview?.({ summary: { ...aggregate, resources: undefined }, score,
     finalizationStartedAt: fullSiteFinalizationStartedAt(crawl, records) });
   const overviewAt = performance.now();
-  const storageReconciliation = reconcileStorageInventory(score?.assessedStorageRecords ?? [], aggregate.resources);
+  const { storageReconciliation, inventoryClassification } = classifyReportInventory(score, aggregate.resources);
   const additionalServiceIds = new Set(aggregate.resources.filter(row => row.occurrence.kind === "service" && row.homepage === "not_observed").map(row => row.occurrence.serviceId).filter(Boolean));
-  const inventoryClassification = (row: (typeof aggregate.resources)[number]) =>
-    ["cookie", "storage"].includes(row.occurrence.kind) && storageReconciliation.matched.has(row.occurrence.identity) ? "Non-essential" :
-    row.occurrence.kind !== "embed" && row.purposes.length > 1 ? "Review" : classifyCrawlInventoryResource(row.occurrence);
   const kind = (params.get("kind") ?? "service") as CrawlOccurrence["kind"] | "all";
   const q = (params.get("q") ?? "").toLowerCase().slice(0, 200),
     pageFilter = params.get("page"),
@@ -663,3 +668,90 @@ export async function loadFullSiteExport(scanId: string) {
 export type FullSiteReportExport = NonNullable<
   Awaited<ReturnType<typeof loadFullSiteExport>>
 >;
+
+function classifyReportInventory(score: Awaited<ReturnType<typeof loadFullSiteScore>>, resources: ReturnType<typeof aggregateFullSite>["resources"]) {
+  const storageReconciliation = reconcileStorageInventory(score?.assessedStorageRecords ?? [], resources);
+  const inventoryClassification = (row: (typeof resources)[number]) =>
+    ["cookie", "storage"].includes(row.occurrence.kind) && storageReconciliation.matched.has(row.occurrence.identity) ? "Non-essential" :
+    row.occurrence.kind !== "embed" && row.purposes.length > 1 ? "Review" : classifyCrawlInventoryResource(row.occurrence);
+  return { storageReconciliation, inventoryClassification };
+}
+
+/** Saved first view only. Detailed evidence remains in the canonical report and
+ * is fetched on demand; omitted arrays are never presented as empty evidence. */
+export type FullSiteReportPreview = {
+  version: "full-site-report-preview.v1";
+  summary: FullSiteReportOverview["summary"];
+  score: Omit<NonNullable<FullSiteReportOverview["score"]>, "sources"> | null;
+  finalizationStartedAt: FullSiteReportOverview["finalizationStartedAt"];
+  networkOverview: FullSiteReportResponse["networkOverview"];
+  forms: { count: number; limited: boolean };
+  hiddenLinks: ReturnType<typeof summarizeSiteIntegrityLinks> | null;
+  hiddenLinkDestinations: Array<[string, number]>;
+  coverage: FullSiteReportResponse["coverage"];
+  timing: FullSiteReportResponse["timing"];
+  failedPages: Array<Omit<FullSiteReportResponse["pageChoices"][number], "graphSource">>;
+  cacheable: boolean;
+  homepageUrl: string | null;
+};
+const pendingPreviews = new Map<string, Promise<FullSiteReportPreview | null>>();
+
+export async function loadFullSiteReportPreview(scanId: string, retainedCrawl?: FullSiteCrawlRow | null): Promise<FullSiteReportPreview | null> {
+  // Same durable, checksum-verified and globally bounded cache as the full view.
+  const source = await fullSiteReportSourceKey(scanId).catch(() => null);
+  const key = source ? `${source}:overview.v1` : null;
+  if (key) {
+    const cached = await readFullSiteReportCache(scanId, key).catch(() => null) as FullSiteReportPreview | null;
+    if (cached?.version === "full-site-report-preview.v1" && cached.summary?.state?.scanId === scanId) return cached;
+    const pending = pendingPreviews.get(key);
+    if (pending) return pending;
+  }
+  const task = (async () => {
+    let complete = true;
+    const inputs = await loadFullSiteReportInputs(scanId, retainedCrawl, () => { complete = false; });
+    if (!inputs) return null;
+    const { crawl, records, state, pages, aggregate, score } = inputs;
+    const { inventoryClassification } = classifyReportInventory(score, aggregate.resources);
+    const identities = new Map<string, ReturnType<typeof identifyCrawlService>>();
+    const networkOverview = buildNetworkInventoryOverview(aggregate.resources.map(row => {
+      const identityKey = JSON.stringify([row.occurrence.kind, row.occurrence.label, row.occurrence.domain]);
+      if (!identities.has(identityKey)) identities.set(identityKey, identifyCrawlService(row.occurrence));
+      const identity = identities.get(identityKey)!;
+      return { key: serviceIntegrationGroup(identity).key, context: { identity },
+        resources: [{ key: row.key, kind: row.occurrence.kind, context: { identity }, inventoryEvidence: inventoryClassification(row) }] };
+    }));
+    const forms = pages.filter(page => ["completed", "partial"].includes(page.status))
+      .map(page => page.observation?.configurationHash === state.configurationHash ? page.observation.collectionSurfaces : undefined);
+    const destinations = new Map<string, number>();
+    const findings = new Map((score?.siteIntegrity?.findings ?? []).map(finding => [finding.evidence.observation.documentUrl, finding]));
+    for (const finding of findings.values()) for (const link of finding.evidence.observation.links) {
+      destinations.set(link.destinationDomain, (destinations.get(link.destinationDomain) ?? 0) + 1);
+    }
+    const preview: FullSiteReportPreview = {
+      version: "full-site-report-preview.v1", cacheable: complete,
+      summary: { ...aggregate, resources: undefined },
+      // Keep complete priority findings: California editorial joins require their
+      // bound evidence. Bulk page/checklist and inventory evidence stays deferred.
+      score: score ? { version: score.version, value: score.value, scoredPages: score.scoredPages,
+        limitedPages: score.limitedPages, scope: score.scope, priorityReview: score.priorityReview,
+        assessedNonEssentialStorage: score.assessedNonEssentialStorage } : null,
+      finalizationStartedAt: fullSiteFinalizationStartedAt(crawl, records), networkOverview,
+      forms: { count: forms.reduce((n, form) => n + (form?.inventory.forms.length ?? 0), 0),
+        limited: forms.some(form => !form || form.inventory.coverage.status !== "complete") || pages.some(page =>
+          !["excluded", "cancelled", "queued", "active"].includes(page.status) && (!page.observation?.collectionSurfaces || page.observation.configurationHash !== state.configurationHash)) },
+      hiddenLinks: score?.siteIntegrity ? summarizeSiteIntegrityLinks(score.siteIntegrity) : null,
+      hiddenLinkDestinations: [...destinations].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
+      coverage: summarizeDiscoveredCoverage(records.map(row => row.target_url), crawl.robots_json as RobotsPolicy | null, crawl.hosts),
+      timing: { crawlStartedAt: crawl.crawl_started_at ? new Date(crawl.crawl_started_at).toISOString() : null },
+      failedPages: pages.filter(page => ["partial", "failed", "blocked"].includes(page.status)).map(page => ({
+        id: page.id, url: page.url, source: page.source, status: page.status, limitation: page.limitation,
+        httpStatus: page.observation?.configurationHash === state.configurationHash ? page.observation.httpStatus : null,
+      })),
+      homepageUrl: pages.find(page => page.source === "homepage")?.url ?? null,
+    };
+    if (key && preview.score && complete) await writeFullSiteReportCache(scanId, key, preview, "overview").catch(() => false);
+    return preview;
+  })().finally(() => { if (key && pendingPreviews.get(key) === task) pendingPreviews.delete(key); });
+  if (key && pendingPreviews.size < 16) pendingPreviews.set(key, task);
+  return task;
+}

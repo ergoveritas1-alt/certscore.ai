@@ -213,22 +213,30 @@ export default function PricingPage() {
                     {planDescriptions[customPlan.code] ?? customPlan.summary}
                   </p>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-violet-50 px-3 py-3 ring-1 ring-violet-100">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">API access</p>
-                    <p className="mt-1 font-semibold text-violet-950">Included</p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-xl bg-white px-2.5 py-2.5 ring-1 ring-sky-100">
+                    <p className="text-[10px] leading-tight uppercase tracking-[0.1em] text-slate-500">API access</p>
+                    <p className="mt-0.5 leading-5 font-medium text-slate-900">Included</p>
                   </div>
-                  <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-sky-100">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Scan volume</p>
-                    <p className="mt-1 font-medium text-slate-900">{customPlan.monthlyPageScanLabel}</p>
+                  <div className="rounded-xl bg-violet-50 px-2.5 py-2.5 ring-1 ring-violet-100">
+                    <p className="text-[10px] leading-tight uppercase tracking-[0.1em] text-slate-500">Volume discount</p>
+                    <p className="mt-0.5 leading-5 font-semibold text-violet-950">Available</p>
                   </div>
-                  <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-sky-100">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Frequency</p>
-                    <p className="mt-1 font-medium text-slate-900">Higher cadence</p>
+                  <div className="rounded-xl bg-white px-2.5 py-2.5 ring-1 ring-sky-100">
+                    <p className="text-[10px] leading-tight uppercase tracking-[0.1em] text-slate-500">Frequency</p>
+                    <p className="mt-0.5 leading-5 font-medium text-slate-900">Higher cadence</p>
                   </div>
-                  <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-sky-100">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Batch scans</p>
-                    <p className="mt-1 font-medium text-slate-900">Available</p>
+                  <div className="rounded-xl bg-white px-2.5 py-2.5 ring-1 ring-sky-100">
+                    <p className="text-[10px] leading-tight uppercase tracking-[0.1em] text-slate-500">Batch scans</p>
+                    <p className="mt-0.5 leading-5 font-medium text-slate-900">Available</p>
+                  </div>
+                  <div className="rounded-xl bg-white px-2.5 py-2.5 ring-1 ring-sky-100">
+                    <p className="text-[10px] leading-tight uppercase tracking-[0.1em] text-slate-500">White-label reports</p>
+                    <p className="mt-0.5 leading-5 font-medium text-slate-900">Available</p>
+                  </div>
+                  <div className="rounded-xl bg-white px-2.5 py-2.5 ring-1 ring-sky-100">
+                    <p className="text-[10px] leading-tight uppercase tracking-[0.1em] text-slate-500">Full site multi-page reports</p>
+                    <p className="mt-0.5 leading-5 font-medium text-slate-900">Available</p>
                   </div>
                 </div>
               </div>

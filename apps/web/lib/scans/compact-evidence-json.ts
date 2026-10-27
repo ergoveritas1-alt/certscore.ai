@@ -1,3 +1,5 @@
+import { gdprNarrowCustomerEvidence } from "./gdpr-narrow-evidence";
+
 const MAX_ARRAY_SAMPLE = 5;
 const MAX_STRING_LENGTH = 240;
 
@@ -12,6 +14,7 @@ function compactLongString(value: string) {
 }
 
 const EVIDENCE_JSON_KEYS_TO_SUPPRESS = new Set([
+  "omissionShadow",
   "appliedRules",
   "bridgeGeneratedBy",
   "bridgeMappingType",
@@ -218,7 +221,9 @@ function compactEvidenceJsonForDisplayInternal(value: unknown, context: CompactE
 
   const entries: Array<[string, unknown]> = [];
   const collapsedUrls: string[] = [];
-  const objectEntries = Object.entries(value);
+  const publicValue = "gdprNarrowPosture" in value
+    ? gdprNarrowCustomerEvidence(value as Record<string, unknown>) : value;
+  const objectEntries = Object.entries(publicValue);
   const collapsedAliasKeys = new Set<string>();
 
   for (const [key, entry] of objectEntries) {

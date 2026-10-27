@@ -843,3 +843,22 @@ test("rights evidence is specific to the credited passage and preserves explicit
     "Sie haben das Recht auf Auskunft über personenbezogene Daten und auf Löschung Ihrer personenbezogenen Daten.",
   ]) assert.equal(isDataSubjectRightsDisclosureEvidenceUsable(text), true, text);
 });
+
+test("rights notifications and legal bases cannot stand in for categories or retention criteria", () => {
+  const rights = "Conformément à la Réglementation et dans la mesure du possible, MGEN informera les destinataires de vos données de tout effacement, rectification de vos données, ou limitation de traitement de vos données.";
+  const basis = "We rely on compliance with a legal obligation to retain records and to respond to lawful requests.";
+  const categories = "Vos données sont destinées aux personnels habilités dans le cadre de leurs missions. Elles peuvent également être communiquées lorsque cela est strictement nécessaire aux partenaires, conseillers juridiques et financiers, et prestataires.";
+  for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+    assert.notEqual(article13DisclosureRejectReason(rights, "recipients_or_vendor_categories", {mode}), null);
+    assert.notEqual(article13DisclosureRejectReason(basis, "data_retention", {mode}), null);
+    assert.equal(article13DisclosureRejectReason("We retain your information for as long as we need it for the purposes described in this Privacy Policy, and no longer.", "data_retention", {mode}), null);
+    assert.notEqual(article13DisclosureRejectReason("We will only keep your personal data for as long as necessary to fulfil the purposes we collected it for.", "processing_purposes", {mode}), null);
+  }
+  assert.equal(article13DisclosureRejectReason(categories, "recipients_or_vendor_categories", {mode:"multilingual_classifier"}), null);
+});
+
+test("a direct marketing purpose stays eligible when the same statement also gives retention criteria", () => {
+  const text="When we use information for direct marketing purposes, we will retain your data until you opt-out from receiving the marketing materials; provided that we will need to retain certain information to maintain a record of your request.";
+  for (const mode of ["scan_core","retained_report","multilingual_classifier"] as const)
+    assert.equal(article13DisclosureRejectReason(text,"processing_purposes",{mode}),null);
+});

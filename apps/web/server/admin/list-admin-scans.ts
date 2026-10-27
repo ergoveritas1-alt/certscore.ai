@@ -133,6 +133,7 @@ export type AdminScanListItem = {
   organizationId: string | null;
   organizationName: string | null;
   pagesScanned: number;
+  fullSitePagesScanned?: number | null;
   pageUrl: string | null;
   pageUrlSource: AdminPageUrlSource | null;
   privacyPolicyPresent: boolean | null;
@@ -526,6 +527,7 @@ export async function listAdminScansPage(
       startedAt: scan.started_at,
       pagesScanned: scan.pages_scanned,
       totalSignals: noGo.isNoGo ? null : overviewSnapshot?.total_signals ?? null,
+      fullSitePagesScanned: scan.full_site_pages_scanned ?? null,
       topFindingCount: canonicalSummary.topFindingCount,
       findingCount: noGo.isNoGo ? null : overviewSnapshot?.report_finding_count ?? null,
       freshRescanRequested: getFreshRescanRequested(linkedRequest?.request_context ?? pulseAttribution?.request_context ?? null),
@@ -680,6 +682,7 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     organizationName,
     organizationId: request.organization_id ?? request.scan_organization_id,
     pagesScanned: linkedScan?.pagesScanned ?? 0,
+    fullSitePagesScanned: linkedScan?.fullSitePagesScanned ?? null,
     pageUrl: resolvedPageUrl?.url ?? linkedScan?.pageUrl ?? null,
     pageUrlSource: resolvedPageUrl?.source ?? linkedScan?.pageUrlSource ?? null,
     privacyPolicyPresent: linkedScan?.privacyPolicyPresent ?? null,

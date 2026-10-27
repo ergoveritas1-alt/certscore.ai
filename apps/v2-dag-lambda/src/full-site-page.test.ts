@@ -239,10 +239,12 @@ test("callback retries one transient failure with identical credentials inside t
   const { createServer } = await import("node:http");
   let status = 502, calls = 0, alwaysFail = false, delayMs = 0;
   const bodies: string[] = [];
+  const claimDeadlines: Array<string | undefined> = [];
   const server = createServer(async (request, response) => {
     let body = "";
     for await (const chunk of request) body += chunk;
     bodies.push(body);
+    claimDeadlines.push(request.headers["x-certscore-claim-deadline-ms"] as string | undefined);
     calls++;
     if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
     response.writeHead(alwaysFail || calls === 1 ? status : 200, {"Content-Type":"application/json"});
@@ -262,11 +264,13 @@ test("callback retries one transient failure with identical credentials inside t
     // the bounded retry/deadline assertions; the loopback proxy serves the reply.
     const url = new URL("http://93.184.216.34/api/internal/full-site/page");
     for (const operation of ["claim","finish"]) {
-      calls=0; bodies.length=0;
+      calls=0; bodies.length=0; claimDeadlines.length=0;
       const result = await requestFullSiteControl(url,message,{operation},Date.now()+3000);
       assert.equal(result.accepted,true);
       assert.equal(calls,2);
       assert.equal(bodies[0],bodies[1],"Retry cannot change credential or operation");
+      assert.equal(claimDeadlines[0],claimDeadlines[1],"Retry cannot extend the server's admission deadline");
+      assert.equal(claimDeadlines[0] === undefined, operation !== "claim");
     }
     calls=0; alwaysFail=true;
     await assert.rejects(requestFullSiteControl(url,message,{operation:"claim"},Date.now()+3000), /502/);

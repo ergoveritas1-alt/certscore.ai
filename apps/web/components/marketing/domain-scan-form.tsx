@@ -1,5 +1,8 @@
 "use client";
 
+import { applyVisitorScanFromDefault } from "../../lib/scans/visitor-scan-default";
+import { useHomepageScanPreferences } from "./homepage-scan-preferences";
+import { isSampleScanFrom } from "../../lib/marketing/homepage-location";
 import { useBrowserMarketplaceScope } from "../marketplace-browser/scope";
 import { type FullSiteFormValue } from "../scans/full-site-controls";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
@@ -430,7 +433,7 @@ function StandardDomainScanForm({
   allowRestrictedScanOptions = false,
   buttonLabel = "Start full scan",
   compact = false,
-  defaultScanFrom = "eu_ie",
+  defaultScanFrom,
   emptySubmitDomain = "",
   helperText,
   inputLabel = "Website domain",
@@ -449,7 +452,7 @@ function StandardDomainScanForm({
   const allowedDefaultScanFrom = restrictLocalExtensionScanFrom({
     allowLocalExtensionScan,
     allowRestrictedScanOptions,
-    scanFrom: defaultScanFrom
+    scanFrom: defaultScanFrom ?? "eu_ie"
   });
   const [domain, setDomain] = useState("");
   const [showSearchResultsWarning, setShowSearchResultsWarning] = useState(false);
@@ -462,7 +465,10 @@ function StandardDomainScanForm({
   const [hasRecentReusableScan, setHasRecentReusableScan] = useState(false);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
-  const [scanFrom, setScanFrom] = useState<ScanFrom>(allowedDefaultScanFrom);
+  const [localScanFrom, setScanFrom] = useState<ScanFrom>(allowedDefaultScanFrom);
+  const homepagePreferences = useHomepageScanPreferences();
+  const usesHomepagePreferences = mode === "full" && defaultScanFrom === undefined && homepagePreferences !== null;
+  const scanFrom = usesHomepagePreferences ? homepagePreferences.scanFrom : localScanFrom;
   const [heroPlaceholder, setHeroPlaceholder] = useState(HERO_IDLE_PLACEHOLDER);
   const [recentScanReusedFromUrl, setRecentScanReusedFromUrl] = useState(false);
   useEffect(() => {
@@ -476,6 +482,29 @@ function StandardDomainScanForm({
   }, [requestSource]);
   const staticPlaceholder = inputPlaceholder ?? HERO_IDLE_PLACEHOLDER;
   const isSubmittingRef = useRef(false);
+  const scanFromManuallySelectedRef = useRef(false);
+  useEffect(() => {
+    // Preserve explicit account/report settings and the existing preview flow.
+    if (mode !== "full" || defaultScanFrom !== undefined || usesHomepagePreferences) return;
+    const controller = new AbortController();
+    let active = true;
+    const timeout = window.setTimeout(() => controller.abort(), 1_500);
+    void fetch("/api/public/scan-defaults", {
+      cache: "no-store", credentials: "same-origin", signal: controller.signal,
+    }).then(async response => {
+      if (!response.ok) return;
+      const payload: unknown = await response.json();
+      if (!active || !payload || typeof payload !== "object") return;
+      const suggested = "scanFrom" in payload ? payload.scanFrom : undefined;
+      setScanFrom(current => applyVisitorScanFromDefault({
+        current, initialDefault: allowedDefaultScanFrom, suggested,
+        manuallySelected: scanFromManuallySelectedRef.current,
+        submitting: isSubmittingRef.current,
+      }));
+    }).catch(() => { /* Keep the existing default when the hint is unavailable. */ })
+      .finally(() => window.clearTimeout(timeout));
+    return () => { active = false; controller.abort(); window.clearTimeout(timeout); };
+  }, [mode, defaultScanFrom, allowedDefaultScanFrom, usesHomepagePreferences]);
   const submissionProgressValueRef = useRef(0);
   const effectiveSubmitDomain = (domain || emptySubmitDomain).trim();
   const searchResultsTarget = searchResultsScanTarget(effectiveSubmitDomain);
@@ -1033,7 +1062,11 @@ function StandardDomainScanForm({
                 includeLocalExtension={canUseLocalExtensionScan}
                 localV2ScanProfileValue={localV2ScanProfile}
                 localV2RunViaLambdaValue={localV2RunViaLambda}
-                onChange={setScanFrom}
+                onChange={(value) => {
+                  scanFromManuallySelectedRef.current = true;
+                  if (usesHomepagePreferences && isSampleScanFrom(value)) homepagePreferences.selectScanFrom(value);
+                  else setScanFrom(value);
+                }}
                 onFreshRescanChange={setFreshRescan}
                 onLocalV2ScanProfileChange={(value) => setLocalV2ScanProfile(normalizeLocalV2ScanProfile(value))}
                 onLocalV2RunViaLambdaChange={setLocalV2RunViaLambda}

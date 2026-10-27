@@ -13,7 +13,6 @@ import {
   crawlObservationSchema,
   compactCrawlObservation,
 } from "@website-signal-risk-scanner/shared";
-import { projectCrawlRuntimeGraph } from "../../../../../server/scans/runtime-evidence-graph-projection";
 const schema = z
   .object({
     operation: z.enum(["claim", "finish"]),
@@ -41,6 +40,12 @@ const schema = z
   })
   .strict();
 export async function POST(request: Request) {
+  const receivedAt = performance.now();
+  const rawDeadline = request.headers.get("x-certscore-claim-deadline-ms");
+  const claimDeadlineAtMs = rawDeadline === null ? undefined : Number(rawDeadline);
+  if (rawDeadline !== null && (!/^\d{1,16}$/.test(rawDeadline) || !Number.isSafeInteger(claimDeadlineAtMs)))
+    return new Response(null, { status: 400 });
+  const deadlineRemainingAtEntryMs = claimDeadlineAtMs === undefined ? null : claimDeadlineAtMs - Date.now();
   if (Number(request.headers.get("content-length")) > 4096)
     return new Response(null, { status: 413 });
   const reader = request.body?.getReader();
@@ -71,13 +76,19 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(json);
   if (!parsed.success) return new Response(null, { status: 400 });
   const data = parsed.data;
-  if (data.operation === "claim")
+  if (data.operation === "claim") {
+    const grant = await claimFullSitePage({ ...data, region: data.region ?? "", claimDeadlineAtMs });
+    const elapsedMs = Math.round(performance.now() - receivedAt);
+    if (elapsedMs >= 1000 || deadlineRemainingAtEntryMs !== null && deadlineRemainingAtEntryMs <= 0)
+      console.info(JSON.stringify({ event: "full_site.claim_endpoint", pageId: data.pageId, attemptId: data.attemptId,
+        elapsedMs, deadlineRemainingAtEntryMs, admitted: Boolean(grant) }));
     return NextResponse.json(
       {
-        grant: await claimFullSitePage({ ...data, region: data.region ?? "" }),
+        grant,
       },
       { headers: { "Cache-Control": "no-store" } },
     );
+  }
   const { createHash } = await import("node:crypto");
   const row = await queryOne<{
     scan_id: string;
@@ -152,6 +163,7 @@ export async function POST(request: Request) {
     }
   }
   if (packet.runtimeGraph) {
+    const { projectCrawlRuntimeGraph } = await import("../../../../../server/scans/runtime-evidence-graph-projection");
     const graph = projectCrawlRuntimeGraph({ graph: (rawEvidence as { runtimeEvidenceGraph?: unknown })?.runtimeEvidenceGraph, pageId: data.pageId, attemptId: data.attemptId,
       source: { sha256: packet.sourceHash, sizeBytes: data.evidenceSizeBytes, verificationStatus: "verified" } });
     const verified = graph.graphs[0];

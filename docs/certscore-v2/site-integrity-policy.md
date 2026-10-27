@@ -1,6 +1,6 @@
 # Site integrity review policy v3
 
-`certscore.site-integrity-policy.v4` implements a factual review and an owner-approved overall-score deduction for verified concealed outbound links. It does not classify a destination as adult, pharmaceutical, malicious or unrelated, establish unauthorized modification, or imply personal-data disclosure. Those conclusions require separate investigation.
+`certscore.site-integrity-policy.v5-shared-postures` implements a factual review and an owner-approved effect shared by the EU-view overall score and California posture score for verified concealed outbound links. It does not classify a destination as adult, pharmaceutical, malicious or unrelated, establish unauthorized modification, or imply personal-data disclosure. Those conclusions require separate investigation.
 
 ## Canonical path
 
@@ -18,6 +18,25 @@ This validates retained evidence without adding capture work or rewriting
 historical projections.
 
 Malformed, unverified, missing, mismatched or insufficient evidence cannot become a review finding. Historical reports are not backfilled, reinterpreted or promoted from manual observations or loose flags.
+
+## October 26, 2026 shared scoring
+
+The current schedule is 13 for the first verified occurrence, plus 5 for each
+additional occurrence, capped at 37 once per report (13/18/23/28/33/37 for 1–6+).
+The same source-bound typed projection, normalized concern, concern policy and
+unified finding produce explicit effects for both score targets. The independent
+California assessment consumes only its matching current policy effect. It does
+not reinterpret historical overall-only effects or create a legal checklist gap.
+Each scan/page/link reference counts once; repeated copies cannot increase the
+amount. Existing starting-page California scope and additional-page overall
+scope are preserved. Scores retain their existing floor and availability rules.
+
+Historical v4 keeps 17/+5/40 and no California effect. Persisted historical scores
+and source-bound full-site cache entries retain their original amounts. No new
+browser work, scan, model call, retention increase or historical rewrite is part
+of this release. Estimated added typed score metadata is below $0.10/month at
+100,000 scans. Customer report evidence remains factual, without deduction
+amounts or formulas. Earlier approvals below describe their historical versions.
 
 ## Bounded observation and eligibility
 

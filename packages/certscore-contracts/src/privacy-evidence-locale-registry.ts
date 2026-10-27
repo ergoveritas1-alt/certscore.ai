@@ -97,7 +97,7 @@ const BASE_PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleRegis
   }),
   locale("zh", {
     policyControllerScopePatterns: ["(?:系指|由)(?<controller>[\\p{Script=Han}A-Za-z0-9·]{2,80}(?:有限公司|公司))[^。！？]{0,100}(?:拥有并运营|拥有及运营)[^。！？]{0,180}{target}(?:网站|网页)", "本隐私政策适用于[^。！？]{0,160}{target}[^。！？]{0,80}(?:访问和使用|产品和服务)"],
-    privacyPolicyLabels: ["隐私政策", "隐私声明"], privacyPolicyPathSlugs: ["privacy-policy", "yinsi-zhengce"], cookiePolicyLabels: ["Cookie 政策", "饼干政策"], cookiePolicyPathSlugs: ["cookie-policy"], cookieSettingsLabels: ["Cookie 设置", "饼干设置"], termsLabels: ["使用条款"], termsPathSlugs: ["terms"], contextHints: ["隐私", "个人信息", "Cookie", "同意"], tldHints: [".cn"],
+    privacyPolicyLabels: ["隐私政策", "隐私声明", "隐私权保护政策", "隐私协议"], privacyPolicyPathSlugs: ["privacy-policy", "yinsi-zhengce"], cookiePolicyLabels: ["Cookie 政策", "饼干政策"], cookiePolicyPathSlugs: ["cookie-policy"], cookieSettingsLabels: ["Cookie 设置", "饼干设置"], termsLabels: ["使用条款"], termsPathSlugs: ["terms"], contextHints: ["隐私", "个人信息", "Cookie", "同意"], tldHints: [".cn"],
     consentControls: { accept: ["全部接受", "接受全部"], reject: ["全部拒绝", "拒绝全部"], options: ["Cookie 设置", "管理偏好设置"], necessaryOnly: ["仅必要 Cookie", "仅限必要的 Cookie"] },
   }),
   locale("fa", {

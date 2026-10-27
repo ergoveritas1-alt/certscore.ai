@@ -50,6 +50,11 @@ test("durable report cache survives a cold module, validates sources and integri
     assert.equal(await cache.writeFullSiteReportCache("scan",currentKey,{large:randomBytes(700000).toString("base64")}),false);
     assert.equal(await cache.writeFullSiteReportCache("scan",currentKey,{large:"x".repeat(17*1024*1024)}),false);
     assert.equal(state.writes,1);
+    assert.equal(await cache.writeFullSiteReportCache("scan",`${currentKey}:overview.v1`,report,"overview"),true);
+    assert.deepEqual(await cache.readFullSiteReportCache("scan",`${currentKey}:overview.v1`),report);
+    state.fingerprint="changed during overview assembly";
+    assert.equal(await cache.writeFullSiteReportCache("scan",`${currentKey}:overview.v1`,report,"overview"),false);
+    assert.equal(state.writes,2,"overview entries use the same bounded cache and source checks");
     assert.equal(cache.isDefaultFullSiteReport(new URLSearchParams("kind=all&sort=priority&pageSort=url&offset=0&stream=1"),false),true);
     for(const query of ["kind=all&q=example","kind=all&offset=50","kind=all&detailPage=page","kind=all&sort=vendor","kind=cookie"])
       assert.equal(cache.isDefaultFullSiteReport(new URLSearchParams(query),false),false);

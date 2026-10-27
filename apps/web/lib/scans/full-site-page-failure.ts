@@ -14,6 +14,8 @@ export function describeFullSitePageFailure(page: { status: string; httpStatus?:
     return `Capture could not be assessed (HTTP ${httpStatus})`;
   if (page.limitation === "worker_lease_expired")
     return "Worker result not received before deadline; capture unavailable";
+  if (page.limitation === "claim_deadline_expired")
+    return "Worker start was not acknowledged before deadline; capture unavailable";
   if (page.limitation === "dispatch_admission_timeout")
     return "Worker did not start before deadline; capture unavailable";
   if (page.limitation === "collection_failure")

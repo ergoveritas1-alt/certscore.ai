@@ -1800,10 +1800,65 @@
       "note": "One explicitly owner-requested original-region AWS verification of recipient retention fixes; no automatic retry, Options or production deploy. owner-retention-two-20261022",
       "state": "cooldown",
       "url": "https://securid.com/"
+    },
+    "https://swappie.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-23T23:24:08.014Z",
+      "lastContactAt": "2026-10-26T23:24:08.014Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://swappie.com",
+      "note": "Owner-authorized one-attempt production policy-evidence validation after candidate-selection release d7effa3b3. Run key: policy-candidate-production-validation-2026-10-26. All five starting pages were representative; policy usability outcomes are separate from no-go and California findings. No retries, consent actions, budget changes or customer finding materialization."
+    },
+    "https://tapmad.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-24T00:39:40.410Z",
+      "lastContactAt": "2026-10-27T00:39:40.410219+00:00",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized one-attempt production policy-evidence validation after recovery/witness release 819fe9931. Run key: policy-recovery-production-validation-2026-10-26. YY and Tapmad retained usable primary policies; Tujugada text insufficient; Radcom ownership unresolved. Tapmad transfer witness source-verified. No retries, consent actions, budget changes or customer findings.",
+      "state": "cooldown",
+      "url": "https://tapmad.com"
+    },
+    "https://tujugada.com.ar": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-24T00:39:59.589Z",
+      "lastContactAt": "2026-10-27T00:39:59.589638+00:00",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized one-attempt production policy-evidence validation after recovery/witness release 819fe9931. Run key: policy-recovery-production-validation-2026-10-26. YY and Tapmad retained usable primary policies; Tujugada text insufficient; Radcom ownership unresolved. Tapmad transfer witness source-verified. No retries, consent actions, budget changes or customer findings.",
+      "state": "cooldown",
+      "url": "https://tujugada.com.ar"
+    },
+    "https://yy.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-24T00:40:19.965Z",
+      "lastContactAt": "2026-10-27T00:40:19.965633+00:00",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized one-attempt production policy-evidence validation after recovery/witness release 819fe9931. Run key: policy-recovery-production-validation-2026-10-26. YY and Tapmad retained usable primary policies; Tujugada text insufficient; Radcom ownership unresolved. Tapmad transfer witness source-verified. No retries, consent actions, budget changes or customer findings.",
+      "state": "cooldown",
+      "url": "https://yy.com"
+    },
+    "https://radcom.hosting": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-24T00:40:35.030Z",
+      "lastContactAt": "2026-10-27T00:40:35.030889+00:00",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized one-attempt production policy-evidence validation after recovery/witness release 819fe9931. Run key: policy-recovery-production-validation-2026-10-26. YY and Tapmad retained usable primary policies; Tujugada text insufficient; Radcom ownership unresolved. Tapmad transfer witness source-verified. No retries, consent actions, budget changes or customer findings.",
+      "state": "cooldown",
+      "url": "https://radcom.hosting"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-22T20:32:01.998Z",
+  "updatedAt": "2026-10-27T00:41:05.011Z",
   "contactOnlyUrls": [
     "https://abc.xyz/",
     "https://acuitybrands.com/",
@@ -1862,6 +1917,11 @@
     "https://www.osano.com/",
     "https://www.pferdeklinik-roentorf.de/",
     "https://pella.com/",
-    "https://securid.com/"
+    "https://securid.com/",
+    "https://radcom.hosting",
+    "https://swappie.com",
+    "https://tapmad.com",
+    "https://tujugada.com.ar",
+    "https://yy.com"
   ]
 }

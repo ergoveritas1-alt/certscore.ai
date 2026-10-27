@@ -4,12 +4,15 @@ import { SCORING_RULES, SCORING_FAMILIES, scoringRuleDescription } from "./scori
 import { deriveRegulatoryCoverageScore } from "./regulatory-coverage-score";
 const gap = (id: string, retainedEvidence = {}) => ({ id, assessmentStatus: "gap_observed" as const, evidenceState: "observed" as const, status: "Gap observed", criticalEvidence: { retainedEvidence } });
 test("approved registry has exactly the reviewed rows and caps", () => {
-  assert.equal(SCORING_RULES.length, 24);
-  assert.equal(new Set(SCORING_RULES.map(rule => rule.id)).size, 24);
+  assert.equal(SCORING_RULES.length, 26);
+  assert.equal(new Set(SCORING_RULES.map(rule => rule.id)).size, 26);
+  assert.deepEqual(Object.fromEntries(SCORING_RULES.filter(rule => ["consent_optional_defaults_on", "consent_browsing_as_consent",
+    "legal_basis_disclosure_observed", "retention_disclosure_observed", "supervisory_authority_complaint_disclosure"].includes(rule.id))
+    .map(rule => [rule.id, rule.points])), { consent_optional_defaults_on: 8, consent_browsing_as_consent: 6 });
   assert.equal(SCORING_RULES.find(rule => rule.id === "privacy_notice_availability")?.points, 9);
   assert.deepEqual(Object.fromEntries(Object.entries(SCORING_FAMILIES).map(([id, family]) => [id, family.cap])), {
     pre_consent_storage: 40, pre_consent_tracking: 40, consent_controls: 22, post_refusal_enforcement: 30,
-    sensitive_runtime: 25, tracking_technology: 25, embedded_third_party: 20, policy_transparency: 12, transport_security: 20, gpc: 0, site_integrity: 40, accessibility: 12,
+    sensitive_runtime: 25, tracking_technology: 25, embedded_third_party: 20, policy_transparency: 12, transport_security: 20, gpc: 0, site_integrity: 37, accessibility: 12,
   });
   assert.deepEqual(SCORING_RULES.find(rule => rule.id === "post_reject_tracking_reduction")?.entityTotals, [15,20,23,25,27,28,29,30]);
   assert.equal(SCORING_RULES.filter(rule => rule.siteWide).length, 16);

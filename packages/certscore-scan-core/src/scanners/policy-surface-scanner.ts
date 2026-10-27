@@ -29,6 +29,7 @@ import {
   hasProcessingPurposeDataContext,
   NAMED_DATA_SERVICE_PURPOSE_PATTERN,
   STRUCTURED_DATA_PURPOSE_PATTERN,
+  RESIDENCE_RELATIVE_TRANSFER_PATTERN,
   type DirectVsInferred,
   type EvidenceRef,
   isSupportedPrivacyEvidenceLocale,
@@ -148,6 +149,8 @@ const DEFAULT_POLICY_EXCERPT_KEYWORDS = [
 export interface PolicySurfaceScannerInput {
   url: string;
   normalizedUrl: string;
+  /** Runtime-only cutoff for optional candidate recovery; never extends lane time. */
+  candidateRecoveryDeadlineAtMs?: number;
   region?: string;
   scanStartedAtMs: number;
   internalBudgetMs: number;
@@ -563,6 +566,13 @@ interface PolicyBrowserRuntime {
   getBrowser(): Promise<Browser>;
 }
 
+/** Redirects guide acquisition, never replace the original ownership target. */
+export function policyInputAfterHomepageRedirect<T extends Pick<PolicySurfaceScannerInput, "url" | "normalizedUrl">>(
+  input: T, finalUrl: string,
+): T {
+  return { ...input, normalizedUrl: finalUrl };
+}
+
 export async function policySurfaceScanner(
   input: PolicySurfaceScannerInput,
 ): Promise<PolicySurfaceScannerResult> {
@@ -628,6 +638,7 @@ export async function policySurfaceScanner(
   const policyDeadlineController = new AbortController();
   input = {
     ...input,
+    url: requestedPolicyUrl,
     absoluteDeadlineAtMs: input.absoluteDeadlineAtMs === undefined ? undefined : policyDeadlineAtMs,
     signal: combineAbortSignals(parentSignal, policyDeadlineController.signal),
   };
@@ -745,7 +756,7 @@ export async function policySurfaceScanner(
     // The guarded HTTP redirect is a routing hint even when its final response
     // is denied. It establishes no policy body, ownership, or usable coverage.
     if (homepageFinalUrl && homepageFinalUrl !== input.normalizedUrl) {
-      input = { ...input, normalizedUrl: homepageFinalUrl, url: homepageFinalUrl };
+      input = policyInputAfterHomepageRedirect(input, homepageFinalUrl);
     }
     if (!homepage.ok) {
       const fallbackCandidates = dedupeCandidates([
@@ -1329,7 +1340,7 @@ export async function policySurfaceScanner(
     }))).filter((candidate):candidate is PolicySurfaceCandidate=>candidate!==null);
     if(warmedPrimaryCandidates.length) {
       const limit=rankedCandidates.every(isCommonPathFallbackCandidate)?MAX_COMMON_PATH_CANDIDATES_TO_FETCH:policyFetchLimit(input);
-      rankedCandidates=dedupeCandidates([...warmedPrimaryCandidates,...rankedCandidates]).slice(0,limit);
+      rankedCandidates=capPolicyCandidatesWithSurfaceDiversity(dedupeCandidates([...warmedPrimaryCandidates,...rankedCandidates]),limit);
     }
     const policyResults = await fetchPolicyCandidateGroup({
       input,
@@ -1871,6 +1882,7 @@ interface ProcessPolicyCandidateInput {
 interface PolicyCandidateProcessingProgress {
   documentFetched: boolean;
   retentionStarted: boolean;
+  fetchedCheckpoint?: ProcessPolicyCandidateResult;
 }
 
 interface ProcessPolicyCandidateResult {
@@ -2107,8 +2119,9 @@ function policyEvaluationCandidateKey(candidate: PolicySurfaceCandidate): string
   }
 }
 
-async function processPolicyCandidateBeforeDeadline(
+export async function processPolicyCandidateBeforeDeadline(
   input: ProcessPolicyCandidateInput,
+  processCandidate = processPolicyCandidate,
 ): Promise<ProcessPolicyCandidateResult> {
   const absoluteRemainingMs = deadlineRemainingMs(input.input.absoluteDeadlineAtMs);
   if (absoluteRemainingMs <= 10 || input.input.signal?.aborted) {
@@ -2122,11 +2135,14 @@ async function processPolicyCandidateBeforeDeadline(
   };
   const candidateInput: ProcessPolicyCandidateInput = {
     ...input,
-    input: { ...input.input, signal: candidateSignal },
+    input: { ...input.input, signal: candidateSignal, candidateRecoveryDeadlineAtMs: Math.min(
+      input.input.absoluteDeadlineAtMs ?? Infinity,
+      Date.now() + POLICY_CANDIDATE_PROCESSING_TIMEOUT_MS,
+    ) - POLICY_CANDIDATE_PUBLICATION_GRACE_MS },
     processingProgress,
   };
   let processingSettled = false;
-  const processingPromise = processPolicyCandidate(candidateInput).finally(() => {
+  const processingPromise = processCandidate(candidateInput).finally(() => {
     processingSettled = true;
   });
   void processingPromise.catch(() => undefined);
@@ -2150,7 +2166,10 @@ async function processPolicyCandidateBeforeDeadline(
       return settled.value;
     }
     candidateController.abort(new Error("Policy candidate processing budget exhausted."));
-    return skippedBudgetCandidateResult(input.candidate);
+    return processingProgress.fetchedCheckpoint ?? skippedBudgetCandidateResult(input.candidate);
+  } catch (error) {
+    if (input.input.signal?.aborted && processingProgress.fetchedCheckpoint) return processingProgress.fetchedCheckpoint;
+    throw error;
   } finally {
     candidateController.abort(new Error("Policy candidate processing settled."));
     if (!processingSettled) {
@@ -2246,6 +2265,26 @@ function skippedBudgetCandidateResult(candidate: PolicySurfaceCandidate): Proces
     }),
     artifactRefs: [],
     secondaryCandidates: [],
+  };
+}
+
+/** A successful transport is not a completed policy evaluation. No body is copied. */
+export function fetchedPolicyBudgetCheckpoint(
+  candidate: PolicySurfaceCandidate, fetched: FetchTextResult,
+): ProcessPolicyCandidateResult | undefined {
+  if (!fetched.ok || !candidate.fetchable || candidate.observationOnly) return undefined;
+  return {
+    observation: {
+      ...observationFromCandidate(candidate, {
+        status: "failed", fetchFailureReason: "scan_budget_exhausted",
+        httpStatus: fetched.status,
+        finalUrl: successfulPolicyFetchFinalUrl(fetched, candidate.normalizedUrl),
+        redirectChain: policyFetchRedirectChain(fetched),
+        confidence: candidate.assisted?.confidence ?? candidate.deterministicScore,
+      }),
+      documentFetchState: "fetched", documentEvaluationState: "not_attempted",
+    },
+    artifactRefs: [], secondaryCandidates: [],
   };
 }
 
@@ -2384,8 +2423,9 @@ async function processPolicyCandidate({
     }
   }
 
-  if (processingProgress) {
+  if (processingProgress && fetched.ok) {
     processingProgress.documentFetched = true;
+    processingProgress.fetchedCheckpoint = fetchedPolicyBudgetCheckpoint(candidate, fetched);
   }
   if (!fetched.ok && !directOnly && !(suppressCommonPathRenderedRecovery && isCommonPathFallbackCandidate(candidate)) &&
       !blockedPolicyFetchCaches.has(fetchCaches.direct) && shouldTryRenderedPolicyDocumentFetch({
@@ -2446,6 +2486,10 @@ async function processPolicyCandidate({
     };
   }
 
+  if (processingProgress && !processingProgress.fetchedCheckpoint) {
+    processingProgress.documentFetched = true;
+    processingProgress.fetchedCheckpoint = fetchedPolicyBudgetCheckpoint(candidate, fetched);
+  }
   let fetchedFinalUrl = successfulPolicyFetchFinalUrl(fetched, candidate.normalizedUrl);
   let effectiveCandidate = fetchedFinalUrl === candidate.normalizedUrl
     ? candidate
@@ -2739,8 +2783,9 @@ async function processPolicyCandidate({
   }
   const ownership = classifyPolicyDocumentOwnership({
     directlyLinkedFromScannedPage: isDirectlyLinkedPolicyCandidate(effectiveCandidate),
+    linkSourcePageUrl: effectiveCandidate.linkSourcePageUrl,
     documentTitle: title, documentUrl: effectiveCandidate.normalizedUrl,
-    observedAt: new Date(input.scanStartedAtMs).toISOString(), targetUrl: input.normalizedUrl,
+    observedAt: new Date(input.scanStartedAtMs).toISOString(), targetUrl: input.url,
     text: analysisVisibleText,
   });
   const linkedChoiceCandidate = candidate;
@@ -3449,6 +3494,15 @@ function renderedPolicyLinkContext(
   };
 }
 
+export function policyRenderedRecoveryDeadline(input: {
+  nowMs: number; timeoutMs: number; absoluteDeadlineAtMs?: number;
+  candidateRecoveryDeadlineAtMs?: number; hardDeadlineAtMs?: number;
+}): number {
+  return Math.min(input.nowMs + Math.max(0, input.timeoutMs),
+    input.absoluteDeadlineAtMs === undefined ? Infinity : input.absoluteDeadlineAtMs - POLICY_CANDIDATE_PUBLICATION_GRACE_MS,
+    input.candidateRecoveryDeadlineAtMs ?? Infinity, input.hardDeadlineAtMs ?? Infinity);
+}
+
 export async function fetchRenderedPolicyDocumentText(input: {
   browserRuntime: PolicyBrowserRuntime;
   input: PolicySurfaceScannerInput;
@@ -3463,6 +3517,8 @@ export async function fetchRenderedPolicyDocumentText(input: {
   timeoutMs: number;
   hardDeadlineAtMs?: number;
   allowRetainedPageRetry?: boolean;
+  /** Shared across retries; does not enable legal-disclosure expansion. */
+  recoveryDeadlineAtMs?: number;
 }): Promise<FetchTextResult> {
   let context: Awaited<ReturnType<Browser["newContext"]>> | undefined;
   let sameContextRecoveryPage: Page | undefined;
@@ -3471,14 +3527,30 @@ export async function fetchRenderedPolicyDocumentText(input: {
   let page: Page | undefined;
   let failureStage: RenderedPolicyFailureStage = "browser_start";
   const recoveryDiagnostic:LegalDisclosureRecoveryDiagnostic|undefined=input.hardDeadlineAtMs===undefined?undefined:{version:"legal_disclosure_recovery.v1",stage:"browser_start"};
+  const recoveryDeadlineAtMs = Math.min(input.recoveryDeadlineAtMs ?? Infinity, policyRenderedRecoveryDeadline({
+    nowMs: Date.now(), timeoutMs: input.timeoutMs,
+    absoluteDeadlineAtMs: input.input.absoluteDeadlineAtMs,
+    candidateRecoveryDeadlineAtMs: input.input.candidateRecoveryDeadlineAtMs,
+    hardDeadlineAtMs: input.hardDeadlineAtMs,
+  }));
   const captureController = new AbortController();
-  const captureTimer = input.hardDeadlineAtMs === undefined ? undefined : setTimeout(() => {
-    captureController.abort();
-    void context?.close().catch(() => undefined);
-  }, Math.max(1, input.hardDeadlineAtMs - Date.now()));
-  try {
-    const browser = await input.browserRuntime.getBrowser();
+  const remainingRecoveryMs = (cap: number): number => {
     captureController.signal.throwIfAborted();
+    input.input.signal?.throwIfAborted();
+    const remaining = recoveryDeadlineAtMs - Date.now();
+    if (remaining <= 0) throw new Error("Policy rendered recovery timeout");
+    return Math.max(1, Math.min(cap, remaining));
+  };
+  const captureTimer = setTimeout(() => {
+    captureController.abort(new Error("Policy rendered recovery timeout"));
+    // Cancel outstanding browser work too; a borrowed page must not keep
+    // navigating after recovery expires. Other pages in its context survive.
+    void (context ? context.close() : page?.close())?.catch(() => undefined);
+  }, Math.max(1, recoveryDeadlineAtMs - Date.now()));
+  try {
+    remainingRecoveryMs(input.timeoutMs);
+    const browser = await input.browserRuntime.getBrowser();
+    remainingRecoveryMs(input.timeoutMs);
     retainedRecoveryPage = input.linkContext && input.input.renderedRecoveryPage
       ? input.input.renderedRecoveryPage
       : undefined;
@@ -3501,7 +3573,7 @@ export async function fetchRenderedPolicyDocumentText(input: {
     } else {
       page = retainedRecoveryPage;
     }
-    const navigationDeadlineAtMs = input.hardDeadlineAtMs ?? Date.now() + Math.max(1_000, input.timeoutMs);
+    const navigationDeadlineAtMs = recoveryDeadlineAtMs;
     const sessionPrimerUrl = input.linkContext?.pageUrl ?? (
       input.primeSession ? input.input.renderedRecoverySessionPrimerUrl : undefined
     );
@@ -3518,14 +3590,14 @@ export async function fetchRenderedPolicyDocumentText(input: {
       );
       await page.goto(sessionPrimerUrl, {
         waitUntil: "commit",
-        timeout: primerTimeoutMs,
+        timeout: remainingRecoveryMs(primerTimeoutMs),
       }).catch(() => null);
       await page.waitForLoadState("domcontentloaded", {
-        timeout: Math.min(750, Math.max(250, navigationDeadlineAtMs - Date.now())),
+        timeout: remainingRecoveryMs(750),
       }).catch(() => undefined);
     }
     if(recoveryDiagnostic)recoveryDiagnostic.stage="navigation";
-    const targetNavigationTimeoutMs = Math.max(1_000, navigationDeadlineAtMs - Date.now());
+    const targetNavigationTimeoutMs = remainingRecoveryMs(input.timeoutMs);
     const clickNavigation = input.linkContext &&
       sessionPrimerUrl &&
       isPolicySessionPrimerCompatible(input.linkContext.pageUrl, input.url)
@@ -3533,6 +3605,7 @@ export async function fetchRenderedPolicyDocumentText(input: {
           ...input.linkContext,
           targetUrl: input.url,
           timeoutMs: targetNavigationTimeoutMs,
+          deadlineAtMs: navigationDeadlineAtMs,
           onStage: stage => { failureStage = stage; },
         })
       : null;
@@ -3548,12 +3621,12 @@ export async function fetchRenderedPolicyDocumentText(input: {
           // the bounded text and substance checks below. Waiting for every
           // parser-blocking resource can discard an otherwise usable policy.
           waitUntil: "commit",
-          timeout: targetNavigationTimeoutMs,
+          timeout: remainingRecoveryMs(targetNavigationTimeoutMs),
         });
     failureStage = "document_readiness";
     if(recoveryDiagnostic)recoveryDiagnostic.stage="document_ready";
     if (input.hardDeadlineAtMs === undefined) await page.waitForLoadState("networkidle", {
-      timeout: Math.min(1_000, Math.max(500, input.timeoutMs)),
+      timeout: remainingRecoveryMs(1_000),
     }).catch(() => undefined);
     await page.waitForFunction(
       () => {
@@ -3570,16 +3643,19 @@ export async function fetchRenderedPolicyDocumentText(input: {
         return semanticPolicyBodyReady;
       },
       undefined,
-      { timeout: Math.min(1_500, Math.max(500, input.timeoutMs)) },
+      { timeout: remainingRecoveryMs(1_500) },
     ).catch(() => undefined);
-    if (input.hardDeadlineAtMs !== undefined) await expandCaliforniaNoticeText(page, input.hardDeadlineAtMs,recoveryDiagnostic);
-    await page.waitForTimeout(input.hardDeadlineAtMs === undefined ? Math.min(750, Math.max(250, input.timeoutMs))
-      : Math.max(0, Math.min(250, input.hardDeadlineAtMs - Date.now() - 250)));
+    remainingRecoveryMs(input.timeoutMs);
+    if (input.hardDeadlineAtMs !== undefined) await expandCaliforniaNoticeText(page, navigationDeadlineAtMs,recoveryDiagnostic);
+    await page.waitForTimeout(remainingRecoveryMs(input.hardDeadlineAtMs === undefined ? 750
+      : Math.max(0, Math.min(250, navigationDeadlineAtMs - Date.now() - 250))));
+    remainingRecoveryMs(input.timeoutMs);
     failureStage = "text_capture";
     if(recoveryDiagnostic)recoveryDiagnostic.stage="text_capture";
     const html = await page.content().catch(() => "");
-    const bodyText = await page.locator("body").innerText({ timeout: 1_000 }).catch(() => "");
+    const bodyText = await page.locator("body").innerText({ timeout: remainingRecoveryMs(1_000) }).catch(() => "");
     const semanticTextCandidates = await renderedPolicySemanticTextCandidates(page);
+    remainingRecoveryMs(input.timeoutMs);
     const text = bestRenderedPolicyDocumentText(html, [
       bodyText,
       ...semanticTextCandidates,
@@ -3631,6 +3707,7 @@ export async function fetchRenderedPolicyDocumentText(input: {
   } catch (error) {
     if (
       input.hardDeadlineAtMs === undefined && input.allowRetainedPageRetry !== false &&
+      !captureController.signal.aborted && !input.input.signal?.aborted && recoveryDeadlineAtMs > Date.now() &&
       retainedRecoveryPage &&
       page === retainedRecoveryPage
     ) {
@@ -3644,6 +3721,7 @@ export async function fetchRenderedPolicyDocumentText(input: {
               renderedRecoveryPage: retryPage,
             },
             allowRetainedPageRetry: false,
+            recoveryDeadlineAtMs,
           });
           return {
             ...retried,
@@ -3680,14 +3758,11 @@ export async function fetchRenderedPolicyDocumentText(input: {
   } finally {
     if (captureTimer) clearTimeout(captureTimer);
     releaseAbortContext?.();
-    await sameContextRecoveryPage?.close().catch(() => undefined);
-    const close = context?.close().catch(() => undefined);
-    if (input.hardDeadlineAtMs === undefined) await close;
-    else {
-      let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
-      await Promise.race([close, new Promise<void>(resolve => { cleanupTimer = setTimeout(resolve, 200); })]);
-      if (cleanupTimer) clearTimeout(cleanupTimer);
-    }
+    const close = Promise.all([sameContextRecoveryPage?.close().catch(() => undefined),
+      context?.close().catch(() => undefined)]);
+    let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([close, new Promise<void>(resolve => { cleanupTimer = setTimeout(resolve, 200); })]);
+    if (cleanupTimer) clearTimeout(cleanupTimer);
   }
 }
 
@@ -3707,19 +3782,20 @@ async function clickObservedPolicyLink(
     selector?: string;
     targetUrl: string;
     timeoutMs: number;
+    deadlineAtMs: number;
     onStage?: (stage: "observed_link_lookup" | "observed_link_click" | "navigation_commit") => void;
   },
 ): Promise<{ clicked: boolean; response: Awaited<ReturnType<Page["waitForNavigation"]>> }> {
   const marker = "data-certscore-policy-recovery-target";
   input.onStage?.("observed_link_lookup");
   const locator = await observedPolicyLinkLocator(page, input);
-  if (!locator) return { clicked: false, response: null };
+  if (!locator || Date.now() >= input.deadlineAtMs) return { clicked: false, response: null };
   const marked = await locator.evaluate((element, attributeName) => {
     element.setAttribute(attributeName, "true");
     if (element.tagName.toLowerCase() === "a") element.setAttribute("target", "_self");
     return true;
-  }, marker).catch(() => false);
-  if (!marked) return { clicked: false, response: null };
+  }, marker, { timeout: Math.max(1, input.deadlineAtMs - Date.now()) }).catch(() => false);
+  if (!marked || Date.now() >= input.deadlineAtMs) return { clicked: false, response: null };
 
   const markedLocator = page.locator(`[${marker}="true"]`);
   const expectedDestination = policyClickUrlIdentity(input.targetUrl, page.url());
@@ -3740,19 +3816,20 @@ async function clickObservedPolicyLink(
   let clickCompleted = false;
   try {
     input.onStage?.("observed_link_click");
+    const timeoutMs = Math.max(1, Math.min(input.timeoutMs, input.deadlineAtMs - Date.now()));
     const [response] = await Promise.all([
       page.waitForNavigation({
         // Bind the clicked main-document destination at commit; unrelated
         // resources must not erase this response while completing their load.
         waitUntil: "commit",
-        timeout: Math.max(1_000, input.timeoutMs),
+        timeout: timeoutMs,
       }).then(response => {
         committedResponse = matchesCommittedDestination(response) ? response : null;
         return committedResponse;
       }).catch(() => null),
       // The explicit navigation waiter owns response proof. The default click
       // wait can otherwise time out on resources after the response committed.
-      markedLocator.click({ timeout: Math.max(1_000, input.timeoutMs), noWaitAfter: true })
+      markedLocator.click({ timeout: timeoutMs, noWaitAfter: true })
         .then(() => { clickCompleted = true; input.onStage?.("navigation_commit"); }),
     ]);
     return { clicked: clickCompleted, response };
@@ -5804,8 +5881,8 @@ function classifyCommonPathSurface(path: string, normalizedUrl: string): ReturnT
   return classified;
 }
 
-function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): PolicySurfaceCandidate[] {
-  return candidates
+export function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): PolicySurfaceCandidate[] {
+  return dedupeCandidates(candidates)
     .filter((candidate) =>
       (candidate.fetchable || candidate.observationOnly) &&
       !isObviousCommercePolicyFalsePositive(candidate) &&
@@ -5814,6 +5891,7 @@ function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): Polic
     )
     .sort((left, right) =>
       surfacePriority(left.deterministicSurfaceType) - surfacePriority(right.deterministicSurfaceType) ||
+      Number(isObservedFetchablePrivacyCandidate(right)) - Number(isObservedFetchablePrivacyCandidate(left)) ||
       policyDocumentScopePriority(left) - policyDocumentScopePriority(right) ||
       materialPolicySupplementPriority(left) - materialPolicySupplementPriority(right) ||
       policyCandidateDiscoveryPriority(left) - policyCandidateDiscoveryPriority(right) ||
@@ -6095,7 +6173,7 @@ function policyFetchLimit(input: PolicySurfaceScannerInput): number {
   return input.discoveryMode === "fast" ? 6 : MAX_CANDIDATES_TO_FETCH;
 }
 
-function mergeSupplementalPolicyCandidates(
+export function mergeSupplementalPolicyCandidates(
   rankedCandidates: PolicySurfaceCandidate[],
   allCandidates: PolicySurfaceCandidate[],
   limit: number,
@@ -6104,8 +6182,15 @@ function mergeSupplementalPolicyCandidates(
   const existingUrls = new Set(existingObservations
     .map((observation) => observation.normalizedUrl ?? observation.url)
     .filter((value): value is string => Boolean(value)));
+  const dedupedCandidates = dedupeCandidates(allCandidates);
   const selected = new Map<string, PolicySurfaceCandidate>();
-  for (const candidate of rankedCandidates) {
+  const rankedCandidateKeys = new Set(rankedCandidates.map(candidateKey));
+  // An earlier ranking may contain a seed for a URL also observed in the full
+  // inventory. Resolve that duplicate before capping, retaining the link proof.
+  for (const candidate of dedupeCandidates([
+    ...rankedCandidates,
+    ...dedupedCandidates.filter(candidate => rankedCandidateKeys.has(candidateKey(candidate))),
+  ])) {
     const key = candidateKey(candidate);
     if (!existingUrls.has(candidate.normalizedUrl)) {
       selected.set(key, candidate);
@@ -6113,7 +6198,7 @@ function mergeSupplementalPolicyCandidates(
   }
 
   const rankedKeys = new Set(selected.keys());
-  const supplements = allCandidates
+  const supplements = dedupedCandidates
     .filter((candidate) =>
       !rankedKeys.has(candidateKey(candidate)) &&
       !existingUrls.has(candidate.normalizedUrl) &&
@@ -6138,7 +6223,18 @@ function materialPolicySupplementPriority(candidate: PolicySurfaceCandidate): nu
   return isMaterialGdprNoticeSupplementCandidate(candidate) ? 0 : 1;
 }
 
-function capPolicyCandidatesWithSurfaceDiversity(
+function isObservedFetchablePrivacyCandidate(candidate: PolicySurfaceCandidate): boolean {
+  // Selection priority only: these are eligible retrieval candidates, not yet
+  // verified target-owned policy documents. All fetch/content gates still apply.
+  return candidate.deterministicSurfaceType === "privacy_policy" &&
+    candidate.fetchable && !candidate.observationOnly &&
+    candidate.deterministicScore >= 0.5 && candidate.clickable &&
+    ["footer_link", "header_link", "page_text_link"].includes(candidate.discoveryMethod) &&
+    !isCommonPathFallbackCandidate(candidate) &&
+    !isObviousCommercePolicyFalsePositive(candidate);
+}
+
+export function capPolicyCandidatesWithSurfaceDiversity(
   candidates: PolicySurfaceCandidate[],
   limit: number,
 ): PolicySurfaceCandidate[] {
@@ -6153,11 +6249,23 @@ function capPolicyCandidatesWithSurfaceDiversity(
   const selectedSurfaceTypes = new Set<PolicySurfaceCandidate["deterministicSurfaceType"]>();
   const diverse: PolicySurfaceCandidate[] = [];
 
+  // Reserve observed privacy destinations before diversity consumes the cap.
+  // Preserve incoming rank among them, then use the remaining slots for other
+  // surfaces and fallbacks. Reapplying the cap cannot put guesses ahead of them.
+  for (const candidate of candidates) {
+    if (diverse.length >= limit) break;
+    const key = candidateKey(candidate);
+    if (!isObservedFetchablePrivacyCandidate(candidate) || selected.has(key)) continue;
+    selected.add(key);
+    selectedSurfaceTypes.add(candidate.deterministicSurfaceType);
+    diverse.push(candidate);
+  }
+
   for (const candidate of candidates) {
     if (diverse.length >= limit) {
       break;
     }
-    if (selectedSurfaceTypes.has(candidate.deterministicSurfaceType)) {
+    if (selectedSurfaceTypes.has(candidate.deterministicSurfaceType) || selected.has(candidateKey(candidate))) {
       continue;
     }
     const key = candidateKey(candidate);
@@ -7393,6 +7501,7 @@ function normalizedEntityToken(value: string | undefined): string | undefined {
 
 export function classifyPolicyDocumentOwnership(input: {
   directlyLinkedFromScannedPage?: boolean;
+  linkSourcePageUrl?: string;
   documentTitle?: string;
   documentUrl: string;
   observedAt?: string;
@@ -7403,6 +7512,9 @@ export function classifyPolicyDocumentOwnership(input: {
   "documentOwnerEntity" | "targetRelationship" | "ownershipConfidence" | "ownershipReasonCodes"
 > {
   const targetSite = getRegistrableDomainFromUrl(input.targetUrl);
+  const directlyLinkedFromTarget = input.directlyLinkedFromScannedPage === true &&
+    (!input.linkSourcePageUrl || Boolean(targetSite &&
+      getRegistrableDomainFromUrl(input.linkSourcePageUrl) === targetSite));
   const documentSite = getRegistrableDomainFromUrl(input.documentUrl);
   const documentHost = (() => {
     try {
@@ -7525,7 +7637,7 @@ export function classifyPolicyDocumentOwnership(input: {
     };
   }
 
-  if (targetBrandRouteBound && (controllerLanguage || input.directlyLinkedFromScannedPage === true)) {
+  if (targetBrandRouteBound && (controllerLanguage || directlyLinkedFromTarget)) {
     return {
       documentOwnerEntity: documentEntity ?? documentSite ?? undefined,
       targetRelationship: "first_party_brand",
@@ -7534,7 +7646,7 @@ export function classifyPolicyDocumentOwnership(input: {
         "cross_site_document",
         "target_brand_exact_policy_route_binding",
         ...(controllerLanguage ? ["corporate_policy_controller_language"] : []),
-        ...(input.directlyLinkedFromScannedPage
+        ...(directlyLinkedFromTarget
           ? ["direct_target_link_to_brand_bound_policy_route"]
           : []),
       ],
@@ -7542,7 +7654,7 @@ export function classifyPolicyDocumentOwnership(input: {
   }
 
   if (
-    input.directlyLinkedFromScannedPage === true &&
+    directlyLinkedFromTarget &&
     targetNamed &&
     targetNamedInTitle &&
     /(?:privacy|privacypolicy|data-protection|datenschutz|privacidad|confidentialit|polityka-prywatnosci)/i
@@ -10331,46 +10443,72 @@ export function extractPolicyCookieDisclosures(input: {
 }
 
 function extractPolicyTableRowsFromHtml(cleanHtml: string, sourceUrl: string): RetainedPolicySection[] {
-  return Array.from(cleanHtml.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)).flatMap((tableMatch, tableIndex) => {
-    const tableHtml = tableMatch[1] ?? "";
-    const rows = Array.from(tableHtml.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)).map((rowMatch) => {
-      const rowHtml = rowMatch[1] ?? "";
-      const cells = Array.from(rowHtml.matchAll(/<(th|td)\b[^>]*>([\s\S]*?)<\/(?:th|td)>/gi)).map((cellMatch) => ({
-        isHeader: (cellMatch[1] ?? "").toLowerCase() === "th",
-        text: htmlToVisibleText(cellMatch[2] ?? "")
-      })).filter((cell) => cell.text.length > 0);
-      return { cells };
-    }).filter((row) => row.cells.length > 0);
-    if (rows.length === 0) {
-      return [];
+  type Cell = { isHeader: boolean; text: string; ambiguousSpan: boolean };
+  type Row = { cells: Cell[]; start: number; end: number };
+  type Table = { rows: Row[]; nested: boolean; context?: string; row?: Row; cell?: { start: number; isHeader: boolean; ambiguousSpan: boolean } };
+  const stack: Table[] = [];
+  const tables: Table[] = [];
+  // Balance table boundaries before interpreting rows. A non-greedy table/row
+  // regex can join an outer header with a different nested table's data.
+  for (const tag of cleanHtml.matchAll(/<\/?(?:table|tr|th|td)\b[^>]*>/gi)) {
+    const name = /^<\/?(\w+)/.exec(tag[0])![1]!.toLowerCase();
+    const closing = tag[0].startsWith("</");
+    const index = tag.index!;
+    if (name === "table") {
+      if (!closing) {
+        if (stack.length) stack.at(-1)!.nested = true;
+        const parent = stack.at(-1);
+        const context = parent?.row?.cells.length === 1 && !parent.row.cells[0]!.ambiguousSpan && parent.row.cells[0]!.text.length <= 160
+          ? parent.row.cells[0]!.text : undefined;
+        stack.push({ rows: [], nested: false, context });
+      } else {
+        const table = stack.pop();
+        if (table && !table.nested) tables.push(table);
+      }
+      continue;
     }
-
-    const firstRow = rows[0];
-    const firstRowLooksLikeHeader = firstRow !== undefined && (
-      firstRow.cells.some((cell) => cell.isHeader) ||
-      firstRow.cells.length > 1 && firstRow.cells.every((cell) => cell.text.length <= 100)
-    );
-    const headers = firstRowLooksLikeHeader ? firstRow?.cells.map((cell) => cell.text) ?? [] : [];
-    const dataRows = firstRowLooksLikeHeader ? rows.slice(1) : rows;
-
-    return dataRows.map((row, rowIndex) => {
-      const mappedCells = row.cells.map((cell, cellIndex) => {
-        const header = headers[cellIndex];
-        return header ? `${header}: ${cell.text}` : cell.text;
-      });
-      const textExcerpt = normalizeWhitespace(mappedCells.join(". "));
-      const firstValue = row.cells[0]?.text ?? `row ${rowIndex + 1}`;
-      const headingPrefix = headers.length > 0 ? headers.join(" | ") : `Table ${tableIndex + 1}`;
-      return {
-        sourceUrl,
-        heading: normalizeWhitespace(`${headingPrefix} — ${firstValue}`).slice(0, 160),
-        textExcerpt,
-        extractionMethod: "html_table_row" as const,
-        sourceOffsetBasis: "sanitized_html" as const,
-        charStart: (tableMatch.index ?? 0),
-        charEnd: (tableMatch.index ?? 0) + tableMatch[0].length,
-        quality: textExcerpt.length >= 120 ? "partial" as const : "limited" as const,
+    const table = stack.at(-1);
+    if (!table) continue;
+    if (name === "tr") {
+      if (!closing) { table.row = { cells: [], start: index, end: index }; table.cell = undefined; }
+      else if (table.row) {
+        table.row.end = index + tag[0].length;
+        if (table.row.cells.length) table.rows.push(table.row);
+        table.row = undefined; table.cell = undefined;
+      }
+    } else if (table.row) {
+      if (!closing) table.cell = {
+        start: index + tag[0].length,
+        isHeader: name === "th" && !/\bscope\s*=\s*["']?row\b/i.test(tag[0]),
+        ambiguousSpan: /\b(?:rowspan|colspan)\s*=\s*["']?(?!1(?:["'\s>]|$))\d+/i.test(tag[0]),
       };
+      else if (table.cell) {
+        const text = htmlToVisibleText(cleanHtml.slice(table.cell.start, index));
+        // Preserve empty columns so a later value cannot shift under a header.
+        table.row.cells.push({ text, isHeader: table.cell.isHeader, ambiguousSpan: table.cell.ambiguousSpan });
+        table.cell = undefined;
+      }
+    }
+  }
+  const headerLabel = /^(?:purpose(?:\/activity| of (?:the )?processing)?|activity|lawful basis|legal basis|type of (?:personal )?data|data categor(?:y|ies)|retention(?: period)?|storage period|recipient(?:s| categories)?|service provider|cookie name|duration)$/i;
+  return tables.flatMap((table, tableIndex) => {
+    const first = table.rows[0];
+    const header = first && first.cells.length > 1 && first.cells.every(cell => !cell.ambiguousSpan &&
+      (cell.isHeader || headerLabel.test(cell.text)));
+    const headers = header ? first.cells.map(cell => cell.text) : [];
+    return (header ? table.rows.slice(1) : table.rows).flatMap((row, rowIndex) => {
+      // Ambiguous spanning layouts remain available through ordinary policy
+      // text/heading extraction; do not manufacture a column relationship.
+      if (row.cells.some(cell => cell.ambiguousSpan)) return [];
+      const aligned = headers.length === row.cells.length;
+      const textExcerpt = normalizeWhitespace(row.cells.map((cell, index) =>
+        aligned && headers[index] ? `${headers[index]}: ${cell.text}` : cell.text).filter(Boolean).join(". "));
+      return [{ sourceUrl,
+        heading: normalizeWhitespace(`${table.context || (headers.length ? headers.join(" | ") : `Table ${tableIndex + 1}`)} — ${row.cells[0]?.text || `row ${rowIndex + 1}`}`).slice(0, 160),
+        textExcerpt, extractionMethod: "html_table_row" as const, sourceOffsetBasis: "sanitized_html" as const,
+        charStart: row.start, charEnd: row.end,
+        quality: textExcerpt.length >= 120 ? "partial" as const : "limited" as const,
+      }];
     });
   });
 }
@@ -10712,7 +10850,7 @@ function bestSectionForProfile(
     const observed = evidenceStatus === "observed";
     const structural = section.extractionMethod?.startsWith("html_") === true;
     const specificTransfer = profile.disclosureType === "international_transfers" &&
-      /\b(?:personal data|personal information|your data|your information)\b.{0,180}\b(?:transferred|processed|stored|accessed)\b.{0,180}\b(?:USA|United States|outside (?:the )?(?:EEA|EU)|other countries)\b/i.test(selectedExcerpt);
+      (RESIDENCE_RELATIVE_TRANSFER_PATTERN.test(selectedExcerpt) || /\b(?:personal data|personal information|your data|your information)\b.{0,180}\b(?:transferred|processed|stored|accessed)\b.{0,180}\b(?:USA|United States|outside (?:the )?(?:EEA|EU)|other countries)\b/i.test(selectedExcerpt));
     const generalProcessingBasis = profile.disclosureType === "legal_basis" &&
       !/\b(?:fanpages?|job applicants?|application documents|recruitment|recruiting|talent pool)\b/i.test(haystack) &&
       /\b(?:process(?:ing|ed)?|collect(?:ion|ed)?)\b.{0,160}\b(?:data|information)\b.{0,180}\b(?:Art\.?\s*6|Article 6|consent|legitimate interests?|contract)\b/i.test(selectedExcerpt);
@@ -10913,14 +11051,15 @@ function compactSourceDisclosureStatements(text: string, topic: Article13Disclos
       const excerpt = text.slice(starts[index], starts[index + count]).trim();
       if (excerpt.length < 35 || excerpt.length > 640) continue;
       if (sharedArticle13DisclosureRejectReason(excerpt, topic) !== null) continue;
-      if (["international_transfers", "legal_basis"].includes(topic) && !observedPattern.test(excerpt)) continue;
+      if (["international_transfers", "legal_basis"].includes(topic) && !observedPattern.test(excerpt) &&
+          !(topic === "international_transfers" && RESIDENCE_RELATIVE_TRANSFER_PATTERN.test(excerpt))) continue;
       // A processor role or a reference to another controller is not the
       // controller's own contact disclosure.
       const transferSafeguards = topic === "international_transfers" &&
         /\b(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect(?:ed|ion)?)\b/i.test(excerpt);
       const firstStatement = text.slice(starts[index], starts[index + 1]).trim();
       const transferLocation = topic === "international_transfers" &&
-        /\b(?:servers around the world|(?:transfer(?:red)?|process(?:ed)?|store(?:d)?|access(?:ed)?).{0,180}(?:outside|USA|United States|other countries)|third parties may be in|they may also be outside)\b/i.test(firstStatement);
+        (RESIDENCE_RELATIVE_TRANSFER_PATTERN.test(firstStatement) || /\b(?:servers around the world|(?:transfer(?:red)?|process(?:ed)?|store(?:d)?|access(?:ed)?).{0,180}(?:outside|USA|United States|other countries)|third parties may be in|they may also be outside)\b/i.test(firstStatement));
       candidates.push({ text: excerpt, length: excerpt.length, transferSafeguards, transferLocation });
       // Keep a contiguous safeguard sentence with its transfer statement when
       // both fit the existing quote budget.
@@ -10948,7 +11087,8 @@ function sectionEvidenceStatus(
       : "not_confirmed";
   }
   if (
-    ["processing_purposes", "recipients_or_vendor_categories", "data_retention", "automated_decision_making_or_profiling"].includes(profile.disclosureType) &&
+    (["processing_purposes", "recipients_or_vendor_categories", "data_retention", "automated_decision_making_or_profiling"].includes(profile.disclosureType) ||
+      profile.disclosureType === "international_transfers" && RESIDENCE_RELATIVE_TRANSFER_PATTERN.test(excerpt)) &&
     isArticle13DisclosureEvidenceUsable(excerpt, profile.disclosureType)
   ) {
     return "observed";
@@ -11917,7 +12057,8 @@ export function dedupeCandidates(candidates: PolicySurfaceCandidate[]): PolicySu
     const existing = byUrl.get(key);
     // Seed hints must not outrank an observed link to the same URL.
     const provenanceRelevant = Boolean(candidate.cmpDiscovery?.length || existing?.cmpDiscovery?.length ||
-      candidate.seedSource || existing?.seedSource);
+      candidate.seedSource || existing?.seedSource || isCommonPathFallbackCandidate(candidate) ||
+      (existing && isCommonPathFallbackCandidate(existing)));
     const preferCandidate = !existing || (candidate.fetchable && !existing.fetchable) ||
       (!provenanceRelevant && candidate.deterministicScore > existing.deterministicScore) ||
       (provenanceRelevant && candidate.fetchable === existing.fetchable && (

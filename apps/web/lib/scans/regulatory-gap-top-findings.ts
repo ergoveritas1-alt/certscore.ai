@@ -1,6 +1,8 @@
 import { CERT_SCORE_FINDING_REGISTRY, type CertScoreFinding } from "./finding-registry";
 import { readChecklistRemediation } from "./checklist-remediation";
 import { describePostRejectFinding } from "./post-reject-finding-copy";
+import { narrowKindForRow, readBoundGdprNarrow } from "./gdpr-narrow-evidence";
+import { isActiveGdprNarrowKind } from "@certscore/contracts";
 
 export type RegulatoryGapTopFindingRow = {
   assessmentDirection?: string;
@@ -89,6 +91,9 @@ function getPolicySourceUrl(row: RegulatoryGapTopFindingRow) {
   if (!retainedEvidence || typeof retainedEvidence !== "object") {
     return null;
   }
+  const narrow = readBoundGdprNarrow(retainedEvidence);
+  const issue = narrow?.issues.find(issue => issue.kind === narrowKindForRow(row.id));
+  if (issue) return issue.sourceUrl;
   const assessment = retainedEvidence.article13CoverageAssessment;
   if (!assessment || typeof assessment !== "object" || Array.isArray(assessment)) {
     return null;
@@ -112,9 +117,32 @@ const POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS = new Set([
 ]);
 
 export function buildRegulatoryGapTopFindings(input: RegulatoryGapTopFindingInput): CertScoreFinding[] {
-  return clusterRelatedRuntimeTopFindings([
+  return clusterNarrowPostureFindings(clusterRelatedRuntimeTopFindings([
     ...findingsForArea(input.gdprEprivacyArea, GDPR_CONFIG)
-  ]);
+  ]));
+}
+
+/** Editorial grouping over already-projected findings. A complaint-only
+ * omission stays in GDPR Transparency; multiple omissions may form one card. */
+function clusterNarrowPostureFindings(findings: CertScoreFinding[]) {
+  // Repeated projected rows must not suppress their own strongest card when
+  // their IDs are added to the supporting-card suppression set below.
+  findings = [...new Map(findings.map(finding => [finding.id, finding])).values()];
+  const omissions = findings.filter(f => ["legal_basis", "retention", "complaint"].includes(narrowKindForRow(regulatoryRowId(f) ?? "") ?? "") &&
+    readBoundGdprNarrow(f.evidenceDetails?.policyEvidenceDetails?.retainedEvidence as Record<string, unknown>));
+  const consent = findings.filter(f => ["optional_defaults", "implied_consent"].includes(narrowKindForRow(regulatoryRowId(f) ?? "") ?? ""));
+  const omitted = new Set(omissions.filter(f => omissions.length >= 2 ||
+    narrowKindForRow(regulatoryRowId(f) ?? "") === "complaint").map(f => f.id));
+  const consentPrimary = consent.find(f => regulatoryRowId(f) === "consent_optional_defaults_on") ?? consent[0];
+  for (const finding of consent) if (finding !== consentPrimary) omitted.add(finding.id);
+  const result = findings.filter(f => !omitted.has(f.id));
+  if (omissions.length >= 2) result.push({ ...omissions[0]!, id: "regulatory_gap__gdpr_eprivacy__reviewed_notice_omissions",
+    label: "Privacy notice disclosures need review", severity: "medium", defaultSurfacePriority: 65,
+    shortSummary: omissions.map(f => f.label).join("; "),
+    evidenceRefs: [...new Set(omissions.flatMap(f => f.evidenceRefs))],
+    evidencePreview: omissions.map(f => f.shortSummary),
+  });
+  return result;
 }
 
 // Keep the distinct cookie/storage checklist concern visible. Overlapping
@@ -200,6 +228,11 @@ function findingsForArea(
   }
 
   const projectedRows = area.rows
+    .filter(row => {
+      const kind = narrowKindForRow(row.id), retained = row.criticalEvidence?.retainedEvidence ?? row.retainedEvidence;
+      return !kind || isActiveGdprNarrowKind(kind) || !retained ||
+        !("gdprNarrowPosture" in retained || retained.gdprNarrowKind === kind);
+    })
     .map((row, index) => ({
       concernKind: getRegulatoryTopFindingConcernKind(row),
       index,

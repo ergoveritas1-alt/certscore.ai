@@ -1,3 +1,4 @@
+import { CALIFORNIA_AGENT_REGISTRATION_ID, californiaAgentRegistrationProjectionSchema, type CaliforniaAgentRegistrationProjection } from "@certscore/contracts";
 import {supportsCombinedOptOutRisk} from "./california-combined-opt-out-policy";
 import {BROAD_OPT_OUT_FINDING_ID,broadOptOutAssessmentSchema,type BroadOptOutAssessment} from "@certscore/contracts";
 import {OPT_OUT_SIGNAL_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID,optOutPresenceSignalSchema,type OptOutPresenceSignal} from "@certscore/contracts";
@@ -121,6 +122,7 @@ export type UnifiedFindingDetails =
   | {family:"broad_opt_out_assessment";projection:BroadOptOutAssessment}
   | { family: "form_destinations"; projection: FormDestinationProjection }
   | { family: "cms_security"; projection: CmsSecurityProjection }
+  | { family: "california_agent_registration"; projection: CaliforniaAgentRegistrationProjection }
   | { family: "california_privacy_review"; projection: CaliforniaPrivacyReview; gpcAssessment?: import("@certscore/contracts").GpcResponseAssessment }
   | { family: "opt_out_presence_signal"; projection: OptOutPresenceSignal }
   | { family: "opt_out_absence"; projection: {scanId:string;documentUrl:string;sourceHash:string;scope:"starting_page_and_retained_policies"} }
@@ -1876,6 +1878,10 @@ function buildUnifiedFindingDetails(input: {
     if(review?.contractVersion!=="certscore.california-privacy-review.v10"||!review.frictionlessGpcException)return undefined;
     const parsed=frictionlessGpcProjectionSchema.safeParse({assessment:review.frictionlessGpcException,sources:review.reviewCoverage.sourceDocuments});
     return parsed.success?{family:"frictionless_gpc_exception",projection:parsed.data} satisfies UnifiedFindingDetails:undefined;
+  }
+  if (input.findingId === CALIFORNIA_AGENT_REGISTRATION_ID) {
+    const parsed = californiaAgentRegistrationProjectionSchema.safeParse(input.fallbackEvidence?.agentRegistrationProjection);
+    return parsed.success ? {family: "california_agent_registration", projection: parsed.data} satisfies UnifiedFindingDetails : undefined;
   }
   if (CALIFORNIA_PRIVACY_REVIEW_IDS.some(id => id === input.findingId)) {
     const projection = readCaliforniaPrivacyReviewFromConsent(input.fallbackEvidence?.consentControlAssessment);

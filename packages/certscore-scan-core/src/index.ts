@@ -3070,7 +3070,7 @@ function classifyBrandedRuntimeError(text: string | null | undefined): Classifie
   const errorOffset = reasonCode === "not_found_404" ? text!.search(/\b404\s*\|?\s*OOPS!/i) : 0;
   return { confidence: 0.97, evidenceText: boundedScanNoGoText(text!.slice(Math.max(0, errorOffset))) ?? "Retained branded error page.",
     hardTerminal: true, reasonCode,
-    visualPageState: reasonCode === "not_found_404" ? "wrong_site_or_soft_404" : "maintenance_or_unavailable" };
+    visualPageState: reasonCode === "not_found_404" ? "wrong_site_or_soft_404" : reasonCode === "unsupported_region" ? "access_blocked" : "maintenance_or_unavailable" };
 }
 
 function classifyScanNoGoText(text: string): ClassifiedNoGoPageState | null {

@@ -1,9 +1,12 @@
 /** Closed, retained page templates. A phrase in an article or a successful
  * transport alone is not a page-state observation. No browser work is added. */
 export function classifyRuntimeErrorPage(text: string | null | undefined):
-  "not_found_404" | "maintenance_or_unavailable" | undefined {
+  "not_found_404" | "maintenance_or_unavailable" | "unsupported_region" | undefined {
   if (!text) return undefined;
   const bounded = text.slice(0, 4096).replace(/\s+/g, " ").trim();
+  if (text.length <= 256 && /^OOPS!!!\s+WE ARE CURRENTLY NOT AVAILABLE IN YOUR REGION\.$/i.test(bounded)) {
+    return "unsupported_region";
+  }
   const soft404 = /\b404\s*\|?\s*OOPS! WE['’]RE SORRY\.\s+This page doesn['’]t exist, or you can['’]t access it\.\s+Main Page\s*\|\s*Your Apps\s*\|\s*Help Center\s*\|\s*Resources\b/i.exec(bounded);
   if (soft404) {
     const prefix = bounded.slice(0, soft404.index);
