@@ -1855,10 +1855,30 @@
       "note": "Owner-authorized one-attempt production policy-evidence validation after recovery/witness release 819fe9931. Run key: policy-recovery-production-validation-2026-10-26. YY and Tapmad retained usable primary policies; Tujugada text insufficient; Radcom ownership unresolved. Tapmad transfer witness source-verified. No retries, consent actions, budget changes or customer findings.",
       "state": "cooldown",
       "url": "https://radcom.hosting"
+    },
+    "https://www.eni.com/en-IT/home.html": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-24T23:22:58.145Z",
+      "lastContactAt": "2026-10-27T23:22:58.145Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.eni.com/en-IT/home.html"
+    },
+    "https://www.wickes.co.uk/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-24T23:23:13.389Z",
+      "lastContactAt": "2026-10-27T23:23:13.389Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.wickes.co.uk/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-27T23:19:19.145Z",
+  "updatedAt": "2026-10-27T23:24:02.411Z",
   "contactOnlyUrls": [
     "https://abc.xyz/",
     "https://acuitybrands.com/",
