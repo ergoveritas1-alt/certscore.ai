@@ -76,6 +76,11 @@ type GdprTransparencySemanticRule = {
   variant?: "semantic_clause" | "section_semantic_clause" | "behavioral_profiling_disclosure_v1" | "behavioral_profiling_disclosure_v2";
 };
 
+/** A transfer destination alone is not cross-border proof. Keep the data,
+ * transfer/processing and comparison with the visitor's country in one clause.
+ * No country, company or domain allowlist is implied. */
+export const RESIDENCE_RELATIVE_TRANSFER_PATTERN = /\b(?:personal (?:data|information)|your (?:data|information)|information we collect)\b[^.!?]{0,100}\b(?:may|will|can) be transferred to (?:and|or) processed in [\p{L}][\p{L} '-]{1,60},? where (?:the )?(?:privacy|data protection) laws[^.!?]{0,160}\b(?:country|jurisdiction) where you (?:reside|live)\b/iu;
+
 const MAX_EXCERPT_CHARS = 360;
 const DEFAULT_MAX_MATCHES = 24;
 
@@ -260,6 +265,12 @@ const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] 
     matchedTerm: "explicit automated processing or profiling disclosure",
     pattern: /\b(?:this (?:site|website|service|platform|application|app|fixture)|the (?:site|website|service|platform|application|app))\b.{0,100}\b(?:do(?:es)? not|will not)\b.{0,100}\b(?:use|conduct|perform|carry out|engage in)\b.{0,180}\b(?:profiling|automated decision(?:-making| making|s)?|solely automated (?:processing|decision))\b.{0,220}\b(?:legal effects?|significantly affects?|similarly significant effects?|eligibility|credit|insurance|employment|access to (?:a )?service)\b|\b(?:personal data|personal information|user data|your data|your information)\b.{0,140}\b(?:is|are) subject to\b.{0,100}\b(?:automatic|automated) processing\b.{0,100}\bprofiling\b|\b(?:personal data|personal information|your data|your information)\b.{0,220}\bprofiling\b.{0,220}\bdecisions?\b.{0,140}\b(?:legal effects?|significantly affects?|similarly significant effects?)\b.{0,220}\bwe\b.{0,60}\b(?:do not|will not)\b.{0,80}\b(?:conduct|perform|carry out|engage in) such processing\b/i,
     topic: "automated_decision_making_or_profiling",
+  },
+  {
+    locale: "en",
+    matchedTerm: "data transferred and processed under laws differing from the visitor's country",
+    pattern: RESIDENCE_RELATIVE_TRANSFER_PATTERN,
+    topic: "international_transfers",
   },
   {
     locale: "en",
