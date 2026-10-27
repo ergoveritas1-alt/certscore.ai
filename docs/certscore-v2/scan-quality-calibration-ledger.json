@@ -1894,18 +1894,18 @@
     },
     "https://listesdemots.net/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-24T20:23:01.676Z",
-      "lastContactAt": "2026-10-27T20:23:01.676Z",
+      "cooldownUntil": "2026-11-24T20:44:30.514Z",
+      "lastContactAt": "2026-10-27T20:44:30.514Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://listesdemots.net/",
-      "note": "Owner-authorized single Magnite diagnostic follow-up; six matching requests, parser member/depth limits and unverified responses; not live qualification or release acceptance. Receipt: /Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261027T202048Z-manual-magnite-live-followup/live-once/result.json"
+      "note": "Owner-authorized single instrumented Magnite diagnostic; six limited bodies (four member/two depth), three canonical HTTP 200 responses; no qualification or release acceptance. Receipt: /Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261027T203321Z-manual-magnite-bounded-diagnostics/live-once/result.json"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-27T20:26:05.794Z",
+  "updatedAt": "2026-10-27T20:45:17.186Z",
   "contactOnlyUrls": [
     "https://abc.xyz/",
     "https://acuitybrands.com/",
