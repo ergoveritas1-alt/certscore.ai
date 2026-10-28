@@ -1901,8 +1901,8 @@
     },
     "https://adecco.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:26:05.015Z",
-      "lastContactAt": "2026-10-28T18:26:05.015Z",
+      "cooldownUntil": "2026-11-25T19:01:10.719Z",
+      "lastContactAt": "2026-10-28T19:01:10.719Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1941,8 +1941,8 @@
     },
     "https://ferrero.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:27:56.189Z",
-      "lastContactAt": "2026-10-28T18:27:56.189Z",
+      "cooldownUntil": "2026-11-25T19:01:19.366Z",
+      "lastContactAt": "2026-10-28T19:01:19.366Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1971,8 +1971,8 @@
     },
     "https://aacsb.edu/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:29:46.173Z",
-      "lastContactAt": "2026-10-28T18:29:46.173Z",
+      "cooldownUntil": "2026-11-25T19:01:18.297Z",
+      "lastContactAt": "2026-10-28T19:01:18.297Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2001,8 +2001,8 @@
     },
     "https://findaya.co.id/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:31:16.667Z",
-      "lastContactAt": "2026-10-28T18:31:16.667Z",
+      "cooldownUntil": "2026-11-25T19:01:26.437Z",
+      "lastContactAt": "2026-10-28T19:01:26.437Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2011,8 +2011,8 @@
     },
     "https://getdbt.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:31:19.781Z",
-      "lastContactAt": "2026-10-28T18:31:19.781Z",
+      "cooldownUntil": "2026-11-25T19:01:24.005Z",
+      "lastContactAt": "2026-10-28T19:01:24.005Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2021,8 +2021,8 @@
     },
     "https://vonagebusiness.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:32:09.231Z",
-      "lastContactAt": "2026-10-28T18:32:09.231Z",
+      "cooldownUntil": "2026-11-25T19:01:27.982Z",
+      "lastContactAt": "2026-10-28T19:01:27.982Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2041,8 +2041,8 @@
     },
     "https://ktm.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:32:50.656Z",
-      "lastContactAt": "2026-10-28T18:32:50.656Z",
+      "cooldownUntil": "2026-11-25T19:01:35.541Z",
+      "lastContactAt": "2026-10-28T19:01:35.541Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2051,8 +2051,8 @@
     },
     "https://renishaw.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:33:14.434Z",
-      "lastContactAt": "2026-10-28T18:33:14.434Z",
+      "cooldownUntil": "2026-11-25T19:01:45.782Z",
+      "lastContactAt": "2026-10-28T19:01:45.782Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2061,8 +2061,8 @@
     },
     "https://sympatico.ca/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:34:03.520Z",
-      "lastContactAt": "2026-10-28T18:34:03.520Z",
+      "cooldownUntil": "2026-11-25T19:01:57.783Z",
+      "lastContactAt": "2026-10-28T19:01:57.783Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2071,8 +2071,8 @@
     },
     "https://flixcar.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:34:00.282Z",
-      "lastContactAt": "2026-10-28T18:34:00.282Z",
+      "cooldownUntil": "2026-11-25T19:02:00.685Z",
+      "lastContactAt": "2026-10-28T19:02:00.685Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2284,7 +2284,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-28T18:44:20.758Z",
+  "updatedAt": "2026-10-28T19:02:38.541Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
