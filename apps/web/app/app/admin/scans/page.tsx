@@ -32,7 +32,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type AdminScansPageProps = {
-  searchParams?: Promise<{ createdVia?: string; page?: string; perPage?: string; q?: string; status?: string; freshness?: string; access?: string; outcome?: string; language?: string; industry?: string; scanFrom?: string; timeSpan?: string; includeCanary?: string; excludeMacMiniScanBot?: string; scanBotFilter?: string; snapshot?: string; traffic?: string }>;
+  searchParams?: Promise<{ createdVia?: string; page?: string; perPage?: string; q?: string; status?: string; freshness?: string; access?: string; outcome?: string; language?: string; industry?: string; scanFrom?: string; timeSpan?: string; includeCanary?: string; excludeMacMiniScanBot?: string; scanBotFilter?: string; snapshot?: string; traffic?: string; details?: string }>;
 };
 
 function CreatedViaCell({ scan }: { scan: AdminScanListItem }) {
@@ -149,6 +149,28 @@ function getOperationalStatus(scan: AdminScanListItem) {
     return { className: "bg-sky-400", label: "Request" };
   }
   return { className: "bg-emerald-500", label: "Completed" };
+}
+
+function AdminBasicScanTable({ scans }: { scans: AdminScanListItem[] }) {
+  return <table className="w-full min-w-[1120px] text-left text-xs">
+    <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500"><tr>
+      {["Status", "Activity", "Page", "Requester IP", "From", "Duration", "Scan ID", "Open"].map((label) => <th className="border-b border-slate-200 px-3 py-2" key={label}>{label}</th>)}
+    </tr></thead>
+    <tbody className="divide-y divide-slate-100">{scans.map((scan) => {
+      const state = getOperationalStatus(scan);
+      const activity = formatRequestedDateTime(scan.activityAt);
+      return <tr className="h-14 hover:bg-slate-50" key={scan.activityId}>
+        <td className="px-3 py-2" title={scan.noGoReason ?? state.label}><span className="inline-flex items-center gap-1.5 font-semibold"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full ${state.className}`} />{state.label}</span>{scan.rowKind === "request" ? <p className="mt-1 text-[10px] text-slate-500">Request-only</p> : null}</td>
+        <td className="px-3 py-2 whitespace-nowrap" title={`Activity: ${formatAdminDateTime(scan.activityAt)} · Requested: ${formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}`}><p>{activity.date}</p><p className="text-slate-500">{activity.time}</p></td>
+        <td className="max-w-xs break-all px-3 py-2 font-semibold text-slate-800">{scan.pageUrl ?? "Page URL unavailable"}</td>
+        <td className="px-3 py-2 font-mono text-[10px] text-slate-500" title={scan.requesterName ?? undefined}>{requesterIpLabel(scan)}</td>
+        <td className="px-3 py-2 whitespace-nowrap">{scan.scanFromLabel}</td>
+        <td className="px-3 py-2 whitespace-nowrap">{["queued", "running", "finalizing"].includes(scan.status) ? state.label : formatAdminScanDuration(scan) ?? "—"}</td>
+        <td className="max-w-48 break-all px-3 py-2 font-mono text-[10px] text-slate-500">{scan.linkedScanId ?? scan.scanId}</td>
+        <td className="px-3 py-2">{scan.linkedScanId && scan.scanViewHref ? <Link className="text-sky-800 underline" href={scan.scanViewHref} prefetch={false}>Open report</Link> : "—"}</td>
+      </tr>;
+    })}</tbody>
+  </table>;
 }
 
 function formatAdminScanDuration(scan: Pick<AdminScanListItem, "completedAt" | "createdAt" | "startedAt">) {
@@ -317,6 +339,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
   const activeIndustry = resolvedSearchParams.industry?.trim().slice(0, 200) ?? "";
   const activeScanFrom = SCAN_FROM_VALUES.includes(resolvedSearchParams.scanFrom as typeof SCAN_FROM_VALUES[number]) ? resolvedSearchParams.scanFrom as typeof SCAN_FROM_VALUES[number] : "any";
   const activeTimeSpan = resolveAdminScanActivityPeriod(resolvedSearchParams);
+  const showReportDetails = resolvedSearchParams.details === "1";
   const trafficScope = resolveAdminTrafficScope(resolvedSearchParams);
   const { includeInternalQa: includeCanary, includeMacMini } = adminTrafficScopeVisibility(trafficScope);
   const excludeMacMiniScanBot = !includeMacMini;
@@ -335,7 +358,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
       timeSpan: activeTimeSpan,
       includeCanary,
       excludeMacMiniScanBot
-    }));
+    }, showReportDetails));
 
   // Both panels await the same hydrated result and one cached database snapshot.
   const snapshotPromise = withServerTiming("app.admin.scans.operational_snapshot", async () => (await scanPagePromise).snapshot);
@@ -401,10 +424,15 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
       <CardHeader className="pb-2"><div className="flex flex-wrap items-end justify-between gap-2"><div><CardTitle>Scan activity</CardTitle><p className="mt-1 text-sm text-slate-500">Physical runs and request-only items matching the chart filters. Activity time: completion, start or creation for runs; request time for request-only items.</p></div><p className="text-sm text-slate-500">{snapshotNumber(totalCount)} matching items</p></div></CardHeader>
       <AdminTableRefreshBoundary basePath="/app/admin/scans" label="Refreshing scans">
       <CardContent className="min-w-0 space-y-3 pt-0">
-        <AdminScansAutoRefresh targets={liveTargets} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <AdminScansAutoRefresh targets={liveTargets} />
+          <Link className="app-raised-button rounded-full px-3 py-1.5 text-sm font-semibold text-sky-800" href={adminScanActivityHref(sharedParams, { details: showReportDetails ? null : "1", page: String(currentPage) })} prefetch={false}>{showReportDetails ? "Show basic rows" : "Show report details"}</Link>
+        </div>
+        {!showReportDetails ? <p className="text-xs text-slate-500">Basic scan rows load first. Scores, consent evidence, vendor counts and other report columns are available through Show report details or the individual report.</p> : null}
         <AdminScansFilterForm hasFilters={hasFilters || Boolean(activeCreatedVia)} submitFirst>
           <select aria-label="Filter scans by creation source" className="h-10 w-[11rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeCreatedVia ?? ""} name="createdVia"><option value="">Any creation source</option>{Object.entries(SCAN_CREATION_SOURCES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <input name="traffic" type="hidden" value={trafficScope} />
+          {showReportDetails ? <input name="details" type="hidden" value="1" /> : null}
           <input aria-label="Filter by domain, scan ID, email, requester, IP, or source; use field not-equal syntax to exclude" className="h-10 min-w-[28rem] flex-[1_1_32rem] rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery} name="q" placeholder="Domain, scan_id, email, requester, IP · source:homepage-anonymous · ip!=66.*" />
           <select aria-label="Filter scans by status" className="h-10 w-[7.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeStatus} name="status">{statuses.map((status) => <option key={status} value={status}>{status === "any" ? "Any status" : formatFilterLabel(status)}</option>)}</select>
           <select aria-label="Filter scans by freshness" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeFreshness} name="freshness">{freshnesses.map((freshness) => <option key={freshness} value={freshness}>{freshness === "any" ? "Any freshness" : freshness === "fresh" ? "Fresh" : freshness === "forced_fresh" ? "Forced fresh" : "Reused <24h"}</option>)}</select>
@@ -423,11 +451,11 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           pageSize={pageSize}
           totalCount={totalCount}
           visibleCount={scans.length}
-          searchParams={{ createdVia: activeCreatedVia ?? "", q: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, traffic: trafficScope }}
+          searchParams={{ createdVia: activeCreatedVia ?? "", q: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, traffic: trafficScope, details: showReportDetails ? "1" : "" }}
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-          <table className="w-[3957px] min-w-[3957px] table-fixed text-left text-xs">
+          {showReportDetails ? <table className="w-[3957px] min-w-[3957px] table-fixed text-left text-xs">
             <colgroup>
               <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "115px" }} /><col style={{ width: "173px" }} /><col style={{ width: "75px" }} /><col style={{ width: "190px" }} /><col style={{ width: "170px" }} />
               <col style={{ width: "70px" }} /><col style={{ width: "100px" }} /><col style={{ width: "75px" }} /><col style={{ width: "65px" }} /><col style={{ width: "65px" }} /><col style={{ width: "65px" }} /><col style={{ width: "156px" }} />
@@ -529,7 +557,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                 );
               })}
             </tbody>
-          </table>
+          </table> : <AdminBasicScanTable scans={scans} />}
         </div>
       </CardContent>
       </AdminTableRefreshBoundary>

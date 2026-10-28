@@ -277,8 +277,8 @@ const SCAN_ACTIVITY_NO_GO_SQL = adminNoGoSql({
   outcomesParameter: "$12"
 });
 
-function adminScanActivityBaseSql(metadataOnly = false) {
-  return `with scan_activity as (
+function adminScanActivityBaseSql(metadataOnly = false, cachedTraffic = false) {
+  const sql = `with scan_activity as (
     select
       'scan'::text as row_kind,
       coalesce(s.activity_traffic->>'class','unknown') as traffic_class,
@@ -366,13 +366,13 @@ function adminScanActivityBaseSql(metadataOnly = false) {
         else 'unknown'
       end as access_filter
       ,coalesce(nullif(trim(ss.stop_reason_code), ''), ss.scan_outcome) as outcome_filter
-      ,(
+      ,${cachedTraffic ? "coalesce(s.id = any($29::uuid[]), false)" : `(
         exists (select 1 from public.scan_pages csp where csp.scan_id = s.id and csp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
         or ${scanOriginalRequestCanarySql("s.id")}
         or ${scanOriginalRequesterQaSql("s.id", "$23", "$24", "$25")}
         or ${scanCanaryTargetSql("s.scan_config_json")}
-      ) as canary_filter
-      ,${scanOriginalRequesterMacMiniSql("s.id", "$22")} as mac_mini_scan_bot_filter
+      )`} as canary_filter
+      ,${cachedTraffic ? "coalesce(s.id = any($30::uuid[]), false)" : scanOriginalRequesterMacMiniSql("s.id", "$22")} as mac_mini_scan_bot_filter
     from public.scans s
     left join public.domains d on d.id = s.domain_id
     left join public.industries ind on ind.id = d.industry_primary_id
@@ -522,7 +522,7 @@ function adminScanActivityBaseSql(metadataOnly = false) {
         exists (
           select 1 from public.integration_api_keys bot_key
           where bot_key.public_id = sr.requested_by ->> 'apiKeyId' and bot_key.name = any($22::text[])
-        ) or ${scanOriginalRequesterMacMiniSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$22")}
+        ) or ${cachedTraffic ? "coalesce(coalesce(sr.fulfilled_by_scan_id, sr.scan_id) = any($30::uuid[]), false)" : scanOriginalRequesterMacMiniSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$22")}
       ) as mac_mini_scan_bot_filter
     from public.scan_requests sr
     left join public.scans s on s.id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
@@ -629,6 +629,8 @@ function adminScanActivityBaseSql(metadataOnly = false) {
          macMiniFilter: "mac_mini_scan_bot_filter",
        })}
   )`;
+  // Allow the previous-period count to prune report-only fields and request rows.
+  return metadataOnly ? sql.replace("filtered_activity as materialized", "filtered_activity as not materialized") : sql;
 }
 
 function adminScanActivityParams(limit: number, offset: number, filters: AdminScanActivityFilters, since: string | null) {
@@ -654,12 +656,12 @@ function adminScanActivityParams(limit: number, offset: number, filters: AdminSc
   ];
 }
 
-export async function loadAdminScanActivitySnapshot(limit: number, offset: number, filters: AdminScanActivityFilters) {
+export async function loadAdminScanActivitySnapshot(limit: number, offset: number, filters: AdminScanActivityFilters, trafficClassification: { qa: string[]; macmini: string[] }) {
   const period = filters.timeSpan ?? "24h";
   const window = adminScanActivityWindow(period);
   const result = await query<AdminScanActivitySnapshotData>(
-    adminScanActivitySnapshotSql(adminScanActivityBaseSql(true)),
-    [...adminScanActivityParams(limit, offset, filters, window.previousStart), window.end, window.start],
+    adminScanActivitySnapshotSql(adminScanActivityBaseSql(true, true)),
+    [...adminScanActivityParams(limit, offset, filters, window.previousStart), window.end, window.start, trafficClassification.qa, trafficClassification.macmini],
     { readOnly: true }
   );
   const data = result.rows[0];
@@ -1361,7 +1363,7 @@ export type AdminBlockedRunTelemetryRow = {
   scan_timestamp?: string | null;
 };
 
-export async function loadAdminScanListPageData(limit: number, offset = 0, requesterEmail: string | null = null, selectedScanIds: string[] | null = null): Promise<{
+export async function loadAdminScanListPageData(limit: number, offset = 0, requesterEmail: string | null = null, selectedScanIds: string[] | null = null, includeReportDetails = true): Promise<{
   diagnosticEvents: AdminScanDiagnosticEventRow[];
   domains: AdminScanDomainRow[];
   organizations: AdminScanOrganizationRow[];
@@ -1376,17 +1378,17 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
   const scansResult = await query<AdminScanQueryRow>(
     `select id, organization_id, domain_id, scan_type, status, created_at, started_at, completed_at, pages_scanned, scan_config_json,
             egress_id, egress_provider,
-            ${ADMIN_FULL_SITE_PAGES_SCANNED_SQL} as full_site_pages_scanned,
-            (select sp.page_language
+            ${includeReportDetails ? ADMIN_FULL_SITE_PAGES_SCANNED_SQL : "null::int"} as full_site_pages_scanned,
+            ${includeReportDetails ? `(select sp.page_language
                from scan_pages sp
               where sp.scan_id = scans.id
                 and nullif(trim(sp.page_language), '') is not null
               order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc
-              limit 1) as page_language,
-            (select array_agg(sp.page_language order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc)
+              limit 1)` : "null::text"} as page_language,
+            ${includeReportDetails ? `(select array_agg(sp.page_language order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc)
                from scan_pages sp
               where sp.scan_id = scans.id
-                and nullif(trim(sp.page_language), '') is not null) as page_languages
+                and nullif(trim(sp.page_language), '') is not null)` : "null::text[]"} as page_languages
        from scans
       where ($4::uuid[] is null or scans.id = any($4::uuid[]))
         and ($3::text is null or exists (
@@ -1475,7 +1477,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
     scanIds.length
       ? query<AdminScanSnapshotRow>(
           `select scan_id,
-                  admin_evidence_matrix,
+                  ${includeReportDetails ? `admin_evidence_matrix,
                   report_projection_payload #> '{runtimeArtifacts,siteIntegrity}' as admin_site_integrity,
                   report_projection_payload #> '{canonicalReportProjection,collectionSurfaceAssessment}' as admin_collection_surfaces,
                   report_projection_payload #> '{runtimeArtifacts,cmsSecurity}' as admin_cms_security,
@@ -1499,6 +1501,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
                           or finding->'scoreEffects' @> '[{"framework":"accessibility"}]'::jsonb
                     )
                   ) as admin_canonical_score_input,
+` : ""}
                   certscore_overall,
                   admin_industry_label,
                   admin_summary_generated_at,
@@ -1600,7 +1603,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
           { readOnly: true }
         )
       : Promise.resolve({ rows: [] as Array<{ scan_id: string; has_recovery: boolean | null; has_scanner_event: boolean | null }> }),
-    loadTopFindingCounts()
+    includeReportDetails ? loadTopFindingCounts() : Promise.resolve(new Map<string, number>())
   ]);
 
   const scannerEvidenceByScanId = new Map(

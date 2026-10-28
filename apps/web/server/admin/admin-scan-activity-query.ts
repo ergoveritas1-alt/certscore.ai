@@ -1,7 +1,7 @@
 export type AdminScanActivitySnapshotData = {
   rows: Array<{ activity_at: string; activity_id: string; request_public_id: string | null; row_kind: "request" | "scan"; scan_id: string | null; status: string; no_go_flag: boolean | null; access_posture_class: string | null }>;
   metrics: { items: number; runs: number; requests: number; completed: number; failed: number; limited: number; no_go: number; active: number; reused: number; newest_at: string | null; p50: number | null; p95: number | null };
-  previous: { items: number; runs: number; failed: number };
+  previous: { runs: number };
   regions: Array<{ value: string; count: number; runs: number; requests: number }>;
   trend: Array<{ n: number; bucket_start: string; bucket_end: string; items: number; runs: number; requests: number; failed: number; limited: number }>;
 };
@@ -16,7 +16,7 @@ export function adminScanActivitySnapshotSql(base: string) {
     where activity_at < $27::timestamptz
       and ($28::timestamptz is null or activity_at >= $28::timestamptz)
   ), previous_activity as materialized (
-    select * from filtered_activity where activity_at < $28::timestamptz
+    select scan_id from filtered_activity where activity_at < $28::timestamptz and row_kind = 'scan'
   ), summary as (
     select count(*)::int as items,
       count(*) filter (where a.row_kind = 'scan')::int as runs,
@@ -35,8 +35,7 @@ export function adminScanActivitySnapshotSql(base: string) {
         filter (where a.row_kind = 'scan' and s.completed_at >= coalesce(s.started_at, s.created_at)) as p95
     from current_activity a left join public.scans s on a.row_kind = 'scan' and s.id = a.scan_id
   ), previous_summary as (
-    select count(*)::int as items, count(*) filter (where row_kind = 'scan')::int as runs,
-      count(*) filter (where status = 'failed')::int as failed from previous_activity
+    select count(*)::int as runs from previous_activity
   ), window_bounds as (
     select coalesce($28::timestamptz, min(activity_at), $27::timestamptz - interval '24 hours') as start_at,
       $27::timestamptz as end_at from current_activity

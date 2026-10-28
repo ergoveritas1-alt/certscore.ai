@@ -38,6 +38,7 @@ import {
   type AdminScanSnapshotRow,
   type AdminScanRequestRow as ScanRequestRow
 } from "./repository";
+import { loadScanTrafficClassification } from "./scan-traffic-classification";
 import { projectAdminNoGo, selectAdminActivityStatus, selectAdminScanOutcome, type AdminNoGoProjection } from "./admin-no-go";
 import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
 import { requirePlatformAdminContext } from "./platform-admin";
@@ -327,18 +328,20 @@ export async function listAdminScansPage(
 // Cache the hydrated rows with the chart, rather than mixing cached totals with
 // fresh row statuses. Public entry points authorize before accessing this cache.
 const loadCachedAdminScanActivityPage = unstable_cache(
-  async (limit: number, offset: number, filters: AdminScanActivityFilters) => {
-    const snapshot = await loadAdminScanActivitySnapshot(limit, offset, filters);
-    const page = await enrichAdminScanActivityPage(snapshot);
+  async (limit: number, offset: number, filters: AdminScanActivityFilters, includeReportDetails: boolean) => {
+    const classification = filters.includeCanary === true && filters.excludeMacMiniScanBot === false
+      ? { qa: [], macmini: [] } : await loadScanTrafficClassification();
+    const snapshot = await loadAdminScanActivitySnapshot(limit, offset, filters, classification);
+    const page = await enrichAdminScanActivityPage(snapshot, includeReportDetails);
     return { ...page, snapshot };
   },
-  ["admin-scan-activity-page-v1"],
+  ["admin-scan-activity-page-v2"],
   { revalidate: 30, tags: [ADMIN_SCAN_ACTIVITY_CACHE_TAG] }
 );
 
-export async function getAdminScanActivityPage(limit: number, offset: number, filters: AdminScanActivityFilters) {
+export async function getAdminScanActivityPage(limit: number, offset: number, filters: AdminScanActivityFilters, includeReportDetails = false) {
   await requirePlatformAdminContext();
-  return loadCachedAdminScanActivityPage(limit, offset, filters);
+  return loadCachedAdminScanActivityPage(limit, offset, filters, includeReportDetails);
 }
 
 export async function refreshAdminScanActivity() {
@@ -346,17 +349,17 @@ export async function refreshAdminScanActivity() {
   revalidateTag(ADMIN_SCAN_ACTIVITY_CACHE_TAG);
 }
 
-async function enrichAdminScanActivityPage(page: { rows: AdminScanActivityPageRef[]; totalCount: number }) {
+async function enrichAdminScanActivityPage(page: { rows: AdminScanActivityPageRef[]; totalCount: number }, includeReportDetails = true) {
   const selectedScanIds = [...new Set(page.rows.flatMap((row) => row.scan_id ? [row.scan_id] : []))];
   const selectedRequestIds = page.rows.flatMap((row) => row.request_public_id ? [row.request_public_id] : []);
   const [scanPageData, scanRequestRows, creationAttributions] = await withServerTiming(
     "app.admin.scans.row-enrichment",
     () => Promise.all([
-      loadAdminScanListPageData(Math.max(selectedScanIds.length, 1), 0, null, selectedScanIds),
+      loadAdminScanListPageData(Math.max(selectedScanIds.length, 1), 0, null, selectedScanIds, includeReportDetails),
       selectedScanIds.length || selectedRequestIds.length
         ? loadAdminScanRequestRows(100_000, null, { publicIds: selectedRequestIds, scanIds: selectedScanIds })
         : Promise.resolve([]),
-      loadAdminScanCreationAttributions(selectedScanIds)
+      includeReportDetails ? loadAdminScanCreationAttributions(selectedScanIds) : Promise.resolve([])
     ])
   );
   const mcpScanIds = creationAttributions
@@ -392,10 +395,10 @@ async function enrichAdminScanActivityPage(page: { rows: AdminScanActivityPageRe
     "app.admin.scans.score-attribution",
     () => Promise.all([
       loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id), null),
-      loadLatestVersionedScoreAssessments({
+      includeReportDetails ? loadLatestVersionedScoreAssessments({
         scanIds: scanRows.map((scan) => scan.id),
         scoreKind: "gdpr_eprivacy_evidence"
-      }),
+      }) : Promise.resolve(new Map()),
     ])
   );
   const pulseAttributionMap = new Map(pulseAttributionRows.map((row) => [row.scan_id, row] as const));

@@ -42,7 +42,7 @@ test("shared SQL reconciles chart, table, prior window and latest time at exact 
     assert.equal(Date.parse(result.metrics.newest_at!), Date.parse(result.rows[0]!.activity_at));
     assert.equal(result.trend.reduce((n,b) => n+b.items,0), result.metrics.items);
     assert.equal(result.regions.reduce((n,b) => n+b.count,0), result.metrics.items);
-    assert.equal(result.previous.items, 1);
+    assert.equal(result.previous.runs, 1);
     params[8] = 100;
     const emptyPage = await run();
     assert.equal(emptyPage.rows.length, 0);
@@ -61,11 +61,26 @@ test("page uses one authorized cached cohort and refresh invalidates chart and t
   assert.match(actions, /requirePlatformAdminContext\(\);\s+return loadCachedAdminScanActivityPage/);
   assert.match(actions, /revalidateTag\(ADMIN_SCAN_ACTIVITY_CACHE_TAG\)/);
   assert.match(actions, /revalidate: 30, tags: \[ADMIN_SCAN_ACTIVITY_CACHE_TAG\]/);
-  assert.match(actions, /const page = await enrichAdminScanActivityPage\(snapshot\);\s+return \{ \.\.\.page, snapshot \}/);
+  assert.match(actions, /const page = await enrichAdminScanActivityPage\(snapshot, includeReportDetails\);\s+return \{ \.\.\.page, snapshot \}/);
   assert.match(actions, /status: row\.status \?\? item\.status/, "active polling must use the captured state when enrichment sees a later completion");
   assert.match(page, /\(await scanPagePromise\)\.snapshot/);
   assert.doesNotMatch(page, /getAdminScanOperationalSnapshot|listAdminScansPage/);
   assert.match(page, /formatRequestedDateTime\(scan\.activityAt\)/);
-  assert.match(repository, /adminScanActivitySnapshotSql\(adminScanActivityBaseSql\(true\)\)/);
+  assert.match(repository, /adminScanActivitySnapshotSql\(adminScanActivityBaseSql\(true, true\)\)/);
   assert.match(repository, /and no_go_flag is not true/);
+});
+
+test("basic scan rows skip report payloads and retain an explicit details mode", () => {
+  const actions = readFileSync("apps/web/server/admin/list-admin-scans.ts", "utf8");
+  const repository = readFileSync("apps/web/server/admin/repository.ts", "utf8");
+  const page = readFileSync("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  assert.match(actions, /getAdminScanActivityPage[^\n]+includeReportDetails = false/);
+  assert.match(actions, /includeReportDetails \? loadAdminScanCreationAttributions/);
+  assert.match(actions, /includeReportDetails \? loadLatestVersionedScoreAssessments/);
+  assert.match(repository, /includeReportDetails \? `admin_evidence_matrix/);
+  assert.match(repository, /includeReportDetails \? loadTopFindingCounts\(\)/);
+  assert.match(page, /Show report details/);
+  assert.match(page, /<AdminBasicScanTable scans=\{scans\}/);
+  assert.match(page, /details: showReportDetails \? "1" : ""/);
+  assert.match(page, /operationalSnapshot\.previous\.runs/);
 });
