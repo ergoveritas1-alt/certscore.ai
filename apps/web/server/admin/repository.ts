@@ -277,7 +277,7 @@ const SCAN_ACTIVITY_NO_GO_SQL = adminNoGoSql({
   outcomesParameter: "$12"
 });
 
-function adminScanActivityBaseSql() {
+function adminScanActivityBaseSql(metadataOnly = false) {
   return `with scan_activity as (
     select
       'scan'::text as row_kind,
@@ -596,7 +596,7 @@ function adminScanActivityBaseSql() {
         )
       ))
   ), filtered_activity as materialized (
-    select *
+    select ${metadataOnly ? "row_kind, activity_id, scan_id, request_public_id, activity_at, status, no_go_flag, access_posture_class, freshness_filter, scan_from_filter" : "*"}
     from scan_activity
     where (
          $2::text is null
@@ -658,7 +658,7 @@ export async function loadAdminScanActivitySnapshot(limit: number, offset: numbe
   const period = filters.timeSpan ?? "24h";
   const window = adminScanActivityWindow(period);
   const result = await query<AdminScanActivitySnapshotData>(
-    adminScanActivitySnapshotSql(adminScanActivityBaseSql()),
+    adminScanActivitySnapshotSql(adminScanActivityBaseSql(true)),
     [...adminScanActivityParams(limit, offset, filters, window.previousStart), window.end, window.start],
     { readOnly: true }
   );

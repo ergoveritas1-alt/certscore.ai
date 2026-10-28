@@ -66,6 +66,6 @@ test("page uses one authorized cached cohort and refresh invalidates chart and t
   assert.match(page, /\(await scanPagePromise\)\.snapshot/);
   assert.doesNotMatch(page, /getAdminScanOperationalSnapshot|listAdminScansPage/);
   assert.match(page, /formatRequestedDateTime\(scan\.activityAt\)/);
-  assert.match(repository, /adminScanActivitySnapshotSql\(adminScanActivityBaseSql\(\)\)/);
+  assert.match(repository, /adminScanActivitySnapshotSql\(adminScanActivityBaseSql\(true\)\)/);
   assert.match(repository, /and no_go_flag is not true/);
 });
