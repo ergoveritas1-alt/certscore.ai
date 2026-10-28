@@ -1891,8 +1891,8 @@
     },
     "https://akzonobel.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:03:11.235Z",
-      "lastContactAt": "2026-10-28T18:03:11.235Z",
+      "cooldownUntil": "2026-11-25T18:14:11.111Z",
+      "lastContactAt": "2026-10-28T18:14:11.111Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1911,8 +1911,8 @@
     },
     "https://six-group.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:02:42.892Z",
-      "lastContactAt": "2026-10-28T18:02:42.892Z",
+      "cooldownUntil": "2026-11-25T18:13:53.811Z",
+      "lastContactAt": "2026-10-28T18:13:53.811Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2284,7 +2284,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-28T18:05:01.467Z",
+  "updatedAt": "2026-10-28T18:14:43.524Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
