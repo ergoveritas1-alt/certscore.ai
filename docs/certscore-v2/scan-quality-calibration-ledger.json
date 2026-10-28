@@ -1971,8 +1971,8 @@
     },
     "https://aacsb.edu/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T19:09:24.433Z",
-      "lastContactAt": "2026-10-28T19:09:24.433Z",
+      "cooldownUntil": "2026-11-25T19:21:55.640Z",
+      "lastContactAt": "2026-10-28T19:21:55.640Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2061,8 +2061,8 @@
     },
     "https://sympatico.ca/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T19:09:24.532Z",
-      "lastContactAt": "2026-10-28T19:09:24.532Z",
+      "cooldownUntil": "2026-11-25T19:21:51.803Z",
+      "lastContactAt": "2026-10-28T19:21:51.803Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2284,7 +2284,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-28T19:10:00.191Z",
+  "updatedAt": "2026-10-28T19:23:42.642Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
