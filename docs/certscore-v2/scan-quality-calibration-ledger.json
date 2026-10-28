@@ -1891,8 +1891,8 @@
     },
     "https://akzonobel.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:26:06.600Z",
-      "lastContactAt": "2026-10-28T18:26:06.600Z",
+      "cooldownUntil": "2026-11-25T19:44:16.745Z",
+      "lastContactAt": "2026-10-28T19:44:16.745Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1961,8 +1961,8 @@
     },
     "https://telerik.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:29:06.541Z",
-      "lastContactAt": "2026-10-28T18:29:06.541Z",
+      "cooldownUntil": "2026-11-25T19:44:32.646Z",
+      "lastContactAt": "2026-10-28T19:44:32.646Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2001,8 +2001,8 @@
     },
     "https://findaya.co.id/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T19:29:28.939Z",
-      "lastContactAt": "2026-10-28T19:29:28.939Z",
+      "cooldownUntil": "2026-11-25T19:44:53.393Z",
+      "lastContactAt": "2026-10-28T19:44:53.393Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2274,8 +2274,8 @@
     },
     "https://us.edu.pl/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T18:44:16.638Z",
-      "lastContactAt": "2026-10-28T18:44:16.638Z",
+      "cooldownUntil": "2026-11-25T19:45:08.612Z",
+      "lastContactAt": "2026-10-28T19:45:08.612Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2284,7 +2284,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-28T19:30:05.476Z",
+  "updatedAt": "2026-10-28T19:45:43.689Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
