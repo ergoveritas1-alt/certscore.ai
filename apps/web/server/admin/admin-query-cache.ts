@@ -26,3 +26,5 @@ export const loadCachedAdminScanFilterOptions = unstable_cache(
   ["admin-scan-filter-options"],
   { revalidate: 60 }
 );
+
+export const ADMIN_SCAN_ACTIVITY_CACHE_TAG = "admin-scan-activity";

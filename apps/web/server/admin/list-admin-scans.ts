@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidateTag, unstable_cache } from "next/cache";
+import type { AdminScanActivityPeriod } from "../../lib/admin/admin-scan-activity";
 import {
   type AccessPostureClass,
   type RecoverableFindingClass,
@@ -21,6 +23,9 @@ import {
 import { deriveDisplayCreatedAt } from "../scans/display-state";
 import {
   loadAdminScanActivityPageRefs,
+  loadAdminScanActivitySnapshot,
+  type AdminScanActivityPageRef,
+  type AdminScanActivityFilters,
   type AdminScanOperationalSnapshot,
   type AdminScanOperationalSnapshotPeriod,
   loadAdminScanOverviewCounts,
@@ -46,6 +51,7 @@ import {
 } from "../../lib/scans/admin-evidence-matrix";
 import {
   loadCachedAdminScanOperationalSnapshot,
+  ADMIN_SCAN_ACTIVITY_CACHE_TAG,
   loadCachedAdminScanFilterOptions,
   loadCachedAdminScanOverviewCounts
 } from "./admin-query-cache";
@@ -89,6 +95,7 @@ function retainedClientName(context: Record<string, unknown> | null | undefined)
 }
 
 export type AdminScanListItem = {
+  operationalStatus?: { label: string; className: string };
   createdVia?: ScanCreationAttribution;
   clientName?: string | null;
   clientFamily?: string | null;
@@ -216,10 +223,10 @@ export type BlockedRunTelemetry = {
   successRateByEgress: Array<{ egress: string; successRate: number; total: number }>;
 };
 
-export type AdminScanListStatus = "any" | "no_go" | "rejected" | "failed" | "running" | "queued" | "limited" | "completed";
+export type AdminScanListStatus = "any" | "no_go" | "rejected" | "failed" | "running" | "queued" | "active" | "limited" | "completed";
 export type AdminScanListFreshness = "any" | "fresh" | "forced_fresh" | "reused";
 export type AdminScanListAccess = "any" | "clear" | "blocked" | "captcha" | "robots_limited" | "limited" | "unknown";
-export type AdminScanListTimeSpan = "all" | "4h" | "12h" | "24h" | "7d" | "31d";
+export type AdminScanListTimeSpan = AdminScanActivityPeriod;
 
 export async function listAdminScans(limit = 50, offset = 0, filters?: { email?: string | null; query?: string | null; status?: AdminScanListStatus }): Promise<AdminScanListItem[]> {
   return (await listAdminScansPage(limit, offset, filters)).items;
@@ -314,6 +321,32 @@ export async function listAdminScansPage(
       excludeMacMiniScanBot: filters?.excludeMacMiniScanBot
     })
   );
+  return enrichAdminScanActivityPage(page);
+}
+
+// Cache the hydrated rows with the chart, rather than mixing cached totals with
+// fresh row statuses. Public entry points authorize before accessing this cache.
+const loadCachedAdminScanActivityPage = unstable_cache(
+  async (limit: number, offset: number, filters: AdminScanActivityFilters) => {
+    const snapshot = await loadAdminScanActivitySnapshot(limit, offset, filters);
+    const page = await enrichAdminScanActivityPage(snapshot);
+    return { ...page, snapshot };
+  },
+  ["admin-scan-activity-page-v1"],
+  { revalidate: 30, tags: [ADMIN_SCAN_ACTIVITY_CACHE_TAG] }
+);
+
+export async function getAdminScanActivityPage(limit: number, offset: number, filters: AdminScanActivityFilters) {
+  await requirePlatformAdminContext();
+  return loadCachedAdminScanActivityPage(limit, offset, filters);
+}
+
+export async function refreshAdminScanActivity() {
+  await requirePlatformAdminContext();
+  revalidateTag(ADMIN_SCAN_ACTIVITY_CACHE_TAG);
+}
+
+async function enrichAdminScanActivityPage(page: { rows: AdminScanActivityPageRef[]; totalCount: number }) {
   const selectedScanIds = [...new Set(page.rows.flatMap((row) => row.scan_id ? [row.scan_id] : []))];
   const selectedRequestIds = page.rows.flatMap((row) => row.request_public_id ? [row.request_public_id] : []);
   const [scanPageData, scanRequestRows, creationAttributions] = await withServerTiming(
@@ -588,7 +621,7 @@ export async function listAdminScansPage(
     const item = row.row_kind === "scan"
       ? (row.scan_id ? scanItemMap.get(row.scan_id) : null)
       : (row.request_public_id ? requestItemMap.get(row.request_public_id) : null);
-    return item ? [item] : [];
+    return item ? [{ ...item, activityAt: row.activity_at, operationalStatus: row.operationalStatus }] : [];
   });
   return { items, totalCount: page.totalCount };
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useTransition } from "react";
+import { refreshAdminScanActivity } from "../../../../server/admin/list-admin-scans";
 import type { AdminScanLiveTarget } from "../../../../server/admin/admin-scan-live-status";
 
 type AdminScansAutoRefreshProps = {
@@ -10,6 +11,11 @@ type AdminScansAutoRefreshProps = {
 
 export function AdminScansAutoRefresh({ targets }: AdminScansAutoRefreshProps) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const refresh = () => startTransition(async () => {
+    await refreshAdminScanActivity();
+    router.refresh();
+  });
   const hasActiveScans = targets.some((target) => ["queued", "running", "finalizing"].includes(target.status));
   const initialFingerprint = useMemo(
     () => targets.map((target) => `${target.kind}:${target.id}:${target.status}`).sort().join("|"),
@@ -53,7 +59,8 @@ export function AdminScansAutoRefresh({ targets }: AdminScansAutoRefreshProps) {
           hasActiveScans?: boolean;
         };
         if (result.fingerprint && result.fingerprint !== initialFingerprint) {
-          router.refresh();
+          await refreshAdminScanActivity();
+          if (!cancelled) router.refresh();
           return;
         }
         if (result.hasActiveScans !== false) {
@@ -77,9 +84,8 @@ export function AdminScansAutoRefresh({ targets }: AdminScansAutoRefreshProps) {
     };
   }, [hasActiveScans, initialFingerprint, router, targets]);
 
-  if (!hasActiveScans) {
-    return null;
-  }
-
-  return <p className="text-sm text-slate-500">Refreshing automatically while queued or running scans are present.</p>;
+  return <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+    <button className="app-raised-button rounded-full px-3 py-1.5 font-semibold text-slate-700" disabled={isPending} onClick={refresh} type="button">{isPending ? "Refreshing…" : "Refresh chart and table"}</button>
+    {hasActiveScans ? <p>Refreshing automatically while queued or running scans are present.</p> : null}
+  </div>;
 }

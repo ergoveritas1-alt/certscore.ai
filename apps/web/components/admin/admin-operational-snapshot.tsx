@@ -6,7 +6,6 @@ import {
   ADMIN_OPERATIONAL_SNAPSHOT_PERIODS,
   type AdminOperationalMetricDefinition,
   type AdminOperationalSnapshotHealth,
-  type AdminOperationalSnapshotPeriod,
 } from "../../lib/admin/admin-operational-snapshot";
 
 type SnapshotMetric = {
@@ -65,6 +64,10 @@ export function AdminOperationalSnapshot({
   subtitle,
   trend,
   trendTotal,
+  periodName = "snapshot",
+  periodOptions,
+  refreshedAt,
+  windowLabel,
 }: {
   ariaLabel: string;
   basePath: string;
@@ -72,7 +75,11 @@ export function AdminOperationalSnapshot({
   breakdownColumns?: string;
   health: AdminOperationalSnapshotHealth;
   metrics: SnapshotMetric[];
-  period: AdminOperationalSnapshotPeriod;
+  period: string;
+  periodName?: "snapshot" | "timeSpan";
+  periodOptions?: Array<{ value: string; label: string }>;
+  refreshedAt?: string;
+  windowLabel?: string;
   rates: SnapshotRate[];
   searchParams: Record<string, string | null | undefined>;
   subtitle: string;
@@ -89,12 +96,13 @@ export function AdminOperationalSnapshot({
           <div>
             <CardTitle>Operational snapshot</CardTitle>
             <p className="mt-0.5 text-xs text-slate-500">{subtitle} · Pacific time · <span className={healthClass}>{health.label}</span></p>
+            {refreshedAt ? <p className="mt-1 text-xs text-slate-500">Data refreshed at {refreshedAt}</p> : null}
           </div>
           <form action={basePath} className="flex items-center gap-2" method="get">
-            {Object.entries(searchParams).map(([key, value]) => key === "page" || key === "period" || key === "snapshot" || !value ? null : <input key={key} name={key} type="hidden" value={value} />)}
+            {Object.entries(searchParams).map(([key, value]) => key === "page" || key === "period" || key === "snapshot" || key === periodName || !value ? null : <input key={key} name={key} type="hidden" value={value} />)}
             <label className="sr-only" htmlFor={`${ariaLabel}-snapshot-period`}>Snapshot period</label>
-            <select aria-label="Snapshot period" className="h-9 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700" defaultValue={period} id={`${ariaLabel}-snapshot-period`} name="snapshot">
-              {ADMIN_OPERATIONAL_SNAPSHOT_PERIODS.map((value) => <option key={value} value={value}>{value === "1h" ? "Last hour" : value === "24h" ? "Last 24 hours" : value === "7d" ? "Last 7 days" : value === "30d" ? "Last 30 days" : "Last year"}</option>)}
+            <select aria-label="Snapshot period" className="h-9 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700" defaultValue={period} id={`${ariaLabel}-snapshot-period`} name={periodName}>
+              {(periodOptions ?? ADMIN_OPERATIONAL_SNAPSHOT_PERIODS.map((value) => ({ value, label: value === "1h" ? "Last hour" : value === "24h" ? "Last 24 hours" : value === "7d" ? "Last 7 days" : value === "30d" ? "Last 30 days" : "Last year" }))).map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
             </select>
             <button className="app-raised-button inline-flex h-9 items-center rounded-full px-3 text-sm font-semibold text-slate-700" type="submit">Apply</button>
           </form>
@@ -106,7 +114,7 @@ export function AdminOperationalSnapshot({
         </div>
         <div className="grid gap-4 border-t border-slate-100 p-3 lg:grid-cols-[1.4fr_1fr]">
           <div>
-            <div className="mb-1.5 flex items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-700">{trendTotal} activity</p><p className="text-[10px] text-slate-400">{trend[0]?.label ?? "Start"} — {trend.at(-1)?.label ?? "Now"} · Pacific time</p></div>
+            <div className="mb-1.5 flex items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-700">{trendTotal} activity</p><p className="text-[10px] text-slate-400">{windowLabel ?? `${trend[0]?.label ?? "Start"} — ${trend.at(-1)?.label ?? "Now"} · Pacific time`}</p></div>
             <div aria-label={ariaLabel} className="flex h-14 items-end gap-1" role="img">
               {trend.map((bucket) => <div aria-hidden="true" className={`min-w-0 flex-1 rounded-t transition ${bucket.className ?? "bg-sky-500 hover:bg-sky-600"}`} key={bucket.key} style={{ height: `${Math.max(bucket.value > 0 ? 4 : 1, (bucket.value / maxTrend) * 56)}px` }} title={bucket.title} />)}
             </div>

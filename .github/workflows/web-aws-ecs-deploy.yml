@@ -258,6 +258,16 @@ jobs:
           pnpm --filter @website-signal-risk-scanner/web typecheck
           echo "verified_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
 
+      - name: Test admin scan activity consistency
+        env:
+          ADMIN_ACTIVITY_TEST_DATABASE_URL: postgresql://postgres:local-fixture-only@localhost:5432/marketplace_browser_test
+        run: |
+          pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
+            apps/web/lib/admin/admin-scan-activity.test.ts \
+            apps/web/server/admin/admin-scan-activity-query.test.ts \
+            apps/web/server/admin/admin-scan-operational-snapshot.test.ts \
+            apps/web/server/admin/admin-operational-snapshot-consistency.test.ts
+
       - name: Test Marketplace Light security contracts
         run: |
           node --import tsx --test \

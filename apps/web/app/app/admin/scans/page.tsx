@@ -9,7 +9,7 @@ import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
 import { SCAN_CREATION_SOURCES, scanCreationSource, type ScanCreationSource } from "../../../../lib/admin/scan-creation-source";
 import { projectAdminRequestAdmission } from "../../../../lib/admin/admin-request-admission";
-import { getAdminScanFilterOptions, getAdminScanOperationalSnapshot, listAdminScansPage, type AdminScanListAccess, type AdminScanListFreshness, type AdminScanListItem, type AdminScanListStatus, type AdminScanListTimeSpan } from "../../../../server/admin/list-admin-scans";
+import { getAdminScanFilterOptions, getAdminScanActivityPage, type AdminScanListAccess, type AdminScanListFreshness, type AdminScanListItem, type AdminScanListStatus } from "../../../../server/admin/list-admin-scans";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminNavigationProvider, AdminScanActions } from "./admin-scan-actions";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
@@ -17,7 +17,8 @@ import { AdminScansFilterForm } from "./admin-scans-filter-form";
 import { AdminTrafficFilters } from "../../../../components/admin/admin-traffic-filters";
 import { AdminOperationalSnapshot } from "../../../../components/admin/admin-operational-snapshot";
 import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
-import { ADMIN_OPERATIONAL_SNAPSHOT_PERIODS, adminOperationalSnapshotDelta, adminOperationalSnapshotHealth, adminOperationalSnapshotHref, type AdminOperationalSnapshotPeriod } from "../../../../lib/admin/admin-operational-snapshot";
+import { adminOperationalSnapshotDelta, adminOperationalSnapshotHref } from "../../../../lib/admin/admin-operational-snapshot";
+import { ADMIN_SCAN_ACTIVITY_PERIODS, adminScanActivityHref, adminScanActivityPeriodLabel, resolveAdminScanActivityPeriod } from "../../../../lib/admin/admin-scan-activity";
 import { adminTrafficScopeVisibility, resolveAdminTrafficScope } from "../../../../lib/admin/admin-traffic-scope";
 import {
   adminPolicyEvidenceDiagnosticTitle,
@@ -59,26 +60,18 @@ function ClientChannelCell({ scan }: { scan: AdminScanListItem }) {
   </td>;
 }
 
-const statuses = ["any", "no_go", "rejected", "failed", "running", "queued", "limited", "completed"] as const;
+const statuses = ["any", "no_go", "rejected", "failed", "running", "queued", "active", "limited", "completed"] as const;
 const freshnesses = ["any", "fresh", "forced_fresh", "reused"] as const;
 const accessValues = ["any", "clear", "blocked", "captcha", "robots_limited", "limited", "unknown"] as const;
-const timeSpans = ["all", "4h", "12h", "24h", "7d", "31d"] as const;
-const snapshotPeriods = ADMIN_OPERATIONAL_SNAPSHOT_PERIODS;
+const timeSpans = ADMIN_SCAN_ACTIVITY_PERIODS;
 function normalizeStatus(value: string | undefined): AdminScanListStatus {
   return statuses.includes(value as AdminScanListStatus) ? value as AdminScanListStatus : "any";
 }
 function normalizeFreshness(value: string | undefined): AdminScanListFreshness {
   return freshnesses.includes(value as AdminScanListFreshness) ? value as AdminScanListFreshness : "any";
 }
-function normalizeTimeSpan(value: string | undefined): AdminScanListTimeSpan {
-  return timeSpans.includes(value as AdminScanListTimeSpan) ? value as AdminScanListTimeSpan : "31d";
-}
 function normalizeAccess(value: string | undefined): AdminScanListAccess {
   return accessValues.includes(value as AdminScanListAccess) ? value as AdminScanListAccess : "any";
-}
-
-function normalizeSnapshotPeriod(value: string | undefined): AdminOperationalSnapshotPeriod {
-  return snapshotPeriods.includes(value as AdminOperationalSnapshotPeriod) ? value as AdminOperationalSnapshotPeriod : "24h";
 }
 
 function snapshotNumber(value: number) {
@@ -135,6 +128,7 @@ function getScanFreshnessBadge(scan: Pick<AdminScanListItem, "freshRescanRequest
 }
 
 function getOperationalStatus(scan: AdminScanListItem) {
+  if (scan.operationalStatus) return scan.operationalStatus;
   const requestAdmission = projectAdminRequestAdmission(scan);
   if (requestAdmission) {
     return { className: "bg-rose-500", label: requestAdmission.label };
@@ -322,15 +316,13 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
   const activeLanguage = resolvedSearchParams.language?.trim().slice(0, 80) ?? "";
   const activeIndustry = resolvedSearchParams.industry?.trim().slice(0, 200) ?? "";
   const activeScanFrom = SCAN_FROM_VALUES.includes(resolvedSearchParams.scanFrom as typeof SCAN_FROM_VALUES[number]) ? resolvedSearchParams.scanFrom as typeof SCAN_FROM_VALUES[number] : "any";
-  const activeTimeSpan = normalizeTimeSpan(resolvedSearchParams.timeSpan);
+  const activeTimeSpan = resolveAdminScanActivityPeriod(resolvedSearchParams);
   const trafficScope = resolveAdminTrafficScope(resolvedSearchParams);
   const { includeInternalQa: includeCanary, includeMacMini } = adminTrafficScopeVisibility(trafficScope);
   const excludeMacMiniScanBot = !includeMacMini;
-  const activeSnapshotPeriod = normalizeSnapshotPeriod(resolvedSearchParams.snapshot);
   const hasFilters = Boolean(activeQuery) || activeStatus !== "any" || activeFreshness !== "any" || activeAccess !== "any" || Boolean(activeOutcome) || Boolean(activeLanguage) || Boolean(activeIndustry) || activeScanFrom !== "any" || activeTimeSpan !== "all";
-  const snapshotPromise = withServerTiming("app.admin.scans.operational_snapshot", () => getAdminScanOperationalSnapshot(activeSnapshotPeriod, includeCanary, excludeMacMiniScanBot));
   const filterOptionsPromise = withServerTiming("app.admin.scans.filter-options", () => getAdminScanFilterOptions());
-  const scanPagePromise = withServerTiming("app.admin.scans.list", () => listAdminScansPage(pageSize, (currentPage - 1) * pageSize, {
+  const scanPagePromise = withServerTiming("app.admin.scans.list", () => getAdminScanActivityPage(pageSize, (currentPage - 1) * pageSize, {
       query: activeQuery || null,
       createdVia: activeCreatedVia,
       status: activeStatus,
@@ -345,42 +337,50 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
       excludeMacMiniScanBot
     }));
 
+  // Both panels await the same hydrated result and one cached database snapshot.
+  const snapshotPromise = withServerTiming("app.admin.scans.operational_snapshot", async () => (await scanPagePromise).snapshot);
+  const sharedParams = { ...resolvedSearchParams, timeSpan: activeTimeSpan, traffic: trafficScope };
   async function SnapshotPanel() {
     const operationalSnapshot = await snapshotPromise;
-    const runDelta = adminOperationalSnapshotDelta(operationalSnapshot.metrics.runs, operationalSnapshot.comparison.runs);
-    const failureDelta = adminOperationalSnapshotDelta(operationalSnapshot.metrics.failedRuns, operationalSnapshot.comparison.failedRuns, "higher_is_bad");
-    const latencyDelta = adminOperationalSnapshotDelta(operationalSnapshot.metrics.p95DurationSeconds ?? 0, operationalSnapshot.comparison.p95DurationSeconds ?? 0, "higher_is_bad");
-    const snapshotHref = (values: Record<string, string | null | undefined>) => adminOperationalSnapshotHref("/app/admin/scans", { snapshot: activeSnapshotPeriod, traffic: trafficScope, ...values });
+    const m = operationalSnapshot.metrics;
+    const runDelta = operationalSnapshot.window.start ? adminOperationalSnapshotDelta(m.runs, operationalSnapshot.previous.runs) : null;
+    const snapshotHref = (values: Record<string, string | null | undefined>) => adminScanActivityHref(sharedParams, values);
     const snapshotMetrics = [
-      { label: "Runs", value: snapshotNumber(operationalSnapshot.metrics.runs), detail: operationalSnapshot.period.label, comparison: runDelta.label, anomaly: runDelta.anomaly, href: snapshotHref({}) },
-      { label: "Requests", value: snapshotNumber(operationalSnapshot.metrics.requests), detail: "scan requests", definition: "requests" as const },
-      { label: "Completed", value: snapshotNumber(operationalSnapshot.metrics.completedRuns), detail: "physical runs", definition: "successful" as const, href: snapshotHref({ status: "completed" }) },
-      { label: "Limited", value: snapshotNumber(operationalSnapshot.metrics.limitedRuns), detail: "evidence-limited", href: snapshotHref({ access: "limited" }) },
-      { label: "Failed", value: snapshotNumber(operationalSnapshot.metrics.failedRuns), detail: "physical runs", definition: "errors" as const, comparison: failureDelta.label, anomaly: failureDelta.anomaly, href: snapshotHref({ status: "failed" }) },
-      { label: "Duration", value: `${snapshotDuration(operationalSnapshot.metrics.p50DurationSeconds)} / ${snapshotDuration(operationalSnapshot.metrics.p95DurationSeconds)}`, detail: "p50 / p95", definition: "latency" as const, comparison: latencyDelta.label, anomaly: latencyDelta.anomaly },
+      { label: "Runs", value: snapshotNumber(m.runs), detail: "physical runs", comparison: runDelta?.label, anomaly: runDelta?.anomaly },
+      { label: "Request-only", value: snapshotNumber(m.requests), detail: "reuse or no new run" },
+      { label: "Completed", value: snapshotNumber(m.completed), detail: "completed, usable runs", href: snapshotHref({ status: "completed" }) },
+      { label: "Limited", value: snapshotNumber(m.limited), detail: "matching activity items", href: snapshotHref({ status: "limited" }) },
+      { label: "Failed", value: snapshotNumber(m.failed), detail: "matching activity items", href: snapshotHref({ status: "failed" }) },
+      { label: "Duration", value: `${snapshotDuration(m.p50)} / ${snapshotDuration(m.p95)}`, detail: "physical runs · p50 / p95" },
     ];
+    const rate = (count: number) => snapshotPercentage(m.items > 0 ? count / m.items : null);
     const snapshotRates = [
-      { label: "Completion", value: snapshotPercentage(operationalSnapshot.rates.completion), href: snapshotHref({ status: "completed" }) },
-      { label: "Failures", value: snapshotPercentage(operationalSnapshot.rates.failure), anomaly: failureDelta.anomaly, href: snapshotHref({ status: "failed" }) },
-      { label: "Limited", value: snapshotPercentage(operationalSnapshot.rates.limited), href: snapshotHref({ access: "limited" }) },
-      { label: "Reuse", value: snapshotPercentage(operationalSnapshot.rates.reuse), href: snapshotHref({ freshness: "reused" }) },
-      { label: "No-go", value: snapshotNumber(operationalSnapshot.metrics.noGoRuns), href: snapshotHref({ status: "no_go" }) },
-      { label: "Active", value: snapshotNumber(operationalSnapshot.metrics.activeRuns), href: snapshotHref({ status: "running" }) },
+      { label: "Completion", value: rate(m.completed), href: snapshotHref({ status: "completed" }) },
+      { label: "Failures", value: rate(m.failed), href: snapshotHref({ status: "failed" }) },
+      { label: "Limited", value: rate(m.limited), href: snapshotHref({ status: "limited" }) },
+      { label: "Reuse", value: rate(m.reused), href: snapshotHref({ freshness: "reused" }) },
+      { label: "No-go", value: snapshotNumber(m.no_go), href: snapshotHref({ status: "no_go" }) },
+      { label: "Active", value: snapshotNumber(m.active), href: snapshotHref({ status: "active" }) },
     ];
     return <AdminOperationalSnapshot
-        ariaLabel={`Scan activity trend: ${snapshotNumber(operationalSnapshot.metrics.runs)} runs during ${operationalSnapshot.period.label.toLowerCase()}`}
+        ariaLabel={`Scan activity trend: ${snapshotNumber(m.items)} matching items, ${m.runs} physical runs and ${m.requests} request-only items`}
         basePath="/app/admin/scans"
-        breakdown={operationalSnapshot.scanFromCounts.map((scanFrom) => ({ label: scanFrom.label, value: snapshotNumber(scanFrom.count), detail: `${snapshotNumber(scanFrom.completed)} completed · ${snapshotNumber(scanFrom.failed)} failed`, href: snapshotHref({ scanFrom: scanFrom.value }) }))}
-        health={adminOperationalSnapshotHealth(operationalSnapshot.newestAt, activeSnapshotPeriod)}
+        breakdown={operationalSnapshot.regions.map((region) => ({ label: formatScanFromLabel(region.value as typeof SCAN_FROM_VALUES[number]), value: snapshotNumber(region.count), detail: `${region.runs} runs · ${region.requests} request-only`, href: snapshotHref({ scanFrom: region.value }) }))}
+        health={{ label: m.newest_at ? `Latest matching activity: ${formatAdminDateTime(m.newest_at)}` : "No matching activity", status: m.newest_at ? "current" : "quiet" }}
+        refreshedAt={formatAdminDateTime(operationalSnapshot.refreshedAt)}
+        windowLabel={`${operationalSnapshot.window.start ? formatAdminDateTime(operationalSnapshot.window.start) : "All retained history"} — ${formatAdminDateTime(operationalSnapshot.window.end)} (exclusive cutoff)`}
         metrics={snapshotMetrics}
-        period={activeSnapshotPeriod}
+        period={activeTimeSpan}
+        periodName="timeSpan"
+        periodOptions={timeSpans.map((value) => ({ value, label: adminScanActivityPeriodLabel(value) }))}
         rates={snapshotRates}
-        searchParams={resolvedSearchParams}
-        subtitle={`Physical scan runs and scan requests · ${operationalSnapshot.period.label}`}
-        trend={operationalSnapshot.trend.map((bucket, index) => ({ key: `${bucket.bucket}:${index}`, label: bucket.label, value: bucket.runs, title: `${bucket.label}: ${bucket.runs} runs · ${bucket.failed} failed · ${bucket.limited} limited`, className: bucket.failed > 0 ? "bg-rose-400 hover:bg-rose-500" : bucket.limited > 0 ? "bg-amber-400 hover:bg-amber-500" : undefined }))}
-        trendTotal={operationalSnapshot.period.label}
+        searchParams={sharedParams}
+        subtitle={`Same filters as the table · ${adminScanActivityPeriodLabel(activeTimeSpan)} · rates use all matching activity items`}
+        trend={operationalSnapshot.trend.map((bucket) => ({ key: String(bucket.n), label: formatAdminDateTime(bucket.bucket_start), value: bucket.items, title: `${formatAdminDateTime(bucket.bucket_start)} — ${formatAdminDateTime(bucket.bucket_end)}: ${bucket.items} items · ${bucket.runs} runs · ${bucket.requests} request-only · ${bucket.failed} failed · ${bucket.limited} limited`, className: bucket.failed > 0 ? "bg-rose-400 hover:bg-rose-500" : bucket.limited > 0 ? "bg-amber-400 hover:bg-amber-500" : undefined }))}
+        trendTotal={`${snapshotNumber(m.items)} matching items · ${m.runs} runs + ${m.requests} request-only`}
       />;
   }
+
   async function ScanRows() {
     const [filterOptions, scanPage] = await Promise.all([filterOptionsPromise, scanPagePromise]);
     const totalCount = scanPage.totalCount;
@@ -398,13 +398,12 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
     });
 
     return <Card className="min-w-0 overflow-hidden border-slate-200 bg-white">
-      <CardHeader className="pb-2"><div className="flex flex-wrap items-end justify-between gap-2"><div><CardTitle>Scan activity</CardTitle><p className="mt-1 text-sm text-slate-500">Physical runs and retained scan requests matching the table filters.</p></div><p className="text-sm text-slate-500">{snapshotNumber(totalCount)} matching items</p></div></CardHeader>
+      <CardHeader className="pb-2"><div className="flex flex-wrap items-end justify-between gap-2"><div><CardTitle>Scan activity</CardTitle><p className="mt-1 text-sm text-slate-500">Physical runs and request-only items matching the chart filters. Activity time: completion, start or creation for runs; request time for request-only items.</p></div><p className="text-sm text-slate-500">{snapshotNumber(totalCount)} matching items</p></div></CardHeader>
       <AdminTableRefreshBoundary basePath="/app/admin/scans" label="Refreshing scans">
       <CardContent className="min-w-0 space-y-3 pt-0">
         <AdminScansAutoRefresh targets={liveTargets} />
         <AdminScansFilterForm hasFilters={hasFilters || Boolean(activeCreatedVia)} submitFirst>
           <select aria-label="Filter scans by creation source" className="h-10 w-[11rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeCreatedVia ?? ""} name="createdVia"><option value="">Any creation source</option>{Object.entries(SCAN_CREATION_SOURCES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <input name="snapshot" type="hidden" value={activeSnapshotPeriod} />
           <input name="traffic" type="hidden" value={trafficScope} />
           <input aria-label="Filter by domain, scan ID, email, requester, IP, or source; use field not-equal syntax to exclude" className="h-10 min-w-[28rem] flex-[1_1_32rem] rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery} name="q" placeholder="Domain, scan_id, email, requester, IP · source:homepage-anonymous · ip!=66.*" />
           <select aria-label="Filter scans by status" className="h-10 w-[7.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeStatus} name="status">{statuses.map((status) => <option key={status} value={status}>{status === "any" ? "Any status" : formatFilterLabel(status)}</option>)}</select>
@@ -414,7 +413,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           <select aria-label="Filter scans by language" className="h-10 w-[7rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeLanguage} name="language"><option value="">Any language</option>{filterOptions.languages.map((language) => <option key={language} value={language}>{language}</option>)}</select>
           <select aria-label="Filter scans by industry" className="h-10 w-[10.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeIndustry} name="industry"><option value="">Any industry</option>{filterOptions.industries.map((industry) => <option key={industry} value={industry}>{industry}</option>)}</select>
           <select aria-label="Filter scans by origin" className="h-10 w-[7.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeScanFrom} name="scanFrom"><option value="any">Any origin</option>{SCAN_FROM_VALUES.map((scanFrom) => <option key={scanFrom} value={scanFrom}>{formatScanFromLabel(scanFrom)}</option>)}</select>
-          <select aria-label="Filter scans by time span" className="h-10 w-[8.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeTimeSpan} name="timeSpan">{timeSpans.map((timeSpan) => <option key={timeSpan} value={timeSpan}>{timeSpan === "all" ? "All time" : timeSpan === "4h" ? "Past 4 hours" : timeSpan === "12h" ? "Past 12 hours" : timeSpan === "24h" ? "Past 24 hours" : timeSpan === "7d" ? "Past 7 days" : "Past 31 days"}</option>)}</select>
+          <select aria-label="Filter scans by time span" className="h-10 w-[8.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeTimeSpan} name="timeSpan">{timeSpans.map((timeSpan) => <option key={timeSpan} value={timeSpan}>{adminScanActivityPeriodLabel(timeSpan)}</option>)}</select>
         </AdminScansFilterForm>
         <PaginationControls
           basePath="/app/admin/scans"
@@ -424,7 +423,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           pageSize={pageSize}
           totalCount={totalCount}
           visibleCount={scans.length}
-          searchParams={{ createdVia: activeCreatedVia ?? "", q: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, snapshot: activeSnapshotPeriod, traffic: trafficScope }}
+          searchParams={{ createdVia: activeCreatedVia ?? "", q: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, traffic: trafficScope }}
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
@@ -441,7 +440,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
               <tr>
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" },
-                  { label: "Requester IP" }, { label: "Requested" }, { label: "Page" }, { label: "# Pages", title: "Pages scanned; full-site counts include completed and partial captures" }, { label: "Created via" }, { label: "Client / channel" }, { label: "Tranco" },
+                  { label: "Requester IP" }, { label: "Activity", title: "Same timestamp used by the chart, filters and latest matching activity. Original request time is in the tooltip." }, { label: "Page" }, { label: "# Pages", title: "Pages scanned; full-site counts include completed and partial captures" }, { label: "Created via" }, { label: "Client / channel" }, { label: "Tranco" },
                   { label: "Score" }, { label: "Top" }, { label: "GPC#", title: "Distinct canonical entities qualifying for a GPC deduction" }, { label: "Rej#", title: "Distinct canonical entities qualifying for a post-Reject deduction, deduplicated across cookies and services" }, { label: "GPP#", title: "Distinct canonical entities with verified GPP propagation inconsistencies qualifying for the applied deduction" }, { label: "Privacy / CMP" },
                   { label: "A/R/O" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" }, { label: "# HL" }, { label: "# Forms" }, { label: "CMS" }, { label: "Size" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Access" }, { label: "Industry" },
                   { label: "Scan ID" }, { label: "Scanner egress" },
@@ -466,7 +465,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                 const scanFromMarker = getScanFromMarkerInput(scan.scanFromValue);
                 const matrix = scan.evidenceMatrix;
                 const cmpVendorName = scan.noGoFlag ? null : scan.cmpVendorName?.trim() || matrix?.privacyConsent.cmpVendorName?.trim() || null;
-                const requestedDateTime = formatRequestedDateTime(scan.requestedAt ?? scan.createdAt);
+                const requestedDateTime = formatRequestedDateTime(scan.activityAt);
                 const accessLabel = getAccessLabel(scan);
                 return (
                   <tr key={scan.activityId} className="group h-[52px] hover:bg-slate-50/70">
@@ -478,7 +477,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                       </details> : null}
                     </td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={scan.requesterName ?? provenance.label}>{scan.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${requesterIpLabel(scan)} · ${scan.requesterIpSource.replaceAll("_", " ")}`}>{requesterIpLabel(scan)}</p></td>
-                    <td className="px-2.5 py-1.5 text-[10px] leading-4 text-slate-600" title={formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}><p className="truncate">{requestedDateTime.date}</p><p className="truncate text-slate-500">{requestedDateTime.time}</p></td>
+                    <td className="px-2.5 py-1.5 text-[10px] leading-4 text-slate-600" title={`Activity: ${formatAdminDateTime(scan.activityAt)} · Requested: ${formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}`}><p className="truncate">{requestedDateTime.date}</p><p className="truncate text-slate-500">{requestedDateTime.time}</p></td>
                     <td className="px-2.5 py-1.5">
                       <div className="flex min-w-0 items-center gap-1.5">
                         <p className="min-w-0 flex-1 line-clamp-2 break-all font-semibold leading-4 text-slate-900" title={scan.pageUrl ?? "Page URL unavailable"}>{scan.pageUrl ?? "Page URL unavailable"}</p>
@@ -542,7 +541,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Scan Admin</h2>
-          <p className="text-sm text-slate-500">Requester IP identifies who reached CertScore. Client names are recorded labels, not verified identities. Scanner egress identifies the outbound runtime that reached the target site.</p>
+          <p className="text-sm text-slate-500">Requester IP identifies who reached CertScore.ai. Client names are recorded labels, not verified identities. Scanner egress identifies the outbound runtime that reached the target site.</p>
         </div>
         <AdminTrafficFilters basePath="/app/admin/scans" scope={trafficScope} searchParams={resolvedSearchParams} />
       </div>

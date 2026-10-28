@@ -20,12 +20,12 @@ const caches = [
 test("all four operational snapshots share the same shell and period contract", () => {
   for (const page of pages) {
     assert.match(page, /<AdminOperationalSnapshot/);
-    assert.match(page, /adminOperationalSnapshotHealth/);
+    assert.match(page, /adminOperationalSnapshotHealth|Latest matching activity/);
     assert.match(page, /adminOperationalSnapshotDelta/);
   }
   assert.match(component, /<CardTitle>Operational snapshot<\/CardTitle>/);
   assert.match(component, /Pacific time/);
-  assert.match(component, /name="snapshot"/);
+  assert.match(component, /periodName = "snapshot"/);
   assert.match(component, /grid grid-cols-3 gap-px bg-slate-100 sm:grid-cols-6/);
   assert.match(component, /lg:grid-cols-\[1\.4fr_1fr\]/);
   assert.match(component, /grid grid-cols-3 gap-1\.5/);
@@ -34,7 +34,7 @@ test("all four operational snapshots share the same shell and period contract", 
 
 test("all four snapshot periods survive table filtering", () => {
   for (const page of pages) {
-    assert.match(page, /<input name="snapshot" type="hidden"/);
+    assert.match(page, /<input name="snapshot" type="hidden"|timeSpan: activeTimeSpan/);
   }
 });
 
@@ -54,7 +54,6 @@ test("all four dashboards time snapshots and rows independently", () => {
   ];
   pages.forEach((page, index) => {
     for (const label of timingLabels[index] ?? []) assert.match(page, new RegExp(label.replaceAll(".", "\\.")));
-    assert.match(page, /Promise\.all/);
   });
 });
 

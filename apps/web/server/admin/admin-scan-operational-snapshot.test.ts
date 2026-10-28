@@ -12,12 +12,12 @@ const actions = readFileSync("apps/web/server/admin/list-admin-scans.ts", "utf8"
 test("Admin Scans renders a bounded operational snapshot with scan-specific metrics", () => {
   assert.match(page, /<AdminOperationalSnapshot/);
   assert.match(component, /<CardTitle>Operational snapshot<\/CardTitle>/);
-  assert.match(page, /Physical scan runs and scan requests/);
+  assert.match(page, /Same filters as the table/);
   assert.match(contract, /\["1h", "24h", "7d", "30d", "1y"\]/);
-  assert.match(component, /name="snapshot"/);
+  assert.match(component, /name=\{periodName\}/);
   assert.match(page, /operationalSnapshot\.trend\.map/);
-  assert.match(page, /operationalSnapshot\.scanFromCounts\.map/);
-  for (const label of ["Runs", "Requests", "Completed", "Limited", "Failed", "Duration", "Completion", "Failures", "Reuse", "No-go", "Active"]) {
+  assert.match(page, /operationalSnapshot\.regions\.map/);
+  for (const label of ["Runs", "Request-only", "Completed", "Limited", "Failed", "Duration", "Completion", "Failures", "Reuse", "No-go", "Active"]) {
     assert.match(page, new RegExp(`label: "${label}"`));
   }
 });
@@ -37,16 +37,17 @@ test("Admin Scans snapshot uses one cached aggregation and honors traffic visibi
 });
 
 test("snapshot period and traffic filters survive table filtering and pagination", () => {
-  assert.match(page, /<input name="snapshot" type="hidden" value=\{activeSnapshotPeriod\}/);
-  assert.match(page, /snapshot: activeSnapshotPeriod/);
+  assert.match(page, /timeSpan: activeTimeSpan/);
+  assert.match(page, /adminScanActivityHref\(sharedParams, values\)/);
+  assert.doesNotMatch(page, /activeSnapshotPeriod/);
   assert.match(page, /excludeMacMiniScanBot/);
   assert.match(page, /includeCanary/);
 });
 
 test("Admin Scans keeps imported types out of the server action export surface", () => {
   assert.doesNotMatch(actions, /export type \{ AdminScanOperationalSnapshot/);
-  assert.match(page, /ADMIN_OPERATIONAL_SNAPSHOT_PERIODS/);
-  assert.match(page, /type AdminOperationalSnapshotPeriod/);
+  assert.match(page, /ADMIN_SCAN_ACTIVITY_PERIODS/);
+  assert.match(page, /resolveAdminScanActivityPeriod/);
 });
 
 test("Admin Scans does not append an inferred posture to outcome filter labels", () => {

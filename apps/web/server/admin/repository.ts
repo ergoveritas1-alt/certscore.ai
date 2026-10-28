@@ -1,5 +1,7 @@
 "use server";
 
+import { adminScanActivityWindow, adminScanActivityOperationalStatus, type AdminScanActivityPeriod } from "../../lib/admin/admin-scan-activity";
+import { adminScanActivitySnapshotSql, type AdminScanActivitySnapshotData } from "./admin-scan-activity-query";
 import { scanOriginalRequesterQaSql, scanOriginalRequesterMacMiniSql, scanOriginalRequestCanarySql } from "../../lib/admin/scan-traffic-classification-sql";
 import { loadScanTrafficClassification } from "./scan-traffic-classification";
 import { scanCanaryTargetSql } from "../../lib/admin/canary-scan-target";
@@ -195,6 +197,7 @@ export type AdminRuntimeArtifactRow = {
 };
 
 export type AdminScanActivityPageRef = {
+  operationalStatus?: { label: string; className: string };
   activity_at: string;
   activity_id: string;
   request_public_id: string | null;
@@ -216,14 +219,14 @@ export type AdminScanActivityFilters = {
   excludeMacMiniScanBot?: boolean;
   includeCanary?: boolean;
   query?: string | null;
-  status?: "any" | "no_go" | "rejected" | "failed" | "running" | "queued" | "limited" | "completed";
+  status?: "any" | "no_go" | "rejected" | "failed" | "running" | "queued" | "active" | "limited" | "completed";
   freshness?: "any" | "fresh" | "forced_fresh" | "reused";
   access?: "any" | "clear" | "blocked" | "captcha" | "robots_limited" | "limited" | "unknown";
   outcome?: string | null;
   language?: string | null;
   industry?: string | null;
   scanFrom?: string | null;
-  timeSpan?: "all" | "4h" | "12h" | "24h" | "7d" | "31d";
+  timeSpan?: AdminScanActivityPeriod;
 };
 
 export type AdminScanFilterOptions = {
@@ -466,7 +469,11 @@ function adminScanActivityBaseSql() {
       coalesce(sr.fulfilled_by_scan_id, sr.scan_id) as scan_id,
       sr.public_id as request_public_id,
       sr.requested_at as activity_at,
-      sr.status,
+      case
+        when sr.status in ('failed', 'expired', 'rate_limited', 'no_go') then sr.status
+        when s.status = 'failed' then 'failed'
+        when s.status in ('completed', 'completed_limited') and sr.status in ('queued', 'running', 'finalizing') then s.status
+        else sr.status end as status,
       ${scanCreatedViaSql("s.id", "s.scan_config_json")} as created_via_filter,
       case
         when coalesce(nullif(sr.request_channel, ''), nullif(s.scan_config_json ->> 'source', '')) = 'api-full-scan'
@@ -598,8 +605,9 @@ function adminScanActivityBaseSql() {
          or ($2 = 'failed' and status = 'failed')
          or ($2 = 'running' and status = 'running')
          or ($2 = 'queued' and status = 'queued')
+         or ($2 = 'active' and status in ('queued', 'running', 'finalizing'))
          or ($2 = 'limited' and access_posture_class in ('degraded_but_useful', 'robots_limited'))
-         or ($2 = 'completed' and row_kind = 'scan' and status = 'completed' and not no_go_flag
+         or ($2 = 'completed' and row_kind = 'scan' and status = 'completed' and no_go_flag is not true
              and coalesce(access_posture_class, '') not in ('degraded_but_useful', 'robots_limited'))
        )
        and ($3::text is null or freshness_filter = $3)
@@ -622,11 +630,7 @@ function adminScanActivityBaseSql() {
   )`;
 }
 
-export async function loadAdminScanActivityPageRefs(
-  limit: number,
-  offset: number,
-  filters: AdminScanActivityFilters = {}
-): Promise<{ rows: AdminScanActivityPageRef[]; totalCount: number }> {
+function adminScanActivityParams(limit: number, offset: number, filters: AdminScanActivityFilters, since: string | null) {
   const parsedSearch = parseAdminActivitySearch(filters.query, { source: true });
   const queryText = parsedSearch.query;
   const exclusionArray = (values: string[]) => values.length > 0 ? values : null;
@@ -636,12 +640,9 @@ export async function loadAdminScanActivityPageRefs(
   const language = filters.language?.trim().slice(0, 80) || null;
   const industry = filters.industry?.trim().slice(0, 200) || null;
   const scanFrom = filters.scanFrom?.trim().slice(0, 80) || null;
-  const timeSpan = filters.timeSpan && filters.timeSpan !== "all" ? filters.timeSpan : null;
   const access = filters.access && filters.access !== "any" ? filters.access : null;
   const outcome = filters.outcome?.trim().slice(0, 120) || null;
-  const timeSpanHours = timeSpan === "4h" ? 4 : timeSpan === "12h" ? 12 : timeSpan === "24h" ? 24 : timeSpan === "7d" ? 24 * 7 : timeSpan === "31d" ? 24 * 31 : null;
-  const since = timeSpanHours === null ? null : new Date(Date.now() - timeSpanHours * 60 * 60 * 1000).toISOString();
-  const params = [
+  return [
     queryText, status, freshness, language, industry, scanFrom, since, limit, offset, access, outcome,
     SCAN_NO_GO_SNAPSHOT_OUTCOMES, exclusionArray(parsedSearch.exclusions.requester), source,
     exclusionArray(parsedSearch.exclusions.domain), exclusionArray(parsedSearch.exclusions.scanId),
@@ -650,6 +651,39 @@ export async function loadAdminScanActivityPageRefs(
     filters.excludeMacMiniScanBot !== false, MAC_MINI_SCAN_BOT_API_KEY_NAMES,
     INTERNAL_QA_EMAILS, INTERNAL_QA_REQUESTER_IPS, INTERNAL_QA_MCP_CLIENT_NAMES, filters.createdVia ?? null
   ];
+}
+
+export async function loadAdminScanActivitySnapshot(limit: number, offset: number, filters: AdminScanActivityFilters) {
+  const period = filters.timeSpan ?? "24h";
+  const window = adminScanActivityWindow(period);
+  const result = await query<AdminScanActivitySnapshotData>(
+    adminScanActivitySnapshotSql(adminScanActivityBaseSql()),
+    [...adminScanActivityParams(limit, offset, filters, window.previousStart), window.end, window.start],
+    { readOnly: true }
+  );
+  const data = result.rows[0];
+  if (!data) throw new Error("Admin activity snapshot unavailable");
+  const rows = data.rows.map((row) => ({ ...row, operationalStatus: adminScanActivityOperationalStatus(row) }));
+  return { ...data, rows, totalCount: data.metrics.items, refreshedAt: new Date().toISOString(), window, period };
+}
+
+export async function loadAdminScanActivityPageRefs(
+  limit: number,
+  offset: number,
+  filters: AdminScanActivityFilters = {}
+): Promise<{ rows: AdminScanActivityPageRef[]; totalCount: number }> {
+  const parsedSearch = parseAdminActivitySearch(filters.query, { source: true });
+  const queryText = parsedSearch.query;
+  const source = parsedSearch.source;
+  const status = filters.status && filters.status !== "any" ? filters.status : null;
+  const freshness = filters.freshness && filters.freshness !== "any" ? filters.freshness : null;
+  const language = filters.language?.trim().slice(0, 80) || null;
+  const industry = filters.industry?.trim().slice(0, 200) || null;
+  const scanFrom = filters.scanFrom?.trim().slice(0, 80) || null;
+  const access = filters.access && filters.access !== "any" ? filters.access : null;
+  const outcome = filters.outcome?.trim().slice(0, 120) || null;
+  const since = adminScanActivityWindow(filters.timeSpan ?? "all").start;
+  const params = adminScanActivityParams(limit, offset, filters, since);
 
   const canUseBoundedActivityPath = Boolean(
     !filters.createdVia &&
