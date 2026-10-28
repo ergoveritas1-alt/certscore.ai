@@ -505,8 +505,8 @@
     },
     "https://ikea.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T04:05:25.409Z",
-      "lastContactAt": "2026-10-28T04:05:25.409Z",
+      "cooldownUntil": "2026-11-25T04:10:13.510Z",
+      "lastContactAt": "2026-10-28T04:10:13.510Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1878,7 +1878,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-28T04:06:00.539Z",
+  "updatedAt": "2026-10-28T04:12:12.671Z",
   "contactOnlyUrls": [
     "https://abc.xyz/",
     "https://acuitybrands.com/",
