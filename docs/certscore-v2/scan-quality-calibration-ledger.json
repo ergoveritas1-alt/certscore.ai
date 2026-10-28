@@ -405,8 +405,8 @@
     },
     "https://geico.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T05:08:42.272Z",
-      "lastContactAt": "2026-10-28T05:08:42.272Z",
+      "cooldownUntil": "2026-11-25T05:33:55.463Z",
+      "lastContactAt": "2026-10-28T05:33:55.463Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1878,7 +1878,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-28T05:25:01.127Z",
+  "updatedAt": "2026-10-28T05:38:14.135Z",
   "contactOnlyUrls": [
     "https://abc.xyz/",
     "https://acuitybrands.com/",
