@@ -62,6 +62,7 @@ test("page uses one authorized cached cohort and refresh invalidates chart and t
   assert.match(actions, /revalidateTag\(ADMIN_SCAN_ACTIVITY_CACHE_TAG\)/);
   assert.match(actions, /revalidate: 30, tags: \[ADMIN_SCAN_ACTIVITY_CACHE_TAG\]/);
   assert.match(actions, /const page = await enrichAdminScanActivityPage\(snapshot\);\s+return \{ \.\.\.page, snapshot \}/);
+  assert.match(actions, /status: row\.status \?\? item\.status/, "active polling must use the captured state when enrichment sees a later completion");
   assert.match(page, /\(await scanPagePromise\)\.snapshot/);
   assert.doesNotMatch(page, /getAdminScanOperationalSnapshot|listAdminScansPage/);
   assert.match(page, /formatRequestedDateTime\(scan\.activityAt\)/);

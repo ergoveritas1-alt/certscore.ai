@@ -198,6 +198,7 @@ export type AdminRuntimeArtifactRow = {
 
 export type AdminScanActivityPageRef = {
   operationalStatus?: { label: string; className: string };
+  status?: string;
   activity_at: string;
   activity_id: string;
   request_public_id: string | null;

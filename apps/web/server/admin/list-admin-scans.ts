@@ -621,7 +621,7 @@ async function enrichAdminScanActivityPage(page: { rows: AdminScanActivityPageRe
     const item = row.row_kind === "scan"
       ? (row.scan_id ? scanItemMap.get(row.scan_id) : null)
       : (row.request_public_id ? requestItemMap.get(row.request_public_id) : null);
-    return item ? [{ ...item, activityAt: row.activity_at, operationalStatus: row.operationalStatus }] : [];
+    return item ? [{ ...item, status: row.status ?? item.status, activityAt: row.activity_at, operationalStatus: row.operationalStatus }] : [];
   });
   return { items, totalCount: page.totalCount };
 }
