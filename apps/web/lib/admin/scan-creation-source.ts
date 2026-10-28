@@ -68,9 +68,10 @@ export function scanCreatorSql(scanId: string) {
     order by creator.requested_at asc, creator.priority asc, creator.public_id asc limit 1`;
 }
 
-export function scanOriginalRequestsSql() {
+export function scanOriginalRequestsSql(scanIdsSql?: string) {
   return `select distinct on (creator.scan_id) creator.*
     from (${scanCreationRequestsSql()}) creator
+    ${scanIdsSql ? `where creator.scan_id in (${scanIdsSql})` : ""}
     order by creator.scan_id, creator.requested_at asc, creator.priority asc, creator.public_id asc`;
 }
 

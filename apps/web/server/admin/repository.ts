@@ -277,7 +277,7 @@ const SCAN_ACTIVITY_NO_GO_SQL = adminNoGoSql({
   outcomesParameter: "$12"
 });
 
-function adminScanActivityBaseSql(metadataOnly = false, cachedTraffic = false) {
+function adminScanActivityBaseSql(metadataOnly = false, boundedTraffic = false) {
   const sql = `with scan_activity as (
     select
       'scan'::text as row_kind,
@@ -366,13 +366,13 @@ function adminScanActivityBaseSql(metadataOnly = false, cachedTraffic = false) {
         else 'unknown'
       end as access_filter
       ,coalesce(nullif(trim(ss.stop_reason_code), ''), ss.scan_outcome) as outcome_filter
-      ,${cachedTraffic ? "coalesce(s.id = any($29::uuid[]), false)" : `(
+      ,${boundedTraffic ? "exists (select 1 from activity_canary_scan_ids qa where qa.scan_id = s.id)" : `(
         exists (select 1 from public.scan_pages csp where csp.scan_id = s.id and csp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
         or ${scanOriginalRequestCanarySql("s.id")}
         or ${scanOriginalRequesterQaSql("s.id", "$23", "$24", "$25")}
         or ${scanCanaryTargetSql("s.scan_config_json")}
       )`} as canary_filter
-      ,${cachedTraffic ? "coalesce(s.id = any($30::uuid[]), false)" : scanOriginalRequesterMacMiniSql("s.id", "$22")} as mac_mini_scan_bot_filter
+      ,${boundedTraffic ? "exists (select 1 from activity_classified bot where bot.scan_id = s.id and bot.macmini)" : scanOriginalRequesterMacMiniSql("s.id", "$22")} as mac_mini_scan_bot_filter
     from public.scans s
     left join public.domains d on d.id = s.domain_id
     left join public.industries ind on ind.id = d.industry_primary_id
@@ -522,7 +522,7 @@ function adminScanActivityBaseSql(metadataOnly = false, cachedTraffic = false) {
         exists (
           select 1 from public.integration_api_keys bot_key
           where bot_key.public_id = sr.requested_by ->> 'apiKeyId' and bot_key.name = any($22::text[])
-        ) or ${cachedTraffic ? "coalesce(coalesce(sr.fulfilled_by_scan_id, sr.scan_id) = any($30::uuid[]), false)" : scanOriginalRequesterMacMiniSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$22")}
+        ) or ${boundedTraffic ? "exists (select 1 from activity_classified bot where bot.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id) and bot.macmini)" : scanOriginalRequesterMacMiniSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$22")}
       ) as mac_mini_scan_bot_filter
     from public.scan_requests sr
     left join public.scans s on s.id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
@@ -656,12 +656,12 @@ function adminScanActivityParams(limit: number, offset: number, filters: AdminSc
   ];
 }
 
-export async function loadAdminScanActivitySnapshot(limit: number, offset: number, filters: AdminScanActivityFilters, trafficClassification: { qa: string[]; macmini: string[] }) {
+export async function loadAdminScanActivitySnapshot(limit: number, offset: number, filters: AdminScanActivityFilters) {
   const period = filters.timeSpan ?? "24h";
   const window = adminScanActivityWindow(period);
   const result = await query<AdminScanActivitySnapshotData>(
-    adminScanActivitySnapshotSql(adminScanActivityBaseSql(true, true)),
-    [...adminScanActivityParams(limit, offset, filters, window.previousStart), window.end, window.start, trafficClassification.qa, trafficClassification.macmini],
+    adminScanActivitySnapshotSql(adminScanActivityBaseSql(true, true), true),
+    [...adminScanActivityParams(limit, offset, filters, window.previousStart), window.end, window.start],
     { readOnly: true }
   );
   const data = result.rows[0];

@@ -1,3 +1,5 @@
+import { scanActivityTrafficClassificationCtes } from "../../lib/admin/scan-traffic-classification-sql";
+
 export type AdminScanActivitySnapshotData = {
   rows: Array<{ activity_at: string; activity_id: string; request_public_id: string | null; row_kind: "request" | "scan"; scan_id: string | null; status: string; no_go_flag: boolean | null; access_posture_class: string | null }>;
   metrics: { items: number; runs: number; requests: number; completed: number; failed: number; limited: number; no_go: number; active: number; reused: number; newest_at: string | null; p50: number | null; p95: number | null };
@@ -9,8 +11,22 @@ export type AdminScanActivitySnapshotData = {
 // One PostgreSQL statement supplies page IDs, totals, chart, comparisons and recency.
 // $1–$26 are the existing activity filters; $27 is the exclusive cutoff and $28
 // the inclusive current-period start. The base lower bound includes the prior period.
-export function adminScanActivitySnapshotSql(base: string) {
-  return `${base},
+export function adminScanActivitySnapshotSql(base: string, boundedTraffic = false) {
+  const candidates = `activity_candidates as materialized (
+    select s.id as scan_id from public.scans s
+      where ($7::timestamptz is null or coalesce(s.completed_at,s.started_at,s.created_at) >= $7::timestamptz)
+        and coalesce(s.completed_at,s.started_at,s.created_at) < $27::timestamptz
+        and ($6::text is null or coalesce(s.scan_config_json->>'scanFrom','default') = $6)
+    union select coalesce(sr.fulfilled_by_scan_id,sr.scan_id) from public.scan_requests sr
+      left join public.scans s on s.id = coalesce(sr.fulfilled_by_scan_id,sr.scan_id)
+      where sr.resolution_mode = 'reused_existing_scan'
+        and coalesce(sr.fulfilled_by_scan_id,sr.scan_id) is not null
+        and ($7::timestamptz is null or sr.requested_at >= $7::timestamptz)
+        and sr.requested_at < $27::timestamptz
+        and ($6::text is null or coalesce(s.scan_config_json->>'scanFrom',sr.request_context->>'scanFrom','default') = $6)
+  )`;
+  const scopedBase = boundedTraffic ? base.replace(/^with /, `with ${candidates}, ${scanActivityTrafficClassificationCtes("select scan_id from activity_candidates")}, `) : base;
+  return `${scopedBase},
   current_activity as materialized (
     select * from filtered_activity
     where activity_at < $27::timestamptz

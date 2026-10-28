@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createRequire } from "node:module";
+import { scanActivityTrafficClassificationCtes, SCAN_TRAFFIC_CLASSIFICATION_SQL } from "../../lib/admin/scan-traffic-classification-sql";
 import { adminScanActivitySnapshotSql, type AdminScanActivitySnapshotData } from "./admin-scan-activity-query";
 const require = createRequire(new URL("../../../../packages/db/package.json", import.meta.url));
 const { Client } = require("pg") as typeof import("pg");
@@ -66,7 +67,7 @@ test("page uses one authorized cached cohort and refresh invalidates chart and t
   assert.match(page, /\(await scanPagePromise\)\.snapshot/);
   assert.doesNotMatch(page, /getAdminScanOperationalSnapshot|listAdminScansPage/);
   assert.match(page, /formatRequestedDateTime\(scan\.activityAt\)/);
-  assert.match(repository, /adminScanActivitySnapshotSql\(adminScanActivityBaseSql\(true, true\)\)/);
+  assert.match(repository, /adminScanActivitySnapshotSql\(adminScanActivityBaseSql\(true, true\), true\)/);
   assert.match(repository, /and no_go_flag is not true/);
 });
 
@@ -83,4 +84,43 @@ test("basic scan rows skip report payloads and retain an explicit details mode",
   assert.match(page, /<AdminBasicScanTable scans=\{scans\}/);
   assert.match(page, /details: showReportDetails \? "1" : ""/);
   assert.match(page, /operationalSnapshot\.previous\.runs/);
+});
+
+test("bounded traffic proof preserves old original owners and ignores later internal reuse", { skip: !databaseUrl }, async () => {
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  const ids = [1,2,3,4,5].map(n => `00000000-0000-4000-8000-${String(n).padStart(12,"0")}`);
+  try {
+    await client.query("begin");
+    await client.query(`create temp table fixture_scans(id uuid, scan_config_json jsonb);
+      create temp table fixture_scan_pages(scan_id uuid,page_url text);
+      create temp table fixture_integration_api_keys(public_id text,name text,owner_user_id text,created_by text);
+      create temp table fixture_users(id text,email text);
+      create temp table fixture_better_auth_users(id text,email text);
+      create temp table fixture_pulse_requests(scan_id uuid,public_id text,requested_at timestamptz,requested_by jsonb,request_context jsonb,requested_url text,request_channel text,resolution_mode text);
+      create temp table fixture_scan_requests(fulfilled_by_scan_id uuid,scan_id uuid,public_id text,requested_at timestamptz,requested_by jsonb,request_context jsonb,requested_url text,request_channel text,resolution_mode text)`);
+    for (let i=0;i<ids.length;i++) await client.query("insert into fixture_scans values ($1,$2)", [ids[i], i===3 ? {normalizedUrl:"https://owned.invalid/.well-known/certscore-canary/test"} : {}]);
+    await client.query("insert into fixture_integration_api_keys values ('bot-key','macmini',null,null)");
+    await client.query("insert into fixture_users values ('qa-user','qa@local.test')");
+    for(let i=0;i<ids.length;i++) await client.query("insert into fixture_scan_requests values (null,$1,$2,'2026-01-01Z',$3,'{}','https://example.invalid/','api-full-scan','queued_new_scan')", [ids[i],`origin-${i}`,i===1 ? {apiKeyId:"bot-key"} : i===2 ? {userId:"qa-user"} : {}]);
+    await client.query("insert into fixture_scan_requests values (null,$1,'late-reuse','2026-10-28Z',$2,'{}','https://example.invalid/','mcp','reused_existing_scan')",[ids[0],{userId:"qa-user",apiKeyId:"bot-key"}]);
+    const params = Array(25).fill(null); params[21]=["macmini"]; params[22]=["qa@local.test"]; params[23]=[]; params[24]=[];
+    const prefix=`with types as (select ${Array.from({length:21},(_,i)=>`$${i+1}::text`).join(",")}), activity_candidates(scan_id) as (values ${ids.slice(0,4).map(id=>`('${id}'::uuid)`).join(",")}), `;
+    const sql=prefix+scanActivityTrafficClassificationCtes("select scan_id from activity_candidates")+` select
+      (select array_agg(scan_id::text order by scan_id) from activity_canary_scan_ids) qa,
+      (select array_agg(scan_id::text order by scan_id) from activity_classified where macmini) macmini`;
+    const bounded=(await client.query(sql.replaceAll("public.","fixture_"),params)).rows[0];
+    const global=(await client.query(SCAN_TRAFFIC_CLASSIFICATION_SQL.replaceAll("public.","fixture_"),params.slice(21))).rows[0];
+    assert.deepEqual(bounded.qa,[ids[2],ids[3]]);
+    assert.deepEqual(bounded.macmini,[ids[1]]);
+    assert.deepEqual([...global.qa].filter(id=>ids.slice(0,4).includes(id)).sort(),bounded.qa);
+    assert.deepEqual([...global.macmini].filter(id=>ids.slice(0,4).includes(id)).sort(),bounded.macmini);
+    assert.ok(!bounded.qa.includes(ids[0]),"a later internal result lookup cannot relabel the original external run");
+  } finally { await client.query("rollback"); await client.end(); }
+});
+
+test("refresh uses the server action RSC response once rather than requesting another render", () => {
+  const refresh=readFileSync("apps/web/app/app/admin/scans/admin-scans-auto-refresh.tsx","utf8");
+  assert.match(refresh,/await refreshAdminScanActivity\(\)/);
+  assert.doesNotMatch(refresh,/router\.refresh\(\)/);
 });

@@ -38,7 +38,6 @@ import {
   type AdminScanSnapshotRow,
   type AdminScanRequestRow as ScanRequestRow
 } from "./repository";
-import { loadScanTrafficClassification } from "./scan-traffic-classification";
 import { projectAdminNoGo, selectAdminActivityStatus, selectAdminScanOutcome, type AdminNoGoProjection } from "./admin-no-go";
 import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
 import { requirePlatformAdminContext } from "./platform-admin";
@@ -329,13 +328,11 @@ export async function listAdminScansPage(
 // fresh row statuses. Public entry points authorize before accessing this cache.
 const loadCachedAdminScanActivityPage = unstable_cache(
   async (limit: number, offset: number, filters: AdminScanActivityFilters, includeReportDetails: boolean) => {
-    const classification = filters.includeCanary === true && filters.excludeMacMiniScanBot === false
-      ? { qa: [], macmini: [] } : await loadScanTrafficClassification();
-    const snapshot = await loadAdminScanActivitySnapshot(limit, offset, filters, classification);
+    const snapshot = await loadAdminScanActivitySnapshot(limit, offset, filters);
     const page = await enrichAdminScanActivityPage(snapshot, includeReportDetails);
     return { ...page, snapshot };
   },
-  ["admin-scan-activity-page-v2"],
+  ["admin-scan-activity-page-v3"],
   { revalidate: 30, tags: [ADMIN_SCAN_ACTIVITY_CACHE_TAG] }
 );
 

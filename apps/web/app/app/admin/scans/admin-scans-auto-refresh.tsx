@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useTransition } from "react";
 import { refreshAdminScanActivity } from "../../../../server/admin/list-admin-scans";
 import type { AdminScanLiveTarget } from "../../../../server/admin/admin-scan-live-status";
@@ -10,11 +9,10 @@ type AdminScansAutoRefreshProps = {
 };
 
 export function AdminScansAutoRefresh({ targets }: AdminScansAutoRefreshProps) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const refresh = () => startTransition(async () => {
+    // The server action invalidates the tag and returns the refreshed RSC tree.
     await refreshAdminScanActivity();
-    router.refresh();
   });
   const hasActiveScans = targets.some((target) => ["queued", "running", "finalizing"].includes(target.status));
   const initialFingerprint = useMemo(
@@ -60,7 +58,6 @@ export function AdminScansAutoRefresh({ targets }: AdminScansAutoRefreshProps) {
         };
         if (result.fingerprint && result.fingerprint !== initialFingerprint) {
           await refreshAdminScanActivity();
-          if (!cancelled) router.refresh();
           return;
         }
         if (result.hasActiveScans !== false) {
@@ -82,7 +79,7 @@ export function AdminScansAutoRefresh({ targets }: AdminScansAutoRefreshProps) {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [hasActiveScans, initialFingerprint, router, targets]);
+  }, [hasActiveScans, initialFingerprint, targets]);
 
   return <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
     <button className="app-raised-button rounded-full px-3 py-1.5 font-semibold text-slate-700" disabled={isPending} onClick={refresh} type="button">{isPending ? "Refreshing…" : "Refresh chart and table"}</button>

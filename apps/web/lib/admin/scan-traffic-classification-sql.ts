@@ -49,3 +49,22 @@ export const SCAN_TRAFFIC_CLASSIFICATION_SQL = `with origins as materialized (
   ) select
     coalesce((select array_agg(scan_id::text) from canary_scan_ids), '{}') as qa,
     coalesce((select array_agg(scan_id::text) from classified where macmini), '{}') as macmini`;
+
+// Batch the same original-request proof for a bounded set of scan IDs. Never
+// constrain original request timestamps: a current reuse may point to an old run.
+export function scanActivityTrafficClassificationCtes(scanIdsSql: string) {
+  return `activity_origins as materialized (
+    ${scanOriginalRequestsSql(scanIdsSql)}
+  ), activity_classified as materialized (
+    select origin.scan_id, ${requesterQaSql("$23", "$24", "$25")} as qa,
+      origin_key.name = any($22::text[]) as macmini,
+      coalesce(origin.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/' as canary
+    from activity_origins origin ${requesterJoinsSql()}
+  ), activity_canary_scan_ids as materialized (
+    select s.id as scan_id from public.scans s
+      where s.id in (${scanIdsSql}) and ${scanCanaryTargetSql("s.scan_config_json")}
+    union select sp.scan_id from public.scan_pages sp
+      where sp.scan_id in (${scanIdsSql}) and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+    union select scan_id from activity_classified where qa or canary
+  )`;
+}
