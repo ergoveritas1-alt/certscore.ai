@@ -398,7 +398,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
         periodOptions={timeSpans.map((value) => ({ value, label: adminScanActivityPeriodLabel(value) }))}
         rates={snapshotRates}
         searchParams={sharedParams}
-        subtitle={`Same filters as the table · ${adminScanActivityPeriodLabel(activeTimeSpan)} · rates use all matching activity items`}
+        subtitle={adminScanActivityPeriodLabel(activeTimeSpan)}
         trend={operationalSnapshot.trend.map((bucket) => ({ key: String(bucket.n), label: formatAdminDateTime(bucket.bucket_start), value: bucket.items, title: `${formatAdminDateTime(bucket.bucket_start)} — ${formatAdminDateTime(bucket.bucket_end)}: ${bucket.items} items · ${bucket.runs} runs · ${bucket.requests} request-only · ${bucket.failed} failed · ${bucket.limited} limited`, className: bucket.failed > 0 ? "bg-rose-400 hover:bg-rose-500" : bucket.limited > 0 ? "bg-amber-400 hover:bg-amber-500" : undefined }))}
         trendTotal={`${snapshotNumber(m.items)} matching items · ${m.runs} runs + ${m.requests} request-only`}
       />;
@@ -421,7 +421,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
     });
 
     return <Card className="min-w-0 overflow-hidden border-slate-200 bg-white">
-      <CardHeader className="pb-2"><div className="flex flex-wrap items-end justify-between gap-2"><div><CardTitle>Scan activity</CardTitle><p className="mt-1 text-sm text-slate-500">Physical runs and request-only items matching the chart filters. Activity time: completion, start or creation for runs; request time for request-only items.</p></div><p className="text-sm text-slate-500">{snapshotNumber(totalCount)} matching items</p></div></CardHeader>
+      <CardHeader className="pb-2"><div className="flex flex-wrap items-end justify-between gap-2"><div><CardTitle>Scan activity</CardTitle></div><p className="text-sm text-slate-500">{snapshotNumber(totalCount)} matching items</p></div></CardHeader>
       <AdminTableRefreshBoundary basePath="/app/admin/scans" label="Refreshing scans">
       <CardContent className="min-w-0 space-y-3 pt-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -569,7 +569,6 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Scan Admin</h2>
-          <p className="text-sm text-slate-500">Requester IP identifies who reached CertScore.ai. Client names are recorded labels, not verified identities. Scanner egress identifies the outbound runtime that reached the target site.</p>
         </div>
         <AdminTrafficFilters basePath="/app/admin/scans" scope={trafficScope} searchParams={resolvedSearchParams} />
       </div>

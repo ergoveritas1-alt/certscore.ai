@@ -52,7 +52,7 @@ export function AdminTrafficFilters({
           <option key={value} value={value}>{adminTrafficScopeLabel(value)}</option>
         ))}
       </select>
-      {basePath === "/app/admin/scans" || basePath === "/app/admin/analytics" || basePath === "/app/admin/mcp" ? <span className="ml-2 max-w-72 text-xs text-slate-500">Unknown and historical activity remains visible. Visible activity is not necessarily verified external traffic.</span> : null}
+      {basePath === "/app/admin/analytics" || basePath === "/app/admin/mcp" ? <span className="ml-2 max-w-72 text-xs text-slate-500">Unknown and historical activity remains visible. Visible activity is not necessarily verified external traffic.</span> : null}
     </form>
   );
 }

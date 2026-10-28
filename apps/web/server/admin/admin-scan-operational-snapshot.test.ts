@@ -12,7 +12,7 @@ const actions = readFileSync("apps/web/server/admin/list-admin-scans.ts", "utf8"
 test("Admin Scans renders a bounded operational snapshot with scan-specific metrics", () => {
   assert.match(page, /<AdminOperationalSnapshot/);
   assert.match(component, /<CardTitle>Operational snapshot<\/CardTitle>/);
-  assert.match(page, /Same filters as the table/);
+  assert.match(page, /subtitle=\{adminScanActivityPeriodLabel\(activeTimeSpan\)\}/);
   assert.match(contract, /\["1h", "24h", "7d", "30d", "1y"\]/);
   assert.match(component, /name=\{periodName\}/);
   assert.match(page, /operationalSnapshot\.trend\.map/);
