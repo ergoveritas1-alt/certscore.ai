@@ -2081,8 +2081,8 @@
     },
     "https://zype.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T17:15:07.084Z",
-      "lastContactAt": "2026-10-28T17:15:07.084Z",
+      "cooldownUntil": "2026-11-25T17:20:19.735Z",
+      "lastContactAt": "2026-10-28T17:20:19.735Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2091,8 +2091,8 @@
     },
     "https://shopperapproved.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T16:56:06.319Z",
-      "lastContactAt": "2026-10-28T16:56:06.319Z",
+      "cooldownUntil": "2026-11-25T17:20:27.896Z",
+      "lastContactAt": "2026-10-28T17:20:27.896Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2284,7 +2284,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-28T17:17:57.933Z",
+  "updatedAt": "2026-10-28T17:22:46.807Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
