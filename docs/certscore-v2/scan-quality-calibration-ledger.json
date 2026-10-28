@@ -1891,8 +1891,8 @@
     },
     "https://akzonobel.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T20:23:52.490Z",
-      "lastContactAt": "2026-10-28T20:23:52.490Z",
+      "cooldownUntil": "2026-11-25T20:30:09.823Z",
+      "lastContactAt": "2026-10-28T20:30:09.823Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1931,8 +1931,8 @@
     },
     "https://vinted.ro/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T20:23:45.594Z",
-      "lastContactAt": "2026-10-28T20:23:45.594Z",
+      "cooldownUntil": "2026-11-25T20:30:04.284Z",
+      "lastContactAt": "2026-10-28T20:30:04.284Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2274,8 +2274,8 @@
     },
     "https://us.edu.pl/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T20:24:11.038Z",
-      "lastContactAt": "2026-10-28T20:24:11.038Z",
+      "cooldownUntil": "2026-11-25T20:30:25.614Z",
+      "lastContactAt": "2026-10-28T20:30:25.614Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2284,7 +2284,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-28T20:27:22.244Z",
+  "updatedAt": "2026-10-28T20:31:17.909Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
