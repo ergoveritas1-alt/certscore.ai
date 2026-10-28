@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidateTag, unstable_cache } from "next/cache";
 import type { AdminScanActivityPeriod } from "../../lib/admin/admin-scan-activity";
 import {
   type AccessPostureClass,
@@ -51,7 +50,6 @@ import {
 } from "../../lib/scans/admin-evidence-matrix";
 import {
   loadCachedAdminScanOperationalSnapshot,
-  ADMIN_SCAN_ACTIVITY_CACHE_TAG,
   loadCachedAdminScanFilterOptions,
   loadCachedAdminScanOverviewCounts
 } from "./admin-query-cache";
@@ -324,26 +322,13 @@ export async function listAdminScansPage(
   return enrichAdminScanActivityPage(page);
 }
 
-// Cache the hydrated rows with the chart, rather than mixing cached totals with
-// fresh row statuses. Public entry points authorize before accessing this cache.
-const loadCachedAdminScanActivityPage = unstable_cache(
-  async (limit: number, offset: number, filters: AdminScanActivityFilters, includeReportDetails: boolean) => {
-    const snapshot = await loadAdminScanActivitySnapshot(limit, offset, filters);
-    const page = await enrichAdminScanActivityPage(snapshot, includeReportDetails);
-    return { ...page, snapshot };
-  },
-  ["admin-scan-activity-page-v3"],
-  { revalidate: 30, tags: [ADMIN_SCAN_ACTIVITY_CACHE_TAG] }
-);
-
+// One live, bounded capture supplies both panels. The original table already
+// read on every request; the basic view avoids its expensive report projections.
 export async function getAdminScanActivityPage(limit: number, offset: number, filters: AdminScanActivityFilters, includeReportDetails = false) {
   await requirePlatformAdminContext();
-  return loadCachedAdminScanActivityPage(limit, offset, filters, includeReportDetails);
-}
-
-export async function refreshAdminScanActivity() {
-  await requirePlatformAdminContext();
-  revalidateTag(ADMIN_SCAN_ACTIVITY_CACHE_TAG);
+  const snapshot = await loadAdminScanActivitySnapshot(limit, offset, filters);
+  const page = await enrichAdminScanActivityPage(snapshot, includeReportDetails);
+  return { ...page, snapshot };
 }
 
 async function enrichAdminScanActivityPage(page: { rows: AdminScanActivityPageRef[]; totalCount: number }, includeReportDetails = true) {

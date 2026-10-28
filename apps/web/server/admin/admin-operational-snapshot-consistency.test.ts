@@ -38,8 +38,10 @@ test("all four snapshot periods survive table filtering", () => {
   }
 });
 
-test("all four operational snapshots cache expensive aggregation for fast refreshes", () => {
-  for (const source of caches) {
+test("other dashboards retain their aggregation caches; scans read one bounded live cohort", () => {
+  const scans = readFileSync("apps/web/server/admin/list-admin-scans.ts", "utf8");
+  assert.doesNotMatch(scans, /loadCachedAdminScanActivityPage/);
+  for (const source of caches.slice(1)) {
     assert.match(source, /unstable_cache/);
     assert.match(source, /revalidate: 30/);
   }

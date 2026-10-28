@@ -55,13 +55,13 @@ test("shared SQL reconciles chart, table, prior window and latest time at exact 
   } finally { await client.query("rollback"); await client.end(); }
 });
 
-test("page uses one authorized cached cohort and refresh invalidates chart and table together", () => {
+test("page uses one authorized live cohort and refresh updates chart and table together", () => {
   const actions = readFileSync("apps/web/server/admin/list-admin-scans.ts", "utf8");
   const page = readFileSync("apps/web/app/app/admin/scans/page.tsx", "utf8");
   const repository = readFileSync("apps/web/server/admin/repository.ts", "utf8");
-  assert.match(actions, /requirePlatformAdminContext\(\);\s+return loadCachedAdminScanActivityPage/);
-  assert.match(actions, /revalidateTag\(ADMIN_SCAN_ACTIVITY_CACHE_TAG\)/);
-  assert.match(actions, /revalidate: 30, tags: \[ADMIN_SCAN_ACTIVITY_CACHE_TAG\]/);
+  assert.match(actions, /requirePlatformAdminContext\(\);\s+const snapshot = await loadAdminScanActivitySnapshot/);
+  assert.doesNotMatch(actions, /revalidateTag|loadCachedAdminScanActivityPage/);
+  assert.doesNotMatch(actions, /unstable_cache/);
   assert.match(actions, /const page = await enrichAdminScanActivityPage\(snapshot, includeReportDetails\);\s+return \{ \.\.\.page, snapshot \}/);
   assert.match(actions, /status: row\.status \?\? item\.status/, "active polling must use the captured state when enrichment sees a later completion");
   assert.match(page, /\(await scanPagePromise\)\.snapshot/);
@@ -119,8 +119,8 @@ test("bounded traffic proof preserves old original owners and ignores later inte
   } finally { await client.query("rollback"); await client.end(); }
 });
 
-test("refresh uses the server action RSC response once rather than requesting another render", () => {
+test("manual and active-scan refresh share one live page request", () => {
   const refresh=readFileSync("apps/web/app/app/admin/scans/admin-scans-auto-refresh.tsx","utf8");
-  assert.match(refresh,/await refreshAdminScanActivity\(\)/);
-  assert.doesNotMatch(refresh,/router\.refresh\(\)/);
+  assert.equal(refresh.match(/router\.refresh\(\)/g)?.length,1);
+  assert.doesNotMatch(refresh,/refreshAdminScanActivity/);
 });
