@@ -2224,8 +2224,8 @@
     },
     "https://nfieldmr.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T20:43:15.208Z",
-      "lastContactAt": "2026-10-28T20:43:15.208Z",
+      "cooldownUntil": "2026-11-25T20:48:27.959Z",
+      "lastContactAt": "2026-10-28T20:48:27.959Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2274,8 +2274,8 @@
     },
     "https://us.edu.pl/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T20:42:57.730Z",
-      "lastContactAt": "2026-10-28T20:42:57.730Z",
+      "cooldownUntil": "2026-11-25T20:48:21.966Z",
+      "lastContactAt": "2026-10-28T20:48:21.966Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2284,7 +2284,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-28T20:44:56.942Z",
+  "updatedAt": "2026-10-28T20:49:32.589Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
