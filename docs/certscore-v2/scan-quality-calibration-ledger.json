@@ -2081,8 +2081,8 @@
     },
     "https://zype.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T16:56:18.752Z",
-      "lastContactAt": "2026-10-28T16:56:18.752Z",
+      "cooldownUntil": "2026-11-25T17:10:44.971Z",
+      "lastContactAt": "2026-10-28T17:10:44.971Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2101,8 +2101,8 @@
     },
     "https://feefo.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-25T16:57:03.543Z",
-      "lastContactAt": "2026-10-28T16:57:03.543Z",
+      "cooldownUntil": "2026-11-25T17:11:23.832Z",
+      "lastContactAt": "2026-10-28T17:11:23.832Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2284,7 +2284,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-28T17:08:35.858Z",
+  "updatedAt": "2026-10-28T17:12:03.108Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
