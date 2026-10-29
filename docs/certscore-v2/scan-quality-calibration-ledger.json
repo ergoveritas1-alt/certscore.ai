@@ -2348,10 +2348,150 @@
       "lastOutcome": "failed",
       "state": "cooldown",
       "url": "https://www.coca-colacompany.com/"
+    },
+    "https://iapp.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T16:59:14.762Z",
+      "lastContactAt": "2026-10-29T16:59:14.762Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://iapp.org/"
+    },
+    "https://www.billtrust.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T16:59:03.819Z",
+      "lastContactAt": "2026-10-29T16:59:03.819Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.billtrust.com/"
+    },
+    "https://www.olo.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:00:10.480Z",
+      "lastContactAt": "2026-10-29T17:00:10.480Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.olo.com/"
+    },
+    "https://www.brandwatch.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:00:11.865Z",
+      "lastContactAt": "2026-10-29T17:00:11.865Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.brandwatch.com/"
+    },
+    "https://www.hachettebookgroup.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:01:03.681Z",
+      "lastContactAt": "2026-10-29T17:01:03.681Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.hachettebookgroup.com/"
+    },
+    "https://www.sygic.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:01:07.436Z",
+      "lastContactAt": "2026-10-29T17:01:07.436Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.sygic.com/"
+    },
+    "https://roboflow.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:02:01.332Z",
+      "lastContactAt": "2026-10-29T17:02:01.332Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://roboflow.com/"
+    },
+    "https://iion.io/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:02:18.530Z",
+      "lastContactAt": "2026-10-29T17:02:18.530Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://iion.io/"
+    },
+    "https://acculynx.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:02:48.194Z",
+      "lastContactAt": "2026-10-29T17:02:48.194Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://acculynx.com/"
+    },
+    "https://www.e2open.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:03:29.384Z",
+      "lastContactAt": "2026-10-29T17:03:29.384Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.e2open.com/"
+    },
+    "https://worldathletics.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:03:34.942Z",
+      "lastContactAt": "2026-10-29T17:03:34.942Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://worldathletics.org/"
+    },
+    "https://www.pageuppeople.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:03:59.894Z",
+      "lastContactAt": "2026-10-29T17:03:59.894Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.pageuppeople.com/"
+    },
+    "https://www.lincoln.ac.uk/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:04:43.043Z",
+      "lastContactAt": "2026-10-29T17:04:43.043Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.lincoln.ac.uk/"
+    },
+    "https://journeyapps.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:05:08.184Z",
+      "lastContactAt": "2026-10-29T17:05:08.184Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://journeyapps.com/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-29T16:45:20.801Z",
+  "updatedAt": "2026-10-29T17:05:08.485Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -2463,6 +2603,20 @@
     "https://zooplus.de/",
     "https://zype.com/",
     "https://www.northwesternmutual.com/",
-    "https://www.coca-colacompany.com/"
+    "https://www.coca-colacompany.com/",
+    "https://iapp.org/",
+    "https://www.billtrust.com/",
+    "https://www.olo.com/",
+    "https://www.brandwatch.com/",
+    "https://www.hachettebookgroup.com/",
+    "https://www.sygic.com/",
+    "https://roboflow.com/",
+    "https://iion.io/",
+    "https://acculynx.com/",
+    "https://www.e2open.com/",
+    "https://worldathletics.org/",
+    "https://www.pageuppeople.com/",
+    "https://www.lincoln.ac.uk/",
+    "https://journeyapps.com/"
   ]
 }
