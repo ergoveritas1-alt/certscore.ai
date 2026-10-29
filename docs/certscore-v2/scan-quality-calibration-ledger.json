@@ -2328,10 +2328,30 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://us.edu.pl/"
+    },
+    "https://www.northwesternmutual.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T16:45:01.830Z",
+      "lastContactAt": "2026-10-29T16:45:01.830Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "failed",
+      "state": "cooldown",
+      "url": "https://www.northwesternmutual.com/"
+    },
+    "https://www.coca-colacompany.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T16:45:18.713Z",
+      "lastContactAt": "2026-10-29T16:45:18.713Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "failed",
+      "state": "cooldown",
+      "url": "https://www.coca-colacompany.com/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-28T20:49:32.589Z",
+  "updatedAt": "2026-10-29T16:45:20.801Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -2441,6 +2461,8 @@
     "https://you.com/",
     "https://yy.com",
     "https://zooplus.de/",
-    "https://zype.com/"
+    "https://zype.com/",
+    "https://www.northwesternmutual.com/",
+    "https://www.coca-colacompany.com/"
   ]
 }
