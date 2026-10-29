@@ -2633,10 +2633,70 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://bluesoft.com.br/"
+    },
+    "https://myrealpage.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T19:12:06.658Z",
+      "lastContactAt": "2026-10-29T19:12:06.658Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://myrealpage.com/"
+    },
+    "https://onebit.cz/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T19:13:18.695Z",
+      "lastContactAt": "2026-10-29T19:13:18.695Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://onebit.cz/"
+    },
+    "https://www.d-id.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T19:14:08.234Z",
+      "lastContactAt": "2026-10-29T19:14:08.234Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.d-id.com/"
+    },
+    "https://www.cbs.dk/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T19:14:37.682Z",
+      "lastContactAt": "2026-10-29T19:14:37.682Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.cbs.dk/"
+    },
+    "https://wponetap.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T19:15:50.381Z",
+      "lastContactAt": "2026-10-29T19:15:50.381Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://wponetap.com/"
+    },
+    "https://www.recordedfuture.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T19:16:59.617Z",
+      "lastContactAt": "2026-10-29T19:16:59.617Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.recordedfuture.com/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-29T18:21:47.359Z",
+  "updatedAt": "2026-10-29T19:17:00.258Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -2776,6 +2836,12 @@
     "https://golf.com/",
     "https://www.itnews.com.au/",
     "https://www.hotspotshield.com/",
-    "https://bluesoft.com.br/"
+    "https://bluesoft.com.br/",
+    "https://myrealpage.com/",
+    "https://onebit.cz/",
+    "https://www.d-id.com/",
+    "https://www.cbs.dk/",
+    "https://wponetap.com/",
+    "https://www.recordedfuture.com/"
   ]
 }
