@@ -2570,10 +2570,73 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://fidoalliance.org/"
+    },
+    "https://skybet.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-26T18:17:18.008Z",
+      "lastContactAt": "2026-10-29T18:17:18.008Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "main_document_restricted_status",
+        "failed_or_unreachable_visit"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://skybet.com/"
+    },
+    "https://www.telefonica.es/es/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T18:17:45.420Z",
+      "lastContactAt": "2026-10-29T18:17:45.420Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.telefonica.es/es/"
+    },
+    "https://golf.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T18:19:16.647Z",
+      "lastContactAt": "2026-10-29T18:19:16.647Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://golf.com/"
+    },
+    "https://www.itnews.com.au/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T18:20:24.484Z",
+      "lastContactAt": "2026-10-29T18:20:24.484Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.itnews.com.au/"
+    },
+    "https://www.hotspotshield.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T18:21:32.585Z",
+      "lastContactAt": "2026-10-29T18:21:32.585Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.hotspotshield.com/"
+    },
+    "https://bluesoft.com.br/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T18:21:47.024Z",
+      "lastContactAt": "2026-10-29T18:21:47.024Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://bluesoft.com.br/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-29T17:22:07.728Z",
+  "updatedAt": "2026-10-29T18:21:47.359Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -2707,6 +2770,12 @@
     "https://www.orangelogic.com/",
     "https://www.computer.org/",
     "https://www.nationalgallery.org.uk/",
-    "https://fidoalliance.org/"
+    "https://fidoalliance.org/",
+    "https://skybet.com/",
+    "https://www.telefonica.es/es/",
+    "https://golf.com/",
+    "https://www.itnews.com.au/",
+    "https://www.hotspotshield.com/",
+    "https://bluesoft.com.br/"
   ]
 }
