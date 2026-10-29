@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { AdminDocumentGetForm } from "./admin-document-get-form";
 import {
   ADMIN_OPERATIONAL_METRIC_DEFINITIONS,
   ADMIN_OPERATIONAL_SNAPSHOT_PERIODS,
@@ -88,27 +89,29 @@ export function AdminOperationalSnapshot({
 }) {
   const maxTrend = Math.max(1, ...trend.map((bucket) => bucket.value));
   const healthClass = health.status === "current" ? "text-emerald-700" : health.status === "delayed" ? "text-amber-700" : "text-slate-400";
+  const PeriodForm = basePath === "/app/admin/scans" ? AdminDocumentGetForm : "form";
 
   return (
-    <Card className="overflow-hidden border-slate-200 bg-white">
+    <Card className="overflow-hidden border-slate-200 bg-white [&:has(form[aria-busy=true])_[data-snapshot-results]]:invisible">
       <CardHeader className="border-b border-slate-100 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <CardTitle>Operational snapshot</CardTitle>
-            <p className="mt-0.5 text-xs text-slate-500">{subtitle} · Pacific time · <span className={healthClass}>{health.label}</span></p>
-            {refreshedAt ? <p className="mt-1 text-xs text-slate-500">Data refreshed at {refreshedAt}</p> : null}
+            <p className="mt-0.5 text-xs text-slate-500" data-snapshot-results>{subtitle} · Pacific time · <span className={healthClass}>{health.label}</span></p>
+            {refreshedAt ? <p className="mt-1 text-xs text-slate-500" data-snapshot-results>Data refreshed at {refreshedAt}</p> : null}
           </div>
-          <form action={basePath} className="flex items-center gap-2" method="get">
+          <PeriodForm action={basePath} className="flex items-center gap-2" method="get">
             {Object.entries(searchParams).map(([key, value]) => key === "page" || key === "period" || key === "snapshot" || key === periodName || !value ? null : <input key={key} name={key} type="hidden" value={value} />)}
             <label className="sr-only" htmlFor={`${ariaLabel}-snapshot-period`}>Snapshot period</label>
             <select aria-label="Snapshot period" className="h-9 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700" defaultValue={period} id={`${ariaLabel}-snapshot-period`} name={periodName}>
               {(periodOptions ?? ADMIN_OPERATIONAL_SNAPSHOT_PERIODS.map((value) => ({ value, label: value === "1h" ? "Last hour" : value === "24h" ? "Last 24 hours" : value === "7d" ? "Last 7 days" : value === "30d" ? "Last 30 days" : "Last year" }))).map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
             </select>
             <button className="app-raised-button inline-flex h-9 items-center rounded-full px-3 text-sm font-semibold text-slate-700" type="submit">Apply</button>
-          </form>
+          </PeriodForm>
         </div>
       </CardHeader>
       <CardContent className="p-0">
+        <div data-snapshot-results>
         <div className="grid grid-cols-3 gap-px bg-slate-100 sm:grid-cols-6">
           {metrics.map((metric) => linkedContent(metric.label, metric.href, "min-w-0 bg-white px-3 py-2.5", <div title={metric.definition ? ADMIN_OPERATIONAL_METRIC_DEFINITIONS[metric.definition] : undefined}><p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">{metric.label}</p><div className="mt-0.5 flex min-w-0 items-baseline gap-1.5"><p className="truncate text-lg font-semibold text-slate-950">{metric.value}</p>{metric.comparison ? <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold ${anomalyClass(metric.anomaly)}`} title="Change from the previous matching period">{metric.comparison}</span> : null}</div><p className="truncate text-[10px] text-slate-400">{metric.detail}</p></div>))}
         </div>
@@ -125,6 +128,7 @@ export function AdminOperationalSnapshot({
         </div>
         <div className={`grid gap-px border-t border-slate-100 bg-slate-100 ${breakdownColumns}`}>
           {breakdown.map((item) => linkedContent(item.label, item.href, "flex items-center justify-between gap-3 bg-white px-3 py-2.5", <div className="contents"><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-900">{item.label}</p><p className="truncate text-[10px] text-slate-500">{item.detail}</p></div><p className="shrink-0 text-lg font-semibold text-slate-950">{item.value}</p></div>))}
+        </div>
         </div>
       </CardContent>
     </Card>

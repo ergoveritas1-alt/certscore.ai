@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useTransition } from "react";
+import { adminGetFormHref, useAdminDocumentNavigation } from "../../../../components/admin/admin-document-get-form";
 
 type AdminScansFilterFormProps = {
   basePath?: string;
@@ -14,21 +15,20 @@ type AdminScansFilterFormProps = {
 
 export function AdminScansFilterForm({ basePath = "/app/admin/scans", children, clearHref, hasFilters, submitFirst = false }: AdminScansFilterFormProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [isRoutePending, startTransition] = useTransition();
+  const documentNavigation = useAdminDocumentNavigation();
+  const useDocumentNavigation = basePath === "/app/admin/scans";
+  const isPending = useDocumentNavigation ? documentNavigation.isPending : isRoutePending;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const params = new URLSearchParams();
-
-    new FormData(event.currentTarget).forEach((value, key) => {
-      if (typeof value === "string" && value.length > 0) {
-        params.set(key, value);
-      }
-    });
-
-    const query = params.toString();
+    const href = adminGetFormHref(event.currentTarget, basePath);
+    if (useDocumentNavigation) {
+      documentNavigation.navigate(href, event.currentTarget);
+      return;
+    }
     startTransition(() => {
-      router.push(query ? `${basePath}?${query}` : basePath);
+      router.push(href);
     });
   }
 
