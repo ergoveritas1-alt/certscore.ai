@@ -36,6 +36,7 @@ import {
 import type { PulseResponse } from "@certscore/api-contracts";
 import { deriveChoicePathEvidenceDisposition } from "@certscore/contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { hasTerminalReportPublicationFailure, reportPublicationResultState, terminalReportPublicationError } from "../../server/scans/report-publication-read-state";
 import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
 import { projectScanReportNoGo } from "../scans/scan-report-disposition";
 import { derivePulseReportScore } from "../pulse/projection";
@@ -229,29 +230,11 @@ function normalizeScanStatus(value: string | null | undefined) {
 }
 
 export function apiV2CanonicalResultState(scanRecord: ScanDetailResponse): "finalizing" | "final" | "failed" {
+  if (hasTerminalReportPublicationFailure(scanRecord)) return "failed";
   if (projectScanReportNoGo(scanRecord)) {
     return "final";
   }
-  const scanStatus = normalizeScanStatus(scanRecord.scan.status);
-  if (scanStatus === "failed" || scanStatus === "expired") {
-    return "failed";
-  }
-  if (scanStatus !== "completed" && scanStatus !== "completed_limited") {
-    return "finalizing";
-  }
-  const projectionStatus = stringOrNull(scanRecord.snapshot?.report_projection_status);
-  if (projectionStatus === "failed") {
-    return "failed";
-  }
-  if (projectionStatus === "ready") {
-    return "final";
-  }
-  // Older retained scans predate explicit report-projection status but may
-  // already carry an immutable persisted score.
-  if (!projectionStatus && finiteScore(scanRecord.snapshot?.certscore_overall) !== null) {
-    return "final";
-  }
-  return "finalizing";
+  return reportPublicationResultState(scanRecord);
 }
 
 function statusProgressPercent(status: ReturnType<typeof normalizeScanStatus>) {
@@ -286,6 +269,7 @@ function latestScanHeartbeat(scanRecord: ScanDetailResponse) {
 }
 
 function terminalScanFailure(scanRecord: ScanDetailResponse, status: ReturnType<typeof normalizeScanStatus>) {
+  if (hasTerminalReportPublicationFailure(scanRecord)) return terminalReportPublicationError();
   if (status !== "failed" && status !== "expired" && status !== "rate_limited") {
     return undefined;
   }
@@ -1033,10 +1017,10 @@ export function buildApiV2ScanResource(
 ): ApiV2ScanResource {
   const scan = scanRecord.scan;
   const domain = scan.domainHostname ?? "unknown";
-  const score = derivePulseReportScore({ scanRecord });
   const scanTimeSeconds = scanTimeSecondsFromTimestamps(scan.startedAt, scan.completedAt);
-  const noGoProjection = projectScanReportNoGo(scanRecord);
   const canonicalResultState = apiV2CanonicalResultState(scanRecord);
+  const noGoProjection = canonicalResultState === "final" ? projectScanReportNoGo(scanRecord) : null;
+  const score = canonicalResultState === "final" && !noGoProjection ? derivePulseReportScore({ scanRecord }) : null;
   const scoreStatus = canonicalResultState === "final" ? "final" : "provisional";
   const formsSummary = canonicalResultState === "final" ? projectScanFormsSummary(scanRecord) : null;
   const scoreExplanation = canonicalResultState === "final" ? projectScanScoreExplanation(scanRecord, score) : null;
@@ -1075,8 +1059,8 @@ export function buildApiV2ScanResource(
     score: noGoProjection ? null : score,
     ...(postureScores ? { postureScores } : {}),
     scoreStatus,
-    scoreVersion,
-    scoreUpdatedAt,
+    scoreVersion: canonicalResultState === "final" ? scoreVersion : null,
+    scoreUpdatedAt: canonicalResultState === "final" ? scoreUpdatedAt : null,
     riskLevel: noGoProjection ? null : riskLevelFromScore(score),
     gpcResponse,
     accessibilityAudit: projectAccessibilityAuditSummary(scanRecord.runtimeArtifacts?.accessibilityAudit, scan.id),
@@ -1224,14 +1208,14 @@ export function buildApiV2ScanStatus(
   options: { canonicalScan?: ApiV2ScanResource; nowMs?: number } = {}
 ): ApiV2ScanJob {
   const scan = scanRecord.scan;
-  const noGoProjection = projectScanReportNoGo(scanRecord);
   const normalizedScanStatus = normalizeScanStatus(scan.status);
   const canonicalResultState = apiV2CanonicalResultState(scanRecord);
+  const noGoProjection = canonicalResultState === "final" ? projectScanReportNoGo(scanRecord) : null;
   const status = (noGoProjection || canonicalResultState === "final" && isAccessibilityAuditLimited(scanRecord.runtimeArtifacts?.accessibilityAudit, scan.id)) && scan.status === "completed"
     ? "completed_limited"
     : canonicalResultState === "failed"
       ? "failed"
-      : normalizedScanStatus === "completed" && canonicalResultState === "finalizing"
+      : (normalizedScanStatus === "completed" || normalizedScanStatus === "completed_limited") && canonicalResultState === "finalizing"
         ? "finalizing"
         : normalizedScanStatus;
   const failure = terminalScanFailure(scanRecord, status);
@@ -1284,18 +1268,18 @@ export function buildApiV2ScanStatus(
     startedAt: dateStringOrNull(scan.startedAt),
     completedAt: dateStringOrNull(scan.completedAt),
     scanTimeSeconds,
-    score: canonicalScan.score ?? null,
-    ...(canonicalScan.postureScores ? { postureScores: canonicalScan.postureScores } : {}),
-    scoreStatus: canonicalScan.scoreStatus,
-    scoreVersion: canonicalScan.scoreVersion ?? null,
-    scoreUpdatedAt: canonicalScan.scoreUpdatedAt ?? null,
-    riskLevel: canonicalScan.riskLevel ?? null,
+    score: canonicalResultState === "final" ? canonicalScan.score ?? null : null,
+    ...(canonicalResultState === "final" && canonicalScan.postureScores ? { postureScores: canonicalScan.postureScores } : {}),
+    scoreStatus: canonicalResultState === "final" ? canonicalScan.scoreStatus : "provisional",
+    scoreVersion: canonicalResultState === "final" ? canonicalScan.scoreVersion ?? null : null,
+    scoreUpdatedAt: canonicalResultState === "final" ? canonicalScan.scoreUpdatedAt ?? null : null,
+    riskLevel: canonicalResultState === "final" ? canonicalScan.riskLevel ?? null : null,
     gpcResponse: canonicalScan.gpcResponse ?? null,
     accessibilityAudit: canonicalScan.accessibilityAudit ?? null,
     postAcceptObservation: canonicalScan.postAcceptObservation ?? null,
     postRefusalObservation: canonicalScan.postRefusalObservation ?? null,
-    ...(canonicalScan.formsSummary ? { formsSummary: canonicalScan.formsSummary } : {}),
-    ...(canonicalScan.scoreExplanation ? { scoreExplanation: canonicalScan.scoreExplanation } : {}),
+    ...(canonicalResultState === "final" && canonicalScan.formsSummary ? { formsSummary: canonicalScan.formsSummary } : {}),
+    ...(canonicalResultState === "final" && canonicalScan.scoreExplanation ? { scoreExplanation: canonicalScan.scoreExplanation } : {}),
     coverage: canonicalScan.coverage ?? null,
     lastUpdatedAt: lastHeartbeatAt ?? undefined,
     phaseStartedAt,
@@ -1306,7 +1290,7 @@ export function buildApiV2ScanStatus(
     stalled,
     retryAfterSeconds,
     ...(failure ? { error: failure } : {}),
-    reportUrl,
+    reportUrl: canonicalResultState === "final" ? reportUrl : null,
     recommendedNextAction,
     links: {
       self: absoluteUrl(`/api/v2/scans/${scan.id}/status`),

@@ -42,7 +42,7 @@ const californiaDisclosureChoiceAssessmentV1Schema = z.object({
 export const californiaRuntimeLinkProofSchema=z.object({
   basis:z.literal("qualified_gpc_collection.v1"),
   inspectionSourceHash:hash,gpcSourceSha256:hash,gpcSessionSha256:hash,documentUrlSha256:hash,
-  qualifierVersion:z.literal("california-gpc-response.v10-property-bound"),
+  qualifierVersion:z.enum(["california-gpc-response.v10-property-bound","california-gpc-response.v11-index-auction","california-gpc-response.v12-auctions"]),
   requests:z.array(z.object({evidenceId:z.string().min(1).max(240),entityId:z.string().regex(/^ent_[a-f0-9]{12}$/)}).strict()).min(1).max(32),
 }).strict().superRefine((p,ctx)=>{
   if(new Set(p.requests.map(r=>r.evidenceId)).size!==p.requests.length)

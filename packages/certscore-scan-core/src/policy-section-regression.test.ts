@@ -272,3 +272,15 @@ test("every localized behavioral practice retains its original policy quote and 
     }
   }
 });
+
+
+test("purpose selection prefers a data-bound table over the retained customer-role paragraph", () => {
+  const roleOnly = "Our customer decides how that data is used, and our Data Processing Addendum governs how we handle it. If you subscribed to a company's status page, or you're on a customer's team, that company's privacy policy applies, and you should contact them first to exercise your rights.";
+  const purpose = "Data categories: Account and contact information. Purpose of the processing: We use your personal information to provide the service, process payments and send account notifications.";
+  const sections = [roleOnly, purpose].map((textExcerpt, index) => ({ sourceUrl, heading: index ? "Processing purposes" : "How we handle data",
+    textExcerpt, charStart: index * 400, charEnd: index * 400 + textExcerpt.length, quality: "strong" as const, extractionState: "complete" as const }));
+  const witness = retainedArticle13SectionEvidenceFromSections(sections, sourceUrl).find(row => row.coverageArea === "processing_purposes");
+  assert.equal(witness?.signalObserved, "observed");
+  assert.ok(witness?.selectedPolicySectionExcerpt.includes("process payments"));
+  assert.ok(!witness?.selectedPolicySectionExcerpt.includes("Our customer decides"));
+});

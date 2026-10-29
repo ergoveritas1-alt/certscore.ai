@@ -1,3 +1,4 @@
+import { hasTerminalReportPublicationFailure } from "./report-publication-read-state";
 import { createHash } from "node:crypto";
 import { withScanReportDisposition } from "../../lib/scans/scan-report-disposition";
 import type { ScanDetailResponse } from "./get-scan-by-id";
@@ -187,6 +188,8 @@ export function buildPersistedScanReportProjection(
     : null;
   const payload = {
     ...scanRecord,
+    // Request state belongs to the live read, never the immutable report bytes.
+    reportPublication: undefined,
     ...(options.canonicalReportProjection
       ? { canonicalReportProjection: options.canonicalReportProjection }
       : {}),
@@ -213,8 +216,9 @@ export function buildPersistedScanReportProjection(
 }
 
 export function readPersistedScanReportProjection(
-  scanRecord: Pick<ScanDetailResponse, "scan" | "snapshot">
+  scanRecord: Pick<ScanDetailResponse, "scan" | "snapshot"> & Partial<Pick<ScanDetailResponse, "reportPublication">>
 ): ScanDetailResponse | null {
+  if (hasTerminalReportPublicationFailure(scanRecord)) return null;
   if (!isReadableScanReportProjectionReady(scanRecord.snapshot) || !isRecord(scanRecord.snapshot)) {
     return null;
   }
@@ -246,5 +250,16 @@ export function readPersistedScanReportProjection(
   ) {
     return null;
   }
-  return withScanReportDisposition(payload as ScanDetailResponse);
+  return withScanReportDisposition({
+    ...(payload as ScanDetailResponse),
+    // Set only after the immutable payload passes byte, hash and identity checks.
+    reportPublication: { requestStatus: scanRecord.reportPublication?.requestStatus ?? null, snapshotPersisted: true, projectionVerified: true },
+    snapshot: {
+      ...(isRecord(payload.snapshot) ? payload.snapshot : {}),
+      report_projection_status: scanRecord.snapshot.report_projection_status,
+      report_projection_version: scanRecord.snapshot.report_projection_version,
+      report_projection_computed_at: scanRecord.snapshot.report_projection_computed_at,
+      report_projection_source_hash: scanRecord.snapshot.report_projection_source_hash,
+    },
+  } as ScanDetailResponse);
 }

@@ -82,11 +82,15 @@ export function qualifyGpcRequest(event:Pick<NetworkEvent,"eventId"|"requestId"|
   r.proof.urlSha256===gpcDocumentHash(event.requestUrl)&&r.proof.origin===url.origin&&r.proof.path===url.pathname&&r.proof.entity.entityId===expected?.entityId);
  const restriction=capture?.restrictions.find(r=>r.eventId===event.eventId&&r.documentToken===session.mainDocument?.documentToken&&r.urlSha256===gpcDocumentHash(event.requestUrl)&&r.timestampMs===event.timestampMs);
  const complete=row?.proof.proof?.headersStatus==="complete"&&["absent","complete"].includes(row.proof.proof.bodyStatus);
- const supplemental=row?{...structuredClone(row.proof.qualification),policyVersion:"ca_sale_sharing_qualification.v3" as const}:undefined;
+ const supplemental=row?{...structuredClone(row.proof.qualification),policyVersion:["bounded_ca_request_proof.v13","bounded_ca_request_proof.v14"].includes(row.proof.proof?.policyVersion??"")&&row.proof.qualification.basis==="magnite_exchange_bid_user_identifier"?"ca_sale_sharing_qualification.v5-magnite-auction" as const:row.proof.proof?.policyVersion==="bounded_ca_request_proof.v12"&&row.proof.qualification.basis==="index_exchange_bid_user_identifier"?"ca_sale_sharing_qualification.v4-index-auction" as const:"ca_sale_sharing_qualification.v3" as const}:undefined;
  if(supplemental?.gpp){
   supplemental.gpp=applyGppRequestCmpContext(supplemental.gpp,context??{});
   if(supplemental.gpp.cmpComparison==="same_time_conflicting"&&!supplemental.processingSignals.includes("privacy_signal_conflict"))supplemental.processingSignals.push("privacy_signal_conflict");
  }
- const qualified=complete&&supplemental&&isQualifyingSaleSharingRequest(supplemental)?supplemental:base;
- return {...qualified,processingSignals:[...new Set([...base.processingSignals,...qualified.processingSignals,...(restriction?.processingSignals??[]),...(supplemental?.gpp?.cmpComparison==="same_time_conflicting"?["privacy_signal_conflict" as const]:[])])]};
+ const qualified=complete&&supplemental&&(isQualifyingSaleSharingRequest(supplemental)||supplemental.basis==="magnite_exchange_bid_user_identifier"&&supplemental.policyVersion==="ca_sale_sharing_qualification.v5-magnite-auction"||supplemental.basis==="index_exchange_bid_user_identifier"&&supplemental.policyVersion==="ca_sale_sharing_qualification.v4-index-auction")?supplemental:base;
+ // Full, exact-request supplemental inspection may observe GPP only in the
+ // body. Keep that positive processing evidence even when the request role
+ // remains unresolved; role fallback must not relabel it as not_present.
+ const gpp=complete&&supplemental?.gpp&&supplemental.gpp.status!=="not_present"?supplemental.gpp:qualified.gpp;
+ return {...qualified,...(gpp?{gpp}:{}),processingSignals:[...new Set([...base.processingSignals,...qualified.processingSignals,...(complete?supplemental?.processingSignals??[]:[]),...(restriction?.processingSignals??[]),...(supplemental?.gpp?.cmpComparison==="same_time_conflicting"?["privacy_signal_conflict" as const]:[])])]};
 }

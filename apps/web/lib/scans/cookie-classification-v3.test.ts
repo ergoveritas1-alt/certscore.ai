@@ -83,3 +83,20 @@ test("conflicting retained providers cannot win by observation order or change p
     assert.equal(getGdprEprivacyRowDeduction(result.storage), 0);
   }
 });
+
+test("v8 unknown categories reach the canonical inventory while v7 bindings stay historical",()=>{
+ for(const [name,domain] of [["UID","scorecardresearch.com"],["MUID","bing.com"],["bcookie","linkedin.com"]]){
+  const input=observation(name!,domain!);const result=project([input]);const row=result.inventory.rows[0]!;
+  assert.equal(row.cookieClassification?.version,"certscore.cookie-purpose.v8");
+  assert.ok(row.essentialityReasonCodes?.includes(`cookie_purpose_unknown:${input.cookieClassification!.unknownReason}`));
+  assert.equal(row.nonEssential,false);
+ }
+ const old=observation("bcookie","linkedin.com");old.cookieClassification=resolveCanonicalCookieClassification("bcookie",{cookieDomain:"linkedin.com"},"certscore.cookie-purpose.v7");old.category=old.cookieClassification.category;old.essentiality=old.cookieClassification.essentiality;old.essentialityReasonCodes=["cookie_purpose_policy:certscore.cookie-purpose.v7"];
+ const row=project([old]).inventory.rows[0]!;assert.equal(row.cookieClassification?.version,"certscore.cookie-purpose.v7");assert.equal(row.category,"unknown");assert.ok(!row.essentialityReasonCodes?.some(code=>code.startsWith("cookie_purpose_unknown:")));
+ const mixed=project([old,observation("bcookie","linkedin.com")]).inventory.rows[0]!;assert.equal(mixed.cookieClassification,null);assert.equal(mixed.nonEssential,false);
+ const older={...old,cookieClassification:resolveCanonicalCookieClassification("bcookie",{cookieDomain:"linkedin.com"},"certscore.cookie-purpose.v6"),essentialityReasonCodes:["cookie_purpose_policy:certscore.cookie-purpose.v6"]};
+ const neutral=project([older]).inventory.rows[0]!;assert.equal(neutral.cookieClassification,null);assert.equal(neutral.cookiePurposePolicyVersion,"certscore.cookie-purpose.v7");
+ const fresh=observation("_cc_aud","crwdcntrl.net");assert.equal(project([fresh]).inventory.rows[0]?.nonEssential,true);
+ // A new marker cannot validate an old classification or vice versa.
+ assert.equal(project([{...old,essentialityReasonCodes:["cookie_purpose_policy:certscore.cookie-purpose.v8"]}]).inventory.rows[0]?.cookieClassification,null);
+});

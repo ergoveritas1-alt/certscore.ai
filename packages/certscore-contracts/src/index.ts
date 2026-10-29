@@ -1861,12 +1861,40 @@ export const policyCookieDisclosureObservationSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
+export const policyPdfSourceCoverageSchema = z.object({
+  contractVersion: z.literal("policy_pdf_source_coverage.v1"),
+  status: z.enum(["complete", "partial", "unknown"]),
+  totalPages: z.number().int().positive().max(1_000_000).nullable(),
+  extractedPages: z.number().int().nonnegative().max(12).nullable(),
+  pageLimit: z.literal(12),
+  characterLimit: z.literal(500_000),
+  characterLimitReached: z.boolean(),
+}).strict().superRefine((coverage, context) => {
+  if (coverage.status === "complete" && (coverage.totalPages === null || coverage.extractedPages !== coverage.totalPages || coverage.characterLimitReached)) {
+    context.addIssue({code:z.ZodIssueCode.custom,message:"Complete PDF source coverage requires all pages and no character truncation."});
+  }
+  if (coverage.totalPages !== null && coverage.extractedPages !== null && coverage.extractedPages > coverage.totalPages) {
+    context.addIssue({code:z.ZodIssueCode.custom,message:"Extracted PDF pages cannot exceed the source page count."});
+  }
+});
+export type PolicyPdfSourceCoverage = z.infer<typeof policyPdfSourceCoverageSchema>;
+
 export const policyDocumentTextCoverageSchema = z.object({
+  // Retention of the extracted string; source-document coverage is separate.
   status: z.enum(["complete", "truncated", "unavailable"]),
   sourceTextChars: z.number().int().nonnegative(),
   retainedTextChars: z.number().int().nonnegative(),
   limitationKeys: z.array(z.string().max(120)).max(12).default([]),
+  pdfSourceCoverage: policyPdfSourceCoverageSchema.optional(),
 });
+
+/** Preserve legacy retention contracts; new PDF limits must not imply absence. */
+export function hasCompletePolicySourceCoverage(coverage: z.infer<typeof policyDocumentTextCoverageSchema> | undefined): boolean {
+  if (coverage?.status !== "complete") return false;
+  if (coverage.pdfSourceCoverage === undefined) return true;
+  const parsed = policyPdfSourceCoverageSchema.safeParse(coverage.pdfSourceCoverage);
+  return parsed.success && parsed.data.status === "complete";
+}
 
 export const gdprTransparencyTopicCoverageDiagnosticSchema = z.object({
   contractVersion: z.enum(["gdpr_transparency_topic_coverage_diagnostic.v1", "gdpr_transparency_topic_coverage_diagnostic.v2"]),
@@ -3479,6 +3507,8 @@ const canonicalPolicyObservationSchema: z.ZodType<z.output<typeof policySurfaceO
 const canonicalDomSnapshotSchema: z.ZodType<z.output<typeof domSnapshotArtifactSchema>, z.ZodTypeDef, unknown> = domSnapshotArtifactSchema;
 const canonicalConsentUiObservationSchema: z.ZodType<z.output<typeof consentUiObservationSchema>, z.ZodTypeDef, z.input<typeof consentUiObservationSchema>> = consentUiObservationSchema;
 const canonicalPolicyInspectionSchema: z.ZodType<z.output<typeof policySurfaceInspectionOutcomeSchema>, z.ZodTypeDef, z.input<typeof policySurfaceInspectionOutcomeSchema>> = policySurfaceInspectionOutcomeSchema;
+const canonicalNetworkEventSchema: z.ZodType<NetworkEvent, z.ZodTypeDef, z.input<typeof networkEventSchema>> = networkEventSchema;
+const canonicalNetworkResponseEventSchema: z.ZodType<NetworkResponseEvent, z.ZodTypeDef, z.input<typeof networkResponseEventSchema>> = networkResponseEventSchema;
 const canonicalEvidenceBundleObjectSchema = z.object({
   accessibilityAudit: canonicalAccessibilityAuditSchema.optional(),
   runtimeMetadataSnapshots: z.array(canonicalDomSnapshotSchema).max(1).optional(),
@@ -3507,8 +3537,8 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   gpcImpactCapture: canonicalImpactCaptureSchema.optional(),
   gpcImpactSemanticObservation: canonicalImpactSemanticSchema.optional(),
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
-  networkEvents: z.array(networkEventSchema),
-  networkResponseEvents: z.array(networkResponseEventSchema).default([]),
+  networkEvents: z.array(canonicalNetworkEventSchema),
+  networkResponseEvents: z.array(canonicalNetworkResponseEventSchema).default([]),
   automatedAccessObservation: automatedAccessObservationSchema.optional(),
   siteResourceSizeSummary: siteResourceSizeSummarySchema.optional(),
   cookieEvents: z.array(cookieEventSchema),

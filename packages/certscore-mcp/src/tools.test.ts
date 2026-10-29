@@ -2302,3 +2302,29 @@ test("all customer MCP summary formatters omit deduction narration while retaini
     assert.deepEqual(bundle.scoreExplanation,scan.scoreExplanation);
   }
 });
+
+
+test("terminal publication failure removes stale preview, scores and polling instructions", () => {
+  const value = withMcpAgentGuidance({ status: "finalizing", scanId: "scan_publication_failure",
+    score: 79, postureScores: { gdprEprivacy: { score: 79 } }, scoreStatus: "final",
+    scoreVersion: "stale", scoreUpdatedAt: "2026-10-26T00:00:00Z", scoreExplanation: { score: 79 },
+    retryAfterSeconds: 5, preConsentPreview: { mustContinuePolling: true },
+    error: { code: "report_publication_failed", message: "The report could not be published.", retryable: false,
+      retryAfterSeconds: null, recommendedNextAction: "Stop polling this scan. Contact CertScore.ai support." } });
+  assert.equal(value.status, "failed");
+  assert.equal(value.score, null);
+  assert.equal(value.postureScores, undefined);
+  assert.equal(value.scoreExplanation, undefined);
+  assert.equal(value.scoreStatus, "provisional");
+  assert.equal(value.scoreVersion, null);
+  assert.equal(value.preConsentPreview, undefined);
+  assert.equal(value.retryAfterSeconds, null);
+  assert.equal(value.recommendedNextTool, null);
+  assert.equal(value.reportUrl, null);
+  assert.equal(value.error?.retryable, false);
+  assert.match(scanStatusText(value), /Stop polling this scan/i);
+});
+
+test("rate-limited MCP responses preserve the upstream retry delay", () => {
+  assert.equal(withMcpAgentGuidance({ status: "rate_limited", retryAfterSeconds: 60 }).retryAfterSeconds, 60);
+});

@@ -9,6 +9,7 @@ import test from "node:test";
 import { createRequire } from "node:module";
 import {
   apiV2ActiveScanRetryAfterSeconds,
+  apiV2CanonicalResultState,
   buildApiV2Error,
   buildApiV2ErrorFromPulse,
   buildApiV2DomainLatestScan,
@@ -976,6 +977,52 @@ test("buildApiV2ScanStatus keeps completed scanner work finalizing until the can
   assert.equal(status.links?.findings, undefined);
   assert.equal(resource.status, "finalizing");
   assert.equal(resource.scoreStatus, "provisional");
+  assert.equal(resource.score, null);
+  assert.equal(resource.postureScores, undefined);
+});
+
+test("modern unpublished numeric fallback never becomes a final API score", () => {
+  for (const status of ["completed", "completed_limited"]) {
+    const record = fixture({ status, scanConfigJson: { processor: "local-certscore-v2-dag-parallel-v1" } });
+    record.snapshot = { certscore_overall: 79 };
+    assert.equal(apiV2CanonicalResultState(record), "finalizing");
+    const resource = buildApiV2ScanResource(record);
+    assert.equal(resource.score, null);
+    assert.equal(resource.postureScores, undefined);
+    assert.equal(resource.scoreExplanation, undefined);
+    assert.equal(buildApiV2ScanStatus(record).status, "finalizing");
+  }
+});
+
+test("genuinely historical persisted scores retain legacy API compatibility", () => {
+  const record = fixture();
+  record.snapshot = { certscore_overall: 32, score_version: "overall-score.v1" };
+  record.reportPublication = { requestStatus: null, snapshotPersisted: true, projectionVerified: false };
+  assert.equal(apiV2CanonicalResultState(record), "final");
+  assert.equal(buildApiV2ScanStatus(record).status, "completed");
+  assert.equal(buildApiV2ScanResource(record).scoreStatus, "final");
+  assert.equal(record.snapshot.certscore_overall, 32);
+  record.reportPublication.snapshotPersisted = false;
+  assert.equal(apiV2CanonicalResultState(record), "finalizing");
+});
+
+test("terminal request blocks API resource and status even with a stale numeric candidate", () => {
+  const record = fixture();
+  record.reportPublication = { requestStatus: "terminal_failure", snapshotPersisted: false, projectionVerified: false };
+  const status = buildApiV2ScanStatus(record, { canonicalScan: buildApiV2ScanResource(fixture()) });
+  const resource = buildApiV2ScanResource(record);
+  assert.equal(resource.status, "failed");
+  assert.equal(resource.score, null);
+  assert.equal(resource.postureScores, undefined);
+  assert.equal(status.score, null);
+  assert.equal(status.scoreStatus, "provisional");
+  assert.equal(status.scoreExplanation, undefined);
+  assert.equal(status.formsSummary, undefined);
+  assert.equal(status.postureScores, undefined);
+  assert.equal(status.error?.code, "report_publication_failed");
+  assert.equal(status.error?.retryable, false);
+  assert.equal(status.retryAfterSeconds, null);
+  assert.equal(status.reportUrl, null);
 });
 
 test("buildApiV2ScanStatus fails closed when canonical report projection fails", () => {
@@ -1839,4 +1886,35 @@ test("Reject request overflow stays limited and score-neutral through persisted 
     hydrated.runtimeArtifacts?.postRefusalEvidenceProjection,
   );
   assert.equal(retainedProjection.captureCoverage?.requestsDroppedAfterAction, 1);
+});
+
+
+test("modern ready markers require verified persisted bytes", () => {
+  const record = fixture({ scanConfigJson: { processor: "local-certscore-v2-dag-parallel-v1" } });
+  record.snapshot = { certscore_overall: 79, report_projection_status: "ready" };
+  assert.equal(apiV2CanonicalResultState(record), "finalizing");
+  record.reportPublication = { requestStatus: "completed", snapshotPersisted: true, projectionVerified: false };
+  assert.equal(buildApiV2ScanResource(record).score, null);
+  record.reportPublication.projectionVerified = true;
+  assert.equal(apiV2CanonicalResultState(record), "final");
+});
+
+
+test("durable publication failure wins over every valid no-go presentation and stale ready score", () => {
+  for (const reasonCode of SCAN_NO_GO_REASON_CODES) {
+    const presentation = SCAN_NO_GO_REASON_PRESENTATIONS[reasonCode];
+    const record = fixture();
+    record.runtimeArtifacts = { scan_no_go_assessment: { decision: "no_go", reasonCodes: [reasonCode, "scan_no_go_corroborated"] },
+      visual_access_review: { page_state: presentation.pageState, reason_code: reasonCode } } as any;
+    assert.equal(buildApiV2ScanResource(record).resultDisposition, "no_go");
+    record.reportPublication = { requestStatus: "terminal_failure", snapshotPersisted: true, projectionVerified: true };
+    const resource = buildApiV2ScanResource(record);
+    const status = buildApiV2ScanStatus(record);
+    assert.equal(resource.status, "failed");
+    assert.equal(resource.resultDisposition, undefined);
+    assert.equal(resource.score, null);
+    assert.equal(status.status, "failed");
+    assert.equal(status.error?.code, "report_publication_failed");
+    assert.equal(status.retryAfterSeconds, null);
+  }
 });

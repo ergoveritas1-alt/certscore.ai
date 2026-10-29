@@ -101,6 +101,7 @@ export function getPersistedScanReportProjection(
 }
 
 type PersistedScanReportProjectionRow = {
+  publication_request_status?: string | null;
   report_projection_computed_at: string | null;
   report_projection_payload: Record<string, unknown> | null;
   report_projection_payload_sha256: string | null;
@@ -113,6 +114,7 @@ type PersistedScanReportProjectionRow = {
 };
 
 function projectionFromPersistedRow(row: PersistedScanReportProjectionRow): ScanDetailResponse | null {
+  if (row.publication_request_status === "terminal_failure") return null;
   const projection = readPersistedScanReportProjection({
     scan: {
       id: row.scan_id,
@@ -125,6 +127,11 @@ function projectionFromPersistedRow(row: PersistedScanReportProjectionRow): Scan
   }
   return {
     ...projection,
+    reportPublication: {
+      requestStatus: row.publication_request_status ?? null,
+      snapshotPersisted: true,
+      projectionVerified: true,
+    },
     snapshot: {
       ...(projection.snapshot ?? {}),
       report_projection_computed_at: row.report_projection_computed_at,
@@ -209,11 +216,35 @@ export async function loadPersistedScanReportProjection(input: {
 }) {
   const cached = getCachedCompletedReportProjection(input);
   if (cached) {
-    return presentRuntimeGraphForRead(cached, process.env);
+    // Immutable report bytes may be cached; live publication failure may not.
+    const live = await queryOne<{ publication_request_status: string | null }>(
+      `select (select request.status from public.scan_score_materialization_requests request
+                 where request.scan_id = s.id) as publication_request_status
+         from public.scans s
+         join public.scan_snapshots projection on projection.scan_id = s.id
+        where s.id = $1::uuid
+          and ($2::uuid is null or s.organization_id = $2::uuid)
+          and projection.report_projection_source_hash = $3::text
+          and projection.report_projection_status = 'ready'
+        limit 1`,
+      [input.scanId, input.organizationId ?? null, input.generation],
+      { readOnly: true }
+    );
+    if (!live || live.publication_request_status === "terminal_failure") return null;
+    return presentRuntimeGraphForRead({
+      ...cached,
+      reportPublication: {
+        requestStatus: live.publication_request_status,
+        snapshotPersisted: true,
+        projectionVerified: true,
+      },
+    }, process.env);
   }
   const row = await queryOne<PersistedScanReportProjectionRow>(
     `select s.id as scan_id,
             s.status as scan_status,
+            (select request.status from public.scan_score_materialization_requests request
+              where request.scan_id = s.id) as publication_request_status,
             projection.report_projection_computed_at,
             projection.report_projection_payload,
             projection.report_projection_payload_sha256,
@@ -255,6 +286,8 @@ export async function loadAnonymousPersistedScanReportProjection(input: {
   const row = await queryOne<PersistedScanReportProjectionRow>(
     `select s.id as scan_id,
             s.status as scan_status,
+            (select request.status from public.scan_score_materialization_requests request
+              where request.scan_id = s.id) as publication_request_status,
             projection.report_projection_computed_at,
             projection.report_projection_payload,
             projection.report_projection_payload_sha256,

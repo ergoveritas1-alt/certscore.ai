@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { oneTrustGroupEvidenceSchema } from "@certscore/contracts";
+import { oneTrustGroupEvidenceSchema, type ConsentConfirmationReason } from "@certscore/contracts";
 import type { BrowserContext, Frame, Page } from "playwright";
 import { matchesCanonicalCmpCookieName } from "./cmp-cookie-name.js";
 import type { SemanticState } from "./consent-action-semantic-state.js";
@@ -9,23 +9,26 @@ export type OneTrustBaseline = {
   status: "invalid";
   reason?: "configuration_unverifiable" | "cookie_missing_or_ambiguous" |
     "cookie_groups_malformed" | "cookie_groups_unconfigured";
+  diagnosticReason?: ConsentConfirmationReason;
 } | {
   status: "verified"; identityHash: string; valueHash: string;
   coverage: "complete" | "partial";
   groupIds: string[]; configurationHash: string;
 };
 
-async function readConfiguration(scope: Page | Frame): Promise<Group[] | "invalid" | undefined> {
+async function readConfiguration(scope: Page | Frame, diagnostic?: (reason: ConsentConfirmationReason) => void): Promise<Group[] | "invalid" | undefined> {
+  let readFailed = false;
   const raw = await scope.evaluate(() => {
     const api = (window as unknown as { OneTrust?: { GetDomainData?: () => { Groups?: unknown } } }).OneTrust;
     if (typeof api?.GetDomainData !== "function") return undefined;
     const groups = api.GetDomainData()?.Groups;
     if (!Array.isArray(groups) || !groups.length || groups.length > 64) return "invalid";
     return groups.map((group) => ({ id: group?.CustomGroupId, status: group?.Status }));
-  }).catch(() => "invalid" as const);
-  if (raw === undefined || raw === "invalid") return raw;
+  }).catch(() => { readFailed = true; return "invalid" as const; });
+  if (raw === undefined) { diagnostic?.("configuration_missing"); return raw; }
+  if (raw === "invalid") { diagnostic?.(readFailed ? "configuration_unverifiable" : "configuration_malformed"); return raw; }
   if (raw.some((group) => typeof group.id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(group.id) ||
-    !["always active", "active", "inactive"].includes(group.status)) || new Set(raw.map((group) => group.id)).size !== raw.length) return "invalid";
+    !["always active", "active", "inactive"].includes(group.status)) || new Set(raw.map((group) => group.id)).size !== raw.length) { diagnostic?.("configuration_malformed"); return "invalid"; }
   return raw.map((group) => ({ id: group.id as string, alwaysActive: group.status === "always active" }))
     .sort((a, b) => a.id.localeCompare(b.id));
 }
@@ -46,19 +49,20 @@ export function parseOneTrustCookieGroups(value: string): Map<string, boolean> |
   return groups;
 }
 
-async function readCookie(context: BrowserContext, scope: Page | Frame) {
+async function readCookie(context: BrowserContext, scope: Page | Frame, diagnostic?: (reason: ConsentConfirmationReason) => void) {
   const cookies = (await context.cookies(scope.url())).filter((cookie) => matchesCanonicalCmpCookieName(cookie.name, "OptanonConsent"));
-  if (cookies.length !== 1) return undefined;
+  if (cookies.length !== 1) { diagnostic?.(cookies.length ? "receipt_ambiguous" : "receipt_missing"); return undefined; }
   const cookie = cookies[0]!;
   return { ...cookie, identityHash: hash(JSON.stringify([cookie.name, cookie.domain, cookie.path, cookie.partitionKey ?? ""])) };
 }
 
 export async function captureOneTrustBaseline(context: BrowserContext, scope: Page | Frame): Promise<OneTrustBaseline | undefined> {
-  const configuration = await readConfiguration(scope);
+  let diagnosticReason: ConsentConfirmationReason | undefined;
+  const configuration = await readConfiguration(scope, reason => { diagnosticReason = reason; });
   // Preserve legacy registry decoding where no domain-data API exists. If an
   // API is present but unverifiable, it must not fall back to guessed categories.
   if (configuration === undefined) return undefined;
-  if (configuration === "invalid") return { status: "invalid", reason: "configuration_unverifiable" };
+  if (configuration === "invalid") return { status: "invalid", reason: "configuration_unverifiable", diagnosticReason };
   const cookie = await readCookie(context, scope);
   const groups = cookie ? parseOneTrustCookieGroups(cookie.value) : undefined;
   if (!cookie) return { status: "invalid", reason: "cookie_missing_or_ambiguous" };
@@ -72,13 +76,24 @@ export async function captureOneTrustBaseline(context: BrowserContext, scope: Pa
 }
 
 export async function verifyOneTrustCookieDecision(context: BrowserContext, scope: Page | Frame,
-  baseline: OneTrustBaseline): Promise<SemanticState | undefined> {
-  if (baseline.status !== "verified") return undefined;
-  const configuration = await readConfiguration(scope);
-  if (!Array.isArray(configuration) || hash(JSON.stringify(configuration)) !== baseline.configurationHash) return undefined;
-  const cookie = await readCookie(context, scope);
+  baseline: OneTrustBaseline, diagnostic?: (reason: ConsentConfirmationReason) => void): Promise<SemanticState | undefined> {
+  if (baseline.status !== "verified") {
+    diagnostic?.(baseline.diagnosticReason ?? (baseline.reason === "cookie_groups_malformed" ? "receipt_malformed" :
+      baseline.reason === "cookie_groups_unconfigured" ? "receipt_groups_unconfigured" :
+      baseline.reason === "cookie_missing_or_ambiguous" ? "baseline_receipt_unverified" : "configuration_unverifiable"));
+    return undefined;
+  }
+  const configuration = await readConfiguration(scope, diagnostic);
+  if (!Array.isArray(configuration)) return undefined;
+  if (hash(JSON.stringify(configuration)) !== baseline.configurationHash) { diagnostic?.("configuration_changed"); return undefined; }
+  const cookie = await readCookie(context, scope, diagnostic);
   const current = cookie ? parseOneTrustCookieGroups(cookie.value) : undefined;
-  if (!cookie || cookie.identityHash !== baseline.identityHash || !current) return undefined;
+  if (!cookie) return undefined;
+  if (cookie.identityHash !== baseline.identityHash) { diagnostic?.("receipt_identity_changed"); return undefined; }
+  if (!current) { diagnostic?.("receipt_malformed"); return undefined; }
+  if ([...current.keys()].some(id => !configuration.some(group => group.id === id))) { diagnostic?.("receipt_groups_unconfigured"); return undefined; }
+  if (current.size !== configuration.length) { diagnostic?.("group_universe_incomplete"); return undefined; }
+  if (hash(cookie.value) === baseline.valueHash) { diagnostic?.("no_fresh_decision"); return undefined; }
   const groups = [...current].map(([id, consent]) => ({ id, consent, alwaysActive: configuration.find((group) => group.id === id)?.alwaysActive }));
   const proof = oneTrustGroupEvidenceSchema.safeParse({
     // V1 keeps its complete-baseline contract. V2 permits only a known subset
@@ -87,7 +102,7 @@ export async function verifyOneTrustCookieDecision(context: BrowserContext, scop
     beforeValueSha256: baseline.valueHash, afterValueSha256: hash(cookie.value),
     configurationSha256: baseline.configurationHash, baselineGroupIds: baseline.groupIds, configuredGroupIds: configuration.map((group) => group.id), groups,
   });
-  if (!proof.success) return undefined;
+  if (!proof.success) { diagnostic?.("configuration_or_groups_unverified"); return undefined; }
   const optional = proof.data.groups.filter((group) => !group.alwaysActive);
   const decision = optional.every((group) => group.consent) ? "granted"
     : optional.every((group) => !group.consent) ? "denied" : "mixed";

@@ -90,6 +90,7 @@ import {
 } from "./scan-execution-provenance";
 import { loadLatestVersionedScoreAssessments } from "./score-assessment-repository";
 import { withPersistedFirstLayerConsentEvidence } from "./scan-report-consent-projection";
+import type { ReportPublicationReadState } from "./report-publication-read-state";
 
 function recordValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -1476,6 +1477,11 @@ async function loadScanDetailRecord(input: {
 
   return {
     legacyScoreAssessment: legacyScoreAssessmentMap.get(input.scanId) ?? null,
+    reportPublication: {
+      requestStatus: scanRow.publication_request_status ?? null,
+      snapshotPersisted: Boolean(snapshot),
+      projectionVerified: false,
+    } as ReportPublicationReadState | undefined,
     accessPostureSummary: {
       accessPostureClass: accessPostureSummary.accessPostureClass,
       highestSuccessfulTier,

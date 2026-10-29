@@ -62,3 +62,33 @@ test("encoded German controller retention and complaint disclosures pass canonic
     assert.equal(signal.status, "observed");
   }
 });
+
+
+test("a retained role-only purpose citation cannot become an Observed canonical checklist row", () => {
+  const quote = "Our customer decides how that data is used, and our Data Processing Addendum governs how we handle it. If you subscribed to a company's status page, or you're on a customer's team, that company's privacy policy applies, and you should contact them first to exercise your rights.";
+  const runtimeArtifacts = { policyDisclosureSummary: { article13DisclosureSignals: [{ disclosureType: "processing_purposes", status: "observed", confidence: .9,
+    source: "deterministic", evidenceText: quote, selectedPolicySectionExcerpt: quote,
+    selectedPolicySectionUrl: "https://example.test/privacy", selectedEvidenceStrength: "strong" }],
+    gdprTransparencyEvidenceProfile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE, gdprTransparencyProductionEvidenceEnabled: true } };
+  const normalizedConcerns = buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] });
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ coverageLimited: false, events: [], normalizedConcerns, runtimeArtifacts, scanCompleted: true, snapshot: {} });
+  const rows = deriveGdprEprivacyCoverageChecklist({ coverageLimited: false, coverageOutcomes, projectedFindings: [], unifiedFindings: [], scanCompleted: true });
+  assert.notEqual(rows.find(row => row.id === "processing_purposes_disclosure")?.evidenceState, "observed");
+});
+
+test("explicit German website joint controllers reach the canonical checklist without bypassing source ownership", () => {
+  const sourceUrl="https://example.test/datenschutz";
+  const text="Datenschutzerklärung. Gemeinsam Verantwortliche für den Betrieb dieser Internetseite im Sinne der Europäischen Datenschutz-Grundverordnung (DSGVO) und zugleich Diensteanbieter sind: 1. Beispiel Zeitung GmbH & Co. KG, Breiter Gang 10, 49074 Osnabrück. E-Mail: info@example.test.";
+  const sections=extractPolicySections({html:"",visibleText:text,sourceUrl});
+  const input={policyTextQuality:{usable:true},profile:GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,surface:{surfaceType:"privacy_policy" as const,status:"fetched" as const,url:sourceUrl,normalizedUrl:sourceUrl,gdprTransparencyTopicCandidates:gdprTransparencyTopicCandidatesFromRetainedPolicySections(sections)}};
+  assert.deepEqual(adaptGdprTransparencyTopicCandidatesForProduction({...input,isTargetRelevantPrivacyPolicy:false}).acceptedProductionSignals,[]);
+  const result=adaptGdprTransparencyTopicCandidatesForProduction({...input,isTargetRelevantPrivacyPolicy:true});
+  assert.ok(result.acceptedProductionSignals.some(s=>s.disclosureType==="controller_contact"));
+  const runtimeArtifacts={policyDisclosureSummary:{article13DisclosureSignals:result.acceptedProductionSignals,gdprTransparencyEvidenceProfile:result.profile,gdprTransparencyProductionEvidenceEnabled:result.productionEvidenceEnabled}};
+  const normalizedConcerns=buildNormalizedConcerns({runtimeArtifacts,reviewFindingCandidates:[],validationFindings:[]});
+  assert.ok(normalizedConcerns.some(c=>c.originKey==="gdpr_transparency.article13.controller_contact"));
+  const coverageOutcomes=deriveGdprEprivacyCoveragePolicyOutcomes({coverageLimited:false,events:[],normalizedConcerns,runtimeArtifacts,scanCompleted:true,snapshot:{}});
+  const rows=deriveGdprEprivacyCoverageChecklist({coverageLimited:false,coverageOutcomes,projectedFindings:[],unifiedFindings:[],scanCompleted:true});
+  assert.equal(rows.find(r=>r.id==="controller_contact_disclosure")?.evidenceState,"observed");
+  assert.notEqual(rows.find(r=>r.id==="dpo_contact_point_disclosure")?.evidenceState,"observed");
+});

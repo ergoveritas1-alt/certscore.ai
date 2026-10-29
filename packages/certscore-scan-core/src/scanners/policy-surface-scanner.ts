@@ -1,6 +1,7 @@
 import { createPrivacyFrameContinuityProof } from "../privacy-frame-continuity";
 import { buildPrivacyChoiceDiagnostics, createPrivacyChoiceDomDiagnostics } from "../privacy-choice-diagnostics";
 import { canStartPolicyAnalysis, createPolicyAnalysisGate } from "../policy-analysis-gate";
+import { boundedPdfText, pdfSourceLimitations } from "../policy-pdf-text";
 import { locateCaliforniaReviewTopics } from "@certscore/contracts";
 import { applyGoverningPolicySelection, mergePolicySurfaceObservations, canonicalPolicyUrlIdentity, policySurfaceObservationKey } from "../policy-surface-projection.js";
 export { applyGoverningPolicySelection, mergePolicySurfaceObservations, canonicalPolicyUrlIdentity } from "../policy-surface-projection.js";
@@ -35,6 +36,8 @@ import {
   isSupportedPrivacyEvidenceLocale,
   type PolicyCookieDisclosureObservation,
   type PolicySurfaceObservation,
+  type PolicyPdfSourceCoverage,
+  hasCompletePolicySourceCoverage,
   type PolicyNegativeSearchEvidence,
   type PrivacySurfaceClassification,
   type PrivacySurfaceMatchStrength,
@@ -125,7 +128,6 @@ const MAX_POLICY_TEXT_RESPONSE_BYTES = 2_500_000;
 const MAX_POLICY_DECOMPRESSED_BYTES = 2_500_000;
 const MAX_POLICY_PDF_BYTES = 2_500_000;
 const MAX_POLICY_PDF_PAGES = 12;
-const MAX_POLICY_PDF_TEXT_CHARS = 500_000;
 const MAX_POLICY_FETCH_DIAGNOSTICS = 32;
 const DEFAULT_POLICY_EXCERPT_KEYWORDS = [
   "personal data",
@@ -2933,6 +2935,7 @@ async function processPolicyCandidate({
       artifactWriter: input.artifactWriter,
       candidate: effectiveCandidate,
       visibleText: retainedVisibleText,
+      pdfSourceCoverage: fetched.pdfSourceCoverage,
       scanStartedAtMs: input.scanStartedAtMs,
       policySurfaceTextArtifactBudget,
     }),
@@ -4126,6 +4129,7 @@ async function writePolicySurfaceTextArtifact(input: {
   artifactWriter: ArtifactWriter;
   candidate: PolicySurfaceCandidate;
   visibleText: string;
+  pdfSourceCoverage?: PolicyPdfSourceCoverage;
   scanStartedAtMs: number;
   policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
 }): Promise<{
@@ -4135,6 +4139,7 @@ async function writePolicySurfaceTextArtifact(input: {
     sourceTextChars: number;
     retainedTextChars: number;
     limitationKeys: string[];
+    pdfSourceCoverage?: PolicyPdfSourceCoverage;
   };
 }> {
   const normalizedText = normalizeWhitespace(input.visibleText);
@@ -4144,7 +4149,8 @@ async function writePolicySurfaceTextArtifact(input: {
         status: "unavailable",
         sourceTextChars: normalizedText.length,
         retainedTextChars: 0,
-        limitationKeys: ["policy_surface_text_total_budget_exhausted"],
+        limitationKeys: ["policy_surface_text_total_budget_exhausted", ...pdfSourceLimitations(input.pdfSourceCoverage)],
+        ...(input.pdfSourceCoverage ? {pdfSourceCoverage:input.pdfSourceCoverage} : {}),
       },
     };
   }
@@ -4155,7 +4161,8 @@ async function writePolicySurfaceTextArtifact(input: {
         status: "unavailable",
         sourceTextChars: 0,
         retainedTextChars: 0,
-        limitationKeys: ["policy_surface_text_empty"],
+        limitationKeys: ["policy_surface_text_empty", ...pdfSourceLimitations(input.pdfSourceCoverage)],
+        ...(input.pdfSourceCoverage ? {pdfSourceCoverage:input.pdfSourceCoverage} : {}),
       },
     };
   }
@@ -4170,7 +4177,8 @@ async function writePolicySurfaceTextArtifact(input: {
         status: "unavailable",
         sourceTextChars: normalizedText.length,
         retainedTextChars: 0,
-        limitationKeys: ["policy_surface_text_remaining_budget_too_small"],
+        limitationKeys: ["policy_surface_text_remaining_budget_too_small", ...pdfSourceLimitations(input.pdfSourceCoverage)],
+        ...(input.pdfSourceCoverage ? {pdfSourceCoverage:input.pdfSourceCoverage} : {}),
       },
     };
   }
@@ -4205,7 +4213,8 @@ async function writePolicySurfaceTextArtifact(input: {
       status: truncated ? "truncated" : "complete",
       sourceTextChars: normalizedText.length,
       retainedTextChars: retainedText.length,
-      limitationKeys: truncated ? ["policy_surface_text_artifact_truncated"] : [],
+      limitationKeys: [...(truncated ? ["policy_surface_text_artifact_truncated"] : []), ...pdfSourceLimitations(input.pdfSourceCoverage)],
+      ...(input.pdfSourceCoverage ? {pdfSourceCoverage:input.pdfSourceCoverage} : {}),
     },
   };
 }
@@ -7794,7 +7803,7 @@ export function buildGdprTransparencyTopicCoverageDiagnostics(input: {
     input.documentRole === "policy_document" &&
     targetOwned &&
     input.contentCoverage.status === "complete" &&
-    input.documentTextCoverage?.status === "complete";
+    hasCompletePolicySourceCoverage(input.documentTextCoverage);
 
   return GDPR_TRANSPARENCY_COVERAGE_TOPICS.map((topic) => {
     const evidenceRows = input.sectionEvidence.filter((evidence) => evidence.coverageArea === topic);
@@ -7833,6 +7842,8 @@ export function buildGdprTransparencyTopicCoverageDiagnostics(input: {
       input.documentTextCoverage?.status !== "complete"
         ? `policy_document_text_coverage_${input.documentTextCoverage?.status ?? "unavailable"}`
         : null,
+      input.documentTextCoverage?.pdfSourceCoverage?.status !== undefined && input.documentTextCoverage.pdfSourceCoverage.status !== "complete"
+        ? `policy_pdf_source_coverage_${input.documentTextCoverage.pdfSourceCoverage.status}` : null,
     ].filter((value): value is string => value !== null)).slice(0, 16);
 
     return {
@@ -8890,6 +8901,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 type FetchTextResult = {
+  pdfSourceCoverage?: PolicyPdfSourceCoverage;
   recoveryDiagnostic?:LegalDisclosureRecoveryDiagnostic;
   accessBlockedEarlier?: boolean;
   bodyTruncated?: boolean;
@@ -8965,7 +8977,7 @@ type PdfParseConstructor = new (input: { data: Uint8Array }) => {
     imageBuffer: boolean;
     imageDataUrl: boolean;
     pageJoiner: string;
-  }): Promise<{ text: string }>;
+  }): Promise<{ text: string; total?: number; pages?: {num:number;text:string}[] }>;
 };
 
 function fetchPolicyDocumentSingleFlight(
@@ -9161,6 +9173,7 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
           text: "",
         };
       }
+      const extracted = await extractPdfPolicyText(body);
       return {
         attempts: [{
           ...attemptBase,
@@ -9172,7 +9185,8 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
         documentFormat: "pdf",
         ok: true,
         status: response.status,
-        text: await extractPdfPolicyText(body),
+        text: extracted.text,
+        pdfSourceCoverage: extracted.coverage,
       };
     }
     const decodedBody = decodeBoundedPolicyResponseBody(body, contentEncoding);
@@ -9662,13 +9676,13 @@ function contentLengthFromHeader(value: string | null): number | undefined {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
-async function extractPdfPolicyText(body: Uint8Array): Promise<string> {
+export async function extractPdfPolicyText(body: Uint8Array): Promise<ReturnType<typeof boundedPdfText>> {
   if (body.length === 0 || body.length > MAX_POLICY_PDF_BYTES) {
-    return "";
+    return boundedPdfText({text:""});
   }
   const PDFParse = await loadPdfParser();
   if (!PDFParse) {
-    return "";
+    return boundedPdfText({text:""});
   }
   const parser = new PDFParse({ data: body });
   try {
@@ -9678,9 +9692,9 @@ async function extractPdfPolicyText(body: Uint8Array): Promise<string> {
       imageBuffer: false,
       imageDataUrl: false,
     });
-    return normalizeWhitespace(result.text).slice(0, MAX_POLICY_PDF_TEXT_CHARS);
+    return boundedPdfText(result);
   } catch {
-    return "";
+    return boundedPdfText({text:""});
   } finally {
     await parser.destroy().catch(() => undefined);
   }

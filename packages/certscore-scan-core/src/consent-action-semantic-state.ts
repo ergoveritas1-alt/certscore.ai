@@ -59,16 +59,17 @@ export async function verifiedCookieDecision(input: {
   if (cookies.length !== 1) { input.onDiagnostic?.(cookies.length ? "receipt_ambiguous" : "receipt_missing"); return undefined; }
   const cookie = cookies[0]!;
   if (input.cookieName === "OptanonConsent" && input.oneTrustBaseline) {
-    const state = await verifyOneTrustCookieDecision(input.context, input.scope, input.oneTrustBaseline);
-    if (!state || state.stateHash !== sha256(cookie.value)) { input.onDiagnostic?.("configuration_or_groups_unverified"); return undefined; }
+    const state = await verifyOneTrustCookieDecision(input.context, input.scope, input.oneTrustBaseline, input.onDiagnostic);
+    if (!state) return undefined;
+    if (state.stateHash !== sha256(cookie.value)) { input.onDiagnostic?.("receipt_readback_mismatch"); return undefined; }
     const observedAtEpochMs = matchingStateWriteTime(writes, cookie.name, cookie.value, input.actionAt, "cookie");
     // A partial pre-click receipt cannot establish the previous decision.
     // Require the complete replacement value to be written after dispatch.
     if (state.oneTrustGroupEvidence?.policyVersion === "onetrust_cookie_groups.v2" && observedAtEpochMs === undefined) { input.onDiagnostic?.("no_fresh_decision"); return undefined; }
     return { ...state, observedAtEpochMs };
   }
-  const decision = decodeCanonicalConsentDecision(cookie.name, cookie.value, true);
-  if (decision === "unknown") { input.onDiagnostic?.("receipt_malformed_or_unsupported"); return undefined; }
+  const decision = decodeCanonicalConsentDecision(cookie.name, cookie.value, true, input.onDiagnostic);
+  if (decision === "unknown") return undefined;
   return {
     key: cookie.name,
     stateHash: sha256(cookie.value),
@@ -96,12 +97,16 @@ export async function verifiedCanonicalStateWrite(input: {
   const storageReads = new Map<string, Promise<string | undefined>>();
   for (const write of writes.slice(-96)) {
     const registered = input.registeredKeys?.includes(write.name) === true;
-    if (write.value === undefined || decodeCanonicalConsentDecision(write.name, write.value, registered) === "unknown") continue;
+    // Unknown unrelated writes are not consent receipt failures. Inspect only
+    // registered keys or canonical consent identities for diagnostic purposes.
+    const diagnostic = registered || /consent/i.test(write.name) ? input.onDiagnostic : undefined;
+    if (write.value === undefined || decodeCanonicalConsentDecision(write.name, write.value, registered, diagnostic) === "unknown") continue;
     let value: string | undefined;
     if (write.storageType === "cookie") {
       cookieRead ??= input.context.cookies(input.scope.url());
       const cookies = (await cookieRead).filter((cookie) => cookie.name === write.name);
-      if (cookies.length === 1) value = cookies[0]!.value;
+      if (cookies.length !== 1) { input.onDiagnostic?.(cookies.length ? "receipt_ambiguous" : "receipt_missing"); continue; }
+      value = cookies[0]!.value;
     } else {
       const identity = `${write.storageType}\n${write.name}`;
       let read = storageReads.get(identity);

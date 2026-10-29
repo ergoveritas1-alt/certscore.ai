@@ -153,3 +153,56 @@ test("independent ordinary visits retain their separate exact identities for sco
     }
   }
 });
+
+
+test("apex/www availability requires the original retained HTTPS recovery and both exact document identities", () => {
+  const f = fixture();
+  const reportUrl = "https://example.com/", runtimeUrl = "https://www.example.com/";
+  f.bundle.url = reportUrl; f.bundle.normalizedUrl = reportUrl;
+  f.bundle.runtimeMetadataSnapshots![0]!.url = runtimeUrl;
+  f.bundle.domSnapshots = [{ ...f.bundle.runtimeMetadataSnapshots![0]!, url: reportUrl,
+    documentIdentity: { source: "cdp_loader_id", token: "consent-loader" } }];
+  f.bundle.scanLaneRuns![0]!.navigationAttempts = [
+    { sequence: 1, mode: "initial_https_navigation", outcome: "transport_error", httpStatus: null, durationMs: 10, effectiveUrl: reportUrl },
+    { sequence: 2, mode: "https_apex_www_recovery", outcome: "success", httpStatus: 200, durationMs: 10, effectiveUrl: runtimeUrl },
+  ];
+  const original = structuredClone(f.bundle);
+  const proof = projectCaliforniaObservedScoreBasis(f.bundle, CA_FIXTURE_SOURCE, reportUrl);
+  assert.equal(proof?.policyVersion, "usable_starting_page_score.v3-apex-www-recovery");
+  const child = projectCaliforniaPrivacyReview(f.bundle, CA_FIXTURE_SOURCE, reportUrl, f.policyEvidence)!;
+  assert.equal(deriveCaliforniaRegulatoryScore({ assessment: child, checklistRows: [], unifiedFindings: [] }).score, 100);
+  const parent = deriveConsentControlAssessment({ scan: { scanId: f.bundle.scanId, finalUrl: reportUrl } });
+  assert.ok(consentControlAssessmentSchema.safeParse({ ...parent, californiaPrivacyReview: child }).success);
+  assert.deepEqual(f.bundle, original);
+  for (const mutate of [
+    () => { f.bundle.normalizedUrl = "https://unrelated.com/"; },
+    () => { f.bundle.scanLaneRuns![0]!.navigationAttempts![1]!.mode = "initial_https_navigation"; },
+    () => { f.bundle.scanLaneRuns![0]!.navigationAttempts![1]!.httpStatus = 403; },
+    () => { f.bundle.scanLaneRuns![0]!.navigationAttempts![1]!.effectiveUrl = reportUrl; },
+    () => { f.bundle.domSnapshots[0]!.documentIdentity = undefined; },
+    () => { f.bundle.domSnapshots[0]!.documentIdentity!.token = "runtime-loader"; },
+    () => { f.bundle.runtimeMetadataSnapshots![0]!.documentIdentity = undefined; },
+    () => { f.bundle.runtimeMetadataSnapshots![0]!.textExcerpt = "OOPS!!! WE ARE CURRENTLY NOT AVAILABLE IN YOUR REGION."; },
+  ]) {
+    mutate(); assert.equal(projectCaliforniaObservedScoreBasis(f.bundle, CA_FIXTURE_SOURCE, reportUrl), undefined);
+    Object.assign(f.bundle, structuredClone(original));
+  }
+  for (const [apex, www] of [
+    ["https://tenant.github.io/", "https://www.tenant.github.io/"],
+    ["https://example.unknownsuffix/", "https://www.example.unknownsuffix/"],
+    ["http://example.com/", "http://www.example.com/"],
+    ["https://example.com:444/", "https://www.example.com:444/"],
+    ["https://example.com/path", "https://www.example.com/path"],
+    ["https://example.com/#section", "https://www.example.com/#section"],
+    ["https://user:secret@example.com/", "https://www.example.com/"],
+    ["https://127.0.0.1/", "https://www.127.0.0.1/"],
+    ["https://example.com/", "https://other.example.com/"],
+    ["https://example.com/?state=one", "https://www.example.com/?state=two"],
+  ]) {
+    Object.assign(f.bundle, structuredClone(original));
+    f.bundle.url = apex!; f.bundle.normalizedUrl = apex!; f.bundle.domSnapshots[0]!.url = apex!;
+    f.bundle.runtimeMetadataSnapshots![0]!.url = www!;
+    f.bundle.scanLaneRuns![0]!.navigationAttempts![1]!.effectiveUrl = www!;
+    assert.equal(projectCaliforniaObservedScoreBasis(f.bundle, CA_FIXTURE_SOURCE, apex!), undefined, apex);
+  }
+});

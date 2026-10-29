@@ -8,6 +8,7 @@ export const INFORMAL_GERMAN_POLICY_CLAUSES = [
 ] as const;
 
 export const INADEQUATE_PURPOSE_WITNESSES = [
+  "Our customer decides how that data is used, and our Data Processing Addendum governs how we handle it. If you subscribed to a company's status page, or you're on a customer's team, that company's privacy policy applies, and you should contact them first to exercise your rights.",
   "Data categories Purpose of the processing Types of Processing Legal Basis Data Source Third party recipients Device data, including the type of device, operating system used, device settings, application IDs, unique device identifiers and crash data.",
   "to withdraw your consent fully or partly. Once we have received notification that you have withdrawn your consent, we will no longer process your Personal Information for the purpose(s) to which you originally consented unless there is another legal ground for the processing. d) Complaints: Although we would rather you speak to us first, if you believe that",
 ] as const;

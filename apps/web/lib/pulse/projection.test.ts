@@ -987,7 +987,7 @@ test("Pulse uses the same canonical overall score model as the report", () => {
   assert.match(source, /kind: reportSurface\.customerScoreAssessment\.scoreKind/);
   assert.match(source, /metricLabel: "Overall score"/);
   assert.match(source, /selectedWithholdingReason/);
-  assert.match(source, /version: reportSurface\.customerScoreAssessment\.scoreVersion/);
+  assert.match(source, /version: publicationState === "final" \? reportSurface\.customerScoreAssessment\.scoreVersion : null/);
 });
 
 test("Pulse policy surfaces exclude unfetched guessed aliases and retain verified canonical pages", () => {
@@ -1437,5 +1437,29 @@ test("failed canonical publication exposes no stale API or summary scores", () =
     const result=buildPulseProjection({scanRecord:record,detail:"summary",format:"json",freshnessMode:"latest",pulseRequestId:"failed",requestedUrl:"https://example.com/",resolutionMode:"test",waitSeconds:0});
     assert.equal((result.summary as any).score,null);
     assert.equal((result.summary as any).postureScores,undefined);
+  }
+});
+
+
+test("all direct Pulse details suppress terminal and unpublished modern scores", () => {
+  const { derivePulseReportScore } = require("./projection") as typeof import("./projection");
+  for (const requestStatus of ["terminal_failure", "pending", "completed"]) {
+    const record = pulseScanRecord({
+      scan: { id: "11111111-1111-4111-8111-111111111111", domainHostname: "example.com", status: "completed", pagesScanned: 1 },
+      snapshot: { certscore_overall: 79, report_projection_status: "ready" },
+      reportPublication: { requestStatus, snapshotPersisted: true, projectionVerified: false },
+    });
+    const before = structuredClone(record);
+    assert.equal(derivePulseReportScore({ scanRecord: record }), null);
+    for (const detail of ["tiny", "summary", "standard", "full", "evidence"] as const) {
+      const result = buildPulseProjection({ scanRecord: record, detail, format: "json", freshnessMode: "latest", pulseRequestId: "publication", requestedUrl: "https://example.com/", resolutionMode: "test", waitSeconds: 0 });
+      assert.equal(result.scanStatus, requestStatus === "terminal_failure" ? "failed" : "finalizing");
+      assert.equal((result.summary as any).score, null);
+      assert.equal((result.summary as any).postureScores, undefined);
+      assert.equal(result.scoreExplanation, undefined);
+      if ("executiveSummary" in result) assert.equal((result.executiveSummary as any)?.score, null);
+      assert.ok(pulseResponseSchema.safeParse(result).success, detail);
+    }
+    assert.deepEqual(record, before);
   }
 });

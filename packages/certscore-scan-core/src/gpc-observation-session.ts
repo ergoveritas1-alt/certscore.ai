@@ -169,6 +169,7 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
       if (requests.some(r => !r.preTransmissionBlock && (r.headerSource === "readback_pending" || r.headerSource === "readback_failed")))
         limitations.push("request_header_readback_incomplete");
       stopped = true;
+      const proofCapture=requestProofCapture.finish(commit?.loader);
       const packet = gpcObservationSessionSchema.parse({
         contractVersion: "certscore.gpc-observation-session.v2", scanId: input.scanId, captureId: input.captureId,
         observationScope: "main_document_and_retained_http_requests", captureStartedAtMs, captureEndedAtMs: now(),
@@ -180,9 +181,9 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
           requestId: delivered.requestId, requestAtMs: delivered.requestAtMs, secGpc: delivered.secGpc, committedAtMs: commit.at,
         },
         semanticObservation: semanticObservation ?? null, requests, requestsObserved, requestsDropped,
-        requestProofCapture:requestProofCapture.finish(commit?.loader),
+        requestProofCapture:proofCapture,
         listener: listener ?? { callbacks: 0, dropped: 0, registered: false },
-        requestDiagnostics: requestDiagnostics.finish(requests), limitationKeys: limitations,
+        requestDiagnostics: requestDiagnostics.finish(requests,new Set(proofCapture.rows.map(r=>r.eventId))), limitationKeys: limitations,
       });
       frozenPacket = packet;
       return packet;

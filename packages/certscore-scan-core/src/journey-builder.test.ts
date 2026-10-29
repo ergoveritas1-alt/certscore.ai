@@ -1,3 +1,4 @@
+import {resolveCanonicalCookieClassification} from "@certscore/vendor-resolver";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
@@ -917,6 +918,8 @@ function cookieEvent(input: {
     cookieParty: input.thirdParty === false ? "first_party" : "third_party",
     vendorAssociated: false,
     cookiePurpose: "unknown",
+    cookieEssentiality: "unknown",
+    cookieEssentialityReasonCodes: [],
     cookieClassificationBasis: [],
     operation: "set_cookie_header",
     valueRedacted: true,
@@ -952,6 +955,7 @@ function scriptEvent(input: {
 
 function vendorObservation(input: {
   observationId: string;
+  entity?: string;
   vendor: string;
   product: string;
   purpose: NormalizedVendorObservation["purpose"];
@@ -962,7 +966,7 @@ function vendorObservation(input: {
 }): NormalizedVendorObservation {
   return {
     observationId: input.observationId,
-    entity: input.vendor === "FullStory" ? "FullStory, Inc." : input.vendor,
+    entity: input.entity ?? (input.vendor === "FullStory" ? "FullStory, Inc." : input.vendor),
     vendor: input.vendor,
     product: input.product,
     purpose: input.purpose,
@@ -970,6 +974,8 @@ function vendorObservation(input: {
     basis: ["fixture"],
     regulatoryRelevance: ["consent"],
     matchedEvidenceIds: input.matchedEvidenceIds,
+    matchedEvidenceRefs: [],
+    matchSources: [],
     matchedHostnames: input.matchedHostnames,
     matchedUrls: input.matchedUrls ?? [],
     matchedCookieNames: input.matchedCookieNames ?? [],
@@ -980,4 +986,14 @@ test("first-party identifier parameter is classified without retaining its value
   const signals = querySignalsFromUrl("https://gum.criteo.com/fpm/init?first_party_id=private-value&first_party_domain=example.test");
   assert.deepEqual(signals.identifierParamNames, ["first_party_id"]);
   assert.doesNotMatch(JSON.stringify(signals), /private-value/);
+});
+
+
+test("v7 and v8 bound cookie evidence keep their own purpose and reject mismatched markers",()=>{
+ for(const version of ["certscore.cookie-purpose.v7","certscore.cookie-purpose.v8"] as const){
+  const classification=resolveCanonicalCookieClassification("_cc_aud",{cookieDomain:"crwdcntrl.net"},version);
+  const event={...cookieEvent({eventId:"bound-cookie",cookieName:"_cc_aud",hostname:"crwdcntrl.net",registrableDomain:"crwdcntrl.net"}),cookieClassification:classification,cookiePurpose:classification.category,cookieEssentiality:classification.essentiality,cookieEssentialityReasonCodes:[`cookie_purpose_policy:${version}`]};
+  const row=classifyCookieEvents([event],[])[0]!;assert.equal(row.cookiePurpose,classification.category);assert.equal(row.cookieEssentiality,classification.essentiality);
+  const mismatch=classifyCookieEvents([{...event,cookieEssentialityReasonCodes:[`cookie_purpose_policy:${version.endsWith("v7")?"certscore.cookie-purpose.v8":"certscore.cookie-purpose.v7"}`]}],[])[0]!;assert.equal(mismatch.cookiePurpose,"unknown");
+ }
 });

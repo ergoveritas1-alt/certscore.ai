@@ -8,9 +8,11 @@ import {californiaChoiceEnforcementPoints} from "./california-choice-enforcement
 const PREVIOUS_POLICY="california-post-reject.v2-qualified-disclosure" as const;
 export const PROPERTY_BOUND_POST_REJECT_POLICY="california-post-reject.v3-property-bound" as const;
 export const CALIFORNIA_POST_REJECT_POLICY="california-post-reject.v4-retained-scope" as const;
+export const MAGNITE_AUCTION_POST_REJECT_POLICY="california-post-reject.v6-auctions" as const;
+export const INDEX_AUCTION_POST_REJECT_POLICY="california-post-reject.v5-index-auction" as const;
 export const CALIFORNIA_POST_REJECT_FINDING="california_post_reject_collection" as const;
 export const californiaPostRejectAssessmentSchema=z.object({
- policyVersion:z.enum(["california-post-reject.v1",PREVIOUS_POLICY,PROPERTY_BOUND_POST_REJECT_POLICY,CALIFORNIA_POST_REJECT_POLICY]),scanId:z.string().min(1).max(160).nullable(),
+ policyVersion:z.enum(["california-post-reject.v1",PREVIOUS_POLICY,PROPERTY_BOUND_POST_REJECT_POLICY,CALIFORNIA_POST_REJECT_POLICY,INDEX_AUCTION_POST_REJECT_POLICY,MAGNITE_AUCTION_POST_REJECT_POLICY]),scanId:z.string().min(1).max(160).nullable(),
  sourcePacketSha256:z.string().regex(/^[a-f0-9]{64}$/).nullable(),targetSha256:z.string().regex(/^[a-f0-9]{64}$/).nullable(),
  scope:z.enum(["cookie_tracking_rejection","unknown"]),controlLabel:z.string().max(160),
  scopeEvidence:z.object({policyVersion:z.literal("retained_cookie_reject_scope.v1"),basis:z.literal("bound_canonical_reject_context"),
@@ -28,7 +30,7 @@ export const californiaPostRejectAssessmentSchema=z.object({
  }).strict()).max(32),
  }).strict().superRefine((a,ctx)=>{
  const ids=[...new Set(a.requests.filter(r=>r.reason==="qualified_collection").map(r=>r.entityId))].sort();
- if(a.scopeEvidence&&(a.policyVersion!==CALIFORNIA_POST_REJECT_POLICY||a.scope!=="cookie_tracking_rejection"||!a.sourcePacketSha256||!a.targetSha256))
+ if(a.scopeEvidence&&(![CALIFORNIA_POST_REJECT_POLICY,INDEX_AUCTION_POST_REJECT_POLICY,MAGNITE_AUCTION_POST_REJECT_POLICY].some(v=>v===a.policyVersion)||a.scope!=="cookie_tracking_rejection"||!a.sourcePacketSha256||!a.targetSha256))
   ctx.addIssue({code:z.ZodIssueCode.custom,message:"Retained scope evidence requires the current source-bound scope policy."});
  if(ids.some(id=>!id) || JSON.stringify(ids)!==JSON.stringify(a.recipientIds) || new Set(a.requests.map(r=>r.requestId)).size!==a.requests.length ||
   ((a.status==="qualified_collection")!==(ids.length>0)) || ids.length>0&&(!a.scanId||!a.sourcePacketSha256||!a.targetSha256||a.scope==="unknown"))
@@ -63,16 +65,17 @@ function retainedCookieRejectScope(p:PostRefusalReportProjection):CaliforniaPost
 
 /** Cookie-wide refusal can anchor cookie-based advertising/identity collection
  * risk. It does not assert refusal of every CCPA processing purpose. */
-export function assessCaliforniaPostReject(value:unknown, policyVersion:CaliforniaPostRejectAssessment["policyVersion"]=CALIFORNIA_POST_REJECT_POLICY):CaliforniaPostRejectAssessment|null {
+export function assessCaliforniaPostReject(value:unknown, policyVersion?:CaliforniaPostRejectAssessment["policyVersion"]):CaliforniaPostRejectAssessment|null {
  const parsed=postRefusalReportProjectionSchema.safeParse(value);if(!parsed.success)return null;
- const propertyBound=policyVersion===CALIFORNIA_POST_REJECT_POLICY||policyVersion===PROPERTY_BOUND_POST_REJECT_POLICY;
+ policyVersion??=parsed.data.scoringEvidence?.requests.some(r=>["bounded_ca_request_proof.v13","bounded_ca_request_proof.v14"].includes(r.californiaCollection?.proof?.policyVersion??""))?MAGNITE_AUCTION_POST_REJECT_POLICY:parsed.data.scoringEvidence?.requests.some(r=>r.californiaCollection?.proof?.policyVersion==="bounded_ca_request_proof.v12")?INDEX_AUCTION_POST_REJECT_POLICY:CALIFORNIA_POST_REJECT_POLICY;
+ const propertyBound=policyVersion===MAGNITE_AUCTION_POST_REJECT_POLICY||policyVersion===INDEX_AUCTION_POST_REJECT_POLICY||policyVersion===CALIFORNIA_POST_REJECT_POLICY||policyVersion===PROPERTY_BOUND_POST_REJECT_POLICY;
  const p=parsed.data,propertySource=propertyBound?readPropertySaleSharingSource(parsed.data.propertySaleSharingSource):undefined,presence=retainedRejectPresence(p),proof=p.actionControlProof;
  const label=proof?.accessibleLabel??"";
  const classification=classifyConsentControlLabel({label,contextText:proof?.cmpId??"",usage:"observation"});
  const legacyScope=proof?.classifierIntent==="reject" && proof.classifierConfidence>=0.9 &&
   (classification.semanticRole==="necessary_only" || /^(?:reject|decline|deny) all(?: cookies)?[.!]?$/i.test(label.trim()))
   ? "cookie_tracking_rejection" as const:"unknown" as const;
- const scopeEvidence=legacyScope==="unknown"&&policyVersion===CALIFORNIA_POST_REJECT_POLICY?retainedCookieRejectScope(p):undefined;
+ const scopeEvidence=legacyScope==="unknown"&&[CALIFORNIA_POST_REJECT_POLICY,INDEX_AUCTION_POST_REJECT_POLICY,MAGNITE_AUCTION_POST_REJECT_POLICY].some(v=>v===policyVersion)?retainedCookieRejectScope(p):undefined;
  const scope=scopeEvidence?"cookie_tracking_rejection" as const:legacyScope;
  const source=p.sourceIdentity;
  const verified=presence && source && p.packetSha256 && source.targetSha256===proof?.authorizedTargetSha256;
@@ -85,7 +88,7 @@ export function assessCaliforniaPostReject(value:unknown, policyVersion:Californ
   let propertyEvidence: z.infer<typeof propertySaleSharingProofSchema>|undefined;
   let reason:CaliforniaPostRejectAssessment["requests"][number]["reason"]="request_metadata_unavailable";
   if(fact && (!retained || JSON.stringify(fact)===JSON.stringify(retained.californiaCollection))) {
-   let qualification={...fact.qualification,policyVersion:propertyBound?"ca_sale_sharing_qualification.v3" as const:policyVersion===PREVIOUS_POLICY?"ca_sale_sharing_qualification.v2" as const:undefined};
+   let qualification={...fact.qualification,policyVersion:policyVersion===MAGNITE_AUCTION_POST_REJECT_POLICY&&["bounded_ca_request_proof.v13","bounded_ca_request_proof.v14"].includes(fact.proof?.policyVersion??"")&&fact.qualification.basis==="magnite_exchange_bid_user_identifier"?"ca_sale_sharing_qualification.v5-magnite-auction" as const:(policyVersion===INDEX_AUCTION_POST_REJECT_POLICY||policyVersion===MAGNITE_AUCTION_POST_REJECT_POLICY)&&fact.proof?.policyVersion==="bounded_ca_request_proof.v12"&&fact.qualification.basis==="index_exchange_bid_user_identifier"?"ca_sale_sharing_qualification.v4-index-auction" as const:propertyBound?"ca_sale_sharing_qualification.v3" as const:policyVersion===PREVIOUS_POLICY?"ca_sale_sharing_qualification.v2" as const:undefined};
    const declaration=propertySource?.declarations.find(d=>d.propertyIdSha256===fact.propertyBinding?.propertyIdSha256&&d.entityId===fact.entity.entityId);
    if(qualification.activity==="unresolved"&&declaration&&propertySource){
     propertyEvidence={policyVersion:"corroborated_property_collection.v1",sourceBundleSha256:propertySource.sourceBundleSha256,

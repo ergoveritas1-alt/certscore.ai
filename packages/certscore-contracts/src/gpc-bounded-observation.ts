@@ -56,13 +56,15 @@ const activityByBasis = {
   trade_desk_identity_mapping: "identity_sync",
   lotame_profile_mapping: "identity_sync",
   openx_identity_resolution: "identity_sync",
+  index_exchange_bid_user_identifier: "identified_advertising_collection",
+  magnite_exchange_bid_user_identifier: "identified_advertising_collection",
   magnite_bid_user_identifier: "identified_advertising_collection",
   owner_property_sale: "declared_sale_sharing_collection",
   owner_property_sharing: "declared_sale_sharing_collection",
   owner_property_audience: "declared_sale_sharing_collection",
 } as const;
 export const saleSharingRequestQualificationSchema = z.object({
-        policyVersion:z.enum(["ca_sale_sharing_qualification.v2", "ca_sale_sharing_qualification.v3"]).optional(),
+        policyVersion:z.enum(["ca_sale_sharing_qualification.v2", "ca_sale_sharing_qualification.v3", "ca_sale_sharing_qualification.v4-index-auction","ca_sale_sharing_qualification.v5-magnite-auction"]).optional(),
         activity: z.enum(["identity_sync", "audience_collection", "identified_advertising_collection", "declared_sale_sharing_collection", "unresolved"]),
         basis: z.enum(Object.keys(activityByBasis) as [keyof typeof activityByBasis, ...(keyof typeof activityByBasis)[]]),
         processingSignals: z.array(z.enum(["google_rdp", "google_npa", "google_limited_ads", "meta_ldu",
@@ -103,7 +105,7 @@ export const gpcBoundedObservationSchema = z.object({
     // Optional only for historical records. New producers retain endpoint roles
     // and request-local processing declarations, without legal conclusions.
     advertisingCollectionQualification: z.object({
-      policyVersion: z.enum(["gpc_sale_sharing_evidence.v1", "gpc_sale_sharing_evidence.v2", "gpc_sale_sharing_evidence.v3", "gpc_sale_sharing_evidence.v4", "gpc_sale_sharing_evidence.v5"]),
+      policyVersion: z.enum(["gpc_sale_sharing_evidence.v1", "gpc_sale_sharing_evidence.v2", "gpc_sale_sharing_evidence.v3", "gpc_sale_sharing_evidence.v4", "gpc_sale_sharing_evidence.v5", "gpc_sale_sharing_evidence.v6-index-auction","gpc_sale_sharing_evidence.v7-auctions"]),
       rows: z.array(saleSharingRequestQualificationSchema.extend({evidenceId:z.string().min(1).max(160)})).max(100),
     }).strict().optional(),
     propertySaleSharingSource: propertySaleSharingSourceSchema.optional(),
@@ -131,18 +133,18 @@ export const gpcBoundedObservationSchema = z.object({
   const qualification = o.requests.advertisingCollectionQualification;
   const propagation = o.requests.gppPropagation;
   const propertySource = o.requests.propertySaleSharingSource;
-  if (propertySource && (qualification?.policyVersion!=="gpc_sale_sharing_evidence.v5" || propertySource.scanId!==o.scanId) ||
+  if (propertySource && (!["gpc_sale_sharing_evidence.v5","gpc_sale_sharing_evidence.v6-index-auction","gpc_sale_sharing_evidence.v7-auctions"].includes(qualification?.policyVersion??"") || propertySource.scanId!==o.scanId) ||
     qualification?.rows.some(row => {
       const property = row.propertyEvidence, declared = row.activity==="declared_sale_sharing_collection";
       if (declared !== Boolean(property)) return true;
       if (!property) return false;
       const declaration = propertySource?.declarations.find(d=>d.declarationId===property.declarationId);
       const recipient = recipients?.rows.find(r=>r.evidenceId===row.evidenceId);
-      return qualification.policyVersion!=="gpc_sale_sharing_evidence.v5" || !declaration ||
+      return !["gpc_sale_sharing_evidence.v5","gpc_sale_sharing_evidence.v6-index-auction","gpc_sale_sharing_evidence.v7-auctions"].includes(qualification.policyVersion) || !declaration ||
         declaration.basis!==row.basis || declaration.propertyIdSha256!==property.propertyIdSha256 ||
         declaration.entityId!==recipient?.entityId || property.sourceBundleSha256!==propertySource?.sourceBundleSha256;
     })) ctx.addIssue({code:z.ZodIssueCode.custom,message:"Property collection requires a same-scan source-bound declaration and recipient."});
-  if (propagation && (!["gpc_sale_sharing_evidence.v2", "gpc_sale_sharing_evidence.v3", "gpc_sale_sharing_evidence.v4", "gpc_sale_sharing_evidence.v5"].includes(qualification?.policyVersion ?? "") ||
+  if (propagation && (!["gpc_sale_sharing_evidence.v2", "gpc_sale_sharing_evidence.v3", "gpc_sale_sharing_evidence.v4", "gpc_sale_sharing_evidence.v5", "gpc_sale_sharing_evidence.v6-index-auction","gpc_sale_sharing_evidence.v7-auctions"].includes(qualification?.policyVersion ?? "") ||
     new Set(propagation.rows.map(row=>row.evidenceId)).size !== propagation.rows.length || propagation.rows.some(row=>{
       const request=qualification?.rows.find(q=>q.evidenceId===row.evidenceId);
       const recipient=recipients?.rows.find(r=>r.evidenceId===row.evidenceId);
@@ -160,10 +162,12 @@ export const gpcBoundedObservationSchema = z.object({
   if (qualification && (!recipients || qualification.rows.length !== recipients.rows.length ||
     new Set(qualification.rows.map(row => row.evidenceId)).size !== qualification.rows.length ||
     qualification.rows.some(row => !recipients.rows.some(recipient => recipient.evidenceId === row.evidenceId) ||
-      (qualification.policyVersion==="gpc_sale_sharing_evidence.v5" ? row.policyVersion!=="ca_sale_sharing_qualification.v3" : qualification.policyVersion==="gpc_sale_sharing_evidence.v4" ? row.policyVersion!=="ca_sale_sharing_qualification.v2" : row.policyVersion!==undefined) ||
+      (qualification.policyVersion==="gpc_sale_sharing_evidence.v7-auctions" ? row.policyVersion!==(row.basis==="magnite_exchange_bid_user_identifier"?"ca_sale_sharing_qualification.v5-magnite-auction":row.basis==="index_exchange_bid_user_identifier"?"ca_sale_sharing_qualification.v4-index-auction":"ca_sale_sharing_qualification.v3") : qualification.policyVersion==="gpc_sale_sharing_evidence.v6-index-auction" ? row.policyVersion!==(row.basis==="index_exchange_bid_user_identifier"?"ca_sale_sharing_qualification.v4-index-auction":"ca_sale_sharing_qualification.v3") : qualification.policyVersion==="gpc_sale_sharing_evidence.v5" ? row.policyVersion!=="ca_sale_sharing_qualification.v3" : qualification.policyVersion==="gpc_sale_sharing_evidence.v4" ? row.policyVersion!=="ca_sale_sharing_qualification.v2" : row.policyVersion!==undefined) ||
+      row.basis==="index_exchange_bid_user_identifier"&&!["gpc_sale_sharing_evidence.v6-index-auction","gpc_sale_sharing_evidence.v7-auctions"].includes(qualification.policyVersion) ||
+      row.basis==="magnite_exchange_bid_user_identifier"&&qualification.policyVersion!=="gpc_sale_sharing_evidence.v7-auctions" ||
       new Set(row.processingSignals).size !== row.processingSignals.length || row.activity !== activityByBasis[row.basis] ||
       (qualification.policyVersion !== "gpc_sale_sharing_evidence.v1" ? !row.gpp : Boolean(row.gpp)) ||
-      (!["gpc_sale_sharing_evidence.v3","gpc_sale_sharing_evidence.v4","gpc_sale_sharing_evidence.v5"].includes(qualification.policyVersion) && ["linkedin_hashed_email", "meta_advanced_matching_identifier"].includes(row.basis)) ||
+      (!["gpc_sale_sharing_evidence.v3","gpc_sale_sharing_evidence.v4","gpc_sale_sharing_evidence.v5", "gpc_sale_sharing_evidence.v6-index-auction","gpc_sale_sharing_evidence.v7-auctions"].includes(qualification.policyVersion) && ["linkedin_hashed_email", "meta_advanced_matching_identifier"].includes(row.basis)) ||
       row.gpp && (new Set(row.gpp.sectionIds).size !== row.gpp.sectionIds.length ||
         new Set(row.gpp.applicableSections).size !== row.gpp.applicableSections.length ||
         new Set(row.gpp.sections.map(section => section.sectionId)).size !== row.gpp.sections.length ||
@@ -212,7 +216,9 @@ export type GpcBoundedObservation = z.infer<typeof gpcBoundedObservationSchema>;
  * retains NPA as context rather than a standalone exemption. */
 export function isQualifyingSaleSharingRequest(row:z.infer<typeof saleSharingRequestQualificationSchema>):boolean {
  const gpp=row.gpp;
- if(row.activity==="unresolved" || row.activity!==activityByBasis[row.basis] || row.processingSignals.some(signal=>signal!=="google_npa" || !["ca_sale_sharing_qualification.v2","ca_sale_sharing_qualification.v3"].includes(row.policyVersion??"")) || !gpp)return false;
+ if((row.basis==="magnite_exchange_bid_user_identifier")!==(row.policyVersion==="ca_sale_sharing_qualification.v5-magnite-auction"))return false;
+ if((row.basis==="index_exchange_bid_user_identifier")!==(row.policyVersion==="ca_sale_sharing_qualification.v4-index-auction"))return false;
+ if(row.activity==="unresolved" || row.activity!==activityByBasis[row.basis] || row.processingSignals.some(signal=>signal!=="google_npa" || !["ca_sale_sharing_qualification.v2","ca_sale_sharing_qualification.v3","ca_sale_sharing_qualification.v4-index-auction","ca_sale_sharing_qualification.v5-magnite-auction"].includes(row.policyVersion??"")) || !gpp)return false;
  if(row.activity==="declared_sale_sharing_collection" && (row.policyVersion!=="ca_sale_sharing_qualification.v3" || !row.propertyEvidence))return false;
  if(gpp.status==="not_present")return gpp.sectionIds.length===0 && gpp.applicableSections.length===0 && gpp.sections.length===0 &&
   gpp.requestSignals==="not_assessed" && gpp.cmpComparison==="not_compared" && gpp.reasons.length===0;

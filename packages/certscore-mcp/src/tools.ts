@@ -376,7 +376,9 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(
   error: ActionableError | null;
   observationOnlyDisclaimer: string;
 } {
-  const status = String(value.status ?? "");
+  const error = terminalErrorForResult(value);
+  const publicationFailed = error?.code === "report_publication_failed";
+  const status = publicationFailed ? "failed" : String(value.status ?? "");
   const active = status === "queued" || status === "running" || status === "finalizing";
   const usable = status === "completed" || status === "completed_limited";
   const upstreamRetryAfterSeconds = typeof value.retryAfterSeconds === "number" && Number.isFinite(value.retryAfterSeconds)
@@ -388,8 +390,7 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(
       ? status === "queued"
         ? MCP_QUEUED_POLL_DELAY_SECONDS
         : MCP_RUNNING_POLL_DELAY_SECONDS
-      : upstreamRetryAfterSeconds;
-  const error = terminalErrorForResult(value);
+      : publicationFailed ? null : upstreamRetryAfterSeconds;
   const stableScanId = typeof value.scanId === "string" && value.scanId.trim()
     ? value.scanId.trim()
     : typeof value.scan_id === "string" && value.scan_id.trim()
@@ -400,7 +401,7 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(
     typeof value.preConsentPreview === "object" &&
     !Array.isArray(value.preConsentPreview),
   );
-  const preConsentPreview = hasPreConsentPreview
+  const preConsentPreview = publicationFailed ? undefined : hasPreConsentPreview
     ? {
         ...value.preConsentPreview,
         observationOnlyDisclaimer: PREVIEW_OBSERVATION_ONLY_DISCLAIMER,
@@ -422,6 +423,16 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(
   const activeNextAction = `${hasPreConsentPreview ? "The returned preConsentPreview is a partial preview of passive evidence. Its counts are checkpoint-only partial counts, not the full scan tally; do not present them as final totals or stop the workflow. " : ""}${activePollAction} Continue with certscore_get_scan_status using the unchanged scanId ${stableScanId ?? value.jobId}. Do not poll in parallel or resubmit certscore_scan_site while this scan is active. After completed or completed_limited, call certscore_get_scan_bundle for the completed scan's final returned tally, canonical findings, and limitations.`;
   return withResponseCapture({
     ...value,
+    ...(publicationFailed ? {
+      status: "failed",
+      score: null,
+      postureScores: undefined,
+      scoreExplanation: undefined,
+      scoreStatus: "provisional",
+      scoreVersion: null,
+      scoreUpdatedAt: null,
+      riskLevel: null,
+    } : {}),
     preConsentPreview,
     retryAfterSeconds,
     error,
@@ -429,7 +440,7 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(
     scoreLabel: "CertScore score",
     provenance: scanProvenance(value, fallbackProvenanceMode),
     interpretationGuidance: interpretationGuidance(),
-    recommendedNextTool: active ? "certscore_get_scan_status" : usable ? "certscore_get_scan_bundle" : null,
+    recommendedNextTool: publicationFailed ? null : active ? "certscore_get_scan_status" : usable ? "certscore_get_scan_bundle" : null,
     recommendedNextAction: error?.recommendedNextAction ?? (active
       ? activeNextAction
       : returnedNextAction ?? (usable

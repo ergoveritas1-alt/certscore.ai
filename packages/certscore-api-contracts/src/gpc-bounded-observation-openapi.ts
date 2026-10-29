@@ -322,7 +322,9 @@ export const gpcBoundedObservationOpenApi = {
                         "type": "string",
                         "enum": [
                           "ca_sale_sharing_qualification.v2",
-                          "ca_sale_sharing_qualification.v3"
+                          "ca_sale_sharing_qualification.v3",
+                          "ca_sale_sharing_qualification.v4-index-auction",
+                          "ca_sale_sharing_qualification.v5-magnite-auction"
                         ]
                       },
                       "activity": {
@@ -359,6 +361,8 @@ export const gpcBoundedObservationOpenApi = {
                           "trade_desk_identity_mapping",
                           "lotame_profile_mapping",
                           "openx_identity_resolution",
+                          "index_exchange_bid_user_identifier",
+                          "magnite_exchange_bid_user_identifier",
                           "magnite_bid_user_identifier",
                           "owner_property_sale",
                           "owner_property_sharing",
@@ -809,7 +813,9 @@ export const gpcBoundedObservationOpenApi = {
                 "gpc_sale_sharing_evidence.v2",
                 "gpc_sale_sharing_evidence.v3",
                 "gpc_sale_sharing_evidence.v4",
-                "gpc_sale_sharing_evidence.v5"
+                "gpc_sale_sharing_evidence.v5",
+                "gpc_sale_sharing_evidence.v6-index-auction",
+                "gpc_sale_sharing_evidence.v7-auctions"
               ]
             },
             "rows": {
@@ -828,7 +834,9 @@ export const gpcBoundedObservationOpenApi = {
                     "type": "string",
                     "enum": [
                       "ca_sale_sharing_qualification.v2",
-                      "ca_sale_sharing_qualification.v3"
+                      "ca_sale_sharing_qualification.v3",
+                      "ca_sale_sharing_qualification.v4-index-auction",
+                      "ca_sale_sharing_qualification.v5-magnite-auction"
                     ]
                   },
                   "activity": {
@@ -865,6 +873,8 @@ export const gpcBoundedObservationOpenApi = {
                       "trade_desk_identity_mapping",
                       "lotame_profile_mapping",
                       "openx_identity_resolution",
+                      "index_exchange_bid_user_identifier",
+                      "magnite_exchange_bid_user_identifier",
                       "magnite_bid_user_identifier",
                       "owner_property_sale",
                       "owner_property_sharing",

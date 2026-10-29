@@ -1538,7 +1538,7 @@ export async function runPostRefusalObserver(
         action: "reject", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256,
         parentScanStartedAtMs, dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
         signal: effectiveSignal, targetStillAuthorized, read: () => waitForRefusalConfirmation(context!, page!, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined,
-          {pass: () => confirmationDiagnostic.pass(true), reason: confirmationDiagnostic.reason}, selectedRecipe!.controlFrameUrl),
+          {pass: () => confirmationDiagnostic.pass(true), reason: confirmationDiagnostic.terminalReason}, selectedRecipe!.controlFrameUrl),
       });
       const stopReason = await finishAfterActionWindow({
         onFinalWindow: terminalRead.start,
@@ -1607,7 +1607,7 @@ export async function runPostRefusalObserver(
         })),
       };
       terminalDecisionEvidence = terminalRead.retained(afterActionCapture);
-      if (terminalDecisionEvidence) confirmationDiagnostic.reason("verified_decision");
+      if (terminalDecisionEvidence) confirmationDiagnostic.terminalReason("verified_decision");
       return await finalize({
         resolverFound: true,
         registration: {
@@ -3441,7 +3441,7 @@ async function waitForRefusalConfirmation(
     while (firstRead || Date.now() <= deadlineAtMs) {
       firstRead = false;
       diagnostics?.pass();
-      if (signal?.aborted) return undefined;
+      if (signal?.aborted) { diagnostics?.reason("confirmation_aborted"); return undefined; }
       const state = await verifiedCanonicalStateWrite({
         context, scope: scope.scope, actionAt: actionDispatchedAtEpochMs,
         afterSequence: baseline.lastSequence,
@@ -3468,7 +3468,8 @@ async function waitForRefusalConfirmation(
     while (firstRead || Date.now() <= deadlineAtMs) {
       firstRead = false;
       diagnostics?.pass();
-      if (signal?.aborted || baseline.kind !== "cmp_cookie_values_equal") return undefined;
+      if (signal?.aborted) { diagnostics?.reason("confirmation_aborted"); return undefined; }
+      if (baseline.kind !== "cmp_cookie_values_equal") return undefined;
       const states = await exactCmpCookieStates(context, page.url(), confirmation.cookies);
       const complete = confirmation.cookies.every((expectation) => {
         const state = states[cookieExpectationKey(expectation)];
@@ -3502,11 +3503,11 @@ async function waitForRefusalConfirmation(
     while (firstRead || Date.now() <= deadlineAtMs) {
       firstRead = false;
       diagnostics?.pass();
-      if (signal?.aborted) return undefined;
+      if (signal?.aborted) { diagnostics?.reason("confirmation_aborted"); return undefined; }
       const currentCookieState = await cmpCookieState(context, confirmation.cookieName);
       if (currentCookieState && currentCookieState.stateHash !== baseline.cookieStateHash) {
         const semantic = await verifiedCookieDecision({ context, scope: semanticScope,
-            cookieName: confirmation.cookieName, actionAt: actionDispatchedAtEpochMs });
+            cookieName: confirmation.cookieName, actionAt: actionDispatchedAtEpochMs, onDiagnostic: diagnostics?.reason });
           if (semantic) onDecisionObserved?.(semantic);
           if (semantic?.decision === "denied") return {
             stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
@@ -3527,7 +3528,7 @@ async function waitForRefusalConfirmation(
     while (firstRead || Date.now() <= deadlineAtMs) {
       firstRead = false;
       diagnostics?.pass();
-      if (signal?.aborted) return undefined;
+      if (signal?.aborted) { diagnostics?.reason("confirmation_aborted"); return undefined; }
       for (const cookieName of confirmation.cookieNames.slice(0, 8)) {
         const currentCookieState = await cmpCookieState(context, cookieName);
         if (currentCookieState && currentCookieState.stateHash !== baseline.cookieStateHashes[cookieName]) {
@@ -3554,7 +3555,7 @@ async function waitForRefusalConfirmation(
     while (firstRead || Date.now() <= deadlineAtMs) {
       firstRead = false;
       diagnostics?.pass();
-      if (signal?.aborted) return undefined;
+      if (signal?.aborted) { diagnostics?.reason("confirmation_aborted"); return undefined; }
       const snapshot = await readCmpApiConsentSnapshot(semanticScope, confirmation.provider);
       if (!snapshot) diagnostics?.reason("api_unavailable");
       else if (snapshot.configurationSha256 !== baseline.configurationSha256) diagnostics?.reason("configuration_changed");
@@ -3610,7 +3611,7 @@ async function waitForRefusalConfirmation(
   while (firstRead || Date.now() <= deadlineAtMs) {
     firstRead = false;
       diagnostics?.pass();
-    if (signal?.aborted) return undefined;
+    if (signal?.aborted) { diagnostics?.reason("confirmation_aborted"); return undefined; }
     const baselineSnapshot = "snapshot" in baseline ? baseline.snapshot : undefined;
     const tcfRead = readTcfData(semanticScope).then((snapshot): RefusalConfirmationState | undefined => {
       if (!snapshot?.success || snapshot.eventStatus !== "useractioncomplete" || !purposeIds.length ||

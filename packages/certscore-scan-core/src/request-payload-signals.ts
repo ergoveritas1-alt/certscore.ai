@@ -18,8 +18,15 @@ export function readRuntimeRequestPayload(request: { postData(): string | null }
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) { fields = Object.keys(parsed); objectFields = true; }
     } catch { /* Try the existing form-field interpretation. */ }
     if (!objectFields) {
-      try { fields = [...new Set(new URLSearchParams(body).keys())]; } catch { /* Unknown fields. */ }
+      // A bare/encoded envelope is not a form field name. This metadata never
+      // gates the independent request proof or changes the ephemeral body.
+      const opaque = !body.includes("&") && /^[A-Za-z0-9+/]+={0,2}$/.test(body) &&
+        body.length % 4 === 0 && Buffer.from(body,"base64").toString("base64") === body;
+      if (body.includes("=") && !opaque && !/^[\s]*[\[{]/.test(body)) {
+        try { fields = [...new Set(new URLSearchParams(body).keys())]; } catch { /* Unknown fields. */ }
+      }
     }
   }
+  fields = fields.filter(field => /^[A-Za-z_$][\w.$-]{0,63}$/.test(field)).slice(0,32);
   return { body, signals: { bodyPresent: true, bodySizeBytes: Buffer.byteLength(body), bodyFieldNames: fields } };
 }

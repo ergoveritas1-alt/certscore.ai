@@ -1,0 +1,124 @@
+{
+  "provenance": {
+    "runId": "20261027T044232Z-manual-audit-1e655977",
+    "source": "publication-trace.json",
+    "sha256": "52fa008d6c263e2329788d4ff9cdcc69aecf9b75f7601f86f34c2fd0c5b866ba",
+    "scope": "Sanitized original operational fields only; no reconstructed runtime/scoring evidence."
+  },
+  "failures": [
+    {
+      "scanId": "9926f180-3347-4c74-b404-c70e3d98f0af",
+      "status": "completed",
+      "createdAt": "2026-10-26T09:29:26.197387+00:00",
+      "completedAt": "2026-10-26T09:29:42.16+00:00",
+      "request": {
+        "status": "terminal_failure",
+        "lastError": "{\"code\":\"publication_invariant_failed\",\"version\":\"report-publication-failure.v1\",\"phase\":\"score_availability\",\"invariant\":\"posture_scores_unavailable\",\"issues\":[]}",
+        "completedAt": "2026-10-26T09:29:43.676212+00:00",
+        "requestedAt": "2026-10-26T09:29:42.895024+00:00",
+        "attemptCount": 1,
+        "firstFailedAt": "2026-10-26T09:29:43.676212+00:00",
+        "lastAttemptAt": "2026-10-26T09:29:42.895024+00:00",
+        "nextAttemptAt": "2026-10-26T09:29:43.676212+00:00",
+        "placeholderToken": false
+      },
+      "snapshot": {
+        "status": null,
+        "present": false,
+        "version": null,
+        "sourceHash": null,
+        "payloadSha256": null
+      },
+      "events": [
+        {
+          "eventType": "v2_lambda_result.received",
+          "createdAt": "2026-10-26T09:29:42.344012+00:00"
+        },
+        {
+          "eventType": "signals.merge_completed",
+          "createdAt": "2026-10-26T09:29:42.85976+00:00"
+        },
+        {
+          "eventType": "findings.unified_derivation_completed",
+          "createdAt": "2026-10-26T09:29:42.884508+00:00"
+        }
+      ]
+    },
+    {
+      "scanId": "c0c0e3d0-583c-425a-8910-0c6a026d3e4f",
+      "status": "completed",
+      "createdAt": "2026-10-25T15:30:14.228342+00:00",
+      "completedAt": "2026-10-25T15:30:37.981+00:00",
+      "request": {
+        "status": "terminal_failure",
+        "lastError": "{\"code\":\"publication_invariant_failed\",\"version\":\"report-publication-failure.v1\",\"phase\":\"score_availability\",\"invariant\":\"posture_scores_unavailable\",\"issues\":[]}",
+        "completedAt": "2026-10-25T15:30:47.187124+00:00",
+        "requestedAt": "2026-10-25T15:30:40.326604+00:00",
+        "attemptCount": 1,
+        "firstFailedAt": "2026-10-25T15:30:47.187124+00:00",
+        "lastAttemptAt": "2026-10-25T15:30:40.326604+00:00",
+        "nextAttemptAt": "2026-10-25T15:30:47.187124+00:00",
+        "placeholderToken": false
+      },
+      "snapshot": {
+        "status": null,
+        "present": false,
+        "version": null,
+        "sourceHash": null,
+        "payloadSha256": null
+      },
+      "events": [
+        {
+          "eventType": "v2_lambda_result.received",
+          "createdAt": "2026-10-25T15:30:38.986056+00:00"
+        },
+        {
+          "eventType": "signals.merge_completed",
+          "createdAt": "2026-10-25T15:30:40.289677+00:00"
+        },
+        {
+          "eventType": "findings.unified_derivation_completed",
+          "createdAt": "2026-10-25T15:30:40.317375+00:00"
+        }
+      ]
+    },
+    {
+      "scanId": "e6d611f2-e3b9-4fe2-a9e5-d20bb7f4ae0b",
+      "status": "completed",
+      "createdAt": "2026-10-26T19:58:29.586114+00:00",
+      "completedAt": "2026-10-26T19:59:03.58+00:00",
+      "request": {
+        "status": "terminal_failure",
+        "lastError": "{\"code\":\"publication_invariant_failed\",\"version\":\"report-publication-failure.v1\",\"phase\":\"score_availability\",\"invariant\":\"posture_scores_unavailable\",\"issues\":[]}",
+        "completedAt": "2026-10-26T19:59:08.050401+00:00",
+        "requestedAt": "2026-10-26T19:59:05.549393+00:00",
+        "attemptCount": 1,
+        "firstFailedAt": "2026-10-26T19:59:08.050401+00:00",
+        "lastAttemptAt": "2026-10-26T19:59:05.549393+00:00",
+        "nextAttemptAt": "2026-10-26T19:59:08.050401+00:00",
+        "placeholderToken": false
+      },
+      "snapshot": {
+        "status": null,
+        "present": false,
+        "version": null,
+        "sourceHash": null,
+        "payloadSha256": null
+      },
+      "events": [
+        {
+          "eventType": "v2_lambda_result.received",
+          "createdAt": "2026-10-26T19:59:04.028298+00:00"
+        },
+        {
+          "eventType": "signals.merge_completed",
+          "createdAt": "2026-10-26T19:59:05.525075+00:00"
+        },
+        {
+          "eventType": "findings.unified_derivation_completed",
+          "createdAt": "2026-10-26T19:59:05.543014+00:00"
+        }
+      ]
+    }
+  ]
+}

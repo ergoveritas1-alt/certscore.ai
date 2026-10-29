@@ -1,3 +1,4 @@
+import { hasTerminalReportPublicationFailure, reportPublicationResultState, terminalReportPublicationError } from "../../server/scans/report-publication-read-state";
 import { projectScanPostureScores } from "../api-v2/posture-scores";
 import { hasSuspendedGpcScoreEffect } from "../scans/gpc-customer-policy";
 import { projectScanFormsSummary, projectScanScoreExplanation } from "../api-v2/scan-report-summary";
@@ -696,6 +697,7 @@ export function derivePulseReportScore(input: {
   unifiedFindingPackets?: ReturnType<typeof buildScanReportUnifiedFindings>;
 }) {
   const scanRecord = input.scanRecord;
+  if (reportPublicationResultState(scanRecord) !== "final") return null;
   const persistedReportScore =
     scanRecord.snapshot?.report_projection_status === "ready" && !hasSuspendedGpcScoreEffect(scanRecord)
       ? finiteNumber(scanRecord.snapshot.certscore_overall)
@@ -2281,11 +2283,15 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const generated = generatedAt();
   const scan = hydratedScanRecord.scan;
   const domain = scan.domainHostname ?? safeHostname(input.requestedUrl) ?? "unknown";
-  const pulseNoGoState = buildPulseNoGoState(hydratedScanRecord.runtimeArtifacts);
+  const publicationState = reportPublicationResultState(hydratedScanRecord);
+  const publicationFailed = hasTerminalReportPublicationFailure(hydratedScanRecord);
+  const pulseNoGoState = publicationFailed ? null : buildPulseNoGoState(hydratedScanRecord.runtimeArtifacts);
   const noGoProjection = pulseNoGoState
     ? { resultDisposition: pulseNoGoState.resultDisposition, noGo: pulseNoGoState.noGo }
     : null;
-  const effectiveScanStatus = pulseNoGoState?.scanStatus ?? (scan.status === "completed" &&
+  const effectiveScanStatus = publicationState === "failed" ? "failed" :
+    !pulseNoGoState && publicationState === "finalizing" && ["completed", "completed_limited"].includes(scan.status) ? "finalizing" :
+    pulseNoGoState?.scanStatus ?? (scan.status === "completed" &&
     isAccessibilityAuditLimited(hydratedScanRecord.runtimeArtifacts?.accessibilityAudit, scan.id) ? "completed_limited" : scan.status);
   const coverage = deriveCoverage(hydratedScanRecord);
   const publicCoverage = withAccessibilityAuditCoverage(coverage, hydratedScanRecord.runtimeArtifacts?.accessibilityAudit, scan.id);
@@ -2305,7 +2311,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   });
   const executive = reportSurface.executive;
   const allFindings = reportSurface.allFindings;
-  const score = noGoProjection ? null : reportSurface.score;
+  const score = noGoProjection || publicationState !== "final" ? null : reportSurface.score;
   const coverageLimitedByNoGo = allFindings.some((finding) => finding.id === "scan_quality_visual_no_go");
   const topFindings = reportSurface.topFindings.map((finding) => toPulseFinding(finding, scan.id, {
     coverageLimitedByNoGo,
@@ -2322,9 +2328,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     domain,
     findings: allFindings,
     score
-  }), ...(!noGoProjection && ["completed", "completed_limited"].includes(scan.status) &&
-    (hydratedScanRecord.snapshot?.report_projection_status === "ready" ||
-      !hydratedScanRecord.snapshot?.report_projection_status && typeof hydratedScanRecord.snapshot?.certscore_overall === "number")
+  }), ...(!noGoProjection && publicationState === "final"
       ? { postureScores: projectScanPostureScores(hydratedScanRecord, score, projectScanScoreExplanation(hydratedScanRecord, score)) } : {}) };
   if (noGoProjection) {
     summary.headline = noGoProjection.noGo.title;
@@ -2364,7 +2368,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const allThirdPartyRequestCount = finiteNumber(recordValue(networkSummary, "thirdPartyRequestCount")) ??
     reportSurface.presentationSummary.thirdPartyRequestCount;
   const trackerFootprintBreakdown = buildTrackerFootprintBreakdown(reportSurface);
-  const selectedScoreStatus = reportSurface.customerScoreAssessment.scoreStatus;
+  const selectedScoreStatus = publicationState === "final" ? reportSurface.customerScoreAssessment.scoreStatus : "unavailable";
   const selectedWithholdingReason = reportSurface.customerScoreAssessment.withholdingReason;
   const transportSecurity = buildTransportSecurityProjection({
     detail: input.detail,
@@ -2383,7 +2387,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       metricLabel: "Overall score",
       source: reportSurface.customerScoreAssessment.scoreSource,
       status: selectedScoreStatus,
-      version: reportSurface.customerScoreAssessment.scoreVersion,
+      version: publicationState === "final" ? reportSurface.customerScoreAssessment.scoreVersion : null,
       withholdingReason: selectedWithholdingReason
     },
     riskLevel: summary.riskLevel,
@@ -2504,13 +2508,14 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     scanId: scan.id,
     scan_id: scan.id,
     scanStatus: effectiveScanStatus,
+    ...(publicationFailed ? { error: terminalReportPublicationError() } : {}),
     accessibilityAudit: projectAccessibilityAuditSummary(hydratedScanRecord.runtimeArtifacts?.accessibilityAudit, scan.id),
     ...(noGoProjection ?? {}),
     gpcResponse,
     postAcceptObservation,
     postRefusalObservation,
     formsSummary: projectScanFormsSummary(hydratedScanRecord),
-    scoreExplanation: projectScanScoreExplanation(hydratedScanRecord, score),
+    scoreExplanation: publicationState === "final" ? projectScanScoreExplanation(hydratedScanRecord, score) : undefined,
     summary,
     executiveSummary,
     surfacedResults,

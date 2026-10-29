@@ -33,6 +33,6 @@ export const C3_COOKIE_COVERAGE = [
 ] as const;
 
 export function cookieCoverageForPolicy(version: string | undefined) {
- return version === "certscore.cookie-purpose.v7" ? [...VENDOR_COOKIE_COVERAGE, ...C3_COOKIE_COVERAGE]
+ return ["certscore.cookie-purpose.v7", "certscore.cookie-purpose.v8"].includes(version ?? "") ? [...VENDOR_COOKIE_COVERAGE, ...C3_COOKIE_COVERAGE]
   : version === "certscore.cookie-purpose.v6" ? VENDOR_COOKIE_COVERAGE : [];
 }

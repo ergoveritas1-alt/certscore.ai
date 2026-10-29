@@ -45,3 +45,11 @@ test("successful runtime body reads preserve empty, JSON, form and bounded-field
   assert.equal(large.signals?.bodySizeBytes, 20_002);
   assert.deepEqual(large.signals?.bodyFieldNames, []);
 });
+
+test("opaque bodies cannot become field names and valid metadata stays bounded",()=>{
+ for(const body of ['opaque-private-envelope',Buffer.from('private-payload').toString('base64'),'[{"private":"value"}]']){
+  const result=readRuntimeRequestPayload({postData:()=>body});assert.equal(result.body,body);assert.deepEqual(result.signals?.bodyFieldNames,[]);
+ }
+ const input=Object.fromEntries([...Array.from({length:80},(_,i)=>[`field_${i}`,'private']),['raw=value','private'],['x'.repeat(500),'private']]);
+ const result=readRuntimeRequestPayload({postData:()=>JSON.stringify(input)});assert.equal(result.signals?.bodyFieldNames.length,32);assert.ok(result.signals!.bodyFieldNames.every(k=>/^[A-Za-z_$][\w.$-]{0,63}$/.test(k)));assert.doesNotMatch(JSON.stringify(result.signals),/private/);
+});

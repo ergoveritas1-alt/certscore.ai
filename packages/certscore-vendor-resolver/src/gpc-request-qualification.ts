@@ -10,7 +10,7 @@ import { decodeGppRequest, type GppRequestContext } from "./gpp-request-decoder"
 export const GPC_REQUEST_QUALIFICATION_POLICY = "gpc_sale_sharing_evidence.v5" as const;
 export type GpcRequestQualification = Omit<NonNullable<GpcBoundedObservation["requests"]["advertisingCollectionQualification"]>["rows"][number], "evidenceId">;
 
-export function inspectGpcRequestQualification(rawUrl: string, context: GppRequestContext & { allowLinkedInWa?: boolean; linkedInHeaderIdentifier?: boolean; linkedInWaBodyIdentifier?:boolean } = {}, bodyFields?: URLSearchParams): GpcRequestQualification {
+export function inspectGpcRequestQualification(rawUrl: string, context: GppRequestContext & { allowLinkedInWa?: boolean; linkedInHeaderIdentifier?: boolean; linkedInWaBodyIdentifier?:boolean; indexExchangeAuction?:boolean; magniteExchangeAuction?:boolean } = {}, bodyFields?: URLSearchParams): GpcRequestQualification {
   const result: GpcRequestQualification = { policyVersion:"ca_sale_sharing_qualification.v3", activity: "unresolved", basis: "endpoint_or_identity_unresolved", processingSignals: [], gpp: decodeGppRequest(new URLSearchParams()) };
   let url: URL;
   try { url = new URL(rawUrl); } catch { return result; }
@@ -103,5 +103,17 @@ export function inspectGpcRequestQualification(rawUrl: string, context: GppReque
   }
   if (host === "fastlane.rubiconproject.com" && path === "/a/api/fastlane.json" && identifier("eid_pubcid.org", "eid_sharedid.org", "eid_id5-sync.com", "eid_liveramp.com"))
     return role("identified_advertising_collection", "magnite_bid_user_identifier");
+  if(host==="htlb.casalemedia.com"&&path==="/openrtb/pbjs"&&context.indexExchangeAuction&&
+    ["eid_pubcid.org","eid_sharedid.org","eid_id5-sync.com","eid_liveramp.com"].some(key=>
+      !url.searchParams.has(key)&&bodyFields?.getAll(key).length===1&&isAdvertisingIdentityValue(key,bodyFields.get(key)??undefined))){
+    result.policyVersion="ca_sale_sharing_qualification.v4-index-auction";
+    return role("identified_advertising_collection","index_exchange_bid_user_identifier");
+  }
+  if(host==="fastlane.rubiconproject.com"&&path==="/a/api/prebid-exchange.json"&&context.magniteExchangeAuction&&
+    ["eid_pubcid.org","eid_sharedid.org","eid_id5-sync.com","eid_liveramp.com"].some(key=>
+      !url.searchParams.has(key)&&bodyFields?.getAll(key).length===1&&isAdvertisingIdentityValue(key,bodyFields.get(key)??undefined))){
+    result.policyVersion="ca_sale_sharing_qualification.v5-magnite-auction";
+    return role("identified_advertising_collection","magnite_exchange_bid_user_identifier");
+  }
   return result;
 }

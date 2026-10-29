@@ -1,7 +1,7 @@
 import {createHash} from "node:crypto";
 import {isCurrentCaliforniaChoiceInspection,isCaliforniaRuntimeLinkAssessment,californiaRuntimeLinkProofSchema,gpcResponseAssessmentSchema,
   frictionlessGpcContradictionSchema,type CaliforniaPrivacyReview} from "@certscore/contracts";
-import {deriveCaliforniaGpcResponsePolicy,CALIFORNIA_GPC_RESPONSE_POLICY_VERSION} from "./california-gpc-response-policy";
+import {deriveCaliforniaGpcResponsePolicy,CALIFORNIA_GPC_RESPONSE_POLICY_VERSION,INDEX_AUCTION_GPC_POLICY_VERSION,MAGNITE_AUCTION_GPC_POLICY_VERSION} from "./california-gpc-response-policy";
 import {hasVerifiedCustomerGpcEvidence} from "./gpc-customer-policy";
 
 /** Positive typed GPC proof, independent of policy wording or CMP state getters.
@@ -12,7 +12,7 @@ function qualifiedGpcCollection(review:CaliforniaPrivacyReview,value:unknown){
   if(!parsed.success || parsed.data.contractVersion!=="certscore.gpc-response-assessment.v3" || !hasVerifiedCustomerGpcEvidence(parsed.data))return undefined;
   const a=parsed.data,o=a.observation,policy=deriveCaliforniaGpcResponsePolicy(a);
   const documentHash=createHash("sha256").update(review.documentUrl).digest("hex");
-  if(policy.policyVersion!==CALIFORNIA_GPC_RESPONSE_POLICY_VERSION || policy.scoreEffect!=="deduction" ||
+  if(![CALIFORNIA_GPC_RESPONSE_POLICY_VERSION,INDEX_AUCTION_GPC_POLICY_VERSION,MAGNITE_AUCTION_GPC_POLICY_VERSION].some(v=>v===policy.policyVersion) || policy.scoreEffect!=="deduction" ||
       policy.reasonCode!=="verified_gpc_advertising_collection" || o.scanId!==review.scanId || o.documentUrlSha256!==documentHash ||
       !o.sourceSha256 || !o.sessionSha256 || o.sourceSha256!==a.comparison.gpcArtifact?.sha256)return undefined;
   const ids=new Set(policy.eligibleActivity.persistedUnderGpc);

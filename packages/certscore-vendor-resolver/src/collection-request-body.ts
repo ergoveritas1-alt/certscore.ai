@@ -2,6 +2,9 @@ import { decodeMixpanelBody, isMixpanelTrack } from "./mixpanel-collection-body"
 import {isAdvertisingIdentityValue} from './advertising-identifiers';
 import {readBoundedProtocolJson,type ProtocolJson} from './bounded-protocol-json';
 import { decodeIndexExchangeCollectionBody, isIndexExchangeCollection, readIndexExchangeProcessing } from "./index-exchange-collection-body";
+import {decodeGoogleBrowserCollectionBody, isGoogleBrowserCollection, readGoogleBrowserProcessing} from "./google-browser-collection-body";
+import {decodeRubiconExchangeCollectionBody, isRubiconExchangeCollection, readRubiconExchangeProcessing} from "./rubicon-collection-body";
+import type {OpenRtbContext} from "./openrtb-identity";
 
 /** Reviewed collector envelopes. This module observes shape and processing
  * declarations; accepting an envelope never establishes a sale/sharing role. */
@@ -40,7 +43,12 @@ export function collectionBodyPrivacySignals(url:URL,fields:URLSearchParams):boo
  return protocol(url)!==null&&[...fields].some(([k,v])=>
    protocol(url)==='reddit' && ['dpm','dpcc','dprc'].includes(k) && !['','0','false'].includes(v)||['rdp','npa','ltd','dpo','data_processing_options'].includes(k)||restricted.has(k)&&!['0','false'].includes(v));
 }
-export function decodeCanonicalCollectionBody(url:URL,body:string):{fields:URLSearchParams;format:'json'|'form'}|null{
+export type CollectionBodyDecodeStage = "envelope_selection" | "json_structure" | "collector_fields" | "field_uniqueness";
+export function decodeCanonicalCollectionBody(url:URL,body:string,onStage?:(stage:CollectionBodyDecodeStage)=>void):{fields:URLSearchParams;format:'json'|'form';context?:OpenRtbContext}|null{
+ const stage=(value:CollectionBodyDecodeStage)=>{try{onStage?.(value);}catch{/* Diagnostic observers cannot change decoding. */}};
+ stage("envelope_selection");
+ if(isGoogleBrowserCollection(url))return decodeGoogleBrowserCollectionBody(url,body);
+ if(isRubiconExchangeCollection(url))return decodeRubiconExchangeCollectionBody(url,body);
  if(isIndexExchangeCollection(url))return decodeIndexExchangeCollectionBody(url,body);
  const p=protocol(url);if(!p)return null;
  if(p==='mixpanel')return decodeMixpanelBody(url,body);
@@ -56,7 +64,9 @@ export function decodeCanonicalCollectionBody(url:URL,body:string):{fields:URLSe
   }
  }
  if(!text.startsWith('{'))return null;
+ stage("json_structure");
  const root=readBoundedProtocolJson(text,[...url.searchParams].length);if(!object(root))fail();
+ stage("collector_fields");
  const fields=new URLSearchParams();
  const routing=p==='reddit'?new Set(['id','event']):p==='tiktok'?new Set(['pixel_code','event']):p==='snap'?new Set(['pid','ev']):p==='pinterest'?new Set(['tid','event']):new Set<string>();
  const value=(key:string,v:ProtocolJson)=>{
@@ -112,6 +122,7 @@ export function decodeCanonicalCollectionBody(url:URL,body:string):{fields:URLSe
  }
  // A single retained request may batch events, but conflicting or repeated
  // privacy declarations cannot be combined into an invented effective state.
+ stage("field_uniqueness");
  for(const key of new Set(fields.keys()))if(fields.getAll(key).length!==1){
   const values=fields.getAll(key);
   if(isCanonicalProtocolIdentityField(url,key)&&new Set(values).size===1){fields.delete(key);fields.append(key,values[0]!);}
@@ -123,7 +134,9 @@ export function decodeCanonicalCollectionBody(url:URL,body:string):{fields:URLSe
 /** A known processing declaration remains observable even if unrelated event
  * metadata is unsupported. Only reviewed root/event locations are inspected;
  * no absence or role is inferred from this independent partial read. */
-export function readCanonicalBodyProcessing(url:URL,body:string):URLSearchParams|null{
+export function readCanonicalBodyProcessing(url:URL,body:string,structuralPolicy?:"magnite_json_structure.v1"):URLSearchParams|null{
+ if(isGoogleBrowserCollection(url))return readGoogleBrowserProcessing(url,body);
+ if(isRubiconExchangeCollection(url))return readRubiconExchangeProcessing(url,body,structuralPolicy);
  if(isIndexExchangeCollection(url))return readIndexExchangeProcessing(url,body);
  const p=protocol(url);if(!p||new TextEncoder().encode(body).length>32768)return null;
  try{
