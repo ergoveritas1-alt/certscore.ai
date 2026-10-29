@@ -1,0 +1,125 @@
+.table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.table th,
+.table td {
+  min-width: 0;
+  padding: 0.5rem 0.25rem;
+  vertical-align: top;
+}
+
+.table th {
+  white-space: normal;
+  line-height: 1rem;
+  letter-spacing: 0.02em;
+}
+
+.table td:first-child {
+  position: static;
+}
+
+.table td:first-child > span {
+  gap: 0.25rem;
+  max-width: 100%;
+}
+
+.table td:first-child > span > span[aria-hidden] {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+}
+
+.table td:first-child > span > span:not([aria-hidden]) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.table td:nth-child(2) > p,
+.table td:nth-child(7) > p {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+
+.table td:nth-child(2) > p {
+  word-break: break-all;
+}
+
+.table td:nth-child(4) > div {
+  display: block;
+}
+
+.table td:nth-child(4) > div > span {
+  display: inline-block;
+  margin-top: 0.125rem;
+}
+
+.table td:nth-child(6) > p {
+  font-size: 0.625rem;
+  line-height: 0.875rem;
+}
+
+.table td:nth-child(6) summary {
+  padding: 0.125rem 0.25rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.table td:nth-child(8) {
+  white-space: nowrap;
+}
+
+@media (max-width: 1023px) {
+  .table {
+    display: block;
+  }
+
+  .table colgroup {
+    display: none;
+  }
+
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .table tbody {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 0.75rem;
+    height: auto;
+    padding: 0.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+  }
+
+  .table td {
+    display: block;
+    padding: 0.5rem;
+  }
+
+  .table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.25rem;
+    color: #64748b;
+    font-size: 0.625rem;
+    font-weight: 600;
+    line-height: 1rem;
+    text-transform: uppercase;
+  }
+}

@@ -14,6 +14,7 @@ import { withServerTiming } from "../../../../server/performance/log-server-timi
 import { AdminNavigationProvider, AdminScanActions } from "./admin-scan-actions";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
 import { AdminScansFilterForm } from "./admin-scans-filter-form";
+import basicTableStyles from "./admin-basic-scan-table.module.css";
 import { AdminTrafficFilters } from "../../../../components/admin/admin-traffic-filters";
 import { AdminOperationalSnapshot } from "../../../../components/admin/admin-operational-snapshot";
 import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
@@ -41,7 +42,7 @@ function CreatedViaCell({ scan }: { scan: AdminScanListItem }) {
   const title = origin?.requestId
     ? `Original creation request: ${origin.requestId} · ${formatAdminDateTime(origin.requestedAt)}`
     : "Creation source from retained scan metadata; original request details unavailable. Unknown means attribution could not be verified.";
-  return <td className="px-2.5 py-1.5">
+  return <td data-label="Created via" role="cell" className="px-2.5 py-1.5">
     <p className="text-[9px] text-slate-500">Scan audience: {origin?.trafficClass ?? "unknown"}</p>
     {origin?.requestId ? <details><summary className="cursor-pointer rounded bg-sky-50 px-2 py-1 text-sky-800" title={title}>{label}</summary><p className="mt-1 break-all text-[10px]">{origin.requestId}<br />{formatAdminDateTime(origin.requestedAt)}{origin.requestId.startsWith("pulse_req_") ? <Link className="block text-sky-700 underline" href={`/app/admin/pulse/${encodeURIComponent(origin.requestId)}`}>Open request</Link> : null}</p></details>
       : <span className="inline-flex rounded bg-slate-50 px-2 py-1 text-slate-700" title={title}>{label}</span>}
@@ -54,7 +55,7 @@ function ClientChannelCell({ scan }: { scan: AdminScanListItem }) {
   const channel = scan.executionChannel && scan.executionChannel !== "unknown"
     ? formatFilterLabel(scan.executionChannel)
     : SCAN_CREATION_SOURCES[scanCreationSource(scan.requestChannel)];
-  return <td className="px-2.5 py-1.5">
+  return <td data-label="Client / channel" role="cell" className="px-2.5 py-1.5">
     <p className="truncate font-semibold text-slate-700" title={client}>{client}</p>
     <p className="mt-0.5 truncate text-[10px] text-slate-500" title={channel}>{channel}</p>
   </td>;
@@ -177,46 +178,46 @@ function AdminScanSummaryCells({ scan }: { scan: AdminScanListItem }) {
     : null;
   const requestedDateTime = formatRequestedDateTime(scan.activityAt);
   return <>
-    <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50 has-[details[open]]:z-40" title={status.label}>
+    <td data-label="Status" role="cell" className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50 has-[details[open]]:z-40" title={status.label}>
       <span className="inline-flex items-center gap-1.5 font-semibold"><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /><span className={status.label === "No-go" ? "text-rose-700" : "text-slate-700"}>{status.label}</span></span>
       {noGoReason ? <details className="relative mt-0.5 min-w-0 text-[10px] leading-4 text-slate-500">
         <summary aria-label={`Expand no-go reason: ${noGoReason}`} className="block cursor-pointer list-none truncate rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden" title={noGoReason}>{noGoReason}</summary>
         <p className="absolute left-0 top-full z-40 mt-1 w-72 max-w-[calc(100vw-3rem)] whitespace-normal break-words rounded-md border border-slate-200 bg-white p-2 text-xs text-slate-700 shadow-lg">{noGoReason}</p>
       </details> : null}
     </td>
-    <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={scan.requesterName ?? provenance.label}>{scan.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${requesterIpLabel(scan)} · ${scan.requesterIpSource.replaceAll("_", " ")}`}>{requesterIpLabel(scan)}</p></td>
-    <td className="px-2.5 py-1.5 text-[10px] leading-4 text-slate-600" title={`Activity: ${formatAdminDateTime(scan.activityAt)} · Requested: ${formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}`}><p className="truncate">{requestedDateTime.date}</p><p className="truncate text-slate-500">{requestedDateTime.time}</p></td>
-    <td className="px-2.5 py-1.5">
+    <td data-label="Requester IP" role="cell" className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={scan.requesterName ?? provenance.label}>{scan.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${requesterIpLabel(scan)} · ${scan.requesterIpSource.replaceAll("_", " ")}`}>{requesterIpLabel(scan)}</p></td>
+    <td data-label="Activity" role="cell" className="px-2.5 py-1.5 text-[10px] leading-4 text-slate-600" title={`Activity: ${formatAdminDateTime(scan.activityAt)} · Requested: ${formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}`}><p className="truncate">{requestedDateTime.date}</p><p className="truncate text-slate-500">{requestedDateTime.time}</p></td>
+    <td data-label="Page" role="cell" className="px-2.5 py-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
         <p className="min-w-0 flex-1 line-clamp-2 break-all font-semibold leading-4 text-slate-900" title={scan.pageUrl ?? "Page URL unavailable"}>{scan.pageUrl ?? "Page URL unavailable"}</p>
         <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">{scan.scanType}</span>
       </div>
     </td>
-    <td className="px-2.5 py-1.5 font-medium tabular-nums text-slate-800">{scan.linkedScanId ? snapshotNumber(scan.fullSitePagesScanned ?? scan.pagesScanned) : "—"}</td>
+    <td data-label="# Pages" role="cell" className="px-2.5 py-1.5 font-medium tabular-nums text-slate-800">{scan.linkedScanId ? snapshotNumber(scan.fullSitePagesScanned ?? scan.pagesScanned) : "—"}</td>
     <CreatedViaCell scan={scan} />
     <ClientChannelCell scan={scan} />
-    <td className="px-2.5 py-1.5 font-medium text-slate-700">{scan.trancoRank ? `#${scan.trancoRank.toLocaleString()}` : "—"}</td>
-    <td className="px-2.5 py-1.5">
+    <td data-label="Tranco" role="cell" className="px-2.5 py-1.5 font-medium text-slate-700">{scan.trancoRank ? `#${scan.trancoRank.toLocaleString()}` : "—"}</td>
+    <td data-label="Score" role="cell" className="px-2.5 py-1.5">
       {[
         { label: "EU", value: scan.certscoreOverall, title: [scan.scoreLabel, scan.scoreVersion, scan.scoreCoverageConfidence ? `${scan.scoreCoverageConfidence} coverage` : null, scan.scoreScoredAt ? `scored ${scan.scoreScoredAt}` : null].filter(Boolean).join(" · ") || undefined },
         { label: "CA", value: scan.californiaScore ?? null, title: scan.californiaScoreVersion ?? undefined }
       ].map(({ label, value, title }) => <p key={label} className="flex items-baseline justify-between gap-1 whitespace-nowrap leading-4" title={title} aria-label={`${label} score: ${value === null ? "unavailable" : `${value} out of 100`}`}><span className="text-[10px] font-medium text-slate-500">{label}</span><span><span className="font-semibold tabular-nums text-slate-950">{value ?? "—"}</span>{value !== null ? <span className="text-[10px] text-slate-400">/100</span> : null}</span></p>)}
     </td>
-    <td className="px-2.5 py-1.5"><span className="text-sm font-semibold text-slate-950">{scan.topFindingCount ?? "—"}</span></td>
+    <td data-label="Top" role="cell" className="px-2.5 py-1.5"><span className="text-sm font-semibold text-slate-950">{scan.topFindingCount ?? "—"}</span></td>
   </>;
 }
 
 function AdminBasicScanTable({ scans }: { scans: AdminScanListItem[] }) {
-  return <table className="w-[1311px] min-w-[1311px] table-fixed text-left text-xs">
+  return <table aria-label="Basic scan activity" role="table" className={`${basicTableStyles.table} w-full table-fixed text-left text-xs`}>
     <colgroup>
-      {[100, 165, 115, 173, 75, 190, 170, 70, 100, 75, 78].map((width, index) => <col key={index} style={{ width: `${width}px` }} />)}
+      {[10, 13, 10, 14, 5, 12, 12, 8, 8, 4, 4].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}
     </colgroup>
-    <thead className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500"><tr>
-      {[...ADMIN_SCAN_SUMMARY_COLUMNS, { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }].map(({ label, className, title }) => <th key={label} title={title} className={`border-b border-slate-200 px-2.5 py-1.5 font-semibold ${className ?? ""}`}>{label}</th>)}
+    <thead role="rowgroup" className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500"><tr role="row">
+      {[...ADMIN_SCAN_SUMMARY_COLUMNS, { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }].map(({ label, title }) => <th role="columnheader" key={label} title={title} className="border-b border-slate-200 font-semibold">{label}</th>)}
     </tr></thead>
-    <tbody className="divide-y divide-slate-100 bg-white text-slate-700">{scans.map((scan) => <tr className="group h-[52px] hover:bg-slate-50/70" key={scan.activityId}>
+    <tbody role="rowgroup" className="divide-y divide-slate-100 bg-white text-slate-700">{scans.map((scan) => <tr role="row" className="group h-[52px] hover:bg-slate-50/70" key={scan.activityId}>
       <AdminScanSummaryCells scan={scan} />
-      <td className="sticky right-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50">{scan.linkedScanId && scan.scanViewHref ? <Link className="text-sky-800 underline" href={scan.scanViewHref} prefetch={false}>Open report</Link> : "—"}</td>
+      <td data-label="Open" role="cell" className="bg-white group-hover:bg-slate-50">{scan.linkedScanId && scan.scanViewHref ? <Link aria-label="Open report" title="Open report" className="inline-flex h-7 w-6 items-center justify-center rounded-md text-sky-800 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600" href={scan.scanViewHref} prefetch={false}><svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg></Link> : "—"}</td>
     </tr>)}</tbody>
   </table>;
 }
