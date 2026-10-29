@@ -2488,10 +2488,92 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://journeyapps.com/"
+    },
+    "https://www.udacity.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:18:45.454Z",
+      "lastContactAt": "2026-10-29T17:18:45.454Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.udacity.com/"
+    },
+    "https://amplifi.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:19:34.723Z",
+      "lastContactAt": "2026-10-29T17:19:34.723Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://amplifi.com/"
+    },
+    "https://www.wma.net/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:19:50.003Z",
+      "lastContactAt": "2026-10-29T17:19:50.003Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.wma.net/"
+    },
+    "https://www.tu-darmstadt.de/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:20:48.198Z",
+      "lastContactAt": "2026-10-29T17:20:48.198Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.tu-darmstadt.de/"
+    },
+    "https://www.orangelogic.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:20:37.044Z",
+      "lastContactAt": "2026-10-29T17:20:37.044Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.orangelogic.com/"
+    },
+    "https://www.computer.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:21:45.001Z",
+      "lastContactAt": "2026-10-29T17:21:45.001Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.computer.org/"
+    },
+    "https://www.nationalgallery.org.uk/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-26T17:21:09.510Z",
+      "lastContactAt": "2026-10-29T17:21:09.510Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "failed_or_unreachable_visit"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://www.nationalgallery.org.uk/"
+    },
+    "https://fidoalliance.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T17:22:07.432Z",
+      "lastContactAt": "2026-10-29T17:22:07.432Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://fidoalliance.org/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-29T17:05:08.485Z",
+  "updatedAt": "2026-10-29T17:22:07.728Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -2617,6 +2699,14 @@
     "https://worldathletics.org/",
     "https://www.pageuppeople.com/",
     "https://www.lincoln.ac.uk/",
-    "https://journeyapps.com/"
+    "https://journeyapps.com/",
+    "https://www.udacity.com/",
+    "https://amplifi.com/",
+    "https://www.wma.net/",
+    "https://www.tu-darmstadt.de/",
+    "https://www.orangelogic.com/",
+    "https://www.computer.org/",
+    "https://www.nationalgallery.org.uk/",
+    "https://fidoalliance.org/"
   ]
 }
