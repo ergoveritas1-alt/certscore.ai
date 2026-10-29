@@ -123,6 +123,7 @@ test("bounded traffic proof preserves old original owners and ignores later inte
 
 test("manual and active-scan refresh share one live page request", () => {
   const refresh=readFileSync("apps/web/app/app/admin/scans/admin-scans-auto-refresh.tsx","utf8");
-  assert.equal(refresh.match(/router\.refresh\(\)/g)?.length,1);
+  assert.equal(refresh.match(/window\.location\.reload\(\)/g)?.length,1);
+  assert.doesNotMatch(refresh,/useRouter|useTransition|router\.refresh/);
   assert.doesNotMatch(refresh,/refreshAdminScanActivity/);
 });

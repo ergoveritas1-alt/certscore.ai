@@ -360,7 +360,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
       excludeMacMiniScanBot
     }, showReportDetails));
 
-  // Both panels await the same hydrated result and one cached database snapshot.
+  // Both panels await the same hydrated result and one live database snapshot.
   const snapshotPromise = withServerTiming("app.admin.scans.operational_snapshot", async () => (await scanPagePromise).snapshot);
   const sharedParams = { ...resolvedSearchParams, timeSpan: activeTimeSpan, traffic: trafficScope };
   async function SnapshotPanel() {

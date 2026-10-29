@@ -264,6 +264,7 @@ jobs:
         run: |
           pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
             apps/web/lib/admin/admin-scan-activity.test.ts \
+            apps/web/app/app/admin/scans/admin-scans-auto-refresh.test.ts \
             apps/web/server/admin/admin-scan-activity-query.test.ts \
             apps/web/server/admin/admin-scan-operational-snapshot.test.ts \
             apps/web/server/admin/admin-operational-snapshot-consistency.test.ts
