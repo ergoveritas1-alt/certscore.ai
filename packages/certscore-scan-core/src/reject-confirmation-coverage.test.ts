@@ -183,3 +183,27 @@ for (const key of ["VWD6_ENSIGHTEN_PRIVACY_Analytics", "RSA_ENSIGHTEN_PRIVACY_Ad
     });
   });
 }
+
+for (const mode of ["saved", "no_event", "partial", "opposite", "invalid_necessary"] as const) {
+  test(`HubSpot Reject with necessary category: ${mode}`, async () => {
+    const recipe = buildCanonicalPostRefusalActionRecipes().find(row => row.cmpId === "HubSpot Consent Banner")!;
+    await fixture(`<section id="hs-eu-cookie-confirmation"><p>Choose optional cookies</p>
+      <button id="hs-eu-decline-button" onclick="save();fetch('/click');this.parentElement.hidden=true">Reject all</button></section>
+      <script>
+      window.handlers=[];window.state={categories:{necessary:true,analytics:true,advertisement:true,functionality:true}};
+      window._hsp={push:([command,fn])=>{if(command!=='addPrivacyConsentListener')throw Error('unexpected command');handlers.push(fn);fn(state);}};
+      window.save=()=>{window.state={categories:${mode === "partial" ? '{necessary:true,analytics:false}' : `{necessary:${mode !== "invalid_necessary"},analytics:${mode === "opposite"},advertisement:false,functionality:false}`}};
+        ${mode === "no_event" ? '' : 'handlers.forEach(fn=>fn(state));'} };
+      </script>`, async (url, clicks) => {
+      const packet = await observe(url, recipe);
+      assert.equal(clicks(), 1);
+      assert.equal(packet.refusalRegistration.status, mode === "saved" ? "confirmed" : "unconfirmed");
+      assert.equal(packet.decisionEvidence?.decision === "denied", mode === "saved");
+      const projection = projectPostRefusalEvidenceForReport({packet});
+      // Loopback lab evidence verifies the observer, but cannot become a
+      // production report action or a confirmed customer finding.
+      assert.equal(projection.execution?.clickCompleted, false);
+      assert.equal(projection.execution?.consentConfirmed, false);
+    });
+  });
+}

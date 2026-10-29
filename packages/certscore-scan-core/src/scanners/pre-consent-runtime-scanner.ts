@@ -1,3 +1,4 @@
+import { consentGeometryCheckpoint } from "../consent-geometry-checkpoint.js";
 import {retainDomOptOutLabel,retainDomOptOutSearch} from "../dom-opt-out-label.js";
 import {captureBoundRuntimeTextSnapshot,retainRuntimeOptOutSearch,type RuntimeTextCapture} from "../runtime-opt-out-text.js";
 import {isGateRuntimeTextTarget} from "@certscore/contracts";
@@ -1761,7 +1762,13 @@ export async function preConsentRuntimeScanner(
               timeoutMs,
             }),
             () => null,
-          );
+          ).then(geometry => {
+            if (geometry) {
+              const entry = timingBreakdown.find(timing => timing.label === "early consent control geometry");
+              if (entry) entry.detail = consentGeometryCheckpoint(geometry);
+            }
+            return geometry;
+          });
         })
       : Promise.resolve(null);
     retainedRenderedPolicyLinkEvidence = captureRenderedPolicyEvidence
@@ -5452,11 +5459,18 @@ async function captureCmpRuntimeProbeInputs(input: {
   storageSnapshot?: StorageSnapshot;
   scanStartedAtMs: number;
 }): Promise<VendorResolverInput[]> {
-  const observed = await input.page.evaluate(() => {
+  // Reuse the canonical library inside the same bounded DOM/global pass.
+  // A reviewed marker must not also need a scanner-local keyword whitelist.
+  const exactMarkers = KNOWN_CMP_REGISTRY.flatMap(entry => entry.domSelectors ?? [])
+    .filter(selector => /^[.#][\w-]+$/.test(selector)).map(selector => selector.slice(1));
+  const exactGlobals = KNOWN_CMP_REGISTRY.flatMap(entry => entry.globalNames ?? [])
+    .filter(name => !name.includes("."));
+  const observed = await input.page.evaluate(({ exactMarkers, exactGlobals }) => {
+    const knownMarkers = new Set(exactMarkers), knownGlobals = new Set(exactGlobals);
     const markerPattern =
       /(consent|cookie|cmp|privacy|drupal|eu_cookie_compliance|sliding-popup|onetrust|optanon|didomi|truste|trustarc|usercentrics|cookiebot|cybot|sourcepoint|sp_message|osano|ketch|quantcast|iubenda|termly|cookieyes|cky|coi)|^(?:ensNotifyBanner|ensModalWrapper|tcf2__ensNotifyBanner|tcf2__ensModalWrapper|ccm-root|ccm-widget)$/i;
     const globalNames = Object.getOwnPropertyNames(window)
-      .filter((name) => markerPattern.test(name))
+      .filter((name) => markerPattern.test(name) || knownGlobals.has(name))
       .slice(0, 150);
     const drupalSettings = (window as typeof window & {
       drupalSettings?: Record<string, unknown>;
@@ -5467,11 +5481,11 @@ async function captureCmpRuntimeProbeInputs(input: {
     const selectors = new Set<string>();
     for (const element of Array.from(document.querySelectorAll("[id],[class]")).slice(0, 1_000)) {
       const id = element.getAttribute("id");
-      if (id && markerPattern.test(id)) {
+      if (id && (markerPattern.test(id) || knownMarkers.has(id))) {
         selectors.add(`#${CSS.escape(id)}`);
       }
       for (const className of Array.from(element.classList)) {
-        if (markerPattern.test(className)) {
+        if (markerPattern.test(className) || knownMarkers.has(className)) {
           selectors.add(`.${CSS.escape(className)}`);
         }
       }
@@ -5483,7 +5497,7 @@ async function captureCmpRuntimeProbeInputs(input: {
       globalNames,
       selectors: [...selectors],
     };
-  }).catch(() => ({ globalNames: [], selectors: [] }));
+  }, { exactMarkers, exactGlobals }).catch(() => ({ globalNames: [], selectors: [] }));
 
   const storageKeys = unique([
     ...(input.storageSnapshot?.localStorageKeys ?? []),

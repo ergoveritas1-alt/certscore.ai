@@ -91,9 +91,9 @@ for (const provider of ["osano", "hubspot"] as const) test(`${provider}: complet
   try {
     const page = await browser.newPage();
     await page.setContent(`<script>
-      window.handlers=[]; window.registrations=0;
+      window.handlers=[]; window.registrations=0; window.getterReads=0;
       window.state={ANALYTICS:'DENY',MARKETING:'DENY',PERSONALIZATION:'DENY',ESSENTIAL:'ACCEPT','OPT-OUT':'ACCEPT',STORAGE:'DENY'};
-      window.Osano={cm:{getConsent:()=>window.state,addEventListener:(name,fn)=>{if(name!=='osano-cm-consent-saved')throw Error('wrong event');window.registrations++;window.handlers.push(fn)}}};
+      window.Osano={cm:{getConsent:()=>{window.getterReads++;return window.state;},addEventListener:(name,fn)=>{if(name!=='osano-cm-consent-saved')throw Error('wrong event');window.registrations++;window.handlers.push(fn)}}};
       window._hsp={push:([name,fn])=>{if(name!=='addPrivacyConsentListener')throw Error('wrong API');window.registrations++;window.handlers.push(fn)}};
       window.emit=data=>window.handlers.forEach(fn=>fn(data));
     </script>`);
@@ -105,15 +105,26 @@ for (const provider of ["osano", "hubspot"] as const) test(`${provider}: complet
     await page.evaluate(data => { (window as any).state=data; (window as any).emit(data); }, granted);
     const state = await readCmpApiConsentSnapshot(page, provider);
     assert.equal(state?.decision, "granted"); assert.equal(state?.eventSequence, 1); assert.ok(state?.eventObservedAtEpochMs);
+    const beforeReads = await page.evaluate(() => (window as any).getterReads);
+    const reasons: string[] = [];
+    assert.deepEqual(await readCmpApiConsentSnapshot(page, provider, reason => reasons.push(reason)), state);
+    assert.deepEqual(reasons, []);
+    assert.equal(await page.evaluate(() => (window as any).getterReads), beforeReads + (provider === "osano" ? 1 : 0));
     for (const data of [null, {allowed:true}, {categories:{analytics:true}}, {ANALYTICS:"ACCEPT"}]) {
       await page.evaluate(data => { (window as any).state=data; (window as any).emit(data); }, data);
-      assert.ok([undefined, "unknown"].includes((await readCmpApiConsentSnapshot(page, provider))?.decision));
+      const diagnostics: string[] = [];
+      assert.ok([undefined, "unknown"].includes((await readCmpApiConsentSnapshot(page, provider, reason => diagnostics.push(reason)))?.decision));
+      assert.deepEqual(diagnostics, ["receipt_format_unsupported"]);
     }
     if (provider === "osano") {
       await page.evaluate(data => { (window as any).state=data; (window as any).emit({ANALYTICS:"ACCEPT"}); }, granted);
-      assert.equal(await readCmpApiConsentSnapshot(page, provider), undefined, "malformed event cannot witness an otherwise valid getter");
+      const diagnostics: string[] = [];
+      assert.equal(await readCmpApiConsentSnapshot(page, provider, reason => diagnostics.push(reason)), undefined, "malformed event cannot witness an otherwise valid getter");
+      assert.deepEqual(diagnostics, ["receipt_readback_mismatch"]);
       await page.evaluate(data=>{(window as any).state=data;(window as any).__tcfapi=()=>{};},granted);
-      assert.equal(await readCmpApiConsentSnapshot(page,provider),undefined,"non-TCF recipe cannot certify IAB purpose decisions");
+      diagnostics.length = 0;
+      assert.equal(await readCmpApiConsentSnapshot(page,provider,reason => diagnostics.push(reason)),undefined,"non-TCF recipe cannot certify IAB purpose decisions");
+      assert.deepEqual(diagnostics, ["configuration_or_groups_unverified"]);
     }
     assert.equal(await page.evaluate(() => (window as any).registrations), 1);
   } finally { await browser.close(); }
@@ -160,4 +171,37 @@ test("HubSpot queues one read-only listener before bootstrap without accepting a
     assert.equal(after?.decision,"denied");assert.equal(after?.eventSequence,2);assert.ok(after?.eventObservedAtEpochMs);
     assert.equal(await page.evaluate(()=>(window as any)._hsp.length),1);
   } finally {await browser.close();}
+});
+
+test("HubSpot: served necessary category preserves optional decisions and rejects unsupported extensions", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<script>
+      window.registrations=0;
+      window._hsp={push:([name,callback])=>{if(name!=='addPrivacyConsentListener')throw Error('unexpected command');window.registrations++;window.listener=callback;}};
+    </script>`);
+    const before = await readCmpApiConsentSnapshot(page, "hubspot");
+    assert.equal(before?.eventSequence, 0);
+    for (const [categories, expected] of [
+      [{necessary:true,analytics:true,advertisement:true,functionality:true}, "granted"],
+      [{necessary:true,analytics:false,advertisement:false,functionality:false}, "denied"],
+      [{necessary:true,analytics:true,advertisement:false,functionality:false}, "mixed"],
+      [{analytics:true,advertisement:true,functionality:true}, "granted"],
+      [{necessary:false,analytics:true,advertisement:true,functionality:true}, "unknown"],
+      [{necessary:"true",analytics:true,advertisement:true,functionality:true}, "unknown"],
+      [{necessary:null,analytics:true,advertisement:true,functionality:true}, "unknown"],
+      [{necessary:true,analytics:true,advertisement:true}, "unknown"],
+      [{necessary:true,analytics:true,advertisement:true,functionality:true,other:true}, "unknown"],
+    ] as const) {
+      await page.evaluate(categories => (window as any).listener({categories}), categories);
+      const reasons: string[] = [];
+      const state = await readCmpApiConsentSnapshot(page, "hubspot", r => reasons.push(r));
+      assert.equal(state?.decision, expected, JSON.stringify(categories));
+      assert.deepEqual(reasons, expected === "unknown" ? ["receipt_format_unsupported"] : []);
+      const reread = await readCmpApiConsentSnapshot(page, "hubspot");
+      assert.equal(reread?.eventSequence, state?.eventSequence, "reading does not manufacture another saved event");
+    }
+    assert.equal(await page.evaluate(() => (window as any).registrations), 1);
+  } finally { await browser.close(); }
 });

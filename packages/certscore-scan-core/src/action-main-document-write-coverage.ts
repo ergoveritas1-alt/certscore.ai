@@ -1,3 +1,4 @@
+import { cmpPassiveReadToken, recordCmpPassiveRead } from "./cmp-passive-diagnostics.js";
 import { createHash } from "node:crypto";
 import type { Page } from "playwright";
 import type { ActionMainDocumentWriteCoverage } from "@certscore/contracts";
@@ -8,15 +9,19 @@ export type WriteProbeMetadata = {
 };
 /** Replaces the existing terminal write read; adds no browser round trip. */
 export async function readActionWriteCapture<T>(page: Page, readerName: string): Promise<{ writes: T[]; metadata?: WriteProbeMetadata }> {
-  return page.evaluate((name) => {
+  const token = cmpPassiveReadToken(page);
+  const result = await page.evaluate((name) => {
     const reader = (window as unknown as Record<string, unknown>)[name] as
       ((() => unknown[]) & { coverage?: () => WriteProbeMetadata }) | undefined;
     if (typeof reader !== "function") return { writes: [] };
     const writes = reader();
+    let passive:unknown;try { passive=(window as unknown as {__certscoreReadCmpPassiveEvents?:()=>unknown}).__certscoreReadCmpPassiveEvents?.(); } catch { /* Preserve the independent writes. */ }
     // Optional diagnostics must never discard independently retained write evidence.
-    try { return { writes, ...(reader.coverage ? { metadata: reader.coverage() } : {}) }; }
+    try { return { writes, passive, ...(reader.coverage ? { metadata: reader.coverage() } : {}) }; }
     catch { return { writes }; }
-  }, readerName).catch(() => ({ writes: [] })) as Promise<{ writes: T[]; metadata?: WriteProbeMetadata }>;
+  }, readerName).catch(() => ({ writes: [] })) as { writes: T[]; metadata?: WriteProbeMetadata; passive?:unknown };
+  recordCmpPassiveRead(token,result.passive);
+  return {writes:result.writes,...(result.metadata?{metadata:result.metadata}:{})};
 }
 export function buildActionWriteCoverage(input: {
   metadata?: WriteProbeMetadata; targetUrl: string; windowStartedAtMs: number; windowEndedAtMs: number;

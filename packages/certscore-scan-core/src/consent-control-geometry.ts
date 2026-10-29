@@ -242,7 +242,12 @@ interface CaptureConsentControlGeometryOptions {
   candidateLimit?: number;
   containerLimit?: number;
   timeoutMs?: number;
+  /** Action-search retries must not queue another read behind a timed-out RPC.
+   * A skipped frame stays unavailable; late data is never reused. */
+  avoidOverlappingFrameReads?: boolean;
 }
+
+const pendingActionGeometryReads = new WeakSet<Frame>();
 
 interface RawGeometryContainer {
   selectorHint: string;
@@ -372,6 +377,13 @@ export async function captureConsentControlGeometry(
     consentPatternSource: CONSENT_CONTEXT_PATTERN.source,
     controlLabelPatternSource: CANDIDATE_ACTION_PRIORITY_PATTERN.source,
     registrySelectors,
+    // Names only: no property reads, SDK getters or protocol calls. Use the
+    // canonical library in this same document snapshot as the control inventory.
+    registryGlobals: [...new Set([
+      ...KNOWN_CMP_REGISTRY.flatMap(entry => entry.globalNames ?? []),
+      "OneTrust", "Optanon", "OptanonWrapper", "__tcfapi", "__cmp", "__cmpapi", "Cookiebot", "Didomi", "UC_UI", "TrustArc",
+    ])]
+      .filter(name => !name.includes(".")),
     nonVisitorSurfaces: CONSENT_NON_VISITOR_SURFACES,
     namedRejectRecipes: KNOWN_CMP_REGISTRY.flatMap(entry => entry.rejectLabelBoundNecessaryOnly
       ? [{ ...entry.rejectLabelBoundNecessaryOnly, provider: entry.canonicalName }] : []),
@@ -410,7 +422,16 @@ export async function captureConsentControlGeometry(
   page.on("framenavigated", onNavigation);
   const [captureResults, retainedCookieNames] = await Promise.all([Promise.all(frames.map(async (frame, frameIndex) => {
     try {
-      const capture = frame.evaluate<RawGeometryCapture, typeof frameInput>(collectConsentGeometryInPage, frameInput);
+      if (options.avoidOverlappingFrameReads && pendingActionGeometryReads.has(frame)) return undefined;
+      if (options.avoidOverlappingFrameReads) pendingActionGeometryReads.add(frame);
+      // Hold the slot until the actual browser RPC settles, not until the
+      // caller's timeout. Do not share its result with a later capture: the
+      // control, document or action state may have changed in the meantime.
+      const capture = Promise.resolve().then(() =>
+        frame.evaluate<RawGeometryCapture, typeof frameInput>(collectConsentGeometryInPage, frameInput)
+      ).finally(() => {
+        if (options.avoidOverlappingFrameReads) pendingActionGeometryReads.delete(frame);
+      });
       const result = frameTimeoutMs
         ? await promiseWithTimeout(capture, frameTimeoutMs)
         : await capture;
@@ -1340,6 +1361,7 @@ function collectConsentGeometryInPage(input: {
   consentPatternSource: string;
   controlLabelPatternSource: string;
   registrySelectors: string[];
+  registryGlobals: string[];
   namedRejectRecipes: (NonNullable<(typeof KNOWN_CMP_REGISTRY)[number]["rejectLabelBoundNecessaryOnly"]> & { provider: string })[];
   initialOptionalOffCloseRecipes: NonNullable<(typeof KNOWN_CMP_REGISTRY)[number]["initialOptionalOffCloseObservation"]>[];
   nonFirstLayerSurfaceSelector: string;
@@ -1540,7 +1562,9 @@ function collectConsentGeometryInPage(input: {
 
   const domSelectors = input.registrySelectors.filter((selector) => {
     try {
-      return Boolean(document.querySelector(selector));
+      // Reuse the composed-tree roots already inspected for controls. A CMP
+      // inside an open shadow root must not disappear from its own inventory.
+      return deepRootsFor(document).some(root => Boolean(root.querySelector(selector)));
     } catch {
       return false;
     }
@@ -1561,18 +1585,7 @@ function collectConsentGeometryInPage(input: {
     viewport,
     scripts: Array.from(document.scripts).map((script) => script.src).filter(Boolean).slice(0, 80),
     cookieNames: safeCookieNames(),
-    globals: [
-      "OneTrust",
-      "Optanon",
-      "OptanonWrapper",
-      "__tcfapi",
-      "__cmp",
-      "__cmpapi",
-      "Cookiebot",
-      "Didomi",
-      "UC_UI",
-      "TrustArc",
-    ].filter((name) => name in window).concat(
+    globals: input.registryGlobals.filter(name => Object.hasOwn(window, name)).concat(
       (() => {
         const settings = (window as typeof window & {
           drupalSettings?: Record<string, unknown>;

@@ -1,6 +1,12 @@
+import { isComplianzControl } from "./complianz-consent-state.js";
+import { CMP_PASSIVE_EVENT_INIT_SCRIPT, installCmpPassiveDiagnostics } from "./cmp-passive-diagnostics.js";
+import { retainNotificationAcknowledgment, type ExistingApiRead } from "./notification-acknowledgment.js";
+import { installOneTrustSdkSourceCapture } from "./onetrust-sdk-source.js";
+import { confirmationDiagnostics } from "./consent-confirmation-diagnostics.js";
+import { firstVerifiedConsentRead } from "./consent-confirmation-read.js";
 import { installBorlabsDeferredDialogReveal } from "./borlabs-passive-dialog-reveal.js";
-import { waitForConsentDocumentReady } from "./consent-document-readiness.js";
-import { retainResolverDiagnostic } from "./consent-action-resolver-diagnostics.js";
+import { waitForConsentDocumentOrNamedControl, isRegisteredLoadingOneTrustRecipe } from "./consent-document-readiness.js";
+import { appendResolverDiagnostic, canonicalResolverDiagnostic } from "./consent-action-resolver-diagnostics.js";
 import { buildObservedActionSourceProof } from "./observed-action-source-proof.js";
 import { installActionDomStorageCapture } from "./action-dom-storage-capture.js";
 import { readActionWriteCapture, buildActionWriteCoverage } from "./action-main-document-write-coverage.js";
@@ -20,6 +26,7 @@ import { finishOptionalRuntimeGraph, installRuntimeGraphCapture } from "./runtim
 import { finishAfterActionWindow } from "./after-action-capture.js";
 import {
   CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT,
+  consentReceiptChangeValue,
   POST_ACCEPT_DEFAULT_OBSERVATION_WINDOW_MS,
   postAcceptEvidencePacketSchema,
 
@@ -73,7 +80,7 @@ import {
 } from "./cmp-accessible-action.js";
 import { readCmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
 import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery, waitForTransparentConsentControl } from "./cmp-action-control-proof.js";
-import { matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, type SemanticState } from "./consent-action-semantic-state.js";
+import { matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, verifiedChangedOneTrustDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import {
   captureConsentControlGeometry,
   type ConsentControlCandidateEvidence,
@@ -83,6 +90,7 @@ import {
   cmpRecipeRequiresViewportHitTarget,
   dispatchLocatorClickWithVerifiedGeometry,
   inspectLocatorActionability,
+  inspectLocatorConsentReadiness,
   locatorEnabledWithinDeadline,
   locatorActionabilitySupportsVerifiedDispatch,
   locatorHasViewportHitTarget,
@@ -218,6 +226,8 @@ type CapturedRequest = {
 };
 
 type InstrumentedStorageWrite = {
+  cookieAssignment?: string;
+  documentUrl?: string;
   deletion?: boolean;
   value?: string;
   storageType: "cookie" | "local_storage" | "session_storage";
@@ -242,6 +252,7 @@ type ConfirmationBaseline =
       kind: "canonical_accept_transition";
       controlVisible: boolean;
       surfacePresent: boolean;
+      complianzControlBound?: boolean;
       bannerStateHash?: string;
       pageUrl: string;
     }
@@ -252,6 +263,7 @@ type ConfirmationBaseline =
       kind: "cmp_api_consent_state_changed";
       canonicalState?: string;
       eventSequence: number;
+      apiRead?: ExistingApiRead;
     }
   | {
       kind: "tcf_purposes_granted_or_cmp_cookie_changed";
@@ -269,6 +281,7 @@ type ConfirmationBaseline =
 
 type ConfirmationState = {
   oneTrustGroupEvidence?: SemanticState["oneTrustGroupEvidence"];
+  complianzReceiptEvidence?: SemanticState["complianzReceiptEvidence"];
   tcfApiSource?: "addEventListener" | "getTCData";
   tcfPurposeEvidence?: ActionTcfData["purposeEvidence"];
   observedAtEpochMs?: number;
@@ -405,6 +418,7 @@ export async function runPostAcceptObserver(
   let formCapture: PostAcceptEvidencePacket["formCapture"];
   let afterActionCapture: PostAcceptEvidencePacket["afterActionCapture"];
   let terminalDecisionEvidence: PostAcceptEvidencePacket["terminalDecisionEvidence"];
+  const confirmationDiagnostic = confirmationDiagnostics();
   let decisionEvidence: PostAcceptEvidencePacket["decisionEvidence"] = {
     policyVersion: "semantic_consent_registration.v2", decision: "unknown", basis: "unverified",
   };
@@ -413,6 +427,13 @@ export async function runPostAcceptObserver(
   let context: BrowserContext | undefined;
   let page: Page | undefined;
   let graphCapture: Awaited<ReturnType<typeof installRuntimeGraphCapture>> | undefined;
+  let notificationAcknowledgment: import("@certscore/contracts").NotificationAcknowledgment | undefined;
+  let lastHubSpotRead: ExistingApiRead | undefined;
+  const recordHubSpotRead = (snapshot: import("./cmp-api-consent-state").CmpApiConsentSnapshot | undefined) => {
+    lastHubSpotRead = snapshot ? {snapshot,readAtEpochMs:Date.now()} : undefined;
+  };
+  let passiveCmpCapture: ReturnType<typeof installCmpPassiveDiagnostics> | undefined;
+  let oneTrustSdkCapture: ReturnType<typeof installOneTrustSdkSourceCapture> | undefined;
   let originDomStorageCapture: Awaited<ReturnType<typeof installActionDomStorageCapture>> | undefined;
   let actionDiscovery: ConsentActionDiscovery | undefined;
   const storageCollectionDiagnostics: { preAction?: ActionStorageCollectionDiagnostics; postAction?: ActionStorageCollectionDiagnostics } = {};
@@ -456,8 +477,8 @@ export async function runPostAcceptObserver(
     if (captureCoverage.requestsDroppedAfterAction > 0) limitations.push("post_action_network_capture_truncated");
     captureCoverage.requestsDroppedBeforeAction += Math.max(0, preActionRequests.length + postActionRequests.length - retainedRequests().length);
     formCapture ??= formCaptureHandle?.finish();
-    const originDomStorageObservation = originDomStorageCapture?.finish();
     const completedAtMs = Date.now();
+    const originDomStorageObservation = originDomStorageCapture?.finish(completedAtMs);
     const confirmed = fields.registration.status === "confirmed" &&
       fields.registration.acceptanceExercised &&
       fields.registration.acceptanceRegisteredAtMs !== undefined;
@@ -465,6 +486,9 @@ export async function runPostAcceptObserver(
     const packet = postAcceptEvidencePacketSchema.parse({
       ...finishOptionalRuntimeGraph(graphCapture, "post_accept", confirmed ? undefined : "action_not_confirmed"),
       artifactVersion: "certscore.post_accept_evidence.v2",
+      confirmationDiagnostics: confirmationDiagnostic.retained(),
+      ...(passiveCmpCapture ? {passiveCmpDiagnostics:passiveCmpCapture.finish(completedAtMs)} : {}),
+      ...(notificationAcknowledgment ? {notificationAcknowledgment} : {}),
       ...(formCapture ? { formCapture } : {}),
       ...(formSnapshotCapture ? { formSnapshotCapture } : {}),
       ...(afterActionCapture ? { afterActionCapture } : {}),
@@ -591,6 +615,8 @@ export async function runPostAcceptObserver(
       await installPublicNetworkGuardRoute(context);
     }
     page = await context.newPage();
+    passiveCmpCapture = installCmpPassiveDiagnostics(page);
+    oneTrustSdkCapture = installOneTrustSdkSourceCapture(page);
     await installBorlabsDeferredDialogReveal(page, observationTargetUrl);
     originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl);
     if (input.runtimeGraph) graphCapture = await installRuntimeGraphCapture(page, {
@@ -750,19 +776,23 @@ export async function runPostAcceptObserver(
       const signature = JSON.stringify(snapshot);
       if (signature === previousSnapshot) return;
       previousSnapshot = signature;
-      const bounded = retainResolverDiagnostic(snapshot, ++resolverAttempt, Date.now() - resolverStartedAtMs);
-      const retained = bounded.snapshot;
-      const resolver = diagnostics.resolver!;
-      resolver.truncated ||= bounded.truncated;
-      if (resolver.snapshots.length < 12) resolver.snapshots.push(retained);
-      else { resolver.truncated = true; resolver.snapshots[11] = retained; }
+      appendResolverDiagnostic(diagnostics.resolver!, snapshot, ++resolverAttempt, Date.now() - resolverStartedAtMs);
     };
     const searchDeadline = resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs);
-    const documentReady = actionSearchTimeoutMs === 0 || await waitForConsentDocumentReady(page, searchDeadline, effectiveSignal);
-    if (!documentReady) recordResolverSnapshot({ source: "named_recipe", state: "document_loading",
+    const readiness = actionSearchTimeoutMs === 0 ? {documentReady:true,resolution:undefined} :
+      await waitForConsentDocumentOrNamedControl<AcceptRecipeResolution>({page,deadlineAtMs:searchDeadline,signal:effectiveSignal,discovery:actionDiscovery,
+        probe:async (sliceMs,probeSignal)=>{
+          const active=await resolveActiveRuntimeRecipes(page!,recipes,actionDiscovery);
+          if(active.length!==1 || !isRegisteredLoadingOneTrustRecipe(active[0]!,"accept"))return undefined;
+          const candidate=await waitForDeterministicRecipe(page!,active,sliceMs,probeSignal,actionDiscovery,recordResolverSnapshot);
+          return candidate.status==="found" && candidate.scope===page ? candidate : undefined;
+        }});
+    const documentReady=readiness.documentReady;
+    const searchEnded=effectiveSignal?.aborted || (actionSearchTimeoutMs>0 && Date.now()>=searchDeadline);
+    if ((!documentReady || searchEnded) && !readiness.resolution) recordResolverSnapshot({ source: "named_recipe", state: documentReady ? "binding_budget_exhausted" : "document_loading",
       selectorMatchCount: 0, visibleCount: 0, enabledCount: 0, labelMatchCount: 0, actionableCount: 0, cmpIds: [], controlLabels: [] });
     const searchRemaining = () => actionSearchTimeoutMs === 0 ? 0 : Math.max(1, searchDeadline - Date.now());
-    let resolution: AcceptRecipeResolution = !documentReady
+    let resolution: AcceptRecipeResolution = readiness.resolution ?? ((!documentReady || searchEnded)
       ? { status: effectiveSignal?.aborted ? "aborted" : "not_found" }
       : input.allowCanonicalAcceptDiscovery
       ? await waitForDeterministicOrCanonicalAcceptRecipe(
@@ -780,7 +810,7 @@ export async function runPostAcceptObserver(
           effectiveSignal,
           actionDiscovery,
           recordResolverSnapshot,
-        );
+        ));
     timing.resolverMs = Math.max(0, Date.now() - resolverStartedAtMs);
     if (resolution.status !== "found" && resolution.status !== "aborted" &&
       actionSearchTimeoutMs > 0 && timing.resolverMs >= actionSearchTimeoutMs) {
@@ -939,6 +969,7 @@ export async function runPostAcceptObserver(
       control,
     );
     if ("oneTrustBaseline" in confirmationBaseline) {
+      for (const reason of confirmationBaseline.oneTrustBaseline?.diagnosticReasons ?? []) confirmationDiagnostic.reason(reason);
       const reason = oneTrustBaselineLimitation(confirmationBaseline.oneTrustBaseline);
       if (reason) limitations.push(reason);
     }
@@ -1104,10 +1135,13 @@ export async function runPostAcceptObserver(
       effectiveSignal,
       (state) => { decisionEvidence = { policyVersion: "semantic_consent_registration.v2",
         decision: state.decision, basis: "verified_state", observedStateSha256: state.stateHash,
+        ...(state.complianzReceiptEvidence ? {complianzReceiptEvidence:state.complianzReceiptEvidence} : {}),
         ...(state.oneTrustGroupEvidence ? { oneTrustGroupEvidence: state.oneTrustGroupEvidence } : {}),
         observedAtMs: elapsed(parentScanStartedAtMs, state.observedAtEpochMs ?? Date.now()),
         timestampBasis: state.observedAtEpochMs === undefined ? "verified_state_observed" : "instrumented_state_write" }; },
+      { pass: () => confirmationDiagnostic.pass(false), reason: confirmationDiagnostic.reason, apiSnapshot:recordHubSpotRead },
     );
+    if (confirmedState) confirmationDiagnostic.reason("verified_decision");
     timing.confirmationMs = Math.max(0, Date.now() - confirmationStartedAtMs);
     if (clickError) {
       diagnostics.click = {
@@ -1136,9 +1170,10 @@ export async function runPostAcceptObserver(
           onDocumentBound: token => formCaptureHandle?.bindMainDocument(token) });
       }
       const terminalRead = terminalConsentDecisionRead({
+        onOutcome: confirmationDiagnostic.terminal,
         action: "accept", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256,
         parentScanStartedAtMs, dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
-        signal: effectiveSignal, targetStillAuthorized, read: () => waitForAcceptanceConfirmation(context!, page!, confirmationScope, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal),
+        signal: effectiveSignal, targetStillAuthorized, read: () => waitForAcceptanceConfirmation(context!, page!, confirmationScope, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined, { pass: () => confirmationDiagnostic.pass(true), reason: confirmationDiagnostic.terminalReason, apiSnapshot:recordHubSpotRead }),
       });
       const stopReason = await finishAfterActionWindow({
         onFinalWindow: terminalRead.start,
@@ -1174,6 +1209,14 @@ export async function runPostAcceptObserver(
         requestIds: requests.filter((row) => row.startedAtMs >= actionDispatchedAtMs && row.startedAtMs <= captureEndedAtMs).map((row) => row.requestId),
       };
       terminalDecisionEvidence = terminalRead.retained(afterActionCapture);
+      if (terminalDecisionEvidence) confirmationDiagnostic.terminalReason("verified_decision");
+      if (selectedRecipe.confirmation.kind === "cmp_api_consent_state_changed" && selectedRecipe.confirmation.provider === "hubspot" &&
+        confirmationBaseline.kind === "cmp_api_consent_state_changed" && (confirmationScope === page || confirmationScope === page.mainFrame())) {
+        notificationAcknowledgment = retainNotificationAcknowledgment({before:confirmationBaseline.apiRead,after:lastHubSpotRead,
+          proof:actionControlProof,capture:afterActionCapture,storage:postActionStorage??[],writes:capturedWrites,
+          clockOriginAtMs:parentScanStartedAtMs,mainDocumentStable:!sourceDocumentChanged&&!actionDocumentChanged&&!effectiveSignal?.aborted,
+          clickCompleted:diagnostics.click.outcome === "completed",terminalDecisionConfirmed:!!terminalDecisionEvidence});
+      }
       return await finalize({
         resolverFound: true,
         registration: {
@@ -1200,6 +1243,7 @@ export async function runPostAcceptObserver(
     decisionEvidence = { policyVersion: "semantic_consent_registration.v2", decision: "granted", basis: "verified_state",
       ...(confirmedState.tcfPurposeEvidence ? { tcfPurposeEvidence: confirmedState.tcfPurposeEvidence } : {}),
       ...(confirmedState.tcfApiSource ? { tcfApiSource: confirmedState.tcfApiSource } : {}),
+      ...(confirmedState.complianzReceiptEvidence ? {complianzReceiptEvidence:confirmedState.complianzReceiptEvidence} : {}),
       ...(confirmedState.oneTrustGroupEvidence ? { oneTrustGroupEvidence: confirmedState.oneTrustGroupEvidence } : {}),
       observedStateSha256: confirmedState.stateHash,
       observedAtMs: acceptanceRegisteredAtMs, timestampBasis: confirmedState.observedAtEpochMs === undefined
@@ -1388,6 +1432,8 @@ export async function runPostAcceptObserver(
     finishOptionalRuntimeGraph(graphCapture, "post_accept", "action_capture_closed");
     originDomStorageCapture?.finish();
     actionDiscovery?.dispose();
+    passiveCmpCapture?.finish();
+    oneTrustSdkCapture?.dispose();
     await context?.close().catch(() => undefined);
     if (ownsBrowser) await browser?.close().catch(() => undefined);
   }
@@ -1455,17 +1501,23 @@ async function waitForDeterministicRecipe(
     let visibleCount = 0;
     let enabledCount = 0;
     let labelMatchCount = 0;
+    const matchedCmpIds = new Set<string>();
+    const matchedControlLabels = new Set<string>();
+    const reportIncompleteSweep = () => reportDiagnostic?.({ source: "named_recipe", state: "binding_budget_exhausted",
+      selectorMatchCount, visibleCount, enabledCount, labelMatchCount, actionableCount: 0,
+      cmpIds: [...matchedCmpIds], controlLabels: [...matchedControlLabels] });
     const viewportPendingRecipeIds: string[] = [];
+    let scopeNotInteractive = false;
     const recipesForAttempt = prioritizedRecipeId
       ? recipes.filter((recipe) => recipe.recipeId === prioritizedRecipeId)
       : recipes;
     for (const recipe of recipesForAttempt) {
       if (signal?.aborted) return { status: "aborted" };
       // Never claim uniqueness from a truncated multi-recipe sweep.
-      if (timeoutMs > 0 && Date.now() >= deadlineAtMs) return { status: "not_found" };
+      if (timeoutMs > 0 && Date.now() >= deadlineAtMs) { reportIncompleteSweep(); return { status: "not_found" }; }
       for (const scope of selectorScopes(page, recipe.controlFrameUrl)) {
         if (signal?.aborted) return { status: "aborted" };
-        if (timeoutMs > 0 && Date.now() >= deadlineAtMs) return { status: "not_found" };
+        if (timeoutMs > 0 && Date.now() >= deadlineAtMs) { reportIncompleteSweep(); return { status: "not_found" }; }
         if (recipe.accessibleControl?.kind === "scoped_accessible_control") {
           const control = await resolveScopedAccessibleControl(scope, recipe.accessibleControl);
           if (control) {
@@ -1502,6 +1554,10 @@ async function waitForDeterministicRecipe(
         if (rawCount > 8) return { status: "ambiguous" };
         const count = rawCount;
         selectorMatchCount += count;
+        if (count > 0) {
+          if (recipe.cmpId) matchedCmpIds.add(recipe.cmpId);
+          if (recipe.controlExpectedNormalizedLabel) matchedControlLabels.add(recipe.controlExpectedNormalizedLabel);
+        }
         for (let index = 0; index < count; index += 1) {
           const control = locator.nth(index);
           const [visible, enabled] = await Promise.all([
@@ -1516,10 +1572,9 @@ async function waitForDeterministicRecipe(
           if (enabled) enabledCount += 1;
           if (expectedLabelPresent) labelMatchCount += 1;
           if (visible && enabled && expectedLabelPresent) {
-            if (
-              !cmpRecipeRequiresViewportHitTarget(recipe.cmpId) ||
-              await locatorHasViewportHitTarget(control)
-            ) {
+            const readiness = await inspectLocatorConsentReadiness(control);
+            if (!readiness.scopeInteractive) { scopeNotInteractive = true; continue; }
+            if (locatorActionabilitySupportsVerifiedDispatch(readiness.actionability)) {
               matches.push({ recipe, control, scope });
             } else {
               viewportPendingRecipeIds.push(recipe.recipeId);
@@ -1529,15 +1584,20 @@ async function waitForDeterministicRecipe(
       }
     }
     matches = await distinctActionTargets(matches, deadlineAtMs, signal);
+    if (signal?.aborted) return { status: "aborted" };
+    // A final frame read can finish after the search slice. Its partial sweep
+    // is diagnostic only; it cannot establish a unique actionable control.
+    if (timeoutMs > 0 && Date.now() >= deadlineAtMs) { reportIncompleteSweep(); return { status: "not_found" }; }
     reportDiagnostic?.({ source: "named_recipe",
       state: matches.length > 1 ? "multiple_actionable" : matches.length === 1 ? "single_actionable"
         : selectorMatchCount === 0 ? "selector_absent" : visibleCount === 0 ? "control_hidden"
-          : enabledCount === 0 ? "control_disabled" : labelMatchCount === 0 ? "label_mismatch" : "geometry_unavailable",
+          : enabledCount === 0 ? "control_disabled" : labelMatchCount === 0 ? "label_mismatch"
+            : scopeNotInteractive ? "control_hidden" : viewportPendingRecipeIds.length > 0 ? "control_not_hit_target" : "geometry_unavailable",
       selectorMatchCount: Math.min(64, selectorMatchCount), visibleCount: Math.min(64, visibleCount),
       enabledCount: Math.min(64, enabledCount), labelMatchCount: Math.min(64, labelMatchCount),
       actionableCount: Math.min(64, matches.length),
-      cmpIds: [...new Set(matches.map(match => match.recipe.cmpId).filter((id): id is string => Boolean(id)))].slice(0, 8),
-      controlLabels: [...new Set(matches.map(match => match.recipe.controlExpectedNormalizedLabel).filter((label): label is string => Boolean(label)))].slice(0, 4),
+      cmpIds: [...new Set([...matchedCmpIds, ...matches.map(match => match.recipe.cmpId).filter((id): id is string => Boolean(id))])].slice(0, 8),
+      controlLabels: [...new Set([...matchedControlLabels, ...matches.map(match => match.recipe.controlExpectedNormalizedLabel).filter((label): label is string => Boolean(label))])].slice(0, 4),
     });
     if (matches.length === 1) return { status: "found", ...matches[0]! };
     if (matches.length > 1) return { status: "ambiguous" };
@@ -1581,6 +1641,18 @@ async function waitForDeterministicOrCanonicalAcceptRecipe(
   // semantic confirmation; its selector is now a bounded fallback for pages
   // whose live geometry cannot be retained.
   let activeRuntimeRecipes = await resolveActiveRuntimeRecipes(page, recipes, discovery);
+  // A positive OneTrust runtime hint only routes the existing named-control
+  // verification. Check its live unique control before a broad geometry read
+  // can occupy the renderer; all action and semantic gates remain unchanged.
+  if (activeRuntimeRecipes.length === 1 && activeRuntimeRecipes[0]?.cmpId === "OneTrust") {
+    const namedBudgetMs = Math.min(750, Math.max(0, deadlineAtMs - Date.now()));
+    if (namedBudgetMs > 0) {
+      const namedResolution = await waitForDeterministicRecipe(
+        page, activeRuntimeRecipes, namedBudgetMs, signal, discovery, reportDiagnostic,
+      );
+      if (namedResolution.status === "found" || namedResolution.status === "aborted") return namedResolution;
+    }
+  }
   if (activeRuntimeRecipes.length > 0) {
     const canonicalBudgetMs = Math.min(1_000, Math.max(0, deadlineAtMs - Date.now()));
     if (canonicalBudgetMs > 0 && activeRuntimeRecipes.length === 1) {
@@ -1693,6 +1765,7 @@ async function waitForCanonicalAcceptControlRecipe(
     const geometry = await captureConsentControlGeometry(page, {
       candidateLimit: 48,
       containerLimit: 16,
+      avoidOverlappingFrameReads: true,
       timeoutMs: Math.max(1, Math.min(750, deadlineAtMs - Date.now())),
     }).catch(() => undefined);
     if (geometry?.cmp.name) onCmpDetected?.(geometry.cmp.name);
@@ -1709,7 +1782,6 @@ async function waitForCanonicalAcceptControlRecipe(
         Boolean(candidate.selectorHint) &&
         Boolean(candidate.containerSelectorHint)
       ) ?? [];
-    const classifiedCandidateCount = candidates.length;
     const customBindings = new Map<ConsentControlCandidateEvidence, CustomAcceptControlBinding>();
     let customBindingUnverified = false;
     const customCandidates = candidates.filter(candidate => !hasActionControlStructure(candidate));
@@ -1730,16 +1802,9 @@ async function waitForCanonicalAcceptControlRecipe(
     // A custom control and a native control with the same label may be two
     // distinct choices. Do not let native-wrapper alias reduction discard it.
     if (customBindings.size === 0) candidates = collapseEquivalentCanonicalAcceptCandidates(candidates);
-    const snapshot: ResolverSnapshot = { source: "canonical_geometry",
-      state: !geometry ? "geometry_unavailable" : candidates.length > 1 ? "multiple_actionable"
-        : candidates.length === 1 ? "candidate_detected" : customBindingUnverified ? "control_binding_unverified" : "selector_absent",
-      selectorMatchCount: Math.min(64, geometry?.candidates.length ?? 0),
-      visibleCount: Math.min(64, geometry?.candidates.filter(c => c.decisionStatus === "confirmed_visible").length ?? 0),
-      enabledCount: Math.min(64, geometry?.candidates.filter(c => c.enabled).length ?? 0),
-      labelMatchCount: Math.min(64, classifiedCandidateCount), actionableCount: Math.min(64, candidates.length),
-      cmpIds: geometry?.cmp.name ? [geometry.cmp.name] : [],
-      controlLabels: [...new Set(candidates.map(c => c.normalizedLabel))].slice(0, 4),
-    };
+    const snapshot: ResolverSnapshot = canonicalResolverDiagnostic({
+      geometry, action: "accept_all", actionableCount: candidates.length, bindingUnverified: customBindingUnverified,
+    });
     reportDiagnostic?.(snapshot);
     const bindingState = (state: typeof snapshot.state) => reportDiagnostic?.({ ...snapshot, state, actionableCount: 0 });
     if (customBindingUnverified && candidates.length > 0) {
@@ -2050,6 +2115,7 @@ async function captureConfirmationBaseline(
       kind: confirmation.kind,
       controlVisible,
       surfacePresent,
+      complianzControlBound: confirmation.controlSelector.includes(".cmplz-") && await isComplianzControl(control),
       ...(bannerStateHash ? { bannerStateHash } : {}),
       pageUrl: page.url(),
     };
@@ -2092,6 +2158,7 @@ async function captureConfirmationBaseline(
       kind: confirmation.kind,
       canonicalState: snapshot?.canonicalState,
       eventSequence: snapshot?.eventSequence ?? 0,
+      ...(snapshot ? {apiRead:{snapshot,readAtEpochMs:Date.now()}} : {}),
     };
   }
   if (confirmation.kind === "tcf_purposes_granted_or_cmp_cookie_changed") {
@@ -2129,19 +2196,26 @@ async function waitForAcceptanceConfirmation(
   timeoutMs: number,
   signal?: AbortSignal,
   onDecisionObserved?: (state: SemanticState) => void,
+  diagnostics?: { pass: () => void; reason: (reason: import("@certscore/contracts").ConsentConfirmationReason) => void; apiSnapshot?: (snapshot: import("./cmp-api-consent-state").CmpApiConsentSnapshot | undefined) => void },
 ): Promise<ConfirmationState | undefined> {
   if (confirmation.kind === "canonical_accept_transition") {
     if (baseline.kind !== "canonical_accept_transition" || !baseline.controlVisible || !baseline.surfacePresent) return undefined;
     const deadlineAtMs = Date.now() + timeoutMs;
-    while (Date.now() <= deadlineAtMs) {
-      if (signal?.aborted) return undefined;
+    let firstRead=true;
+    while (firstRead || Date.now() <= deadlineAtMs) {
+      firstRead=false;diagnostics?.pass();
+      if (signal?.aborted) { diagnostics?.reason("confirmation_aborted"); return undefined; }
       const state = await verifiedCanonicalStateWrite({
-        context, scope: confirmationScope, actionAt: actionDispatchedAtEpochMs,
+        context, scope: confirmationScope, actionAt: actionDispatchedAtEpochMs, onDiagnostic: diagnostics?.reason,
+        complianzControlBound: baseline.complianzControlBound,
       });
       if (state) onDecisionObserved?.(state);
+      if (state && state.decision !== "granted") diagnostics?.reason("opposite_or_mixed_decision");
+      else if (!state) diagnostics?.reason("no_registered_complete_decision");
       if (state?.decision === "granted" &&
         normalizeTargetUrl(page.url()) === normalizeTargetUrl(baseline.pageUrl)) {
         return { stateHash: state.stateHash, key: state.key, observedAtEpochMs: state.observedAtEpochMs,
+          ...(state.complianzReceiptEvidence ? {complianzReceiptEvidence:state.complianzReceiptEvidence} : {}),
           witnessType: "canonical_acceptance_state",
           expectedState: "canonical_granted_consent_decision_written_after_action" };
       }
@@ -2151,8 +2225,10 @@ async function waitForAcceptanceConfirmation(
     return undefined;
   }
   const deadlineAtMs = Date.now() + timeoutMs;
-  while (Date.now() <= deadlineAtMs) {
-    if (signal?.aborted) return undefined;
+  let firstRead=true;
+  while (firstRead || Date.now() <= deadlineAtMs) {
+    firstRead=false;diagnostics?.pass();
+    if (signal?.aborted) { diagnostics?.reason("confirmation_aborted"); return undefined; }
     if (confirmation.kind === "local_storage_equals" && baseline.kind === confirmation.kind) {
       const writes = await readStorageWrites(confirmationScope);
       const value = await confirmationScope.evaluate(
@@ -2165,6 +2241,9 @@ async function waitForAcceptanceConfirmation(
         write.storageType === "local_storage" &&
         write.name === confirmation.key && write.value === value
       );
+      if (value === null) diagnostics?.reason("receipt_missing");
+      else if (value !== confirmation.expectedValue) diagnostics?.reason("no_registered_complete_decision");
+      else if (!freshWrite) diagnostics?.reason("no_fresh_decision");
       if (freshWrite && value === confirmation.expectedValue) {
         return {
           observedAtEpochMs: matchingStateWriteTime(writes, confirmation.key, value, actionDispatchedAtEpochMs, "local_storage"),
@@ -2182,6 +2261,9 @@ async function waitForAcceptanceConfirmation(
       const changed = confirmation.cookies.some((cookie) =>
         states[cookieKey(cookie)]?.stateHash !== baseline.stateHashes[cookieKey(cookie)]
       );
+      if (confirmation.cookies.some(cookie => !states[cookieKey(cookie)])) diagnostics?.reason("receipt_missing");
+      else if (!complete) diagnostics?.reason("no_registered_complete_decision");
+      else if (!changed) diagnostics?.reason("no_fresh_decision");
       if (complete && changed) {
         return {
           stateHash: hashValue(JSON.stringify(confirmation.cookies.map((cookie) =>
@@ -2194,12 +2276,16 @@ async function waitForAcceptanceConfirmation(
       }
     } else if (confirmation.kind === "cmp_cookie_changed" && baseline.kind === confirmation.kind) {
       const currentCookieState = await cookieState(context, confirmation.cookieName);
+      if (!currentCookieState) diagnostics?.reason("receipt_missing");
+      else if (currentCookieState === baseline.cookieStateHash) diagnostics?.reason("no_fresh_decision");
       if (currentCookieState && currentCookieState !== baseline.cookieStateHash) {
         const semantic = await verifiedCookieDecision({ context, scope: confirmationScope,
-            cookieName: confirmation.cookieName, actionAt: actionDispatchedAtEpochMs });
+            cookieName: confirmation.cookieName, actionAt: actionDispatchedAtEpochMs, onDiagnostic: diagnostics?.reason });
           if (semantic) onDecisionObserved?.(semantic);
+          if (semantic && semantic.decision !== "granted") diagnostics?.reason("opposite_or_mixed_decision");
           if (semantic?.decision === "granted") return {
             stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
+            ...(semantic.complianzReceiptEvidence ? {complianzReceiptEvidence:semantic.complianzReceiptEvidence} : {}),
             ...(semantic.oneTrustGroupEvidence ? { oneTrustGroupEvidence: semantic.oneTrustGroupEvidence } : {}),
             witnessType: "cmp_cookie_state", expectedState: "canonical_cmp_granted_decision_after_action",
           };
@@ -2207,12 +2293,16 @@ async function waitForAcceptanceConfirmation(
     } else if (confirmation.kind === "cmp_cookie_names_changed" && baseline.kind === confirmation.kind) {
       for (const cookieName of confirmation.cookieNames.slice(0, 8)) {
         const currentCookieState = await cookieState(context, cookieName);
+        if (!currentCookieState) diagnostics?.reason("receipt_missing");
+        else if (currentCookieState === baseline.cookieStateHashes[cookieName]) diagnostics?.reason("no_fresh_decision");
         if (currentCookieState && currentCookieState !== baseline.cookieStateHashes[cookieName]) {
           const semantic = await verifiedCookieDecision({ context, scope: confirmationScope,
-            cookieName: cookieName, actionAt: actionDispatchedAtEpochMs });
+            cookieName: cookieName, actionAt: actionDispatchedAtEpochMs, onDiagnostic: diagnostics?.reason });
           if (semantic) onDecisionObserved?.(semantic);
+          if (semantic && semantic.decision !== "granted") diagnostics?.reason("opposite_or_mixed_decision");
           if (semantic?.decision === "granted") return {
             stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
+            ...(semantic.complianzReceiptEvidence ? {complianzReceiptEvidence:semantic.complianzReceiptEvidence} : {}),
             ...(semantic.oneTrustGroupEvidence ? { oneTrustGroupEvidence: semantic.oneTrustGroupEvidence } : {}),
             witnessType: "cmp_cookie_state", expectedState: "canonical_cmp_granted_decision_after_action",
           };
@@ -2222,13 +2312,24 @@ async function waitForAcceptanceConfirmation(
       confirmation.kind === "cmp_api_consent_state_changed" &&
       baseline.kind === confirmation.kind
     ) {
-      const snapshot = await readCmpApiConsentSnapshot(confirmationScope, confirmation.provider);
+      const snapshot = await readCmpApiConsentSnapshot(confirmationScope, confirmation.provider, diagnostics?.reason);
+      if (confirmation.provider === "hubspot") diagnostics?.apiSnapshot?.(snapshot);
       const changed = Boolean(
         snapshot?.canonicalState && snapshot.canonicalState !== baseline.canonicalState
       );
       const freshEvent = (snapshot?.eventSequence ?? 0) > baseline.eventSequence;
       const actionBoundEvent = snapshot?.eventObservedAtEpochMs === undefined ||
         snapshot.eventObservedAtEpochMs >= actionDispatchedAtEpochMs;
+      // Explain the existing gates using this same read; diagnostics never
+      // supply a witness or add an API call, retry, or observation interval.
+      if (snapshot) {
+        if (snapshot.decision !== "granted") diagnostics?.reason(snapshot.decision === "unknown"
+          ? "no_registered_complete_decision" : "opposite_or_mixed_decision");
+        else if (!actionBoundEvent || (["borlabs", "osano", "hubspot", "drupal_eu_cookie", "didomi"].includes(confirmation.provider) &&
+          (baseline.canonicalState === undefined || !freshEvent || (confirmation.provider !== "borlabs" && snapshot.eventObservedAtEpochMs === undefined)))) {
+          diagnostics?.reason("api_saved_event_unverified");
+        } else if (!changed && !freshEvent) diagnostics?.reason("no_fresh_decision");
+      }
       if (snapshot?.decision === "granted" && actionBoundEvent && (changed || freshEvent) &&
         (!["borlabs", "osano", "hubspot", "drupal_eu_cookie", "didomi"].includes(confirmation.provider) || (baseline.canonicalState !== undefined && freshEvent && (confirmation.provider === "borlabs" || snapshot.eventObservedAtEpochMs !== undefined)))) {
         return {
@@ -2242,62 +2343,66 @@ async function waitForAcceptanceConfirmation(
       confirmation.kind === "tcf_purposes_granted_or_cmp_cookie_changed" &&
       baseline.kind === confirmation.kind
     ) {
-      const snapshot = await readTcfData(page).catch(() => undefined);
-      if (tcfPurposesGranted(snapshot, confirmation.purposeIds, baseline.snapshot)) {
-        return {
-          stateHash: snapshot!.tcStringHash ?? hashValue(JSON.stringify(snapshot!.purposeConsents)),
-          witnessType: "tcf_user_action_complete",
-          tcfApiSource: snapshot!.apiSource,
-          tcfPurposeEvidence: snapshot!.purposeEvidence,
-          expectedState: "configured_purposes_granted_after_accept",
-        };
-      }
-      const currentCookieState = await cookieState(context, confirmation.cookieName);
-      if (currentCookieState && currentCookieState !== baseline.cookieStateHash) {
-        const semantic = await verifiedCookieDecision({ context, scope: confirmationScope,
-            cookieName: confirmation.cookieName, actionAt: actionDispatchedAtEpochMs, oneTrustBaseline: baseline.oneTrustBaseline });
-          if (semantic) onDecisionObserved?.(semantic);
-          if (semantic?.decision === "granted") return {
-            stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
-            ...(semantic.oneTrustGroupEvidence ? { oneTrustGroupEvidence: semantic.oneTrustGroupEvidence } : {}),
-            witnessType: "cmp_cookie_state", expectedState: "canonical_cmp_granted_decision_after_action",
-          };
-      }
+      let decoded: SemanticState | undefined;
+      const tcfRead = readTcfData(page).then((snapshot): ConfirmationState | undefined => {
+        if (!tcfPurposesGranted(snapshot, confirmation.purposeIds, baseline.snapshot)) return undefined;
+        return {stateHash: snapshot!.tcStringHash ?? hashValue(JSON.stringify(snapshot!.purposeConsents)),
+          witnessType: "tcf_user_action_complete", tcfApiSource: snapshot!.apiSource,
+          tcfPurposeEvidence: snapshot!.purposeEvidence, expectedState: "configured_purposes_granted_after_accept"};
+      });
+      const cookieRead = async (): Promise<ConfirmationState | undefined> => {
+        if (confirmation.cookieName === "OptanonConsent" && baseline.oneTrustBaseline?.status === "verified") {
+          decoded = await verifiedChangedOneTrustDecision({context, scope: confirmationScope,
+            cookieName: confirmation.cookieName, actionAt: actionDispatchedAtEpochMs,
+            oneTrustBaseline: baseline.oneTrustBaseline, onDiagnostic: diagnostics?.reason});
+        } else {
+          const currentCookieState = await cookieState(context, confirmation.cookieName);
+          if (!currentCookieState || currentCookieState === baseline.cookieStateHash) {
+            diagnostics?.reason(currentCookieState ? "no_fresh_decision" : "receipt_missing");return undefined;
+          }
+          decoded = await verifiedCookieDecision({context, scope: confirmationScope,
+            cookieName: confirmation.cookieName, actionAt: actionDispatchedAtEpochMs,
+            oneTrustBaseline: baseline.oneTrustBaseline, onDiagnostic: diagnostics?.reason});
+        }
+        if (decoded?.decision !== "granted") {if(decoded)diagnostics?.reason("opposite_or_mixed_decision");return undefined;}
+        return {stateHash:decoded.stateHash,key:decoded.key,observedAtEpochMs:decoded.observedAtEpochMs,
+          ...(decoded.complianzReceiptEvidence ? {complianzReceiptEvidence:decoded.complianzReceiptEvidence} : {}),
+          ...(decoded.oneTrustGroupEvidence ? {oneTrustGroupEvidence:decoded.oneTrustGroupEvidence}:{}),
+          witnessType:"cmp_cookie_state",expectedState:"canonical_cmp_granted_decision_after_action"};
+      };
+      const result = await firstVerifiedConsentRead([tcfRead,cookieRead()]);
+      if(decoded&&(!result||result.witnessType==="cmp_cookie_state"))onDecisionObserved?.(decoded);
+      if(result)return result;
     } else if (
       confirmation.kind === "tcf_purposes_granted_or_cmp_storage_keys_changed" &&
       baseline.kind === confirmation.kind
     ) {
-      const snapshot = await readTcfData(page).catch(() => undefined);
-      if (tcfPurposesGranted(snapshot, confirmation.purposeIds, baseline.snapshot)) {
-        return {
-          stateHash: snapshot!.tcStringHash ?? hashValue(JSON.stringify(snapshot!.purposeConsents)),
-          witnessType: "tcf_user_action_complete",
-          tcfApiSource: snapshot!.apiSource,
-          tcfPurposeEvidence: snapshot!.purposeEvidence,
-          expectedState: "configured_purposes_granted_after_accept",
-        };
-      }
-      const writes = await readStorageWrites(confirmationScope);
-      for (const key of confirmation.keys.slice(0, 8)) {
-        const freshWrite = writes.some((write) =>
-          write.sequence > baseline.lastSequence &&
-          write.observedAtEpochMs >= actionDispatchedAtEpochMs &&
-          write.storageType === confirmation.storageType &&
-          write.name === key
-        );
-        if (!freshWrite) continue;
-        const stateHash = await storageStateHash(confirmationScope, confirmation.storageType, key);
-        if (stateHash && stateHash !== baseline.storageStateHashes[key]) {
-          const semantic = await verifiedCanonicalStateWrite({ context, scope: confirmationScope,
-            actionAt: actionDispatchedAtEpochMs, registeredKeys: confirmation.keys });
-          if (semantic) onDecisionObserved?.(semantic);
-          if (semantic?.decision === "granted" && semantic.key === key) return {
-            stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
-            ...(semantic.oneTrustGroupEvidence ? { oneTrustGroupEvidence: semantic.oneTrustGroupEvidence } : {}),
-            witnessType: "cmp_storage_state", expectedState: "canonical_cmp_granted_decision_after_action",
-          };
+      let decoded: SemanticState | undefined;
+      const tcfRead = readTcfData(page).then((snapshot): ConfirmationState | undefined => {
+        if (!tcfPurposesGranted(snapshot, confirmation.purposeIds, baseline.snapshot)) return undefined;
+        return {stateHash:snapshot!.tcStringHash??hashValue(JSON.stringify(snapshot!.purposeConsents)),
+          witnessType:"tcf_user_action_complete",tcfApiSource:snapshot!.apiSource,
+          tcfPurposeEvidence:snapshot!.purposeEvidence,expectedState:"configured_purposes_granted_after_accept"};
+      });
+      const storageRead = async (): Promise<ConfirmationState | undefined> => {
+        const writes=await readStorageWrites(confirmationScope);
+        for(const key of confirmation.keys.slice(0,8)){
+          const freshWrite=writes.some(write=>write.sequence>baseline.lastSequence&&write.observedAtEpochMs>=actionDispatchedAtEpochMs&&write.storageType===confirmation.storageType&&write.name===key);
+          if(!freshWrite)continue;
+          const stateHash=await storageStateHash(confirmationScope,confirmation.storageType,key);
+          if(!stateHash||stateHash===baseline.storageStateHashes[key])continue;
+          decoded=await verifiedCanonicalStateWrite({context,scope:confirmationScope,actionAt:actionDispatchedAtEpochMs,registeredKeys:confirmation.keys,onDiagnostic:diagnostics?.reason});
+          if(decoded?.decision!=="granted"||decoded.key!==key){if(decoded)diagnostics?.reason("opposite_or_mixed_decision");continue;}
+          return {stateHash:decoded.stateHash,key:decoded.key,observedAtEpochMs:decoded.observedAtEpochMs,
+            ...(decoded.complianzReceiptEvidence ? {complianzReceiptEvidence:decoded.complianzReceiptEvidence} : {}),
+            ...(decoded.oneTrustGroupEvidence?{oneTrustGroupEvidence:decoded.oneTrustGroupEvidence}:{}),
+            witnessType:"cmp_storage_state",expectedState:"canonical_cmp_granted_decision_after_action"};
         }
-      }
+        diagnostics?.reason("no_registered_complete_decision");return undefined;
+      };
+      const result=await firstVerifiedConsentRead([tcfRead,storageRead()]);
+      if(decoded&&(!result||result.witnessType==="cmp_storage_state"))onDecisionObserved?.(decoded);
+      if(result)return result;
     }
     if (Date.now() >= deadlineAtMs) return undefined;
     await waitForDelay(25, signal).catch(() => undefined);
@@ -2767,12 +2872,16 @@ async function installStorageWriteProbe(page: Page) {
           const maxAge = attributes.find((attribute) => attribute.toLowerCase().startsWith("max-age="))?.slice(8);
           const expires = attributes.find((attribute) => attribute.toLowerCase().startsWith("expires="))?.slice(8);
           const deletion = maxAge !== undefined ? Number(maxAge) <= 0 : expires !== undefined && Date.parse(expires) <= Date.now();
-          retain({ storageType: "cookie", name, deletion, value: cookieValue.length <= 2048 ? cookieValue : undefined, observedAtEpochMs: performance.timeOrigin + performance.now() });
+          retain({ storageType: "cookie", name, deletion, value: cookieValue.length <= 2048 ? cookieValue : undefined,
+            ...(name.startsWith("cmplz_") ? {
+              cookieAssignment: String(value).length <= 4096 ? String(value) : undefined,
+              documentUrl: location.href.length <= 2048 ? location.href : undefined,
+            } : {}), observedAtEpochMs: performance.timeOrigin + performance.now() });
           return result;
         },
       });
     }
-  })();` });
+  })();` + CMP_PASSIVE_EVENT_INIT_SCRIPT });
 }
 
 async function readStorageWrites(scope: Page | Frame): Promise<InstrumentedStorageWrite[]> {
@@ -2864,7 +2973,7 @@ async function cookieState(context: BrowserContext, cookieName: string) {
     cookie.name,
     cookie.domain.toLowerCase().replace(/^\./, ""),
     cookie.path,
-    hashValue(cookie.value),
+    hashValue(consentReceiptChangeValue(cookie.name, cookie.value)),
   ]).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
   return states.length > 0 ? hashValue(JSON.stringify(states)) : undefined;
 }

@@ -2360,9 +2360,13 @@ test("pre-consent runtime scanner retains first-layer controls that render in se
       entry.label === "consent gate checkpoints"
     );
 
-    assert.equal(observation?.managePreferencesControlObserved, true);
-    assert.equal(observation?.acceptControlObserved, true);
-    assert.equal(observation?.rejectControlObserved, true);
+    const captureDiagnostic = JSON.stringify({
+      observation,
+      timing: bundle.modulesRun[0]?.timingBreakdown,
+    });
+    assert.equal(observation?.managePreferencesControlObserved, true, captureDiagnostic);
+    assert.equal(observation?.acceptControlObserved, true, captureDiagnostic);
+    assert.equal(observation?.rejectControlObserved, true, captureDiagnostic);
     assert.equal(
       timingMarkers.includes("gate_progress:accept_control_retained"),
       true,

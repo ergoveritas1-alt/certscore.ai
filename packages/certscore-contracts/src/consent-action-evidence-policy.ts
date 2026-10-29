@@ -1,4 +1,6 @@
+import { complianzReceiptEvidenceSchema, complianzReceiptDecision } from "./complianz-consent-state";
 import { z } from "zod";
+import { oneTrustApplicabilityEvidenceSchema, oneTrustEffectiveGroups } from "./onetrust-applicability";
 
 export const CONSENT_ACTION_CONFIRMATION_POLICY = "semantic_consent_registration.v2" as const;
 
@@ -12,7 +14,8 @@ export const CONSENT_ACTION_RETENTION_OVERFLOW_EVALUATION_LIMIT = 256;
 const oneTrustGroupId = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 export const oneTrustGroupEvidenceSchema = z.object({
-  policyVersion: z.enum(["onetrust_cookie_groups.v1", "onetrust_cookie_groups.v2"]),
+  policyVersion: z.enum(["onetrust_cookie_groups.v1", "onetrust_cookie_groups.v2", "onetrust_cookie_groups.v3-sdk-applicability", "onetrust_cookie_groups.v4-effective-categories", "onetrust_cookie_groups.v5-active-scope"]),
+  applicability: oneTrustApplicabilityEvidenceSchema.optional(),
   cookieIdentitySha256: sha256,
   beforeValueSha256: sha256,
   afterValueSha256: sha256,
@@ -21,6 +24,18 @@ export const oneTrustGroupEvidenceSchema = z.object({
   configuredGroupIds: z.array(oneTrustGroupId).min(1).max(64),
   groups: z.array(z.object({ id: oneTrustGroupId, alwaysActive: z.boolean(), consent: z.boolean() }).strict()).min(1).max(64),
 }).strict().superRefine((proof, context) => {
+  if (proof.policyVersion === "onetrust_cookie_groups.v3-sdk-applicability" || proof.policyVersion === "onetrust_cookie_groups.v4-effective-categories" || proof.policyVersion === "onetrust_cookie_groups.v5-active-scope") {
+    const applicability = proof.applicability;
+    const effective = applicability ? oneTrustEffectiveGroups(applicability.inputs.groups,applicability.source) : [];
+    if (!applicability || applicability.policyVersion !== (proof.policyVersion === "onetrust_cookie_groups.v3-sdk-applicability" ? "onetrust_ikea_applicability.v1" : proof.policyVersion === "onetrust_cookie_groups.v5-active-scope" ? "onetrust_effective_categories.v3-active-scope" : "onetrust_effective_categories.v2") || applicability.configurationSha256 !== proof.configurationSha256 ||
+      effective.length !== proof.configuredGroupIds.length ||
+      effective.some(g => !proof.configuredGroupIds.includes(g.id)) ||
+      proof.groups.some(g => (effective.find(e => e.id === g.id)?.status === "always active") !== g.alwaysActive)) {
+      context.addIssue({code:z.ZodIssueCode.custom,message:"SDK applicability must derive the complete retained effective group universe."});
+    }
+  } else if (proof.applicability) {
+    context.addIssue({code:z.ZodIssueCode.custom,message:"Historical OneTrust evidence cannot acquire applicability semantics."});
+  }
   if (proof.beforeValueSha256 === proof.afterValueSha256 ||
     new Set(proof.baselineGroupIds).size !== proof.baselineGroupIds.length ||
     new Set(proof.configuredGroupIds).size !== proof.configuredGroupIds.length ||
@@ -52,6 +67,7 @@ export const consentDecisionEvidenceSchema = z.object({
   }).strict().optional(),
   tcfApiSource: z.enum(["addEventListener", "getTCData"]).optional(),
   oneTrustGroupEvidence: oneTrustGroupEvidenceSchema.optional(),
+  complianzReceiptEvidence: complianzReceiptEvidenceSchema.optional(),
 }).strict().superRefine((evidence, context) => {
   if (evidence.basis === "verified_state" && (!evidence.observedStateSha256 || evidence.observedAtMs === undefined || !evidence.timestampBasis)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Verified decisions require a retained state hash and timestamp provenance." });
@@ -62,6 +78,14 @@ export const consentDecisionEvidenceSchema = z.object({
   if (evidence.tcfPurposeEvidence && (evidence.basis !== "verified_state" || !evidence.tcfApiSource || evidence.oneTrustGroupEvidence)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "TCF purpose encoding requires verified API-source provenance." });
   }
+  if (evidence.complianzReceiptEvidence) {
+    const proof = evidence.complianzReceiptEvidence;
+    if (evidence.basis !== "verified_state" || evidence.timestampBasis !== "instrumented_state_write" ||
+      evidence.oneTrustGroupEvidence || evidence.tcfPurposeEvidence || evidence.tcfApiSource ||
+      evidence.observedStateSha256 !== proof.stateSha256 || evidence.decision !== complianzReceiptDecision(proof)) {
+      context.addIssue({code:z.ZodIssueCode.custom, message:"Complianz decisions require their complete exclusive receipt proof."});
+    }
+  }
   if (evidence.oneTrustGroupEvidence) {
     const proof = evidence.oneTrustGroupEvidence;
     const optional = proof.groups.filter((group) => !group.alwaysActive);
@@ -69,7 +93,7 @@ export const consentDecisionEvidenceSchema = z.object({
       : optional.every((group) => !group.consent) ? "denied" : "mixed";
     if (evidence.basis !== "verified_state" || evidence.tcfApiSource ||
       evidence.observedStateSha256 !== proof.afterValueSha256 || evidence.decision !== decision ||
-      (proof.policyVersion === "onetrust_cookie_groups.v2" && evidence.timestampBasis !== "instrumented_state_write")) {
+      (proof.policyVersion !== "onetrust_cookie_groups.v1" && evidence.timestampBasis !== "instrumented_state_write")) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: "OneTrust decision must match its retained cookie/configuration proof." });
     }
   }

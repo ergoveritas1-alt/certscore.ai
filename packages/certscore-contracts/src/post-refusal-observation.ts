@@ -1,3 +1,6 @@
+import { validateComplianzReceiptEnvelope } from "./complianz-consent-state";
+import { cmpPassiveDiagnosticsSchema } from "./cmp-passive-diagnostics";
+import { validateOneTrustApplicabilityEnvelope } from "./onetrust-applicability";
 import { propertySaleSharingSourceSchema } from "./property-sale-sharing";
 import {californiaRejectRequestEvidenceSchema,validateCaliforniaRejectRequest} from "./california-reject-evidence";
 import { consentConfirmationDiagnosticsSchema } from "./consent-confirmation-diagnostics";
@@ -495,6 +498,7 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
 
 const postRefusalEvidencePacketBaseSchema = z.object({
   confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
+  passiveCmpDiagnostics: cmpPassiveDiagnosticsSchema.optional(),
   runtimeEvidenceGraph: packetRuntimeGraphSchema.optional(),
   runtimeEvidenceGraphDiagnostics: z.array(runtimeGraphVerificationDiagnosticSchema).max(1).optional(),
   artifactVersion: z.enum(["certscore.post_refusal_evidence.v1", "certscore.post_refusal_evidence.v2"]),
@@ -569,6 +573,18 @@ const postRefusalEvidencePacketBaseSchema = z.object({
   )) context.addIssue({ code: z.ZodIssueCode.custom, path: ["timing", "observationEndedAtMs"], message: "Observation end must retain the action and result clock binding." });
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "reject", context);
   validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
+  for (const evidence of [packet.decisionEvidence, packet.terminalDecisionEvidence?.evidence]) {
+    validateComplianzReceiptEnvelope(evidence?.complianzReceiptEvidence, {
+      startedAt:packet.startedAt, completedAt:packet.completedAt, dispatchedAtMs:packet.refusalRegistration.actionDispatchedAtMs,
+      observedAtMs:evidence?.observedAtMs,
+      cmpId:packet.actionControlProof?.cmpId,
+      frameIdentitySha256:packet.actionControlProof && "frameIdentitySha256" in packet.actionControlProof ? packet.actionControlProof.frameIdentitySha256 : undefined,
+    }, context);
+    validateOneTrustApplicabilityEnvelope(evidence?.oneTrustGroupEvidence?.applicability, {
+      startedAt:packet.startedAt, completedAt:packet.completedAt, dispatchedAtMs:packet.refusalRegistration.actionDispatchedAtMs,
+      frameIdentitySha256:packet.actionControlProof && "frameIdentitySha256" in packet.actionControlProof ? packet.actionControlProof.frameIdentitySha256 : undefined,
+    }, context);
+  }
   for (const request of packet.network.requests) {
     validateCaliforniaRejectRequest(request,context);
     if (request.responseCookieWrites?.some(write => write.source !== "response_set_cookie" ||
@@ -1237,6 +1253,9 @@ const postRejectScoringEvidenceSchema = z.object({
 }).strict();
 
 export const postRefusalReportProjectionSchema = z.object({
+  resolver: postRefusalResolverSchema.optional(),
+  confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
+  passiveCmpDiagnostics: cmpPassiveDiagnosticsSchema.optional(),
   propertySaleSharingSource: propertySaleSharingSourceSchema.optional(),
   sourceIdentity:z.object({policyVersion:z.literal("post_reject_source_identity.v1"),scanId:z.string().min(1).max(160),targetSha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict().optional(),
   scoringEvidence: postRejectScoringEvidenceSchema.optional(),
@@ -1410,6 +1429,9 @@ export function projectPostRefusalEvidenceForReport(input: {
       observationEndedAtMs: packet.timing.observationEndedAtMs ?? packet.afterActionCapture?.captureEndedAtMs, requests: packet.network.requests });
 
   const projection = postRefusalReportProjectionSchema.parse({
+    ...(packet.confirmationDiagnostics?.policyVersion === "consent_confirmation_diagnostics.v3" ? {resolver:packet.resolver} : {}),
+    ...(packet.confirmationDiagnostics?.policyVersion === "consent_confirmation_diagnostics.v3" ? {confirmationDiagnostics:packet.confirmationDiagnostics} : {}),
+    ...(packet.passiveCmpDiagnostics ? {passiveCmpDiagnostics:packet.passiveCmpDiagnostics} : {}),
     ...(packet.exactTargetSha256?{sourceIdentity:{policyVersion:"post_reject_source_identity.v1",scanId:packet.parentScanId ?? packet.scanId,targetSha256:packet.exactTargetSha256}}:{}),
     scoringEvidence: {
       version: "post_reject_scoring_evidence.v1",

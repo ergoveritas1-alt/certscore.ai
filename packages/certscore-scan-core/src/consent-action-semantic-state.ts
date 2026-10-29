@@ -1,10 +1,16 @@
+import { verifyComplianzReceipt } from "./complianz-consent-state.js";
+import { cmpPassiveReadToken, recordCmpPassiveRead } from "./cmp-passive-diagnostics.js";
 import { decodeCanonicalConsentDecision, type ConsentStateDecision, type OneTrustGroupEvidence, type ConsentConfirmationReason } from "@certscore/contracts";
 import { createHash } from "node:crypto";
 import type { BrowserContext, Frame, Page } from "playwright";
 import { matchesCanonicalCmpCookieName } from "./cmp-cookie-name.js";
-import { verifyOneTrustCookieDecision, type OneTrustBaseline } from "./onetrust-consent-state.js";
+import { oneTrustCookieIdentityHash, verifyOneTrustCookieDecision, type OneTrustBaseline } from "./onetrust-consent-state.js";
+
+declare const cmplz_categories: unknown;
 
 export type ActionStateWrite = {
+  cookieAssignment?: string;
+  documentUrl?: string;
   storageType: "cookie" | "local_storage" | "session_storage";
   name: string;
   observedAtEpochMs: number;
@@ -15,6 +21,7 @@ export type ActionStateWrite = {
 
 export type SemanticState = {
   oneTrustGroupEvidence?: OneTrustGroupEvidence;
+  complianzReceiptEvidence?: import("@certscore/contracts").ComplianzReceiptEvidence;
   stateHash: string;
   key: string;
   observedAtEpochMs?: number;
@@ -22,13 +29,42 @@ export type SemanticState = {
 };
 
 export async function readActionStateWrites(scope: Page | Frame): Promise<ActionStateWrite[]> {
-  return scope.evaluate(() => {
+  return (await readActionStateSnapshot(scope)).writes;
+}
+
+async function readActionStateSnapshot(scope: Page | Frame): Promise<{writes:ActionStateWrite[];complianz:unknown}> {
+  const token = cmpPassiveReadToken(scope);
+  const raw = await scope.evaluate(() => {
     const target = window as unknown as {
+      __certscoreReadCmpPassiveEvents?: () => unknown;
       __certscoreReadPostAcceptWrites?: () => ActionStateWrite[];
       __certscoreReadPostRefusalWrites?: () => ActionStateWrite[];
     };
-    return (target.__certscoreReadPostAcceptWrites ?? target.__certscoreReadPostRefusalWrites)?.() ?? [];
-  }).catch(() => []);
+    const writes=(target.__certscoreReadPostAcceptWrites ?? target.__certscoreReadPostRefusalWrites)?.() ?? [];
+    let passive:unknown;try { passive=target.__certscoreReadCmpPassiveEvents?.(); } catch { /* Optional diagnostics cannot discard writes. */ }
+    // Read only already-loaded data in the existing write snapshot. No SDK
+    // function, getter, extra round trip, wait or preference panel.
+    let complianz:unknown;
+    try {
+      const descriptor=Object.getOwnPropertyDescriptor(window,"complianz");
+      const config=descriptor && "value" in descriptor ? descriptor.value : undefined;
+      const own=(key:string)=>{const d=config && Object.getOwnPropertyDescriptor(config,key);return d && "value" in d ? d.value : undefined;};
+      const categoryDescriptor=Object.getOwnPropertyDescriptor(window,"cmplz_categories");
+      const categories=categoryDescriptor && !("value" in categoryDescriptor) ? undefined
+        : typeof cmplz_categories === "undefined" ? undefined : cmplz_categories;
+      const values=Array.isArray(categories) && categories.length===4 ? [0,1,2,3].map(index=>{
+        const d=Object.getOwnPropertyDescriptor(categories,index);return d && "value" in d ? d.value : undefined;
+      }) : undefined;
+      if (values && values.every(v=>typeof v==="string") &&
+        [false,0,""].includes(own("tcf_active"))) {
+        complianz={prefix:own("prefix"),tcfActive:false,categories:values};
+      }
+    } catch { /* Unsupported configuration supplies no decision proof. */ }
+    return {writes,passive,complianz};
+  }).catch(() => ({writes:[],passive:undefined}));
+  if (Array.isArray(raw)) return {writes:raw,complianz:undefined}; // Existing test/historical read helpers.
+  recordCmpPassiveRead(token,raw.passive);
+  return {writes:raw.writes,complianz:"complianz" in raw ? raw.complianz : undefined};
 }
 
 export function matchingStateWriteTime(
@@ -40,18 +76,45 @@ export function matchingStateWriteTime(
     write.observedAtEpochMs >= after)?.observedAtEpochMs;
 }
 
-export async function verifiedCookieDecision(input: {
+type CookieDecisionInput = {
   context: BrowserContext;
   scope: Page | Frame;
   cookieName: string;
   actionAt: number;
   oneTrustBaseline?: OneTrustBaseline;
   onDiagnostic?: (reason: ConsentConfirmationReason) => void;
+};
+
+export async function verifiedCookieDecision(input: CookieDecisionInput): Promise<SemanticState | undefined> {
+  return verifiedCookieDecisionFromRead(input);
+}
+
+/** The changed-receipt gate and the candidate read are the same snapshot.
+ * OneTrust's later independent readback still verifies identity, value and the
+ * baseline-bound configuration. Unchanged receipts add no configuration read. */
+export async function verifiedChangedOneTrustDecision(input: CookieDecisionInput & {
+  cookieName: "OptanonConsent";
+  oneTrustBaseline: Extract<OneTrustBaseline, {status: "verified"}>;
 }): Promise<SemanticState | undefined> {
+  const cookies = await input.context.cookies(input.scope.url());
+  const matching = cookies.filter(cookie => matchesCanonicalCmpCookieName(cookie.name, "OptanonConsent"));
+  if (matching.length !== 1) { input.onDiagnostic?.(matching.length ? "receipt_ambiguous" : "receipt_missing"); return undefined; }
+  if (oneTrustCookieIdentityHash(matching[0]!) !== input.oneTrustBaseline.identityHash) {
+    input.onDiagnostic?.("receipt_identity_changed"); return undefined;
+  }
+  if (sha256(matching[0]!.value) === input.oneTrustBaseline.valueHash) { input.onDiagnostic?.("no_fresh_decision"); return undefined; }
+  return verifiedCookieDecisionFromRead(input, cookies);
+}
+
+async function verifiedCookieDecisionFromRead(input: CookieDecisionInput,
+  candidateCookies?: Awaited<ReturnType<BrowserContext["cookies"]>>): Promise<SemanticState | undefined> {
+  if (matchesCanonicalCmpCookieName(input.cookieName, "OptanonConsent") && !input.oneTrustBaseline) {
+    input.onDiagnostic?.("configuration_missing"); return undefined;
+  }
   // Both reads are passive and independent. Share the existing confirmation
   // window instead of serializing two browser round trips on a busy renderer.
   const [writes, currentCookies] = await Promise.all([
-    readActionStateWrites(input.scope), input.context.cookies(input.scope.url()),
+    readActionStateWrites(input.scope), candidateCookies ?? input.context.cookies(input.scope.url()),
   ]);
   const cookies = currentCookies.filter((cookie) =>
     matchesCanonicalCmpCookieName(cookie.name, input.cookieName));
@@ -59,16 +122,20 @@ export async function verifiedCookieDecision(input: {
   if (cookies.length !== 1) { input.onDiagnostic?.(cookies.length ? "receipt_ambiguous" : "receipt_missing"); return undefined; }
   const cookie = cookies[0]!;
   if (input.cookieName === "OptanonConsent" && input.oneTrustBaseline) {
-    const state = await verifyOneTrustCookieDecision(input.context, input.scope, input.oneTrustBaseline);
-    if (!state || state.stateHash !== sha256(cookie.value)) { input.onDiagnostic?.("configuration_or_groups_unverified"); return undefined; }
+    if (input.oneTrustBaseline.status === "verified" && oneTrustCookieIdentityHash(cookie) !== input.oneTrustBaseline.identityHash) {
+      input.onDiagnostic?.("receipt_identity_changed"); return undefined;
+    }
+    const state = await verifyOneTrustCookieDecision(input.context, input.scope, input.oneTrustBaseline, input.onDiagnostic);
+    if (!state) return undefined;
+    if (state.stateHash !== sha256(cookie.value)) { input.onDiagnostic?.("receipt_readback_mismatch"); return undefined; }
     const observedAtEpochMs = matchingStateWriteTime(writes, cookie.name, cookie.value, input.actionAt, "cookie");
-    // A partial pre-click receipt cannot establish the previous decision.
-    // Require the complete replacement value to be written after dispatch.
-    if (state.oneTrustGroupEvidence?.policyVersion === "onetrust_cookie_groups.v2" && observedAtEpochMs === undefined) { input.onDiagnostic?.("no_fresh_decision"); return undefined; }
+    // Partial-baseline and SDK-applicability proofs require a complete
+    // replacement value instrumented after dispatch, not only a changed hash.
+    if (state.oneTrustGroupEvidence && state.oneTrustGroupEvidence.policyVersion !== "onetrust_cookie_groups.v1" && observedAtEpochMs === undefined) { input.onDiagnostic?.("no_fresh_decision"); return undefined; }
     return { ...state, observedAtEpochMs };
   }
-  const decision = decodeCanonicalConsentDecision(cookie.name, cookie.value, true);
-  if (decision === "unknown") { input.onDiagnostic?.("receipt_malformed_or_unsupported"); return undefined; }
+  const decision = decodeCanonicalConsentDecision(cookie.name, cookie.value, true, input.onDiagnostic);
+  if (decision === "unknown") return undefined;
   return {
     key: cookie.name,
     stateHash: sha256(cookie.value),
@@ -84,9 +151,11 @@ export async function verifiedCanonicalStateWrite(input: {
   afterSequence?: number;
   registeredKeys?: string[];
   baselineStateHashes?: Record<string, string>;
+  complianzControlBound?: boolean;
   onDiagnostic?: (reason: ConsentConfirmationReason) => void;
 }): Promise<SemanticState | undefined> {
-  const writes = (await readActionStateWrites(input.scope)).filter((write) =>
+  const snapshot = await readActionStateSnapshot(input.scope);
+  const writes = snapshot.writes.filter((write) =>
     write.observedAtEpochMs >= input.actionAt && write.sequence > (input.afterSequence ?? 0));
   const states: SemanticState[] = [];
   // Repeated writes to a registered receipt are common during CMP startup.
@@ -94,14 +163,35 @@ export async function verifiedCanonicalStateWrite(input: {
   // still needs exact value equality, a fresh timestamp and semantic decoding.
   let cookieRead: ReturnType<BrowserContext["cookies"]> | undefined;
   const storageReads = new Map<string, Promise<string | undefined>>();
+  if (input.complianzControlBound && writes.some(write => write.storageType === "cookie" && /^cmplz_(preferences|statistics|marketing)$/.test(write.name))) {
+    const documentUrl = input.scope.url();
+    cookieRead = input.context.cookies(documentUrl);
+    const cookies = await cookieRead;
+    if (input.scope.url() === documentUrl) {
+      const state = verifyComplianzReceipt({configuration:snapshot.complianz,documentUrl,cookies,
+        writes:writes.slice(-96),actionAt:input.actionAt,readAt:Date.now(),onDiagnostic:input.onDiagnostic});
+      if (state) states.push(state);
+    }
+  }
   for (const write of writes.slice(-96)) {
+    // Split receipts were considered together above; metadata is not a decision.
+    if (write.name.startsWith("cmplz_")) continue;
     const registered = input.registeredKeys?.includes(write.name) === true;
-    if (write.value === undefined || decodeCanonicalConsentDecision(write.name, write.value, registered) === "unknown") continue;
+    // Unknown unrelated writes are not consent receipt failures. Inspect only
+    // registered keys or canonical consent identities for diagnostic purposes.
+    const diagnostic = registered || /consent/i.test(write.name) ? input.onDiagnostic : undefined;
+    // Generic write matching has no pre-click OneTrust configuration proof.
+    // Keep its dynamic group receipts on the dedicated verified-cookie path.
+    if (matchesCanonicalCmpCookieName(write.name, "OptanonConsent")) {
+      diagnostic?.("configuration_missing"); continue;
+    }
+    if (write.value === undefined || decodeCanonicalConsentDecision(write.name, write.value, registered, diagnostic) === "unknown") continue;
     let value: string | undefined;
     if (write.storageType === "cookie") {
       cookieRead ??= input.context.cookies(input.scope.url());
       const cookies = (await cookieRead).filter((cookie) => cookie.name === write.name);
-      if (cookies.length === 1) value = cookies[0]!.value;
+      if (cookies.length !== 1) { input.onDiagnostic?.(cookies.length ? "receipt_ambiguous" : "receipt_missing"); continue; }
+      value = cookies[0]!.value;
     } else {
       const identity = `${write.storageType}\n${write.name}`;
       let read = storageReads.get(identity);

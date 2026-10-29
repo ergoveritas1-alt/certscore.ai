@@ -8,6 +8,57 @@ import test from "node:test";
 import { getPredeployPlan } from "./predeploy.js";
 import { commandWords, RELEASE_REGRESSION_MATRIX, reviewReleaseRegressions, type ReleaseRegressionMatrix } from "./lib/scan-release-regressions.js";
 
+test("CMP identity regressions run in fast and full release gates", () => {
+  const inputs = ["packages/shared/src/known-cmps.ts", "packages/certscore-vendor-resolver/src/index.ts",
+    "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts"];
+  const tests = ["packages/shared/src/cmp-library-coverage.test.ts",
+    "packages/certscore-vendor-resolver/src/cmp-library-coverage.test.ts",
+    "packages/certscore-scan-core/src/cmp-attribution-capture.test.ts",
+    "packages/certscore-scan-core/src/consent-geometry-checkpoint.test.ts",
+    "packages/certscore-scan-core/src/cmp-library-coverage.test.ts"];
+  for (const changed of [...inputs, ...tests]) {
+    for (const full of [false, true]) {
+      const commands = getPredeployPlan([changed], { full }).checks.flatMap(check => check.command);
+      for (const file of tests) assert.ok(commands.includes(file), `${changed}: ${full ? "full" : "fast"} omits ${file}`);
+    }
+  }
+});
+
+test("Accept confirmation and diagnostic regressions run in fast and full release gates", () => {
+  for (const changed of ["packages/certscore-scan-core/src/post-accept-observer.ts", "packages/certscore-contracts/src/consent-confirmation-diagnostics.ts",
+    "packages/certscore-scan-core/src/cmp-api-consent-state.ts", "packages/certscore-scan-core/src/accept-confirmation-coverage.test.ts",
+    "packages/certscore-scan-core/src/confirmation-diagnostic-reasons.test.ts",
+    "packages/certscore-scan-core/src/onetrust-consent-state.ts",
+    "packages/certscore-scan-core/src/onetrust-sdk-source.ts",
+    "packages/certscore-scan-core/src/consent-action-discovery.ts",
+    "packages/certscore-scan-core/src/consent-document-readiness.ts",
+    "packages/certscore-contracts/src/onetrust-applicability.ts",
+    "packages/certscore-contracts/src/notification-acknowledgment.ts",
+    "packages/certscore-scan-core/src/notification-acknowledgment.ts",
+    "packages/certscore-scan-core/src/onetrust-confirmation-readback.test.ts"]) {
+    for (const full of [false, true]) {
+      const plan = getPredeployPlan([changed], { full });
+      const checks = plan.checks.flatMap(check => check.command);
+      for (const file of ["packages/certscore-contracts/src/consent-confirmation-diagnostics.test.ts",
+        "packages/certscore-scan-core/src/accept-confirmation-coverage.test.ts",
+        "packages/certscore-scan-core/src/reject-confirmation-coverage.test.ts",
+        "packages/certscore-scan-core/src/cmp-api-consent-state.test.ts",
+        "packages/certscore-scan-core/src/onetrust-confirmation-readback.test.ts",
+        "packages/certscore-scan-core/src/onetrust-sdk-applicability.test.ts",
+        "packages/certscore-contracts/src/onetrust-applicability.test.ts",
+        "packages/certscore-contracts/src/notification-acknowledgment.test.ts",
+        "packages/certscore-scan-core/src/onetrust-control-resolution.test.ts",
+        "packages/certscore-scan-core/src/onetrust-loading-resolution.test.ts",
+        "packages/certscore-scan-core/src/consent-action-discovery.test.ts",
+        "packages/certscore-scan-core/src/consent-search-readiness.test.ts",
+        "packages/certscore-scan-core/src/consent-action-resolver-diagnostics.test.ts",
+        "packages/certscore-scan-core/src/confirmation-diagnostic-reasons.test.ts"]) {
+        assert.ok(checks.includes(file), `${changed}: ${full ? "full" : "fast"} omits ${file}`);
+      }
+    }
+  }
+});
+
 test("the existing calibration release matrix has executable full and change-targeted regressions and controls", () => {
   const matrix = JSON.parse(readFileSync(RELEASE_REGRESSION_MATRIX, "utf8"));
   const review = reviewReleaseRegressions(process.cwd(), matrix, getPredeployPlan);
@@ -50,12 +101,14 @@ test("a missing comparison revision cannot turn a clean checkout into a successf
     const entry = path.resolve("scripts/predeploy.ts");
     // Resolve the installed loader before changing cwd; no install or cloud call.
     const loader = createRequire(import.meta.url).resolve("tsx");
+    // tsx --tsconfig exports its path to children; keep it valid in the temporary checkout.
+    const env = { ...process.env, TSX_TSCONFIG_PATH: path.resolve("tsconfig.base.json") };
     for (const args of [["--base", "missing-review-revision"], ["--base="]]) {
-      const result = spawnSync(process.execPath, ["--import", loader, entry, ...args], { cwd: root, encoding: "utf8" });
+      const result = spawnSync(process.execPath, ["--import", loader, entry, ...args], { cwd: root, encoding: "utf8", env });
       assert.equal(result.status, 1, `unsafe empty success: ${result.stdout}`);
       assert.match(result.stderr, /base.*(?:available|requires)/i);
     }
-    const valid = spawnSync(process.execPath, ["--import", loader, entry, "--base", "HEAD"], { cwd: root, encoding: "utf8" });
+    const valid = spawnSync(process.execPath, ["--import", loader, entry, "--base", "HEAD"], { cwd: root, encoding: "utf8", env });
     assert.equal(valid.status, 0, valid.stderr);
     assert.match(valid.stdout, /No changed files detected/);
   } finally { rmSync(root, { recursive: true, force: true }); }

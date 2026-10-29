@@ -3807,6 +3807,7 @@ export type RegulatoryReviewOutput = z.infer<typeof regulatoryReviewOutputSchema
 
 export const SCHEMA_VERSION = "certscore.v2.alpha.1";
 export * from "./consent-action-evidence-policy";
+export * from "./onetrust-applicability";
 export * from "./consent-state-decision";
 export * from "./after-action-capture";
 
@@ -3835,3 +3836,11 @@ export * from "./california-reject-evidence";
 export * from "./privacy-capture-profile";
 export * from "./privacy-choice-presence";
 export * from "./gdpr-narrow-posture";
+
+export * from "./notification-acknowledgment";
+
+export * from "./cmp-passive-diagnostics";
+
+export * from "./consent-action-stages";
+
+export * from "./complianz-consent-state";
