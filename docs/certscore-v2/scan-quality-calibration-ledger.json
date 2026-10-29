@@ -2896,10 +2896,20 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://eetapps.com/"
+    },
+    "https://sered.net/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T21:52:22.056Z",
+      "lastContactAt": "2026-10-29T21:52:22.056Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sered.net/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-29T21:01:35.306Z",
+  "updatedAt": "2026-10-29T21:52:22.417Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -3065,6 +3075,7 @@
     "https://concordiasupply.com/",
     "https://ssh.com/",
     "https://lwolf.com/",
-    "https://eetapps.com/"
+    "https://eetapps.com/",
+    "https://sered.net/"
   ]
 }
