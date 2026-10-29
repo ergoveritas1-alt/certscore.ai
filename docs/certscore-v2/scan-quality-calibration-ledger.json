@@ -2906,10 +2906,50 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://sered.net/"
+    },
+    "https://bonfire.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T22:13:32.662Z",
+      "lastContactAt": "2026-10-29T22:13:32.662Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://bonfire.com/"
+    },
+    "https://homechef.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T22:14:46.404Z",
+      "lastContactAt": "2026-10-29T22:14:46.404Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://homechef.com/"
+    },
+    "https://netsparkmobile.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T22:15:46.801Z",
+      "lastContactAt": "2026-10-29T22:15:46.801Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "failed",
+      "state": "cooldown",
+      "url": "https://netsparkmobile.com/"
+    },
+    "https://jobvite.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T22:16:44.224Z",
+      "lastContactAt": "2026-10-29T22:16:44.224Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://jobvite.com/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-29T21:52:22.417Z",
+  "updatedAt": "2026-10-29T22:16:44.545Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -3076,6 +3116,10 @@
     "https://ssh.com/",
     "https://lwolf.com/",
     "https://eetapps.com/",
-    "https://sered.net/"
+    "https://sered.net/",
+    "https://bonfire.com/",
+    "https://homechef.com/",
+    "https://netsparkmobile.com/",
+    "https://jobvite.com/"
   ]
 }
