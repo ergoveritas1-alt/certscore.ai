@@ -2713,10 +2713,110 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://solidgate.com/"
+    },
+    "https://10tv.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:20:29.679Z",
+      "lastContactAt": "2026-10-29T20:20:29.679Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://10tv.com/"
+    },
+    "https://wellhub.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:21:11.701Z",
+      "lastContactAt": "2026-10-29T20:21:11.701Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://wellhub.com/"
+    },
+    "https://renewableenergyworld.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:22:18.470Z",
+      "lastContactAt": "2026-10-29T20:22:18.470Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://renewableenergyworld.com/"
+    },
+    "https://dailysabah.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:22:56.706Z",
+      "lastContactAt": "2026-10-29T20:22:56.706Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://dailysabah.com/"
+    },
+    "https://runna.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:23:26.811Z",
+      "lastContactAt": "2026-10-29T20:23:26.811Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://runna.com/"
+    },
+    "https://lakesidesoftware.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:24:34.747Z",
+      "lastContactAt": "2026-10-29T20:24:34.747Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://lakesidesoftware.com/"
+    },
+    "https://vesync.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:25:45.384Z",
+      "lastContactAt": "2026-10-29T20:25:45.384Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://vesync.com/"
+    },
+    "https://tresensa.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:26:34.254Z",
+      "lastContactAt": "2026-10-29T20:26:34.254Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://tresensa.com/"
+    },
+    "https://medianewsgroup.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:27:42.234Z",
+      "lastContactAt": "2026-10-29T20:27:42.234Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://medianewsgroup.com/"
+    },
+    "https://pdfgear.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:28:53.054Z",
+      "lastContactAt": "2026-10-29T20:28:53.054Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://pdfgear.com/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-29T20:04:39.854Z",
+  "updatedAt": "2026-10-29T20:28:53.789Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -2864,6 +2964,16 @@
     "https://wponetap.com/",
     "https://www.recordedfuture.com/",
     "https://loyaltylion.com/",
-    "https://solidgate.com/"
+    "https://solidgate.com/",
+    "https://10tv.com/",
+    "https://wellhub.com/",
+    "https://renewableenergyworld.com/",
+    "https://dailysabah.com/",
+    "https://runna.com/",
+    "https://lakesidesoftware.com/",
+    "https://vesync.com/",
+    "https://tresensa.com/",
+    "https://medianewsgroup.com/",
+    "https://pdfgear.com/"
   ]
 }
