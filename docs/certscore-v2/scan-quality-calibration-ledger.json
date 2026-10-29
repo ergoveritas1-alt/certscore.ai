@@ -2813,10 +2813,93 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://pdfgear.com/"
+    },
+    "https://pdfescape.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:55:09.267Z",
+      "lastContactAt": "2026-10-29T20:55:09.267Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://pdfescape.com/"
+    },
+    "https://victorianplumbing.co.uk/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:56:01.635Z",
+      "lastContactAt": "2026-10-29T20:56:01.635Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://victorianplumbing.co.uk/"
+    },
+    "https://pcpitstop.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:56:49.623Z",
+      "lastContactAt": "2026-10-29T20:56:49.623Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://pcpitstop.com/"
+    },
+    "https://beds.ac.uk/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-26T20:57:07.480Z",
+      "lastContactAt": "2026-10-29T20:57:07.480Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "main_document_restricted_status",
+        "failed_or_unreachable_visit"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://beds.ac.uk/"
+    },
+    "https://concordiasupply.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:58:07.252Z",
+      "lastContactAt": "2026-10-29T20:58:07.252Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://concordiasupply.com/"
+    },
+    "https://ssh.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:59:15.773Z",
+      "lastContactAt": "2026-10-29T20:59:15.773Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ssh.com/"
+    },
+    "https://lwolf.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T21:00:30.701Z",
+      "lastContactAt": "2026-10-29T21:00:30.701Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://lwolf.com/"
+    },
+    "https://eetapps.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T21:01:34.593Z",
+      "lastContactAt": "2026-10-29T21:01:34.593Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://eetapps.com/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-29T20:28:53.789Z",
+  "updatedAt": "2026-10-29T21:01:35.306Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -2974,6 +3057,14 @@
     "https://vesync.com/",
     "https://tresensa.com/",
     "https://medianewsgroup.com/",
-    "https://pdfgear.com/"
+    "https://pdfgear.com/",
+    "https://pdfescape.com/",
+    "https://victorianplumbing.co.uk/",
+    "https://pcpitstop.com/",
+    "https://beds.ac.uk/",
+    "https://concordiasupply.com/",
+    "https://ssh.com/",
+    "https://lwolf.com/",
+    "https://eetapps.com/"
   ]
 }
