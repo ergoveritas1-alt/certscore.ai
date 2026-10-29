@@ -186,12 +186,15 @@ export type KnownCmpDefinition = {
   aliases: string[];
   canonicalName: string;
   cookieNames?: string[];
+  /** Cookie names are case-sensitive; preserve exact identity for collision-prone names. */
+  caseSensitiveCookieNames?: boolean;
   domains: string[];
   domSelectors?: string[];
   /** Vendor-specific retained selector syntax, avoiding generic attribute values. */
   domMarkerPatterns?: RegExp[];
   evidenceTreatment: KnownCmpEvidenceTreatment;
   globalNames?: string[];
+  exactGlobalNames?: boolean;
   /** Read-only loaded configuration identity; never a visible/actionable scope. */
   passiveConfigurationApi?: "OneTrust.GetDomainData";
   iframePatterns?: RegExp[];
@@ -262,8 +265,8 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     // Passive identity only. Source-reviewed on the Volkswagen consent bundle;
     // Bootstrapper/Ensighten Manage alone does not identify a consent UI.
     canonicalName: "Ensighten Privacy", aliases: ["CHEQ Enforce"], domains: [],
-    domSelectors: ["#ensNotifyBanner", "#ensModalWrapper", "#tcf2__ensNotifyBanner", "#tcf2__ensModalWrapper"],
-    domMarkerPatterns: [/^#(?:ensNotifyBanner|ensModalWrapper|tcf2__ensNotifyBanner|tcf2__ensModalWrapper)$/],
+    domSelectors: ["#ensNotifyBanner", "#ensModalWrapper", "#tcf2__ensNotifyBanner", "#tcf2__ensModalWrapper", "#ensAcceptAll", "#ensRejectAll"],
+    domMarkerPatterns: [/^#(?:ensNotifyBanner|ensModalWrapper|tcf2__ensNotifyBanner|tcf2__ensModalWrapper|ensAcceptAll|ensRejectAll)$/],
     preferenceScopeSelector: "#ensNotifyBanner, #ensModalWrapper, #tcf2__ensNotifyBanner, #tcf2__ensModalWrapper",
     evidenceTreatment: "cmp_infrastructure", role: "consent management platform",
     interactionDocumentationUrls: ["https://academy.ensighten.com/hc/en-us/articles/22832165668241-Enforce-Training-Course-Overview"],
@@ -587,6 +590,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     cookieNames: ["uc_settings", "ucString", "usercentrics"],
     domains: ["usercentrics.com", "usercentrics.eu", "app.usercentrics.eu", "api.usercentrics.eu", "aggregator.service.usercentrics.eu", "consent-api.service.consent.usercentrics.eu"],
     domSelectors: ["#usercentrics-root", "[data-testid*='uc-' i]", "[id*='usercentrics' i]"],
+    domMarkerPatterns: [/(?:^|[#.])usercentrics[-_][\w-]+(?:$|[\s.#\[:])/i, /\[data-testid\s*[*^]?=\s*["']uc-[^"']*["'](?:\s+i)?\]/i, /\[id\s*\*=\s*["']usercentrics["']\s+i\]/i],
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["UC_UI", "UC_UI_SUPPRESS_CMP_DISPLAY", "usercentrics"],
     reopenControlHints: ["usercentrics", "privacy settings", "cookie settings"],
@@ -681,6 +685,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       containerSelectors: ["#CybotCookiebotDialog", "#CybotCookiebotDialogTabContent", "#CybotCookiebotDialogBody"],
     }],
     cookieNames: ["CookieConsent", "CookieConsentBulkTicket"],
+    caseSensitiveCookieNames: true,
     domains: ["cookiebot.com", "consent.cookiebot.com", "cookiebot.eu", "consent.cookiebot.eu", "consentcdn.cookiebot.eu"],
     domSelectors: ["#CybotCookiebotDialog", "#CookiebotWidget"],
     evidenceTreatment: "cmp_infrastructure",
@@ -1056,6 +1061,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     cookieNames: ["TERMLY_API_CACHE", "termly_gtm_template_default_consents"],
     domains: ["termly.io", "app.termly.io"],
     domSelectors: ['[data-termly-part="consent-banner"]', "[id*='termly' i]"],
+    domMarkerPatterns: [/\[data-termly-part\s*=\s*["'][a-z-]+["']\]/i, /(?:^|[#.])termly[-_][\w-]+(?:$|[\s.#\[:])/i, /\[id\s*\*=\s*["']termly["']\s+i\]/i],
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["Termly"],
     interactionDocumentationUrls: [
@@ -1160,7 +1166,8 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
     canonicalName: "CookieScript", aliases: ["Cookie-Script"],
     cookieNames: ["CookieScriptConsent"], domains: ["cookie-script.com"],
-    domSelectors: ["#cookiescript_injected"], globalNames: ["CookieScript"],
+    domSelectors: ["#cookiescript_injected"], globalNames: ["CookieScript"], exactGlobalNames: true,
+    domMarkerPatterns: [/(?:^|\s)#cookiescript_(?:injected|accept|reject)(?=$|[\s>+~.#\[:])/],
     evidenceTreatment: "cmp_infrastructure", role: "consent management platform", recipeVersion: "v1",
     interactionDocumentationUrls: ["https://help.cookie-script.com/en/articles/30246-custom-functions", "https://help.cookie-script.com/en/articles/30242-custom-events"],
     rejectConfirmation: {kind: "cmp_api_consent_state_changed", provider: "cookiescript"},
@@ -1288,6 +1295,64 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     standards: ["gpc", "google_consent_mode"],
     storageKeys: ["transcend-consent", "airgap"],
     urlPatterns: [/airgap\.js/i, /transcend-cdn/i, /privacy-center-api\.transcend\.io/i]
+  },
+  {
+    // Generic authorized controls; complete split-cookie receipts use the shared
+    // Complianz verifier. No named action recipe or SDK opening.
+    canonicalName: "Complianz", aliases: ["Complianz Privacy Suite"], domains: [],
+    domSelectors: [".cmplz-cookiebanner", ".cmplz-buttons"],
+    domMarkerPatterns: [/(?:^|[\s>+~])(?:[a-z][\w-]*)?\.cmplz-(?:cookiebanner|buttons)(?=$|[\s>+~.#\[:])/],
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform",
+    interactionDocumentationUrls: ["https://github.com/complianz/complianz-gdpr/blob/master/cookiebanner/templates/cookiebanner.php"],
+  },
+  {
+    canonicalName: "CookieHub", aliases: [], domains: [],
+    domSelectors: [".ch2-container", ".ch2-dialog"],
+    domMarkerPatterns: [/(?:^|[\s>+~])(?:[a-z][\w-]*)?(?:\.ch2-container|\.ch2-dialog)(?=$|[\s>+~.#\[:])/],
+    cookieNames: ["cookiehub"], caseSensitiveCookieNames: true,
+    globalNames: ["cookiehub"], exactGlobalNames: true,
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform",
+    interactionDocumentationUrls: ["https://docs.cookiehub.com/reference/data/cookies-and-storage", "https://github.com/cookiehub-com/cookiehub-js", "https://github.com/duckduckgo/autoconsent/blob/411524e21188fb260838fb411c9e65de0de4c254/rules/autoconsent/cookiehub.json"],
+  },
+  {
+    // Passive identity only; no action recipe or consent decision decoder.
+    canonicalName: "CIVIC Cookie Control", aliases: [], domains: [],
+    domSelectors: ["#ccc-notify-accept", "#ccc-notify-reject", "#ccc-recommended-settings", "#ccc-reject-settings", "#ccc-module", "#ccc-notify"],
+    domMarkerPatterns: [/(?:^|[\s>+~])(?:[a-z][\w-]*)?(?:#ccc-notify-accept|#ccc-notify-reject|#ccc-recommended-settings|#ccc-reject-settings|#ccc-module|#ccc-notify)(?=$|[\s>+~.#\[:])/],
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform",
+    interactionDocumentationUrls: ["https://cookiecontrol.com/docs/v9", "https://cc.cdn.civiccomputing.com/9/cookieControl-9.x.min.js"],
+  },
+  {
+    // Passive identity only; no action recipe or consent decision decoder.
+    canonicalName: "Piwik PRO Consent Manager", aliases: [], domains: [],
+    domSelectors: ["#PiwikPROConsentForm-container", "#PiwikPROConsentForm-agree-to-all", "#PiwikPROConsentForm-reject-all", "#ppms_cm_popup_overlay", "#ppms_cm_agree-to-all", "#ppms_cm_reject-all"],
+    domMarkerPatterns: [/(?:^|[\s>+~])(?:[a-z][\w-]*)?(?:#PiwikPROConsentForm-container|#PiwikPROConsentForm-agree-to-all|#PiwikPROConsentForm-reject-all|#ppms_cm_popup_overlay|#ppms_cm_agree-to-all|#ppms_cm_reject-all)(?=$|[\s>+~.#\[:])/],
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform",
+    interactionDocumentationUrls: ["https://piwikpro.github.io/ConsentManager-CustomConsentFormExample/implementation-guide.html", "https://github.com/duckduckgo/autoconsent/blob/411524e21188fb260838fb411c9e65de0de4c254/rules/autoconsent/piwik-pro.json"],
+  },
+  {
+    // Passive identity only; no action recipe or consent decision decoder.
+    canonicalName: "WPConsent", aliases: [], domains: [],
+    domSelectors: ["#wpconsent-container", "#wpconsent-accept-all", "#wpconsent-cancel-all", "#wpconsent-preferences-all"],
+    domMarkerPatterns: [/(?:^|[\s>+~])(?:[a-z][\w-]*)?(?:#wpconsent-container|#wpconsent-accept-all|#wpconsent-cancel-all|#wpconsent-preferences-all)(?=$|[\s>+~.#\[:])/],
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform",
+    interactionDocumentationUrls: ["https://wpconsent.com/docs/how-to-customize-the-wpconsent-banner-with-css-variables/", "https://downloads.wordpress.org/plugin/wpconsent-cookies-banner-privacy-suite.latest-stable.zip"],
+  },
+  {
+    // Passive identity only; no action recipe or consent decision decoder.
+    canonicalName: "Shopify Customer Privacy", aliases: [], domains: [],
+    domSelectors: ["#shopify-pc__banner", "#shopify-pc__banner__btn-accept", "#shopify-pc__banner__btn-decline"],
+    domMarkerPatterns: [/(?:^|[\s>+~])(?:[a-z][\w-]*)?(?:#shopify-pc__banner|#shopify-pc__banner__btn-accept|#shopify-pc__banner__btn-decline)(?=$|[\s>+~.#\[:])/],
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform",
+    interactionDocumentationUrls: ["https://shopify.dev/docs/api/customer-privacy", "https://github.com/duckduckgo/autoconsent/blob/411524e21188fb260838fb411c9e65de0de4c254/rules/autoconsent/shopify.json"],
+  },
+  {
+    // Passive identity only; no action recipe or consent decision decoder.
+    canonicalName: "Klaro", aliases: [], domains: [],
+    domSelectors: [".klaro"],
+    domMarkerPatterns: [/(?:^|[\s>+~])(?:[a-z][\w-]*)?(?:\.klaro)(?=$|[\s>+~.#\[:])/],
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform",
+    interactionDocumentationUrls: ["https://github.com/kiprotect/klaro", "https://klaro.org/docs/integration/annotated-configuration"],
   }
 ];
 
@@ -1337,6 +1402,7 @@ const GENERIC_SELECTOR_TOKENS = new Set([
   "testid",
 ]);
 const GENERIC_CMP_PROTOCOL_GLOBALS = new Set(["__tcfapi", "__gpp", "__uspapi", "__cmp"]);
+const GENERIC_CMP_PROTOCOL_COOKIES = new Set(["euconsent-v2"]);
 
 function selectorTokens(value: string) {
   return (value.toLowerCase().match(/[a-z0-9_-]{3,}/g) ?? []).filter((token) => !GENERIC_SELECTOR_TOKENS.has(token));
@@ -1380,7 +1446,10 @@ function collectSignalsForDefinition(definition: KnownCmpDefinition, input: Know
   }
 
   for (const cookieName of uniqueStrings(input.cookieNames ?? [])) {
+    // Shared protocol storage establishes a framework, not a specific provider.
+    if (GENERIC_CMP_PROTOCOL_COOKIES.has(cookieName.toLowerCase())) continue;
     if ((definition.cookieNameVariants ?? []).some(variant => textMatches(cookieName, variant.pattern)) || (definition.cookieNames ?? []).some((knownName) => {
+      if (definition.caseSensitiveCookieNames) return cookieName === knownName;
       const normalizedCookieName = cookieName.toLowerCase();
       const normalizedKnownName = knownName.toLowerCase();
       const prefixName = normalizedKnownName.endsWith("*") ? normalizedKnownName.slice(0, -1) : null;
@@ -1394,7 +1463,9 @@ function collectSignalsForDefinition(definition: KnownCmpDefinition, input: Know
   }
 
   for (const storageKey of uniqueStrings(input.storageKeys ?? [])) {
+    if (GENERIC_CMP_PROTOCOL_COOKIES.has(storageKey.toLowerCase())) continue;
     if ((definition.storageKeys ?? definition.cookieNames ?? []).some((knownName) => {
+      if (definition.caseSensitiveCookieNames) return storageKey === knownName;
       const normalizedStorageKey = storageKey.toLowerCase();
       const normalizedKnownName = knownName.toLowerCase();
       const prefixName = normalizedKnownName.endsWith("*") ? normalizedKnownName.slice(0, -1) : null;
@@ -1408,6 +1479,7 @@ function collectSignalsForDefinition(definition: KnownCmpDefinition, input: Know
 
   for (const globalName of uniqueStrings(input.jsGlobals ?? [])) {
     if ((definition.globalNames ?? []).some((knownName) => {
+      if (definition.exactGlobalNames) return globalName === knownName;
       const normalizedGlobalName = globalName.toLowerCase();
       const normalizedKnownName = knownName.toLowerCase();
       if (GENERIC_CMP_PROTOCOL_GLOBALS.has(normalizedGlobalName) && GENERIC_CMP_PROTOCOL_GLOBALS.has(normalizedKnownName)) {
@@ -1588,7 +1660,7 @@ export function isKnownCmpInfrastructureUrl(value: string | null | undefined) {
 }
 
 export function isKnownCmpCookieName(value: string | null | undefined) {
-  return Boolean(value && detectKnownCmps({ cookieNames: [value] }).length > 0);
+  return Boolean(value && (GENERIC_CMP_PROTOCOL_COOKIES.has(value) || detectKnownCmps({ cookieNames: [value] }).length > 0));
 }
 
 export function isKnownCmpVendorLabel(value: string | null | undefined) {

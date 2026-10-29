@@ -7,6 +7,7 @@ type VerifiedState = {
   tcfPurposeEvidence?: ConsentDecisionEvidence["tcfPurposeEvidence"];
   tcfApiSource?: ConsentDecisionEvidence["tcfApiSource"];
   oneTrustGroupEvidence?: ConsentDecisionEvidence["oneTrustGroupEvidence"];
+  complianzReceiptEvidence?: ConsentDecisionEvidence["complianzReceiptEvidence"];
 };
 
 /** One read overlaps the final 250 ms of the existing window. A late, aborted,
@@ -45,6 +46,7 @@ export function terminalConsentDecisionRead(input: {
             timestampBasis: state.observedAtEpochMs === undefined ? "verified_state_observed" : "instrumented_state_write",
             ...(state.tcfPurposeEvidence ? { tcfPurposeEvidence: state.tcfPurposeEvidence } : {}),
             ...(state.tcfApiSource ? { tcfApiSource: state.tcfApiSource } : {}),
+            ...(state.complianzReceiptEvidence ? {complianzReceiptEvidence:state.complianzReceiptEvidence} : {}),
             ...(state.oneTrustGroupEvidence ? { oneTrustGroupEvidence: state.oneTrustGroupEvidence } : {}),
           },
         });

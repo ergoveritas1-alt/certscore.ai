@@ -194,8 +194,10 @@ test("inventory admission tolerates a two-second proxy handshake and fails close
   const { once } = await import("node:events");
   const proxy = createServer();
   let target: string | undefined;
+  let connects = 0;
   proxy.on("connect", (request, socket) => {
     target = request.url;
+    connects++;
     setTimeout(() => socket.end("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"), 2000);
   });
   proxy.listen(0, "127.0.0.1");
@@ -211,13 +213,16 @@ test("inventory admission tolerates a two-second proxy handshake and fails close
   try {
     console.error = value => diagnostics.push(String(value));
     process.env.CERTSCORE_FULL_SITE_INVENTORY_WORKER = "1";
-    process.env.CERTSCORE_FULL_SITE_CONTROL_ORIGIN = "https://example.com";
+    // The loopback proxy rejects CONNECT before TLS or target contact. Keep
+    // public DNS latency outside this proxy-handshake/deadline fixture.
+    process.env.CERTSCORE_FULL_SITE_CONTROL_ORIGIN = "https://93.184.216.34";
     process.env.CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER = `http://127.0.0.1:${address.port}`;
     process.env.SCAN_PROXY_ENABLED = "1";
     process.env.CERTSCORE_PUBLIC_NETWORK_GUARD_FORCE = "true";
     globalThis.fetch = async () => { throw new Error("Direct egress must not be used"); };
     await assert.rejects(runFullSitePage(message), /403/);
-    assert.equal(target, "example.com:443");
+    assert.equal(target, "93.184.216.34:443");
+    assert.equal(connects, 1, "A permanent rejection must not retry");
     assert.equal(diagnostics.length, 1);
     const diagnostic = JSON.parse(diagnostics[0]!);
     assert.equal(diagnostic.event, "full_site_control_failed");
@@ -226,7 +231,7 @@ test("inventory admission tolerates a two-second proxy handshake and fails close
     assert.ok(diagnostic.elapsed_ms >= 2000);
     assert.equal(diagnostic.error_name, "Error");
     assert.ok(!diagnostics[0]!.includes(message.token));
-    assert.ok(!diagnostics[0]!.includes("example.com"));
+    assert.ok(!diagnostics[0]!.includes("93.184.216.34"));
   } finally {
     console.error = originalError;
     globalThis.fetch = originalFetch;

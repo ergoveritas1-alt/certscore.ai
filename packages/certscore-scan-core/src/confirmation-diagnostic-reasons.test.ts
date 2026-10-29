@@ -15,7 +15,7 @@ function fixture(){
 test("phase callbacks stay separate even when independent reads settle later, and inventories are bounded",async()=>{
  const d=confirmationDiagnostics();const delayed=Promise.resolve().then(()=>d.reason("receipt_missing"));
  d.pass(false);d.pass(true);d.terminalReason("verified_decision");await delayed;
- let r=d.retained();assert.equal(r.policyVersion,"consent_confirmation_diagnostics.v2");if(r.policyVersion!=="consent_confirmation_diagnostics.v2")throw Error();
+ let r=d.retained();assert.equal(r.policyVersion,"consent_confirmation_diagnostics.v3");if(r.policyVersion!=="consent_confirmation_diagnostics.v3")throw Error();
  assert.deepEqual(r.initialReasons,["receipt_missing"]);assert.deepEqual(r.terminalReasons,["verified_decision"]);
  for(const reason of consentConfirmationReasonSchema.options)d.reason(reason);
  r=d.retained();assert.ok(consentConfirmationDiagnosticsSchema.safeParse(r).success);assert.equal(r.reasons.length,12);assert.ok("reasonsTruncated" in r&&r.reasonsTruncated);
@@ -34,7 +34,7 @@ test("OneTrust diagnoses configuration, receipt and group failures from the exis
   if(kind==="absent")f.setCookies([]);
   if(kind==="valid")f.cookie().value+="&receipt=after";
   const reasons:string[]=[];const state=await verifyOneTrustCookieDecision(f.context,f.scope,baseline!,r=>reasons.push(r));
-  assert.equal(!!state,kind==="valid",kind);assert.deepEqual(reasons,expected?[expected]:[],kind);
+  assert.equal(!!state,kind==="valid",kind);assert.ok(reasons.includes("sdk_capture_unavailable"));assert.deepEqual(reasons.filter(r=>r!=="sdk_capture_unavailable"),expected?[expected]:[],kind);
   // Missing/invalid/drifted configuration exits before the existing cookie read.
   assert.equal(f.counts().reads,2);assert.ok(f.counts().cookieReads<=2);
  }
@@ -48,8 +48,12 @@ test("semantic reads retain unsupported diagnostics but never retain raw receipt
  const d=confirmationDiagnostics();const context:any={cookies:async()=>[{name:"CookieConsent",value:"{malformed-private-value"}]};
  const scope:any={url:()=>"https://example.test/",evaluate:async()=>[]};
  assert.equal(await verifiedCookieDecision({context,scope,cookieName:"CookieConsent",actionAt:1,onDiagnostic:d.reason}),undefined);
- assert.ok(d.retained().reasons.includes("receipt_malformed"));assert.doesNotMatch(JSON.stringify(d.retained()),/private-value/);
+ const malformed = d.retained();assert.equal(malformed.policyVersion,"consent_confirmation_diagnostics.v3");
+  if(malformed.policyVersion!=="consent_confirmation_diagnostics.v3")throw Error("Expected v3 diagnostics");
+  assert.ok(malformed.reasons.includes("receipt_malformed"));assert.doesNotMatch(JSON.stringify(malformed),/private-value/);
  scope.evaluate=async()=>[{storageType:"local_storage",name:"uc_settings",value:"opaque-private-value",sequence:1,observedAtEpochMs:10}];
  assert.equal(await verifiedCanonicalStateWrite({context,scope,actionAt:1,registeredKeys:["uc_settings"],onDiagnostic:d.reason}),undefined);
- assert.ok(d.retained().reasons.includes("receipt_format_unsupported"));assert.doesNotMatch(JSON.stringify(d.retained()),/private-value/);
+ const unsupported = d.retained();assert.equal(unsupported.policyVersion,"consent_confirmation_diagnostics.v3");
+  if(unsupported.policyVersion!=="consent_confirmation_diagnostics.v3")throw Error("Expected v3 diagnostics");
+  assert.ok(unsupported.reasons.includes("receipt_format_unsupported"));assert.doesNotMatch(JSON.stringify(unsupported),/private-value/);
 });

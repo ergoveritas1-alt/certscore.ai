@@ -51,3 +51,27 @@ test("consent action discovery wakes on late CMP runtime and DOM controls", asyn
     );
   }
 });
+
+for(const signal of ["mutation","OneTrustGroupsUpdated","OTConsentApplied"] as const) test(`discovery: ${signal} wakes without a request, SDK read or choice claim`,async()=>{
+  const browser=await chromium.launch({headless:true});const page=await browser.newPage();const errors:string[]=[];
+  page.on('pageerror',error=>errors.push(String(error)));
+  const discovery=await installConsentActionDiscovery(page);
+  try{
+    await page.route('**/*',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><body><p id="target">Neutral fixture</p>'}));
+    await page.goto('https://discovery.test/');await new Promise(r=>setTimeout(r,100));
+    const revision=discovery.revision,urls=discovery.runtimeUrls();
+    await page.evaluate(kind=>{
+      if(kind==='mutation')document.querySelector('#target')!.setAttribute('aria-label','Changed');
+      else window.dispatchEvent(new CustomEvent(kind,{detail:['C0001','C0002']}));
+    },signal);
+    await discovery.waitForSignal(revision,500);
+    assert.ok(discovery.revision>revision,`${signal} must wake independently of network events`);
+    assert.deepEqual(discovery.runtimeUrls(),urls);
+    assert.equal(await page.evaluate(()=>document.cookie),'');
+    assert.equal(await page.evaluate(()=>typeof (window as any).OneTrust),'undefined');
+    assert.deepEqual(errors,[],"serialized init script must not require bundler globals");
+    discovery.dispose();const disposedRevision=discovery.revision;
+    await page.evaluate(()=>window.dispatchEvent(new CustomEvent('OneTrustGroupsUpdated')));
+    await new Promise(r=>setTimeout(r,50));assert.equal(discovery.revision,disposedRevision);
+  }finally{discovery.dispose();await browser.close();}
+});

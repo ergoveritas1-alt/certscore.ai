@@ -44,16 +44,42 @@ export type LocatorActionability = {
  * a continuously animated but visible CMP control can be a valid hit target
  * even though Playwright never observes a long enough stability interval.
  */
-export async function inspectLocatorActionability(
-  control: Locator,
-): Promise<LocatorActionability> {
+export async function inspectLocatorActionability(control: Locator): Promise<LocatorActionability> {
+  return (await inspectLocatorReadiness(control, false)).actionability;
+}
+
+/** Reuse the resolver's existing geometry read for composed-scope readiness.
+ * A transparent hit target is still pending, not a completed resolution. The
+ * final source, label, uniqueness and dispatch checks remain independent. */
+export async function inspectLocatorConsentReadiness(control: Locator): Promise<{
+  actionability: LocatorActionability; scopeInteractive: boolean;
+}> {
+  return inspectLocatorReadiness(control, true);
+}
+
+async function inspectLocatorReadiness(control: Locator, inspectScope: boolean): Promise<{
+  actionability: LocatorActionability; scopeInteractive: boolean;
+}> {
   const handle = await control.elementHandle({ timeout: 100 }).catch(() => undefined);
-  if (!handle) return unavailableLocatorActionability();
+  if (!handle) return {actionability: unavailableLocatorActionability(), scopeInteractive: false};
   try {
     const [controlVisible, controlEnabled, geometry] = await Promise.all([
       handle.isVisible().catch(() => false),
       handle.isEnabled().catch(() => false),
-      handle.evaluate((element) => {
+      handle.evaluate((element, inspectScope) => {
+        let scopeInteractive = true;
+        if (inspectScope) {
+          let current: Element | null = element;
+          for (let depth = 0; current && depth < 64; depth++) {
+            const style = getComputedStyle(current);
+            if (!current.isConnected || current.matches('[hidden], [inert], [aria-hidden="true" i]') ||
+              style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" ||
+              style.opacity === "0") { scopeInteractive = false; break; }
+            const root = current.getRootNode();
+            current = current.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
+          }
+          if (current !== null) scopeInteractive = false;
+        }
         const rectangle = element.getBoundingClientRect();
         const boundingBoxInViewport = rectangle.width > 0 &&
           rectangle.height > 0 &&
@@ -63,6 +89,7 @@ export async function inspectLocatorActionability(
           rectangle.top < window.innerHeight;
         if (!boundingBoxInViewport) {
           return {
+            scopeInteractive,
             boundingBoxInViewport,
             centerHitTargetRelation: "no_hit_target" as const,
           };
@@ -78,6 +105,7 @@ export async function inspectLocatorActionability(
           hitTarget = nested;
         }
         return {
+          scopeInteractive,
           boundingBoxInViewport,
           centerHitTargetRelation: hitTarget === null
             ? "no_hit_target" as const
@@ -85,12 +113,14 @@ export async function inspectLocatorActionability(
               ? "control_or_descendant" as const
               : "other_element" as const,
         };
-      }).catch(() => ({
+      }, inspectScope).catch(() => ({
+        scopeInteractive: false,
         boundingBoxInViewport: false,
         centerHitTargetRelation: "unavailable" as const,
       })),
     ]);
-    return { controlVisible, controlEnabled, ...geometry };
+    const {scopeInteractive, ...hitGeometry} = geometry;
+    return {actionability: {controlVisible, controlEnabled, ...hitGeometry}, scopeInteractive};
   } finally {
     await handle.dispose().catch(() => undefined);
   }

@@ -90,3 +90,10 @@ test("deduplication is explicit and cannot masquerade as retained event complete
   assert.equal(actionMainDocumentWriteCoverageSchema.safeParse(result).success, true);
   assert.equal(actionMainDocumentWriteCoverageSchema.safeParse({ ...result, status: "complete_within_scope" }).success, false);
 });
+
+test("optional passive event failures preserve the independent terminal writes",async()=>{
+ const {runInNewContext}=await import("node:vm");
+ const {readActionWriteCapture}=await import("./action-main-document-write-coverage");
+ const page:any={evaluate:async(fn:Function,arg:unknown)=>runInNewContext(`(${fn.toString()})(name)`,{name:arg,window:{reader:()=>[{sequence:7}],__certscoreReadCmpPassiveEvents:()=>{throw Error("diagnostic unavailable");}}})};
+ assert.deepEqual(JSON.parse(JSON.stringify((await readActionWriteCapture(page,"reader")).writes)),[{sequence:7}]);
+});

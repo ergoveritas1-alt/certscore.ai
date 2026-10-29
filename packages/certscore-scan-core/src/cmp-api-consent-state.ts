@@ -1,6 +1,7 @@
 import { readDocumentedConsentApi, type DocumentedConsentProvider } from "./documented-consent-api.js";
 import type { Frame, Page } from "playwright";
 import { readDidomiConsentSnapshot } from "./didomi-consent-state.js";
+import type { ConsentConfirmationReason } from "@certscore/contracts";
 
 export type CmpApiConsentProvider = DocumentedConsentProvider | "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie" | "didomi";
 
@@ -16,10 +17,15 @@ export type CmpApiConsentSnapshot = {
 export async function readCmpApiConsentSnapshot(
   scope: Page | Frame,
   provider: CmpApiConsentProvider,
+  onDiagnostic?: (reason: ConsentConfirmationReason) => void,
 ): Promise<CmpApiConsentSnapshot | undefined> {
-  if (provider === "cookie_information" || provider === "cookiescript" || provider === "finsweet") return readDocumentedConsentApi(scope, provider);
-  if (provider === "didomi") return readDidomiConsentSnapshot(scope);
-  return scope.evaluate(async ({ provider }) => {
+  if (provider === "cookie_information" || provider === "cookiescript" || provider === "finsweet" || provider === "didomi") {
+    const snapshot = provider === "didomi" ? await readDidomiConsentSnapshot(scope) : await readDocumentedConsentApi(scope, provider);
+    if (!snapshot) onDiagnostic?.("api_unavailable");
+    return snapshot;
+  }
+  const result: (CmpApiConsentSnapshot & { diagnosticReason?: ConsentConfirmationReason }) |
+    { diagnosticReason: ConsentConfirmationReason } | undefined = await scope.evaluate(async ({ provider }) => {
     if (provider === "osano" || provider === "hubspot") {
       type Tracker = { sequence: number; state?: string; decision?: "granted" | "denied" | "mixed"; observedAtEpochMs?: number };
       const target = window as unknown as {
@@ -32,8 +38,12 @@ export async function readCmpApiConsentSnapshot(
       const decoder = { decode(raw: unknown) {
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
         const values = raw as Record<string, unknown>;
-        const allowed = provider === "osano" ? [...categoryNames, "ESSENTIAL", "OPT-OUT", "STORAGE"] : categoryNames;
+        const allowed = provider === "osano" ? [...categoryNames, "ESSENTIAL", "OPT-OUT", "STORAGE"] : [...categoryNames, "necessary"];
         if (Object.keys(values).length > allowed.length || Object.keys(values).some(key => !allowed.includes(key))) return undefined;
+        // HubSpot's served Consent.getSafeCopy includes necessary:true. It is
+        // an always-active category, not a vote on the three optional purposes.
+        // Preserve older three-key responses; reject malformed mandatory state.
+        if (provider === "hubspot" && Object.hasOwn(values, "necessary") && values.necessary !== true) return undefined;
         if (provider === "osano" && (values.ESSENTIAL !== "ACCEPT" || allowed.some(key => values[key] !== "ACCEPT" && values[key] !== "DENY"))) return undefined;
         if (categoryNames.some(key => provider === "osano" ? !["ACCEPT", "DENY"].includes(values[key] as string) : typeof values[key] !== "boolean")) return undefined;
         const entries = categoryNames.map(key => [key, provider === "osano" ? values[key] === "ACCEPT" : values[key] === true] as const);
@@ -44,7 +54,7 @@ export async function readCmpApiConsentSnapshot(
       } };
       // This recipe confirms the non-TCF category scope. A TCF-enabled Osano
       // visit also needs separately verified IAB purposes; do not infer them.
-      if (provider === "osano" && typeof target.__tcfapi === "function") return undefined;
+      if (provider === "osano" && typeof target.__tcfapi === "function") return { diagnosticReason: "configuration_or_groups_unverified" as const };
       if (provider === "osano" && (typeof target.Osano?.cm?.getConsent !== "function" || typeof target.Osano.cm.addEventListener !== "function")) return undefined;
       // HubSpot documents this read-only queue initialization before its
       // tracking script loads. Queue the listener before dispatch, rather than
@@ -72,10 +82,12 @@ export async function readCmpApiConsentSnapshot(
         // A first-time visitor can have no decision yet. The listener is still
         // installed before dispatch; only a fresh complete saved event can confirm.
         if (value === undefined && tracker.sequence === 0) return {canonicalState: "unregistered", decision: "unknown" as const, eventSequence: 0};
-        if (!live || (tracker.sequence > 0 && tracker.state !== live.canonicalState)) return undefined;
+        if (!live) return { diagnosticReason: "receipt_format_unsupported" as const };
+        if (tracker.sequence > 0 && tracker.state !== live.canonicalState) return { diagnosticReason: "receipt_readback_mismatch" as const };
         return { ...live, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.observedAtEpochMs };
       }
-      return { canonicalState: tracker.state ?? "unregistered", decision: tracker.decision ?? "unknown" as const, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.observedAtEpochMs };
+      return { canonicalState: tracker.state ?? "unregistered", decision: tracker.decision ?? "unknown" as const, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.observedAtEpochMs,
+        ...(tracker.sequence > 0 && !tracker.state ? { diagnosticReason: "receipt_format_unsupported" as const } : {}) };
     }
     if (provider === "drupal_eu_cookie") {
       type Config = { method?: string; cookie_name?: string; cookie_value_disagreed?: string; cookie_value_agreed?: string; cookie_value_agreed_show_thank_you?: string;
@@ -241,4 +253,11 @@ export async function readCmpApiConsentSnapshot(
       eventSequence: 0,
     };
   }, { provider }).catch(() => undefined);
+  if (!result) { onDiagnostic?.("api_unavailable"); return undefined; }
+  if ("diagnosticReason" in result) {
+    if (result.diagnosticReason) onDiagnostic?.(result.diagnosticReason);
+    const { diagnosticReason: _reason, ...snapshot } = result;
+    return "canonicalState" in snapshot ? snapshot : undefined;
+  }
+  return result;
 }

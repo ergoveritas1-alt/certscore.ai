@@ -313,6 +313,11 @@ test("retained packets redact target query values and bind the exact target by h
   await withFixture("post-refusal-reject-honored", async (url) => {
     const exactTargetUrl = `${url}?session_token=sensitive-value#fragment`;
     const packet = await observe(exactTargetUrl);
+    const originObservation = packet.storage.originDomStorageObservation;
+    assert.ok(originObservation);
+    assert.ok(originObservation.startedAtEpochMs >= Date.parse(packet.startedAt));
+    // Completed observation may freeze receipts before packet serialization.
+    assert.ok(originObservation.frozenAtEpochMs <= Date.parse(packet.completedAt));
     const expectedRetainedUrl = new URL(exactTargetUrl);
     expectedRetainedUrl.search = "";
     expectedRetainedUrl.hash = "";
@@ -400,7 +405,7 @@ test("geometry-resolved OneTrust controls inherit canonical semantic confirmatio
   });
 });
 
-test("runtime-identified CMP resolves its canonical live Reject control before a stale selector", async () => {
+test("runtime-identified CMP resolves its live Reject control without borrowing unverified OneTrust completeness", async () => {
   await withFixture("post-refusal-onetrust-cookie-confirmed", async (url) => {
     const packet = await observe(url, {
       actionSearchTimeoutMs: 1_500,
@@ -424,7 +429,11 @@ test("runtime-identified CMP resolves its canonical live Reject control before a
     assert.equal(packet.resolver.cmpId, "Runtime Fixture CMP");
     assert.equal(packet.resolver.method, "cmp_registry_recipe");
     assert.match(packet.resolver.recipeId, /^canonical-control:reject:v2:/);
-    assert.equal(packet.refusalRegistration.status, "confirmed");
+    // This synthetic adapter declares only a changed cookie, with no
+    // pre-click OneTrust category proof. Control resolution still succeeds.
+    assert.equal(packet.refusalRegistration.status, "unconfirmed");
+    assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
+    assert.equal(packet.decisionEvidence?.decision, "unknown");
   });
 });
 
@@ -625,11 +634,21 @@ test("resolver timeline retains a bounded selector-absent failure diagnosis", as
 
     assert.equal(packet.resolver.found, false);
     assert.equal(packet.resolver.reason, "deterministic_reject_control_not_found");
-    const states = packet.interactionDiagnostics.resolver?.snapshots.map((snapshot) => snapshot.state);
-    // Navigation may return before the document becomes interactive. The
-    // resolver legitimately records that initial state before selector absence.
-    assert.deepEqual(states, states?.[0] === "document_loading"
-      ? ["document_loading", "selector_absent"] : ["selector_absent"]);
+    const snapshots = packet.interactionDiagnostics.resolver?.snapshots;
+    assert.ok(snapshots);
+    const states = snapshots.map((snapshot) => snapshot.state);
+    // A completed empty sweep establishes selector absence. A subsequent
+    // sweep may finish beyond the deadline and must retain that independent
+    // limitation without erasing the earlier absence or authorizing a click.
+    assert.deepEqual(states, [
+      ...(states[0] === "document_loading" ? ["document_loading"] : []),
+      "selector_absent",
+      ...(states.at(-1) === "binding_budget_exhausted" ? ["binding_budget_exhausted"] : []),
+    ]);
+    assert.ok(snapshots.every((snapshot) => snapshot.actionableCount === 0));
+    assert.notEqual(packet.interactionDiagnostics.click.outcome, "completed");
+    assert.notEqual(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.decisionEvidence?.decision, "unknown");
     assert.equal(packet.interactionDiagnostics.resolver?.truncated, false);
   });
 });

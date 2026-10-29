@@ -1937,7 +1937,7 @@ test("does not attach cookie or storage identifiers as matched hostnames", () =>
   const observations = resolveVendorObservations([
     {
       type: "cookie",
-      cookieName: "euconsent-v2",
+      cookieName: "qcChoice",
       hostname: "qc005",
     },
     {
@@ -1962,7 +1962,7 @@ test("does not attach cookie or storage identifiers as matched hostnames", () =>
   const quantcastChoice = observations.find((item) => item.product === "Quantcast Choice CMP");
   assert.ok(quantcastChoice);
   assert.deepEqual(quantcastChoice.matchedHostnames, []);
-  assert.equal(quantcastChoice.matchedCookieNames.includes("euconsent-v2"), true);
+  assert.equal(quantcastChoice.matchedCookieNames.includes("qcChoice"), true);
 
   const permutive = observations.find((item) => item.product === "Permutive");
   assert.ok(permutive);

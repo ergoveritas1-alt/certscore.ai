@@ -6,7 +6,7 @@ https://cnn.com
 https://msnbc.com
 https://weather.com
 https://walmart.com
-https://macys.com
+https://www.wickes.co.uk/
 https://wayfair.com
 https://etsy.com
 https://target.com
@@ -21,7 +21,7 @@ https://supabase.com
 https://notion.so
 https://hubspot.com
 https://salesforce.com
-https://adobe.com
+https://www.eni.com/en-IT/home.html
 https://microsoft.com
 https://healthline.com
 https://plannedparenthood.org

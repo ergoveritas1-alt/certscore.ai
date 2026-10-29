@@ -1,3 +1,5 @@
+import { oneTrustApplicabilityFixture } from "./test-fixtures/onetrust-applicability";
+import { ONETRUST_IKEA_APPLICABILITY as ikeaPin } from "./onetrust-applicability";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash, randomUUID } from "node:crypto";
@@ -489,4 +491,28 @@ test("Accept storage identity retains either supported field and rejects contrad
   const raw = retainedActivityPacket();
   assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...raw, storage: { ...raw.storage,
     writesAfterAccept: [{ ...raw.storage.writesAfterAccept[0], storageIdentityHash: "c".repeat(64) }] } }).success, false);
+});
+
+
+test("SDK applicability Accept proof survives canonical packet projection with document and action bounds",()=>{
+  const base=confirmedPacket(),click=base.acceptanceRegistration.actionDispatchedAtMs;
+  const registered=base.acceptanceRegistration.acceptanceRegisteredAtMs;
+  const proof=oneTrustApplicabilityFixture(Date.parse(base.startedAt),click,registered,true);
+
+  const raw={...base,artifactVersion:"certscore.post_accept_evidence.v2",
+    targetUrl:ikeaPin.documentUrl,normalizedUrl:ikeaPin.documentUrl,
+    actionControlProof:{...base.actionControlProof,contractVersion:"certscore.consent_action_control_proof.v2",
+      frameIdentitySha256:ikeaPin.documentSha256,authorizedTargetSha256:ikeaPin.documentSha256},
+    captureCoverage:{requestsDroppedBeforeAction:0,requestsDroppedAfterAction:0},
+    acceptanceRegistration:{...base.acceptanceRegistration,witnesses:[{...base.acceptanceRegistration.witnesses[0],observedStateHash:proof.afterValueSha256}]},
+    decisionEvidence:{policyVersion:"semantic_consent_registration.v2",decision:"granted",basis:"verified_state",
+      timestampBasis:"instrumented_state_write",observedAtMs:registered,observedStateSha256:proof.afterValueSha256,oneTrustGroupEvidence:proof}};
+  const packet=postAcceptEvidencePacketSchema.parse(raw);
+  const projection=projectPostAcceptEvidenceForReport({packet,packetSha256:"b".repeat(64)});
+  assert.deepEqual(projection.decisionEvidence?.oneTrustGroupEvidence,proof);
+  assert.equal(projection.execution?.consentConfirmed,true);
+  for(const change of [{frameIdentitySha256:"f".repeat(64)},{frameIdentitySha256:undefined}]){
+    assert.equal(postAcceptEvidencePacketSchema.safeParse({...raw,actionControlProof:{...raw.actionControlProof,...change}}).success,false);
+  }
+  assert.equal(postAcceptEvidencePacketSchema.safeParse({...raw,completedAt:new Date(Date.parse(base.startedAt)+click).toISOString()}).success,false);
 });

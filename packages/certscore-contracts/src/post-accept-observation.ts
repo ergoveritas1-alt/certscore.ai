@@ -1,3 +1,7 @@
+import { validateComplianzReceiptEnvelope } from "./complianz-consent-state";
+import { cmpPassiveDiagnosticsSchema } from "./cmp-passive-diagnostics";
+import { notificationAcknowledgmentSchema, validateNotificationAcknowledgment } from "./notification-acknowledgment";
+import { validateOneTrustApplicabilityEnvelope } from "./onetrust-applicability";
 import { consentConfirmationDiagnosticsSchema } from "./consent-confirmation-diagnostics";
 import { observedActionSourceProofSchema, validateObservedActionSourceProof } from "./observed-action-source-proof";
 import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionTiming } from "./retained-action-timing";
@@ -160,6 +164,7 @@ export const postAcceptStorageWriteSchema = postRefusalStorageWriteBaseSchema.om
 });
 
 const postAcceptEvidencePacketBaseSchema = z.object({
+  notificationAcknowledgment: notificationAcknowledgmentSchema.optional(),
   formSnapshotCapture: postAcceptFormSnapshotCaptureSchema.optional(),
   formCapture: postAcceptFormCaptureSchema.optional(),
   afterActionCapture: afterActionCaptureSchema.optional(),
@@ -186,6 +191,7 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   resolver: postRefusalResolverSchema,
   acceptanceRegistration: postAcceptRegistrationSchema,
   confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
+  passiveCmpDiagnostics: cmpPassiveDiagnosticsSchema.optional(),
   observationWindowMs: z.number().int().nonnegative(),
   timing: z.object({
     dispatchDelayMs: z.number().int().nonnegative(),
@@ -274,8 +280,28 @@ const postAcceptEvidencePacketBaseSchema = z.object({
         : packet.formCapture!.actionDispatchedAtMs + packet.observationWindowMs)))) {
     context.addIssue({code: z.ZodIssueCode.custom, path:["formCapture"], message:"Form capture requires the same completed authorized action and bounded timestamps"});
   }
+  if (packet.notificationAcknowledgment && packet.artifactVersion !== "certscore.post_accept_evidence.v2") context.addIssue({code:z.ZodIssueCode.custom,
+    path:["notificationAcknowledgment"],message:"Historical Accept packets cannot acquire notification-acknowledgment semantics."});
+  validateNotificationAcknowledgment(packet.notificationAcknowledgment, {
+    proof:packet.actionControlProof,clickOutcome:packet.interactionDiagnostics?.click.outcome,
+    registrationStatus:packet.acceptanceRegistration.status,decision:packet.decisionEvidence,
+    terminalDecision:packet.terminalDecisionEvidence,cancelled:packet.cancellation.requested,
+    capture:packet.afterActionCapture,storage:packet.storage.postAction,
+  },context);
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "accept", context);
   validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
+  for (const evidence of [packet.decisionEvidence, packet.terminalDecisionEvidence?.evidence]) {
+    validateComplianzReceiptEnvelope(evidence?.complianzReceiptEvidence, {
+      startedAt:packet.startedAt, completedAt:packet.completedAt, dispatchedAtMs:packet.acceptanceRegistration.actionDispatchedAtMs,
+      observedAtMs:evidence?.observedAtMs,
+      cmpId:packet.actionControlProof?.cmpId,
+      frameIdentitySha256:packet.actionControlProof && "frameIdentitySha256" in packet.actionControlProof ? packet.actionControlProof.frameIdentitySha256 : undefined,
+    }, context);
+    validateOneTrustApplicabilityEnvelope(evidence?.oneTrustGroupEvidence?.applicability, {
+      startedAt:packet.startedAt, completedAt:packet.completedAt, dispatchedAtMs:packet.acceptanceRegistration.actionDispatchedAtMs,
+      frameIdentitySha256:packet.actionControlProof && "frameIdentitySha256" in packet.actionControlProof ? packet.actionControlProof.frameIdentitySha256 : undefined,
+    }, context);
+  }
   const writeCoverage = packet.storage.mainDocumentWriteCoverage;
   validateObservedActionSourceProof(packet.observedActionSourceProof, context, {
     scanId: packet.scanId, navigationAuthorized: packet.interactionDiagnostics?.navigation.documentCommitted === true && packet.interactionDiagnostics.navigation.finalUrlAuthorized === true,
@@ -608,6 +634,9 @@ const postAcceptReportActivityRowSchema = z.object({
 });
 
 export const postAcceptReportProjectionSchema = z.object({
+  confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
+  passiveCmpDiagnostics: cmpPassiveDiagnosticsSchema.optional(),
+  notificationAcknowledgment: notificationAcknowledgmentSchema.optional(),
   retainedActionTiming: retainedActionTimingSchema.optional(),
   formSnapshotCapture: postAcceptFormSnapshotProjectionSchema.optional(),
   storageCollectionDiagnostics: actionStoragePhaseDiagnosticsSchema.optional(),
@@ -684,6 +713,13 @@ export const postAcceptReportProjectionSchema = z.object({
       projection.formCapture.window!.endedAtMs > projection.formCapture.window!.startedAtMs + projection.observationWindowMs)))) {
     context.addIssue({code:z.ZodIssueCode.custom, path:["formCapture"], message:"Form capture requires retained packet provenance and completed action proof"});
   }
+  validateNotificationAcknowledgment(projection.notificationAcknowledgment, {
+    proof:projection.actionControlProof,clickOutcome:projection.interactionDiagnostics?.click.outcome,
+    registrationStatus:projection.registrationStatus,decision:projection.decisionEvidence,
+    terminalDecision:projection.terminalDecisionEvidence,capture:projection.afterActionCapture,storage:projection.afterActionStorage,
+  },context);
+  if (projection.notificationAcknowledgment && !projection.packetSha256) context.addIssue({code:z.ZodIssueCode.custom,
+    path:["notificationAcknowledgment"],message:"Acknowledgment projection requires verified packet source binding."});
   validateTerminalConsentDecision(projection.terminalDecisionEvidence, projection.afterActionCapture, projection.actionControlProof, "accept", context);
   validateChoicePathExecution(projection.execution, projection, "accept", context);
   validateRetainedActionTiming(projection.retainedActionTiming, projection, "accept", context);
@@ -775,6 +811,9 @@ export function projectPostAcceptEvidenceForReport(input: {
       observationEndedAtMs: packet.timing.observationEndedAtMs, requests: packet.network.requests });
 
   const projection = postAcceptReportProjectionSchema.parse({
+    ...(packet.confirmationDiagnostics?.policyVersion === "consent_confirmation_diagnostics.v3" ? {confirmationDiagnostics:packet.confirmationDiagnostics} : {}),
+    ...(packet.passiveCmpDiagnostics ? {passiveCmpDiagnostics:packet.passiveCmpDiagnostics} : {}),
+    ...(input.packetSha256 && packet.notificationAcknowledgment ? {notificationAcknowledgment:packet.notificationAcknowledgment} : {}),
     ...(retainedActionTiming ? { retainedActionTiming } : {}),
     registeredObservationCompletion: retainRegisteredObservationCompletion({
       action: "accept", registeredAtMs: packet.acceptanceRegistration.acceptanceRegisteredAtMs,

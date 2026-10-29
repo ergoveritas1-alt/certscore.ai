@@ -18,6 +18,42 @@ test("OneTrust parsing requires one complete bounded groups field without duplic
 });
 
 for (const action of ["accept", "reject"] as const) {
+  for (const availability of ["missing", "after_click"] as const) {
+    test(`${action}: OneTrust ${availability} configuration cannot promote a partial receipt through legacy decoding`, async () => {
+      let clicks = 0;
+      const server = createServer((request, response) => {
+        if (request.url === "/click") { clicks++; response.writeHead(204).end(); return; }
+        response.setHeader("content-type", "text/html");
+        response.end(`<!doctype html><section id="onetrust-banner-sdk"><p>Choose optional analytics and advertising cookies.</p>
+          <button id="onetrust-${action === "accept" ? "accept-btn" : "reject-all"}-handler">${action === "accept" ? "Accept all" : "Reject all"}</button></section>
+          <script>window.OneTrust={};document.cookie='OptanonConsent=groups=C0001:1,C0002:0&receipt=before;path=/';
+          document.querySelector('button').onclick=()=>{
+            ${availability === "after_click" ? "window.OneTrust.GetDomainData=()=>({Groups:[1,2,3,4,5].map(i=>({CustomGroupId:'C000'+i,Status:i===1?'always active':'inactive'}))});" : ""}
+            document.cookie='OptanonConsent=groups=C0001:1,C0002:${action === "accept" ? 1 : 0}&receipt=after;path=/';
+            document.querySelector('section').hidden=true;fetch('/click');};</script>`);
+      });
+      await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address(); assert.ok(address && typeof address !== "string");
+      const common = {url:`http://127.0.0.1:${address.port}/`,scanId:`onetrust-config-${availability}-${action}`,
+        interactionAuthorization:{kind:"loopback",authorizationId:"loopback_local_lab"} as const,
+        actionSearchTimeoutMs:1000,confirmationTimeoutMs:100,observationWindowMs:50};
+      try {
+        const packet = action === "accept"
+          ? await runPostAcceptObserver({...common,recipe:buildCanonicalPostAcceptActionRecipes().find(r=>r.cmpId==="OneTrust")!})
+          : await runPostRefusalObserver({...common,recipe:buildCanonicalPostRefusalActionRecipes().find(r=>r.cmpId==="OneTrust")!});
+        assert.equal(clicks,1,"unknown configuration must not block an authorized click");
+        const registration = "acceptanceRegistration" in packet ? packet.acceptanceRegistration : packet.refusalRegistration;
+        assert.equal(registration.status,"unconfirmed");
+        assert.equal(packet.decisionEvidence?.decision,"unknown");
+        assert.ok(packet.confirmationDiagnostics?.reasons.includes("configuration_missing"));
+        const projection = "acceptanceRegistration" in packet ? projectPostAcceptEvidenceForReport({packet}) : projectPostRefusalEvidenceForReport({packet});
+        assert.equal(projection.execution?.consentConfirmed,false);
+      } finally { server.closeAllConnections(); await new Promise<void>(resolve=>server.close(()=>resolve())); }
+    });
+  }
+}
+
+for (const action of ["accept", "reject"] as const) {
   for (const variant of ["matching", "opposite", "partial", "unknown_group", "configuration_drift", "duplicate_cookie", "unverifiable_configuration", "incomplete_baseline", "added_configuration_group", "partial_baseline_completed", "partial_baseline_opposite", "partial_baseline_unchanged", "partial_baseline_drift", "partial_baseline_duplicate", "partial_baseline_identity", "unknown_baseline_group", "unchanged_value"] as const) {
     test(`${action}: configured OneTrust groups ${variant}`, async () => {
       let clicks = 0;

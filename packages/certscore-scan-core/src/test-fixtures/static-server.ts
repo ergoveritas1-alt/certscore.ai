@@ -2054,7 +2054,14 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
         purpose: { consents: Object.fromEntries(Array.from({ length: 10 }, (_, index) => [String(index + 1), ${JSON.stringify(!staleTcf)}])) }
       };
       if (${JSON.stringify(cookieConfirmation || oneTrustVeryLate)}) {
-        document.cookie = ${JSON.stringify(`${oneTrustConsentCookieName}=baseline; Path=/; SameSite=Lax`)};
+        // Successful cookie fixtures declare their complete category universe.
+        // Bare 'baseline'/'rejected' values cannot establish OneTrust consent.
+        window.OneTrust = { GetDomainData: () => ({ Groups: [
+          { CustomGroupId: 'C0001', Status: 'always active' },
+          { CustomGroupId: 'C0002', Status: 'inactive' },
+          { CustomGroupId: 'C0004', Status: 'inactive' },
+        ] }) };
+        document.cookie = ${JSON.stringify(`${oneTrustConsentCookieName}=groups=C0001:1,C0002:1,C0004:1&receipt=before; Path=/; SameSite=Lax`)};
       }
       if (${JSON.stringify(cookiebotCookieStale)}) {
         document.cookie = "CookieConsent=baseline; Path=/; SameSite=Lax";
@@ -2097,7 +2104,7 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
           }
           if (${JSON.stringify(oneTrust)}) {
             if (${JSON.stringify(cookieConfirmation)}) {
-              document.cookie = ${JSON.stringify(`${oneTrustConsentCookieName}=${staleCookie ? "baseline" : "rejected"}; Path=/; SameSite=Lax`)};
+              document.cookie = ${JSON.stringify(`${oneTrustConsentCookieName}=${staleCookie ? "groups=C0001:1,C0002:1,C0004:1&receipt=before" : "groups=C0001:1,C0002:0,C0004:0&receipt=after"}; Path=/; SameSite=Lax`)};
               if (${JSON.stringify(cookieNavigation)}) {
                 setTimeout(() => window.location.assign("/post-refusal/navigation-settled"), 25);
               }

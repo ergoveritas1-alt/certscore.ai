@@ -15,7 +15,7 @@ export function confirmationDiagnostics() {
     reason(value: ConsentConfirmationReason) { reason(initialReasons, value); },
     terminalReason(value: ConsentConfirmationReason) { reason(terminalReasons, value); },
     terminal(state: ConsentConfirmationDiagnostics["terminalRead"]) { terminalRead = state; },
-    retained(): ConsentConfirmationDiagnostics { return {policyVersion: "consent_confirmation_diagnostics.v2", diagnosticOnly: true,
+    retained(): ConsentConfirmationDiagnostics { return {policyVersion: "consent_confirmation_diagnostics.v3", diagnosticOnly: true,
       initialPasses, terminalPasses, reasons: [...reasons], initialReasons: [...initialReasons],
       terminalReasons: [...terminalReasons], reasonsTruncated, terminalRead}; },
   };

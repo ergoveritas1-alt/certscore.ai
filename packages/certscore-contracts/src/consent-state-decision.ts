@@ -6,12 +6,26 @@ const GRANTED = new Set(["granted", "accepted", "accept_all", "accepted_all"]);
 const DENIED = new Set(["denied", "rejected", "reject_all", "rejected_all", "necessary_only", "essential_only"]);
 
 type UnverifiedReason = "receipt_malformed" | "receipt_format_unsupported" | "group_universe_incomplete";
+/** Ephemeral change detection only. Evidence/witness hashes must retain the raw
+ * receipt. CookieYes renewal metadata and field ordering cannot supply freshness. */
+export function consentReceiptChangeValue(key: string, value: string): string {
+  if (key !== "cookieyes-consent" || value.length > 2_048) return value;
+  let decoded = value;
+  try { decoded = decodeURIComponent(value); } catch { return value; }
+  const entries = decoded.split(",").map(part => part.split(":"));
+  if (entries.length > 24 || entries.some(part => part.length !== 2) ||
+      new Set(entries.map(part => part[0])).size !== entries.length) return value;
+  return JSON.stringify(entries.filter(([name]) => name !== "lastRenewedDate")
+    .sort((a, b) => a[0]!.localeCompare(b[0]!)));
+}
 export function decodeCanonicalConsentDecision(key: string, value: string, registeredConsentState = false,
   onUnverified?: (reason: UnverifiedReason) => void): ConsentStateDecision {
   const unverified = (reason: UnverifiedReason): "unknown" => { onUnverified?.(reason); return "unknown"; };
   if (value.length > 2_048) return unverified("receipt_format_unsupported");
   let decoded = value;
   try { decoded = decodeURIComponent(value); } catch { /* Use the original bounded value. */ }
+  // Split Complianz categories can never supply an all-purpose decision alone.
+  if (key.startsWith("cmplz_")) return unverified("group_universe_incomplete");
   if (key === "cookieyes-consent") return decodeCookieYesDecision(decoded, unverified);
   if (/^OptanonConsent(?:_[a-zA-Z0-9_-]+)?$/.test(key) && decoded.includes("groups=")) {
     const groups = new URLSearchParams(decoded).getAll("groups");
@@ -66,6 +80,13 @@ function decodeCookieYesDecision(value: string, unverified: (reason: UnverifiedR
   const categories = new Set(["analytics", "advertisement", "functional", "performance", "other"]);
   const states: string[] = [];
   for (const [key, decision] of fields) {
+    // Reviewed CookieYes writer appends a renewal epoch to every receipt.
+    // It is lifecycle metadata, never an optional category or a fresh decision.
+    // Keep unknown fields and malformed/duplicate metadata fail-closed.
+    if (key === "lastRenewedDate") {
+      if (!/^[0-9]{13}$/.test(decision)) return unverified("receipt_malformed");
+      continue;
+    }
     if (metadata.has(key)) continue;
     if (!categories.has(key)) return unverified("receipt_format_unsupported");
     if (!["yes", "no"].includes(decision)) return unverified("receipt_malformed");

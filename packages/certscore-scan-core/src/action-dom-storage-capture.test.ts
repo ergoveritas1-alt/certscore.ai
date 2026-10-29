@@ -17,6 +17,26 @@ const added = (key: string, origin = "https://owned.example", value = "private v
   storageId: { securityOrigin: origin, storageKey: origin + "/", isLocalStorage: true }, key, newValue: value,
 });
 
+test("packet finalization freezes receipts on its sampled clock boundary without another read", async (t) => {
+  const f = fake();
+  let clock = 1000, reads = 0;
+  t.mock.method(Date, "now", () => { reads++; return clock; });
+  const capture = await installActionDomStorageCapture(f.page, "https://owned.example/", async () => f.session);
+  clock = 1001;
+  f.session.emit("DOMStorage.domStorageItemAdded", added("key"));
+  clock = 1002;
+  const completedAtEpochMs = Date.now(), readsBeforeFreeze = reads;
+  clock = 999; // A later clock correction cannot change the sampled boundary.
+  const result = capture.finish(completedAtEpochMs);
+  assert.equal(reads, readsBeforeFreeze);
+  assert.equal(result.frozenAtEpochMs, completedAtEpochMs);
+  assert.equal(result.rows[0]?.receivedAtEpochMs, 1001);
+  assert.ok(actionOriginDomStorageObservationSchema.safeParse(result).success);
+  assert.deepEqual(capture.finish(completedAtEpochMs + 10), result);
+  assert.equal(actionOriginDomStorageObservationSchema.safeParse({ ...result, frozenAtEpochMs: 1000 }).success, false,
+    "a receipt after the boundary must still fail validation");
+});
+
 test("origin collector bounds actual events, hashes private fields and freezes all listeners", async () => {
   const f = fake(), capture = await installActionDomStorageCapture(f.page, "https://owned.example/path", async () => f.session);
   for (let i = 0; i < 70; i++) f.session.emit("DOMStorage.domStorageItemAdded", added(`private key ${i}`));

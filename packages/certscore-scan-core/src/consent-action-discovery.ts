@@ -1,4 +1,5 @@
 import type { Page, Request } from "playwright";
+import { isRegisteredCmpInitializationRequest } from "./cmp-initialization-settle";
 
 const MAX_RUNTIME_URLS = 512;
 const MAX_RUNTIME_URL_LENGTH = 4_096;
@@ -43,13 +44,25 @@ export async function installConsentActionDiscovery(
   };
   const onRequest = (request: Request) => rememberRuntimeUrl(request.url());
   const onFrameActivity = () => notify();
+  const onRuntimeCompleted = (request:Request) => {
+    try {
+      const type=request.resourceType();
+      if(type!=="script" && type!=="xhr" && type!=="fetch")return;
+      if(isRegisteredCmpInitializationRequest({method:request.method(),requestUrl:request.url(),
+        resourceType:type,isMainFrame:request.frame()===page.mainFrame()}))notify();
+    } catch { /* Detached/worker requests cannot establish a document hint. */ }
+  };
   page.on("request", onRequest);
+  page.on("requestfinished", onRuntimeCompleted);
+  page.on("requestfailed", onRuntimeCompleted);
   page.on("frameattached", onFrameActivity);
   page.on("framenavigated", onFrameActivity);
 
   await page.exposeBinding(bindingName, () => notify());
   await page.addInitScript(({ bindingName, debounceMs }) => {
-    const wake = () => {
+    // Object methods stay self-contained when serialized by both tsc and tsx;
+    // named local arrow helpers can acquire an unavailable bundler __name call.
+    const hooks = { wake() {
       const stateKey = `__certscoreConsentWakePending:${bindingName}`;
       const scope = globalThis as typeof globalThis & Record<string, unknown>;
       if (scope[stateKey]) return;
@@ -61,13 +74,13 @@ export async function installConsentActionDiscovery(
           void Promise.resolve((binding as () => unknown)()).catch(() => undefined);
         }
       }, debounceMs);
-    };
-    const install = () => {
+    },
+    install() {
       if (!document.documentElement) return;
       const observer = new MutationObserver((mutations) => {
         if (mutations.some((mutation) =>
           mutation.type === "attributes" || mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0
-        )) wake();
+        )) hooks.wake();
       });
       observer.observe(document.documentElement, {
         attributes: true,
@@ -85,7 +98,7 @@ export async function installConsentActionDiscovery(
         subtree: true,
       });
       const resizeObserver = typeof ResizeObserver === "function"
-        ? new ResizeObserver(wake)
+        ? new ResizeObserver(hooks.wake)
         : undefined;
       resizeObserver?.observe(document.documentElement);
       if (document.body) resizeObserver?.observe(document.body);
@@ -93,14 +106,24 @@ export async function installConsentActionDiscovery(
       // consent control into or out of the viewport without mutating the DOM.
       // These events only wake the bounded canonical resolver; they do not
       // retain page text or extend its deadline.
-      addEventListener("resize", wake, { passive: true });
-      addEventListener("scroll", wake, { capture: true, passive: true });
-      addEventListener("animationend", wake, { capture: true, passive: true });
-      addEventListener("transitionend", wake, { capture: true, passive: true });
-      wake();
-    };
-    if (document.documentElement) install();
-    else document.addEventListener("DOMContentLoaded", install, { once: true });
+      addEventListener("resize", hooks.wake, { passive: true });
+      addEventListener("scroll", hooks.wake, { capture: true, passive: true });
+      addEventListener("animationend", hooks.wake, { capture: true, passive: true });
+      addEventListener("transitionend", hooks.wake, { capture: true, passive: true });
+      hooks.wake();
+    }};
+    // Initialization/update events only wake the resolver; payloads never
+    // become a registered choice or bypass fresh semantic receipt verification.
+    addEventListener("OneTrustGroupsUpdated", hooks.wake, {passive:true});
+    addEventListener("OTConsentApplied", hooks.wake, {passive:true});
+    if (document.documentElement) hooks.install();
+    else {
+      // Observe the first root instead of waiting for a parser-blocked DCL.
+      const rootObserver=new MutationObserver(()=>{
+        if(document.documentElement){rootObserver.disconnect();hooks.install();}
+      });
+      rootObserver.observe(document,{childList:true});
+    }
   }, { bindingName, debounceMs: DOM_WAKE_DEBOUNCE_MS });
 
   return {
@@ -111,6 +134,8 @@ export async function installConsentActionDiscovery(
       if (disposed) return;
       disposed = true;
       page.off("request", onRequest);
+      page.off("requestfinished", onRuntimeCompleted);
+      page.off("requestfailed", onRuntimeCompleted);
       page.off("frameattached", onFrameActivity);
       page.off("framenavigated", onFrameActivity);
       for (const resolve of [...waiters]) resolve();

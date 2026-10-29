@@ -177,8 +177,8 @@
       ]
     },
     {
-      "url": "https://macys.com",
-      "role": "ecommerce",
+      "url": "https://www.wickes.co.uk/",
+      "role": "retail",
       "lanes": [
         "consent_controls",
         "gdpr_transparency",
@@ -357,8 +357,8 @@
       ]
     },
     {
-      "url": "https://adobe.com",
-      "role": "saas",
+      "url": "https://www.eni.com/en-IT/home.html",
+      "role": "enterprise",
       "lanes": [
         "consent_controls",
         "gdpr_transparency",

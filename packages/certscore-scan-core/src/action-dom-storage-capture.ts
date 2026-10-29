@@ -56,11 +56,11 @@ export async function installActionDomStorageCapture(page: Page, targetUrl: stri
     await session.send("DOMStorage.enable");
     enabled = true;
   } catch { /* Additive diagnostics must not invalidate an existing action. */ }
-  const finish = (): ActionDomStorageObservation => {
+  const finish = (frozenAtEpochMs = Date.now()): ActionDomStorageObservation => {
     if (frozen) return frozen;
     frozen = { contractVersion: "action_origin_dom_storage_observation.v1", scope: "origin_storage_partition_event_receipts",
       diagnosticOnly: true, timingBasis: "observer_event_receipt_clock", targetOriginSha256: hash(targetOrigin), setup: enabled ? "enabled" : "unavailable",
-      startedAtEpochMs, frozenAtEpochMs: Date.now(), observedEvents, invalidEvents, overflowEvents, foreignOriginEvents,
+      startedAtEpochMs, frozenAtEpochMs, observedEvents, invalidEvents, overflowEvents, foreignOriginEvents,
       additionalPageObserved, rows: rows.map(row => ({ ...row })),
       limitations: ["receipt_clock_not_write_time", "no_document_or_frame_attribution", "source_delivery_not_verified", "cookies_and_other_storage_not_covered",
         ...(!enabled ? ["setup_unavailable" as const] : []), ...(invalidEvents ? ["invalid_event" as const] : []),
