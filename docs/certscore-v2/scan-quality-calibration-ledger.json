@@ -2693,10 +2693,30 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://www.recordedfuture.com/"
+    },
+    "https://loyaltylion.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:03:57.865Z",
+      "lastContactAt": "2026-10-29T20:03:57.865Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://loyaltylion.com/"
+    },
+    "https://solidgate.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-26T20:04:39.563Z",
+      "lastContactAt": "2026-10-29T20:04:39.563Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://solidgate.com/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-29T19:17:00.258Z",
+  "updatedAt": "2026-10-29T20:04:39.854Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -2842,6 +2862,8 @@
     "https://www.d-id.com/",
     "https://www.cbs.dk/",
     "https://wponetap.com/",
-    "https://www.recordedfuture.com/"
+    "https://www.recordedfuture.com/",
+    "https://loyaltylion.com/",
+    "https://solidgate.com/"
   ]
 }
