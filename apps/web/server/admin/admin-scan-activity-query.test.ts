@@ -73,15 +73,16 @@ test("page uses one authorized live cohort and refresh updates chart and table t
   assert.match(adminScanActivitySnapshotSql("with scan_activity as (select 1)",true), /activity_visible_scans as materialized/);
 });
 
-test("basic scan rows skip report payloads and retain an explicit details mode", () => {
+test("basic scan rows retain summary columns while evidence details remain on demand", () => {
   const actions = readFileSync("apps/web/server/admin/list-admin-scans.ts", "utf8");
   const repository = readFileSync("apps/web/server/admin/repository.ts", "utf8");
   const page = readFileSync("apps/web/app/app/admin/scans/page.tsx", "utf8");
   assert.match(actions, /getAdminScanActivityPage[^\n]+includeReportDetails = false/);
-  assert.match(actions, /includeReportDetails \? loadAdminScanCreationAttributions/);
-  assert.match(actions, /includeReportDetails \? loadLatestVersionedScoreAssessments/);
+  assert.match(actions, /loadAdminScanCreationAttributions\(selectedScanIds\)/);
+  assert.doesNotMatch(actions, /includeReportDetails \? loadAdminScanCreationAttributions/);
+  assert.doesNotMatch(actions, /includeReportDetails \? loadLatestVersionedScoreAssessments/);
   assert.match(repository, /includeReportDetails \? `admin_evidence_matrix/);
-  assert.match(repository, /includeReportDetails \? loadTopFindingCounts\(\)/);
+  assert.doesNotMatch(repository, /includeReportDetails \? loadTopFindingCounts\(\)/);
   assert.match(page, /Show report details/);
   assert.match(page, /<AdminBasicScanTable scans=\{scans\}/);
   assert.match(page, /details: showReportDetails \? "1" : ""/);

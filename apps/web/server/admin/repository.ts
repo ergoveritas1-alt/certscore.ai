@@ -1384,7 +1384,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
   const scansResult = await query<AdminScanQueryRow>(
     `select id, organization_id, domain_id, scan_type, status, created_at, started_at, completed_at, pages_scanned, scan_config_json,
             egress_id, egress_provider,
-            ${includeReportDetails ? ADMIN_FULL_SITE_PAGES_SCANNED_SQL : "null::int"} as full_site_pages_scanned,
+            ${ADMIN_FULL_SITE_PAGES_SCANNED_SQL} as full_site_pages_scanned,
             ${includeReportDetails ? `(select sp.page_language
                from scan_pages sp
               where sp.scan_id = scans.id
@@ -1424,8 +1424,8 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
   const organizationIds = [...new Set(scanRows.flatMap((scan) => (scan.organization_id ? [scan.organization_id] : [])))];
   const scanIds = scanRows.map((scan) => scan.id);
 
-  const loadTopFindingCounts = async () => {
-    if (scanIds.length === 0) {
+  const loadTopFindingCounts = async (missingScanIds: string[]) => {
+    if (missingScanIds.length === 0) {
       return new Map<string, number>();
     }
     const reportsTable = await queryOne<{ table_name: string | null }>(
@@ -1455,13 +1455,13 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
               end as top_finding_count
          from reports
         where scan_id = any($1::uuid[])`,
-      [scanIds],
+      [missingScanIds],
       { readOnly: true }
     );
     return new Map(result.rows.flatMap((row) => row.top_finding_count === null ? [] : [[row.scan_id, row.top_finding_count] as const]));
   };
 
-  const [domainsResult, organizationsResult, snapshotsResult, diagnosticEventsResult, runtimeArtifactsResult, scannerEvidenceResult, topFindingCounts] = await Promise.all([
+  const [domainsResult, organizationsResult, snapshotsResult, diagnosticEventsResult, runtimeArtifactsResult, scannerEvidenceResult] = await Promise.all([
     domainIds.length
       ? query<AdminScanDomainRow>(
           `select id, hostname
@@ -1487,6 +1487,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
                   report_projection_payload #> '{runtimeArtifacts,siteIntegrity}' as admin_site_integrity,
                   report_projection_payload #> '{canonicalReportProjection,collectionSurfaceAssessment}' as admin_collection_surfaces,
                   report_projection_payload #> '{runtimeArtifacts,cmsSecurity}' as admin_cms_security,
+` : ""}
                   jsonb_build_object(
                     'scanId', report_projection_payload #>> '{scan,id}',
                     'projectionScanId', report_projection_payload #>> '{canonicalReportProjection,legacyScoreAssessmentInput,scanId}',
@@ -1507,7 +1508,6 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
                           or finding->'scoreEffects' @> '[{"framework":"accessibility"}]'::jsonb
                     )
                   ) as admin_canonical_score_input,
-` : ""}
                   certscore_overall,
                   admin_industry_label,
                   admin_summary_generated_at,
@@ -1608,9 +1608,14 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
           [scanIds],
           { readOnly: true }
         )
-      : Promise.resolve({ rows: [] as Array<{ scan_id: string; has_recovery: boolean | null; has_scanner_event: boolean | null }> }),
-    includeReportDetails ? loadTopFindingCounts() : Promise.resolve(new Map<string, number>())
+      : Promise.resolve({ rows: [] as Array<{ scan_id: string; has_recovery: boolean | null; has_scanner_event: boolean | null }> })
   ]);
+
+  // Most published snapshots already retain this count. Read legacy reports
+  // only for the displayed snapshots that still need the existing fallback.
+  const topFindingCounts = await loadTopFindingCounts(snapshotsResult.rows.flatMap(
+    (snapshot) => snapshot.scan_id && snapshot.top_finding_count == null ? [snapshot.scan_id] : []
+  ));
 
   const scannerEvidenceByScanId = new Map(
     scannerEvidenceResult.rows.map((row) => [row.scan_id, row] as const)

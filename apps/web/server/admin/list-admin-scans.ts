@@ -323,7 +323,7 @@ export async function listAdminScansPage(
 }
 
 // One live, bounded capture supplies both panels. The original table already
-// read on every request; the basic view avoids its expensive report projections.
+// read on every request; the basic view omits detailed evidence projections.
 export async function getAdminScanActivityPage(limit: number, offset: number, filters: AdminScanActivityFilters, includeReportDetails = false) {
   await requirePlatformAdminContext();
   const snapshot = await loadAdminScanActivitySnapshot(limit, offset, filters);
@@ -341,7 +341,7 @@ async function enrichAdminScanActivityPage(page: { rows: AdminScanActivityPageRe
       selectedScanIds.length || selectedRequestIds.length
         ? loadAdminScanRequestRows(100_000, null, { publicIds: selectedRequestIds, scanIds: selectedScanIds })
         : Promise.resolve([]),
-      includeReportDetails ? loadAdminScanCreationAttributions(selectedScanIds) : Promise.resolve([])
+      loadAdminScanCreationAttributions(selectedScanIds)
     ])
   );
   const mcpScanIds = creationAttributions
@@ -377,10 +377,10 @@ async function enrichAdminScanActivityPage(page: { rows: AdminScanActivityPageRe
     "app.admin.scans.score-attribution",
     () => Promise.all([
       loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id), null),
-      includeReportDetails ? loadLatestVersionedScoreAssessments({
+      loadLatestVersionedScoreAssessments({
         scanIds: scanRows.map((scan) => scan.id),
         scoreKind: "gdpr_eprivacy_evidence"
-      }) : Promise.resolve(new Map()),
+      }),
     ])
   );
   const pulseAttributionMap = new Map(pulseAttributionRows.map((row) => [row.scan_id, row] as const));
