@@ -117,3 +117,16 @@ test("accounted cases with unresolved source scope are not complete governing-po
   const summary = summarizePolicyAudit(f.prep, f.passA);
   assert.equal(summary.accountedReviewRecords, 1); assert.equal(summary.completedPolicyReviews, 0);
 });
+
+test("PDF source limits prevent whole-document absence review without losing retained byte verification", t => {
+  const f = fixture(t);
+  const pdf = {contractVersion:"policy_pdf_source_coverage.v1",status:"partial",totalPages:18,extractedPages:12,pageLimit:12,characterLimit:500_000,characterLimitReached:false};
+  for (const metadata of [pdf, {...pdf,status:"complete"}, {...pdf,status:"unknown",totalPages:null}]) {
+    f.bundle.policySurfaceObservations = [{...f.policy,documentTextCoverage:{...f.policy.documentTextCoverage,pdfSourceCoverage:metadata}}] as any;
+    const c = inspectPolicyCapture({root:f.root,scanId:"s1",site:"x",region:"eu",status:"completed",bundle:f.bundle,receipts:[f.receipt]});
+    assert.equal(c.documents[0]!.verification,"verified_local_bytes");
+    assert.equal(c.documents[0]!.textCoverage,"partial_or_unknown_source_document");
+    const prep = {...f.prep,checks:[c]};const bytes = Buffer.from(JSON.stringify(prep));
+    assert.throws(()=>validatePolicyPassA({...f.passA,preparationSha256:sha256(bytes)},prep,bytes));
+  }
+});

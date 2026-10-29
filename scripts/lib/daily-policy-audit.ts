@@ -18,6 +18,18 @@ export const sha256 = (value: string | Uint8Array) => createHash("sha256").updat
 export const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) => item && typeof item === "object" && !Array.isArray(item)
   ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
 
+// Audit tooling is installed independently of product contracts. Validate new
+// PDF metadata here without requiring an unshipped product package update.
+function completePdfSource(value: unknown): boolean {
+  const coverage = object(value);
+  return coverage.contractVersion === "policy_pdf_source_coverage.v1" &&
+    coverage.status === "complete" && coverage.pageLimit === 12 &&
+    coverage.characterLimit === 500_000 && coverage.characterLimitReached === false &&
+    typeof coverage.totalPages === "number" && Number.isInteger(coverage.totalPages) &&
+    coverage.totalPages > 0 && coverage.totalPages <= 12 &&
+    coverage.extractedPages === coverage.totalPages;
+}
+
 const aliases: Record<string, PolicyTopic> = {
   retention_disclosure: "data_retention", retention_disclosure_observed: "data_retention", retention_disclosure_present: "data_retention",
   legal_basis_disclosure_observed: "legal_basis", recipients_vendor_categories_disclosure: "recipients_or_vendor_categories",
@@ -97,7 +109,10 @@ export function inspectPolicyCapture(input: { root: string; scanId: string; site
     const doc: PolicyDocument = { key: String(p.observationId), observationId: String(p.observationId), surfaceType: String(p.surfaceType),
       url: safeUrl(p.finalUrl ?? p.url), urlSha256: sha256(String(p.finalUrl ?? p.url)), language: string(p.documentLanguage ?? p.matchedLocale),
       fetch: String(p.documentFetchState ?? p.status), role: String(p.documentRole ?? "unknown"), relationship: String(p.targetRelationship ?? "unknown"),
-      textCoverage: String(coverage.status ?? "unknown"), sectionCoverage: String(sections.status ?? "unknown"),
+      textCoverage: coverage.pdfSourceCoverage === undefined ? String(coverage.status ?? "unknown") :
+        completePdfSource(coverage.pdfSourceCoverage)
+          ? String(coverage.status ?? "unknown") : "partial_or_unknown_source_document",
+      sectionCoverage: String(sections.status ?? "unknown"),
       sourceTextChars: typeof coverage.sourceTextChars === "number" ? coverage.sourceTextChars : null,
       retainedTextChars: typeof coverage.retainedTextChars === "number" ? coverage.retainedTextChars : null,
       file: null, verification: "no_full_text_reference", limitations: [...array(coverage.limitationKeys), ...array(sections.limitationKeys)].map(String) };
