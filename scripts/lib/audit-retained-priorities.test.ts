@@ -43,3 +43,9 @@ test("URL-qualified, unresolved and missing-event requests cannot merge into one
  const b=protocolFixture();b.networkEvents[0]!.requestPayloadSignals.bodyFieldNames=["event","event","x".repeat(400),"private=value"];
  assert.deepEqual(unsupportedProtocolReview(b)[0]!.bodyFieldNames,["event"]);
 });
+
+// Both versioned phase contracts preserve the same initial/terminal separation.
+test('v3 precise diagnostic reasons remain phase-separated without promoting registration',()=>{
+ const result=actionConfirmationReview({acceptanceRegistration:{status:'unconfirmed'},confirmationDiagnostics:{policyVersion:'consent_confirmation_diagnostics.v3',diagnosticOnly:true,initialPasses:1,terminalPasses:1,terminalRead:'verified',reasons:['sdk_not_observed','verified_decision'],initialReasons:['sdk_not_observed'],terminalReasons:['verified_decision'],reasonsTruncated:false}},'accept');
+ assert.deepEqual(result.initialReasons,['sdk_not_observed']);assert.deepEqual(result.terminalReasons,['verified_decision']);assert.equal(result.registration,'unconfirmed');assert.equal(result.diagnosticVersion,'consent_confirmation_diagnostics.v3');
+});

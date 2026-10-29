@@ -7,7 +7,7 @@ import {obj,arr,type Obj} from "./audit-progress";
 export function actionConfirmationReview(packet:Obj,action:"accept"|"reject"){
   const registration=obj(packet[action==="accept"?"acceptanceRegistration":"refusalRegistration"]),click=obj(obj(packet.interactionDiagnostics).click).outcome;
   const diagnostic=consentConfirmationDiagnosticsSchema.safeParse(packet.confirmationDiagnostics);
-  const phases=diagnostic.success && diagnostic.data.policyVersion === "consent_confirmation_diagnostics.v2" ? diagnostic.data : null;
+  const phases=diagnostic.success && diagnostic.data.policyVersion !== "consent_confirmation_diagnostics.v1" ? diagnostic.data : null;
   return {action,provider:String(obj(packet.resolver).cmpId??"not_identified"),click:String(click??"not_checked"),registration:String(registration.status??"not_checked"),
     reasons:diagnostic.success?diagnostic.data.reasons:["diagnostics_not_retained"],terminalRead:diagnostic.success?diagnostic.data.terminalRead:"not_checked",
     diagnosticVersion:diagnostic.success?diagnostic.data.policyVersion:null,
