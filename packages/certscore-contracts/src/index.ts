@@ -3509,6 +3509,13 @@ const canonicalConsentUiObservationSchema: z.ZodType<z.output<typeof consentUiOb
 const canonicalPolicyInspectionSchema: z.ZodType<z.output<typeof policySurfaceInspectionOutcomeSchema>, z.ZodTypeDef, z.input<typeof policySurfaceInspectionOutcomeSchema>> = policySurfaceInspectionOutcomeSchema;
 const canonicalNetworkEventSchema: z.ZodType<NetworkEvent, z.ZodTypeDef, z.input<typeof networkEventSchema>> = networkEventSchema;
 const canonicalNetworkResponseEventSchema: z.ZodType<NetworkResponseEvent, z.ZodTypeDef, z.input<typeof networkResponseEventSchema>> = networkResponseEventSchema;
+const bundleField0: z.ZodType<z.output<typeof runtimeEvidenceEventSchema>, z.ZodTypeDef, z.input<typeof runtimeEvidenceEventSchema>> = runtimeEvidenceEventSchema;
+const bundleField1: z.ZodType<z.output<typeof derivedRuntimeSignalsSchema>, z.ZodTypeDef, z.input<typeof derivedRuntimeSignalsSchema>> = derivedRuntimeSignalsSchema;
+const bundleField2: z.ZodType<z.output<typeof consentFlowObservationSchema>, z.ZodTypeDef, z.input<typeof consentFlowObservationSchema>> = consentFlowObservationSchema;
+const bundleField3: z.ZodType<z.output<typeof consentActionAttemptSchema>, z.ZodTypeDef, z.input<typeof consentActionAttemptSchema>> = consentActionAttemptSchema;
+const bundleField4: z.ZodType<z.output<typeof observedJourneySchema>, z.ZodTypeDef, z.input<typeof observedJourneySchema>> = observedJourneySchema;
+const bundleField5: z.ZodType<z.output<typeof cookieSnapshotSchema>, z.ZodTypeDef, z.input<typeof cookieSnapshotSchema>> = cookieSnapshotSchema;
+const bundleField6: z.ZodType<z.output<typeof normalizedVendorObservationSchema>, z.ZodTypeDef, z.input<typeof normalizedVendorObservationSchema>> = normalizedVendorObservationSchema;
 const canonicalEvidenceBundleObjectSchema = z.object({
   accessibilityAudit: canonicalAccessibilityAuditSchema.optional(),
   runtimeMetadataSnapshots: z.array(canonicalDomSnapshotSchema).max(1).optional(),
@@ -3536,13 +3543,13 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   gpcObservationSession: canonicalGpcSessionSchema.optional(),
   gpcImpactCapture: canonicalImpactCaptureSchema.optional(),
   gpcImpactSemanticObservation: canonicalImpactSemanticSchema.optional(),
-  runtimeTimeline: z.array(runtimeEvidenceEventSchema),
+  runtimeTimeline: z.array(bundleField0),
   networkEvents: z.array(canonicalNetworkEventSchema),
   networkResponseEvents: z.array(canonicalNetworkResponseEventSchema).default([]),
   automatedAccessObservation: automatedAccessObservationSchema.optional(),
   siteResourceSizeSummary: siteResourceSizeSummarySchema.optional(),
   cookieEvents: z.array(cookieEventSchema),
-  cookieSnapshots: z.array(cookieSnapshotSchema),
+  cookieSnapshots: z.array(bundleField5),
   storageSnapshots: z.array(storageSnapshotSchema),
   scriptEvents: z.array(scriptEventSchema),
   runtimeScriptEvidence: z.array(runtimeScriptEvidenceSchema).max(8).optional(),
@@ -3554,9 +3561,9 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   formDestinationTrace: formDestinationTraceSchema.optional(),
   collectionSurfaceSnapshots: z.array(collectionSurfaceSnapshotSchema).max(MAX_COLLECTION_SURFACE_FORMS).optional(),
   consentInteractionEvents: z.array(consentInteractionEventSchema).default([]),
-  consentFlowObservations: z.array(consentFlowObservationSchema).default([]),
+  consentFlowObservations: z.array(bundleField2).default([]),
   consentActionCandidates: z.array(consentActionCandidateSchema).default([]),
-  consentActionAttempts: z.array(consentActionAttemptSchema).default([]),
+  consentActionAttempts: z.array(bundleField3).default([]),
   consentFlowComparisons: z.array(consentFlowComparisonSchema).default([]),
   policySurfaceObservations: z.array(canonicalPolicyObservationSchema).default([]),
   siteIntegrityObservation: siteIntegrityObservationSchema.optional(),
@@ -3565,9 +3572,9 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   screenshots: z.array(screenshotArtifactSchema),
   homepageScreenshot: homepageScreenshotStateSchema.optional(),
   domSnapshots: z.array(canonicalDomSnapshotSchema),
-  normalizedVendorObservations: z.array(normalizedVendorObservationSchema),
-  observedJourneys: z.array(observedJourneySchema).default([]),
-  derivedRuntimeSignals: derivedRuntimeSignalsSchema,
+  normalizedVendorObservations: z.array(bundleField6),
+  observedJourneys: z.array(bundleField4).default([]),
+  derivedRuntimeSignals: bundleField1,
   runtimeCoverage: runtimeCoverageSummarySchema.optional(),
   consentSurfaceInspection: consentSurfaceInspectionOutcomeSchema.optional(),
   policySurfaceInspection: canonicalPolicyInspectionSchema.optional(),
