@@ -14,6 +14,44 @@ import { compactCanonicalEvidenceBundleForRetention, summarizeSiteResourceSizes 
 import { getScanProfile } from "./profiles.js";
 import { gpcImpactRequestSetHash } from "./gpc-impact-capture.js";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
+import {gpcProductionRuntimeFixture} from "../../certscore-contracts/src/test-fixtures/gpc-production";
+import {captureCaliforniaRejectRequest} from "./california-reject-request";
+import {gpcProofEventPriorities} from "./gpc-proof-retention";
+
+test("compaction preserves exact source requests for selected GPC proofs within the existing caps",()=>{
+  const bundle=oversizedGoogleLikeBundle(),session=gpcProductionRuntimeFixture().gpcObservationSession!;
+  for(const event of bundle.networkEvents)Object.assign(event,{collectionEndpointObserved:true,thirdParty:true,firstParty:false,hasIdentifierLikeParameters:true,cookieNamesSent:["visitor_id"],resourceType:"fetch"});
+  // Late duplicate-recipient events previously competed only on generic event
+  // priority despite their detailed retained proof pointing to these exact IDs.
+  const events=bundle.networkEvents.slice(150,154);
+  session.requestProofCapture={contractVersion:"gpc_request_capture.v1",inspected:4,skipped:0,pending:0,failed:0,retentionDropped:0,restrictions:[],rows:events.map(event=>{
+    const url="https://htlb.casalemedia.com/openrtb/pbjs";
+    Object.assign(event,{requestUrl:url,url,hostname:"htlb.casalemedia.com",method:"POST",collectionEndpointObserved:true,hasIdentifierLikeParameters:false,cookieNamesSent:[]});
+    const fact=captureCaliforniaRejectRequest({url,method:"POST",requestId:event.requestId,startedAtMs:event.timestampMs,hasBody:true,body:"unsupported",headers:{"content-type":"text/plain"}})!;
+    return {eventId:event.eventId,documentToken:session.mainDocument!.documentToken,capturedAtMs:event.timestampMs,proof:{...fact,contractVersion:"gpc_request_proof.v1"}};
+  })};
+  session.requests=session.requestProofCapture.rows.map(row=>({eventId:row.eventId,timestampMs:row.proof.startedAtMs,urlSha256:row.proof.urlSha256,secGpc:"1"}));
+  session.requestsObserved=session.requests.length;session.requestsDropped=0;
+  session.scanId=bundle.scanId;bundle.gpcObservationSession=session;
+  const withoutProof=structuredClone(bundle);delete withoutProof.gpcObservationSession;
+  const ordinary=compactCanonicalEvidenceBundleForRetention(withoutProof,1);
+  assert.ok(events.some(event=>!ordinary.networkEvents.some(row=>row.eventId===event.eventId)));
+  const compacted=compactCanonicalEvidenceBundleForRetention(bundle,1);
+  assert.ok(compacted.networkEvents.length<=80);assert.ok(compacted.networkResponseEvents.length<=60);
+  for(const event of events)assert.ok(compacted.networkEvents.some(row=>row.eventId===event.eventId));
+  assert.ok(canonicalEvidenceBundleSchema.safeParse(compacted).success);
+  for(const mode of ["id","method","time","url","document","ambiguous","request_collision"]){
+    const bad=structuredClone(bundle),row=bad.gpcObservationSession!.requestProofCapture!.rows[0]!;
+    if(mode==="id")row.proof.requestId="other";
+    if(mode==="method")row.proof.method="GET";
+    if(mode==="time")row.proof.startedAtMs++;
+    if(mode==="url")row.proof.urlSha256="f".repeat(64);
+    if(mode==="document")row.documentToken="other";
+    if(mode==="ambiguous")bad.networkEvents.push(structuredClone(events[0]!));
+    if(mode==="request_collision")bad.networkEvents[0]!.requestId=events[0]!.requestId;
+    assert.equal(gpcProofEventPriorities(bad).has(events[0]!.eventId),false,mode);
+  }
+});
 
 test("repeated collector traffic cannot evict another recipient's successful request/response pair", () => {
   const bundle = oversizedGoogleLikeBundle();

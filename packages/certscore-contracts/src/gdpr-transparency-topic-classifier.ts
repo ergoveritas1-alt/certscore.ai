@@ -225,6 +225,14 @@ const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] 
   },
   {
     locale: "de",
+    matchedTerm: "benannte gemeinsam verantwortliche fur diese internetseite",
+    // A retained website-controller declaration plus a named legal entity.
+    // Bare joint responsibility, platform mentions and navigation do not qualify.
+    pattern: /\bgemeinsam verantwortliche(?:n)? fur den betrieb (?:dieser|der) (?:internetseite|website)\b.{0,180}\b(?:datenschutz-grundverordnung|dsgvo)\b.{0,140}\b(?:sind|ist)\s*:?\s*(?:\d+[.)]?\s*)?[a-z][a-z0-9 .&'-]{2,100}\b(?:gmbh|ag|kg|e\.k\.)\b/i,
+    topic: "controller_contact",
+  },
+  {
+    locale: "de",
     matchedTerm: "verantwortliche stelle mit kontaktangabe",
     pattern: /\b(?:die )?verantwortliche stelle fur die datenverarbeitung\b.{0,80}\bist\b.{0,260}(?:@|telefon|e-mail)/i,
     topic: "controller_contact",

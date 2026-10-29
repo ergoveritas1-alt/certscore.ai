@@ -1,0 +1,12 @@
+{
+  "provenance": "Redacted structural derivative of owner-authorized local capture; not original-body replay or proof of original EID equality.",
+  "sourceBodySha256": "1f92ab1b4a0c977c4779390b10041e935589cfa9ed6b5431df204dbeb3c7533c",
+  "fixture": {
+    "url": "https://fastlane.rubiconproject.com/a/api/prebid-exchange.json?as=fixture&m=fixture&s=fixture",
+    "method": "POST",
+    "body": "{\"imp\":[{\"ext\":{\"data\":{\"aupname\":\"fixture\",\"divId\":\"fixture\",\"adserver\":{\"name\":\"fixture\",\"adslot\":\"fixture\"},\"pbadslot\":\"fixture\"},\"gpid\":\"fixture\",\"tid\":\"G-FIXTURE01\",\"tidSource\":\"fixture\",\"prebid\":{\"bidder\":{\"dvplus\":{\"siteId\":1,\"zoneId\":1,\"accountId\":1,\"bidonmultiformat\":false}},\"adunitcode\":\"fixture\",\"floors\":{\"floorMin\":1}}},\"id\":\"fixture\",\"banner\":{\"topframe\":1,\"format\":[{\"w\":1,\"h\":1},{\"w\":1,\"h\":1},{\"w\":1,\"h\":1},{\"w\":1,\"h\":1},{\"w\":1,\"h\":1}]},\"secure\":1,\"bidfloor\":1,\"bidfloorcur\":\"fixture\"}],\"source\":{\"ext\":{\"schain\":{\"ver\":\"fixture\",\"nodes\":[{\"hp\":1,\"asi\":\"fixture\",\"sid\":\"fixture\"}],\"complete\":1},\"tidSource\":\"fixture\"},\"tid\":\"G-FIXTURE01\"},\"regs\":{\"ext\":{\"gpc\":\"fixture\",\"gdpr\":0},\"coppa\":0},\"user\":{\"ext\":{\"eids\":[{\"source\":\"pubcid.org\",\"uids\":[{\"id\":\"fixture\",\"atype\":1}]}]}},\"ext\":{\"prebid\":{\"auctiontimestamp\":1,\"targeting\":{\"includewinners\":true,\"includebidderkeys\":false},\"adServerCurrency\":\"fixture\",\"channel\":{\"name\":\"fixture\",\"version\":\"fixture\"},\"aliases\":{\"rubicon\":\"fixture\"},\"aliasgvlids\":{\"rubicon\":1},\"page_view_ids\":{\"rubicon\":\"fixture\"},\"safeRenderer\":true,\"floors\":{\"enabled\":false,\"floorMin\":1,\"floorMinCur\":\"fixture\"}}},\"site\":{\"domain\":\"fixture\",\"publisher\":{\"domain\":\"fixture\"},\"page\":\"https://fixture.test/\",\"ext\":{\"data\":{\"documentLang\":\"fixture\"}},\"ref\":\"https://fixture.test/\"},\"device\":{\"w\":1,\"h\":1,\"ua\":\"fixture\",\"language\":\"fixture\",\"ext\":{\"vpw\":1,\"vph\":1},\"sua\":{\"source\":1,\"platform\":{\"brand\":\"fixture\"},\"mobile\":1}},\"id\":\"fixture\",\"test\":1}",
+    "mime": "text/plain",
+    "redacted": true,
+    "originalReplay": false
+  }
+}

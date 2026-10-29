@@ -182,7 +182,7 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
       advertisingCollectionEvidenceIds: selectedCollection.map(row=>row.eventId),
       advertisingCollectionRecipients: { contractVersion: "canonical_collection_recipients.v1", resolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
         rows: selectedCollection.map(event => collectionRecipients.get(event.eventId)!) },
-      advertisingCollectionQualification: { policyVersion: GPC_REQUEST_QUALIFICATION_POLICY, rows:qualification },
+      advertisingCollectionQualification: { policyVersion: qualification.some(row=>row.policyVersion==="ca_sale_sharing_qualification.v5-magnite-auction")?"gpc_sale_sharing_evidence.v7-auctions":qualification.some(row=>row.policyVersion==="ca_sale_sharing_qualification.v4-index-auction")?"gpc_sale_sharing_evidence.v6-index-auction":GPC_REQUEST_QUALIFICATION_POLICY, rows:qualification },
       ...(qualification.some(row=>row.propertyEvidence) ? {propertySaleSharingSource:propertySource} : {}),
       gppPropagation: propagation,
       classifiedCount: classified.length, collectionCount: classified.filter(r => r.collectionEndpointObserved).length,

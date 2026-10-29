@@ -26,11 +26,12 @@ for(const run of runs){
   const original=inventory.find((i:any)=>i.id===rec.scanId)?.retained?.[0];
   if(original?.pointers?.scanArtifactUri!==canonical.uri||original?.hashes?.scanArtifactUri?.sha256!==canonical.expected?.sha256)throw Error("Original canonical pointer mismatch");
   const originalBytes=verifiedLocalBytes(root,canonical,20_000_000),main=JSON.parse(originalBytes.toString()),expected=main.gpcResponseAssessment?.comparison?.gpcArtifact;
+  if(main.scanId!==rec.scanId)throw Error("Original canonical identity mismatch");
   if(!expected||main.gpcResponseAssessment?.observation?.sourceSha256!==expected.sha256||expected.uri!==rec.uri)throw Error("Original GPC comparison binding mismatch");
   const bytes=verifiedLocalBytes(root,{...rec,verified:true,expected:{sha256:expected.sha256,sizeBytes:expected.sizeBytes}},20_000_000),bundle=JSON.parse(bytes.toString());if(bundle.scanId!==rec.scanId)throw Error("GPC identity mismatch");seen.add(rec.scanId+'gpc');
-  const source={file:rec.localPath,sha256:sha(bytes)};sources.push(source);for(const row of unsupportedProtocolReview(bundle))protocols.push({scanId:rec.scanId,...row,source});
+  const source={file:rec.localPath,sha256:sha(bytes),bytes:bytes.length,parentFile:canonical.localPath,parentSha256:sha(originalBytes),parentBytes:originalBytes.length,originalWorkerUri:expected.uri};sources.push(source);for(const row of unsupportedProtocolReview(bundle))protocols.push({scanId:rec.scanId,...row,source});
  }
 }
 mkdirSync(out,{recursive:true});
-writeFileSync(path.join(out,'retained-review.json'),JSON.stringify({version:'certscore.retained-priorities.v1',sourceOnly:true,cohort:'original-credential-verified Mac mini; canaries/tests excluded',actions,unsupportedRequests:protocols,rankedProtocols:rankProtocolReviews(protocols),sources,productionWrites:0,newScans:0,newFindings:0},null,2)+'\n',{flag:'wx'});
+writeFileSync(path.join(out,'retained-review.json'),JSON.stringify({version:'certscore.retained-priorities.v2',sourceOnly:true,cohort:'original-credential-verified Mac mini; canaries/tests excluded',actions,unsupportedRequests:protocols,rankedProtocols:rankProtocolReviews(protocols),sources,productionWrites:0,newScans:0,newFindings:0},null,2)+'\n',{flag:'wx'});
 console.log(JSON.stringify({actions:actions.length,unsupportedRequests:protocols.length,rankedProtocols:rankProtocolReviews(protocols).map(r=>({origin:r.origin,path:r.path,requests:r.requests}))}));

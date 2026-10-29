@@ -4,7 +4,7 @@ import {resolveCanonicalCookieClassification,resolveCanonicalCookieKnowledge,cla
 import {captureCaliforniaRejectRequest} from '../../certscore-scan-core/src/california-reject-request';
 test('documented cookie identities retain exact provider and purpose while v5 remains historical',()=>{
  for(const [name,category,entity]of [['_clck','session_replay','Microsoft Corporation'],['_ttp','advertising','TikTok Technology Limited'],['hubspotutk','analytics','HubSpot, Inc.'],['_mkto_trk','analytics','Adobe Inc.'],['fs_uid','session_replay','FullStory, Inc.'],['_pin_unauth','advertising','Pinterest, Inc.'],['__kla_id','analytics','Klaviyo, Inc.']]as const){
-  const c=resolveCanonicalCookieClassification(name,{cookieDomain:'.example.test'});assert.equal(c.version,'certscore.cookie-purpose.v7');assert.equal(c.category,category);assert.equal(c.essentiality,'non_essential');assert.equal(c.provider?.entity,entity);
+  const c=resolveCanonicalCookieClassification(name,{cookieDomain:'.example.test'});assert.equal(c.version,'certscore.cookie-purpose.v8');assert.equal(c.category,category);assert.equal(c.essentiality,'non_essential');assert.equal(c.provider?.entity,entity);
  }
  assert.equal(resolveCanonicalCookieKnowledge('_clck',{purposePolicyVersion:'certscore.cookie-purpose.v5'}).essentiality,'unknown');
  for(const name of ['__hs_opt_out','__hs_cookie_cat_pref','fs_cid'])assert.equal(resolveCanonicalCookieClassification(name).essentiality,'essential');

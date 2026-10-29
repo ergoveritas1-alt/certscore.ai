@@ -264,6 +264,36 @@ test("API v2 lightweight status fails closed when persisted report projection fa
   assert.equal(response.score, null);
 });
 
+test("durable terminal publication stops status polling even without a snapshot", async () => {
+  const build = await getBuildLightweightApiV2ScanStatusInput();
+  const response = build(projection({
+    publicationRequestStatus: "terminal_failure",
+    reportProjectionStatus: null,
+    score: 79,
+  }));
+  assert.equal(response.status, "failed");
+  assert.equal(response.error?.code, "report_publication_failed");
+  assert.equal(response.error?.retryable, false);
+  assert.equal(response.retryAfterSeconds, null);
+  assert.equal(response.score, null);
+  assert.equal(response.preConsentPreview, undefined);
+  assert.match(response.error!.recommendedNextAction, /Stop polling/);
+});
+
+test("terminal publication failure overrides stale ready and no-go metadata", async () => {
+  const build = await getBuildLightweightApiV2ScanStatusInput();
+  const response = build(projection({
+    publicationRequestStatus: "terminal_failure",
+    reportReady: true,
+    score: 99,
+    scanNoGoAssessment: { decision: "no_go", reasonCodes: ["target_access_denied"] },
+  }));
+  assert.equal(response.status, "failed");
+  assert.equal(response.resultDisposition, undefined);
+  assert.equal(response.score, null);
+  assert.equal(response.scoreVersion, null);
+});
+
 test("API v2 status route uses bounded status and persisted-report reads only", async () => {
   const { readFile } = await import("node:fs/promises");
   const source = await readFile("apps/web/app/api/v2/scans/[scanId]/status/route.ts", "utf8");
@@ -273,4 +303,18 @@ test("API v2 status route uses bounded status and persisted-report reads only", 
   assert.match(source, /buildLightweightApiV2ScanStatusInput/);
   assert.doesNotMatch(source, /getPublicScanRecord/);
   assert.doesNotMatch(source, /materializeLocalV2DagScanDetail/);
+});
+
+
+test("an unavailable verified payload cannot fall back to a required ready numeric status", async () => {
+  const build = await getBuildLightweightApiV2ScanStatusInput();
+  const input = projection({ reportReady: true, reportProjectionRequired: true, score: 79 });
+  const result = build(input, { persistedReportVerified: false });
+  assert.equal(result.status, "finalizing");
+  assert.equal(result.score, null);
+  assert.equal(result.scoreStatus, "provisional");
+  assert.equal(input.reportReady, true);
+  const legacy = build({ ...input, reportProjectionRequired: false }, { persistedReportVerified: false });
+  assert.equal(legacy.status, "completed");
+  assert.equal(legacy.score, 79);
 });

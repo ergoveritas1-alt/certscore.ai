@@ -1,12 +1,15 @@
 export {readBoundedProtocolJson, type ProtocolJson} from "./bounded-protocol-json";
 export {decodeCanonicalCollectionBody, canonicalCollectionBodyFields, collectionBodyPrivacySignals,isCanonicalProtocolIdentityField,readCanonicalBodyProcessing,usesExpandedCollectionBody} from "./collection-request-body";
 export { isIndexExchangeCollection } from "./index-exchange-collection-body";
+export {isGoogleBrowserCollection} from "./google-browser-collection-body";
+export {isRubiconExchangeCollection} from "./rubicon-collection-body";
+export {ProtocolLimitError,protocolLimit} from "./protocol-limit";
 import {VENDOR_COOKIE_COVERAGE, C3_COOKIE_COVERAGE, cookieCoverageForPolicy} from "./vendor-cookie-coverage";
 export { classifyCanonicalCollectionEndpoint, isCanonicalAdvertisingCollectionCandidate, COLLECTION_ENDPOINT_POLICY_VERSION } from "./collection-endpoints";
 export { inspectGpcRequestQualification, GPC_REQUEST_QUALIFICATION_POLICY } from "./gpc-request-qualification";
 export { decodeGppRequest, applyGppRequestCmpContext } from "./gpp-request-decoder";
 import { cookieClassificationSchema, type CookieClassification } from "@certscore/contracts";
-import { COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge as cookieKnowledge, type CanonicalCookieContext } from "./cookie-knowledge-base";
+import { COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge as cookieKnowledge, type CanonicalCookieContext, type CanonicalCookieKnowledge } from "./cookie-knowledge-base";
 import type {
   EndpointGeographyPrecision,
   EndpointGeographyStatus,
@@ -26,6 +29,7 @@ export {
   COOKIE_PURPOSE_CANDIDATE_VERSION,
   AXEPTIO_COOKIE_PURPOSE_POLICY,
   COOKIE_PURPOSE_POLICY,
+  C3_COOKIE_PURPOSE_POLICY,
   VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY,
   LEGACY_COOKIE_PURPOSE_POLICY,
   retainedCookiePurposePolicy,
@@ -40,8 +44,9 @@ export {
 
 export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-25-index-envelope-v17";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-27-browser-collect-v18";
 export const C3_COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-23-v5";
+export const COOKIE_REVIEW_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-27-v6";
 export const COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-21-v4";
 
 export type VendorResolverEvidenceType =
@@ -1986,6 +1991,7 @@ const rules: VendorRule[] = [
       /^https:\/\/(?:www|ssl)\.google-analytics\.com\/analytics\.js\b/i,
       // This shared administrative host is measurement evidence only at this exact endpoint.
       /^https:\/\/analytics\.google\.com\/g\/collect(?:\?[^#\r\n]*)?$/,
+      /^https:\/\/(?:google-analytics\.com|region1\.analytics\.google\.com)\/g\/collect(?:\?[^#\r\n]*)?$/,
     ],
     cookiePatterns: [/^_ga(?:_.+)?$/i, /^_gid$/i, /^_gat/i],
     storageKeyPatterns: [/^_ga(?:_.+)?$/i, /^_gid$/i, /^_gat/i],
@@ -5288,8 +5294,8 @@ export function getCanonicalVendorRegistryManifest() {
   return {
     contractVersion: "vendor-registry-manifest-v1" as const,
     resolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
-    cookieProviderResolverVersion: C3_COOKIE_PROVIDER_RESOLVER_VERSION,
-    rules: [...rules, ...auditedCookieProviderRules, ...currentCookieProviderRules, ...coverageCookieProviderRules, ...c3CookieProviderRules].map(rule => ({
+    cookieProviderResolverVersion: COOKIE_REVIEW_PROVIDER_RESOLVER_VERSION,
+    rules: [...rules, ...auditedCookieProviderRules, ...currentCookieProviderRules, ...coverageCookieProviderRules, ...c3CookieProviderRules, ...reviewedCookieProviderRules].map(rule => ({
       ruleId: rule.basisLabel,
       ...rule.identity,
       entity: rule.entity,
@@ -5619,8 +5625,8 @@ export function resolveVendorObservations(
     const storageKey = input.storageKey;
     const domSelector = input.domSelector;
 
-    const cookieRules = input.type === "cookie" && [COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
-      ? [...rules, ...auditedCookieProviderRules, ...([COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY,PRIOR_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion) ? currentCookieProviderRules : []), ...([COOKIE_PURPOSE_POLICY,VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion)?coverageCookieProviderRules:[]), ...(input.cookiePurposePolicyVersion===COOKIE_PURPOSE_POLICY?c3CookieProviderRules:[])] : rules;
+    const cookieRules = input.type === "cookie" && [COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
+      ? [...rules, ...auditedCookieProviderRules, ...([COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY,PRIOR_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion) ? currentCookieProviderRules : []), ...([COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY,VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion)?coverageCookieProviderRules:[]), ...([COOKIE_PURPOSE_POLICY,C3_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion)?c3CookieProviderRules:[]), ...(input.cookiePurposePolicyVersion===COOKIE_PURPOSE_POLICY?reviewedCookieProviderRules:[])] : rules;
     for (const rule of cookieRules) {
       const matchedHost = hostname
         ? matchesAny(hostname, rule.hostPatterns) && !matchesAny(hostname, rule.excludeHostPatterns)
@@ -5686,9 +5692,9 @@ export function resolveVendorObservations(
             : matchedCookie ? "cookie_name" : "hostname";
       const registryAttribution: VendorRegistryAttribution = {
         contractVersion: "vendor-registry-attribution-v1",
-        resolverVersion: input.type === "cookie" && [COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
+        resolverVersion: input.type === "cookie" && [COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
           ? input.cookiePurposePolicyVersion === HEAP_COOKIE_PURPOSE_POLICY
-            ? "certscore-cookie-provider-2026-10-15-v3" : input.cookiePurposePolicyVersion === COOKIE_PURPOSE_POLICY ? C3_COOKIE_PROVIDER_RESOLVER_VERSION : COOKIE_PROVIDER_RESOLVER_VERSION
+            ? "certscore-cookie-provider-2026-10-15-v3" : input.cookiePurposePolicyVersion===COOKIE_PURPOSE_POLICY ? COOKIE_REVIEW_PROVIDER_RESOLVER_VERSION : [COOKIE_PURPOSE_POLICY,C3_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion) ? C3_COOKIE_PROVIDER_RESOLVER_VERSION : COOKIE_PROVIDER_RESOLVER_VERSION
           : CANONICAL_VENDOR_RESOLVER_VERSION,
         ...rule.identity,
         ruleIds: [rule.basisLabel],
@@ -6280,8 +6286,29 @@ const c3CookieProviderRules: VendorRule[] = C3_COOKIE_COVERAGE.map((coverage, in
     basisLabel:`c3_cookie_coverage_${index+1}`, review:{reviewedAt:"2026-10-23",reviewer:"Codex primary-source review",sourceUrls:[coverage.source]}};
 });
 
+const reviewedCookieProviderRules: VendorRule[] = [{
+  ...rules.find(rule => rule.vendor === "Lotame" && rule.product === "Lotame")!,
+  cookiePatterns:[/^_cc_aud$/],hostPatterns:[/^(?:[a-z0-9-]+\.)*crwdcntrl\.net$/],
+  urlPatterns:[],storageKeyPatterns:[],requireHostPatternForCookieMatch:true,requireUrlPatternMatch:false,
+  basisLabel:"lotame_exact_audience_cookie_v8",confidence:0.98,
+  review:{reviewedAt:"2026-10-27",reviewer:"Codex exact-cookie source review",sourceUrls:[
+    "https://tags.crwdcntrl.net/lt/c/16589/sync.min.js",
+    "https://www.globalservices.bt.com/fr/legal/cookies",
+    "https://www.lotame.com/privacy/services-privacy-notice/",
+  ]},
+}];
+
+function cookieUnknownReason(knowledge: CanonicalCookieKnowledge): CookieClassification["unknownReason"] {
+  if (knowledge.category!=="unknown" && knowledge.essentiality!=="unknown") return null;
+  if (knowledge.ruleId?.endsWith("_context_required")) return "missing_context";
+  if ((knowledge.documentedPurposes?.length??0)>1) return "mixed_purpose";
+  if (knowledge.ruleId==="ambiguous_or_unsupported_identity.v1") return "ambiguous_identity";
+  if (knowledge.ruleId==="unresolved.v1" || !knowledge.ruleId) return "no_registry_match";
+  return knowledge.category==="unknown"?"purpose_not_established":"necessity_not_established";
+}
+
 export function resolveCanonicalCookieClassification(name: string, context: Pick<CanonicalCookieContext, "cookieDomain"> = {},
-  policyVersion: typeof COOKIE_PURPOSE_POLICY | typeof VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY = COOKIE_PURPOSE_POLICY): CookieClassification {
+  policyVersion: typeof COOKIE_PURPOSE_POLICY | typeof C3_COOKIE_PURPOSE_POLICY | typeof VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY = COOKIE_PURPOSE_POLICY): CookieClassification {
   const knowledge = cookieKnowledge(name, { ...context, purposePolicyVersion: policyVersion });
   const domain = context.cookieDomain?.replace(/^\.+/, "").toLowerCase() || null;
   const resolution = resolveCanonicalVendor({ type: "cookie", cookieName: name, hostname: domain ?? undefined, cookiePurposePolicyVersion: policyVersion });
@@ -6294,11 +6321,12 @@ export function resolveCanonicalCookieClassification(name: string, context: Pick
   if(!provider&&coverage&&knowledge.vendor===coverage.vendor){
     const rule=rules.find(r=>r.vendor===coverage.vendor&&r.product===coverage.product);
     if(rule)provider={vendor:rule.vendor,product:rule.product,entity:rule.entity,registryAttribution:{...rule.identity,
-      contractVersion:"vendor-registry-attribution-v1",resolverVersion:policyVersion===COOKIE_PURPOSE_POLICY?C3_COOKIE_PROVIDER_RESOLVER_VERSION:CANONICAL_VENDOR_RESOLVER_VERSION,ruleIds:[rule.basisLabel],matchKind:"cookie_name"}};
+      contractVersion:"vendor-registry-attribution-v1",resolverVersion:policyVersion===COOKIE_PURPOSE_POLICY?COOKIE_REVIEW_PROVIDER_RESOLVER_VERSION:[COOKIE_PURPOSE_POLICY,C3_COOKIE_PURPOSE_POLICY].some(v=>v===policyVersion)?C3_COOKIE_PROVIDER_RESOLVER_VERSION:CANONICAL_VENDOR_RESOLVER_VERSION,ruleIds:[rule.basisLabel],matchKind:"cookie_name"}};
   }
   return cookieClassificationSchema.parse({ version: policyVersion, cookieName: name, cookieDomain: domain,
     category: knowledge.category, essentiality: knowledge.essentiality, documentedPurposes: knowledge.documentedPurposes ?? [],
-    ruleId: knowledge.ruleId ?? "unresolved", provider });
+    ruleId: knowledge.ruleId ?? "unresolved", provider,
+    ...(policyVersion===COOKIE_PURPOSE_POLICY?{unknownReason:cookieUnknownReason(knowledge)}:{}) });
 }
 
 export { isAdvertisingIdentityValue } from "./advertising-identifiers";

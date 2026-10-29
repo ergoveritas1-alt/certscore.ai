@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DATA_BOUND_PURPOSE_TABLE, INADEQUATE_PURPOSE_WITNESSES } from "../../../../packages/certscore-contracts/src/test-fixtures/policy-topic-witnesses";
+import { DISCLOSURE_DUTY_WITNESSES } from "../../../../packages/certscore-contracts/src/test-fixtures/disclosure-duty-witnesses";
 
 import {
   classifyGdprTransparencyTopics,
@@ -74,6 +75,14 @@ test("context provenance cannot promote weak purpose quotes without a substantiv
       surface: surface([candidate({topic: "processing_purposes", evidenceText, matchedLocale: "en", matchedTerm: "purpose of the processing",
         classifierReasonCodes: ["matched_processing_purposes", "variant_requires_privacy_context"]})])});
     assert.deepEqual(result.acceptedProductionSignals, []);
+  }
+});
+
+test("privacy-context provenance cannot override a disclosure-duty semantic rejection",()=>{
+  for(const {topic,text} of DISCLOSURE_DUTY_WITNESSES){
+    const result=adaptGdprTransparencyTopicCandidatesForProduction({isTargetRelevantPrivacyPolicy:true,policyTextQuality:{usable:true},
+      surface:surface([candidate({topic,evidenceText:text,matchedLocale:"hu",matchedTerm:topic==="dpo_contact"?"adatvédelmi tisztviselő elérhetőségei":topic==="data_retention"?"személyes adatok tárolásának időtartama":"címzettek kategóriái",classifierReasonCodes:[`matched_${topic}`,"variant_requires_privacy_context"]})])});
+    assert.deepEqual(result.acceptedProductionSignals,[],topic);
   }
 });
 

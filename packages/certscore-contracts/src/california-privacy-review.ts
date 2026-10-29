@@ -312,6 +312,12 @@ export const californiaObservedScoreBasisSchema = z.discriminatedUnion("policyVe
     policyVersion:z.literal("usable_starting_page_score.v2-independent-visit"),
     runtimeDocumentUrlSha256:hash,
   }).strict(),
+  californiaObservedScoreBasisV1Schema.extend({
+    policyVersion:z.literal("usable_starting_page_score.v3-apex-www-recovery"),
+    runtimeDocumentUrlSha256:hash,
+    startingPageUrlSha256:hash,
+    routeEvidence:z.literal("retained_https_apex_www_recovery.v1"),
+  }).strict(),
 ]);
 export type CaliforniaObservedScoreBasis = z.infer<typeof californiaObservedScoreBasisSchema>;
 const californiaPrivacyReviewV10=californiaPrivacyReviewV9.extend({

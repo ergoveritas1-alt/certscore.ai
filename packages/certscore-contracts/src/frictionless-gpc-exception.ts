@@ -7,7 +7,7 @@ export const FRICTIONLESS_GPC_DISCLOSURES=["opt_out_right","frictionless_process
 export const FRICTIONLESS_GPC_UNVERIFIED_REQUIREMENTS=["signal_processing","no_fee_or_consideration","equivalent_experience","no_signal_triggered_interstitial","full_sale_sharing_scope"] as const;
 export const frictionlessGpcContradictionSchema=z.object({
   sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),sessionSha256:z.string().regex(/^[a-f0-9]{64}$/),documentUrlSha256:z.string().regex(/^[a-f0-9]{64}$/),
-  qualifierVersion:z.literal("california-gpc-response.v10-property-bound"),
+  qualifierVersion:z.enum(["california-gpc-response.v10-property-bound","california-gpc-response.v11-index-auction","california-gpc-response.v12-auctions"]),
   requests:z.array(z.object({evidenceId:z.string().min(1).max(240),entityId:z.string().regex(/^ent_[a-f0-9]{12}$/)}).strict()).min(1).max(4),
 }).strict().superRefine((row,ctx)=>{if(new Set(row.requests.map(r=>r.evidenceId)).size!==row.requests.length)ctx.addIssue({code:"custom",message:"Exception contradiction requests must be unique."});});
 export const frictionlessGpcExceptionSchema=z.object({

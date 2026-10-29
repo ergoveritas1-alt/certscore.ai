@@ -3,6 +3,8 @@ import {
   hasProcessingPurposeDataContext,
   hasSubstantiveProcessingPurposesEvidence,
   article13DisclosureRejectReason,
+  hasNonSubstantiveDisclosureContext,
+  ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION,
   looksLikeArticle13CodeOrConfigText,
   looksLikeArticle13PageChrome,
   looksLikeArticle13TableOfContents,
@@ -193,7 +195,7 @@ export function adaptGdprTransparencyTopicCandidatesForProduction(
     );
     acceptedProductionSignals.push({
       classifierProvenance: candidate.classifierProvenance,
-      classifierReasonCodes: uniqueStrings(candidate.classifierReasonCodes).slice(0, 16),
+      classifierReasonCodes: uniqueStrings([ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION, ...candidate.classifierReasonCodes]).slice(0, 16),
       confidence: candidate.confidence,
       disclosureType: candidate.topic,
       evidenceSource: retainedSignal
@@ -303,6 +305,9 @@ function rejectReasonForCandidate(
   const article13RejectReason = article13DisclosureRejectReason(candidate.evidenceText, candidate.topic, {
     mode: "multilingual_classifier",
   });
+  if (hasNonSubstantiveDisclosureContext(candidate.evidenceText, candidate.topic)) {
+    return "candidate_topic_invariants_failed";
+  }
   if (article13RejectReason === "page_chrome_or_navigation") return article13RejectReason;
   if (candidateMatchesKnownCrossTopicFalsePositive(candidate)) {
     return "candidate_topic_invariants_failed";

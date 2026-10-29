@@ -1,3 +1,4 @@
+import { consentConfirmationDiagnosticsSchema } from "./consent-confirmation-diagnostics";
 import { observedActionSourceProofSchema, validateObservedActionSourceProof } from "./observed-action-source-proof";
 import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionTiming } from "./retained-action-timing";
 import { postAcceptFormSnapshotCaptureSchema, postAcceptFormSnapshotProjectionSchema, postAcceptFormSnapshotDeadline } from "./post-accept-form-snapshots";
@@ -184,6 +185,7 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   completedAt: z.string().datetime(),
   resolver: postRefusalResolverSchema,
   acceptanceRegistration: postAcceptRegistrationSchema,
+  confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
   observationWindowMs: z.number().int().nonnegative(),
   timing: z.object({
     dispatchDelayMs: z.number().int().nonnegative(),

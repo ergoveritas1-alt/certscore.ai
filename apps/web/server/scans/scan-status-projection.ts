@@ -4,6 +4,7 @@ import { apiV2PreConsentRuntimePreviewSchema, type ApiV2PreConsentRuntimePreview
 import { queryOne } from "@website-signal-risk-scanner/db";
 import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
+import { terminalReportPublicationError } from "./report-publication-read-state";
 import {
   MAX_SCAN_REPORT_PROJECTION_BYTES,
   READABLE_SCAN_REPORT_PROJECTION_VERSIONS,
@@ -31,6 +32,7 @@ export type ScanStatusProjection = {
   reportProjectionRequired: boolean;
   reportReady: boolean;
   reportProjectionStatus?: string | null;
+  publicationRequestStatus?: string | null;
   scanFrom?: string | null;
   scanNoGoAssessment?: Record<string, unknown> | null;
   score?: number | null;
@@ -80,6 +82,7 @@ type ScanStatusProjectionRow = {
   report_projection_required: boolean;
   report_ready: boolean;
   report_projection_status: string | null;
+  publication_request_status?: string | null;
   scan_from: string | null;
   scan_no_go_assessment: Record<string, unknown> | null;
   score: number | null;
@@ -119,6 +122,7 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
     reportProjectionRequired: row.report_projection_required,
     reportReady: row.report_ready,
     reportProjectionStatus: row.report_projection_status,
+    publicationRequestStatus: row.publication_request_status ?? null,
     scanFrom: row.scan_from,
     scanNoGoAssessment: row.scan_no_go_assessment,
     score: row.score,
@@ -131,6 +135,11 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
     visualAccessReview: row.visual_access_review,
   };
 }
+
+const REQUIRES_PUBLICATION_SQL = `(coalesce(s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}', false)
+  or publication_request.scan_id is not null
+  or exists (select 1 from scan_events runtime_result
+              where runtime_result.scan_id = s.id and runtime_result.event_type = 'v2_lambda_result.received'))`;
 
 const PROJECTION_SQL = `select s.id,
        s.organization_id,
@@ -149,6 +158,7 @@ const PROJECTION_SQL = `select s.id,
        snapshot.score_scored_at as score_updated_at,
        snapshot.score_version,
        snapshot.report_projection_status,
+       publication_request.status as publication_request_status,
        snapshot.scan_no_go_assessment,
        snapshot.visual_access_review,
        case
@@ -190,9 +200,9 @@ const PROJECTION_SQL = `select s.id,
              and event.event_type = 'v2_runtime_preview.received'
            order by event.created_at desc
            limit 1) as pre_consent_preview
-       , coalesce(s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}', false) as report_projection_required
+       , ${REQUIRES_PUBLICATION_SQL} as report_projection_required
        , case
-           when s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}' then
+           when ${REQUIRES_PUBLICATION_SQL} then
              exists (
                select 1 from scan_events merged
                 where merged.scan_id = s.id
@@ -205,7 +215,7 @@ const PROJECTION_SQL = `select s.id,
            else true
          end as report_inputs_ready
        , case
-           when s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}' then exists (
+           when ${REQUIRES_PUBLICATION_SQL} then exists (
              select 1 from scan_snapshots projection
               where projection.scan_id = s.id
                 and projection.report_projection_status = 'ready'
@@ -235,7 +245,8 @@ const PROJECTION_SQL = `select s.id,
          ) as browser_extension_normalization_ready
   from scans s
   left join domains d on d.id = s.domain_id
-  left join scan_snapshots snapshot on snapshot.scan_id = s.id`;
+  left join scan_snapshots snapshot on snapshot.scan_id = s.id
+  left join public.scan_score_materialization_requests publication_request on publication_request.scan_id = s.id`;
 
 export async function getOrganizationScanStatusProjection(input: {
   organizationId: string;
@@ -327,13 +338,14 @@ export function isCompletedScanStatus(status: string) {
 }
 
 export function buildLightweightScanStatusResponse(projection: ScanStatusProjection) {
+  const publicationFailed = projection.publicationRequestStatus === "terminal_failure";
   return {
     domain: projection.domainHostname,
     browserExtensionNormalizationReady: projection.browserExtensionNormalizationReady,
-    ...(projection.preConsentPreview ? { preConsentPreview: projection.preConsentPreview } : {}),
+    ...(!publicationFailed && projection.preConsentPreview ? { preConsentPreview: projection.preConsentPreview } : {}),
     reportReadiness: {
       generation: projection.reportGeneration,
-      status: projection.reportReady ? "ready" : "finalizing"
+      status: publicationFailed ? "failed" : projection.reportReady ? "ready" : "finalizing"
     },
     postRefusalObservationExpected: projection.postRefusalObservationExpected,
     progress: {
@@ -345,12 +357,13 @@ export function buildLightweightScanStatusResponse(projection: ScanStatusProject
       errorMessage: projection.errorMessage,
       id: projection.id,
       startedAt: projection.startedAt,
-      status: projection.status,
+      status: publicationFailed ? "failed" : projection.status,
     },
   };
 }
 
 function apiV2ProjectionStatus(projection: ScanStatusProjection, hasNoGo: boolean) {
+  if (projection.publicationRequestStatus === "terminal_failure") return "failed" as const;
   if ((hasNoGo || projection.accessibilityAuditStatus === "limited" && projection.reportReady) && (projection.status === "completed" || projection.status === "completed_limited")) {
     return "completed_limited" as const;
   }
@@ -378,7 +391,13 @@ function apiV2ProjectionStatus(projection: ScanStatusProjection, hasNoGo: boolea
  * Projects the bounded status row into the API v2 job builder input. This path
  * deliberately excludes report hydration and artifact materialization.
  */
-export function buildLightweightApiV2ScanStatusInput(projection: ScanStatusProjection) {
+export function buildLightweightApiV2ScanStatusInput(
+  projection: ScanStatusProjection,
+  options: { persistedReportVerified?: boolean } = {},
+) {
+  if (projection.reportProjectionRequired && options.persistedReportVerified === false) {
+    projection = { ...projection, reportReady: false };
+  }
   const runtimeArtifacts = {
     ...(projection.scanNoGoAssessment
       ? { scan_no_go_assessment: projection.scanNoGoAssessment }
@@ -387,15 +406,17 @@ export function buildLightweightApiV2ScanStatusInput(projection: ScanStatusProje
       ? { visual_access_review: projection.visualAccessReview }
       : {}),
   };
-  const noGoProjection = projectExternalScanNoGo(runtimeArtifacts);
+  const noGoProjection = projection.publicationRequestStatus === "terminal_failure" ? null : projectExternalScanNoGo(runtimeArtifacts);
   const status = apiV2ProjectionStatus(projection, Boolean(noGoProjection));
   const terminal = status === "completed" || status === "completed_limited" || status === "failed" || status === "expired" || status === "rate_limited";
-  const score = terminal && projection.reportReady && !noGoProjection && typeof projection.score === "number"
+  const score = (status === "completed" || status === "completed_limited") && projection.reportReady && !noGoProjection && typeof projection.score === "number"
     ? projection.score
     : null;
   const pagesRequested = Math.max(1, projection.pagesRequested ?? 1);
   const pagesScanned = Math.max(0, projection.pagesScanned ?? 0);
-  const reportProjectionError = status === "failed" && projection.reportProjectionStatus === "failed"
+  const reportProjectionError = projection.publicationRequestStatus === "terminal_failure"
+    ? terminalReportPublicationError()
+    : status === "failed" && projection.reportProjectionStatus === "failed"
     ? {
         code: "report_projection_failed",
         message: "The scan completed, but its canonical report result could not be finalized.",
@@ -412,7 +433,7 @@ export function buildLightweightApiV2ScanStatusInput(projection: ScanStatusProje
     status,
     ...(noGoProjection ?? {}),
     ...(reportProjectionError ? { error: reportProjectionError } : {}),
-    ...(projection.preConsentPreview ? { preConsentPreview: projection.preConsentPreview } : {}),
+    ...(projection.publicationRequestStatus !== "terminal_failure" && projection.preConsentPreview ? { preConsentPreview: projection.preConsentPreview } : {}),
     createdAt: projection.createdAt,
     startedAt: projection.startedAt,
     completedAt: projection.completedAt,
@@ -422,7 +443,7 @@ export function buildLightweightApiV2ScanStatusInput(projection: ScanStatusProje
       ? projection.scanFrom
       : undefined,
     score,
-    scoreStatus: terminal && projection.reportReady ? "final" as const : "provisional" as const,
+    scoreStatus: (status === "completed" || status === "completed_limited") && projection.reportReady ? "final" as const : "provisional" as const,
     scoreVersion: score === null ? null : projection.scoreVersion ?? null,
     scoreUpdatedAt: score === null ? null : projection.scoreUpdatedAt ?? projection.completedAt,
     riskLevel: score === null

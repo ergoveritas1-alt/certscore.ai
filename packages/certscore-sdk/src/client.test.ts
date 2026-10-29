@@ -879,3 +879,17 @@ test("SDK preserves separately typed EU and California scores in a Pulse summary
     assert.equal(result.summary?.postureScores?.ccpaCpra.score, 93);
   } finally { mock.restore(); }
 });
+
+
+test("SDK stops after one status read for a terminal publication failure", async () => {
+  const status = { type: "certscore_scan_job", jobId: "scan_publication_failure", scanId: "scan_publication_failure", status: "failed",
+    score: null, retryAfterSeconds: null, error: { code: "report_publication_failed", message: "The report could not be published.",
+      retryable: false, retryAfterSeconds: null, recommendedNextAction: "Stop polling this scan." } };
+  const mock = installFetch([{ status: 200, body: status }]);
+  try {
+    await assert.rejects(() => new CertScoreClient().scans.wait({ ...status, status: "running", error: undefined } as any, { pollIntervalMs: 0 }),
+      (error: unknown) => error instanceof CertScoreScanFailedError && error.code === "report_publication_failed" && error.scanId === status.scanId);
+    assert.equal(mock.calls.length, 1);
+    assert.match(mock.calls[0]!, /\/status$/);
+  } finally { mock.restore(); }
+});

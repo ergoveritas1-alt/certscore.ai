@@ -11,15 +11,15 @@ const analytics = [
 ] as const;
 
 test("C3 exact first-party analytics cookies retain purpose, canonical identity and typed provenance", () => {
-  assert.equal(getCanonicalVendorRegistryManifest().cookieProviderResolverVersion, "certscore-cookie-provider-2026-10-23-v5");
+  assert.equal(getCanonicalVendorRegistryManifest().cookieProviderResolverVersion, "certscore-cookie-provider-2026-10-27-v6");
   for (const [name, vendor, entityId] of analytics) {
     const row = resolveCanonicalCookieClassification(name, {cookieDomain:".example.test"});
-    assert.equal(row.version, "certscore.cookie-purpose.v7");
+    assert.equal(row.version, "certscore.cookie-purpose.v8");
     assert.equal(row.category, "analytics");
     assert.equal(row.essentiality, "non_essential");
     assert.equal(row.provider?.vendor, vendor);
     assert.equal(row.provider?.registryAttribution.entityId, entityId);
-    assert.equal(row.provider?.registryAttribution.resolverVersion, "certscore-cookie-provider-2026-10-23-v5");
+    assert.equal(row.provider?.registryAttribution.resolverVersion, "certscore-cookie-provider-2026-10-27-v6");
     assert.deepEqual(readCookieClassification(JSON.parse(JSON.stringify(row)), name, "example.test"), row);
     assert.equal(readCookieClassification(row, name, "other.test"), null);
     const fresh = resolveCanonicalActionStoragePurpose({storageType:"cookie",name,hostname:"example.test"});

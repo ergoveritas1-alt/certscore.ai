@@ -81,7 +81,7 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   const body = await response.json();
   assert.equal(body.openapi, "3.1.1");
   assert.equal(body.info.title, "CertScore Pulse GPT Action API beta");
-  assert.equal(body.info.version, "0.5.5");
+  assert.equal(body.info.version, "0.5.6");
   assert.equal(body.paths["/api/v1/pulse/gpt"].get.operationId, "getPulseForUrl");
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.operationId, "getPulseJobStatus");
   assert.equal(body.paths["/api/v1/pulse/gpt/scan/{scanId}"].get.operationId, "getPulseByScanId");
@@ -210,7 +210,7 @@ test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app 
   const body = JSON.parse(rawBody);
   assert.equal(body.openapi, "3.1.0");
   assert.equal(body.info.title, "CertScore Pulse API beta");
-  assert.equal(body.info.version, "0.5.5");
+  assert.equal(body.info.version, "0.5.6");
   assert.ok(body.paths["/api/v1/pulse"]);
   assert.match(rawBody, /forceNewScan/);
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.responses["429"].content["application/json"].schema.$ref, "#/components/schemas/PulseError");

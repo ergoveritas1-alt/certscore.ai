@@ -9,16 +9,33 @@ export const gpcRequestFailureCodeSchema = z.enum(["none", "unknown", "ERR_ABORT
   "ERR_TIMED_OUT", "ERR_CERT_AUTHORITY_INVALID", "other_network_error"]);
 export const gpcRequestBlockedReasonSchema = z.enum(["other", "csp", "mixed-content", "origin", "inspector", "subresource-filter",
   "content-type", "coep-frame-resource-needs-coep-header", "corp-not-same-origin", "corp-not-same-site", "unknown"]);
+export const gpcRequestCorsErrorSchema=z.enum(["HeaderDisallowedByPreflightResponse","InvalidAllowHeadersPreflightResponse","PreflightInvalidStatus","PreflightMissingAllowOriginHeader","PreflightAllowOriginMismatch","MissingAllowOriginHeader","AllowOriginMismatch","other"]);
 const cdpDiagnostic = z.object({ requestId: z.string().min(1).max(160), loaderId: z.string().max(160),
   isMainFrame: z.boolean(), resourceType: z.string().max(32),
   requestStartEpochMs: z.number().nonnegative(), timingBasis: z.enum(["request_event", "response_timing"]),
   requestHeader: z.string().max(8).nullable(),
   terminal: z.enum(["unknown", "response_received", "finished", "failed"]), canceled: z.boolean(),
   failureCode: gpcRequestFailureCodeSchema.optional(),
+  responseStatus:z.number().int().min(100).max(599).nullable().optional(),
+  corsError:gpcRequestCorsErrorSchema.nullable().optional(),corsHeader:z.literal("sec-gpc").optional(),
   blockedReason: gpcRequestBlockedReasonSchema.nullable().optional(),
   extraInfoCount: time, chainRequestCount: time,
   extraInfoHeader: z.string().max(8).nullable(),
   extraInfoStatus: z.enum(["single_request_single_extra_info", "unavailable", "ambiguous_redirect_or_extra_info"]),
+}).strict();
+const requestDiagnosticRowSchema=z.object({
+      eventId: z.string().min(1).max(160), urlSha256: hash,
+      method: z.string().max(32), resourceType: z.string().max(32),
+      isMainFrame: z.boolean().nullable(), serviceWorker: z.boolean().nullable(),
+      requestStartEpochMs: z.number().nonnegative().nullable(),
+      failure: z.enum(["none", "aborted", "network_error", "unknown"]),
+      failureCode: gpcRequestFailureCodeSchema.optional(),
+      candidateCount: time,
+      correlation: z.enum(["unique_url_method_start_time", "ambiguous", "unmatched", "timing_unavailable"]),
+      cdp: cdpDiagnostic.nullable(),
+      urlMethodCandidateCount: time.optional(),
+      /** Candidate details remain explicitly unbound when exact timing is absent. */
+      unboundCandidates: z.array(cdpDiagnostic).max(3).optional(),
 }).strict();
 export const gpcObservationSessionSchema = z.object({
   contractVersion: z.enum(["certscore.gpc-observation-session.v1", "certscore.gpc-observation-session.v2"]),
@@ -71,22 +88,10 @@ export const gpcObservationSessionSchema = z.object({
   listener: z.object({ callbacks: time, dropped: time, registered: z.boolean() }).strict(),
   /** Correlation aids only. These never replace the request's original header proof. */
   requestDiagnostics: z.object({
-    contractVersion: z.literal("certscore.gpc-request-diagnostics.v1"),
+    contractVersion: z.enum(["certscore.gpc-request-diagnostics.v1","certscore.gpc-request-diagnostics.v2"]),
     observedCdpRequests: time, droppedCdpEvents: time, droppedDiagnostics: time,
-    missingHeaders: z.array(z.object({
-      eventId: z.string().min(1).max(160), urlSha256: hash,
-      method: z.string().max(32), resourceType: z.string().max(32),
-      isMainFrame: z.boolean().nullable(), serviceWorker: z.boolean().nullable(),
-      requestStartEpochMs: z.number().nonnegative().nullable(),
-      failure: z.enum(["none", "aborted", "network_error", "unknown"]),
-      failureCode: gpcRequestFailureCodeSchema.optional(),
-      candidateCount: time,
-      correlation: z.enum(["unique_url_method_start_time", "ambiguous", "unmatched", "timing_unavailable"]),
-      cdp: cdpDiagnostic.nullable(),
-      urlMethodCandidateCount: time.optional(),
-      /** Candidate details remain explicitly unbound when exact timing is absent. */
-      unboundCandidates: z.array(cdpDiagnostic).max(3).optional(),
-    }).strict()).max(256),
+    missingHeaders:z.array(requestDiagnosticRowSchema).max(256),
+    selectedRequests:z.array(requestDiagnosticRowSchema).max(32).optional(),
   }).strict().optional(),
   limitationKeys: z.array(z.string().min(1).max(160)).max(32),
 }).strict().superRefine((p, ctx) => {
@@ -133,6 +138,21 @@ export const gpcObservationSessionSchema = z.object({
   if (p.requests.some(r => r.preTransmissionBlock && (p.contractVersion !== "certscore.gpc-observation-session.v2" ||
     r.secGpc !== null || !p.mainDocument || r.preTransmissionBlock.documentToken !== p.mainDocument.documentToken || r.preTransmissionBlock.observedAtMs < r.timestampMs || r.preTransmissionBlock.observedAtMs > p.captureEndedAtMs)))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Pre-transmission blocks require v2, unchanged missing header and same-request bounded readback." });
+  const diagnostics=p.requestDiagnostics;
+  const selected=diagnostics?.selectedRequests??[];
+  const allDiagnostics=[...(diagnostics?.missingHeaders??[]),...selected];
+  if(diagnostics&&((diagnostics.contractVersion==="certscore.gpc-request-diagnostics.v2")!==(diagnostics.selectedRequests!==undefined)||
+    allDiagnostics.length>256||new Set(allDiagnostics.map(r=>r.eventId)).size!==allDiagnostics.length||
+    selected.some(r=>!p.requestProofCapture?.rows.some(proof=>proof.eventId===r.eventId)||p.requests.find(request=>request.eventId===r.eventId)?.secGpc!=="1")||
+    allDiagnostics.some(d=>{
+      const request=p.requests.find(r=>r.eventId===d.eventId);
+      const cdpRows=[...(d.cdp?[d.cdp]:[]),...(d.unboundCandidates??[])];
+      return !request||request.urlSha256!==d.urlSha256||
+        (d.correlation==="unique_url_method_start_time")!==(d.cdp!==null&&d.candidateCount===1)||
+        cdpRows.some(c=>c.extraInfoStatus==="single_request_single_extra_info"&&(c.chainRequestCount!==1||c.extraInfoCount!==1)||
+          c.corsHeader!==undefined&&!c.corsError||
+          diagnostics.contractVersion==="certscore.gpc-request-diagnostics.v1"&&(c.responseStatus!==undefined||c.corsError!==undefined||c.corsHeader!==undefined));
+    })))ctx.addIssue({code:z.ZodIssueCode.custom,message:"Selected request diagnostics must share the existing 256-row cap and retain source-bound, versioned correlation."});
   if (p.requestDiagnostics?.missingHeaders.some(d => {
     const request = p.requests.find(r => r.eventId === d.eventId);
     return !request || request.urlSha256 !== d.urlSha256 || request.secGpc === "1" ||

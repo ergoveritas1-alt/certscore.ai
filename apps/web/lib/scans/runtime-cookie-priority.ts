@@ -1,4 +1,4 @@
-import { COOKIE_CLASSIFICATION_VERSION } from "@certscore/contracts";
+import { usesBoundCookieClassificationVersion } from "@certscore/contracts";
 import {
   getRuntimeCookiePrimaryProvider,
   getRuntimeCookieEvidenceIdentity,
@@ -64,7 +64,7 @@ export function getRuntimeCookieFirstSeenMs(row: RuntimeCookieEvidenceRow) {
 }
 
 export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
-  if (row.cookiePurposePolicyVersion === COOKIE_CLASSIFICATION_VERSION) return row.cookieClassification?.provider?.vendor ?? "Unknown";
+  if (usesBoundCookieClassificationVersion(row.cookiePurposePolicyVersion)) return row.cookieClassification?.provider?.vendor ?? "Unknown";
   if (/^(c_code|countrycode|statecode|geodata|geo_country|trp-country|trp-language)$/i.test(row.cookieName)) {
     return row.domain ?? row.cookieName;
   }
@@ -124,7 +124,7 @@ export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
 }
 
 export function getRuntimeCookiePurposeLabel(row: RuntimeCookieEvidenceRow) {
-  if (row.cookiePurposePolicyVersion === COOKIE_CLASSIFICATION_VERSION) return normalizeInventoryLabel(row.category);
+  if (usesBoundCookieClassificationVersion(row.cookiePurposePolicyVersion)) return normalizeInventoryLabel(row.category);
   const vendorLabel = getRuntimeCookieBrandLabel(row);
   const cookieNameVendor = findRuntimeCookieNameVendor(row.cookieName);
   if (cookieNameVendor?.category) return normalizeInventoryLabel(cookieNameVendor.category);
@@ -194,7 +194,7 @@ export function getRuntimeCookiePurposeLabel(row: RuntimeCookieEvidenceRow) {
 }
 
 function getRuntimeCookieAttribution(row: RuntimeCookieEvidenceRow) {
-  if (row.cookiePurposePolicyVersion === COOKIE_CLASSIFICATION_VERSION) {
+  if (usesBoundCookieClassificationVersion(row.cookiePurposePolicyVersion)) {
     const provider = row.cookieClassification?.provider;
     return { vendor: provider?.vendor ?? "Unknown", attributionEvidence: provider ? {
       signatureId: provider.registryAttribution.ruleIds[0]!, matchedOn: "retained_signature" as const, matchedValue: row.cookieName,
@@ -214,7 +214,7 @@ function getRuntimeCookieAttribution(row: RuntimeCookieEvidenceRow) {
 }
 
 function getRuntimeCookieSyncedIdentifiers(row: RuntimeCookieEvidenceRow, vendor: string) {
-  if (row.cookiePurposePolicyVersion === COOKIE_CLASSIFICATION_VERSION) return [];
+  if (usesBoundCookieClassificationVersion(row.cookiePurposePolicyVersion)) return [];
   const haystack = [row.initiatorVendor, row.initiatorDomain, row.initiatorUrl].filter(Boolean).join(" ").toLowerCase();
   return vendor !== "Google" && /(google|googlesyndication|doubleclick|securepubads|_ga|_gid|gcl_)/i.test(haystack) ? ["Google"] : [];
 }

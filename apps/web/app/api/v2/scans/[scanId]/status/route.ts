@@ -55,7 +55,7 @@ export async function GET(request: Request, context: RouteContext) {
     const scanStatus = persistedReport
       ? buildApiV2ScanStatus(persistedReport)
       : buildApiV2ScanJobFromPulseStatus(
-          buildLightweightApiV2ScanStatusInput(projection),
+          buildLightweightApiV2ScanStatusInput(projection, { persistedReportVerified: false }),
           { requestedUrl: projection.pageUrl ?? undefined }
         );
     const retryAfter = scanStatus.retryAfterSeconds === null || scanStatus.retryAfterSeconds === undefined

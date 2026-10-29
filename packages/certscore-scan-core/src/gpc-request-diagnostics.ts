@@ -1,11 +1,12 @@
 import type { CDPSession, Request } from "playwright";
-import { gpcRequestFailureCodeSchema, gpcRequestBlockedReasonSchema, type GpcObservationSession } from "@certscore/contracts";
+import { gpcRequestFailureCodeSchema, gpcRequestBlockedReasonSchema,gpcRequestCorsErrorSchema, type GpcObservationSession } from "@certscore/contracts";
 import { gpcDocumentHash } from "./gpc-signal-capture.js";
 
 type Diagnostics = NonNullable<GpcObservationSession["requestDiagnostics"]>;
 type Candidate = { requestId: string; loaderId: string; isMainFrame: boolean; resourceType: string;
   requestStartEpochMs: number; requestEventEpochMs: number; monotonicTime: number; timingBasis: "request_event" | "response_timing";
   terminal: "unknown" | "response_received" | "finished" | "failed"; canceled: boolean; failureCode: ReturnType<typeof failureCode>;
+  responseStatus:number|null;corsError:ReturnType<typeof gpcRequestCorsErrorSchema.parse>|null;corsHeader?:"sec-gpc";
   blockedReason: NonNullable<Diagnostics["missingHeaders"][number]["cdp"]>["blockedReason"];
   requestHeader: string | null; urlSha256: string; method: string };
 type RequestHandle = Pick<Request, "timing" | "method" | "resourceType" | "serviceWorker" | "failure">;
@@ -39,7 +40,7 @@ export function createGpcRequestDiagnostics(cdp: CDPSession, mainFrameId: string
     if (p.redirectResponse) updateResponse(p.requestId, p.redirectResponse);
     const candidate: Candidate = { requestId: p.requestId, loaderId: bounded(p.loaderId, 160), isMainFrame: p.frameId === mainFrameId,
       resourceType: bounded(p.type, 32), requestStartEpochMs: p.wallTime * 1000, requestEventEpochMs: p.wallTime * 1000,
-      monotonicTime: p.timestamp, timingBasis: "request_event", terminal: "unknown", canceled: false, failureCode: "none", blockedReason: null,
+      monotonicTime: p.timestamp, timingBasis: "request_event", terminal: "unknown", canceled: false, failureCode: "none", blockedReason: null,responseStatus:null,corsError:null,
       requestHeader: header(p.request.headers), urlSha256: gpcDocumentHash(p.request.url), method: p.request.method };
     candidates.push(candidate);
     const chain = byId.get(p.requestId) ?? []; chain.push(candidate); byId.set(p.requestId, chain);
@@ -50,6 +51,7 @@ export function createGpcRequestDiagnostics(cdp: CDPSession, mainFrameId: string
     const candidate = byId.get(requestId)?.at(-1);
     if (!candidate || stopped) return;
     candidate.terminal = "response_received";
+    if(Number.isInteger(response?.status)&&response.status>=100&&response.status<=599)candidate.responseStatus=response.status;
     // Public Playwright timing uses ResourceTiming.requestTime, not necessarily
     // requestWillBeSent.wallTime. Convert the same CDP monotonic clock to epoch.
     const requestTime = response?.timing?.requestTime;
@@ -64,6 +66,10 @@ export function createGpcRequestDiagnostics(cdp: CDPSession, mainFrameId: string
     c.terminal = "failed"; c.canceled = p.canceled === true; c.failureCode = p.errorText ? failureCode(p.errorText) : "unknown";
     const reason = gpcRequestBlockedReasonSchema.safeParse(p.blockedReason);
     c.blockedReason = p.blockedReason === undefined ? null : reason.success ? reason.data : "unknown";
+    if(typeof p.corsErrorStatus?.corsError==="string"){
+      const cors=gpcRequestCorsErrorSchema.safeParse(p.corsErrorStatus.corsError);c.corsError=cors.success?cors.data:"other";
+      if(typeof p.corsErrorStatus.failedParameter==="string"&&p.corsErrorStatus.failedParameter.toLowerCase()==="sec-gpc")c.corsHeader="sec-gpc";
+    }
   } };
   const onExtra = (p: any) => {
     if (stopped) return;
@@ -79,20 +85,20 @@ export function createGpcRequestDiagnostics(cdp: CDPSession, mainFrameId: string
     track(eventId: string, request: RequestHandle, isMainFrame: boolean | null) {
       if (!stopped && handles.size < 5000) handles.set(eventId, { request, isMainFrame });
     },
-    finish(requests: GpcObservationSession["requests"]): Diagnostics {
+    finish(requests: GpcObservationSession["requests"],selectedEventIds:ReadonlySet<string>=new Set()): Diagnostics {
       stopped = true;
       const describe = (candidate: Candidate): NonNullable<Diagnostics["missingHeaders"][number]["cdp"]> => {
         const chainCount = byId.get(candidate.requestId)!.length;
         const extraHeaders = extra.get(candidate.requestId) ?? [];
         return { requestId: candidate.requestId, loaderId: candidate.loaderId, isMainFrame: candidate.isMainFrame,
           resourceType: candidate.resourceType, requestStartEpochMs: candidate.requestStartEpochMs, timingBasis: candidate.timingBasis,
+          responseStatus:candidate.responseStatus,corsError:candidate.corsError,...(candidate.corsHeader?{corsHeader:candidate.corsHeader}:{}),
           requestHeader: candidate.requestHeader, terminal: candidate.terminal, canceled: candidate.canceled, failureCode: candidate.failureCode, blockedReason: candidate.blockedReason,
           extraInfoCount: extraHeaders.length, chainRequestCount: chainCount,
           extraInfoHeader: chainCount === 1 && extraHeaders.length === 1 ? extraHeaders[0]! : null,
           extraInfoStatus: chainCount !== 1 || extraHeaders.length > 1 ? "ambiguous_redirect_or_extra_info" : extraHeaders.length === 1 ? "single_request_single_extra_info" : "unavailable" };
       };
-      const missing = requests.filter(r => r.secGpc !== "1");
-      const missingHeaders: Diagnostics["missingHeaders"] = missing.slice(0, 256).map(row => {
+      const describeRequest=(row:GpcObservationSession["requests"][number]):Diagnostics["missingHeaders"][number]=>{
         const handle = handles.get(row.eventId);
         let start: number | null = null, method = "", resourceType = "", serviceWorker: boolean | null = null;
         let failure: Diagnostics["missingHeaders"][number]["failure"] = "unknown";
@@ -116,9 +122,15 @@ export function createGpcRequestDiagnostics(cdp: CDPSession, mainFrameId: string
           correlation: start === null ? "timing_unavailable" : matches.length === 1 ? "unique_url_method_start_time" : matches.length ? "ambiguous" : "unmatched",
           cdp: candidate ? describe(candidate) : null,
           urlMethodCandidateCount: possible.length, unboundCandidates: candidate ? [] : possible.slice(0, 3).map(describe) };
-      });
-      return { contractVersion: "certscore.gpc-request-diagnostics.v1", observedCdpRequests, droppedCdpEvents,
-        droppedDiagnostics: Math.max(0, missing.length - 256), missingHeaders };
+      };
+      const missing=requests.filter(r=>r.secGpc!=="1");
+      const missingHeaders=missing.slice(0,256).map(describeRequest);
+      // Preserve existing missing-header diagnostics. Reuse only their unused
+      // slots for already-selected proofs; no extra CDP listeners/commands/wait.
+      const desired=requests.filter(r=>r.secGpc==="1"&&selectedEventIds.has(r.eventId));
+      const selectedRequests=desired.slice(0,Math.min(32,Math.max(0,256-missingHeaders.length))).map(describeRequest);
+      return {contractVersion:"certscore.gpc-request-diagnostics.v2",observedCdpRequests,droppedCdpEvents,
+        droppedDiagnostics:Math.max(0,missing.length-256)+desired.length-selectedRequests.length,missingHeaders,selectedRequests};
     },
     close() { stopped = true; cdp.off("Network.requestWillBeSent", onRequest); cdp.off("Network.requestWillBeSentExtraInfo", onExtra);
       cdp.off("Network.responseReceived", onResponse); cdp.off("Network.loadingFinished", onFinished); cdp.off("Network.loadingFailed", onFailed); handles.clear(); },

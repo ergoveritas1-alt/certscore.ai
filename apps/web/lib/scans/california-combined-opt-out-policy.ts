@@ -1,7 +1,7 @@
 import {createHash} from "node:crypto";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY,californiaCombinedOptOutRiskSchema,gpcResponseAssessmentSchema,
   isCurrentCaliforniaChoiceInspection,type CaliforniaPrivacyReview} from "@certscore/contracts";
-import {CALIFORNIA_GPC_RESPONSE_POLICY_VERSION,deriveCaliforniaGpcResponsePolicy} from "./california-gpc-response-policy";
+import {CALIFORNIA_GPC_RESPONSE_POLICY_VERSION,INDEX_AUCTION_GPC_POLICY_VERSION,MAGNITE_AUCTION_GPC_POLICY_VERSION,deriveCaliforniaGpcResponsePolicy} from "./california-gpc-response-policy";
 import {hasVerifiedCustomerGpcEvidence} from "./gpc-customer-policy";
 
 /** New materializations only. A scoped badge is not sufficient absence proof.
@@ -28,7 +28,7 @@ export function deriveCombinedOptOutRisk(review:CaliforniaPrivacyReview,value:un
   ])].sort().slice(0,32);
   if(!advertisingEvidenceIds.length)return undefined;
   const contradiction=policy.scoreEffect==="deduction" &&
-    (policy.reasonCode==="verified_gpc_choice_contradiction" || policy.policyVersion===CALIFORNIA_GPC_RESPONSE_POLICY_VERSION);
+    (policy.reasonCode==="verified_gpc_choice_contradiction" || [CALIFORNIA_GPC_RESPONSE_POLICY_VERSION,INDEX_AUCTION_GPC_POLICY_VERSION,MAGNITE_AUCTION_GPC_POLICY_VERSION].some(v=>v===policy.policyVersion));
   const supported=policy.scoreEffect==="none" && o.status==="complete" && o.delivery.fullContextVerified && o.requests.complete &&
     o.semanticProbe==="observed" && o.registration.cmpGpcSignal==="received" &&
     o.registration.sale==="opted_out" && o.registration.sharing==="opted_out";

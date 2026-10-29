@@ -10,7 +10,7 @@ import {supportsCaliforniaRuntimeLink} from "./california-runtime-link-policy";
 import {CALIFORNIA_RUNTIME_LINK_POLICY,CALIFORNIA_NINE_POINT_LINK_POLICY} from "@certscore/contracts";
 import {californiaPotentialRiskSchema,potentialRiskRecipients,CA_POTENTIAL_RISK_FINDING,CA_POTENTIAL_RISK_POLICY,potentialRiskPoints,potentialRiskIncrement,CA_POTENTIAL_RISK_LEGACY_POLICY} from "./california-potential-risk-policy";
 import {deriveCaliforniaGpcResponsePolicy} from "./california-gpc-response-policy";
-import {californiaPostRejectAssessmentSchema,californiaPostRejectPoints,CALIFORNIA_POST_REJECT_POLICY,CALIFORNIA_POST_REJECT_FINDING} from "./california-post-reject-policy";
+import {californiaPostRejectAssessmentSchema,californiaPostRejectPoints,CALIFORNIA_POST_REJECT_POLICY,INDEX_AUCTION_POST_REJECT_POLICY,MAGNITE_AUCTION_POST_REJECT_POLICY,CALIFORNIA_POST_REJECT_FINDING} from "./california-post-reject-policy";
 import {deriveGppPropagationPolicy, GPP_PROPAGATION_FINDING_ID, GPP_PROPAGATION_POLICY_KEY, GPP_PROPAGATION_POINTS} from "./gpp-propagation-policy";
 import { accessibilityFindingDeductionBreakdown } from "./accessibility-score-policy";
 import { californiaOptOutCollectionPolicy } from "./california-opt-out-collection-policy";
@@ -238,7 +238,7 @@ export function deriveCaliforniaRegulatoryScore(input: {
       effect.policyVersion===a.policyVersion&&effect.policyKey==="california.choice_enforcement.post_reject"&&
       effect.deductionPoints===californiaPostRejectPoints(a)))continue;
     a.recipientIds.forEach(id=>choiceRecipients.add(id));choiceSupported=true;rejectChoiceSupported=true;
-    if(a.policyVersion===CALIFORNIA_POST_REJECT_POLICY)rejectScopePolicyApplied=true;
+    if(a.policyVersion===CALIFORNIA_POST_REJECT_POLICY||a.policyVersion===INDEX_AUCTION_POST_REJECT_POLICY||a.policyVersion===MAGNITE_AUCTION_POST_REJECT_POLICY)rejectScopePolicyApplied=true;
   }
   if (choiceSupported) {
     // Union canonical entity identities across both choices. The initial effect

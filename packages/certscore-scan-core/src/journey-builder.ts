@@ -1,4 +1,4 @@
-import { readCookieClassification, COOKIE_CLASSIFICATION_VERSION } from "@certscore/contracts";
+import { usesBoundCookieClassificationVersion, readCookieClassification } from "@certscore/contracts";
 import type {
   CookieEvent,
   CookieSnapshot,
@@ -45,7 +45,7 @@ const meaningfulNonTrackerPurposes = new Set<NormalizedVendorObservation["purpos
 function usesCookieClassificationV3(event: RuntimeEvidenceEvent) {
   return ("cookieClassification" in event && event.cookieClassification !== undefined) ||
     ("cookieEssentialityReasonCodes" in event && Array.isArray(event.cookieEssentialityReasonCodes) &&
-      event.cookieEssentialityReasonCodes.includes(`cookie_purpose_policy:${COOKIE_CLASSIFICATION_VERSION}`));
+      usesBoundCookieClassificationVersion(retainedCookiePurposePolicy(event.cookieEssentialityReasonCodes)));
 }
 
 export function classifyCookieEvents(
@@ -55,7 +55,8 @@ export function classifyCookieEvents(
   return cookieEvents.map((event) => {
     if (usesCookieClassificationV3(event)) {
       const retained = readCookieClassification(event.cookieClassification, event.cookieName, event.cookieDomain ?? event.hostname);
-      const classification = retainedCookiePurposePolicy(event.cookieEssentialityReasonCodes) === COOKIE_CLASSIFICATION_VERSION &&
+      const version = retainedCookiePurposePolicy(event.cookieEssentialityReasonCodes);
+      const classification = usesBoundCookieClassificationVersion(version) && retained?.version === version &&
         retained?.category === event.cookiePurpose && retained?.essentiality === event.cookieEssentiality ? retained : null;
       const matches = vendors.filter(vendor => vendor.matchedEvidenceIds.includes(event.eventId));
       const related = matches.length === 1 ? matches[0] : undefined;

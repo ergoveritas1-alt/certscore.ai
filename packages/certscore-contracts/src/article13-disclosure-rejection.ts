@@ -46,6 +46,32 @@ export type Article13DisclosureRejectReasonOptions = {
   mode?: Article13DisclosureRejectionMode;
 };
 
+export const ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION = "article13_disclosure_eligibility.v2" as const;
+
+/** A list of information the law requires is not the information itself.
+ * This is a negative semantic guard, never a new source of positive credit. */
+export function hasNonSubstantiveDisclosureContext(value: string, topic: string | undefined): boolean {
+  if (!["data_retention", "recipients_or_vendor_categories", "dpo_contact"].includes(topic ?? "")) return false;
+  const text = normalizeArticle13Whitespace(value);
+  const plain = text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+  if (topic === "recipients_or_vendor_categories") {
+    if (hasSubstantiveRecipientsEvidence(text)) return false;
+    // Notifying existing recipients about rectification/deletion describes a
+    // rights procedure, without identifying a recipient or recipient category.
+    if (/(?:informera|informer|notifier).{0,90}destinataires.{0,180}(?:effacement|rectification|limitation de traitement)/u.test(plain)) return true;
+    if (/(?:partageons|transmettons|communiquons|tovabbitjuk|megosztjuk|weitergegeben).{0,160}(?:prestataires|hebergeurs|szolgaltato|adatfeldolgozo|dienstleister)/u.test(plain)) return false;
+  }
+  if (topic === "data_retention" && (hasSubstantiveRetentionEvidence(text) ||
+      /\b\d{1,4}\s*(?:days?|weeks?|months?|years?|jours?|mois|ans?|tage?|monate?|jahre?|nap(?:ig)?|honap(?:ig)?|ev(?:ig)?)(?=$|[^\p{L}])/u.test(plain))) return false;
+  if (topic === "dpo_contact" && /[\p{L}\d._%+-]+@[\p{L}\d.-]+\.[\p{L}]{2,}|\b(?:tel|phone|telefon)\s*[:+]\s*\d/iu.test(text)) return false;
+  const list = /[•●▪]/u.test(text) || text.includes(";");
+  const dutyPreamble = /(?:following|additional) information|(?:provide|shall provide|must provide).{0,60}information|folgenden informationen|informations? (?:suivantes|complementaires)|következő(?: kiegészítő)? információkat/iu.test(text) ||
+    /kovetkezo(?: kiegeszito)? informaciokat/u.test(plain);
+  const unfilledRecipientItem = topic === "recipients_or_vendor_categories" &&
+    /(?:cimzettjei|cimzettek kategoriai).{0,35}ha van ilyen|(?:recipients|categories of recipients).{0,35}if any/u.test(plain);
+  return list && (dutyPreamble || unfilledRecipientItem);
+}
+
 export function isArticle13DisclosureEvidenceUsable(
   value: string,
   disclosureType: Article13DisclosureType,
@@ -64,13 +90,16 @@ export function isDataSubjectRightsDisclosureEvidenceUsable(value: string) {
 
 /** Data named in the same retained witness, including structural table cells. */
 export function hasProcessingPurposeDataContext(value: string) {
-  return /\b(?:personal data|personal information|your data|your information|this information|account data|information we collect|data we collect|cookies|processing of data|data will be processed|contact information|financial information|digital information|contact details|email address|device data)\b|\bdata categories\s*:\s*\S/i.test(value);
+  return /\b(?:personal data|personal information|your data|your information|this information|account data|information we collect|data we collect|cookies|processing of data|data will be processed|contact information|financial information|digital information|contact details|email address|device data|application data|application documents|your details|the data|payment information|donation information|technical data|contact data|usage data|name|account information|billing information)\b|\bdata categories\s*:\s*\S/i.test(value);
 }
 
 export function hasSubstantiveProcessingPurposesEvidence(value: string) {
   const text = normalizeArticle13Whitespace(value);
+  // A role/rights clause can mention handling data without saying what it is
+  // used for. Require named data context in this same bounded witness.
+  if (!hasProcessingPurposeDataContext(text)) return false;
   const purposeOutcomePattern =
-    /\b(?:provide|deliver|operate|maintain|improve|develop|personalize|communicate|respond|answer|process(?:ing)?(?=\s+(?:(?:your|the|an?)\s+)?(?:enquir\w*|inquir\w*|applications?|payments?|orders?|transactions?|requests?)\b)|fulfil|fulfill|protect|secure|prevent|detect|measure|analy[sz]e|understand|verify|validate|diagnose|comply|send|administer|manage|support|facilitate|handle|perform|conduct|ensure|keep records?|follow[- ]?up|authenticate|optimise|optimize)\b/i;
+    /\b(?:provide|deliver|operate|maintain|improve|develop|personalize|communicate|respond|answer|process(?:ing)?(?=\s+(?:(?:your|the|an?)\s+)?(?:enquir\w*|inquir\w*|applications?|payments?|orders?|transactions?|requests?)\b)|fulfil|fulfill|protect|secure|prevent|detect|measure|analy[sz]e|understand|verify|validate|diagnose|comply|send|administer|manage|support|facilitate|handle(?=\s+(?:(?:your|the|an?)\s+)?(?:orders?|payments?|enquir\w*|inquir\w*|requests?|applications?|support|accounts?)\b)|perform|conduct|ensure|keep records?|follow[- ]?up|authenticate|optimise|optimize)\b/i;
   // A purpose heading/table header, or a reference to processing for purposes
   // previously consented to, does not say what the data is actually used for.
   // Require an outcome before any heading or grammatical form may qualify.
@@ -293,6 +322,7 @@ export function article13DisclosureRejectReason(
 ): Article13DisclosureRejectReason | null {
   const mode = options.mode ?? "scan_core";
   const text = normalizeArticle13Whitespace(value);
+  if (hasNonSubstantiveDisclosureContext(text, disclosureType)) return "insufficient_row_specific_terms";
   const crossTopicReason = article13CrossTopicRejectReason(text, disclosureType);
   if (crossTopicReason) {
     if (looksLikeArticle13CodeOrConfigText(text)) return "code_or_non_policy_excerpt";

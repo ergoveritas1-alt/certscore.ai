@@ -85,14 +85,26 @@ for (const state of ["loading", "unsettled", "unverifiable", "missing", "complet
   });
 }
 
-test("actual retained SITS forms survive assessment, persistence and both report renderings", async () => {
+test("retained SITS inventory with a representative-access control survives persistence and rendering", async () => {
   const { deriveCollectionSurfaceAssessment } = await import("./local-v2-dag-report");
   const { buildTimelineReportModel } = await import("../../components/scans/report-lab/timeline-report-model");
   const { ShadowScanReport } = await import("../../components/scans/report-lab/shadow-scan-report");
   const scanId = "local-sits-form-verification-20261005";
-  const assessment = deriveCollectionSurfaceAssessment({
+  // The retained inventory alone does not attest representative runtime access.
+  const unavailable = deriveCollectionSurfaceAssessment({
     bundle: { scanId, collectionSurfaceInventory: captured.inventory,
       scanLaneRuns: [{ laneId: "runtime_evidence", executionOutcome: "completed" }],
+    } as unknown as CanonicalEvidenceBundle,
+    canonicalDocumentUrl: captured.url, scanId, assessedAt: captured.capturedAt,
+  });
+  assert.equal(unavailable.assessmentStatus, "not_testable");
+  assert.ok(unavailable.limitationKeys.includes("collection_surface_representative_access_unavailable"));
+  assert.deepEqual(unavailable.forms, []);
+  // Synthetic positive control supplies the missing access fact explicitly;
+  // it does not amend the original retained fixture or attest its production visit.
+  const assessment = deriveCollectionSurfaceAssessment({
+    bundle: { scanId, collectionSurfaceInventory: captured.inventory,
+      scanLaneRuns: [{ laneId: "runtime_evidence", executionOutcome: "success", accessOutcome: "representative_page" }],
     } as unknown as CanonicalEvidenceBundle,
     canonicalDocumentUrl: captured.url, scanId, assessedAt: captured.capturedAt,
   });

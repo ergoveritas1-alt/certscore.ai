@@ -1,4 +1,4 @@
-import { COOKIE_CLASSIFICATION_VERSION } from "@certscore/contracts";
+import { usesBoundCookieClassificationVersion } from "@certscore/contracts";
 import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
 import { preConsentBrowserStorageProjectionSchema } from "@certscore/contracts";
 import { INVENTORY_METRIC_LABELS, inventoryMetricFamily } from "./inventory-resource-semantics";
@@ -1519,7 +1519,7 @@ export function buildRuntimeInventoryGroupRows(input: {
   );
   const candidates: InventoryGroupRow[] = [
     ...groupedCookieRows.map((row): InventoryGroupRow => {
-      const newClassification = row.cookieDetails.some(detail => detail.cookiePurposePolicyVersion === COOKIE_CLASSIFICATION_VERSION);
+      const newClassification = row.cookieDetails.some(detail => usesBoundCookieClassificationVersion(detail.cookiePurposePolicyVersion));
       const providers = row.cookieDetails.map(detail => detail.cookieClassification?.provider).filter(Boolean);
       const uniqueProviders = new Map(providers.map(provider => [provider!.registryAttribution.serviceId, provider!]));
       const retainedProvider = uniqueProviders.size === 1 && providers.length === row.cookieDetails.length ? [...uniqueProviders.values()][0] : null;

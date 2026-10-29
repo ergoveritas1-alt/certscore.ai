@@ -16,7 +16,7 @@ const capture = (body: string, target = url, method = "POST") => captureCaliforn
 
 test("source-reviewed Index banner envelope retains hashed evidence without inventing California purpose", () => {
   const row = capture(JSON.stringify(event()))!;
-  assert.equal(row.proof?.policyVersion, "bounded_ca_request_proof.v7");
+  assert.equal(row.proof?.policyVersion, "bounded_ca_request_proof.v12");
   assert.equal(row.proof?.bodyStatus, "complete");
   assert.equal(row.payload, "inspected_body");
   assert.equal(row.proof?.identifiers.find(id => id.field === "eid_pubcid.org")?.source, "body");
@@ -73,6 +73,6 @@ test("GPC and Reject share the Index parser with one body and header read and th
   assert.equal(reads, result.inspected);
   assert.ok(result.inspected <= 48);
   assert.ok(result.rows.length <= 32);
-  assert.ok(result.rows.every(row => row.proof.proof?.policyVersion === "bounded_ca_request_proof.v7" &&
+  assert.ok(result.rows.every(row => row.proof.proof?.policyVersion === "bounded_ca_request_proof.v12" &&
     row.proof.proof.bodyStatus === "complete" && row.proof.qualification.activity === "unresolved"));
 });

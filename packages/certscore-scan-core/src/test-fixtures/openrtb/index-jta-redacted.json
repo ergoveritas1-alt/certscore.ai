@@ -1,0 +1,12 @@
+{
+  "provenance": "Redacted structural derivative of owner-authorized local capture; not original-body replay or proof of original EID equality.",
+  "sourceBodySha256": "cd2c66e839cc31d63fa0c5493c7e95c302e1591b4db477bbbcf16d18f046f08b",
+  "fixture": {
+    "url": "https://htlb.casalemedia.com/openrtb/pbjs?s=fixture",
+    "method": "POST",
+    "body": "{\"id\":\"fixture\",\"site\":{\"page\":\"https://fixture.test/\",\"domain\":\"fixture\",\"publisher\":{\"domain\":\"fixture\"}},\"ext\":{\"source\":\"prebid\",\"ixdiag\":{\"ls\":true,\"mfu\":1,\"bu\":1,\"iu\":1,\"nu\":1,\"ou\":1,\"allu\":1,\"ren\":false,\"version\":\"fixture\",\"userIds\":[\"fixture\"],\"url\":\"https://fixture.test/\",\"vpd\":false,\"eidLength\":1,\"tmax\":1,\"syncsPerBidder\":1,\"imps\":1,\"fpd\":true,\"pbadslot\":\"fixture\",\"adunitcode\":\"fixture\",\"divId\":\"fixture\"},\"features\":{\"pbjs_enable_multiformat\":{\"activated\":false},\"pbjs_allow_all_eids\":{\"activated\":false}}},\"imp\":[{\"id\":\"fixture\",\"banner\":{\"topframe\":1,\"format\":[{\"w\":1,\"h\":1,\"ext\":{\"siteID\":\"fixture\"}},{\"w\":1,\"h\":1,\"ext\":{\"siteID\":\"fixture\"}}]},\"ext\":{\"dfp_ad_unit_code\":\"fixture\",\"gpid\":\"fixture\",\"tid\":\"G-FIXTURE01\",\"data\":{\"adserver\":{\"name\":\"fixture\",\"adslot\":\"fixture\"},\"pbadslot\":\"fixture\"}}}],\"at\":1,\"source\":{\"tid\":\"G-FIXTURE01\"},\"user\":{\"eids\":[{\"source\":\"pubcid.org\",\"uids\":[{\"id\":\"fixture\",\"atype\":1}]}],\"ext\":{\"eids\":[{\"source\":\"pubcid.org\",\"uids\":[{\"id\":\"fixture\",\"atype\":1}]}]}},\"regs\":{\"ext\":{\"us_privacy\":\"1---\"},\"gpp\":\"[redacted]\",\"gpp_sid\":[7]},\"device\":{\"sua\":{\"source\":1,\"platform\":{\"brand\":\"fixture\"},\"browsers\":[{\"brand\":\"fixture\",\"version\":[\"fixture\"]},{\"brand\":\"fixture\",\"version\":[\"fixture\"]},{\"brand\":\"fixture\",\"version\":[\"fixture\"]}],\"mobile\":1},\"h\":1,\"w\":1}}",
+    "mime": "text/plain",
+    "redacted": true,
+    "originalReplay": false
+  }
+}
