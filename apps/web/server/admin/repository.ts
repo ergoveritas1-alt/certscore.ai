@@ -373,7 +373,7 @@ function adminScanActivityBaseSql(metadataOnly = false, boundedTraffic = false) 
         or ${scanCanaryTargetSql("s.scan_config_json")}
       )`} as canary_filter
       ,${boundedTraffic ? "exists (select 1 from activity_classified bot where bot.scan_id = s.id and bot.macmini)" : scanOriginalRequesterMacMiniSql("s.id", "$22")} as mac_mini_scan_bot_filter
-    from public.scans s
+    from ${boundedTraffic ? "activity_visible_scans" : "public.scans"} s
     left join public.domains d on d.id = s.domain_id
     left join public.industries ind on ind.id = d.industry_primary_id
     left join public.scan_snapshots ss on ss.scan_id = s.id
@@ -659,8 +659,14 @@ function adminScanActivityParams(limit: number, offset: number, filters: AdminSc
 export async function loadAdminScanActivitySnapshot(limit: number, offset: number, filters: AdminScanActivityFilters) {
   const period = filters.timeSpan ?? "24h";
   const window = adminScanActivityWindow(period);
+  const trafficSql = adminTrafficVisibilitySql({
+    trafficClass: "coalesce(s.activity_traffic->>'class','unknown')",
+    excludeMacMiniParameter: "$21", includeInternalQaParameter: "$20",
+    internalQaFilter: "exists (select 1 from activity_canary_scan_ids qa where qa.scan_id = s.id)",
+    macMiniFilter: "exists (select 1 from activity_classified bot where bot.scan_id = s.id and bot.macmini)"
+  });
   const result = await query<AdminScanActivitySnapshotData>(
-    adminScanActivitySnapshotSql(adminScanActivityBaseSql(true, true), true),
+    adminScanActivitySnapshotSql(adminScanActivityBaseSql(true, true), true, trafficSql),
     [...adminScanActivityParams(limit, offset, filters, window.previousStart), window.end, window.start],
     { readOnly: true }
   );

@@ -67,8 +67,10 @@ test("page uses one authorized live cohort and refresh updates chart and table t
   assert.match(page, /\(await scanPagePromise\)\.snapshot/);
   assert.doesNotMatch(page, /getAdminScanOperationalSnapshot|listAdminScansPage/);
   assert.match(page, /formatRequestedDateTime\(scan\.activityAt\)/);
-  assert.match(repository, /adminScanActivitySnapshotSql\(adminScanActivityBaseSql\(true, true\), true\)/);
+  assert.match(repository, /adminScanActivitySnapshotSql\(adminScanActivityBaseSql\(true, true\), true, trafficSql\)/);
   assert.match(repository, /and no_go_flag is not true/);
+  assert.match(repository, /boundedTraffic \? "activity_visible_scans"/);
+  assert.match(adminScanActivitySnapshotSql("with scan_activity as (select 1)",true), /activity_visible_scans as materialized/);
 });
 
 test("basic scan rows skip report payloads and retain an explicit details mode", () => {

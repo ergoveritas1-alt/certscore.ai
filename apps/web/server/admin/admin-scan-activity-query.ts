@@ -11,7 +11,7 @@ export type AdminScanActivitySnapshotData = {
 // One PostgreSQL statement supplies page IDs, totals, chart, comparisons and recency.
 // $1–$26 are the existing activity filters; $27 is the exclusive cutoff and $28
 // the inclusive current-period start. The base lower bound includes the prior period.
-export function adminScanActivitySnapshotSql(base: string, boundedTraffic = false) {
+export function adminScanActivitySnapshotSql(base: string, boundedTraffic = false, visibleTrafficSql = "true") {
   const candidates = `activity_candidates as materialized (
     select s.id as scan_id from public.scans s
       where ($7::timestamptz is null or coalesce(s.completed_at,s.started_at,s.created_at) >= $7::timestamptz)
@@ -25,7 +25,13 @@ export function adminScanActivitySnapshotSql(base: string, boundedTraffic = fals
         and sr.requested_at < $27::timestamptz
         and ($6::text is null or coalesce(s.scan_config_json->>'scanFrom',sr.request_context->>'scanFrom','default') = $6)
   )`;
-  const scopedBase = boundedTraffic ? base.replace(/^with /, `with ${candidates}, ${scanActivityTrafficClassificationCtes("select scan_id from activity_candidates")}, `) : base;
+  // Materialize eligibility before status/no-go predicates can run their
+  // canonical evidence checks. Internal traffic must not pay that per-row cost.
+  const visible = `activity_visible_scans as materialized (
+    select s.* from public.scans s where s.id in (select scan_id from activity_candidates)
+      and (${visibleTrafficSql})
+  )`;
+  const scopedBase = boundedTraffic ? base.replace(/^with /, `with ${candidates}, ${scanActivityTrafficClassificationCtes("select scan_id from activity_candidates")}, ${visible}, `) : base;
   return `${scopedBase},
   current_activity as materialized (
     select * from filtered_activity
