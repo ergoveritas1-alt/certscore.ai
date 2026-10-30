@@ -32,7 +32,7 @@ export function scopeReportPresentation<T extends object>(input: T): T {
   const source = input as Record<string, unknown>;
   const focus = reportPresentationFocus(input);
   const output: Record<string, unknown> = { ...source, reviewFocus: focus };
-  if (!reportSectionInFocus("gpc", focus)) { delete output.gpcResponse; delete output.gpcLaneStatus; }
+  if (!reportSectionInFocus("gpc", focus)) { delete output.gpcResponse; delete output.gpcLaneStatus; delete output.gpcTimeline; }
   if (!reportSectionInFocus("privacy", focus)) { delete output.privacyAuditEvidence; delete output.californiaPrivacyReview; }
   if (!reportSectionInFocus("gdpr-transparency", focus) && Array.isArray(source.gdprTransparencyRows)) output.gdprTransparencyRows = [];
   for (const field of ["findings", "consentRows", "relatedRows", "trackingExternalRows", "preConsentRuntimeRows", "transportRows"] as const) {

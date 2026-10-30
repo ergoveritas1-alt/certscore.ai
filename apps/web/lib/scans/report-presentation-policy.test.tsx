@@ -25,16 +25,18 @@ Object.assign(globalThis,{React});
 
 test("report focus scopes findings and sections with explicit focus overriding scan geography",()=>{
   const source={scan:{id:"scope",originCode:"CA"},reviewFocus:"gdpr_eprivacy",score:{value:80},californiaScore:{score:86},controls:{accept:"Observed"},
-    gpcResponse:{proof:"retained"},privacyAuditEvidence:{proof:"retained"},
+    gpcResponse:{proof:"retained"},gpcTimeline:{clockLabel:"Times from GPC visit start",events:[]},privacyAuditEvidence:{proof:"retained"},
     findings:[{id:"gpc_response",status:"Potential gap"},{id:EU,status:"Potential gap"},{id:"accessibility_priority_group",status:"Observed"}],
     gdprTransparencyRows:[{id:"legal_basis_disclosure_observed",status:"Observed"}],
     consentRows:[{id:"accept_consent_control",status:"Observed"},{id:"post_reject_tracking_reduction",status:"Gap observed"}],
     detailedEvidence:{sections:[{id:"gpc",rows:[]},{id:"privacy",rows:[]},{id:"policy",rows:[{id:"legal_basis_disclosure_observed",status:"Gap observed"},{id:"shared_policy_surface",status:"Observed"}],counts:{checks:2,review:1,limited:0,observed:1,unsupported:0},recap:"2 checks · 1 to review",displayStatus:"Review"}]}};
   const before=structuredClone(source),eu=scopeReportPresentation(source),ca=scopeReportPresentation({...source,reviewFocus:"ccpa_cpra"});
   assert.equal(eu.gpcResponse,undefined);assert.equal(eu.privacyAuditEvidence,undefined);
+  assert.equal(eu.gpcTimeline,undefined,"the EU timeline cannot offer a California GPC session");
   assert.deepEqual(eu.findings.map(f=>f.id),[EU,"accessibility_priority_group"]);
   assert.equal(eu.detailedEvidence.sections.some(s=>s.id==="gpc"||s.id==="privacy"),false);
   assert.equal(ca.gpcResponse,source.gpcResponse);assert.equal(ca.privacyAuditEvidence,source.privacyAuditEvidence);
+  assert.equal(ca.gpcTimeline,source.gpcTimeline);
   assert.deepEqual(ca.findings.map(f=>f.id),["gpc_response","accessibility_priority_group"]);
   assert.deepEqual(ca.gdprTransparencyRows,[]);
   assert.deepEqual(ca.consentRows,[],"EU checklist assessments stay scoped; observed controls have their own shared projection");
