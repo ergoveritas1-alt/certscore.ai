@@ -1,5 +1,6 @@
 import { privacyAuditEvidenceSchema, type DetailedEvidenceRow, type DetailedEvidenceSection } from "@certscore/api-contracts";
 import { EVIDENCE_SECTION_TITLES } from "./detailed-evidence-presentation";
+import { reportStatusLabel } from "./report-status-presentation";
 
 export const PRIVACY_CONTROL_LABELS = { do_not_sell_or_share: "Do Not Sell/Share", your_privacy_choices: "Privacy choices", cookie_settings: "Cookie settings" } as const;
 export const PRIVACY_TOPIC_LABELS = { sale_sharing: "Sale/sharing", collection_purposes: "Collection/purposes", retention: "Retention", privacy_rights: "Privacy rights", opt_out_methods: "Opt-out methods" } as const;
@@ -10,7 +11,7 @@ export function californiaPrivacyEvidence(value: unknown, scanId?: string) {
   const evidence = parsed.success && (!scanId || parsed.data.scanId === scanId) ? parsed.data : null;
   const candidates = evidence?.contractVersion === "certscore.privacy-audit-evidence.v2" ? evidence.controlCandidates : [];
   const row = (field: string, index: number, evidenceRef: string, title: string, summary: string, status: string): DetailedEvidenceRow => ({
-    id: `${field}:${index}`, title, summary, status, displayStatus: status === "Needs review" ? "Review" : status,
+    id: `${field}:${index}`, title, summary, status, displayStatus: reportStatusLabel(status),
     correctionSteps: [], evidenceRefs: [evidenceRef], evidenceTarget: "california-privacy-evidence",
     source: { field: `privacyAuditEvidence.${field}`, rowId: evidenceRef },
   });

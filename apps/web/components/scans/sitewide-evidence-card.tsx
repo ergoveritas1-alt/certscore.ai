@@ -5,6 +5,7 @@ import { sitewideEvidenceGroups, type SitewideEvidencePage } from "../../lib/sca
 import { DetailedEvidenceFinding } from "./detailed-evidence-finding";
 import { checklistRemediation } from "../../lib/scans/checklist-remediation";
 import { EVIDENCE_SECTION_TITLES } from "../../lib/scans/detailed-evidence-presentation";
+import { reportStatusLabel } from "../../lib/scans/report-status-presentation";
 import { EvidenceSectionHeader } from "./evidence-section-header";
 import { evidenceRowAnchor } from "../../lib/scans/report-evidence-navigation";
 
@@ -22,7 +23,7 @@ export function SitewideEvidenceCard({group, children}: {group: keyof typeof sit
     const statuses = new Map<string, number>();
     const summaries = new Map<string, number>();
     for (const row of observations) {
-      const status = row.status === "Review signal" ? "Needs review" : row.status;
+      const status = row.status === "Review signal" ? "Review" : reportStatusLabel(row.status);
       statuses.set(status, (statuses.get(status) ?? 0) + 1);
       summaries.set(row.summary, (summaries.get(row.summary) ?? 0) + 1);
     }

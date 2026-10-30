@@ -11,6 +11,7 @@ import { CaliforniaPrivacyWorkpaper } from "../../components/scans/regulatory-re
 import { SitePriorityReview } from "../../components/scans/site-priority-review";
 import { deriveCaliforniaRegulatoryScore } from "./california-regulatory-score";
 import { FullSiteExecutiveSummary } from "../../components/scans/full-site-executive-summary";
+import {buildRegulatoryAssessmentHighlights} from "./regulatory-assessment-highlights";
 
 // Match existing component tests under tsx's classic JSX test transform.
 Object.assign(globalThis, { React });
@@ -27,6 +28,15 @@ test("registration quote remains in existing California evidence while overview/
   assert.ok(packets.some(row => row.unifiedFindingId === ID && row.surfacingDecision.reportable));
   const rows = projectCaliforniaRegulatoryPriorities(packets).map((row, index) => ({...row, rank: index + 1, pages: [{id: review.scanId, url: review.documentUrl, homepage: true}]}));
   const score = deriveCaliforniaRegulatoryScore({assessment: review, checklistRows: [], unifiedFindings: packets});
+  const before=JSON.stringify(packets);
+  for(const focus of ["ccpa_cpra","gdpr_eprivacy"] as const)for(const scope of [{kind:"page"},{kind:"site",scannedPages:3}] as const){
+    const selected=buildRegulatoryAssessmentHighlights(rows,focus,scope);
+    assert.ok(!selected.topIssues.some(row=>row.id===ID));
+    assert.doesNotMatch(`${selected.highlights.text} ${selected.highlights.expanded?.text??""}`,/registration|Secretary of State|authorized agent/i);
+    assert.ok(selected.highlights.text.length<=500);assert.ok((selected.highlights.expanded?.text.length??0)<=1000);
+  }
+  assert.equal(JSON.stringify(packets),before);
+  assert.deepEqual(deriveCaliforniaRegulatoryScore({assessment:review,checklistRows:[],unifiedFindings:packets}),score);
   const detailed = renderToStaticMarkup(React.createElement(CaliforniaPrivacyWorkpaper, {assessment: review, scanId: review.scanId, focus: "ccpa_cpra", coverage: review.reviewCoverage}));
   assert.match(detailed, /data-california-agent-registration/);
   assert.match(detailed, /Such authorized agent must be registered/);

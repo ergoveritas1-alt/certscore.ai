@@ -7,6 +7,7 @@ import { topFindingReaderSummary } from "../../lib/scans/top-finding-reader-summ
 import { FindingApplicabilityNote } from "../scans/finding-applicability-note";
 import { FindingDisclosureSummary } from "../scans/finding-disclosure-summary";
 import { regulatoryReviewContext } from "../../lib/scans/regulatory-review-catalog";
+import { reportStatusLabel } from "../../lib/scans/report-status-presentation";
 const monoClass = "font-mono tabular-nums";
 
 export function DisclosureChevron({ className = "" }: { className?: string }) {
@@ -37,7 +38,7 @@ export function StatusBadge({ status }: { status: ShadowEvidenceStatus }) {
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[0.68rem] font-semibold uppercase ${statusClasses(status)}`}>
       {status !== "Potential gap" ? <span aria-hidden="true">{symbol}</span> : null}
-      {status}
+      {reportStatusLabel(status)}
     </span>
   );
 }

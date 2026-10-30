@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Locator } from "playwright";
 import type { CustomAcceptControlBinding } from "@certscore/contracts";
+import type { ConsentProofReadGuard } from "./cmp-action-control-proof.js";
 
 /** Candidate eligibility only. A plain tag, label or pointer cursor never
  * authorizes dispatch. Named CMPs continue to require registered recipes. */
@@ -13,13 +14,14 @@ export function isCustomAcceptControlCandidate(candidate: { tagName: string; rol
  * The bounded function text exists only in memory to compute a retained hash. */
 export async function inspectCustomAcceptControl(
   control: Locator, bannerSelector: string, deadlineAtMs: number, expectedNormalizedLabel?: string,
+  proofGuard?: ConsentProofReadGuard,
 ): Promise<CustomAcceptControlBinding | undefined> {
   const remaining = Math.min(100, deadlineAtMs - Date.now());
   if (remaining <= 0 || !bannerSelector || bannerSelector.length > 500) return undefined;
   let timer: NodeJS.Timeout | undefined;
   try {
-    const result = await Promise.race([
-      control.evaluate((element, { selector, expectedLabel }) => {
+    proofGuard?.checkpoint();
+    const read = control.evaluate((element, { selector, expectedLabel }) => {
         const tagName = element.tagName.toLowerCase();
         if (!(element instanceof HTMLElement) || !element.isConnected || element.getAttribute("role") ||
           !(tagName === "span" || tagName === "div" || tagName.includes("-")) ||
@@ -44,9 +46,13 @@ export async function inspectCustomAcceptControl(
         const source = Function.prototype.toString.call(element.onclick);
         if (!source || source.length > 16_384 || source.includes("[native code]")) return null;
         return { tagName, source };
-      }, { selector: bannerSelector, expectedLabel: expectedNormalizedLabel }).catch(() => null),
+      }, { selector: bannerSelector, expectedLabel: expectedNormalizedLabel }).catch(() => null);
+    proofGuard?.track(read);
+    const result = await Promise.race([
+      read,
       new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), remaining); }),
     ]);
+    proofGuard?.checkpoint();
     if (!result || Date.now() >= deadlineAtMs) return undefined;
     return { policyVersion: "custom_accept_control.v1", kind: "direct_onclick",
       tagName: result.tagName, bannerSelector, nonTransactional: true,

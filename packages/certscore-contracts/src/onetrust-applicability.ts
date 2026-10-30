@@ -173,6 +173,18 @@ export const oneTrustLegacyApplicabilityInputsSchema = z.object({
   isIabEnabled:z.literal(false),vendorLevelOptOut:z.literal(false),useGoogleVendors:z.literal(false),
   groups:z.array(oneTrustApplicabilityGroupSchema.extend({alwaysShowCategory:z.boolean().nullable()})).min(2).max(64),
 }).strict().refine(value=>new Set(value.groups.map(g=>g.id)).size===value.groups.length,"Group IDs must be unique.");
+const boundedEpochMs = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+export const oneTrustDocumentContinuitySchema = z.object({
+  policyVersion: z.literal("onetrust_native_document_continuity.v1"),
+  navigationType: z.enum(["historyApi", "documentCommit"]), exactUrlUnchanged: z.literal(true),
+  originalFrameSha256: sha, readbackFrameSha256: sha,
+  originalLoaderSha256: sha, readbackLoaderSha256: sha, documentSha256: sha,
+  checkpointStartedAtEpochMs: boundedEpochMs, verifiedAtEpochMs: boundedEpochMs,
+}).strict().refine(value => value.originalFrameSha256 === value.readbackFrameSha256 &&
+  value.originalLoaderSha256 === value.readbackLoaderSha256 &&
+  value.checkpointStartedAtEpochMs <= value.verifiedAtEpochMs &&
+  value.verifiedAtEpochMs - value.checkpointStartedAtEpochMs <= 100,
+"Native document continuity requires one unchanged frame/loader and a bounded checkpoint.");
 export const oneTrustSdkSourceSchema = z.object({
   sdkUrl: z.string().url().max(240),
   sdkSha256: sha,
@@ -180,8 +192,13 @@ export const oneTrustSdkSourceSchema = z.object({
   documentSha256: sha,
   documentEpochSha256: sha, observedAtEpochMs: z.number().int().positive(),
   responseStatus: z.literal(200), redirected: z.literal(false), serviceWorker: z.literal(false),
+  documentContinuity: oneTrustDocumentContinuitySchema.optional(),
 }).strict().refine(source => ONETRUST_REVIEWED_SDKS.some(pin => pin.sdkUrl === source.sdkUrl &&
-  pin.sdkSha256 === source.sdkSha256 && pin.sdkBytes === source.sdkBytes), "Served SDK bytes must match a reviewed source revision.");
+  pin.sdkSha256 === source.sdkSha256 && pin.sdkBytes === source.sdkBytes), "Served SDK bytes must match a reviewed source revision.")
+  .refine(source => !source.documentContinuity ||
+    (source.documentContinuity.documentSha256 === source.documentSha256 &&
+      source.observedAtEpochMs <= source.documentContinuity.checkpointStartedAtEpochMs),
+  "Native continuity must follow the original SDK proof and bind the same document.");
 export const oneTrustApplicabilityEvidenceSchema = z.object({
   policyVersion: z.enum([ONETRUST_IKEA_APPLICABILITY.policyVersion, ONETRUST_EFFECTIVE_CATEGORY_POLICY, ONETRUST_ACTIVE_CATEGORY_POLICY]),
   source: oneTrustSdkSourceSchema,
@@ -210,6 +227,7 @@ export const oneTrustApplicabilityEvidenceSchema = z.object({
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"Historical IKEA applicability retains its exact document and source boundary."});
   }
   if (value.source.observedAtEpochMs > value.baselineReadAtEpochMs ||
+    (value.source.documentContinuity && value.source.documentContinuity.verifiedAtEpochMs > value.baselineReadAtEpochMs) ||
     value.baselineReadAtEpochMs > value.confirmationReadAtEpochMs) {
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"The served SDK must be verified before the same-document baseline and confirmation reads."});
   }

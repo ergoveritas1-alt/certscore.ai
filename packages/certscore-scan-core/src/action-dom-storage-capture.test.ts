@@ -17,6 +17,17 @@ const added = (key: string, origin = "https://owned.example", value = "private v
   storageId: { securityOrigin: origin, storageKey: origin + "/", isLocalStorage: true }, key, newValue: value,
 });
 
+test("an optional shared-session hook cannot prevent existing DOMStorage capture", async () => {
+  const f = fake(); const commands: string[] = [];
+  f.session.send = async (command: string) => { commands.push(command); return {}; };
+  const capture = await installActionDomStorageCapture(f.page, "https://owned.example/", async () => f.session,
+    { onSession: session => { assert.equal(session, f.session); throw new Error("optional witness setup failed"); } });
+  f.session.emit("DOMStorage.domStorageItemAdded", added("key"));
+  const result = capture.finish();
+  assert.deepEqual(commands, ["DOMStorage.enable"]);
+  assert.equal(result.setup, "enabled"); assert.equal(result.rows.length, 1); assert.equal(f.detached(), 1);
+});
+
 test("packet finalization freezes receipts on its sampled clock boundary without another read", async (t) => {
   const f = fake();
   let clock = 1000, reads = 0;

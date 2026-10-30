@@ -27,6 +27,18 @@ const RELEASE_REGRESSION_REVIEW_CHECK: Check = {
   command: ["pnpm", "test:scan-release-regressions"],
 };
 
+const ASSESSMENT_HIGHLIGHTS_CHECK: Check = {
+  key: "assessment-highlights",
+  label: "reviewed assessment highlights and completed EU/California report headlines",
+  command: ["pnpm", "test:assessment-highlights"],
+};
+
+const REPORT_PRESENTATION_CHECK: Check = {
+  key: "report-presentation",
+  label: "canonical EU/California scope, report status labels and evidence/PDF parity",
+  command: ["pnpm", "test:report-presentation"],
+};
+
 const EVIDENCE_RECOVERY_CHECK: Check = {
   key: "report-evidence-recovery",
   label: "verified artifact recovery, exact consent documents and policy completeness",
@@ -193,14 +205,27 @@ const CONSENT_ACTION_SEMANTICS_CHECK: Check = {
     "packages/certscore-scan-core/src/action-main-document-write-coverage.test.ts",
     "scripts/cmp-stage-benchmark.test.ts",
     "scripts/cmp-retained-failure-sweep.test.ts",
+    "scripts/cmp-full-cohort-audit.test.ts",
+    "scripts/cmp-paired-comparison.test.ts",
+    "scripts/cmp-paired-campaign.test.ts",
     "packages/certscore-scan-core/src/cookieyes-renewal-receipt.test.ts",
     "packages/certscore-scan-core/src/complianz-consent-state.test.ts",
     "packages/certscore-scan-core/src/accept-confirmation-coverage.test.ts",
     "packages/certscore-scan-core/src/reject-confirmation-coverage.test.ts",
     "packages/certscore-scan-core/src/confirmation-diagnostic-reasons.test.ts",
     "packages/certscore-scan-core/src/consent-action-resolver-diagnostics.test.ts",
+    "packages/certscore-scan-core/src/cmp-control-actionability-deadline.test.ts",
+    "packages/certscore-scan-core/src/cmp-action-control-proof-deadline.test.ts",
+    "packages/certscore-scan-core/src/cmp-accessible-action.test.ts",
+    "packages/certscore-scan-core/src/registered-contextual-accept.test.ts",
+    "packages/certscore-scan-core/src/consent-control-read-budget.test.ts",
+    "packages/certscore-scan-core/src/consent-request-clock.test.ts",
+    "packages/certscore-scan-core/src/consent-receipt-capture.test.ts",
+    "packages/certscore-contracts/src/consent-receipt-capture.test.ts",
+    "packages/certscore-scan-core/src/public-network-guard.test.ts",
     "packages/certscore-scan-core/src/consent-geometry-backpressure.test.ts",
     "packages/certscore-scan-core/src/cmp-api-consent-state.test.ts",
+    "packages/certscore-scan-core/src/cmp-api-confirmation.test.ts",
     "packages/certscore-scan-core/src/cmp-action-semantic-proof.test.ts",
     "packages/certscore-scan-core/src/cmp-control-actionability.test.ts",
     "packages/certscore-scan-core/src/consent-action-binding.test.ts",
@@ -213,11 +238,13 @@ const CONSENT_ACTION_SEMANTICS_CHECK: Check = {
     "packages/certscore-scan-core/src/consent-reject-eligibility.test.ts",
     "packages/certscore-scan-core/src/onetrust-consent-state.test.ts",
     "packages/certscore-scan-core/src/onetrust-sdk-applicability.test.ts",
+    "packages/certscore-scan-core/src/onetrust-document-binding.test.ts",
     "packages/certscore-contracts/src/onetrust-applicability.test.ts",
     "packages/certscore-contracts/src/notification-acknowledgment.test.ts",
     "packages/certscore-scan-core/src/onetrust-confirmation-readback.test.ts",
     "packages/certscore-scan-core/src/onetrust-control-resolution.test.ts",
     "packages/certscore-scan-core/src/onetrust-loading-resolution.test.ts",
+    "packages/certscore-scan-core/src/registered-cmp-loading.test.ts",
     "packages/certscore-scan-core/src/consent-action-discovery.test.ts",
     "packages/certscore-scan-core/src/consent-search-readiness.test.ts",
     "packages/certscore-scan-core/src/action-dom-storage-capture.test.ts",
@@ -260,8 +287,21 @@ const ACCESSIBILITY_SCORING_CHECK: Check = {
     "apps/web/lib/api-v2/scan-report-summary.test.ts"],
 };
 
+const CMP_RUNTIME_VISITOR_CHECK: Check = {
+  key: "cmp-runtime-visitor", label: "CMP visitor canonical-error stop and navigation safety",
+  command: ["node", "--test", "scripts/cmp-paired-runtime-visit.test.cjs"],
+};
+const CMP_RUNTIME_COORDINATOR_CHECK: Check = {
+  key: "cmp-runtime-coordinator", label: "CMP durable contact limits, no retry and global halt",
+  command: ["python3", "scripts/cmp-paired-runtime-runner.test.py"],
+};
+
 const ROOT_FULL_CHECKS: Check[] = [
+  REPORT_PRESENTATION_CHECK,
+  ASSESSMENT_HIGHLIGHTS_CHECK,
   RELEASE_REGRESSION_REVIEW_CHECK,
+  CMP_RUNTIME_VISITOR_CHECK,
+  CMP_RUNTIME_COORDINATOR_CHECK,
   {
     key: "workspace-package-build",
     label: "bootstrap workspace package exports for clean-checkout tests and typechecks",
@@ -340,6 +380,17 @@ const ROOT_FULL_CHECKS: Check[] = [
 
 const TARGETS: Target[] = [
   {
+    key: "report-presentation-scope",
+    label: "report contracts and local PDF presentation",
+    matches: file => file.startsWith("packages/certscore-api-contracts/") || file.startsWith("scripts/report-pdf-v2/") || file === "scripts/preview-report-pdf-v2.ts",
+    checks: [REPORT_PRESENTATION_CHECK],
+  },
+  {
+    key: "cmp-runtime-harness", label: "CMP paired runtime harness safety",
+    matches: file => file.startsWith("scripts/cmp-paired-runtime-"),
+    checks: [CMP_RUNTIME_VISITOR_CHECK, CMP_RUNTIME_COORDINATOR_CHECK],
+  },
+  {
     key: "mcp-http", label: "MCP public contracts and HTTP transport",
     matches: file => file.startsWith("apps/mcp/") || file.startsWith("packages/certscore-mcp/") ||
       file.startsWith("packages/certscore-api-contracts/") || file.startsWith("packages/certscore-sdk/"),
@@ -352,8 +403,10 @@ const TARGETS: Target[] = [
   {
     key: "consent-action-semantics",
     label: "consent action semantics and dispatch",
-    matches: file => file.startsWith("packages/certscore-contracts/src/") || file.startsWith("scripts/cmp-stage-benchmark") || file.startsWith("scripts/cmp-retained-failure-sweep") ||
-      /^packages\/certscore-scan-core\/src\/(?:post-accept-|post-refusal-|cmp-action-|cmp-api-|cmp-passive-|action-main-document-write-coverage|consent-|onetrust-|accept-confirmation-|notification-acknowledgment|confirmation-diagnostic)/.test(file),
+    matches: file => file.startsWith("packages/certscore-contracts/src/") || file.startsWith("scripts/cmp-stage-benchmark") || file.startsWith("scripts/cmp-retained-failure-sweep") || file.startsWith("scripts/cmp-full-cohort-audit") ||
+      file.startsWith("scripts/cmp-paired-comparison") || file.startsWith("scripts/cmp-paired-campaign") ||
+      file === "packages/certscore-scan-core/src/public-network-guard.ts" || file === "packages/certscore-scan-core/src/public-network-guard.test.ts" ||
+      /^packages\/certscore-scan-core\/src\/(?:post-accept-|post-refusal-|cmp-action-|cmp-api-|cmp-passive-|cmp-control-|cmp-accessible-|custom-accept-|action-dom-storage-|action-main-document-write-coverage|consent-|registered-|onetrust-|accept-confirmation-|notification-acknowledgment|confirmation-diagnostic)/.test(file),
     checks: [CONSENT_ACTION_SEMANTICS_CHECK],
   },
   {
@@ -384,7 +437,8 @@ const TARGETS: Target[] = [
       file.startsWith("packages/validation-shared/"),
     checks: [
       POLICY_SOURCE_WITNESS_CHECK,
-      { key: "assessment-highlights", label: "reviewed assessment highlights and bounded expansion", command: ["pnpm", "test:assessment-highlights"] },
+      ASSESSMENT_HIGHLIGHTS_CHECK,
+      REPORT_PRESENTATION_CHECK,
       CALIFORNIA_REVIEW_CHECK,
       RUNTIME_GRAPH_RELEASE_CHECK,
       SCAN_NO_GO_RELEASE_CHECK,

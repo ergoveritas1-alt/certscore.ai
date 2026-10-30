@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v22";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v24";
 
 export type ConsentControlIntent =
   | "accept"
@@ -341,6 +341,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "essential only", "necessary_only"),
     contextual("reject", "required only", { requiresConsentContext: true, variant: "necessary_only" }),
     contextual("reject", "only required", { requiresConsentContext: true, variant: "necessary_only" }),
+    { phrase: "accept only required", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, exactLabelOnly: true },
     contextual("reject", "accept required", { requiresConsentContext: true, variant: "necessary_only" }),
     equivalent("reject", "only necessary", "necessary_only"),
     equivalent("reject", "only essential", "necessary_only"),
@@ -1274,7 +1275,7 @@ function classifyConsentControlLabelInternal(
     return unknown(["informational_consent_reference"]);
   }
   // An instruction negating a necessary-only choice is not a refusal choice.
-  if (/^do not accept (?:only (?:essential|necessary)|(?:essential|necessary) only)(?: cookies)?$/i.test(normalizedLabel)) {
+  if (/^(?:i )?do not accept (?:only (?:essential|necessary|required)|(?:essential|necessary|required) only)(?: cookies)?$/i.test(normalizedLabel)) {
     return unknown(["negated_consent_choice"]);
   }
   if (input.usage === "action" && CONSENT_CONTROL_PHRASE_REGISTRY.some(term =>

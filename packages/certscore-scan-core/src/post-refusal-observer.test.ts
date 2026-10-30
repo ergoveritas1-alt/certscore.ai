@@ -1983,7 +1983,11 @@ test("Osano Reject reuses the unspent geometry slice after a transient intercept
         assert.equal(clicks, 0); assert.equal(packet.refusalRegistration.refusalExercised, false);
       } else {
         assert.equal(packet.interactionDiagnostics.click.outcome, "failed_before_dispatch");
-        assert.equal(packet.interactionDiagnostics.click.failureClass, "intercepted");
+        // The recovery deadline is exhausted, so final geometry is unavailable.
+        // The earlier trial may itself retain an interception or stability timeout;
+        // do not require an extra late read to distinguish those diagnostics.
+        assert.ok(["actionability_timeout", "intercepted"].includes(packet.interactionDiagnostics.click.failureClass!));
+        assert.equal(packet.interactionDiagnostics.click.actionability?.centerHitTargetRelation, "unavailable");
         assert.equal(packet.refusalRegistration.refusalExercised, false); assert.equal(clicks, 0);
       }
     }

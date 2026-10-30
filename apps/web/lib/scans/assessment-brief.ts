@@ -1,4 +1,4 @@
-import { selectCaliforniaPriorityFindings } from "./california-priority-selection";
+import { assessmentHighlightProminence, selectAssessmentHighlightFindings, supportingAssessmentHighlightOrder } from "./assessment-highlight-selection";
 import { findMissingPrivacyPolicyHighlight } from "./missing-privacy-policy-highlight";
 import { getGdprEprivacyPostureTone } from "./regulatory-coverage-score";
 import { SCORING_RULE_BY_ID } from "./scoring-policy";
@@ -16,9 +16,15 @@ export type AssessmentHighlightFinding = {
   evidenceJson?: Record<string, unknown>;
 };
 export type AssessmentScope = { kind: "page" } | { kind: "site"; scannedPages: number | null };
+/** Contextual results describe proved observations only. Actions belong to
+ * eligible projected findings, never unresolved coverage/review statuses. */
+export type AssessmentResultSummary = {
+  facts: readonly string[]; targetId: string; sourceRefs: readonly string[];
+};
 export type AssessmentContext = {
   score?: number | null;
   coverage?: { state: "complete" | "limited" | "unknown"; limitedCount?: number; items?: readonly { id: string; title: string }[] };
+  assessmentResult?: AssessmentResultSummary | null;
 };
 type Domain = "privacy" | "accessibility" | "security" | "maintenance" | "other";
 export type AssessmentAttention = "high_priority" | "needs_work" | "attention" | "targeted_improvements" | "review" | "no_priority_observed" | "limited";
@@ -37,6 +43,7 @@ function accessibilityMembers(finding: AssessmentHighlightFinding): AssessmentHi
 
 /** Reader labels over already-projected identities, never a new assessment. */
 function readerTitle(finding: AssessmentHighlightFinding): string {
+  if (finding.id === "california_collection_review" && finding.title === "Collection under privacy-choice conditions — review recommended") return "Collection under privacy-choice conditions";
   if (finding.id === "regulatory_gap__gdpr_eprivacy__transport_security_http_redirect") return "HTTP-to-HTTPS redirect review";
   if (finding.id === "regulatory_gap__gdpr_eprivacy__consent_surface_observed" && finding.summary === "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.") return "Consent interface not confirmed";
   if (finding.id === "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction" && finding.title === "Post-choice tracking reduction") return "Activity after a Reject click — review";
@@ -87,17 +94,21 @@ export function buildAssessmentBrief(
   scope: AssessmentScope,
   context: AssessmentContext = {},
 ) {
-  const priorityFindings = selectCaliforniaPriorityFindings(findings);
+  const priorityFindings = selectAssessmentHighlightFindings(findings);
   const privacy = findMissingPrivacyPolicyHighlight(priorityFindings);
   const highlighted = privacy ? [privacy, ...priorityFindings.filter(finding => finding !== privacy)] : priorityFindings;
   // Rank only already-projected findings. A supported gap should not hide
   // behind a review row, and a low-severity maintenance item belongs last.
   const rank = (finding: AssessmentHighlightFinding) => finding.severity === "low" ? 2
     : finding.status === "Potential gap" || finding.severity === "critical" || finding.severity === "high" ? 0 : 1;
-  const ordered = [...highlighted].sort((left, right) => rank(left) - rank(right));
+  const supporting = (finding: AssessmentHighlightFinding) => assessmentHighlightProminence(finding, findings) === "supporting";
+  const ordered = [...highlighted].sort((left, right) => Number(supporting(left)) - Number(supporting(right))
+    || (supporting(left) && supporting(right) ? supportingAssessmentHighlightOrder(left) - supportingAssessmentHighlightOrder(right) : 0)
+    || rank(left) - rank(right));
   const sources = ordered.map(finding => ({
     readerMembers: accessibilityMembers(finding),
     sourceRef: finding.id ?? `projected-finding:${findings.indexOf(finding) + 1}`,
+    prominence: assessmentHighlightProminence(finding, findings),
     id: finding.id ?? null,
     title: normalizeAssessmentCopy(finding.title),
     readerTitle: readerTitle(finding),
@@ -155,6 +166,7 @@ export function buildAssessmentBrief(
     secondary: sources.slice(1),
     firstAction: primary?.actions[0] ?? null,
     sourceRefs: sources.map(source => source.sourceRef),
+    assessmentResult: context.assessmentResult ?? null,
   };
 }
 export type AssessmentBrief = ReturnType<typeof buildAssessmentBrief>;

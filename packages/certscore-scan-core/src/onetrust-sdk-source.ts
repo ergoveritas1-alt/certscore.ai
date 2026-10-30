@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { ONETRUST_REVIEWED_SDKS, type ConsentConfirmationReason, type OneTrustSdkSource } from "@certscore/contracts";
-import type { Page, Frame, Request, Response } from "playwright";
+import type { CDPSession, Page, Frame, Request, Response } from "playwright";
+import { createOneTrustDocumentBinding, type OneTrustNativeDocument, type OneTrustNativeBindingOptions } from "./onetrust-document-binding.js";
 
-type Capture = { snapshot(): OneTrustSdkSource | undefined; diagnostic(): ConsentConfirmationReason | undefined; dispose(): void };
+type Capture = { snapshot(): OneTrustSdkSource | undefined; diagnostic(): ConsentConfirmationReason | undefined;
+  bindNativeSession(session: CDPSession, options?: OneTrustNativeBindingOptions): void; dispose(): void };
 const captures = new WeakMap<Page, Capture>();
 const sha = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 function documentUrl(page: Page) { try { const u = new URL(page.url()); if (u.protocol !== "https:") return ""; u.hash = ""; return u.href; } catch { return ""; } }
@@ -19,12 +21,40 @@ export function installOneTrustSdkSourceCapture(page: Page): Capture {
  * production installer always uses SHA-256 and the reviewed source registry. */
 export function createOneTrustSdkSourceCapture(page: Page, digest: (bytes: Buffer) => string): Capture {
   let epoch = randomUUID(), disposed = false, attempted = false, requestCount = 0, source: OneTrustSdkSource | undefined;
+  let commitCheckpointRequired = false;
+  let quarantined = false, nativeDocument: OneTrustNativeDocument | undefined;
   let reason: ConsentConfirmationReason | undefined = "sdk_not_observed";
   const requests = new WeakMap<Request, string>();
-  const navigate = (frame: Frame) => {
-    if (frame !== page.mainFrame()) return;
-    epoch = randomUUID(); attempted = false; requestCount = 0; source = undefined; reason = "sdk_document_changed";
+  const invalidate = () => {
+    const invalidatedSdk = requestCount > 0 || attempted || !!source || reason === "sdk_document_changed";
+    epoch = randomUUID(); attempted = false; requestCount = 0; source = undefined;
+    reason = invalidatedSdk ? "sdk_document_changed" : "sdk_not_observed";
+    quarantined = false; nativeDocument = undefined; commitCheckpointRequired = false;
   };
+  const lifecycle = createOneTrustDocumentBinding({ page,
+    source: () => source && requestCount === 1 && nativeDocument ? { epoch, document: nativeDocument } : undefined,
+    commitPaired: () => {
+      quarantined = commitCheckpointRequired;
+      return commitCheckpointRequired;
+    },
+    invalidate, suspend: () => { quarantined = true; },
+    restore: (savedEpoch, checkpoint) => {
+      if (disposed || epoch !== savedEpoch || requestCount !== 1 || !source ||
+        source.observedAtEpochMs > checkpoint.startedAtEpochMs) return;
+      // A prior baseline may retain the original object and configuration hash.
+      // Publish a new proof for later reads; never mutate that earlier evidence.
+      source = { ...source, documentContinuity: {
+        policyVersion: "onetrust_native_document_continuity.v1",
+        navigationType: checkpoint.navigationType, exactUrlUnchanged: true,
+        originalFrameSha256: sha(checkpoint.original.frameId), readbackFrameSha256: sha(checkpoint.readback.frameId),
+        originalLoaderSha256: sha(checkpoint.original.loaderId), readbackLoaderSha256: sha(checkpoint.readback.loaderId),
+        documentSha256: source.documentSha256, checkpointStartedAtEpochMs: checkpoint.startedAtEpochMs,
+        verifiedAtEpochMs: checkpoint.verifiedAtEpochMs,
+      } };
+      quarantined = false;
+    },
+  });
+  const navigate = (frame: Frame) => lifecycle.playwrightNavigated(frame);
   const request = (req: Request) => {
     try {
       if (/\/otBannerSdk\.js$/i.test(new URL(req.url()).pathname) && req.resourceType() === "script" &&
@@ -32,7 +62,12 @@ export function createOneTrustSdkSourceCapture(page: Page, digest: (bytes: Buffe
         requestCount = Math.min(2, requestCount + 1);
         source = undefined;
         reason = requestCount > 1 ? "sdk_multiple_requests" : ONETRUST_REVIEWED_SDKS.some(pin => req.url() === pin.sdkUrl) ? "sdk_response_unverified" : "sdk_unreviewed";
-        if (requestCount === 1 && ONETRUST_REVIEWED_SDKS.some(pin => req.url() === pin.sdkUrl) && req.method() === "GET" && !req.redirectedFrom()) requests.set(req, epoch);
+        if (requestCount === 1 && ONETRUST_REVIEWED_SDKS.some(pin => req.url() === pin.sdkUrl) && req.method() === "GET" && !req.redirectedFrom()) {
+          requests.set(req, epoch);
+          nativeDocument = lifecycle.currentDocument(true);
+          commitCheckpointRequired = !!nativeDocument && !lifecycle.currentDocument();
+          if (commitCheckpointRequired) quarantined = true;
+        }
       }
     } catch { /* A detached/worker request supplies no same-document proof. */ }
   };
@@ -56,15 +91,18 @@ export function createOneTrustSdkSourceCapture(page: Page, digest: (bytes: Buffe
         source = {sdkUrl:pin.sdkUrl,sdkSha256:pin.sdkSha256,sdkBytes:pin.sdkBytes,
           documentSha256:sha(capturedDocument),documentEpochSha256:sha(epoch),observedAtEpochMs:Date.now(),
           responseStatus:200,redirected:false,serviceWorker:false};
+        lifecycle.sourceVerified();
       }).catch(() => { if (!disposed && requestEpoch === epoch && requestCount === 1) reason = "sdk_body_unavailable"; });
     } catch { /* Optional source proof must never interrupt the action lane. */ }
   };
   page.on("framenavigated", navigate); page.on("request", request); page.on("response", response);
   const capture: Capture = {
-    diagnostic: () => reason,
-    snapshot: () => !disposed && source?.documentSha256 === sha(documentUrl(page)) ? source : undefined,
+    diagnostic: () => quarantined ? "sdk_document_changed" : reason,
+    snapshot: () => !disposed && !quarantined && source?.documentSha256 === sha(documentUrl(page)) ? source : undefined,
+    bindNativeSession: (session, options) => lifecycle.bindNativeSession(session, options),
     dispose: () => {
       disposed = true; source = undefined;
+      lifecycle.dispose();
       page.off("framenavigated", navigate); page.off("request", request); page.off("response", response);
       if (captures.get(page) === capture) captures.delete(page);
     },

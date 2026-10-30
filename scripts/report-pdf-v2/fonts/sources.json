@@ -1,0 +1,38 @@
+{
+  "Manrope-variable.ttf": {
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/Manrope%5Bwght%5D.ttf",
+    "sha256": "3ae11c49db0455a3cc33e37d380f20fdb8c7f8b41dc07625c177e3d87a9d6ae6"
+  },
+  "Manrope-OFL.txt": {
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/OFL.txt",
+    "sha256": "58172e0c0fac2cda8a37b348164bb55e44b0e69051e557e92b1d3f6910141f7b"
+  },
+  "JetBrainsMono-variable.ttf": {
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/JetBrainsMono%5Bwght%5D.ttf",
+    "sha256": "48715a42ec242c21e9f02692891e147d022299a52e48d5e413e1a942193ffeda"
+  },
+  "JetBrainsMono-OFL.txt": {
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/OFL.txt",
+    "sha256": "b2fe5e8987594e9ffd1d2ca52a2f5d73eb8335243893c5d6254b5ad69269591d"
+  },
+  "Manrope-400.ttf": {
+    "instanceOf": "Manrope-variable.ttf",
+    "weight": 400,
+    "sha256": "d95e1c834b8d39e71610c9a2944019c2a004f0d66a8953bc0c7c775881cfd10c"
+  },
+  "Manrope-700.ttf": {
+    "instanceOf": "Manrope-variable.ttf",
+    "weight": 700,
+    "sha256": "d711423d4411648cfcc7584c67519361e3db4f94aa9993ac79c31b7f77aed9e0"
+  },
+  "Manrope-800.ttf": {
+    "instanceOf": "Manrope-variable.ttf",
+    "weight": 800,
+    "sha256": "df97e0280f00f410f46dd6f13bfaa9251a466ea082e8847286641d4a53cf6e8c"
+  },
+  "JetBrainsMono-400.ttf": {
+    "instanceOf": "JetBrainsMono-variable.ttf",
+    "weight": 400,
+    "sha256": "e1449216313d848b1259bcf1cf135218064ccac8c29d4da34997b5428fb85fed"
+  }
+}

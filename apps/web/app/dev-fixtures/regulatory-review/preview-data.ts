@@ -7,6 +7,7 @@ const summaries: Record<string, string> = {
   "reviewed-notice-omissions": "A substantive review of the illustrative complete governing notice identified multiple missing privacy disclosures. The finding remains scoped to the reviewed documents.",
   "california-agent-registration": "The illustrative retained California request instructions require an authorized agent to register with the Secretary of State. Review the condition and the available authorization routes for individuals.",
   "california-gpc-choice":"The illustrative canonical finding retains verified GPC receipt with an applicable opt-out remaining off. Review how the recorded choice reaches relevant services.",
+  "california-collection-review":"The illustrative canonical finding retains successful analytics collection under GPC. The request's sale/sharing purpose remains unresolved; this does not establish an opt-out failure or legal violation.",
   "california-rights-disclosure":"Complete retained English policy inspection found no candidate wording for a core privacy-rights disclosure topic. The California posture assumes CCPA applies; request handling remains untested.",
   "california-opt-out-activity": "Advertising-classified responses were retained after an explicit, recorded sale/sharing opt-out in this illustrative 500 ms window. Legal sale/sharing status requires review.",
   "california-choice": "A complete inspection found no named sale/sharing choice in rendered links and buttons. Applicability and alternative methods still need review.",

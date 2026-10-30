@@ -27,7 +27,7 @@ test("GPC detail exposes verified facts without score deduction wording",()=>{
   assert.deepEqual(projection,before);
   const eu=renderToStaticMarkup(<GpcEvidenceIndexCard projection={projection} />);
   assert.doesNotMatch(eu,/15-point California risk deduction|15-point CA deduction/);
-  assert.match(eu,/13 classified tracking requests/);
+  assert.equal(eu,"","California GPC evidence cannot leak through a direct EU card render");
 });
 
 test("GPC detail groups qualifying recipients and shows retained request timing without deduction copy",()=>{

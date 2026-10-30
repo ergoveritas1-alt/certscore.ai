@@ -31,7 +31,7 @@ function projected(version: "v4" | "v5" | "v10", text = noNonDiscrimination) {
   const score = () => deriveCaliforniaRegulatoryScore({assessment: review, checklistRows: [], unifiedFindings: packets});
   return {review, persisted, packets, rows, score};
 }
-for (const version of ["v4", "v5", "v10"] as const) test(`${version}: sole non-discrimination omission stays detailed with identical score effects`, () => {
+for (const version of ["v4", "v5", "v10"] as const) test(`${version}: sole non-discrimination omission stays out of highlights and priorities with unchanged scoring`, () => {
   const result = projected(version);
   const finding = result.rows.find(row => row.id === CALIFORNIA_RIGHTS_DISCLOSURE_ID)!;
   assert.ok(finding, "Canonical detailed finding remains projected");
@@ -48,7 +48,7 @@ for (const version of ["v4", "v5", "v10"] as const) test(`${version}: sole non-d
   for (const scope of [{kind: "page"}, {kind: "site", scannedPages: 3}] as const) {
     const highlights = buildAssessmentHighlightsPresentation([finding], scope);
     assert.doesNotMatch(`${highlights.text} ${highlights.expanded?.text ?? ""}`, /non-discrimination/i);
-    assert.ok(![...highlights.links, ...(highlights.expanded?.links ?? [])].some(link => link.targetId.includes(CALIFORNIA_RIGHTS_DISCLOSURE_ID)));
+    assert.deepEqual(highlights.links, []);
     assert.doesNotMatch(buildAssessmentHighlights([finding], scope), /non-discrimination/i);
     const brief = buildAssessmentBrief([finding], scope);
     assert.equal(brief.primary, null); assert.equal(brief.findingCount, 0);
@@ -73,7 +73,7 @@ test("mixed rights omissions and other California findings remain eligible for t
   assert.deepEqual(selected.map(row => [row.id, row.rank]), [[broken.id, 1]]);
   const highlights = buildAssessmentHighlightsPresentation(rows, {kind: "page"});
   assert.match(highlights.text, /Broken privacy-choice destination/);
-  assert.doesNotMatch(`${highlights.text} ${highlights.expanded?.text ?? ""}`, /Non-discrimination disclosure/);
+    assert.doesNotMatch(`${highlights.text} ${highlights.expanded?.text ?? ""}`, /Non-discrimination disclosure/);
 });
 
 test("selection requires typed assessed topics and the canonical finding identity, never headline wording", () => {
@@ -88,7 +88,7 @@ test("selection requires typed assessed topics and the canonical finding identit
   assert.ok(!noGap.packets.some(packet => packet.unifiedFindingId === CALIFORNIA_RIGHTS_DISCLOSURE_ID));
 });
 
-test("rendered top list and overview omit the standalone gap while detailed California evidence retains it", () => {
+test("overview and priority list omit the sole disclosure finding while detail and score remain unchanged", () => {
   const result = projected("v10"), score = result.score();
   const list = renderToStaticMarkup(React.createElement(SitePriorityReview, {findings: result.rows, reviewFocus: "ccpa_cpra", pending: false, sitewideAvailable: true, scannedPages: 1}));
   const overview = renderToStaticMarkup(React.createElement(FullSiteExecutiveSummary, {score: {value: 100, priorityReview: result.rows, scoredPages: 1}, californiaScore: score, pending: false, scannedPages: 1, reviewFocus: "ccpa_cpra"}));

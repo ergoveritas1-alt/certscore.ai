@@ -19,3 +19,47 @@ test("passive HTTP and event observations never verify a decision or category sc
 });
 
 test("a complete declared universe needs no exclusion and is not classified as unsupported",()=>{const p={...projection(),confirmationDiagnostics:{reasons:["category_exclusion_unneeded"]}} as unknown as Projection;assert.equal(assessConsentActionStages(p).categoryCheck,"supported");});
+
+test("initial registration, terminal verification and notification remain separate", () => {
+ const p = {...projection(), registrationStatus:"unconfirmed", actionControlProof:{action:"accept",cmpId:"OneTrust",authorizedTargetSha256:"b".repeat(64)},
+  afterActionCapture:{action:"accept",activationStatus:"completed",stopReason:"window_elapsed",requestsDropped:0,storageSnapshotRetained:true,actionDispatchedAtMs:100,requestedWindowMs:3000,captureEndedAtMs:3100},
+  terminalDecisionEvidence:{action:"accept",authorizedTargetSha256:"b".repeat(64),readStartedAtMs:200,readCompletedAtMs:250,evidence:{basis:"verified_state",decision:"granted",observedAtMs:220}},
+ } as unknown as Projection;
+ const stages = assessConsentActionStages(p).evidenceStages;
+ assert.equal(stages.consentSurfaceObserved,true);
+ assert.equal(stages.initialChoiceRegistrationSupported,false);
+ assert.equal(stages.terminalChoiceStateVerified,true);
+ assert.equal(stages.notificationAcknowledged,null);
+ const wrongTarget = {...p,terminalDecisionEvidence:{...p.terminalDecisionEvidence!,authorizedTargetSha256:"c".repeat(64)}};
+ assert.equal(assessConsentActionStages(wrongTarget).evidenceStages.terminalChoiceStateVerified,false);
+ const acknowledgment = {...projection(),registrationStatus:"unconfirmed",notificationAcknowledgment:{policyVersion:"hubspot_notification_acknowledgment.v1"}} as unknown as Projection;
+ const notification = assessConsentActionStages(acknowledgment).evidenceStages;
+ assert.equal(notification.notificationAcknowledged,true);
+ assert.equal(notification.initialChoiceRegistrationSupported,false);
+ assert.equal(notification.terminalChoiceStateVerified,null);
+});
+
+test("historical missing stages and phase diagnostics remain unknown", () => {
+ const legacy = {...projection(),actionControlProof:undefined,registrationStatus:"unsupported",resolver:{found:false},confirmationDiagnostics:{policyVersion:"consent_confirmation_diagnostics.v1",reasons:["receipt_missing"]}} as unknown as Projection;
+ const stages = assessConsentActionStages(legacy).evidenceStages;
+ assert.equal(stages.cmpIdentity,"unverified");
+ assert.equal(stages.consentSurfaceObserved,null);
+ assert.equal(stages.controlIdentified,null);
+ assert.equal(stages.initialDiagnosticReasons,null);
+ assert.equal(stages.terminalDiagnosticReasons,null);
+ assert.equal(stages.initialChoiceRegistrationSupported,null);
+ const phased = {...legacy,confirmationDiagnostics:{policyVersion:"consent_confirmation_diagnostics.v3",reasons:["api_unavailable","receipt_missing"],initialReasons:["api_unavailable"],terminalReasons:["receipt_missing"]}} as unknown as Projection;
+ assert.deepEqual(assessConsentActionStages(phased).evidenceStages.initialDiagnosticReasons,["api_unavailable"]);
+ assert.deepEqual(assessConsentActionStages(phased).evidenceStages.terminalDiagnosticReasons,["receipt_missing"]);
+});
+
+test("attempted and completed actions do not substitute for initial decision proof", () => {
+ const p = {...projection(),registrationStatus:"unconfirmed",interactionDiagnostics:{click:{outcome:"failed_before_dispatch"}},execution:{clickCompleted:false,observationCompleted:false,consentConfirmed:false}} as unknown as Projection;
+ const stages = assessConsentActionStages(p);
+ assert.equal(stages.evidenceStages.actionAttempted,true);
+ assert.equal(stages.measures.clickCompleted,false);
+ assert.equal(stages.evidenceStages.initialChoiceRegistrationSupported,false);
+ const confirmed = {...projection(),registrationStatus:"confirmed",acceptanceExercised:true,acceptanceRegisteredAtMs:100,actionControlProof:{action:"accept",cmpId:"OneTrust"},decisionEvidence:{basis:"verified_state",decision:"granted"}} as unknown as Projection;
+ assert.equal(assessConsentActionStages(confirmed).evidenceStages.initialChoiceRegistrationSupported,true);
+ assert.equal(assessConsentActionStages({...confirmed,decisionEvidence:undefined}).evidenceStages.initialChoiceRegistrationSupported,false);
+});

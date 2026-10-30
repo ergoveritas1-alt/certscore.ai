@@ -1,3 +1,4 @@
+import {receiptCaptureToken,retainReceiptWrites,retainReceiptCookies} from './consent-receipt-capture.js';
 import { verifyComplianzReceipt } from "./complianz-consent-state.js";
 import { cmpPassiveReadToken, recordCmpPassiveRead } from "./cmp-passive-diagnostics.js";
 import { decodeCanonicalConsentDecision, type ConsentStateDecision, type OneTrustGroupEvidence, type ConsentConfirmationReason } from "@certscore/contracts";
@@ -34,6 +35,7 @@ export async function readActionStateWrites(scope: Page | Frame): Promise<Action
 
 async function readActionStateSnapshot(scope: Page | Frame): Promise<{writes:ActionStateWrite[];complianz:unknown}> {
   const token = cmpPassiveReadToken(scope);
+  const receiptToken = receiptCaptureToken(scope);
   const raw = await scope.evaluate(() => {
     const target = window as unknown as {
       __certscoreReadCmpPassiveEvents?: () => unknown;
@@ -62,6 +64,7 @@ async function readActionStateSnapshot(scope: Page | Frame): Promise<{writes:Act
     } catch { /* Unsupported configuration supplies no decision proof. */ }
     return {writes,passive,complianz};
   }).catch(() => ({writes:[],passive:undefined}));
+  retainReceiptWrites(receiptToken,Array.isArray(raw)?raw:raw.writes);
   if (Array.isArray(raw)) return {writes:raw,complianz:undefined}; // Existing test/historical read helpers.
   recordCmpPassiveRead(token,raw.passive);
   return {writes:raw.writes,complianz:"complianz" in raw ? raw.complianz : undefined};
@@ -96,7 +99,9 @@ export async function verifiedChangedOneTrustDecision(input: CookieDecisionInput
   cookieName: "OptanonConsent";
   oneTrustBaseline: Extract<OneTrustBaseline, {status: "verified"}>;
 }): Promise<SemanticState | undefined> {
+  const receiptToken=receiptCaptureToken(input.scope);
   const cookies = await input.context.cookies(input.scope.url());
+  retainReceiptCookies(receiptToken,cookies,input.cookieName);
   const matching = cookies.filter(cookie => matchesCanonicalCmpCookieName(cookie.name, "OptanonConsent"));
   if (matching.length !== 1) { input.onDiagnostic?.(matching.length ? "receipt_ambiguous" : "receipt_missing"); return undefined; }
   if (oneTrustCookieIdentityHash(matching[0]!) !== input.oneTrustBaseline.identityHash) {
@@ -113,9 +118,11 @@ async function verifiedCookieDecisionFromRead(input: CookieDecisionInput,
   }
   // Both reads are passive and independent. Share the existing confirmation
   // window instead of serializing two browser round trips on a busy renderer.
+  const receiptToken=receiptCaptureToken(input.scope);
   const [writes, currentCookies] = await Promise.all([
     readActionStateWrites(input.scope), candidateCookies ?? input.context.cookies(input.scope.url()),
   ]);
+  retainReceiptCookies(receiptToken,currentCookies,input.cookieName);
   const cookies = currentCookies.filter((cookie) =>
     matchesCanonicalCmpCookieName(cookie.name, input.cookieName));
   // Multiple paths/domains/partitions with the same logical cookie are ambiguous.
@@ -189,7 +196,9 @@ export async function verifiedCanonicalStateWrite(input: {
     let value: string | undefined;
     if (write.storageType === "cookie") {
       cookieRead ??= input.context.cookies(input.scope.url());
-      const cookies = (await cookieRead).filter((cookie) => cookie.name === write.name);
+      const allCookies=await cookieRead;
+      retainReceiptCookies(receiptCaptureToken(input.scope),allCookies,write.name);
+      const cookies = allCookies.filter((cookie) => cookie.name === write.name);
       if (cookies.length !== 1) { input.onDiagnostic?.(cookies.length ? "receipt_ambiguous" : "receipt_missing"); continue; }
       value = cookies[0]!.value;
     } else {

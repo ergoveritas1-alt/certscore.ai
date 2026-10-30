@@ -8,6 +8,58 @@ import { buildCanonicalPostAcceptActionRecipes } from "./post-accept-cmp-recipes
 import { buildCanonicalPostRefusalActionRecipes } from "./post-refusal-cmp-recipes.js";
 
 for (const action of ["accept", "reject"] as const) {
+  for (const mode of ["receipt", "missing_receipt", "unchanged_receipt", "negated", "conflicting", "notification"] as const) {
+    test(`OneTrust ${action}: category qualifier ${mode} preserves dispatch proof and confirmation gates`, async () => {
+      let clicks = 0;
+      const verb = action === "accept" ? "Accept" : "Reject";
+      const label = mode === "notification" ? "OK" : `${mode === "negated" ? "Do not " : ""}${verb} All Not Essential Cookies`;
+      const server = createServer((request, response) => {
+        if (request.url === "/click") { clicks++; response.writeHead(204).end(); return; }
+        response.setHeader("content-type", "text/html");
+        response.end(`<!doctype html><style>section{position:fixed;top:10px;left:10px;padding:20px;background:white}button{padding:15px}</style>
+          <section id="onetrust-banner-sdk"><p>${mode === "notification" ? "This notice acknowledges our updated privacy policy." : "Choose whether to allow optional analytics cookies."}</p>
+          <button id="onetrust-${action === "accept" ? "accept-btn" : "reject-all"}-handler" ${mode === "conflicting" ? `aria-label="${action === "accept" ? "Reject" : "Accept"} all cookies"` : ""}>${label}</button></section>
+          <script>window.OneTrust={GetDomainData:()=>({Groups:[{CustomGroupId:'C0001',Status:'always active'},{CustomGroupId:'C0002',Status:'inactive'}]})};
+          ${mode === "missing_receipt" ? "" : `document.cookie='OptanonConsent=groups=C0001:1,C0002:${action === "accept" ? 0 : 1}&receipt=before;path=/';`}
+          document.querySelector('button').onclick=()=>{fetch('/click');
+            ${mode === "receipt" ? `document.cookie='OptanonConsent=groups=C0001:1,C0002:${action === "accept" ? 1 : 0}&receipt=after;path=/';` : ""}
+            document.querySelector('section').hidden=true;};</script>`);
+      });
+      await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address(); assert.ok(address && typeof address !== "string");
+      const browser = await chromium.launch({ headless: true });
+      try {
+        const common = { browser, url: `http://127.0.0.1:${address.port}/`, scanId: `category-qualifier-${action}-${mode}`,
+          interactionAuthorization: { kind: "loopback", authorizationId: "loopback_local_lab" } as const,
+          actionSearchTimeoutMs: 1200, confirmationTimeoutMs: 150, observationWindowMs: 100 };
+        const packet = action === "accept"
+          ? await runPostAcceptObserver({ ...common, recipe: buildCanonicalPostAcceptActionRecipes().find(row => row.cmpId === "OneTrust")! })
+          : await runPostRefusalObserver({ ...common, recipe: buildCanonicalPostRefusalActionRecipes().find(row => row.cmpId === "OneTrust")! });
+        const registration = "acceptanceRegistration" in packet ? packet.acceptanceRegistration : packet.refusalRegistration;
+        const shouldDispatch = ["receipt", "missing_receipt", "unchanged_receipt"].includes(mode);
+        assert.equal(clicks, shouldDispatch ? 1 : 0, JSON.stringify(packet.interactionDiagnostics));
+        if (shouldDispatch) {
+          assert.equal(packet.actionControlProof?.accessibleLabel, label);
+          assert.equal(packet.actionControlProof?.classifierIntent, action);
+          assert.equal(packet.actionControlProof?.cmpId, "OneTrust");
+          assert.equal(packet.actionControlProof?.uniquelyActionable, true);
+          assert.equal(packet.interactionDiagnostics?.click.outcome, "completed");
+        }
+        assert.equal(registration.status === "confirmed", mode === "receipt", JSON.stringify(packet.confirmationDiagnostics));
+        if (mode === "missing_receipt" || mode === "unchanged_receipt") {
+          assert.equal(registration.status, "unconfirmed");
+          assert.equal(packet.decisionEvidence?.decision, "unknown");
+          assert.equal(packet.decisionEvidence?.basis, "unverified");
+        }
+      } finally {
+        await browser.close(); server.closeAllConnections();
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    });
+  }
+}
+
+for (const action of ["accept", "reject"] as const) {
   for (const mode of ["slow_frame", "covered", "delayed"] as const) {
     test(`OneTrust ${action}: ${mode} preserves bounded resolution and truthful diagnostics`, async () => {
       let clicks = 0;

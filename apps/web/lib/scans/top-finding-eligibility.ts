@@ -1,5 +1,6 @@
 import type { CertScoreFinding, CertScoreFindingDirectness } from "./finding-registry";
 import { classifyConsentControlLabel, hasTypedConsentVisualProminence } from "@certscore/contracts";
+import { getAccessibilityFindingIdForRuleCode } from "./accessibility-evidence";
 
 export type RuntimeTopFindingEligibility =
   | "top_candidate"
@@ -126,12 +127,10 @@ function hasPromotionGradeKeyboardAxeEvidence(accessibilityEvidence: Record<stri
 }
 
 function isSemanticLabelingRuleId(ruleId: string | null) {
-  return Boolean(
-    ruleId &&
-      /^(?:aria-command-name|aria-input-field-name|aria-toggle-field-name|aria-tooltip-name|aria-treeitem-name|button-name|input-button-name|label|link-name|select-name)$/i.test(
-        ruleId
-      )
-  );
+  // Use the same reviewed classification as concern policy and scoring. A
+  // second allowlist had incorrectly rejected complete aria-prohibited-attr
+  // evidence as if the rule ID, selectors and node proof were missing.
+  return getAccessibilityFindingIdForRuleCode(ruleId?.trim().toLowerCase()) === "semantic_labeling_accessibility_issue";
 }
 
 function hasPromotionGradeSemanticAxeEvidence(accessibilityEvidence: Record<string, unknown> | null | undefined) {

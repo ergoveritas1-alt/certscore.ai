@@ -133,18 +133,42 @@ test("completed clean score omits the redundant scope paragraph", () => {
   assert.doesNotMatch(html, /does not mean every policy topic was confirmed/);
 });
 
-test("empty California capture is incomplete rather than a clean zero-issue result", () => {
+test("empty California capture remains unscored without a global failure headline", () => {
   const html=renderToStaticMarkup(<FullSiteExecutiveSummary pending={false} scannedPages={1}
     reviewFocus="ccpa_cpra" score={{...score,priorityReview:[]}}
     californiaScore={{policyVersion:"california-regulatory-posture.v9",score:null,scope:"starting_page",coverage:"limited",assessmentSourceHash:null,deductions:[]}} />);
-  assert.match(html,/Assessment incomplete/);
-  assert.match(html,/Missing capture is not a passing result/);
+  assert.match(html,/California privacy review/);
+  assert.match(html,/California score unavailable for this scan/);
   assert.doesNotMatch(html,/0 CCPA\/CPRA issues|No CCPA\/CPRA priority issues|out of 100/);
 });
 
-test("incomplete California empty assessments link the referenced evidence without implying a clean result",()=>{
+test("partial California empty assessments link the checks without a global failure headline",()=>{
   const html=renderToStaticMarkup(<FullSiteExecutiveSummary score={score} pending={false} scannedPages={4} reviewFocus="ccpa_cpra" />);
-  assert.match(html,/California assessment is incomplete/);
+  assert.match(html,/View the California privacy checks in/);
   assert.match(html,/href="#evidence"[^>]*>Detailed evidence<\/a>/);
   assert.doesNotMatch(html,/No CCPA\/CPRA priority issues were identified/);
+});
+
+
+test("completed 86-point report with partial California checks keeps its result and scoped review",()=>{
+  const reviewCoverage={families:[{assessmentState:"completed",status:"review"},...Array(4).fill({assessmentState:"partial",status:"review"}),{assessmentState:"limited",status:"limited"}]} as NonNullable<import("../../lib/scans/california-regulatory-score").CaliforniaRegulatoryScore["reviewCoverage"]>;
+  const californiaScore={policyVersion:"california-regulatory-posture.v9" as const,score:86,scope:"starting_page" as const,coverage:"limited" as const,assessmentSourceHash:"a".repeat(64),deductions:[],reviewCoverage};
+  const before=structuredClone(californiaScore);
+  const html=renderToStaticMarkup(<FullSiteExecutiveSummary pending={false} scannedPages={1} reviewFocus="ccpa_cpra" score={{...score,priorityReview:[]}} californiaScore={californiaScore}/>);
+  assert.match(html,/California score 86 out of 100/);
+  assert.match(html,/California privacy review/);
+  assert.match(html,/1 page scanned/);
+  assert.match(html,/View the California privacy checks in/);
+  assert.match(html,/href="#evidence"/);
+  assert.doesNotMatch(html,/Assessment incomplete|assessment is incomplete|unresolved checks|0 CCPA\/CPRA issues|No CCPA\/CPRA priority issues/);
+  assert.deepEqual(californiaScore,before);
+});
+
+
+test("California scores still loading are not presented as unavailable or complete",()=>{
+  for(const loadingSavedResult of [false,true]){
+    const html=renderToStaticMarkup(<FullSiteExecutiveSummary score={{...score,priorityReview:[]}} pending loadingSavedResult={loadingSavedResult} scannedPages={1} reviewFocus="ccpa_cpra" californiaScore={null}/>);
+    assert.match(html,loadingSavedResult?/Loading saved assessment/:/Assessment in progress/);
+    assert.doesNotMatch(html,/California score unavailable|Assessment incomplete|0 CCPA\/CPRA issues|out of 100/);
+  }
 });

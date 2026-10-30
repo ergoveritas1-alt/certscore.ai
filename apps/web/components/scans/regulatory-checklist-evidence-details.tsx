@@ -1,4 +1,5 @@
 import React from "react";
+import { reportStatusLabel } from "../../lib/scans/report-status-presentation";
 import { getCorrectionGuidance } from "../../lib/scans/checklist-correction-guidance";
 import { EvidenceJsonBlock } from "./evidence-json-block";
 import { VendorBrandChip } from "./vendor-brand-chip";
@@ -526,7 +527,7 @@ function resultTraceStatusLabel(status: ResultTraceEvent["status"]) {
     case "pass":
       return "Passed";
     case "warn":
-      return "Needs review";
+      return reportStatusLabel("Needs review");
     case "info":
     default:
       return "Observed";

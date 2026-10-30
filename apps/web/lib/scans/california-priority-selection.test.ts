@@ -15,10 +15,16 @@ import {buildAssessmentHighlightsPresentation} from "./assessment-highlights";
 import {selectRegulatoryReview} from "./regulatory-review-catalog";
 import {californiaPriorityGpcFixture, ANALYTICS_URL, QUALIFIED_URL, UNRESOLVED_AD_URL, californiaPriorityRejectFixture} from "./test-fixtures/california-priority-gpc";
 import {FindingRow} from "../../components/scans/report-finding-row";
+import {findingEvidenceAnchor} from "./report-evidence-navigation";
+import {buildRegulatoryAssessmentHighlights} from "./regulatory-assessment-highlights";
+import {buildAssessmentBrief} from "./assessment-brief";
+import {type CaliforniaPotentialRiskAssessment} from "./california-potential-risk-contract";
 
-function canonical(urls: string[] = [], declared = false, extraRuntime: Record<string, unknown> = {}) {
-  const text = declared ? CA_FIXTURE_POLICY.replace("We do not sell or share personal information.", "We sell personal information to advertising partners.")
+function canonical(urls: string[] = [], declared = false, extraRuntime: Record<string, unknown> = {}, soleDisclosureOmission = false,
+  riskPolicy: CaliforniaPotentialRiskAssessment["policyVersion"] = "california.collection-review.v3-retained-scope") {
+  let text = declared ? CA_FIXTURE_POLICY.replace("We do not sell or share personal information.", "We sell personal information to advertising partners.")
     : CA_FIXTURE_POLICY.replace("We do not sell or share personal information.", "");
+  if(soleDisclosureOmission)text=text.replace("We will not discriminate against you for exercising your privacy rights. ","");
   const f: ReturnType<typeof californiaCoverageFixture> = JSON.parse(JSON.stringify(californiaCoverageFixture(text)).replaceAll(CA_FIXTURE_URL,"https://example.test/"));
   f.bundle.url = "https://example.test/"; f.bundle.normalizedUrl = f.bundle.url;
   f.bundle.scanId = "gpc-fixture"; f.policyEvidence.projection.scanId = f.bundle.scanId;
@@ -28,7 +34,7 @@ function canonical(urls: string[] = [], declared = false, extraRuntime: Record<s
   const parent = deriveConsentControlAssessment({scan:{scanId:f.bundle.scanId,finalUrl:f.bundle.url}});parent.californiaPrivacyReview = review;
   const gpc = urls.length ? californiaPriorityGpcFixture(urls) : undefined;
   const packets = buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),runtimeArtifacts:{...extraRuntime,consentControlAssessment:parent,
-    ...(gpc ? {gpcResponseAssessment:gpc,californiaGpcPotentialRiskAssessment:assessGpcPotentialRisk(gpc)} : {})}});
+    ...(gpc ? {gpcResponseAssessment:gpc,californiaGpcPotentialRiskAssessment:assessGpcPotentialRisk(gpc,riskPolicy)} : {})}});
   const rows = projectCaliforniaRegulatoryPriorities(packets).map((row,i)=>({...row,rank:i+1,pages:[{id:f.bundle.scanId,url:f.bundle.url,homepage:true}]}));
   const score = ()=>deriveCaliforniaRegulatoryScore({assessment:review,checklistRows:[],unifiedFindings:packets});
   return {review,packets,rows,score,gpc};
@@ -64,18 +70,108 @@ test("choice corroboration cannot borrow another document or scan; missing bindi
   assert.equal(californiaPriorityDemotion(missing,[missing,...r.rows.filter(f=>f!==row)]),null);
   assert.equal(californiaPriorityDemotion({...row,evidenceJson:{}},r.rows),null);
 });
-test("analytics-only review is detailed while collection findings and scoring remain intact",()=>{
+test("analytics-only collection is a qualified California top issue with intact qualifications, findings and scoring",()=>{
   const r=canonical([ANALYTICS_URL]),row=collection(r);assert.ok(row);
   const before=JSON.stringify(r.packets),score=r.score();
   assert.ok(score.deductions.some(d=>d.findingId===row.id));
-  assert.equal(californiaPriorityDemotion(row,r.rows),"analytics_only_collection");
+  assert.equal(californiaPriorityDemotion(row,r.rows),null);
+  const top=selectRegulatoryReview(r.rows,"ccpa_cpra").topIssues;
+  assert.ok(top.some(f=>f.id===row.id));
+  assert.equal(top.find(f=>f.id===row.id)?.status,"Partial concern");
+  assert.notEqual(row.priority,"high");
   for(const scope of [{kind:"page"},{kind:"site",scannedPages:3}] as const){
     const copy=buildAssessmentHighlightsPresentation(r.rows,scope);
-    assert.ok(![...copy.links,...(copy.expanded?.links??[])].some(link=>link.targetId.includes(row.id)));
+    assert.ok([...copy.links,...(copy.expanded?.links??[])].some(link=>link.targetId===findingEvidenceAnchor(row.id)));
+    assert.match(`${copy.text} ${copy.expanded?.text??""}`,/sale\/sharing purpose.*unresolved/i);
+    assert.match(`${copy.text} ${copy.expanded?.text??""}`,/non-personalized ads declared/);
   }
   const detailed=renderToStaticMarkup(React.createElement(FindingRow,{finding:{...row,focus:"CCPA/CPRA",vendors:[]}}));
   assert.ok(detailed.includes(row.title));assert.match(detailed,/sale\/sharing purpose.*unresolved/i);
   assert.equal(JSON.stringify(r.packets),before);assert.deepEqual(r.score(),score);
+});
+
+for(const [policy,points] of [["california.collection-review.v1",5],["california.collection-review.v2",7],["california.collection-review.v3-retained-scope",7]] as const)
+  test(`${policy}: top-issue selection preserves the historical assessment and original score effect`,()=>{
+    const r=canonical([ANALYTICS_URL],false,{},false,policy),before=JSON.stringify(r.packets),score=r.score();
+    const selected=selectRegulatoryReview(r.rows,"ccpa_cpra").topIssues;
+    assert.equal(selected.find(row=>row.id==="california_collection_review")?.status,"Partial concern");
+    assert.equal(score.deductions.find(row=>row.findingId==="california_collection_review")?.points,points);
+    assert.equal(JSON.stringify(r.packets),before);assert.deepEqual(r.score(),score);
+  });
+
+test("qualified collection joins the top list without upgrading its status or displacing a stronger narrative",()=>{
+  const r=canonical([ANALYTICS_URL],true),row=collection(r),before=JSON.stringify(r.packets),score=r.score();
+  const baseline=buildRegulatoryAssessmentHighlights(r.rows.filter(f=>f!==row),"ccpa_cpra",{kind:"page"});
+  const actual=buildRegulatoryAssessmentHighlights(r.rows,"ccpa_cpra",{kind:"page"});
+  assert.deepEqual(actual.topIssues.filter(f=>f.id!==row.id),baseline.topIssues);
+  assert.equal(actual.topIssues.find(f=>f.id===row.id)?.status,"Partial concern");
+  assert.equal(buildAssessmentBrief(r.rows,{kind:"page"}).secondary.find(f=>f.id===row.id)?.prominence,"supporting");
+  assert.ok(actual.highlights.text.startsWith(baseline.highlights.text.split(".")[0]!));
+  const text=`${actual.highlights.text} ${actual.highlights.expanded?.text??""}`;
+  assert.match(text,/sale\/sharing purpose.*unresolved/i);
+  assert.match(text,/non-personalized ads declared/);
+  assert.match(text,/does not establish.*(?:opt-out failure|legal violation)|do not establish a legal violation/);
+  assert.equal(JSON.stringify(r.packets),before);assert.deepEqual(r.score(),score);
+});
+
+test("supporting collection never borrows another framework or appears as an unqualified title when its whole evidence cannot fit",()=>{
+  const r=canonical([ANALYTICS_URL]),row=collection(r);
+  const eu=buildRegulatoryAssessmentHighlights(r.rows,"gdpr_eprivacy",{kind:"page"});
+  assert.doesNotMatch(`${eu.highlights.text} ${eu.highlights.expanded?.text??""}`,/Collection under privacy-choice|Google LLC|sale\/sharing purpose/);
+  const oversized={...row,summary:`${"An unfamiliar processing restriction must remain attached. ".repeat(30)}${row.summary}`};
+  const copy=buildAssessmentHighlightsPresentation([oversized],{kind:"page"});
+  assert.doesNotMatch(`${copy.text} ${copy.expanded?.text??""}`,/Collection under privacy-choice|An unfamiliar processing restriction/);
+  assert.equal(copy.links.length,0);
+});
+
+test("sparse California results list collection as review while the sole disclosure omission remains detailed-only",()=>{
+  const r=canonical([ANALYTICS_URL],false,{},true),before=JSON.stringify(r.packets),score=r.score();
+  const actual=buildRegulatoryAssessmentHighlights(r.rows,"ccpa_cpra",{kind:"page"},{score:score.score});
+  assert.deepEqual(actual.topIssues.map(f=>f.id),["california_collection_review"]);
+  const copy=`${actual.highlights.text} ${actual.highlights.expanded?.text??""}`;
+  assert.match(actual.highlights.text,/^“Collection under privacy-choice conditions”/);
+  assert.doesNotMatch(copy,/non-discrimination/i);
+  assert.match(copy,/purpose is unresolved|purpose.*remains unresolved/);
+  assert.match(copy,/non-personalized ads declared/);
+  assert.doesNotMatch(copy,/No priority|No CCPA|Assessment incomplete|collection notices|deduct|points/);
+  assert.ok(actual.highlights.text.length<=500);assert.ok((actual.highlights.expanded?.text.length??0)<=1000);
+  assert.equal(JSON.stringify(r.packets),before);assert.deepEqual(r.score(),score);
+});
+
+test("purpose-qualified GPC risk precedes collection review in the California ranking",()=>{
+  const r=canonical([QUALIFIED_URL,"https://events.hotjar.io/"]),before=JSON.stringify(r.packets),score=r.score();
+  const selected=selectRegulatoryReview(r.rows,"ccpa_cpra").topIssues;
+  const gpcIndex=selected.findIndex(row=>row.id==="gpc_response");
+  const reviewIndex=selected.findIndex(row=>row.id==="california_collection_review");
+  assert.ok(gpcIndex>=0 && reviewIndex>gpcIndex);
+  assert.equal(selected[reviewIndex]!.status,"Partial concern");
+  assert.equal(JSON.stringify(r.packets),before);assert.deepEqual(r.score(),score);
+});
+
+test("removing an editorial exclusion cannot promote nonreportable or ineligible collection packets",()=>{
+  const r=canonical([ANALYTICS_URL]);
+  const original=r.packets.find(packet=>packet.unifiedFindingId==="california_collection_review")!;
+  assert.ok(original);
+  for(const mutate of [
+    (packet:typeof original)=>{packet.surfacingDecision.reportable=false;},
+    (packet:typeof original)=>{packet.presentationDecision.status="suppress";},
+    (packet:typeof original)=>{packet.concernContext!.promotionEligibilities=[];},
+    (packet:typeof original)=>{packet.concernContext!.externalSurfacingEligibilities=[];},
+  ]){
+    const packet=structuredClone(original);mutate(packet);
+    const rows=projectCaliforniaRegulatoryPriorities([packet]);
+    assert.ok(!rows.some(row=>row.id==="california_collection_review"));
+  }
+  const absent=canonical();
+  assert.ok(!selectRegulatoryReview(absent.rows,"ccpa_cpra").topIssues.some(row=>row.id==="california_collection_review"));
+});
+
+test("an omitted oversized supporting observation cannot lend its action to a different displayed finding",()=>{
+  const r=canonical([ANALYTICS_URL],false,{},true),row=collection(r);
+  const findings=r.rows.map(f=>f===row?{...f,summary:`${"Unfamiliar qualification. ".repeat(80)}${f.summary}`}:f);
+  const copy=buildRegulatoryAssessmentHighlights(findings,"ccpa_cpra",{kind:"page"}).highlights;
+  assert.doesNotMatch(`${copy.text} ${copy.expanded?.text??""}`,/non-discrimination/i);
+  assert.doesNotMatch(`${copy.text} ${copy.expanded?.text??""}`,/Review effective recipient settings|Unfamiliar qualification|Collection under privacy-choice/);
 });
 test("fully covered unresolved advertising recipients yield one stronger GPC headline",()=>{
   const r=canonical([QUALIFIED_URL,UNRESOLVED_AD_URL]),row=collection(r);assert.ok(row,"Fixture must retain distinct qualified and unresolved collection");

@@ -18,6 +18,7 @@ import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-ch
 import { StatusBadge } from "../../components/scans/report-finding-row";
 import { SitePriorityReview } from "../../components/scans/site-priority-review";
 import { buildDetailedEvidenceExport } from "./detailed-evidence-report";
+import { buildRegulatoryAssessmentHighlights } from "./regulatory-assessment-highlights";
 
 function fixture() {
   const projection = accessibilityProjectionFixture();
@@ -95,6 +96,29 @@ test("priority selection requires canonical eligibility, high severity, confiden
   assert.deepEqual(buildSitePriorityReview([], pages, projectAccessibilityPriorities(packets), []), [], "an executive-array shortcut cannot bypass canonical accessibility selection");
 });
 
+test("verified prohibited ARIA attributes reach both regulatory highlights through canonical priority projection", () => {
+  const projection = accessibilityProjectionFixture();
+  const base = projection.observation.violations[0]!;
+  projection.observation.violations = [{ ...base, ruleId: "aria-prohibited-attr", impact: "serious", tags: ["wcag2a", "wcag412"],
+    help: "Elements must only use permitted ARIA attributes", description: "Ensure ARIA attributes are not prohibited for an element's role",
+    helpUrl: "https://dequeuniversity.com/rules/axe/4.11/aria-prohibited-attr",
+    representativeNodes: [{ selectors: ["p[aria-label]"], htmlSnippet: "<p aria-label>", failureSummary: "aria-label cannot be used on a p with no valid role attribute." }] }];
+  projection.observation.rulesEvaluated = ["aria-prohibited-attr"];
+  const packets = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { accessibilityAudit: projection },
+    reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+  const original = structuredClone(packets);
+  assert.equal(projectAccessibilityPriorities(packets).length, 1);
+  const rows = buildSitePriorityReview([], [{ id: projection.observation.scanId, url: projection.observation.documentUrl, homepage: true, findingIds: [] }], [], packets);
+  for (const focus of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
+    const selected = buildRegulatoryAssessmentHighlights(rows, focus, { kind: "page" });
+    assert.equal(selected.topIssues.length, 1);
+    assert.equal(selected.topIssues[0]!.id, ACCESSIBILITY_PRIORITY_GROUP_ID);
+    assert.match(selected.highlights.text, /ARIA attributes|ARIA roles/);
+    assert.doesNotMatch(selected.highlights.text, /No priority|deletion|collection notices/);
+  }
+  assert.deepEqual(packets, original, "Highlight selection cannot change canonical findings or score effects.");
+});
+
 test("snapshot stays brief and directs readers to full, escaped accessibility evidence", () => {
   const { audit, observation } = fixture();
   const report = { ...SHADOW_REPORT, accessibilityAudit: audit, accessibilityEvidence: observation };
@@ -123,10 +147,11 @@ test("snapshot stays brief and directs readers to full, escaped accessibility ev
   const review = { ...observation, status: "limited" as const, violations: [], reviewItems: observation.violations, limitations: ["rules_need_review"] };
   const html = renderToStaticMarkup(<AccessibilityEvidence audit={projectAccessibilityAuditSummary(accessibilityProjectionFixture(review))!} observation={review} />);
   assert.match(html, /0 issues.*4 checks need manual review/s);
-  assert.match(html, /Checks needing manual review/);
-  assert.match(html, />Review</);
-  assert.equal((html.match(/<span[^>]*>Review<\/span>/g) ?? []).length, review.reviewItems.length, "individual manual-review badges contain text only");
-  assert.match(html.match(/<summary\b[^>]*>(.*?)<\/summary>/s)![1]!, /M12 3 2 21h20Z/, "manual-review section keeps its warning indicator");
+  assert.match(html, /Manual checks/);
+  assert.match(html, />Manual check</);
+  assert.equal((html.match(/<span[^>]*>Manual check<\/span>/g) ?? []).length, review.reviewItems.length, "individual manual-check badges contain text only");
+  assert.match(html.match(/<summary\b[^>]*>(.*?)<\/summary>/s)![1]!, /<circle/, "inconclusive manual checks use an information indicator");
+  assert.doesNotMatch(html.match(/<summary\b[^>]*>(.*?)<\/summary>/s)![1]!, /M12 3 2 21h20Z/, "manual checks are distinct from the finding warning indicator");
   assert.doesNotMatch(html, />Issue found<|>Issues found<|Flagged|border-rose/);
   const clean = projectAccessibilityAuditSummary(accessibilityProjectionFixture({ violations: [] }))!;
   assert.doesNotMatch(renderToStaticMarkup(<AccessibilityEvidence audit={clean} />), />Issue found<|>Issues found<|Flagged/);
@@ -211,7 +236,7 @@ test("privacy concerns lead accessibility without changing canonical statuses or
   }
 });
 
-test("executive overview mentions projected accessibility briefly after privacy concerns", () => {
+test("executive overview preserves the privacy lead and reports accessibility alongside the other consent finding", () => {
   const { packets } = fixture();
   const accessibility = buildSitePriorityReview([], [], [], packets);
   const copy = buildExecutiveOverview({
@@ -219,7 +244,8 @@ test("executive overview mentions projected accessibility briefly after privacy 
       { title: "Decline consent control", summary: "No refusal control was retained." }, ...accessibility],
   });
   assert.ok(copy.indexOf("pre-consent storage") < copy.indexOf("Semantic labeling accessibility issue"), copy);
-  assert.ok(copy.indexOf("Decline consent control") < copy.indexOf("Semantic labeling accessibility issue"), copy);
+  assert.match(copy, /Other findings: “Decline consent control”/);
+  assert.match(copy, /Form controls lacked associated labels/);
   assert.doesNotMatch(copy, /3 priority issues/);
   assert.doesNotMatch(copy, /element instances|manual review|Tracking activity and cookies\/storage/);
 });
@@ -227,8 +253,9 @@ test("executive overview mentions projected accessibility briefly after privacy 
 test("executive copy uses the projected accessibility group without adding unprojected audit counts", () => {
   const { packets } = fixture();
   const copy = buildExecutiveOverview({ findings: buildSitePriorityReview([], [], [], packets) });
-  assert.match(copy, /^Accessibility needs attention/);
-  assert.match(copy, /automated accessibility findings/);
+  assert.match(copy, /^“Semantic labeling accessibility issue/);
+  assert.match(copy, /Form controls lacked associated labels; Buttons lacked discernible accessible names/);
+  assert.match(copy, /Images lacked required text alternatives/);
   assert.doesNotMatch(copy, /4 accessibility issues|critical|high-impact|site-wide breakdown|narrow review|visitor choice/i);
 });
 

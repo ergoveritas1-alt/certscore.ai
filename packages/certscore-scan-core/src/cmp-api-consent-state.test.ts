@@ -130,6 +130,47 @@ for (const provider of ["osano", "hubspot"] as const) test(`${provider}: complet
   } finally { await browser.close(); }
 });
 
+test("Osano documented OPT_OUT spelling preserves complete saved decisions and rejects ambiguous scope", async () => {
+  const browser = await chromium.launch({headless:true});
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<script>
+      window.state={ESSENTIAL:'ACCEPT',ANALYTICS:'DENY',MARKETING:'DENY',PERSONALIZATION:'DENY',STORAGE:'DENY',OPT_OUT:'DENY'};
+      window.Osano={cm:{getConsent:()=>({...window.state}),addEventListener:(name,fn)=>{window.listener=fn;}}};
+      window.emit=data=>{window.state=data;window.listener({...data});};
+    </script>`);
+    const baseline = await readCmpApiConsentSnapshot(page,"osano");
+    assert.equal(baseline?.decision,"denied");
+    for (const granted of [true,false]) {
+      const value = granted ? "ACCEPT" : "DENY";
+      const state = {ESSENTIAL:"ACCEPT",ANALYTICS:value,MARKETING:value,PERSONALIZATION:value,STORAGE:"DENY",OPT_OUT:"ACCEPT"};
+      await page.evaluate(data=>(window as any).emit(data),state);
+      const readback = await readCmpApiConsentSnapshot(page,"osano");
+      assert.equal(readback?.decision,granted?"granted":"denied");
+      assert.ok(readback?.eventObservedAtEpochMs);
+      // Both documented spellings describe the same typed, separate IAB scope.
+      const {OPT_OUT,...other} = state;
+      await page.evaluate(data=>(window as any).emit(data),{...other,"OPT-OUT":OPT_OUT});
+      assert.equal((await readCmpApiConsentSnapshot(page,"osano"))?.canonicalState,readback?.canonicalState);
+    }
+    const complete = {ESSENTIAL:"ACCEPT",ANALYTICS:"ACCEPT",MARKETING:"ACCEPT",PERSONALIZATION:"ACCEPT",STORAGE:"DENY",OPT_OUT:"DENY"};
+    for (const update of [
+      {...complete,"OPT-OUT":"ACCEPT"}, {...complete,"OPT-OUT":"DENY"},
+      {...complete,OPT_OUT:true}, {...complete,OPT_OUT:undefined}, {...complete,STORAGE:undefined},
+      {...complete,MARKETING:undefined}, {...complete,ESSENTIAL:"DENY"}, {...complete,other:"ACCEPT"},
+    ]) {
+      await page.evaluate(data=>(window as any).emit(data),update);
+      const reasons:string[]=[];
+      assert.equal(await readCmpApiConsentSnapshot(page,"osano",reason=>reasons.push(reason)),undefined);
+      assert.deepEqual(reasons,["receipt_format_unsupported"]);
+    }
+    await page.evaluate(data=>{(window as any).emit(data);(window as any).state={...data,MARKETING:"DENY"};},complete);
+    assert.equal(await readCmpApiConsentSnapshot(page,"osano"),undefined,"saved event and getter must agree");
+    await page.evaluate(data=>{(window as any).emit(data);(window as any).__tcfapi=()=>{};},complete);
+    assert.equal(await readCmpApiConsentSnapshot(page,"osano"),undefined,"category keys do not certify IAB purposes");
+  } finally {await browser.close();}
+});
+
 test("Drupal: configured opt-in statuses require a matching fresh write; categories require complete source accounting", async () => {
   const browser = await chromium.launch({ headless: true });
   try {

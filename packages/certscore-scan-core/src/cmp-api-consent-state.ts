@@ -1,9 +1,13 @@
+import {receiptCaptureToken,retainReceiptApi,retainReceiptApiPartial} from './consent-receipt-capture.js';
 import { readDocumentedConsentApi, type DocumentedConsentProvider } from "./documented-consent-api.js";
 import type { Frame, Page } from "playwright";
 import { readDidomiConsentSnapshot } from "./didomi-consent-state.js";
 import type { ConsentConfirmationReason } from "@certscore/contracts";
 
 export type CmpApiConsentProvider = DocumentedConsentProvider | "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie" | "didomi";
+
+export type PartialApiReceipt = {fields:Record<string,unknown>;limited:boolean;omittedFields:number;
+ apiReadKind?:'get_state'|'saved_event';readbackMatched?:boolean;eventSequence?:number;eventObservedAtEpochMs?:number};
 
 export type CmpApiConsentSnapshot = {
   canonicalState: string;
@@ -14,10 +18,11 @@ export type CmpApiConsentSnapshot = {
   eventObservedAtEpochMs?: number;
 };
 
-export async function readCmpApiConsentSnapshot(
+async function readCmpApiConsentSnapshotInternal(
   scope: Page | Frame,
   provider: CmpApiConsentProvider,
   onDiagnostic?: (reason: ConsentConfirmationReason) => void,
+  onPartial?: (value: PartialApiReceipt) => void,
 ): Promise<CmpApiConsentSnapshot | undefined> {
   if (provider === "cookie_information" || provider === "cookiescript" || provider === "finsweet" || provider === "didomi") {
     const snapshot = provider === "didomi" ? await readDidomiConsentSnapshot(scope) : await readDocumentedConsentApi(scope, provider);
@@ -25,9 +30,19 @@ export async function readCmpApiConsentSnapshot(
     return snapshot;
   }
   const result: (CmpApiConsentSnapshot & { diagnosticReason?: ConsentConfirmationReason }) |
-    { diagnosticReason: ConsentConfirmationReason } | undefined = await scope.evaluate(async ({ provider }) => {
+    { diagnosticReason: ConsentConfirmationReason; receiptPartial?: PartialApiReceipt } | undefined = await scope.evaluate(async ({ provider }) => {
+    const partialCapture={read(raw:unknown){
+      const fields:Record<string,boolean|string>=Object.create(null);let inspected=0,retained=0,omittedFields=0,limited=false;
+      if(!raw||typeof raw!=='object'||Array.isArray(raw))return {fields,limited:true,omittedFields:0};
+      for(const key in raw){if(!Object.hasOwn(raw,key))continue;if(inspected++===24){limited=true;break;}
+        const descriptor=Object.getOwnPropertyDescriptor(raw,key),value=descriptor&&'value'in descriptor?descriptor.value:undefined;
+        if(key.length<=160&&(typeof value==='boolean'||typeof value==='string'&&['ACCEPT','DENY','yes','no','allow','deny'].includes(value))){
+          if(retained===8){limited=true;break;}fields[key]=value;retained++;
+        }else omittedFields++;
+      }return {fields,limited,omittedFields};
+    }};
     if (provider === "osano" || provider === "hubspot") {
-      type Tracker = { sequence: number; state?: string; decision?: "granted" | "denied" | "mixed"; observedAtEpochMs?: number };
+      type Tracker = { sequence: number; state?: string; decision?: "granted" | "denied" | "mixed"; observedAtEpochMs?: number; partial?: ReturnType<typeof partialCapture.read>; partialSamples?:number };
       const target = window as unknown as {
         __tcfapi?: unknown;
         Osano?: { cm?: { getConsent?: () => unknown; addEventListener?: (event: string, callback: (data: unknown) => void) => void } };
@@ -38,7 +53,12 @@ export async function readCmpApiConsentSnapshot(
       const decoder = { decode(raw: unknown) {
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
         const values = raw as Record<string, unknown>;
-        const allowed = provider === "osano" ? [...categoryNames, "ESSENTIAL", "OPT-OUT", "STORAGE"] : [...categoryNames, "necessary"];
+        // Osano documents both spellings, including OPT_OUT in its GPC/DNT
+        // getter examples. Accept exactly one; both keys remain ambiguous.
+        // https://docs.osano.com/en-US/osano/article/Hk-0Dnay-global-privacy-control-gpc
+        // https://developers.osano.com/cmp/javascript-api/developer-documentation-consent-javascript-api
+        const optOutKey = Object.hasOwn(values, "OPT_OUT") ? "OPT_OUT" : "OPT-OUT";
+        const allowed = provider === "osano" ? [...categoryNames, "ESSENTIAL", optOutKey, "STORAGE"] : [...categoryNames, "necessary"];
         if (Object.keys(values).length > allowed.length || Object.keys(values).some(key => !allowed.includes(key))) return undefined;
         // HubSpot's served Consent.getSafeCopy includes necessary:true. It is
         // an always-active category, not a vote on the three optional purposes.
@@ -50,7 +70,7 @@ export async function readCmpApiConsentSnapshot(
         const decision = entries.every(([, value]) => value) ? "granted" as const : entries.every(([, value]) => !value) ? "denied" as const : "mixed" as const;
         // IAB STORAGE/OPT-OUT are separate scopes, not all-purpose consent. Keep
         // their typed values in the state hash without treating defaults as votes.
-        return { canonicalState: JSON.stringify({ entries, ...(provider === "osano" ? { storage: values.STORAGE ?? null, optOut: values["OPT-OUT"] ?? null } : {}) }), decision };
+        return { canonicalState: JSON.stringify({ entries, ...(provider === "osano" ? { storage: values.STORAGE, optOut: values[optOutKey] } : {}) }), decision };
       } };
       // This recipe confirms the non-TCF category scope. A TCF-enabled Osano
       // visit also needs separately verified IAB purposes; do not infer them.
@@ -71,7 +91,8 @@ export async function readCmpApiConsentSnapshot(
           // Invalid subsequent events invalidate earlier evidence rather than
           // leaving a stale complete decision eligible for an action witness.
           tracker!.sequence += 1; tracker!.observedAtEpochMs = Date.now();
-          tracker!.state = state?.canonicalState; tracker!.decision = state?.decision;
+          tracker!.state = state?.canonicalState; tracker!.decision = state?.decision;tracker!.partial=state?undefined:(tracker!.partialSamples??0)<8?
+            (tracker!.partialSamples=(tracker!.partialSamples??0)+1,partialCapture.read(raw)):{fields:{},limited:true,omittedFields:0};
         } };
         if (provider === "osano") target.Osano!.cm!.addEventListener!("osano-cm-consent-saved", handlers.listener);
         else target._hsp!.push(["addPrivacyConsentListener", handlers.listener]);
@@ -82,12 +103,12 @@ export async function readCmpApiConsentSnapshot(
         // A first-time visitor can have no decision yet. The listener is still
         // installed before dispatch; only a fresh complete saved event can confirm.
         if (value === undefined && tracker.sequence === 0) return {canonicalState: "unregistered", decision: "unknown" as const, eventSequence: 0};
-        if (!live) return { diagnosticReason: "receipt_format_unsupported" as const };
-        if (tracker.sequence > 0 && tracker.state !== live.canonicalState) return { diagnosticReason: "receipt_readback_mismatch" as const };
+        if (!live) return { diagnosticReason: "receipt_format_unsupported" as const,receiptPartial:{...partialCapture.read(value),apiReadKind:'get_state' as const} };
+        if (tracker.sequence > 0 && tracker.state !== live.canonicalState) return { diagnosticReason: "receipt_readback_mismatch" as const,receiptPartial:tracker.partial?{...tracker.partial,apiReadKind:'saved_event' as const,readbackMatched:false,eventSequence:tracker.sequence,eventObservedAtEpochMs:tracker.observedAtEpochMs}:{...partialCapture.read(value),apiReadKind:'get_state' as const,readbackMatched:false} };
         return { ...live, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.observedAtEpochMs };
       }
       return { canonicalState: tracker.state ?? "unregistered", decision: tracker.decision ?? "unknown" as const, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.observedAtEpochMs,
-        ...(tracker.sequence > 0 && !tracker.state ? { diagnosticReason: "receipt_format_unsupported" as const } : {}) };
+        ...(tracker.sequence > 0 && !tracker.state ? { diagnosticReason: "receipt_format_unsupported" as const,receiptPartial:tracker.partial?{...tracker.partial,apiReadKind:'saved_event' as const,eventSequence:tracker.sequence,eventObservedAtEpochMs:tracker.observedAtEpochMs}:undefined } : {}) };
     }
     if (provider === "drupal_eu_cookie") {
       type Config = { method?: string; cookie_name?: string; cookie_value_disagreed?: string; cookie_value_agreed?: string; cookie_value_agreed_show_thank_you?: string;
@@ -202,7 +223,7 @@ export async function readCmpApiConsentSnapshot(
         ? Object.fromEntries(categoryNames.map(category => [category, eventCategories.includes(category)]))
         : await Promise.resolve(target.Termly.getConsentState());
       if (!raw || typeof raw !== "object" || Array.isArray(raw) ||
-        categoryNames.some(category => typeof (raw as Record<string, unknown>)[category] !== "boolean")) return undefined;
+        categoryNames.some(category => typeof (raw as Record<string, unknown>)[category] !== "boolean")) return {diagnosticReason:"api_unavailable" as const,receiptPartial:{...partialCapture.read(raw),apiReadKind:'get_state' as const}};
       const entries = categoryNames.map(key => [key, (raw as Record<string, unknown>)[key]] as const)
         .sort(([left], [right]) => left.localeCompare(right));
       if (entries.length === 0) return undefined;
@@ -254,10 +275,18 @@ export async function readCmpApiConsentSnapshot(
     };
   }, { provider }).catch(() => undefined);
   if (!result) { onDiagnostic?.("api_unavailable"); return undefined; }
+  if('receiptPartial'in result&&result.receiptPartial)onPartial?.(result.receiptPartial);
   if ("diagnosticReason" in result) {
     if (result.diagnosticReason) onDiagnostic?.(result.diagnosticReason);
-    const { diagnosticReason: _reason, ...snapshot } = result;
+    const { diagnosticReason: _reason, receiptPartial: _partial, ...snapshot } = result as typeof result&{receiptPartial?:unknown};
     return "canonicalState" in snapshot ? snapshot : undefined;
   }
   return result;
+}
+
+export async function readCmpApiConsentSnapshot(scope:Page|Frame,provider:CmpApiConsentProvider,onDiagnostic?:(reason:ConsentConfirmationReason)=>void):Promise<CmpApiConsentSnapshot|undefined>{
+ const token=receiptCaptureToken(scope);
+ const snapshot=await readCmpApiConsentSnapshotInternal(scope,provider,onDiagnostic,partial=>{try{retainReceiptApiPartial(token,provider,partial);}catch{/* Retention is optional. */}});
+ try{retainReceiptApi(token,provider,snapshot);}catch{/* Optional retention cannot change the existing decision. */}
+ return snapshot;
 }

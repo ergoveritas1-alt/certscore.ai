@@ -1,3 +1,4 @@
+import {receiptCaptureToken,retainReceiptCookies,retainReceiptConfiguration} from './consent-receipt-capture.js';
 import { createHash } from "node:crypto";
 import { oneTrustGroupEvidenceSchema, oneTrustApplicabilityInputsSchema, oneTrustLegacyApplicabilityInputsSchema, oneTrustEffectiveGroups, oneTrustApplicabilityInputsSupported, oneTrustApplicabilityReason, ONETRUST_ACTIVE_CATEGORY_POLICY, oneTrustInventoryOnlySource, ONETRUST_IKEA_APPLICABILITY, ONETRUST_EFFECTIVE_CATEGORY_POLICY, type OneTrustApplicabilityEvidence, type ConsentConfirmationReason } from "@certscore/contracts";
 import type { BrowserContext, Frame, Page } from "playwright";
@@ -22,6 +23,7 @@ export type OneTrustBaseline = ({
 type Configuration = { groups: Group[]; configurationHash: string; applicability?: OneTrustApplicabilityEvidence };
 async function readConfiguration(scope: Page | Frame, diagnostic?: (reason: ConsentConfirmationReason) => void): Promise<Configuration | "invalid" | undefined> {
   let readFailed = false;
+  const receiptToken=receiptCaptureToken(scope);
   const source = readOneTrustSdkSource(scope);
   const readAt = Date.now();
   if (!source) { const reason = readOneTrustSdkSourceDiagnostic(scope); if (reason) diagnostic?.(reason); }
@@ -53,6 +55,7 @@ async function readConfiguration(scope: Page | Frame, diagnostic?: (reason: Cons
         vendorServices:Array.isArray(group?.VendorServices) && group.VendorServices.length <= 10000 ? group.VendorServices.length : group?.VendorServices == null ? 0 : -1})),
     }};
   }, {sdkUrl:source?.sdkUrl,inventoryOnly:source ? oneTrustInventoryOnlySource(source) : false}).catch(() => { readFailed = true; return "invalid" as const; });
+  retainReceiptConfiguration(receiptToken,raw,source?.documentSha256);
   if (raw === undefined) { diagnostic?.("configuration_missing"); return raw; }
   if (raw === "invalid") { diagnostic?.(readFailed ? "configuration_unverifiable" : "configuration_malformed"); return raw; }
   if (!Array.isArray(raw) && "fallback" in raw && raw.fallback) diagnostic?.(raw.fallback);
@@ -97,7 +100,10 @@ export function parseOneTrustCookieGroups(value: string): Map<string, boolean> |
 }
 
 async function readCookie(context: BrowserContext, scope: Page | Frame, diagnostic?: (reason: ConsentConfirmationReason) => void) {
-  const cookies = (await context.cookies(scope.url())).filter((cookie) => matchesCanonicalCmpCookieName(cookie.name, "OptanonConsent"));
+  const token=receiptCaptureToken(scope);
+  const allCookies=await context.cookies(scope.url());
+  retainReceiptCookies(token,allCookies,"OptanonConsent");
+  const cookies = allCookies.filter((cookie) => matchesCanonicalCmpCookieName(cookie.name, "OptanonConsent"));
   if (cookies.length !== 1) { diagnostic?.(cookies.length ? "receipt_ambiguous" : "receipt_missing"); return undefined; }
   const cookie = cookies[0]!;
   return { ...cookie, identityHash: oneTrustCookieIdentityHash(cookie) };

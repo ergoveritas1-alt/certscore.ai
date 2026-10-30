@@ -1,3 +1,6 @@
+import { isDeepStrictEqual } from "node:util";
+import { buildCanonicalPostAcceptActionRecipes } from "./post-accept-cmp-recipes";
+import { buildCanonicalPostRefusalActionRecipes } from "./post-refusal-cmp-recipes";
 import type { Page } from "playwright";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { ConsentActionDiscovery } from "./consent-action-discovery";
@@ -23,6 +26,21 @@ export function isRegisteredLoadingOneTrustRecipe(recipe: {
     confirmation?.kind==="tcf_purposes_or_cmp_cookie_changed" &&
     recipe.confirmation.kind===`tcf_purposes_${action==="accept"?"granted":"denied"}_or_cmp_cookie_changed` &&
     recipe.confirmation.cookieName===confirmation.cookieName;
+}
+
+// Reuse the canonical recipe builders so a loading probe cannot broaden a
+// selector, confirmation protocol, scope or provider capability. Only native
+// first-layer main-document recipes qualify; full live action proof follows.
+const loadingRecipes = {
+  accept: buildCanonicalPostAcceptActionRecipes(),
+  reject: buildCanonicalPostRefusalActionRecipes(),
+};
+export function isRegisteredLoadingConsentRecipe(recipe: unknown, action: "accept" | "reject") {
+  return loadingRecipes[action].some(expected => expected.cmpId && expected.bannerSelector &&
+    !expected.controlFrameUrl && !expected.bannerFrameUrl && !expected.accessibleControl &&
+    !("preActionRequirement" in expected && expected.preActionRequirement) &&
+    !("customControlBinding" in expected && expected.customControlBinding) &&
+    cmpActionRecipeEnabled({canonicalName: expected.cmpId, action}) && isDeepStrictEqual(recipe, expected));
 }
 
 /** Route positive named-control probes during the *same* document-ready wait.

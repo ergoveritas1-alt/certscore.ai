@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Page } from "playwright";
-import { waitForConsentDocumentReady,waitForConsentDocumentOrNamedControl,isRegisteredLoadingOneTrustRecipe } from "./consent-document-readiness.js";
+import { waitForConsentDocumentReady,waitForConsentDocumentOrNamedControl,isRegisteredLoadingOneTrustRecipe,isRegisteredLoadingConsentRecipe } from "./consent-document-readiness.js";
 import {buildCanonicalPostAcceptActionRecipes} from "./post-accept-cmp-recipes";
 import {buildCanonicalPostRefusalActionRecipes} from "./post-refusal-cmp-recipes";
 import type {ConsentActionDiscovery} from "./consent-action-discovery";
@@ -93,3 +93,11 @@ test("document readiness releases a stalled early probe without waiting for or r
   } finally {if(timer)clearTimeout(timer);release('late candidate');await result;}
   assert.deepEqual(await result,{documentReady:true},"a late candidate cannot replace the ready result");
 });
+
+for (const action of ["accept", "reject"] as const) for (const cmp of ["CookieYes", "Cookiebot", "Osano", "HubSpot Consent Banner"]) {
+ test(`loading ${cmp} ${action} requires exact canonical recipe`, () => {
+  const recipes=action==="accept"?buildCanonicalPostAcceptActionRecipes():buildCanonicalPostRefusalActionRecipes();
+  const recipe=recipes.find(r=>r.cmpId===cmp)!;assert.ok(isRegisteredLoadingConsentRecipe(recipe,action));
+  for(const change of [{recipeId:"invented"},{controlSelector:"button"},{bannerSelector:"body"},{controlFrameUrl:"https://other.test"},{confirmation:{kind:"unknown"}},{runtimeUrlPatternSources:[".*"]}])assert.equal(isRegisteredLoadingConsentRecipe({...recipe,...change},action),false);
+ });
+}

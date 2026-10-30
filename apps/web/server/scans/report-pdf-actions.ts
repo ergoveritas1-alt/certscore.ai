@@ -7,6 +7,7 @@ import { CMS_CORRECTION_STEPS, evidenceHeaderStatus } from "../../lib/scans/deta
 import { checklistRemediation } from "../../lib/scans/checklist-remediation";
 import { accessibilityCorrectionGuidance, accessibilityRemediationVerification } from "../../lib/scans/accessibility-correction-guidance";
 import { webmasterRemediation } from "../../lib/scans/webmaster-remediation";
+import { reportRowInFocus } from "../../lib/scans/report-framework-scope";
 
 export type PdfAction = {
   id: string;
@@ -41,7 +42,7 @@ export const PDF_TOPIC_VERIFICATION: Record<PdfReportTopic, string> = {
 /** Organizes existing findings and projected review rows; never creates a finding from an inventory. */
 export function pdfAppendixActions(report: CanonicalReportExport): Record<PdfReportTopic, PdfAction[]> {
   const sections: Record<PdfReportTopic, PdfAction[]> = { consent: [], storage: [], policy: [], forms: [], security: [], external: [], tls: [], accessibility: [] };
-  const details = report.appendix.evidenceDossier?.checklistDetails ?? [];
+  const details = (report.appendix.evidenceDossier?.checklistDetails ?? []).filter(row=>reportRowInFocus(row.id,report.reviewFocus));
   const usedRows = new Set<string>();
   for (const finding of pdfNarrativeFindings(report)) {
     const presentation = object(finding.presentation);

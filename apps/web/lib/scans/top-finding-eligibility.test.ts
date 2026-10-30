@@ -777,6 +777,24 @@ test("top-finding evaluator keeps semantic labeling eligible with concrete axe n
   assert.equal(decision.missingCorroborators.includes("sanitized_html_snippets"), false);
 });
 
+test("canonical semantic rule classification retains complete ARIA proof and rejects incomplete or unrelated evidence", () => {
+  for (const ruleId of ["aria-prohibited-attr", "aria-required-children", "label-content-name-mismatch"]) {
+    const node = { selectors: ["p[aria-label]"], htmlSnippet: "<p aria-label>", failureSummary: "The element uses an attribute or name that its role does not support." };
+    const evaluate = (observedRule: string, representativeNodes: unknown[]) => evaluateTopFindingEligibility(finding({
+      id: "semantic_labeling_accessibility_issue", section: "Accessibility",
+      evidenceDetails: { accessibilityEvidence: { axeEvidence: [{ ruleId: observedRule, impact: "serious", nodeCount: 1, representativeNodes }] } },
+    }));
+    assert.equal(evaluate(ruleId, [node]).eligibility, "top_candidate", ruleId);
+    for (const missing of ["selectors", "htmlSnippet", "failureSummary"] as const) {
+      const incomplete = { ...node, [missing]: undefined };
+      assert.equal(evaluate(ruleId, [incomplete]).eligibility, "surface_only", `${ruleId}: missing ${missing}`);
+    }
+    assert.equal(evaluate(ruleId, []).eligibility, "surface_only");
+    assert.equal(evaluate("unreviewed-aria-rule", [node]).eligibility, "surface_only");
+    assert.equal(evaluate("color-contrast", [node]).eligibility, "surface_only");
+  }
+});
+
 test("top-finding evaluator recognizes retained keyboardTraversalTrace aliases without requiring them for axe-only keyboard evidence", () => {
   const withTraversalTrace = evaluateTopFindingEligibility(finding({
     id: "keyboard_navigation_accessibility_issue",

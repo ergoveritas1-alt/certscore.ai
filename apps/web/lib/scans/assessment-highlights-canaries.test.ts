@@ -68,7 +68,8 @@ test("severity and finding families: prioritize canonical findings and preserve 
   assert.match(result.text, /^“Critical keyboard barrier”/);
   assert.match(result.text, /High privacy concern|Medium security concern/);
   assert.doesNotMatch(result.text, /Low maintenance review/);
-  assert.match(result.expanded!.text, /Low maintenance review/);
+  assert.doesNotMatch(result.expanded?.text ?? "", /Low maintenance review/,
+    "A lower-prominence title without an observation cannot pad expanded highlights.");
 });
 
 test("empty, near-empty and large inputs have hard bounds without padding or loss of qualifiers", () => {

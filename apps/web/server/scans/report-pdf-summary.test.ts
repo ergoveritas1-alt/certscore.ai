@@ -4,6 +4,7 @@ import { buildAssessmentHighlights } from "../../lib/scans/assessment-highlights
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 import { accessibilityAuditFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
 import { pdfSiteAssessment, pdfSummaryTopics } from "./report-pdf-summary";
+import { scopeCanonicalReportPdf } from "./report-pdf-evidence";
 import type { CanonicalReportExport } from "./report-export";
 
 function reportFixture() {
@@ -11,6 +12,21 @@ function reportFixture() {
     gdprTransparency: { rows: [] }, cookieAndTrackerInventory: { presentationStatus: "retained", summary: { cookieRows: 0, storageRows: 0 }, rows: [] }, dataCollectionSurfaces: { summary: { totalForms: 0, totalFields: 0 }, assessmentStatus: "insufficient_evidence" },
   } } as unknown as CanonicalReportExport;
 }
+
+test("California PDF retains observed transport facts without EU disclosure conclusions", () => {
+  const report = reportFixture();
+  report.reviewFocus = "ccpa_cpra";
+  report.gdprEprivacyReview!.rows = [
+    { id: "transport_security_https_delivery", label: "HTTPS delivery", status: "Observed", rationale: "HTTPS delivery was verified." },
+    { id: "legal_basis_disclosure_observed", label: "Legal basis", status: "Observed", rationale: "EU disclosure conclusion." },
+  ] as NonNullable<CanonicalReportExport["gdprEprivacyReview"]>["rows"];
+  const before = structuredClone(report), scoped = scopeCanonicalReportPdf(report);
+  assert.deepEqual(scoped.gdprEprivacyReview!.rows.map(row => row.id), ["transport_security_https_delivery"]);
+  const security = pdfSummaryTopics(scoped).find(topic => topic.id === "security")!.visual;
+  assert.ok(security.kind === "transport");
+  assert.equal(security.checks[0]!.status, "Observed");
+  assert.deepEqual(report, before);
+});
 
 test("PDF site assessment uses the scan report writer with canonical observation, qualification and action", () => {
   const report = reportFixture();
@@ -80,6 +96,8 @@ test("the PDF assessment leads with projected gaps rather than a lower-confidenc
   report.gdprEprivacyReview!.rows = [report.gdprEprivacyReview!.rows[0]!];
   assert.match(pdfSiteAssessment(report), /remains unresolved/);
   assert.doesNotMatch(pdfSiteAssessment(report), /No priority issues/);
+  assert.equal(pdfSiteAssessment(report), "Cookie essentiality remains unresolved.");
+  assert.doesNotMatch(pdfSiteAssessment(report), /Review the supporting evidence|recommended checks|Prioritize these fixes/);
 });
 
 test("accessibility zero results require a completed audit and corroborating rule evidence", () => {
@@ -91,6 +109,21 @@ test("accessibility zero results require a completed audit and corroborating rul
   report.accessibilityEvidence = null;
   const missing = pdfSummaryTopics(report).find(topic => topic.id === "accessibility")!.visual;
   assert.ok(missing.kind === "columns" && missing.unavailable);
+});
+
+test("both PDF focuses show retained inconclusive accessibility checks as Manual check, preserving unknown zero-result limits",()=>{
+  for(const focus of ["gdpr_eprivacy","ccpa_cpra"] as const){
+    const report=reportFixture();report.reviewFocus=focus;
+    report.accessibilityAudit={status:"limited",failedRuleCount:0,reviewRuleCount:2} as CanonicalReportExport["accessibilityAudit"];
+    report.accessibilityEvidence={violations:[],reviewItems:[],rulesEvaluated:["aria-hidden-focus","color-contrast"]} as unknown as CanonicalReportExport["accessibilityEvidence"];
+    const before=structuredClone(report),visual=pdfSummaryTopics(report).find(topic=>topic.id==="accessibility")!.visual;
+    assert.ok(visual.kind==="columns"&&!visual.unavailable);
+    if(visual.kind==="columns"){assert.equal(visual.statusLabel,"Manual check");assert.equal(visual.failures,0);assert.equal(visual.reviewItems,2);}
+    assert.deepEqual(report,before);
+    report.accessibilityAudit!.reviewRuleCount=0;
+    const unresolved=pdfSummaryTopics(report).find(topic=>topic.id==="accessibility")!.visual;
+    assert.ok(unresolved.kind==="columns"&&unresolved.unavailable,"an incomplete zero-result capture must not become a passing audit");
+  }
 });
 
 test("CMP summary names the provider and each observed control without asserting action confirmation", () => {
@@ -119,7 +152,7 @@ test("ADA/WCAG summary gives measured failures, nodes and named barriers instead
   assert.equal(visual.failures, 3);
   assert.equal(visual.nodes, 3);
   assert.deepEqual(visual.issues, ["Image text alternatives", "Form field labels", "Button names"]);
-  assert.equal(visual.caption, "4 rules checked / 0 review items");
+  assert.equal(visual.caption, "4 rules checked / 0 manual checks");
   assert.doesNotMatch(visual.caption, /manual audit|Automated check only/);
   assert.deepEqual(report, before);
 });

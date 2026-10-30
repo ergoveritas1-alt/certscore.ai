@@ -1,6 +1,8 @@
 import { CALIFORNIA_AGENT_REGISTRATION_ID, californiaAgentRegistrationProjectionSchema, CALIFORNIA_RIGHTS_DISCLOSURE_ID, californiaPrivacyReviewSchema } from "@certscore/contracts";
 
-/** Editorial selection over an already-projected finding. The underlying
+/** Owner-selected priority-list and highlights exclusion over an already-projected
+ * finding. Sole non-discrimination omissions and authorized-agent registration
+ * remain in Detailed evidence. The underlying
  * finding, eligibility, evidence and score effects remain available in detail.
  * Missing metadata never lets a title or summary stand in for assessed topics. */
 export function isDetailedOnlyCaliforniaDisclosure(finding: {

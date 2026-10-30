@@ -13,6 +13,26 @@ function proof(){return {policyVersion:pin.policyVersion,source:{sdkUrl:pin.sdkU
   responseStatus:200,redirected:false,serviceWorker:false,documentSha256:pin.documentSha256,documentEpochSha256:"a".repeat(64),observedAtEpochMs:100},inputs,
   configurationSha256:"b".repeat(64),baselineReadAtEpochMs:200,confirmationReadAtEpochMs:400};}
 
+for (const navigationType of ["historyApi", "documentCommit"] as const) test(`optional ${navigationType} continuity is source-bound, bounded and predates a fresh baseline`, () => {
+  const original = proof();
+  const continuity = { policyVersion: "onetrust_native_document_continuity.v1", navigationType, exactUrlUnchanged: true,
+    originalFrameSha256: "c".repeat(64), readbackFrameSha256: "c".repeat(64),
+    originalLoaderSha256: "d".repeat(64), readbackLoaderSha256: "d".repeat(64), documentSha256: pin.documentSha256,
+    checkpointStartedAtEpochMs: 150, verifiedAtEpochMs: 175 };
+  const value = { ...original, source: { ...original.source, documentContinuity: continuity } };
+  assert.ok(oneTrustApplicabilityEvidenceSchema.safeParse(original).success, "legacy source remains readable");
+  assert.ok(oneTrustApplicabilityEvidenceSchema.safeParse(value).success, "fresh baseline follows positive checkpoint");
+  assert.equal(oneTrustApplicabilityEvidenceSchema.safeParse({ ...value, baselineReadAtEpochMs: 160 }).success, false,
+    "later continuity cannot support an earlier baseline");
+  for (const change of [{ readbackFrameSha256: "e".repeat(64) }, { readbackLoaderSha256: "e".repeat(64) },
+    { documentSha256: "e".repeat(64) }, { checkpointStartedAtEpochMs: 99 }, { verifiedAtEpochMs: 149 },
+    { verifiedAtEpochMs: 251 }, { verifiedAtEpochMs: Number.MAX_SAFE_INTEGER + 1 },
+    { navigationType: "fragment" }, { exactUrlUnchanged: false }, { unexpected: true }]) {
+    assert.equal(oneTrustApplicabilityEvidenceSchema.safeParse({ ...value,
+      source: { ...value.source, documentContinuity: { ...continuity, ...change } } }).success, false, JSON.stringify(change));
+  }
+});
+
 test("flat non-IAB effective groups follow reviewed popup and inventory predicates",()=>{
   const parsed=oneTrustApplicabilityInputsSchema.parse(inputs);
   assert.deepEqual(oneTrustEffectiveGroups(parsed.groups).map(g=>g.id),["required","optional"]);

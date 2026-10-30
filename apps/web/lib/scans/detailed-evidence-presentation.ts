@@ -1,4 +1,5 @@
 import { TECHNOLOGY_NAMES, type CmsSecurityProjection } from "@certscore/contracts";
+import { REPORT_FOLLOW_UP } from "./report-status-presentation";
 export type EvidenceSummaryRow = { status: string; priority?: "high" };
 export const EVIDENCE_SECTION_TITLES = {
   cmp: "CMP details", consent: "Consent choices", tracking: "Tracking & embeds", policy: "Policies & disclosures",
@@ -7,11 +8,12 @@ export const EVIDENCE_SECTION_TITLES = {
 } as const;
 export const EVIDENCE_SECTION_ORDER = ["cmp", "consent", "tracking", "policy", "accessibility", "runtime", "privacy", "transport", "gpc", "cms"] as const;
 /** Summarize existing row statuses only; never promote missing evidence to a concern. */
-export function evidenceHeaderStatus(rows: readonly EvidenceSummaryRow[]): { label: "Review" | "Limited"; description: string; concern: boolean } | null {
+export function evidenceHeaderStatus(rows: readonly EvidenceSummaryRow[]): { label: "Review" | "Manual check" | "Limited"; description: string; concern: boolean } | null {
   if (rows.some(row => row.status === "Gap observed")) return { label: "Review", description: "Observed gap in this section", concern: true };
   if (rows.some(row => row.status === "Potential gap")) return { label: "Review", description: "Potential gap in this section", concern: true };
-  if (rows.some(row => ["Partial concern", "Review signal", "Needs review", "Review recommended", "Warning"].includes(row.status))) return { label: "Review", description: "Finding needs review", concern: false };
+  if (rows.some(row => ["Partial concern", "Review signal", "Review", "Needs review", "Review recommended", "Warning"].includes(row.status))) return { label: "Review", description: "Finding needs review", concern: false };
   if (rows.some(row => row.priority === "high" && row.status === "Observed")) return { label: "Review", description: "Observed finding to review in this section", concern: true };
+  if (rows.some(row => row.status === "Manual review" || row.status === "Manual check")) return { ...REPORT_FOLLOW_UP.manual, concern: false };
   if (rows.some(row => ["Not confirmed", "Limited", "Insufficient evidence", "Not testable", "Not assessed", "Partially assessed", "Incomplete"].includes(row.status))) return { label: "Limited", description: "Evidence coverage is limited; not a confirmed issue", concern: false };
   return null;
 }
@@ -22,11 +24,12 @@ export function evidenceSectionCounts(rows: readonly EvidenceSummaryRow[]) {
   const limited = rows.filter(row => evidenceHeaderStatus([row])?.label === "Limited").length;
   const unsupported = rows.filter(row => row.status === "Feature not supported").length;
   const observed = rows.filter(row => row.status === "Observed").length;
-  return { checks: rows.length, review, limited, observed, unsupported };
+  const manual = rows.filter(row=>evidenceHeaderStatus([row])?.label==="Manual check").length;
+  return { checks: rows.length, review, limited, observed, unsupported, ...(manual?{manual}:{}) };
 }
 export function evidenceSectionRecap(rows: readonly EvidenceSummaryRow[]) {
-  const { review, limited, observed, unsupported } = evidenceSectionCounts(rows);
-  const outcomes = [review ? `${review} to review` : null, limited ? `${limited} limited` : null, unsupported ? `${unsupported} not supported` : null].filter(Boolean);
+  const { review, limited, observed, unsupported, manual } = evidenceSectionCounts(rows);
+  const outcomes = [review ? `${review} to review` : null, manual?`${manual} manual ${manual===1?"check":"checks"}`:null, limited ? `${limited} limited` : null, unsupported ? `${unsupported} not supported` : null].filter(Boolean);
   if (!outcomes.length) outcomes.push(rows.length && observed === rows.length ? `${observed} observed` : "No review flags");
   return rows.length ? `${rows.length} ${rows.length === 1 ? "check" : "checks"} · ${outcomes.join(" · ")}` : "No checks available";
 }

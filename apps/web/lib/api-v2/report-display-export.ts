@@ -2,9 +2,10 @@ import {apiV2GpcResponseSchema} from "@certscore/api-contracts";
 import { visibleFullSiteReport, visibleResourceInventory } from "./report-visible-fields";
 import { apiFormSnapshotExport } from "./form-snapshot-export";
 import { detailedEvidenceReportSchema, publicCmpAuditSchema, publicCmsSecuritySchema, privacyAuditEvidenceSchema } from "@certscore/api-contracts";
+import { scopeReportPresentation } from "../scans/report-framework-scope";
 /** Report content only: omit diagnostic downloads and encode repeated records once. */
 const REPORT_FIELDS = new Set([
-  "scan", "score", "postureScores", "californiaScore", "formsSummary", "scoreExplanation", "verdict", "executiveHeadline", "findings", "nextStep", "metrics",
+  "scan", "reviewFocus", "score", "postureScores", "californiaScore", "formsSummary", "scoreExplanation", "verdict", "executiveHeadline", "findings", "nextStep", "metrics",
   "gpcResponse", "gpcLaneStatus", "coverage", "controls", "consentControlsAvailable", "consentVendor", "consentRows", "gdprTransparencyRows", "detailedEvidence", "cmpAudit", "cmsSecurity",
   "preConsentRuntimeRows", "trackingExternalRows", "transportRows", "relatedRows",
   "privacyAuditEvidence", "californiaPrivacyReview", "policySurfaceCoverage", "acceptPath", "rejectPath", "accessibilityAudit", "accessibilityEvidence",
@@ -16,6 +17,7 @@ const DIAGNOSTICS = new Set(["canonicalEvidenceJson", "evidenceJson", "runtimeEv
 const pointer = (key: string) => key.replace(/~/g, "~0").replace(/\//g, "~1");
 
 export function buildReportDisplayExport(report: Record<string, unknown>, options: { scanId?: string } = {}) {
+  report = scopeReportPresentation(report);
   const scanId = options.scanId ?? (report.scan as { id?: string } | undefined)?.id;
   const formRows = (rows: unknown) => Array.isArray(rows) && scanId ? rows.map(row => {
     if (!row?.snapshot || row.snapshot.status !== "available") return row;

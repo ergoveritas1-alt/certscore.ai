@@ -11,6 +11,7 @@ import { renderCanonicalReportPdf } from "./report-export-pdf";
 import { PDF_REPORT_TOPICS, pdfTopicForFinding, pdfTopicForRow } from "./report-pdf-topics";
 import { pdfPublicWords } from "./report-pdf-reader";
 import type { CanonicalReportExport } from "./report-export";
+import { californiaPriorityGpcFixture, QUALIFIED_URL } from "../../lib/scans/test-fixtures/california-priority-gpc";
 
 const visiblePdfText = (source: string) => [...source.matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)].map(match => match[1]!.replace(/\\([\\()])/g, "$1")).join(" ");
 
@@ -241,6 +242,28 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
     },
     notice: "Observed evidence only.",
   } as unknown as CanonicalReportExport;
+
+  // Exercise the production renderer in both focuses, including a positive
+  // retained GPC observation. Presentation must not rewrite either score.
+  const jurisdictional=structuredClone(report);
+  jurisdictional.californiaScore={score:86,scope:"starting_page"} as never;
+  jurisdictional.appendix.gdprTransparency.rows[0]!.label="EU-only clause";
+  const gpcAssessment=californiaPriorityGpcFixture([QUALIFIED_URL]);
+  jurisdictional.gpcResponse={contractVersion:gpcAssessment.contractVersion,
+    observation:gpcAssessment.contractVersion==="certscore.gpc-response-assessment.v3"?gpcAssessment.observation:undefined,
+    comparison:gpcAssessment.comparison,status:gpcAssessment.status,summary:"Existing qualified GPC observation."} as never;
+  const jurisdictionalBefore=JSON.stringify(jurisdictional);
+  const euText=visiblePdfText(renderCanonicalReportPdf(jurisdictional).toString("latin1"));
+  const california={...jurisdictional,reviewFocus:"ccpa_cpra",reviewFocusLabel:"CCPA/CPRA"} as CanonicalReportExport;
+  const caText=visiblePdfText(renderCanonicalReportPdf(california).toString("latin1"));
+  assert.doesNotMatch(euText,/GPC response|Global Privacy Control|Privacy choices and notices/);
+  assert.match(caText,/GPC response/);
+  assert.match(euText,/EU-only clause/);
+  assert.doesNotMatch(caText,/EU-only clause|Transparency checks/);
+  assert.match(caText,/California score 86 \/ 100/);
+  const caUnknown={...california,californiaScore:{...california.californiaScore,score:null}};
+  assert.match(visiblePdfText(renderCanonicalReportPdf(caUnknown).toString("latin1")),/California score N\/A Unavailable/);
+  assert.equal(JSON.stringify(jurisdictional),jurisdictionalBefore);
 
   const pdf = renderCanonicalReportPdf(report);
   assert.equal(pdf.subarray(0, 8).toString("latin1"), "%PDF-1.4");

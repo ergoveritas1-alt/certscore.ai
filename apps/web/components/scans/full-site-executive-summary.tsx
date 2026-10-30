@@ -1,8 +1,8 @@
 "use client";
 
 import { californiaAssessmentPresentation } from "../../lib/scans/california-assessment-presentation";
-import { selectRegulatoryReview } from "../../lib/scans/regulatory-review-catalog";
-import { REVIEW_FOCUS_LABELS } from "../../lib/scans/report-review-focus";
+import { buildRegulatoryAssessmentHighlights } from "../../lib/scans/regulatory-assessment-highlights";
+import type { AssessmentReportIdentity } from "../../lib/scans/california-assessment-result-summary";
 import type { ReportReviewFocus } from "@certscore/api-contracts";
 import { AssessmentHighlightsText } from "./assessment-highlights-text";
 
@@ -18,8 +18,9 @@ export function buildSiteAssessmentSummary(priorities: ReadonlyArray<AssessmentH
   return buildAssessmentHighlights(priorities, { kind: "site", scannedPages }, context);
 }
 
-export function FullSiteExecutiveSummary({ score, californiaScore, pending, loadingSavedResult = false, scannedPages, statusLabel, actions, snapshot, homepageVerdict, homepageHighlightLinks, homepageHighlightExpansion, inventorySummary, reviewFocus }: {
+export function FullSiteExecutiveSummary({ score, californiaScore, pending, loadingSavedResult = false, scannedPages, statusLabel, actions, snapshot, homepageVerdict, homepageHighlightLinks, homepageHighlightExpansion, inventorySummary, reviewFocus, reportIdentity }: {
   reviewFocus?: ReportReviewFocus;
+  reportIdentity?: AssessmentReportIdentity;
   californiaScore?: CaliforniaRegulatoryScore | null;
   score?: (Pick<NonNullable<FullSiteReportResponse["score"]>, "value" | "priorityReview" | "scoredPages"> & { limitedPages?: number; deductions?: ScoreDeductions }) | null;
   pending: boolean;
@@ -61,11 +62,13 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
   const californiaPresentation = californiaAssessmentPresentation(californiaScore?.reviewCoverage);
   const value = californiaReview ? californiaScore?.score ?? null : score?.value ?? null;
   const color = getGdprEprivacyPostureTone(value).ringColor;
-  const review = reviewFocus && score?.priorityReview ? selectRegulatoryReview(score.priorityReview, reviewFocus) : null;
-  const priorities = review?.topIssues ?? score?.priorityReview;
   const singlePage = scannedPages === 1;
+  const scope = singlePage ? { kind: "page" as const } : { kind: "site" as const, scannedPages: scannedPages ?? score?.scoredPages ?? null };
+  const context = { score: value, coverage: { state: score?.limitedPages ? "limited" as const : "unknown" as const } };
+  const review = reviewFocus && score?.priorityReview ? buildRegulatoryAssessmentHighlights(score.priorityReview, reviewFocus, scope, context, reportIdentity, californiaScore?.reviewCoverage) : null;
+  const priorities = review?.topIssues ?? score?.priorityReview;
   const scoreLabel = californiaReview ? "California score" : singlePage ? "Score" : "Site score";
-  const highlights = priorities && (!singlePage || reviewFocus) ? buildAssessmentHighlightsPresentation(priorities, singlePage ? { kind: "page" } : { kind: "site", scannedPages: scannedPages ?? score?.scoredPages ?? null }, { score: value, coverage: { state: score?.limitedPages ? "limited" : "unknown" } }) : null;
+  const highlights = review?.highlights ?? (priorities && !singlePage ? buildAssessmentHighlightsPresentation(priorities, scope, context) : null);
   return <section id="report-overview" aria-label="Executive overview" className="my-4 rounded-xl border border-zinc-200 bg-white">
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-5 py-3">
       <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold tracking-tight text-zinc-950">Executive overview</h2>{actions}</div>
@@ -83,12 +86,12 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
           </div>
           <div className="min-w-0 border-l border-zinc-200 pl-3 lg:pl-4">
             {!singlePage ? <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Site score</p> : null}
-            <p className="mt-2 text-lg font-semibold text-zinc-950">{californiaReview && priorities?.length === 0 ? californiaPresentation.emptyLabel : priorities ? `${priorities.length} ${reviewFocus ? "top" : "priority"} ${priorities.length === 1 ? "issue" : "issues"}` : loadingSavedResult ? "Loading saved assessment" : pending ? "Assessment in progress" : "Assessment unavailable"}</p>
+            <p className="mt-2 text-lg font-semibold text-zinc-950">{californiaReview && value === null && (loadingSavedResult || pending) ? loadingSavedResult ? "Loading saved assessment" : "Assessment in progress" : californiaReview && priorities?.length === 0 ? californiaPresentation.emptyLabel : priorities ? `${priorities.length} ${reviewFocus ? "top" : "priority"} ${priorities.length === 1 ? "issue" : "issues"}` : loadingSavedResult ? "Loading saved assessment" : pending ? "Assessment in progress" : "Assessment unavailable"}</p>
             <p className="mt-1 text-xs leading-5 text-zinc-500">{scannedPages === null ? loadingSavedResult ? "Loading sitewide page totals" : "Waiting for page outcomes" : `${scannedPages} ${scannedPages === 1 ? "page" : "pages"} scanned`}</p>
           </div>
         </div>
         {!score && !californiaReview ? <p className="mt-2 text-xs text-zinc-500">{loadingSavedResult ? "The sitewide score will appear when the saved result loads." : pending ? `${singlePage ? "The page score" : "The site-wide score"} will appear when the assessment is ready.` : `${singlePage ? "Page scoring" : "Site-wide scoring"} is unavailable for this scan.`}</p> : null}
-        {californiaReview && value === null ? <p className="mt-2 text-xs text-zinc-600">{californiaPresentation.unavailableScore}</p> : null}
+        {californiaReview && value === null && !pending && !loadingSavedResult ? <p className="mt-2 text-xs text-zinc-600">{californiaPresentation.unavailableScore}</p> : null}
         {score?.limitedPages ? <p className="mt-1 text-xs text-amber-800">{score.limitedPages} {score.limitedPages === 1 ? "page has" : "pages have"} limited scoring coverage.</p> : null}
         </div>
         <div data-overview-block>{snapshot ?? <p className="py-3 text-sm text-zinc-500">The signal snapshot will appear when the starting-page assessment is ready.</p>}</div>
@@ -96,7 +99,7 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
       <div className="flex min-w-0 flex-col justify-between gap-4 md:min-h-[var(--overview-height)]">
         <div data-overview-block>
         <h3 className="text-sm font-bold tracking-tight text-zinc-900">Assessment highlights</h3>
-        {reviewFocus && priorities ? <p className="mt-2 text-sm leading-6 text-zinc-600">{priorities.length ? <AssessmentHighlightsText text={highlights!.text} links={highlights!.links} expanded={highlights!.expanded} /> : californiaReview ? <AssessmentHighlightsText text={californiaPresentation.emptySummary} links={californiaPresentation.emptySummaryLinks} /> : `No ${REVIEW_FOCUS_LABELS[reviewFocus]} priority issues were identified in the assessed evidence.`}</p> : singlePage ? <p className="mt-2 text-sm leading-6 text-zinc-600"><AssessmentHighlightsText text={homepageVerdict ?? "The single page assessment will appear when ready."} links={homepageHighlightLinks} expanded={homepageHighlightExpansion} /></p>
+        {reviewFocus && priorities ? <p className="mt-2 text-sm leading-6 text-zinc-600"><AssessmentHighlightsText text={highlights!.text} links={highlights!.links} expanded={highlights!.expanded} /></p> : singlePage ? <p className="mt-2 text-sm leading-6 text-zinc-600"><AssessmentHighlightsText text={homepageVerdict ?? "The single page assessment will appear when ready."} links={homepageHighlightLinks} expanded={homepageHighlightExpansion} /></p>
           : priorities ? <p className="mt-2 text-sm leading-5 text-zinc-700"><AssessmentHighlightsText text={highlights!.text} links={highlights!.links} expanded={highlights!.expanded} /></p>
           : <p className="mt-2 text-sm leading-6 text-zinc-500">{loadingSavedResult ? "Loading the saved site assessment." : pending ? "Page evidence is still being assessed. The site-scan assessment will appear when ready." : "Site assessment is unavailable."}</p>}
         </div>

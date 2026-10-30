@@ -10,6 +10,7 @@ import { DisclosureChevron } from "./report-finding-row";
 import { EvidenceStatusBadge } from "./evidence-status-badge";
 import { EvidenceSectionHeader } from "./evidence-section-header";
 import { accessibilityAuditUnavailableSummary, accessibilityEvidenceRecap } from "../../lib/scans/detailed-evidence-presentation";
+import { accessibilityReportFollowUp, REPORT_FOLLOW_UP } from "../../lib/scans/report-status-presentation";
 
 type Props = { audit: ApiAccessibilityAuditSummary; observation?: AccessibilityAuditObservation | null };
 
@@ -42,7 +43,7 @@ function RuleEvidence({ rule, review = false }: { rule: AccessibilityRuleObserva
   const { description, correction } = accessibilityFindingCopy(rule, review);
   return <DetailedEvidenceFinding title={accessibilityRuleTitle(rule)}
     summary={`${rule.nodeCount} ${rule.nodeCount === 1 ? "element" : "elements"}${review ? " to review" : " affected"}`}
-    badge={<EvidenceStatusBadge label={review ? "Review" : "Issues found"} tone="review" showIcon={false} />}
+    badge={<EvidenceStatusBadge label={review ? REPORT_FOLLOW_UP.manual.label : "Issues found"} description={review ? REPORT_FOLLOW_UP.manual.description : REPORT_FOLLOW_UP.review.description} tone={review ? "limited" : "review"} showIcon={false} />}
     correctionSteps={[correction]} evidenceJson={{ accessibilityRule: rule }}>
     <div className="mt-3 space-y-3 text-xs leading-5 text-zinc-600">
       {description ? <p>{description}</p> : null}
@@ -64,11 +65,11 @@ function RuleEvidence({ rule, review = false }: { rule: AccessibilityRuleObserva
 }
 
 export function AccessibilityEvidence({ audit, observation }: Props) {
+  const followUp = accessibilityReportFollowUp(audit);
   return <details id="accessibility-evidence" className="group/accessibility border-b border-r border-zinc-200 p-5">
     <EvidenceSectionHeader title={ACCESSIBILITY_REPORT_LABEL}
       recap={accessibilityEvidenceRecap(audit, observation?.limitations)}
-      badge={audit.failedRuleCount !== null && audit.failedRuleCount > 0 || audit.reviewRuleCount ? <EvidenceStatusBadge label="Review" tone="review" />
-        : audit.status !== "completed" ? <EvidenceStatusBadge label="Limited" tone="limited" /> : null} />
+      badge={followUp ? <EvidenceStatusBadge label={followUp.label} description={followUp.description} tone={followUp.kind === "review" ? "review" : "limited"} /> : null} />
     <div className="mt-5 space-y-3 text-xs leading-5 text-zinc-600">
       <p>WCAG 2.2 A/AA automated checks on the starting page.</p>
       <p>{audit.engine}{audit.engineVersion ? ` ${audit.engineVersion}` : ""}{observation?.frameCoverage ? ` · ${observation.frameCoverage.engineRuleCount} rules run` : observation?.rulesEvaluated.length ? ` · ${observation.rulesEvaluated.length} rules evaluated` : ""}</p>
@@ -79,7 +80,7 @@ export function AccessibilityEvidence({ audit, observation }: Props) {
     <div className="mt-4 divide-y divide-zinc-200 border-t border-zinc-200">
       {observation?.violations.map(rule => <RuleEvidence key={rule.ruleId} rule={rule} />)}
     </div>
-    {observation?.reviewItems.length ? <div className="mt-4"><p className="text-xs font-semibold text-zinc-800">Checks needing manual review</p>
+    {observation?.reviewItems.length ? <div className="mt-4"><p className="text-xs font-semibold text-zinc-800">Manual checks</p>
       <div className="mt-2 divide-y divide-zinc-200 border-t border-zinc-200">{observation.reviewItems.map(rule => <RuleEvidence key={rule.ruleId} rule={rule} review />)}</div>
     </div> : null}
   </details>;

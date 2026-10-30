@@ -1,7 +1,8 @@
 import type { ReportEvidenceSection } from "@certscore/api-contracts";
+import { scopeReportPresentation } from "../scans/report-framework-scope";
 
 // Select existing display projections only. Never classify findings or infer observations.
-const CONTEXT_FIELDS = ["scan", "score", "postureScores", "scoreExplanation", "verdict", "findings", "nextStep", "coverage"] as const;
+const CONTEXT_FIELDS = ["scan", "reviewFocus", "score", "postureScores", "californiaScore", "scoreExplanation", "verdict", "findings", "nextStep", "coverage"] as const;
 const SECTION_FIELDS: Record<ReportEvidenceSection, readonly string[]> = {
   consent: ["controls", "consentControlsAvailable", "consentVendor", "consentRows", "acceptPath", "rejectPath", "choicePathComparison", "cmpAudit"],
   cmp: ["cmpAudit", "consentVendor"],
@@ -15,6 +16,7 @@ const SECTION_FIELDS: Record<ReportEvidenceSection, readonly string[]> = {
 };
 
 export function selectReportEvidenceSection(report: Record<string, unknown>, section: ReportEvidenceSection) {
+  report = scopeReportPresentation(report);
   const sections: Record<ReportEvidenceSection, readonly string[]> = { consent: ["cmp", "consent"], cmp: ["cmp"], cms: ["cms"], gpc: ["gpc"], policy: ["policy", "privacy"], tracking: ["tracking", "runtime"], transport: ["transport"], forms: [], accessibility: ["accessibility"] };
   const presentation = report.detailedEvidence as { sections?: Array<{ id: string }> } | undefined;
   report = { ...report,

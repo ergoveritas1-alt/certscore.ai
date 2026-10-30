@@ -4,7 +4,7 @@ const text = z.string().max(4000);
 const ref = z.string().max(2048);
 const count = z.number().int().nonnegative();
 export const detailedEvidenceCountsSchema = z.object({
-  checks: count, review: count, limited: count, observed: count, unsupported: count,
+  checks: count, review: count, limited: count, observed: count, unsupported: count, manual: count.optional(),
 }).strict();
 export const detailedEvidenceRowSchema = z.object({
   id: ref, title: text, summary: text.nullable(), status: z.string().max(80), displayStatus: z.string().max(80),
@@ -20,7 +20,7 @@ export const detailedEvidenceRowSchema = z.object({
 }).strict();
 export const detailedEvidenceSectionSchema = z.object({
   id: z.enum(["cmp", "consent", "tracking", "policy", "runtime", "transport", "accessibility", "cms", "gpc", "privacy"]),
-  title: text, recap: text, displayStatus: z.enum(["Review", "Limited"]).nullable(),
+  title: text, recap: text, displayStatus: z.enum(["Review", "Manual check", "Limited"]).nullable(),
   counts: detailedEvidenceCountsSchema, rows: z.array(detailedEvidenceRowSchema).max(200),
 }).strict();
 export const detailedEvidenceReportSchema = z.object({

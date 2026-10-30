@@ -1,10 +1,12 @@
 import { cmpDetailsExperience } from "./cmp-audit-projection";
 import type { ShadowReportData } from "../../components/scans/report-lab/shadow-report-data";
 import { evidenceRowAnchor, HIDDEN_DETAILED_EVIDENCE_ROW_IDS } from "./report-evidence-navigation";
+import { scopeReportPresentation } from "./report-framework-scope";
 
 export type SharedEvidenceLink = { targetId: string; label: string; showLink?: boolean };
 /** Route already-projected rows to one full evidence view. No assessment changes. */
 export function detailedEvidenceLayout(report: ShadowReportData) {
+  report = scopeReportPresentation(report);
   const cmpTitle = cmpDetailsExperience(report.cmpAudit, report.consentVendor).title;
   const platformRows = report.consentRows.filter(row => ["cmp_framework_signal_observed", "consent-management-framework"].includes(row.id));
   const cookieRows = report.consentRows.filter(row => row.id === "cookie_notice_policy_availability" || row.id === "cookie-notice-policy").map(row => ({

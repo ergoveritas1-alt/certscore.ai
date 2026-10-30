@@ -8,6 +8,30 @@ import test from "node:test";
 import { getPredeployPlan } from "./predeploy.js";
 import { commandWords, RELEASE_REGRESSION_MATRIX, reviewReleaseRegressions, type ReleaseRegressionMatrix } from "./lib/scan-release-regressions.js";
 
+test("completed EU and California headline regressions run in fast web and full preflight", () => {
+  const tests = [
+    "apps/web/lib/scans/california-assessment-presentation.test.ts",
+    "apps/web/components/scans/full-site-executive-summary.test.tsx",
+    "apps/web/components/scans/site-priority-review.test.tsx",
+    "apps/web/components/scans/completed-report-assessment-headline.test.tsx",
+    "apps/web/lib/scans/regulatory-assessment-highlights.test.tsx",
+    "apps/web/lib/scans/regulatory-review-catalog.test.tsx",
+    "apps/web/lib/scans/top-finding-eligibility.test.ts",
+    "apps/web/lib/scans/accessibility-report.test.tsx",
+    "apps/web/lib/scans/california-priority-selection.test.ts",
+    "apps/web/lib/scans/california-disclosure-priority.test.ts",
+    "apps/web/lib/scans/california-agent-registration-presentation.test.ts",
+  ];
+  const script = JSON.parse(readFileSync("package.json", "utf8")).scripts["test:assessment-highlights"] as string;
+  for (const file of tests) {
+    assert.ok(script.split(/\s+/).includes(file), `assessment-highlights script omits ${file}`);
+    for (const full of [false, true]) {
+      const check = getPredeployPlan([file], { full }).checks.find(row => row.key === "assessment-highlights");
+      assert.deepEqual(check?.command, ["pnpm", "test:assessment-highlights"], `${file}: ${full ? "full" : "fast"} preflight omits report headline regressions`);
+    }
+  }
+});
+
 test("CMP identity regressions run in fast and full release gates", () => {
   const inputs = ["packages/shared/src/known-cmps.ts", "packages/certscore-vendor-resolver/src/index.ts",
     "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts"];
@@ -25,8 +49,19 @@ test("CMP identity regressions run in fast and full release gates", () => {
 });
 
 test("Accept confirmation and diagnostic regressions run in fast and full release gates", () => {
-  for (const changed of ["packages/certscore-scan-core/src/post-accept-observer.ts", "packages/certscore-contracts/src/consent-confirmation-diagnostics.ts",
+  for (const changed of ["packages/certscore-scan-core/src/post-accept-observer.ts",
+    "packages/certscore-scan-core/src/consent-control-geometry.ts",
+    "packages/certscore-scan-core/src/consent-request-clock.test.ts",
+    "packages/certscore-scan-core/src/consent-receipt-capture.ts",
+    "packages/certscore-scan-core/src/public-network-guard.ts", "packages/certscore-contracts/src/consent-confirmation-diagnostics.ts",
     "packages/certscore-scan-core/src/cmp-api-consent-state.ts", "packages/certscore-scan-core/src/accept-confirmation-coverage.test.ts",
+    "packages/certscore-scan-core/src/cmp-api-confirmation.ts",
+    "packages/certscore-scan-core/src/cmp-control-actionability.ts",
+    "packages/certscore-scan-core/src/cmp-action-control-proof.ts",
+    "packages/certscore-scan-core/src/cmp-accessible-action.ts",
+    "packages/certscore-scan-core/src/custom-accept-control.ts",
+    "packages/certscore-scan-core/src/onetrust-document-binding.ts",
+    "packages/certscore-scan-core/src/action-dom-storage-capture.ts",
     "packages/certscore-scan-core/src/confirmation-diagnostic-reasons.test.ts",
     "packages/certscore-scan-core/src/onetrust-consent-state.ts",
     "packages/certscore-scan-core/src/onetrust-sdk-source.ts",
@@ -43,12 +78,25 @@ test("Accept confirmation and diagnostic regressions run in fast and full releas
         "packages/certscore-scan-core/src/accept-confirmation-coverage.test.ts",
         "packages/certscore-scan-core/src/reject-confirmation-coverage.test.ts",
         "packages/certscore-scan-core/src/cmp-api-consent-state.test.ts",
+        "packages/certscore-scan-core/src/cmp-api-confirmation.test.ts",
+        "packages/certscore-scan-core/src/cmp-control-actionability-deadline.test.ts",
+        "packages/certscore-scan-core/src/cmp-action-control-proof-deadline.test.ts",
+        "packages/certscore-scan-core/src/cmp-accessible-action.test.ts",
+        "packages/certscore-scan-core/src/registered-contextual-accept.test.ts",
+        "packages/certscore-scan-core/src/onetrust-document-binding.test.ts",
+        "packages/certscore-scan-core/src/consent-control-read-budget.test.ts",
+        "packages/certscore-scan-core/src/consent-request-clock.test.ts",
+        "packages/certscore-scan-core/src/consent-receipt-capture.test.ts",
+        "packages/certscore-contracts/src/consent-receipt-capture.test.ts",
+        "packages/certscore-scan-core/src/public-network-guard.test.ts",
+        "scripts/cmp-full-cohort-audit.test.ts",
         "packages/certscore-scan-core/src/onetrust-confirmation-readback.test.ts",
         "packages/certscore-scan-core/src/onetrust-sdk-applicability.test.ts",
         "packages/certscore-contracts/src/onetrust-applicability.test.ts",
         "packages/certscore-contracts/src/notification-acknowledgment.test.ts",
         "packages/certscore-scan-core/src/onetrust-control-resolution.test.ts",
         "packages/certscore-scan-core/src/onetrust-loading-resolution.test.ts",
+        "packages/certscore-scan-core/src/registered-cmp-loading.test.ts",
         "packages/certscore-scan-core/src/consent-action-discovery.test.ts",
         "packages/certscore-scan-core/src/consent-search-readiness.test.ts",
         "packages/certscore-scan-core/src/consent-action-resolver-diagnostics.test.ts",
@@ -229,5 +277,25 @@ test("shell interpretation, unsupported operators and unterminated quotes cannot
     ["node", "--test", "--test-name-pattern=^reject bad|^allow good", "src/*.test.ts"]);
   for (const command of ["node --test a.test.ts; true", "node --test $(read-secret)", "node --test 'unclosed"]) {
     assert.throws(() => commandWords(command));
+  }
+});
+
+
+test("CMP runtime visitor and coordinator edits run offline halt gates in fast and full plans", () => {
+  for (const file of ["scripts/cmp-paired-runtime-visit.cjs", "scripts/cmp-paired-runtime-visit.test.cjs", "scripts/cmp-paired-runtime-runner.py", "scripts/cmp-paired-runtime-runner.test.py"]) {
+    for (const full of [false, true]) {
+      const keys = getPredeployPlan([file], { full }).checks.map(check => check.key);
+      assert.ok(keys.includes("cmp-runtime-visitor"), file);
+      assert.ok(keys.includes("cmp-runtime-coordinator"), file);
+    }
+  }
+});
+
+test("canonical framework scoping and status regressions run for web, API contracts and PDF changes",()=>{
+  for(const file of ["apps/web/lib/scans/report-framework-scope.ts","apps/web/lib/scans/report-status-presentation.ts","packages/certscore-api-contracts/src/detailed-evidence.ts","scripts/report-pdf-v2/render.py"]){
+    for(const full of [false,true]){
+      const check=getPredeployPlan([file],{full}).checks.find(row=>row.key==="report-presentation");
+      assert.deepEqual(check?.command,["pnpm","test:report-presentation"]);
+    }
   }
 });

@@ -26,6 +26,11 @@ apps/web/artifacts/
 apps/validation-worker/artifacts/*
 !apps/validation-worker/artifacts/.gitkeep
 
+# Local report previews can contain customer evidence and workspace branding.
+output/pdf/*-local.pdf
+output/pdf/*-local.pdf.layout.json
+output/pdf/*-local-source/
+
 # Logs
 *.log
 logs/

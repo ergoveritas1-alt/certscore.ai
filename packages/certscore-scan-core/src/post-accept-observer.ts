@@ -1,3 +1,4 @@
+import {installConsentReceiptCapture,receiptCaptureToken,retainReceiptCookies} from './consent-receipt-capture.js';
 import { isComplianzControl } from "./complianz-consent-state.js";
 import { CMP_PASSIVE_EVENT_INIT_SCRIPT, installCmpPassiveDiagnostics } from "./cmp-passive-diagnostics.js";
 import { retainNotificationAcknowledgment, type ExistingApiRead } from "./notification-acknowledgment.js";
@@ -5,7 +6,7 @@ import { installOneTrustSdkSourceCapture } from "./onetrust-sdk-source.js";
 import { confirmationDiagnostics } from "./consent-confirmation-diagnostics.js";
 import { firstVerifiedConsentRead } from "./consent-confirmation-read.js";
 import { installBorlabsDeferredDialogReveal } from "./borlabs-passive-dialog-reveal.js";
-import { waitForConsentDocumentOrNamedControl, isRegisteredLoadingOneTrustRecipe } from "./consent-document-readiness.js";
+import { waitForConsentDocumentOrNamedControl, isRegisteredLoadingConsentRecipe } from "./consent-document-readiness.js";
 import { appendResolverDiagnostic, canonicalResolverDiagnostic } from "./consent-action-resolver-diagnostics.js";
 import { buildObservedActionSourceProof } from "./observed-action-source-proof.js";
 import { installActionDomStorageCapture } from "./action-dom-storage-capture.js";
@@ -79,6 +80,7 @@ import {
   type CmpAccessibleActionResolution,
 } from "./cmp-accessible-action.js";
 import { readCmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
+import { evaluateCmpApiConfirmation } from "./cmp-api-confirmation.js";
 import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery, waitForTransparentConsentControl } from "./cmp-action-control-proof.js";
 import { matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, verifiedChangedOneTrustDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import {
@@ -95,6 +97,7 @@ import {
   locatorActionabilitySupportsVerifiedDispatch,
   locatorHasViewportHitTarget,
   waitForLocatorVerifiedGeometry,
+  type ConsentControlReadOptions,
 } from "./cmp-control-actionability.js";
 import {
   installConsentActionDiscovery,
@@ -262,6 +265,7 @@ type ConfirmationBaseline =
   | {
       kind: "cmp_api_consent_state_changed";
       canonicalState?: string;
+      configurationSha256?: string;
       eventSequence: number;
       apiRead?: ExistingApiRead;
     }
@@ -432,6 +436,7 @@ export async function runPostAcceptObserver(
   const recordHubSpotRead = (snapshot: import("./cmp-api-consent-state").CmpApiConsentSnapshot | undefined) => {
     lastHubSpotRead = snapshot ? {snapshot,readAtEpochMs:Date.now()} : undefined;
   };
+  let receiptCapture: ReturnType<typeof installConsentReceiptCapture> | undefined;
   let passiveCmpCapture: ReturnType<typeof installCmpPassiveDiagnostics> | undefined;
   let oneTrustSdkCapture: ReturnType<typeof installOneTrustSdkSourceCapture> | undefined;
   let originDomStorageCapture: Awaited<ReturnType<typeof installActionDomStorageCapture>> | undefined;
@@ -478,6 +483,9 @@ export async function runPostAcceptObserver(
     captureCoverage.requestsDroppedBeforeAction += Math.max(0, preActionRequests.length + postActionRequests.length - retainedRequests().length);
     formCapture ??= formCaptureHandle?.finish();
     const completedAtMs = Date.now();
+    const consentReceiptCapture=receiptCapture?.finish(selectedRecipe?.controlFrameUrl?undefined:{
+      targetSha256:actionControlProof?.authorizedTargetSha256,frameIdentitySha256:actionControlProof?.frameIdentitySha256,
+      clickOutcome:diagnostics.click.outcome},completedAtMs);
     const originDomStorageObservation = originDomStorageCapture?.finish(completedAtMs);
     const confirmed = fields.registration.status === "confirmed" &&
       fields.registration.acceptanceExercised &&
@@ -486,6 +494,7 @@ export async function runPostAcceptObserver(
     const packet = postAcceptEvidencePacketSchema.parse({
       ...finishOptionalRuntimeGraph(graphCapture, "post_accept", confirmed ? undefined : "action_not_confirmed"),
       artifactVersion: "certscore.post_accept_evidence.v2",
+      ...(consentReceiptCapture?{consentReceiptCapture}:{}),
       confirmationDiagnostics: confirmationDiagnostic.retained(),
       ...(passiveCmpCapture ? {passiveCmpDiagnostics:passiveCmpCapture.finish(completedAtMs)} : {}),
       ...(notificationAcknowledgment ? {notificationAcknowledgment} : {}),
@@ -609,16 +618,21 @@ export async function runPostAcceptObserver(
         registration: unconfirmedRegistration("aborted", reason),
       });
     }
-    context = await browser.newContext(chromiumContextOptions());
+    context = await browser.newContext({ ...chromiumContextOptions(), ignoreHTTPSErrors: false });
     await installWebBotAuthRoute(context);
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
       await installPublicNetworkGuardRoute(context);
     }
     page = await context.newPage();
     passiveCmpCapture = installCmpPassiveDiagnostics(page);
+    receiptCapture = installConsentReceiptCapture(page,{scanId:input.scanId,action:'accept',clockOriginAtEpochMs:parentScanStartedAtMs,signal:effectiveSignal});
     oneTrustSdkCapture = installOneTrustSdkSourceCapture(page);
     await installBorlabsDeferredDialogReveal(page, observationTargetUrl);
-    originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl);
+    originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl, undefined, {
+      onSession: session => oneTrustSdkCapture?.bindNativeSession(session, {
+        deadlineAtEpochMs: resultBudgetDeadlineAtMs, signal: effectiveSignal,
+      }),
+    });
     if (input.runtimeGraph) graphCapture = await installRuntimeGraphCapture(page, {
       ...input.runtimeGraph, captureId: input.scanId, scenario: "post_accept", startedAt: new Date(parentScanStartedAtMs).toISOString(),
     });
@@ -783,7 +797,7 @@ export async function runPostAcceptObserver(
       await waitForConsentDocumentOrNamedControl<AcceptRecipeResolution>({page,deadlineAtMs:searchDeadline,signal:effectiveSignal,discovery:actionDiscovery,
         probe:async (sliceMs,probeSignal)=>{
           const active=await resolveActiveRuntimeRecipes(page!,recipes,actionDiscovery);
-          if(active.length!==1 || !isRegisteredLoadingOneTrustRecipe(active[0]!,"accept"))return undefined;
+          if(active.length!==1 || !isRegisteredLoadingConsentRecipe(active[0]!,"accept"))return undefined;
           const candidate=await waitForDeterministicRecipe(page!,active,sliceMs,probeSignal,actionDiscovery,recordResolverSnapshot);
           return candidate.status==="found" && candidate.scope===page ? candidate : undefined;
         }});
@@ -863,6 +877,10 @@ export async function runPostAcceptObserver(
     let useVerifiedGeometryDispatch = false;
     const actionReadinessDeadline = Date.now() + (input.allowCanonicalAcceptDiscovery ? 3_000 : 2_500);
     const actionReadinessRemaining = (maximumMs: number) => remainingResultBudgetMs(Math.min(maximumMs, Math.max(0, actionReadinessDeadline - Date.now())));
+    const actionabilityReadOptions = (): ConsentControlReadOptions => ({
+      deadlineAtMs: Math.min(actionReadinessDeadline, resultBudgetDeadlineAtMs ?? Infinity),
+      signal: effectiveSignal, scope: confirmationScope,
+    });
     try {
       await trialAcceptControl(page, control, selectedRecipe);
     } catch (error) {
@@ -872,7 +890,7 @@ export async function runPostAcceptObserver(
       actionabilityError &&
       classifyClickFailure(actionabilityError) === "actionability_timeout"
     ) {
-      const actionability = await inspectLocatorActionability(control);
+      const actionability = await inspectLocatorActionability(control, actionabilityReadOptions());
       if (locatorActionabilitySupportsVerifiedDispatch(actionability)) {
         actionabilityError = undefined;
         useVerifiedGeometryDispatch = true;
@@ -910,6 +928,7 @@ export async function runPostAcceptObserver(
               control,
               actionReadinessRemaining(1_000),
               effectiveSignal,
+              confirmationScope,
             );
             if (!actionability) throw new Error("Verified Accept geometry actionability timeout.");
             actionabilityError = undefined;
@@ -928,7 +947,7 @@ export async function runPostAcceptObserver(
     // Final proof, target authorization and semantic registration remain required.
     if (actionabilityError && !selectedRecipe.accessibleControl && actionReadinessRemaining(1_000) > 0 &&
       ["actionability_timeout", "intercepted"].includes(classifyClickFailure(actionabilityError))) {
-      const actionability = await waitForLocatorVerifiedGeometry(control, actionReadinessRemaining(1_000), effectiveSignal);
+      const actionability = await waitForLocatorVerifiedGeometry(control, actionReadinessRemaining(1_000), effectiveSignal, confirmationScope);
       if (actionability) {
         actionabilityError = undefined; useVerifiedGeometryDispatch = true;
         diagnostics.click.actionability = actionability;
@@ -936,7 +955,7 @@ export async function runPostAcceptObserver(
       }
     }
     if (actionabilityError) {
-      const actionability = await inspectLocatorActionability(control);
+      const actionability = await inspectLocatorActionability(control, actionabilityReadOptions());
       diagnostics.click = {
         outcome: "failed_before_dispatch",
         failureClass: actionability.centerHitTargetRelation === "other_element"
@@ -974,6 +993,7 @@ export async function runPostAcceptObserver(
       if (reason) limitations.push(reason);
     }
     let proofResolution = await buildConsentActionControlProof({
+      deadlineAtMs: resultBudgetDeadlineAtMs,
       onLabelInspection: recordResolverSnapshot,
       signal: effectiveSignal,
       action: "accept",
@@ -1060,6 +1080,7 @@ export async function runPostAcceptObserver(
             control,
           );
           proofResolution = await buildConsentActionControlProof({
+            deadlineAtMs: resultBudgetDeadlineAtMs,
             onLabelInspection: recordResolverSnapshot,
             signal: effectiveSignal,
             action: "accept",
@@ -1097,6 +1118,7 @@ export async function runPostAcceptObserver(
     }
     actionControlProof = proofResolution.proof;
     const actionDispatchedAtEpochMs = Date.now();
+    receiptCapture?.dispatch(actionDispatchedAtEpochMs);
     const actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
     actionDispatched = true;
     try { input.onLifecycleEvent?.({ type: "action_dispatched", atMs: actionDispatchedAtMs }); }
@@ -1112,6 +1134,7 @@ export async function runPostAcceptObserver(
         selectedRecipe,
         useVerifiedGeometryDispatch,
         () => assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256),
+        { deadlineAtMs: resultBudgetDeadlineAtMs, signal: effectiveSignal, scope: confirmationScope },
       );
     } catch (error) {
       clickError = error;
@@ -1173,7 +1196,7 @@ export async function runPostAcceptObserver(
         onOutcome: confirmationDiagnostic.terminal,
         action: "accept", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256,
         parentScanStartedAtMs, dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
-        signal: effectiveSignal, targetStillAuthorized, read: () => waitForAcceptanceConfirmation(context!, page!, confirmationScope, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined, { pass: () => confirmationDiagnostic.pass(true), reason: confirmationDiagnostic.terminalReason, apiSnapshot:recordHubSpotRead }),
+        signal: effectiveSignal, targetStillAuthorized, read: () => waitForAcceptanceConfirmation(context!, page!, confirmationScope, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined, { pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason, apiSnapshot:recordHubSpotRead }),
       });
       const stopReason = await finishAfterActionWindow({
         onFinalWindow: terminalRead.start,
@@ -1433,6 +1456,7 @@ export async function runPostAcceptObserver(
     originDomStorageCapture?.finish();
     actionDiscovery?.dispose();
     passiveCmpCapture?.finish();
+    receiptCapture?.finish();
     oneTrustSdkCapture?.dispose();
     await context?.close().catch(() => undefined);
     if (ownsBrowser) await browser?.close().catch(() => undefined);
@@ -1527,7 +1551,7 @@ async function waitForDeterministicRecipe(
             labelMatchCount += 1;
             if (
               !cmpRecipeRequiresViewportHitTarget(recipe.cmpId) ||
-              await locatorHasViewportHitTarget(control)
+              await locatorHasViewportHitTarget(control, { deadlineAtMs: timeoutMs > 0 ? deadlineAtMs : undefined, signal, scope })
             ) {
               matches.push({ recipe, control, scope });
             } else {
@@ -1572,7 +1596,7 @@ async function waitForDeterministicRecipe(
           if (enabled) enabledCount += 1;
           if (expectedLabelPresent) labelMatchCount += 1;
           if (visible && enabled && expectedLabelPresent) {
-            const readiness = await inspectLocatorConsentReadiness(control);
+            const readiness = await inspectLocatorConsentReadiness(control, { deadlineAtMs: timeoutMs > 0 ? deadlineAtMs : undefined, signal, scope });
             if (!readiness.scopeInteractive) { scopeNotInteractive = true; continue; }
             if (locatorActionabilitySupportsVerifiedDispatch(readiness.actionability)) {
               matches.push({ recipe, control, scope });
@@ -1862,7 +1886,7 @@ async function waitForCanonicalAcceptControlRecipe(
         if (Date.now() >= bindingDeadlineAtMs) { bindingState("binding_budget_exhausted"); break; }
         if (!await locatorEnabledWithinDeadline(control, bindingDeadlineAtMs)) { failed("control_disabled"); continue; }
         if (!(await normalizedAcceptLocatorLabels(control)).includes(candidate.normalizedLabel)) { failed("label_mismatch"); continue; }
-        if (!await locatorHasViewportHitTarget(control)) { failed("control_not_hit_target"); continue; }
+        if (!await locatorHasViewportHitTarget(control, { deadlineAtMs: bindingDeadlineAtMs, signal, scope: scope.scope })) { failed("control_not_hit_target"); continue; }
         actionableControls.push(control);
       }
       if (actionableControls.length > 1) {
@@ -2057,6 +2081,7 @@ async function dispatchAcceptControl(
   recipe: PostAcceptActionRecipe,
   useVerifiedGeometryDispatch = false,
   assertDispatchAllowed?: () => void,
+  readOptions?: ConsentControlReadOptions,
 ) {
   assertDispatchAllowed?.();
   if (recipe.customControlBinding) {
@@ -2071,7 +2096,7 @@ async function dispatchAcceptControl(
     return;
   }
   if (useVerifiedGeometryDispatch) {
-    await dispatchLocatorClickWithVerifiedGeometry(control, 2_000, assertDispatchAllowed);
+    await dispatchLocatorClickWithVerifiedGeometry(control, 2_000, assertDispatchAllowed, readOptions);
     return;
   }
   await control.click({ timeout: 2_000 });
@@ -2157,6 +2182,7 @@ async function captureConfirmationBaseline(
     return {
       kind: confirmation.kind,
       canonicalState: snapshot?.canonicalState,
+      configurationSha256: snapshot?.configurationSha256,
       eventSequence: snapshot?.eventSequence ?? 0,
       ...(snapshot ? {apiRead:{snapshot,readAtEpochMs:Date.now()}} : {}),
     };
@@ -2314,24 +2340,10 @@ async function waitForAcceptanceConfirmation(
     ) {
       const snapshot = await readCmpApiConsentSnapshot(confirmationScope, confirmation.provider, diagnostics?.reason);
       if (confirmation.provider === "hubspot") diagnostics?.apiSnapshot?.(snapshot);
-      const changed = Boolean(
-        snapshot?.canonicalState && snapshot.canonicalState !== baseline.canonicalState
-      );
-      const freshEvent = (snapshot?.eventSequence ?? 0) > baseline.eventSequence;
-      const actionBoundEvent = snapshot?.eventObservedAtEpochMs === undefined ||
-        snapshot.eventObservedAtEpochMs >= actionDispatchedAtEpochMs;
-      // Explain the existing gates using this same read; diagnostics never
-      // supply a witness or add an API call, retry, or observation interval.
-      if (snapshot) {
-        if (snapshot.decision !== "granted") diagnostics?.reason(snapshot.decision === "unknown"
-          ? "no_registered_complete_decision" : "opposite_or_mixed_decision");
-        else if (!actionBoundEvent || (["borlabs", "osano", "hubspot", "drupal_eu_cookie", "didomi"].includes(confirmation.provider) &&
-          (baseline.canonicalState === undefined || !freshEvent || (confirmation.provider !== "borlabs" && snapshot.eventObservedAtEpochMs === undefined)))) {
-          diagnostics?.reason("api_saved_event_unverified");
-        } else if (!changed && !freshEvent) diagnostics?.reason("no_fresh_decision");
-      }
-      if (snapshot?.decision === "granted" && actionBoundEvent && (changed || freshEvent) &&
-        (!["borlabs", "osano", "hubspot", "drupal_eu_cookie", "didomi"].includes(confirmation.provider) || (baseline.canonicalState !== undefined && freshEvent && (confirmation.provider === "borlabs" || snapshot.eventObservedAtEpochMs !== undefined)))) {
+      const eligibility = snapshot && evaluateCmpApiConfirmation({provider: confirmation.provider,
+        baseline, snapshot, decision: "granted", actionDispatchedAtEpochMs});
+      if (eligibility && !eligibility.eligible) diagnostics?.reason(eligibility.reason);
+      if (snapshot && eligibility?.eligible) {
         return {
           stateHash: hashValue(snapshot.canonicalState),
           witnessType: "cmp_api_state",
@@ -2873,7 +2885,7 @@ async function installStorageWriteProbe(page: Page) {
           const expires = attributes.find((attribute) => attribute.toLowerCase().startsWith("expires="))?.slice(8);
           const deletion = maxAge !== undefined ? Number(maxAge) <= 0 : expires !== undefined && Date.parse(expires) <= Date.now();
           retain({ storageType: "cookie", name, deletion, value: cookieValue.length <= 2048 ? cookieValue : undefined,
-            ...(name.startsWith("cmplz_") ? {
+            ...((/consent|optanon|^cmplz_|^__cmp|^cmapi_|(?:^|[.])notice_(?:gdpr_prefs|preferences)$|(?:^|[.])cmapi_cookie_privacy$/i.test(name) || /^_iub_cs(?:-(?:s)?[0-9]{1,16})?$/i.test(name)) ? {
               cookieAssignment: String(value).length <= 4096 ? String(value) : undefined,
               documentUrl: location.href.length <= 2048 ? location.href : undefined,
             } : {}), observedAtEpochMs: performance.timeOrigin + performance.now() });
@@ -2967,7 +2979,10 @@ function cookieKey(input: { name: string; path: string }) {
 }
 
 async function cookieState(context: BrowserContext, cookieName: string) {
-  const states = (await context.cookies()).filter((cookie) =>
+  const token=receiptCaptureToken(context);
+  const cookies=await context.cookies();
+  retainReceiptCookies(token,cookies,cookieName);
+  const states = cookies.filter((cookie) =>
     matchesCanonicalCmpCookieName(cookie.name, cookieName)
   ).map((cookie) => [
     cookie.name,

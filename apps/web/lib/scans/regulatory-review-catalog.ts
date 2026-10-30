@@ -53,7 +53,13 @@ export type RegulatoryReviewTopic = {
 const gdpr = "https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng";
 const eprivacy = "https://eur-lex.europa.eu/eli/dir/2002/58/2009-12-19/eng";
 const california = "https://www.cppa.ca.gov/faq.html";
-const rowIds = (...ids: string[]) => ids.map(id => `regulatory_gap__gdpr_eprivacy__${id}`);
+// Historical canonical finding identities for the same EU refusal assessment.
+// The underlying request/control evidence remains shared; these conclusions
+// must not stand in for California's separately qualified collection findings.
+const LEGACY_EU_FINDING_IDS: Readonly<Record<string, readonly string[]>> = {
+  post_reject_tracking_reduction: ["post_reject_click_tracking", "post_refusal_non_essential_activity", "accept_reject_outcomes_indistinguishable"],
+};
+const rowIds = (...ids: string[]) => ids.flatMap(id => [`regulatory_gap__gdpr_eprivacy__${id}`, ...(LEGACY_EU_FINDING_IDS[id] ?? [])]);
 function eu(id: string, title: string, rows: string[], why: string, rule: string, cases: string[] = [], priority = 50): RegulatoryReviewTopic {
   return { id, title, findingIds: rowIds(...rows), contexts: { gdpr_eprivacy: { why, rule, ruleUrl: rule.startsWith("ePrivacy") ? eprivacy : gdpr, cases, priority } } };
 }
@@ -74,6 +80,9 @@ export const REGULATORY_REVIEW_TOPICS: RegulatoryReviewTopic[] = [
   { id: "california-gpc-choice", title: "GPC choice-enforcement risk", findingIds: ["gpc_response"], contexts: { ccpa_cpra: {
     why: "GPC communicates a sale/sharing opt-out. Verified advertising collection or an acknowledged signal with the applicable opt-out remaining off warrants checking whether the site and its services apply that choice.",
     rule: "CCPA §1798.135; regulations §§7025–7026", ruleUrl: "https://cppa.ca.gov/regulations/pdf/ccpa_updates_cyber_risk_admt_appr_text.pdf", cases: ["sephora"], priority: 100 } } },
+  { id: "california-collection-review", title: "Collection under privacy-choice conditions", findingIds: ["california_collection_review"], contexts: { ccpa_cpra: {
+    why: "Verified collection was observed under privacy-choice conditions; the sale/sharing purpose of the specific requests remains unresolved.",
+    rule: "California collection review", ruleUrl: california, cases: [], priority: 50 } } },
   { id: "california-opt-out-activity", title: "Activity after a sale/sharing opt-out", findingIds: ["california_sale_sharing_opt_out_activity"], contexts: { ccpa_cpra: {
     why: "An applicable sale/sharing opt-out must take effect for relevant data flows. Review whether the observed requests actually involve sale or sharing and whether the visitor’s recorded choice is applied by those services.",
     rule: "CCPA §1798.120; regulations §7026", ruleUrl: "https://cppa.ca.gov/regulations/pdf/ccpa_statute_eff_20260101.pdf", cases: ["tractorSupply"], priority: 100 } } },
@@ -128,15 +137,23 @@ export function regulatoryReviewContext(id: string, focus: ReportReviewFocus, co
   return topic && context ? { ...context, topicId: topic.id, examples: context.cases.map(id => ENFORCEMENT_EXAMPLES[id]!).filter(example => example?.mode === focus) } : null;
 }
 
+/** Framework scope for already-projected findings. Unknown cross-cutting
+ * identities remain available; known single-framework identities stay scoped. */
+export function isRegulatoryFindingRelevant(id: string, focus: ReportReviewFocus = "gdpr_eprivacy"): boolean {
+  const topic = REGULATORY_REVIEW_TOPICS.find(topic => topic.findingIds.includes(id));
+  return !topic || Boolean(topic.contexts[focus]);
+}
+
 /** Rank existing entries for one issue list; framework-specific context stays separate. */
 export function selectRegulatoryReview<T extends { id: string; status: string; rank: number; evidenceJson?: Record<string, unknown> }>(findings: readonly T[], focus: ReportReviewFocus) {
-  const priorityFindings = selectCaliforniaPriorityFindings(findings);
+  const scoped = findings.filter(finding => isRegulatoryFindingRelevant(finding.id, focus));
+  const priorityFindings = focus === "ccpa_cpra" ? selectCaliforniaPriorityFindings(scoped) : scoped;
   const relevant = priorityFindings.filter(finding => regulatoryReviewContext(finding.id, focus));
   const regulatory = [...relevant].sort((a, b) =>
     Number(b.status === "Potential gap") - Number(a.status === "Potential gap") ||
     regulatoryReviewContext(b.id, focus,Boolean(b.evidenceJson?.combinedGpcAssessment))!.priority - regulatoryReviewContext(a.id, focus,Boolean(a.evidenceJson?.combinedGpcAssessment))!.priority
   ).map((finding, index) => ({ ...finding, rank: index + 1 }));
-  const other = priorityFindings.filter(finding => finding.id !== "gpc_response" && !REGULATORY_REVIEW_TOPICS.some(topic => topic.findingIds.includes(finding.id)))
+  const other = priorityFindings.filter(finding => isRegulatoryFindingRelevant(finding.id, focus) && !REGULATORY_REVIEW_TOPICS.some(topic => topic.findingIds.includes(finding.id)))
     .map((finding, index) => ({ ...finding, rank: index + 1 }));
   // A finding tied solely to the other privacy framework stays in Detailed evidence.
   const topIssues = [...regulatory, ...other].map((finding, index) => ({ ...finding, rank: index + 1 }));

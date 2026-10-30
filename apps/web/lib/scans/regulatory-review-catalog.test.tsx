@@ -28,7 +28,7 @@ test("every catalog identity is unique and cases match the selected jurisdiction
   const ids = REGULATORY_REVIEW_TOPICS.flatMap(topic => topic.findingIds);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(REGULATORY_REVIEW_TOPICS.filter(topic => topic.contexts.gdpr_eprivacy).length, 32);
-  assert.equal(REGULATORY_REVIEW_TOPICS.filter(topic => topic.contexts.ccpa_cpra).length, 9);
+  assert.equal(REGULATORY_REVIEW_TOPICS.filter(topic => topic.contexts.ccpa_cpra).length, 10);
   for (const topic of REGULATORY_REVIEW_TOPICS) for (const mode of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
     for (const caseId of topic.contexts[mode]?.cases ?? []) assert.equal(ENFORCEMENT_EXAMPLES[caseId]?.mode, mode, `${topic.id}: ${caseId}`);
     const context = regulatoryReviewContext(topic.findingIds[0]!, mode);
@@ -36,6 +36,15 @@ test("every catalog identity is unique and cases match the selected jurisdiction
     assert.ok(context.why.length > 30 && context.why.length < 350);
     assert.ok(context.ruleUrl.startsWith("https://"));
   }
+});
+test("collection review has explicit California context and cannot become an EU finding through the generic other list",()=>{
+  const finding=REGULATORY_PREVIEW_FINDINGS.find(row=>row.id==="california_collection_review")!;
+  const before=structuredClone(finding);
+  assert.ok(regulatoryReviewContext(finding.id,"ccpa_cpra"));
+  assert.equal(regulatoryReviewContext(finding.id,"gdpr_eprivacy"),null);
+  assert.ok(selectRegulatoryReview([finding],"ccpa_cpra").regulatory.some(row=>row.id===finding.id));
+  assert.equal(selectRegulatoryReview([finding],"gdpr_eprivacy").topIssues.length,0);
+  assert.deepEqual(finding,before);
 });
 test("unknown identities and generic accessibility receive no invented legal context", () => {
   for (const id of ["unrecognized", "accessibility_priority_group", "visual_contrast_accessibility_issue", "site_integrity_cms_security", "privacyAuditEvidence.controls", "cpra_cba_opt_out_missing"]) {

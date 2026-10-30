@@ -3881,3 +3881,5 @@ export * from "./cmp-passive-diagnostics";
 export * from "./consent-action-stages";
 
 export * from "./complianz-consent-state";
+
+export * from './consent-receipt-capture';

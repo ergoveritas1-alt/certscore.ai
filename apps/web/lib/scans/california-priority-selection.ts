@@ -51,7 +51,7 @@ function explicitChoiceCorroboration(review: CaliforniaPrivacyReview) {
   return review.optOutObservation?.verificationStatus === "verified" && review.optOutObservation.evidence.registration === "confirmed" &&
     review.optOutObservation.evidence.requests.some(row => row.collectionEvidence && row.httpStatus < 400);
 }
-export type CaliforniaPriorityDemotion = "agent_registration_detail" | "non_discrimination_only" | "uncorroborated_choice_absence" | "analytics_only_collection" | "same_gpc_recipients" | "combined_opt_out";
+export type CaliforniaPriorityDemotion = "agent_registration_detail" | "non_discrimination_only" | "uncorroborated_choice_absence" | "same_gpc_recipients" | "combined_opt_out";
 
 /** Editorial selection of canonical projected findings only. Never mutates
  * packets, coverage, snapshot state or score inputs. A malformed record cannot
@@ -93,7 +93,9 @@ export function californiaPriorityDemotion(finding: Finding, findings: readonly 
   if (!assessments) return null;
   const potential = assessments.flatMap(row => row.rows.filter(item => item.treatment === "potential_risk"));
   if (!potential.length) return null;
-  if (potential.every(row => row.purpose === "analytics")) return "analytics_only_collection";
+  // A qualified collection-review finding is eligible regardless of recipient
+  // purpose. Unresolved sale/sharing purpose remains in its canonical copy;
+  // it does not justify a blanket analytics-only top-issue exclusion.
   // Do not collapse separate Reject/opt-out paths. Exact same-source GPC
   // membership joins the original document/session, not just an entity label.
   const binding = californiaGpcPriorityBindingSchema.safeParse(finding.evidenceJson?.gpcPriorityBinding);

@@ -7,6 +7,8 @@ import { evidenceSectionCounts, cmsEvidenceVersionLabel } from "../../lib/scans/
 import { TECHNOLOGY_NAMES, TECHNOLOGY_CATEGORY_LABELS, TECHNOLOGY_SCOPE_LABELS } from "@certscore/contracts";
 import { projectConsentControlReport } from "../../lib/scans/consent-control-report";
 import { pdfChoiceWindows, pdfInventoryRows, pdfTimingEvents, pdfRejectTimingEvents } from "./report-pdf-reader";
+import { reportSectionInFocus } from "../../lib/scans/report-framework-scope";
+import { reportStatusLabel } from "../../lib/scans/report-status-presentation";
 
 type Layout = { text(value: unknown, size?: number): PdfLine[]; heading(text: string): PdfLine };
 const value = (input: unknown): string => input === null || input === undefined || input === "" ? "Not retained"
@@ -21,6 +23,7 @@ const setting = (checked: boolean | null) => checked === null ? "Not captured" :
 
 /** Rows wrap and continue across pages; no retained cell is clipped to a character limit. */
 export function pdfEvidenceTable(id: string, headers: string[], rows: string[][], widths?: number[]): PdfLine[] {
+  rows=rows.map(row=>row.map(reportStatusLabel));
   if (!rows.length) return [];
   const columnWidths = widths ?? headers.map(() => 512 / headers.length);
   const headerCells = headers.map((header, index) => wrapPdfText(header, columnWidths[index]! - 16, 8, true));
@@ -52,6 +55,7 @@ function distribution(rows: string[]) {
 }
 
 export function pdfPolicyEvidenceLines(report: CanonicalReportExport, layout: Layout): PdfLine[] {
+  if(!reportSectionInFocus("gdpr-transparency",report.reviewFocus))return [];
   const appendix = report.appendix.gdprTransparency;
   const details = (report.appendix.evidenceDossier?.checklistDetails ?? []).filter(item => item.topic === "policy");
   const isSource = (key: string) => /(?:^|\/ )(?:sourceUrl|policyUrl|selectedPolicySectionUrl|surfaceUrl)$/i.test(key);
@@ -115,12 +119,12 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
   const stats: Record<PdfReportTopic, Array<{ label: string; value: string }>> = {
     consent: [{ label: "CMP checks", value: cmp ? String(cmp.audit.rows.length) : "Unavailable" }, { label: "First-layer choices observed", value: controls ? `${Object.values(controls.controls).filter(state => state === "observed").length} / 3` : "Unavailable" }, { label: "CMP provider", value: cmp?.audit.experience?.provider ?? cmp?.provider ?? "Not retained" }],
     storage: [{ label: "Cookie rows", value: String(runtime.summary.cookieRows) }, { label: "Local / session storage rows", value: String(runtime.summary.storageRows ?? 0) }, { label: "Retained domains", value: String(domainCount(storageRows)) }],
-    policy: [{ label: "Disclosure checks", value: String(report.appendix.gdprTransparency.rows.length) }, { label: "Retained policy source URLs", value: String(policySources.size) }, { label: "Retained policy passages", value: String(policyPassages.size) }],
+    policy: report.reviewFocus==="ccpa_cpra"?[{label:"California review areas",value:String(report.californiaScore?.reviewCoverage?.families.length??"Not retained") }]:[{ label: "Disclosure checks", value: String(report.appendix.gdprTransparency.rows.length) }, { label: "Retained policy source URLs", value: String(policySources.size) }, { label: "Retained policy passages", value: String(policyPassages.size) }],
     forms: [{ label: "Retained forms", value: String(collection.summary.totalForms) }, { label: "Retained fields", value: String(collection.summary.totalFields) }, { label: "Destination request records", value: dossier?.formDestinations ? String(dossier.formDestinations.trace.requests.length) : "Not retained" }],
     security: [{ label: "CMS platforms", value: cms ? String(cms.assessment.detections.length) : "Not retained" }, { label: "Plugins", value: cms?.pluginInventory ? String(cms.pluginInventory.detections.length) : "Not retained" }, { label: "Transport security checks", value: String((report.gdprEprivacyReview?.rows ?? []).filter(row => ["security", "tls"].includes(pdfTopicForRow(row.id) ?? "")).length) }],
     external: [{ label: "Service rows shown", value: String(externalRows.length) }, { label: "Retained domains", value: String(domainCount(externalRows)) }, { label: "Request evidence rows", value: String(runtime.summary.requestEvidenceRows) }],
     tls: [{ label: "TLS checklist rows", value: String((report.gdprEprivacyReview?.rows ?? []).filter(row => pdfTopicForRow(row.id) === "tls").length) }, { label: "Projected findings", value: String(findings.filter(finding => pdfTopicForFinding(finding) === "tls").length) }, { label: "Evidence scope", value: "Starting page" }],
-    accessibility: [{ label: "Failed automated rules", value: value(report.accessibilityAudit?.failedRuleCount) }, { label: "Affected nodes", value: value(report.accessibilityAudit?.affectedNodeCount) }, { label: "Rules needing manual review", value: value(report.accessibilityAudit?.reviewRuleCount) }],
+    accessibility: [{ label: "Failed automated rules", value: value(report.accessibilityAudit?.failedRuleCount) }, { label: "Affected nodes", value: value(report.accessibilityAudit?.affectedNodeCount) }, { label: "Manual checks", value: value(report.accessibilityAudit?.reviewRuleCount) }],
   };
   for (const topic of PDF_REPORT_TOPICS) {
     const rows = topic.id === "consent" && cmp ? cmp.audit.rows : topic.id === "policy" ? report.appendix.gdprTransparency.rows
@@ -140,7 +144,7 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
       if (!support) continue;
       const inventory = support.inventory;
       if (inventory && Object.keys(inventory).length > 0 && Object.keys(inventory).every(key => ["consentStorage", "choiceActivity", "expiries"].includes(key)) && !support.prominence && !support.cookieComparison && !support.requests?.length) continue;
-      a.push(layout.heading(row.label), ...layout.text(`Result: ${row.status}. ${row.detail ?? ""}`));
+      a.push(layout.heading(row.label), ...layout.text(`Result: ${reportStatusLabel(row.status)}. ${row.detail ?? ""}`));
       if (support?.prominence) {
         const geometry = support.prominence;
         a.push(...pdfEvidenceTable(`cmp-geometry-${row.id}`, ["Control", "Bounds: x, y, width, height", "Fill contrast / outer emphasis"], [
@@ -214,7 +218,7 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
     if (item.topic === "policy") continue;
     const destination = sections[item.topic ?? "policy"];
     if (!item.facts.length && !item.subchecks.length) continue;
-    destination.push(layout.heading(`Evidence: ${item.label}`), ...layout.text(`${item.status}. ${item.explanation}`, 9));
+    destination.push(layout.heading(`Evidence: ${item.label}`), ...layout.text(`${reportStatusLabel(item.status)}. ${item.explanation}`, 9));
     const publicFacts = item.facts.filter(fact => !/hash|artifact|contractVersion|evidenceRef|discoveryMethod/i.test(fact.label));
     if (publicFacts.length) destination.push(...pdfEvidenceTable(`checklist-facts-${item.id}`, ["Evidence", "Detail"], publicFacts.map(fact => [label(fact.label), fact.value]), [165, 347]));
     if (item.subchecks.length) destination.push(...pdfEvidenceTable(`checklist-subchecks-${item.id}`, ["Check", "Status", "Evidence / note"], item.subchecks.map(check => [check.label, check.status, `${check.note}; ${check.evidenceRefs.join(", ")}`]), [180, 110, 222]));

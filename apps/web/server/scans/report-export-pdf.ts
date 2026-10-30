@@ -1,4 +1,6 @@
-import { pdfNarrativeFindings } from "./report-pdf-evidence";
+import { pdfNarrativeFindings, scopeCanonicalReportPdf } from "./report-pdf-evidence";
+import { reportSectionInFocus } from "../../lib/scans/report-framework-scope";
+import { reportStatusLabel } from "../../lib/scans/report-status-presentation";
 import { assertPublicReportPdfContent, publicReportPdfBaseUrl } from "./report-pdf-public-safety";
 import { pdfTestedUrl, pdfRegionLabel, pdfPublicWords, pdfConfidenceLabel, pdfReviewGroups, pdfReportCounts, pdfInventoryRows, pdfRelatedCookieServices } from "./report-pdf-reader";
 import { pdfConsentVisualFocus, type PdfVisualFocus } from "./report-pdf-visual";
@@ -256,7 +258,7 @@ const FULL_CAPTURE_SLICE_HEIGHT = 630;
 
 function wrappedLines(value: unknown, options: Omit<PdfLine, "text"> = {}): PdfLine[] {
   // Wrap once, using actual font metrics, after all layout choices are known.
-  return [{ text: ascii(value), ...options }];
+  return [{ text: ascii(typeof value === "string" ? reportStatusLabel(value) : value), ...options }];
 }
 
 function sectionHeading(text: string, pageBreakBefore = false): PdfLine {
@@ -307,6 +309,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
     ]) : []),
   );
   lines = sections.consent;
+  if(reportSectionInFocus("privacy",report.reviewFocus)) {
   lines.push(sectionHeading("Privacy choices and notices"));
   if (!report.privacyAuditEvidence) lines.push(...wrappedLines("Unknown: verified privacy-choice and notice evidence was not retained. This does not establish absence."));
   else {
@@ -319,7 +322,9 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
     if (!audit.controls.length && (audit.contractVersion !== "certscore.privacy-audit-evidence.v2" || !audit.controlCandidates.length)) lines.push(...wrappedLines("No verified privacy-choice surface retained; control absence remains unknown."));
     if (audit.truncated) lines.push(...wrappedLines("Privacy workpaper display limits apply."));
   }
+  }
   lines = sections.consent;
+  if(reportSectionInFocus("gpc",report.reviewFocus)) {
   lines.push(sectionHeading("Other signals - GPC response"));
   if (report.gpcResponse) {
     const gpc = report.gpcResponse;
@@ -333,6 +338,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
     }
     lines.push(...wrappedLines("Signal-delivery proof and comparison deltas are available in the JSON workpaper.", { size: 9 }));
   } else lines.push(...wrappedLines("No verified GPC assessment available; response remains unknown."));
+  }
 
   lines = sections.external;
   if(report.fullSite) {
@@ -340,7 +346,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
     lines.push(...[
       sectionHeading("Scan scope and resource inventory"),
       ...wrappedLines(`${f.scope}. Additional pages: Not assessed for consent, CMP, policy, GDPR transparency or transport.`),
-      ...wrappedLines(`${f.scoreScope} (overall, GDPR/ePrivacy-weighted): ${f.score?.value ?? "Unavailable"}/100. ${f.score?.scope ?? "Scored evidence unavailable."}`),
+      ...(report.reviewFocus === "gdpr_eprivacy" ? wrappedLines(`${f.scoreScope} (overall, GDPR/ePrivacy-weighted): ${f.score?.value ?? "Unavailable"}/100. ${f.score?.scope ?? "Scored evidence unavailable."}`) : []),
       ...wrappedLines(`${f.condition} ${f.countingScope}`),
       ...wrappedLines(`Max pages including homepage: ${state.requested.maxPages}; requested concurrency: ${state.requested.concurrency}; wait between starts: ${state.requested.waitSeconds}s; region: ${state.region}.`),
       ...wrappedLines(`Effective concurrency: ${state.effective.concurrency}; effective wait: ${state.effective.waitSeconds}s. Status: ${state.status}; stop reason: ${state.stopReason??"In progress"}.`),
@@ -565,7 +571,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
   }
 
   lines = sections.accessibility;
-  lines.push(...wrappedLines("Automated starting-page accessibility evidence supporting ADA/WCAG review. This is not an ADA compliance determination or a complete WCAG conformance audit. Manual review is required.", { size: 9 }));
+  lines.push(...wrappedLines("Automated starting-page accessibility evidence supporting ADA/WCAG review. This is not an ADA compliance determination or a complete WCAG conformance audit. Inconclusive checks are listed separately.", { size: 9 }));
   const accessibility = report.accessibilityAudit;
   if (accessibility) lines.push(...wrappedLines(
     `Automated audit: ${accessibility.status}; engine ${accessibility.engine} ${accessibility.engineVersion ?? "version unavailable"}; failed rules ${accessibility.failedRuleCount ?? "unknown"}; affected nodes ${accessibility.affectedNodeCount ?? "unknown"}; rules needing review ${accessibility.reviewRuleCount ?? "unknown"}.`));
@@ -575,7 +581,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
     lines.push(...wrappedLines(`Assessed page: ${accessibilityEvidence.documentUrl}`, { size: 9 }),
       ...wrappedLines(`Captured: ${accessibilityEvidence.startedAt} to ${accessibilityEvidence.completedAt}; ${accessibilityEvidence.rulesEvaluated.length} rules evaluated.`, { size: 8 }),
       ...wrappedLines(`Limitations: ${join(accessibilityEvidence.limitations, "None recorded for this bounded audit")}`, { size: 9 }));
-    for (const [label, rules] of [["Automated rule evidence", accessibilityEvidence.violations], ["Manual review evidence", accessibilityEvidence.reviewItems]] as const) {
+    for (const [label, rules] of [["Automated rule evidence", accessibilityEvidence.violations], ["Manual check evidence", accessibilityEvidence.reviewItems]] as const) {
       for (const rule of rules) {
         lines.push(sectionHeading(`${label}: ${rule.ruleId}`), ...wrappedLines(`${rule.help}. ${rule.description}`),
           ...wrappedLines(`Tags: ${join(rule.tags)}; impact ${rule.impact}; ${rule.nodeCount} affected nodes.`, { size: 9 }),
@@ -901,7 +907,7 @@ function executivePage(report: CanonicalReportExport, hasLogo: boolean, headerTh
   text(`${report.fullSite ? "Website scan report | " : ""}${pdfTestedUrl(report) ?? report.reviewFocusLabel}`, titleX, 741, 9, false, palette.muted);
   text(`Completed: ${pdfLocalDate(report.scan.completedAt, timeZone)} (${timeZone}) | Region: ${pdfRegionLabel(report.scan.scanFrom)}`, 50, 716, 8, false, palette.muted);
 
-  const rawScore = report.score?.value;
+  const rawScore = report.reviewFocus === "ccpa_cpra" ? report.californiaScore?.score ?? null : report.score?.value;
   const score = typeof rawScore === "number" && Number.isFinite(rawScore) && rawScore >= 0 && rawScore <= 100 ? rawScore : null;
   const reviewGroups = pdfReviewGroups(report);
   const reportCounts = pdfReportCounts(report);
@@ -920,7 +926,7 @@ function executivePage(report: CanonicalReportExport, hasLogo: boolean, headerTh
   const metricCenter = 370 + metricHeight / 2;
   card(50, assessmentBottom, 512, assessmentHeight);
   text("Site assessment", 64, 653, 12, true, accent);
-  text(`${report.reviewFocusLabel} | ${titleCase(report.executiveSummary.posture)}`, 64, 636, 10, true);
+  text(`${report.reviewFocusLabel} | ${report.reviewFocus === "ccpa_cpra" ? "Starting-page assessment" : titleCase(report.executiveSummary.posture)}`, 64, 636, 10, true);
   let narrativeSize = 10;
   let narrative = wrapPdfText(ascii(assessment), 484, narrativeSize);
   while ((narrative.length - 1) * (narrativeSize + 1.5) > 84 && narrativeSize > 7.5) {
@@ -930,15 +936,15 @@ function executivePage(report: CanonicalReportExport, hasLogo: boolean, headerTh
   narrative.forEach((line, index) => text(line, 64, 620 - index * (narrativeSize + 1.5), narrativeSize, false, "0.25 0.31 0.39", 484));
 
   card(50, 370, 144, metricHeight);
-  text("CertScore.ai score", 64, metricTop - 19, 10, true);
+  text(report.reviewFocus === "ccpa_cpra" ? "California score" : "CertScore.ai score", 64, metricTop - 19, 10, true);
   ring(122, metricCenter, 34, 7, Math.PI / 2, Math.PI / 2 - 2 * Math.PI, "0.88 0.93 0.95");
   if (score !== null) ring(122, metricCenter, 34, 7, Math.PI / 2, Math.PI / 2 - 2 * Math.PI * score / 100, accent);
   const scoreText = score === null ? "N/A" : String(score);
   const scoreSize = score === null ? 26 : Math.min(35, 70 * 35 / pdfTextWidth(scoreText, 35, true));
   center(scoreText, 122, metricCenter - 6, scoreSize, true, accent);
   center(score === null ? "Unavailable" : "/ 100", 122, metricCenter - 21, 8, false, muted);
-  center(report.score?.scope === "full_site" ? "Full-site score" : "Starting-page score", 122, 381, 7.5, false, muted);
-  text(score === null ? "Unavailable" : getGdprEprivacyPostureTone(score).ratingLabel, 60, metricTop - 33, 7, true, muted, 124);
+  center(report.reviewFocus !== "ccpa_cpra" && report.score?.scope === "full_site" ? "Full-site score" : "Starting-page score", 122, 381, 7.5, false, muted);
+  text(score === null ? "Unavailable" : report.reviewFocus === "ccpa_cpra" ? "Starting-page assessment" : getGdprEprivacyPostureTone(score).ratingLabel, 60, metricTop - 33, 7, true, muted, 124);
 
   // One finding total, in the severity doughnut. No duplicate finding KPI.
   card(204, 370, 144, metricHeight);
@@ -1062,6 +1068,10 @@ function executivePage(report: CanonicalReportExport, hasLogo: boolean, headerTh
       wrapPdfText(visual.status, 72, 9).forEach((line, index) => text(line, x + 39, y + 40 - index * 10, 9, true, statusColor(visual.status), 72));
     } else if (visual.kind === "columns") {
       if (visual.unavailable) text("Unavailable", x + 8, y + 31, 8, false, muted, 105);
+      else if(visual.statusLabel === "Manual check" && !visual.failures){
+        text(visual.statusLabel,x+8,y+36,8,true,muted,105);
+        text(`${visual.reviewItems ?? 0} inconclusive checks`,x+8,y+21,7,false,muted,105);
+      }
       else if (!visual.counts.length) {
         text("0 automated rule failures", x + 8, y + 43, 8, true, muted, width - 16);
         text(`${visual.nodes ?? 0} affected nodes`, x + 8, y + 29, 7, false, muted, width - 16);
@@ -1166,6 +1176,7 @@ export function renderCanonicalReportPdf(
     timeZone?: string;
   } = {},
 ) {
+  report=scopeCanonicalReportPdf(report);
   const headerTheme = normalizeReportHeaderTheme(options.headerTheme);
   const palette = REPORT_HEADER_PALETTES[headerTheme];
   const image = decodePdfImage(options.visualEvidence);

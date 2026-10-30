@@ -10,7 +10,7 @@ import {
 import { getKnownCmpDefinitionByName } from "@website-signal-risk-scanner/shared";
 import { createHash } from "node:crypto";
 import { inspectLocatorActionability, locatorActionabilitySupportsVerifiedDispatch } from "./cmp-control-actionability.js";
-import type { Locator, Page } from "playwright";
+import type { Frame, Locator, Page } from "playwright";
 import { readConsentActionLabelFields, type ConsentActionLabelFields } from "./consent-action-label-fields.js";
 import { consentScopePermitsInteraction } from "./cmp-action-target.js";
 import { readConsentActionSettlingSnapshot } from "./consent-action-settling-snapshot.js";
@@ -26,6 +26,70 @@ type ControlLabelFields = ConsentActionLabelFields;
 export type ConsentActionControlProofResolution =
   | { status: "verified"; proof: ConsentActionControlProof }
   | { status: "label_mismatch" | "label_unverifiable"; reason: string };
+
+/** Proof-only hooks: no new browser commands and no late result reuse. */
+export type ConsentProofReadGuard = {
+  scope: Page | Frame;
+  checkpoint(): void;
+  read<T>(start: () => Promise<T>): Promise<T>;
+  track<T>(pending: Promise<T>): Promise<T>;
+};
+
+type ProofBoundary = {page: Page; controlFrameUrl?: string; signal?: AbortSignal; deadlineAtMs?: number};
+const pendingControlProofs = new WeakSet<object>();
+class ControlProofStopped extends Error {}
+
+async function boundedControlProof<T>(input: ProofBoundary, operation: (guard: ConsentProofReadGuard) => Promise<T>): Promise<T> {
+  let stoppedReason: string | undefined;
+  const checkpoint = () => {
+    if (stoppedReason) throw new ControlProofStopped(stoppedReason);
+    if (input.signal?.aborted) throw new ControlProofStopped("abort_requested_before_action");
+    if (input.deadlineAtMs !== undefined && (!Number.isFinite(input.deadlineAtMs) || Date.now() >= input.deadlineAtMs)) {
+      throw new ControlProofStopped("control_proof_deadline_exhausted");
+    }
+  };
+  checkpoint();
+  const scopes = input.controlFrameUrl
+    ? input.page.frames().filter(frame => frame.url() === input.controlFrameUrl) : [input.page.mainFrame()];
+  if (scopes.length !== 1) throw new ControlProofStopped("resolved_control_scope_ambiguous");
+  const scope = scopes[0]!;
+  if (pendingControlProofs.has(scope)) throw new ControlProofStopped("control_proof_read_pending");
+  pendingControlProofs.add(scope);
+  const actualReads = new Set<Promise<unknown>>();
+  let finished = false;
+  const release = () => { if (finished && actualReads.size === 0) pendingControlProofs.delete(scope); };
+  const track = <V>(pending: Promise<V>) => {
+    actualReads.add(pending);
+    const settled = () => {actualReads.delete(pending); release();};
+    void pending.then(settled, settled);
+    return pending;
+  };
+  const guard: ConsentProofReadGuard = {scope, checkpoint, track,
+    async read(start) {checkpoint(); const result = await track(start()); checkpoint(); return result;}};
+  const work = Promise.resolve().then(() => {checkpoint(); return operation(guard);})
+    .finally(() => {finished = true; release();});
+  let timer: NodeJS.Timeout | undefined;
+  let abort: (() => void) | undefined;
+  try {
+    const stopped = new Promise<never>((_resolve, reject) => {
+      abort = () => {
+        // A timer may precede the wall-clock deadline by a clock tick. Once
+        // the caller stops, later browser replies must never resume this proof.
+        stoppedReason = input.signal?.aborted ? "abort_requested_before_action" : "control_proof_deadline_exhausted";
+        reject(new ControlProofStopped(stoppedReason));
+      };
+      input.signal?.addEventListener("abort", abort, {once: true});
+      if (input.deadlineAtMs !== undefined) timer = setTimeout(abort, Math.max(0, input.deadlineAtMs - Date.now()));
+      if (input.signal?.aborted) abort();
+    });
+    const result = await Promise.race([work, stopped]);
+    checkpoint();
+    return result;
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (abort) input.signal?.removeEventListener("abort", abort);
+  }
+}
 
 /** Unreadable/weak labels may be rediscovered inside the original search budget.
  * Opposite decisions, semantic conflicts and transactional controls never qualify. */
@@ -96,31 +160,34 @@ export function assertConsentActionDispatchAllowed(page: Page, signal?: AbortSig
 /** Revalidate the reviewed necessary-only scope at the final dispatch boundary,
  * after any resolver, baseline, geometry or caller awaits. Never clicks. */
 export async function assertReviewedRejectDispatchAllowed(input: {
-  page: Page; control: Locator; proof?: ConsentActionControlProof; controlFrameUrl?: string; signal?: AbortSignal;
+  page: Page; control: Locator; proof?: ConsentActionControlProof; controlFrameUrl?: string; signal?: AbortSignal; deadlineAtMs?: number;
 }) {
   const proof = input.proof;
   if (!proof || (!proof.labelBoundNecessaryOnly &&
     !(proof.matchedLocale === "pt" && normalizeConsentControlText(proof.accessibleLabel) === "rejeitar"))) return;
-  const definition = getKnownCmpDefinitionByName(proof.cmpId);
-  if (!proof.authorizedTargetSha256 || (definition?.domSelectors?.[0] &&
-    !await verifyContextualApprovalScope(input.control, definition.domSelectors[0], true))) {
-    throw new Error("reviewed_reject_dispatch_binding_changed");
-  }
-  const current = await buildConsentActionControlProof({action: "reject",page: input.page, control: input.control,
-    cmpId: proof.cmpId, recipeId: proof.recipeId, selectorHint: proof.selectorHint,
-    observedAtMs: proof.observedAtMs, authorizedTargetSha256: proof.authorizedTargetSha256,
-    controlFrameUrl: input.controlFrameUrl, signal: input.signal});
-  if (current.status !== "verified" ||
-    current.proof.accessibleLabel !== proof.accessibleLabel ||
-    current.proof.frameIdentitySha256 !== proof.frameIdentitySha256 ||
-    current.proof.labelBoundNecessaryOnly?.contextText !== proof.labelBoundNecessaryOnly?.contextText) {
-    throw new Error("reviewed_reject_dispatch_binding_changed");
-  }
-  assertConsentActionDispatchAllowed(input.page, input.signal, proof.authorizedTargetSha256);
+  await boundedControlProof(input, async guard => {
+    const definition = getKnownCmpDefinitionByName(proof.cmpId);
+    if (!proof.authorizedTargetSha256 || (definition?.domSelectors?.[0] &&
+      !await guard.read(() => verifyContextualApprovalScope(input.control, definition.domSelectors![0]!, true)))) {
+      throw new Error("reviewed_reject_dispatch_binding_changed");
+    }
+    const current = await buildConsentActionControlProofWithinBoundary({action: "reject",page: input.page, control: input.control,
+      cmpId: proof.cmpId, recipeId: proof.recipeId, selectorHint: proof.selectorHint,
+      observedAtMs: proof.observedAtMs, authorizedTargetSha256: proof.authorizedTargetSha256,
+      controlFrameUrl: input.controlFrameUrl, signal: input.signal, deadlineAtMs: input.deadlineAtMs}, guard);
+    if (current.status !== "verified" ||
+      current.proof.accessibleLabel !== proof.accessibleLabel ||
+      current.proof.frameIdentitySha256 !== proof.frameIdentitySha256 ||
+      current.proof.labelBoundNecessaryOnly?.contextText !== proof.labelBoundNecessaryOnly?.contextText) {
+      throw new Error("reviewed_reject_dispatch_binding_changed");
+    }
+    assertConsentActionDispatchAllowed(input.page, input.signal, proof.authorizedTargetSha256);
+  });
 }
 
-export async function buildConsentActionControlProof(input: {
+export type ConsentActionControlProofInput = {
   signal?: AbortSignal;
+  deadlineAtMs?: number;
   onLabelInspection?: (snapshot: Omit<NonNullable<PostRefusalInteractionDiagnostics["resolver"]>["snapshots"][number], "attempt" | "elapsedMs">) => void;
   action: "accept" | "reject";
   authorizedTargetSha256?: string;
@@ -134,32 +201,46 @@ export async function buildConsentActionControlProof(input: {
   page: Page;
   recipeId: string;
   selectorHint: string;
-}): Promise<ConsentActionControlProofResolution> {
+};
+
+export async function buildConsentActionControlProof(input: ConsentActionControlProofInput): Promise<ConsentActionControlProofResolution> {
+  try { return await boundedControlProof(input, guard => buildConsentActionControlProofWithinBoundary(input, guard)); }
+  catch (error) {
+    if (error instanceof ControlProofStopped) return {status: "label_unverifiable", reason: error.message};
+    throw error;
+  }
+}
+
+async function buildConsentActionControlProofWithinBoundary(input: ConsentActionControlProofInput, guard: ConsentProofReadGuard): Promise<ConsentActionControlProofResolution> {
+  guard.checkpoint();
   if (input.signal?.aborted) return { status: "label_unverifiable", reason: "abort_requested_before_action" };
   if (input.authorizedTargetSha256 && sha256(normalizedTarget(input.page.url())) !== input.authorizedTargetSha256) {
     return { status: "label_unverifiable", reason: "redirect_target_not_authorized" };
   }
   if (input.expectedAccessibleControl?.kind !== "closed_shadow_accessible_control") {
-    if (!await consentScopePermitsInteraction(input.control)) {
+    if (!await guard.read(() => consentScopePermitsInteraction(input.control))) {
       return { status: "label_unverifiable", reason: "resolved_control_scope_not_interactive" };
     }
-    if (!locatorActionabilitySupportsVerifiedDispatch(await inspectLocatorActionability(input.control))) {
+    if (!locatorActionabilitySupportsVerifiedDispatch(await guard.read(() => inspectLocatorActionability(input.control, {
+      deadlineAtMs: input.deadlineAtMs, signal: input.signal, scope: guard.scope, trackActualRead: guard.track,
+    })))) {
       return { status: "label_unverifiable", reason: "resolved_control_no_longer_actionable" };
     }
   }
   const fields = input.expectedAccessibleControl?.kind === "closed_shadow_accessible_control"
     ? {
-        ariaLabel: await readClosedShadowAccessibleControlLabel(
+        ariaLabel: await guard.read(() => readClosedShadowAccessibleControlLabel(
           input.page,
-          input.expectedAccessibleControl,
-        ),
+          input.expectedAccessibleControl!, guard,
+        )),
       }
-    : await readControlLabelFields(input.control);
+    : await guard.read(() => readControlLabelFields(input.control));
   const bounded = boundFields(fields);
   // Retain the exact bounded label sources read for proof, without another DOM
   // round trip. This is a candidate read, never dispatch or registration proof.
   const labelEntries = ([['aria_label', bounded.ariaLabel], ['visible_text', bounded.visibleText],
     ['value', bounded.value], ['title', bounded.title]] as const).filter((entry) => Boolean(entry[1]));
+  guard.checkpoint();
   input.onLabelInspection?.({
     source: "control_proof", state: "candidate_detected",
     selectorMatchCount: 1, visibleCount: 1, enabledCount: 1,
@@ -170,6 +251,7 @@ export async function buildConsentActionControlProof(input: {
       frameIdentitySha256: sha256(input.controlFrameUrl ?? input.page.url()),
       labelSources: labelEntries.map((entry) => entry[0]) },
   });
+  guard.checkpoint();
   const definition = getKnownCmpDefinitionByName(input.cmpId);
   const contextualApproval = definition?.acceptContextualApproval &&
     input.recipeId === `canonical-cmp:${definition.canonicalName}:accept:${definition.recipeVersion ?? "v1"}` &&
@@ -184,7 +266,7 @@ export async function buildConsentActionControlProof(input: {
     definition.rejectLabelBoundNecessaryOnly.expectedNormalizedLabels.includes(normalizeConsentControlText(preferredLabel(bounded)?.value))
     ? definition.rejectLabelBoundNecessaryOnly : undefined;
   const necessaryOnlyContext = necessaryOnlyRecipe
-    ? await readLabelBoundNecessaryOnlyContext(input.control, necessaryOnlyRecipe) : undefined;
+    ? await guard.read(() => readLabelBoundNecessaryOnlyContext(input.control, necessaryOnlyRecipe)) : undefined;
   const labelBoundNecessaryOnly = necessaryOnlyRecipe && necessaryOnlyContext
     ? { policyVersion: necessaryOnlyRecipe.policyVersion,
         bannerSelector: "#onetrust-banner-sdk" as const, controlSelector: "#onetrust-reject-all-handler" as const,
@@ -257,7 +339,7 @@ export async function buildConsentActionControlProof(input: {
   }
   if (contextualLabelVerified && (
     !input.authorizedTargetSha256 || input.expectedAccessibleControl ||
-    !await verifyContextualApprovalScope(input.control, contextualApproval!.bannerSelector)
+    !await guard.read(() => verifyContextualApprovalScope(input.control, contextualApproval!.bannerSelector))
   )) {
     return { status: "label_unverifiable", reason: "registered_contextual_accept_scope_not_verified" };
   }
@@ -266,7 +348,7 @@ export async function buildConsentActionControlProof(input: {
       ? input.page.frames().filter((frame) => frame.url() === input.controlFrameUrl)
       : [input.page];
     if (frames.length !== 1) return { status: "label_unverifiable", reason: "resolved_control_scope_ambiguous" };
-    const liveLabels = await frames[0]!.locator(input.selectorHint).evaluateAll((elements) => {
+    const liveLabels = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements) => {
       if (elements.length > 32) return null;
       return elements.filter((element) => {
         const rect = element.getBoundingClientRect();
@@ -278,7 +360,7 @@ export async function buildConsentActionControlProof(input: {
         title: element.getAttribute("title") ?? undefined,
         value: element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)
           ? element.value : undefined }));
-    }).catch(() => null);
+    }).catch(() => null));
     const matching = liveLabels?.filter((fields) => {
       const labels = boundFields(fields);
       if (sourceIntentConflict(labels, labelBoundNecessaryOnly?.contextText)) return false;
@@ -309,17 +391,18 @@ export async function buildConsentActionControlProof(input: {
   // to dispatch. Trial clicks and baseline capture can trigger document changes.
   if (input.expectedCustomControlBinding && (input.action !== "accept" || input.cmpId ||
     !input.authorizedTargetSha256 || !sameCustomAcceptControlBinding(
-      await inspectCustomAcceptControl(input.control, input.expectedCustomControlBinding.bannerSelector, Date.now() + 100,
-        selected.value.replace(/\s+/g, " ").trim().toLowerCase()),
+      await guard.read(() => inspectCustomAcceptControl(input.control, input.expectedCustomControlBinding!.bannerSelector,
+        Math.min(input.deadlineAtMs ?? Infinity, Date.now() + 100), selected.value.replace(/\s+/g, " ").trim().toLowerCase(), guard)),
       input.expectedCustomControlBinding,
     ))) return { status: "label_unverifiable", reason: "custom_control_binding_changed" };
   if (input.signal?.aborted) return { status: "label_unverifiable", reason: "abort_requested_before_action" };
-  if (labelBoundNecessaryOnly && await readLabelBoundNecessaryOnlyContext(input.control, necessaryOnlyRecipe!) !== labelBoundNecessaryOnly.contextText) {
+  if (labelBoundNecessaryOnly && await guard.read(() => readLabelBoundNecessaryOnlyContext(input.control, necessaryOnlyRecipe!)) !== labelBoundNecessaryOnly.contextText) {
     return {status: "label_unverifiable", reason: "label_bound_necessary_only_context_changed"};
   }
   if (input.authorizedTargetSha256 && sha256(normalizedTarget(input.page.url())) !== input.authorizedTargetSha256) {
     return { status: "label_unverifiable", reason: "redirect_target_not_authorized" };
   }
+  guard.checkpoint();
   return {
     status: "verified",
     proof: {

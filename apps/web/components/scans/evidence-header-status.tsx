@@ -7,5 +7,5 @@ export { evidenceHeaderStatus, evidenceSectionRecap } from "../../lib/scans/deta
 export function EvidenceHeaderStatus({ rows }: { rows: readonly EvidenceSummaryRow[] }) {
   const status = evidenceHeaderStatus(rows);
   if (!status) return null;
-  return <EvidenceStatusBadge label={status.label} description={status.description} tone={status.label === "Limited" ? "limited" : "review"} />;
+  return <EvidenceStatusBadge label={status.label} description={status.description} tone={status.label === "Review" ? "review" : "limited"} />;
 }

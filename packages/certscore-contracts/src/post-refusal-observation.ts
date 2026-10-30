@@ -1,3 +1,4 @@
+import {consentReceiptCaptureSchema,validateConsentReceiptCapture} from './consent-receipt-capture';
 import { validateComplianzReceiptEnvelope } from "./complianz-consent-state";
 import { cmpPassiveDiagnosticsSchema } from "./cmp-passive-diagnostics";
 import { validateOneTrustApplicabilityEnvelope } from "./onetrust-applicability";
@@ -497,6 +498,7 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
 });
 
 const postRefusalEvidencePacketBaseSchema = z.object({
+  consentReceiptCapture: consentReceiptCaptureSchema.optional(),
   confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
   passiveCmpDiagnostics: cmpPassiveDiagnosticsSchema.optional(),
   runtimeEvidenceGraph: packetRuntimeGraphSchema.optional(),
@@ -572,6 +574,10 @@ const postRefusalEvidencePacketBaseSchema = z.object({
     packet.timing.observationEndedAtMs < (packet.refusalRegistration.refusalRegisteredAtMs ?? packet.refusalRegistration.actionDispatchedAtMs ?? 0)
   )) context.addIssue({ code: z.ZodIssueCode.custom, path: ["timing", "observationEndedAtMs"], message: "Observation end must retain the action and result clock binding." });
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "reject", context);
+  validateConsentReceiptCapture(packet.consentReceiptCapture,{artifactVersion:packet.artifactVersion,scanId:packet.scanId,action:'reject',
+    targetSha256:packet.actionControlProof?.authorizedTargetSha256,frameIdentitySha256:packet.actionControlProof?.frameIdentitySha256,
+    dispatchedAtMs:packet.refusalRegistration.actionDispatchedAtMs,readyAtMs:packet.timing.readyAtMs,completedAt:packet.completedAt,
+    clickOutcome:packet.interactionDiagnostics?.click.outcome},context);
   validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
   for (const evidence of [packet.decisionEvidence, packet.terminalDecisionEvidence?.evidence]) {
     validateComplianzReceiptEnvelope(evidence?.complianzReceiptEvidence, {

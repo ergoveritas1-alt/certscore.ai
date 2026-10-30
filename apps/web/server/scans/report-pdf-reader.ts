@@ -5,6 +5,7 @@ import { detailedEvidenceCopy } from "../../lib/scans/detailed-evidence-copy";
 import { readChecklistRemediation } from "../../lib/scans/checklist-remediation";
 import { SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
 import { SITE_INTEGRITY_REMEDIATION } from "../../lib/scans/site-integrity-remediation";
+import { reportRowInFocus } from "../../lib/scans/report-framework-scope";
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const string = (value: unknown) => typeof value === "string" ? value : "";
@@ -46,7 +47,7 @@ export function pdfConfidenceLabel(value: unknown) {
 }
 
 export function pdfReviewGroups(report: CanonicalReportExport): PdfReviewGroup[] {
-  const rows = report.gdprEprivacyReview?.rows ?? [];
+  const rows = (report.gdprEprivacyReview?.rows ?? []).filter(row=>reportRowInFocus(row.id,report.reviewFocus));
   const findings = pdfNarrativeFindings(report);
   const details = report.appendix.evidenceDossier?.checklistDetails ?? [];
   const observations: PdfReviewObservation[] = [];

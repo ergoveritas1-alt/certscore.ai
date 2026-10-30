@@ -274,13 +274,13 @@ const COMBINED_PRIVACY_COOKIE_LABELS_BY_LOCALE = {
 // Conservative semantic guards: these markers can withhold action credit,
 // never create refusal or consent. Exact refusal phrases remain separately typed.
 const CONSENT_LABEL_GUARDS_BY_LOCALE = {
-  en: { categoryPhrases: ["non-essential cookies", "non essential cookies", "non-necessary cookies", "non necessary cookies", "non-required cookies", "non required cookies"], negationTokens: ["not", "don't", "never"], informationalPrefixes: ["what happens", "why", "how to", "learn about"] },
+  en: { categoryPhrases: ["non-essential cookies", "non essential cookies", "not essential cookies", "non-necessary cookies", "non necessary cookies", "non-required cookies", "non required cookies"], negationTokens: ["not", "don't", "never"], informationalPrefixes: ["what happens", "why", "how to", "learn about"] },
   es: { negationTokens: ["no", "nunca"], informationalPrefixes: ["qué pasa", "que pasa", "por qué", "cómo"] },
   de: { categoryPhrases: ["nicht notwendigen cookies", "nicht notwendige cookies", "nicht erforderlichen cookies", "nicht erforderliche cookies", "nicht essentiellen cookies", "nicht essenziellen cookies"], negationTokens: ["nicht", "kein", "keine", "keinen"], informationalPrefixes: ["was passiert", "warum", "wie kann"] },
   ja: { negationTokens: ["しない", "しません", "拒否"], informationalPrefixes: ["どうなる", "なぜ"] },
   fr: { categoryPhrases: ["cookies non essentiels", "cookies non nécessaires", "cookies non necessaires"], negationTokens: ["ne", "n'", "pas", "jamais"], informationalPrefixes: ["que se passe", "pourquoi", "comment"] },
   ru: { negationTokens: ["не", "нет"], informationalPrefixes: ["что произойдет", "что будет", "почему", "как"] },
-  pt: { categoryPhrases: ["cookies não essenciais", "cookies nao essenciais"], negationTokens: ["não", "nao", "nunca"], informationalPrefixes: ["o que acontece", "por que", "como"] },
+  pt: { categoryPhrases: ["cookies não essenciais", "cookies nao essenciais", "cookies não-necessários", "cookies não necessários", "cookies nao-necessarios", "cookies nao necessarios"], negationTokens: ["não", "nao", "nunca"], informationalPrefixes: ["o que acontece", "por que", "como"] },
   it: { negationTokens: ["non", "mai"], informationalPrefixes: ["cosa succede", "perché", "come"] },
   tr: { negationTokens: ["değil", "hayır", "etme", "etmiyorum"], informationalPrefixes: ["ne olur", "neden", "nasıl"] },
   zh: { negationTokens: ["不", "不要", "拒绝"], informationalPrefixes: ["会发生什么", "为什么", "如何"] },

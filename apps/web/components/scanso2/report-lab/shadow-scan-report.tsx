@@ -1,5 +1,6 @@
 import { ReportPdfAccessProvider } from "../../scans/report-lab/shadow-report-actions";
 import { GPC_CUSTOMER_RESULTS_ENABLED } from "../../../lib/scans/gpc-customer-policy";
+import {scopeReportPresentation,reportSectionInFocus,reportPresentationFocus} from "../../../lib/scans/report-framework-scope";
 import { ScanCompletedEvent } from "../../analytics/data-layer-events";
 import { choicePathExecutionLabel } from "@certscore/contracts";
 import React from "react";
@@ -683,6 +684,7 @@ function EvidenceIndexRows({ rows, stackedTools = false }: { rows: readonly Shad
 }
 
 function FindingsList({ dense = false, priority = false, report }: { dense?: boolean; priority?: boolean; report: ShadowReportData }) {
+  report=scopeReportPresentation(report);
   return (
     <div className="border-t border-zinc-950">
       {report.findings.map((finding) => <FindingRow dense={dense} finding={finding} key={finding.id} priority={priority} />)}
@@ -1561,6 +1563,7 @@ function GpcEvidenceIndexCard({ projection, homepage = false }: { projection: Gp
 }
 
 export function EvidenceDirectory({ report, compact = false }: { report: ShadowReportData; compact?: boolean }) {
+  report=scopeReportPresentation(report);
   const technology = describeSiteTechnology(report.siteMetadata?.observation);
   const metadataFields = [
     ["Platform", technology.platform],
@@ -1656,7 +1659,7 @@ export function EvidenceDirectory({ report, compact = false }: { report: ShadowR
               </summary>
               <EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools />
             </details>}
-            {GPC_CUSTOMER_RESULTS_ENABLED && (report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} homepage={compact} /> : null)}
+            {GPC_CUSTOMER_RESULTS_ENABLED && reportSectionInFocus("gpc",reportPresentationFocus(report)) && (report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} homepage={compact} /> : null)}
             <details className="group/transport border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                 <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{report.transportRows.filter((row) => row.status === "Observed").length} positive · {report.transportRows.length} checks</h3></div>
@@ -1766,6 +1769,7 @@ export function ShadowScanReport({
   report = SHADOW_REPORT,
   variant,
 }: ShadowScanReportProps) {
+  report=scopeReportPresentation(report);
   const homepageContent = report.resultDisposition === "no_go" ? (
     <main className="mx-auto max-w-7xl space-y-8 px-5 py-10 lg:px-10">
       <ReportIdentity enhancedActions allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />

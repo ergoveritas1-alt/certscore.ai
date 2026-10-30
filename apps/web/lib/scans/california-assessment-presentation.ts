@@ -9,11 +9,11 @@ export function californiaAssessmentPresentation(coverage?: CaliforniaReviewCove
   const incomplete = !families.length || assessed < families.length;
   return {
     incomplete,
-    emptyLabel: incomplete ? "Assessment incomplete" : "0 CCPA/CPRA issues",
+    emptyLabel: incomplete ? "California privacy review" : "0 CCPA/CPRA issues",
     emptySummary: incomplete
-      ? "California assessment is incomplete. No priority issue was established from the retained evidence; unresolved checks may still contain issues. See California privacy review in Detailed evidence for the remaining checks."
+      ? "View the California privacy checks in Detailed evidence."
       : "No CCPA/CPRA priority issues were identified in the assessed evidence.",
     emptySummaryLinks: incomplete ? [{ label: "Detailed evidence", targetId: "evidence" }] : [],
-    unavailableScore: "California score unavailable: this visit did not retain enough evidence to assess risk. Missing capture is not a passing result.",
+    unavailableScore: "California score unavailable for this scan.",
   };
 }

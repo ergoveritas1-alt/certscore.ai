@@ -1,10 +1,25 @@
 import type { CanonicalReportExport } from "./report-export";
+import { isRegulatoryFindingRelevant } from "../../lib/scans/regulatory-review-catalog";
+import { reportRowInFocus, reportSectionInFocus } from "../../lib/scans/report-framework-scope";
+
+/** Lens-specific PDF view; the source canonical export remains a full workpaper. */
+export function scopeCanonicalReportPdf(report: CanonicalReportExport): CanonicalReportExport {
+  const eu = reportSectionInFocus("gdpr-transparency",report.reviewFocus);
+  return {...report,
+    gpcResponse:reportSectionInFocus("gpc",report.reviewFocus)?report.gpcResponse:null,
+    privacyAuditEvidence:reportSectionInFocus("privacy",report.reviewFocus)?report.privacyAuditEvidence:null,
+    gdprEprivacyReview:report.gdprEprivacyReview?{...report.gdprEprivacyReview,rows:report.gdprEprivacyReview.rows.filter(row=>reportRowInFocus(row.id,report.reviewFocus))}:null,
+    appendix:{...report.appendix,gdprTransparency:eu?report.appendix.gdprTransparency:{...report.appendix.gdprTransparency,rows:[]},
+      ...(report.appendix.evidenceDossier?{evidenceDossier:{...report.appendix.evidenceDossier,checklistDetails:(report.appendix.evidenceDossier.checklistDetails??[]).filter(row=>reportRowInFocus(row.id,report.reviewFocus))}}:{})},
+  };
+}
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 /** Honor persisted presentation decisions; never reclassify the underlying finding. */
 export function pdfNarrativeFindings(report: CanonicalReportExport): Array<Record<string, unknown>> {
   return (report.projection.unifiedFindings as Array<Record<string, unknown>>).filter(finding => {
+    if (!isRegulatoryFindingRelevant(String(finding.unifiedFindingId ?? ""), report.reviewFocus)) return false;
     const presentation = object(finding.presentationDecision), surfacing = object(finding.surfacingDecision);
     return !["audit_only", "suppress"].includes(String(presentation.status)) && surfacing.reportable !== false &&
       !["support_only", "suppressed"].includes(String(surfacing.decisionState)) && surfacing.reportLane !== "suppressed";

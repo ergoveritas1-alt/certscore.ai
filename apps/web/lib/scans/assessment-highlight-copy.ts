@@ -16,11 +16,15 @@ function firstObservedTime(times: number[]) {
 }
 
 /** Shorten only known projected wording. Unknown copy and its qualifications stay whole. */
-export function assessmentHighlightFacts(summary: string, id: string | null): string[] {
+export function assessmentHighlightFacts(summary: string, id: string | null, supporting = false): string[] {
   // Historical projected snippets may end inside a semantic qualification.
   // Suppress the whole snippet rather than guessing its missing restriction.
   if (/(?:\.\.\.|…)$/.test(summary.trim())) return [];
   let copy = normalizeAssessmentCopy(summary).replace(/^Potential issue based on scan evidence; /, "");
+  if (supporting && id === "california_collection_review") {
+    const known = copy.match(/^(.+) Collection was observed; the sale\/sharing purpose of these specific requests remains unresolved\. Review recipient purposes, effective settings, processing arrangements and privacy-choice enforcement\. A cookie Reject click does not establish a California sale\/sharing opt-out\. These observations do not establish a legal violation\.$/);
+    if (known) return [copy, `${known[1]} Sale/sharing purpose is unresolved; this does not establish an opt-out failure or legal violation.`];
+  }
   if (id === "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction") {
     copy = copy.replace(/^Partial support from scan evidence; /, "Partial evidence: ")
       .replace(/(\d+) tracking request\(s\)/g, (_match, count: string) => `${count} tracking ${count === "1" ? "request" : "requests"}`)

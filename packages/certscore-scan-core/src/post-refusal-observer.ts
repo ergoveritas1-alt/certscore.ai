@@ -1,3 +1,4 @@
+import {installConsentReceiptCapture,receiptCaptureToken,retainReceiptCookies} from './consent-receipt-capture.js';
 import { isComplianzControl } from "./complianz-consent-state.js";
 import { CMP_PASSIVE_EVENT_INIT_SCRIPT, installCmpPassiveDiagnostics } from "./cmp-passive-diagnostics.js";
 import { installOneTrustSdkSourceCapture } from "./onetrust-sdk-source.js";
@@ -8,7 +9,7 @@ import { captureExactCookieWrite } from "./exact-cookie-write-capture.js";
 import { confirmationDiagnostics } from "./consent-confirmation-diagnostics.js";
 import { firstVerifiedConsentRead } from "./consent-confirmation-read.js";
 import { installBorlabsDeferredDialogReveal } from "./borlabs-passive-dialog-reveal.js";
-import { waitForConsentDocumentOrNamedControl, isRegisteredLoadingOneTrustRecipe } from "./consent-document-readiness.js";
+import { waitForConsentDocumentOrNamedControl, isRegisteredLoadingConsentRecipe } from "./consent-document-readiness.js";
 import { appendResolverDiagnostic, canonicalResolverDiagnostic } from "./consent-action-resolver-diagnostics.js";
 import { buildObservedActionSourceProof } from "./observed-action-source-proof.js";
 import { installActionDomStorageCapture } from "./action-dom-storage-capture.js";
@@ -81,6 +82,7 @@ import {
   type CmpAccessibleActionResolution,
 } from "./cmp-accessible-action.js";
 import { readCmpApiConsentSnapshot, type CmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
+import { evaluateCmpApiConfirmation } from "./cmp-api-confirmation.js";
 import { assertConsentActionDispatchAllowed, assertReviewedRejectDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery, waitForTransparentConsentControl } from "./cmp-action-control-proof.js";
 import { matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, verifiedChangedOneTrustDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import { matchesCanonicalCmpCookieName } from "./cmp-cookie-name.js";
@@ -93,6 +95,7 @@ import {
   locatorActionabilitySupportsVerifiedDispatch,
   locatorHasViewportHitTarget,
   waitForLocatorVerifiedGeometry,
+  type ConsentControlReadOptions,
 } from "./cmp-control-actionability.js";
 import {
   installConsentActionDiscovery,
@@ -446,6 +449,7 @@ export async function runPostRefusalObserver(
   const closeBudgetExpiredContext = () => { budgetContextClose ??= context?.close().catch(() => undefined); };
   budgetController.signal.addEventListener("abort", closeBudgetExpiredContext, { once: true });
   let graphCapture: Awaited<ReturnType<typeof installRuntimeGraphCapture>> | undefined;
+  let receiptCapture: ReturnType<typeof installConsentReceiptCapture> | undefined;
   let passiveCmpCapture: ReturnType<typeof installCmpPassiveDiagnostics> | undefined;
   let oneTrustSdkCapture: ReturnType<typeof installOneTrustSdkSourceCapture> | undefined;
   let originDomStorageCapture: Awaited<ReturnType<typeof installActionDomStorageCapture>> | undefined;
@@ -514,6 +518,9 @@ export async function runPostRefusalObserver(
     observations?: PostRefusalObservation[];
   }): Promise<PostRefusalEvidencePacket> => {
     const completedAtMs = Date.now();
+    const consentReceiptCapture=receiptCapture?.finish(selectedRecipe?.controlFrameUrl?undefined:{
+      targetSha256:actionControlProof?.authorizedTargetSha256,frameIdentitySha256:actionControlProof?.frameIdentitySha256,
+      clickOutcome:interactionDiagnostics.click.outcome},completedAtMs);
     // Freeze synchronous diagnostic receipts at the packet's own boundary;
     // a second wall-clock read could fall outside it after a clock correction.
     const originDomStorageObservation = originDomStorageCapture?.finish(completedAtMs);
@@ -549,6 +556,7 @@ export async function runPostRefusalObserver(
           rows: (fields.requests ?? []).filter(row => postRegistrationRequests.some(source => source.requestId === row.requestId)),
         })
       } : {}),
+      ...(consentReceiptCapture?{consentReceiptCapture}:{}),
       confirmationDiagnostics: confirmationDiagnostic.retained(),
       ...(passiveCmpCapture ? {passiveCmpDiagnostics:passiveCmpCapture.finish(completedAtMs)} : {}),
       artifactOnly: true,
@@ -646,16 +654,21 @@ export async function runPostRefusalObserver(
       }));
       ownsBrowser = true;
     }
-    context = await browser.newContext(browserContextConfiguration);
+    context = await browser.newContext({ ...browserContextConfiguration, ignoreHTTPSErrors: false });
     await installWebBotAuthRoute(context);
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
       await installPublicNetworkGuardRoute(context);
     }
     page = await context.newPage();
     passiveCmpCapture = installCmpPassiveDiagnostics(page);
+    receiptCapture = installConsentReceiptCapture(page,{scanId:input.scanId,action:'reject',clockOriginAtEpochMs:parentScanStartedAtMs,signal:effectiveSignal});
     oneTrustSdkCapture = installOneTrustSdkSourceCapture(page);
     await installBorlabsDeferredDialogReveal(page, observationTargetUrl);
-    originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl);
+    originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl, undefined, {
+      onSession: session => oneTrustSdkCapture?.bindNativeSession(session, {
+        deadlineAtEpochMs: resultBudgetDeadlineAtMs, signal: effectiveSignal,
+      }),
+    });
     if (input.runtimeGraph) graphCapture = await installRuntimeGraphCapture(page, {
       ...input.runtimeGraph, captureId: input.scanId, scenario: "post_reject", startedAt: new Date(parentScanStartedAtMs).toISOString(),
     });
@@ -1031,7 +1044,7 @@ export async function runPostRefusalObserver(
       await waitForConsentDocumentOrNamedControl<DeterministicRecipeResolution>({page,deadlineAtMs:initialSearchDeadline,signal:effectiveSignal,discovery:actionDiscovery,
         probe:async (sliceMs,probeSignal)=>{
           const active=await resolveActiveRuntimeRecipes(page!,actionRecipes,actionDiscovery);
-          if(active.length!==1 || !isRegisteredLoadingOneTrustRecipe(active[0]!,"reject"))return undefined;
+          if(active.length!==1 || !isRegisteredLoadingConsentRecipe(active[0]!,"reject"))return undefined;
           const candidate=await waitForDeterministicRecipe(page!,active,sliceMs,probeSignal,recordResolverSnapshot,actionDiscovery,true);
           return candidate.status==="found" && !candidate.recipe.controlFrameUrl ? candidate : undefined;
         }});
@@ -1193,7 +1206,12 @@ export async function runPostRefusalObserver(
     // recovery allowance as one deadline. A transient interceptor must not
     // discard the geometry slice merely because re-resolution found nothing.
     const actionabilityRecoveryDeadline = actionReadinessDeadline;
-    const actionabilityRecoveryRemaining = () => Math.max(0, actionabilityRecoveryDeadline - Date.now());
+    const actionabilityRecoveryRemaining = () => remainingResultBudgetMs(Math.max(0, actionabilityRecoveryDeadline - Date.now()));
+    const actionabilityReadOptions = (): ConsentControlReadOptions => {
+      const scope = exactSelectorScope(page!, selectedRecipe!.controlFrameUrl);
+      return { deadlineAtMs: Math.min(actionReadinessDeadline, resultBudgetDeadlineAtMs ?? Infinity),
+        signal: effectiveSignal, scope: scope.status === "found" ? scope.scope : undefined };
+    };
     if (actionabilityError) {
       let reResolution: DeterministicRecipeResolution = actionabilityRecoveryRemaining() > 0 ? await waitForDeterministicRecipe(
         page,
@@ -1218,7 +1236,7 @@ export async function runPostRefusalObserver(
             await trialRejectControl(page, control, selectedRecipe);
             actionabilityError = undefined;
           } else {
-            const actionability = await waitForLocatorVerifiedGeometry(control, Math.min(1_000, actionabilityRecoveryRemaining()), effectiveSignal);
+            const actionability = await waitForLocatorVerifiedGeometry(control, Math.min(1_000, actionabilityRecoveryRemaining()), effectiveSignal, actionabilityReadOptions().scope);
             if (!actionability) throw new Error("Verified Reject geometry actionability timeout.");
             actionabilityError = undefined;
             useVerifiedGeometryDispatch = true;
@@ -1235,7 +1253,7 @@ export async function runPostRefusalObserver(
       !selectedRecipe.accessibleControl &&
       ["actionability_timeout", "intercepted"].includes(classifyClickFailure(actionabilityError))
     ) {
-      const actionability = await waitForLocatorVerifiedGeometry(control, actionabilityRecoveryRemaining(), effectiveSignal);
+      const actionability = await waitForLocatorVerifiedGeometry(control, actionabilityRecoveryRemaining(), effectiveSignal, actionabilityReadOptions().scope);
       if (actionability && locatorActionabilitySupportsVerifiedDispatch(actionability)) {
         actionabilityError = undefined;
         useVerifiedGeometryDispatch = true;
@@ -1246,7 +1264,7 @@ export async function runPostRefusalObserver(
       }
     }
     if (actionabilityError) {
-      const actionability = await inspectLocatorActionability(control);
+      const actionability = await inspectLocatorActionability(control, actionabilityReadOptions());
       const failureClass = actionability.centerHitTargetRelation === "other_element"
         ? "intercepted" as const
         : classifyClickFailure(actionabilityError);
@@ -1321,6 +1339,7 @@ export async function runPostRefusalObserver(
       }
     }
     let proofResolution = await buildConsentActionControlProof({
+      deadlineAtMs: resultBudgetDeadlineAtMs,
       onLabelInspection: recordResolverSnapshot,
       signal: effectiveSignal,
       action: "reject",
@@ -1437,6 +1456,7 @@ export async function runPostRefusalObserver(
             selectedRecipe.controlFrameUrl,
           );
           proofResolution = await buildConsentActionControlProof({
+            deadlineAtMs: resultBudgetDeadlineAtMs,
             onLabelInspection: recordResolverSnapshot,
             signal: effectiveSignal,
             action: "reject",
@@ -1492,12 +1512,14 @@ export async function runPostRefusalObserver(
         effectiveSignal,
         () => {
           actionDispatchedAtEpochMs = Date.now();
+          receiptCapture?.dispatch(actionDispatchedAtEpochMs);
           actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
           actionDispatched = true;
           graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
           try {input.onLifecycleEvent?.({type: "action_dispatched", atMs: actionDispatchedAtMs});}
           catch {limitations.push("lifecycle_listener_failed");}
         },
+        { ...actionabilityReadOptions(), deadlineAtMs: resultBudgetDeadlineAtMs },
       );
     } catch (error) {
       clickError = error;
@@ -1555,7 +1577,7 @@ export async function runPostRefusalObserver(
         action: "reject", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256,
         parentScanStartedAtMs, dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
         signal: effectiveSignal, targetStillAuthorized, read: () => waitForRefusalConfirmation(context!, page!, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined,
-          {pass: () => confirmationDiagnostic.pass(true), reason: confirmationDiagnostic.terminalReason}, selectedRecipe!.controlFrameUrl),
+          {pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason}, selectedRecipe!.controlFrameUrl),
       });
       const stopReason = await finishAfterActionWindow({
         onFinalWindow: terminalRead.start,
@@ -1884,6 +1906,7 @@ export async function runPostRefusalObserver(
     originDomStorageCapture?.finish();
     actionDiscovery?.dispose();
     passiveCmpCapture?.finish();
+    receiptCapture?.finish();
     oneTrustSdkCapture?.dispose();
     await context?.close().catch(() => undefined);
     if (ownsBrowser) await browser?.close().catch(() => undefined);
@@ -1931,7 +1954,11 @@ function classifyRequests(
 ): PostRefusalNetworkRequest[] {
   const californiaRows=new Map(prioritizeCaliforniaRequests(requests.map(captured=>({
     startedAtMs:elapsed(scanStartedAtMs,captured.startedAtEpochMs),
-    californiaCollection:captured.californiaCollection?{...captured.californiaCollection,httpStatus:captured.httpStatus??null}:undefined,
+    // Native timing may refine this Request's start after its collection proof
+    // was captured. Keep the retained row and proof on that same corrected
+    // clock; a corrected pre-action start remains pre-action evidence.
+    californiaCollection:captured.californiaCollection?{...captured.californiaCollection,
+      startedAtMs:elapsed(scanStartedAtMs,captured.startedAtEpochMs),httpStatus:captured.httpStatus??null}:undefined,
   }))).map(row=>[row.californiaCollection!.requestId,row.californiaCollection!]));
   return requests.map((captured) => {
     const requestUrl = captured.request.url();
@@ -2594,9 +2621,10 @@ async function dispatchRejectControl(
   proof?: ConsentActionControlProof,
   signal?: AbortSignal,
   onDispatch?: () => void,
+  readOptions?: ConsentControlReadOptions,
 ) {
   assertDispatchAllowed?.();
-  await assertReviewedRejectDispatchAllowed({page,control,proof,signal,controlFrameUrl:recipe.controlFrameUrl});
+  await assertReviewedRejectDispatchAllowed({page,control,proof,signal,controlFrameUrl:recipe.controlFrameUrl,deadlineAtMs:readOptions?.deadlineAtMs});
   assertDispatchAllowed?.();
   onDispatch?.();
   // Lifecycle listeners may cancel synchronously after final preparation.
@@ -2606,7 +2634,7 @@ async function dispatchRejectControl(
     return;
   }
   if (useVerifiedGeometryDispatch) {
-    await dispatchLocatorClickWithVerifiedGeometry(control, 2_000, assertDispatchAllowed);
+    await dispatchLocatorClickWithVerifiedGeometry(control, 2_000, assertDispatchAllowed, readOptions);
     return;
   }
   await control.click({ timeout: 2_000 });
@@ -2775,7 +2803,7 @@ async function waitForDeterministicRecipe(
     const documentInteractive = await page.evaluate(() => document.readyState !== "loading")
       .catch(() => false);
     if (!documentInteractive && !(inspectRegisteredOneTrustWhileLoading && recipes.length===1 &&
-      isRegisteredLoadingOneTrustRecipe(recipes[0]!,"reject"))) {
+      isRegisteredLoadingConsentRecipe(recipes[0]!,"reject"))) {
       reportDiagnostic?.(emptyResolverSnapshot("named_recipe", "document_loading"));
       stableRecipeId = undefined;
       stableSinceMs = 0;
@@ -2840,7 +2868,7 @@ async function waitForDeterministicRecipe(
           matchedControlLabels.add(recipe.accessibleControl.intent);
           if (
             !cmpRecipeRequiresViewportHitTarget(recipe.cmpId) ||
-            await locatorHasViewportHitTarget(control)
+            await locatorHasViewportHitTarget(control, { deadlineAtMs: timeoutMs > 0 ? deadlineAtMs : undefined, signal, scope: scopeResolution.scope })
           ) {
             viewportHitTargetCount += 1;
             actionable.push({ recipe, control });
@@ -2892,7 +2920,7 @@ async function waitForDeterministicRecipe(
         if (enabled) enabledCount += 1;
         if (labelMatches) labelMatchCount += 1;
         if (visible && enabled && labelMatches) {
-          const readiness = await inspectLocatorConsentReadiness(control);
+          const readiness = await inspectLocatorConsentReadiness(control, { deadlineAtMs: timeoutMs > 0 ? deadlineAtMs : undefined, signal, scope: scopeResolution.scope });
           if (!readiness.scopeInteractive) { scopeNotInteractive = true; continue; }
           if (locatorActionabilitySupportsVerifiedDispatch(readiness.actionability)) {
             viewportHitTargetCount += 1;
@@ -3161,7 +3189,7 @@ async function waitForCanonicalRejectControlRecipe(
         if (Date.now() >= bindingDeadlineAtMs) { bindingState("binding_budget_exhausted"); break; }
         if (!await locatorEnabledWithinDeadline(control, bindingDeadlineAtMs)) { failed("control_disabled"); continue; }
         if (!(await normalizedLocatorLabels(control)).includes(candidate.normalizedLabel)) { failed("label_mismatch"); continue; }
-        if (!await locatorHasViewportHitTarget(control)) { failed("control_not_hit_target"); continue; }
+        if (!await locatorHasViewportHitTarget(control, { deadlineAtMs: bindingDeadlineAtMs, signal, scope: scopeResolution.scope })) { failed("control_not_hit_target"); continue; }
         actionableControls.push(control);
       }
       if (actionableControls.length > 1) {
@@ -3588,20 +3616,11 @@ async function waitForRefusalConfirmation(
       firstRead = false;
       diagnostics?.pass();
       if (signal?.aborted) { diagnostics?.reason("confirmation_aborted"); return undefined; }
-      const snapshot = await readCmpApiConsentSnapshot(semanticScope, confirmation.provider);
-      if (!snapshot) diagnostics?.reason("api_unavailable");
-      else if (snapshot.configurationSha256 !== baseline.configurationSha256) diagnostics?.reason("configuration_changed");
-      else if (snapshot.decision !== "denied") diagnostics?.reason(snapshot.decision === "unknown" ? "no_registered_complete_decision" : "opposite_or_mixed_decision");
-      else if (["osano", "hubspot", "drupal_eu_cookie", "didomi", "cookie_information", "cookiescript", "finsweet"].includes(confirmation.provider) &&
-        (snapshot.eventSequence <= baseline.eventSequence || snapshot.eventObservedAtEpochMs === undefined || snapshot.eventObservedAtEpochMs < actionDispatchedAtEpochMs)) diagnostics?.reason("api_saved_event_unverified");
-      const changed = Boolean(
-        snapshot?.canonicalState && snapshot.canonicalState !== baseline.canonicalState
-      );
-      const freshEvent = (snapshot?.eventSequence ?? 0) > baseline.eventSequence;
-      const actionBoundEvent = snapshot?.eventObservedAtEpochMs === undefined ||
-        snapshot.eventObservedAtEpochMs >= actionDispatchedAtEpochMs;
-      if (snapshot?.decision === "denied" && snapshot.configurationSha256 === baseline.configurationSha256 && actionBoundEvent && (changed || freshEvent) &&
-        (!["borlabs", "osano", "hubspot", "drupal_eu_cookie", "didomi", "cookie_information", "cookiescript", "finsweet"].includes(confirmation.provider) || (baseline.canonicalState !== undefined && freshEvent && (confirmation.provider === "borlabs" || snapshot.eventObservedAtEpochMs !== undefined)))) {
+      const snapshot = await readCmpApiConsentSnapshot(semanticScope, confirmation.provider, diagnostics?.reason);
+      const eligibility = snapshot && evaluateCmpApiConfirmation({provider: confirmation.provider,
+        baseline, snapshot, decision: "denied", actionDispatchedAtEpochMs});
+      if (eligibility && !eligibility.eligible) diagnostics?.reason(eligibility.reason);
+      if (snapshot && eligibility?.eligible) {
         return {
           stateHash: hashValue(snapshot.canonicalState),
           witnessType: "cmp_api_state",
@@ -4044,7 +4063,10 @@ async function cmpCookieState(
 ): Promise<{ cookieNames: string[]; stateHash: string } | undefined> {
   const boundedName = cookieName.trim().slice(0, 180);
   if (!boundedName) return undefined;
-  const states = (await context.cookies())
+  const token=receiptCaptureToken(context);
+  const cookies=await context.cookies();
+  retainReceiptCookies(token,cookies,boundedName);
+  const states = cookies
     .filter((cookie) => matchesCanonicalCmpCookieName(cookie.name, boundedName))
     .map((cookie) => ({
       domain: cookie.domain.toLowerCase().replace(/^\./, ""),

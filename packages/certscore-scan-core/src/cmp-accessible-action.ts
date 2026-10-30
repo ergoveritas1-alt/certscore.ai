@@ -1,6 +1,7 @@
 import { classifyConsentControlLabel } from "@certscore/contracts";
 import type { Frame, Locator, Page } from "playwright";
 import { consentScopePermitsInteraction } from "./cmp-action-target.js";
+import type { ConsentProofReadGuard } from "./cmp-action-control-proof.js";
 
 export type CmpAccessibleActionResolution = {
   kind: "scoped_accessible_control" | "closed_shadow_accessible_control";
@@ -81,9 +82,10 @@ export async function closedShadowAccessibleControlAvailable(
 export async function readClosedShadowAccessibleControlLabel(
   page: Page,
   resolution: CmpAccessibleActionResolution,
+  proofGuard?: ConsentProofReadGuard,
 ) {
   if (resolution.kind !== "closed_shadow_accessible_control") return undefined;
-  return (await resolveClosedShadowTarget(page, resolution))?.label;
+  return (await resolveClosedShadowTarget(page, resolution, proofGuard))?.label;
 }
 
 export async function dispatchClosedShadowAccessibleControl(
@@ -126,16 +128,20 @@ export async function dispatchClosedShadowAccessibleControl(
 async function resolveClosedShadowTarget(
   page: Page,
   resolution: CmpAccessibleActionResolution,
+  proofGuard?: ConsentProofReadGuard,
 ): Promise<ClosedShadowTarget | undefined> {
-  const session = await page.context().newCDPSession(page);
+  proofGuard?.checkpoint();
+  const pendingSession = page.context().newCDPSession(page);
+  const session = await (proofGuard?.track(pendingSession) ?? pendingSession);
+  const read = <T>(start: () => Promise<T>): Promise<T> => proofGuard ? proofGuard.read(start) : start();
   try {
-    await session.send("DOM.enable");
-    await session.send("Accessibility.enable");
-    const document = await session.send("DOM.getDocument", { depth: -1, pierce: true });
-    const queried = await session.send("DOM.querySelector", {
+    await read(() => session.send("DOM.enable"));
+    await read(() => session.send("Accessibility.enable"));
+    const document = await read(() => session.send("DOM.getDocument", { depth: -1, pierce: true }));
+    const queried = await read(() => session.send("DOM.querySelector", {
       nodeId: document.root.nodeId,
       selector: resolution.scopeSelector,
-    });
+    }));
     if (!queried.nodeId) return undefined;
 
     const descendantBackendIds = new Set<number>();
@@ -165,7 +171,7 @@ async function resolveClosedShadowTarget(
     if (!host) return undefined;
     visit(host);
 
-    const axTree = await session.send("Accessibility.getFullAXTree");
+    const axTree = await read(() => session.send("Accessibility.getFullAXTree"));
     const candidates = [] as ClosedShadowTarget[];
     for (const node of axTree.nodes ?? []) {
       const backendNodeId = Number(node.backendDOMNodeId || 0);
@@ -180,18 +186,18 @@ async function resolveClosedShadowTarget(
           property.name === "disabled" && property.value?.value === true
         )
       ) continue;
-      const box = await session.send("DOM.getBoxModel", { backendNodeId }).catch(() => undefined);
+      const box = await read(() => session.send("DOM.getBoxModel", { backendNodeId }).catch(() => undefined));
       const quad = box?.model?.border ?? box?.model?.content;
       if (!Array.isArray(quad) || quad.length !== 8) continue;
       const x = (quad[0]! + quad[2]! + quad[4]! + quad[6]!) / 4;
       const y = (quad[1]! + quad[3]! + quad[5]! + quad[7]!) / 4;
       const viewport = page.viewportSize();
       if (!viewport || x < 0 || y < 0 || x > viewport.width || y > viewport.height) continue;
-      const hit = await session.send("DOM.getNodeForLocation", {
+      const hit = await read(() => session.send("DOM.getNodeForLocation", {
         x: Math.round(x),
         y: Math.round(y),
         includeUserAgentShadowDOM: true,
-      }).catch(() => undefined);
+      }).catch(() => undefined));
       let hitBackendId = Number(hit?.backendNodeId || 0);
       let belongsToButton = hitBackendId === backendNodeId;
       while (!belongsToButton && hitBackendId) {
@@ -202,6 +208,7 @@ async function resolveClosedShadowTarget(
     }
     return candidates.length === 1 ? candidates[0] : undefined;
   } finally {
-    await session.detach().catch(() => undefined);
+    const cleanup = session.detach().catch(() => undefined);
+    await (proofGuard?.track(cleanup) ?? cleanup);
   }
 }

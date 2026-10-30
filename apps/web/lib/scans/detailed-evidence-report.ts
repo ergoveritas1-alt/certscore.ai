@@ -7,6 +7,8 @@ import { cmsSecurityProjectionSchema, TECHNOLOGY_NAMES } from "@certscore/contra
 import type { ShadowEvidenceRow, ShadowReportData } from "../../components/scans/report-lab/shadow-report-data";
 import { californiaPrivacyEvidence } from "./california-privacy-evidence";
 import { resolveReportReviewFocus } from "./report-review-focus";
+import { scopeReportPresentation } from "./report-framework-scope";
+import { reportStatusLabel, accessibilityReportFollowUp } from "./report-status-presentation";
 import { detailedEvidenceCopy, policyFindingSummary } from "./detailed-evidence-copy";
 import { accessibilityFindingCopy } from "./accessibility-finding-copy";
 import { accessibilityRuleTitle } from "./accessibility-report";
@@ -23,6 +25,7 @@ import {
 
 /** Read-only presentation over the same report model as the website. Never creates findings or changes assessments. */
 export function buildDetailedEvidenceExport(report: ShadowReportData) {
+  report = scopeReportPresentation(report);
   const layout = detailedEvidenceLayout(report);
   const privacy = californiaPrivacyEvidence(report.privacyAuditEvidence, report.scan.id);
   const sourceRows = [...report.consentRows, ...report.gdprTransparencyRows, ...report.preConsentRuntimeRows, ...report.trackingExternalRows];
@@ -69,7 +72,7 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
     const copy = detailedEvidenceCopy({ ...row, id: evidenceRowAnchor(row.id), summary });
     const observations=projectRejectPresenceDetails(row.evidenceJson);
     return {
-      id: row.id, title: copy.title, summary: copy.summary ?? null, status: row.status, displayStatus: row.status,
+      id: row.id, title: copy.title, summary: copy.summary ?? null, status: row.status, displayStatus: reportStatusLabel(row.status),
       ...(observations.length?{afterRejectObservations:observations}:{}),
       correctionSteps: row.canonicalEvidenceJson ? getCorrectionGuidance(row.canonicalEvidenceJson).steps : row.correctionSteps.filter(step => step.trim().length > 0), evidenceRefs: row.evidenceRefs ?? [], evidenceTarget: evidenceRowAnchor(row.id),
       source: { field, rowId: row.id }, ...(sharedEvidence ? { sharedEvidence } : {}),
@@ -87,7 +90,7 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
     const source = sourceRows.find(item => row.sourceIds.includes(item.id) || evidenceRowAnchor(item.id) === row.evidenceAnchor);
     const copy = detailedEvidenceCopy({ id: `cmp-criterion-${row.id}`, title: row.label, summary: row.detail, status: row.status });
     return { id: row.id, title: copy.title, summary: copy.summary ?? null, status: row.status,
-      displayStatus: row.status === "Review recommended" ? "Review" : row.status,
+      displayStatus: reportStatusLabel(row.status),
       correctionSteps: source?.canonicalEvidenceJson ? getCorrectionGuidance(source.canonicalEvidenceJson).steps : source?.correctionSteps ?? cmpCorrectionSteps(row), evidenceRefs: source?.evidenceRefs ?? row.sourceIds,
       evidenceTarget: `cmp-criterion-${row.id}`, source: { field: "cmpAudit.rows", rowId: row.id },
       ...(layout.cmpLinks[row.id] ? { sharedEvidence: layout.cmpLinks[row.id] } : {}),
@@ -119,14 +122,14 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
       ...(report.accessibilityEvidence?.reviewItems ?? []).map(rule => ({ rule, manual: true, field: "accessibilityEvidence.reviewItems" })),
     ].map(({ rule, manual, field }) => ({
       id: rule.ruleId, title: accessibilityRuleTitle(rule), summary: `${rule.nodeCount} ${rule.nodeCount === 1 ? "element" : "elements"}${manual ? " to review" : " affected"}`,
-      status: manual ? "Review" : "Issues found", displayStatus: manual ? "Review" : "Issues found",
+      status: manual ? "Review" : "Issues found", displayStatus: manual ? "Manual check" : "Issues found",
       description: accessibilityFindingCopy(rule, manual).description,
       correctionSteps: [accessibilityFindingCopy(rule, manual).correction], evidenceRefs: [rule.ruleId],
       evidenceTarget: "accessibility-evidence", source: { field, rowId: rule.ruleId },
     }));
     sections.push({ id: "accessibility", title: EVIDENCE_SECTION_TITLES.accessibility, recap: accessibilityEvidenceRecap(a, report.accessibilityEvidence?.limitations),
-      displayStatus: issues || review ? "Review" : a.status !== "completed" ? "Limited" : null,
-      counts: { checks: issues + review, review: issues + review, limited: 0, observed: 0, unsupported: 0 }, rows });
+      displayStatus: accessibilityReportFollowUp(a)?.label ?? null,
+      counts: { checks: issues + review, review: issues, ...(review ? {manual:review} : {}), limited: 0, observed: 0, unsupported: 0 }, rows });
   }
 
   if (cms && cmsSecurity && (cms.assessment.detections.length || cmsSecurity.plugins.length || cms.technologyInventory?.detections.length)) sections.push({

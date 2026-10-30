@@ -30,6 +30,10 @@ export const detailedEvidenceOpenApiSchemas = {
       "unsupported": {
         "type": "integer",
         "minimum": 0
+      },
+      "manual": {
+        "type": "integer",
+        "minimum": 0
       }
     }
   },
@@ -257,6 +261,7 @@ export const detailedEvidenceOpenApiSchemas = {
             "type": "string",
             "enum": [
               "Review",
+              "Manual check",
               "Limited"
             ]
           },
@@ -293,6 +298,10 @@ export const detailedEvidenceOpenApiSchemas = {
             "minimum": 0
           },
           "unsupported": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "manual": {
             "type": "integer",
             "minimum": 0
           }
@@ -547,6 +556,7 @@ export const detailedEvidenceOpenApiSchemas = {
                   "type": "string",
                   "enum": [
                     "Review",
+                    "Manual check",
                     "Limited"
                   ]
                 },
@@ -583,6 +593,10 @@ export const detailedEvidenceOpenApiSchemas = {
                   "minimum": 0
                 },
                 "unsupported": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "manual": {
                   "type": "integer",
                   "minimum": 0
                 }

@@ -4,6 +4,8 @@ import { buildAssessmentHighlights } from "../../lib/scans/assessment-highlights
 import { projectConsentControlReport } from "../../lib/scans/consent-control-report";
 import { accessibilityRuleTitle } from "../../lib/scans/accessibility-report";
 import type { CanonicalReportExport } from "./report-export";
+import { reportSectionInFocus } from "../../lib/scans/report-framework-scope";
+import { accessibilityReportFollowUp } from "../../lib/scans/report-status-presentation";
 import { PDF_REPORT_TOPICS, pdfTopicOverview } from "./report-pdf-topics";
 import { pdfReviewGroups, pdfInventoryRows } from "./report-pdf-reader";
 
@@ -12,7 +14,7 @@ const string = (value: unknown) => typeof value === "string" ? value : undefined
 
 /** Same assessment writer as the scan report, using only projected findings and retained score/coverage. */
 export function pdfSiteAssessment(report: CanonicalReportExport) {
-  if (report.gdprEprivacyReview?.rows.length) {
+  if (reportSectionInFocus("gdpr-transparency",report.reviewFocus) && report.gdprEprivacyReview?.rows.length) {
     const groups = pdfReviewGroups(report);
     if (groups.length) {
       const order = ["initial-tracking", "refusal", "privacy-notice"];
@@ -36,7 +38,9 @@ export function pdfSiteAssessment(report: CanonicalReportExport) {
         return [...facts, ...(actions.length ? [`Prioritize these fixes: ${actions.join("; ")}. Then re-test this page.`] : [])].join(" ");
       }
       const review = groups[0]!.observations[0]!;
-      return `${review.explanation} Review the supporting evidence and recommended checks before drawing a stronger conclusion.`;
+      // A review-only checklist row preserves its assessment, not a generic
+      // customer task invented from the unresolved status.
+      return review.explanation;
     }
   }
   const findings = pdfNarrativeFindings(report).map(finding => {
@@ -65,7 +69,7 @@ export type SummaryVisual =
   | { kind: "certificate"; status: string; caption: string }
   | { kind: "transport"; checks: Array<{ label: string; status: string }>; caption: string }
   | { kind: "services"; services: number; domains: number; purposes: Array<{ label: string; value: number }>; caption: string; unavailable: boolean }
-  | { kind: "columns"; counts: number[]; caption: string; unavailable: boolean; rules?: number; reviewItems?: number; failures?: number; nodes?: number; issues?: string[] };
+  | { kind: "columns"; counts: number[]; caption: string; unavailable: boolean; rules?: number; reviewItems?: number; failures?: number; nodes?: number; issues?: string[]; statusLabel?: string };
 
 /** Topic-specific inventory/assessment graphics; these never classify or manufacture findings. */
 export function pdfSummaryTopics(report: CanonicalReportExport) {
@@ -73,8 +77,9 @@ export function pdfSummaryTopics(report: CanonicalReportExport) {
   const runtime = report.appendix.cookieAndTrackerInventory;
   const inventoryUnavailable = runtime.presentationStatus === "insufficient_evidence";
   const rows = report.gdprEprivacyReview?.rows ?? [];
-  const disclosures = report.appendix.gdprTransparency.rows;
+  const disclosures = reportSectionInFocus("gdpr-transparency",report.reviewFocus)?report.appendix.gdprTransparency.rows:[];
   const disclosureCounts = evidenceSectionCounts(disclosures);
+  const californiaFamilies=report.californiaScore?.reviewCoverage?.families??[];
   const forms = report.appendix.dataCollectionSurfaces;
   const external = pdfInventoryRows(report).external;
   const domains = [...new Set(external.flatMap(row => row.domains))];
@@ -89,15 +94,16 @@ export function pdfSummaryTopics(report: CanonicalReportExport) {
       provider: report.appendix.evidenceDossier?.cmp?.provider ?? undefined,
       caption: rows.some(row => row.id === "post_reject_tracking_reduction" && row.status === "Gap observed") ? "After Reject: activity observed" : controls ? `${Object.values(controls.controls).filter(state => state === "observed").length} of 3 choices observed` : "Visit evidence unavailable" },
     storage: { kind: "bars", bars: [{ label: "Cookies", value: runtime.summary.cookieRows }, { label: "Storage", value: runtime.summary.storageRows ?? 0 }], caption: "Retained inventory", unavailable: inventoryUnavailable },
-    policy: { kind: "matrix", observed: disclosureCounts.observed, review: disclosureCounts.review, other: Math.max(0, disclosures.length - disclosureCounts.observed - disclosureCounts.review), caption: disclosures.length ? `${disclosures.filter(row => row.status === "Observed").length} / ${disclosures.length} disclosures observed` : "Disclosure checks unavailable" },
+    policy: report.reviewFocus==="ccpa_cpra"?{kind:"matrix",observed:californiaFamilies.filter(row=>["observed","not_triggered_in_scope"].includes(row.status)).length,review:californiaFamilies.filter(row=>["review","assessed_gap"].includes(row.status)).length,other:californiaFamilies.filter(row=>row.status==="unknown").length,caption:californiaFamilies.length?`${californiaFamilies.length} California review areas`:"California review coverage unavailable"}:{ kind: "matrix", observed: disclosureCounts.observed, review: disclosureCounts.review, other: Math.max(0, disclosures.length - disclosureCounts.observed - disclosureCounts.review), caption: disclosures.length ? `${disclosures.filter(row => row.status === "Observed").length} / ${disclosures.length} disclosures observed` : "Disclosure checks unavailable" },
     forms: { kind: "flow", forms: forms.summary.totalForms, fields: forms.summary.totalFields, caption: forms.assessmentStatus === "insufficient_evidence" ? "Inventory unavailable" : "Retained form inventory" },
     security: { kind: "transport", checks: [["HTTPS delivery", "transport_security_https_delivery"], ["HTTP redirect", "transport_security_http_redirect"], ["Mixed-content check", "transport_security_mixed_content"], ["HTTPS certificate", "transport_security_tls_certificate"]].map(([label, id]) => ({ label: label!, status: rows.find(row => row.id === id)?.status ?? "Unavailable" })), caption: expiryLabel },
     external: { kind: "services", services: external.length, domains: domains.length, purposes, caption: inventoryUnavailable ? "Inventory unavailable" : `${external.filter(row => row.preConsent).length} services seen before choice`, unavailable: inventoryUnavailable },
     accessibility: { kind: "columns", counts: report.accessibilityEvidence?.violations.map(rule => rule.nodeCount) ?? [], rules: report.accessibilityEvidence?.rulesEvaluated.length,
+      statusLabel:audit?accessibilityReportFollowUp(audit)?.label:undefined,
       failures: audit?.failedRuleCount ?? undefined, nodes: audit?.affectedNodeCount ?? undefined,
       issues: report.accessibilityEvidence?.violations.map(accessibilityRuleTitle),
-      reviewItems: audit?.reviewRuleCount ?? undefined, caption: report.accessibilityEvidence ? `${report.accessibilityEvidence.rulesEvaluated.length} rules checked / ${audit?.reviewRuleCount ?? "?"} review items` : "Audit evidence unavailable",
-      unavailable: audit?.status !== "completed" || audit.failedRuleCount === null || audit.failedRuleCount === undefined || !report.accessibilityEvidence || audit.failedRuleCount === 0 && report.accessibilityEvidence.violations.length > 0 },
+      reviewItems: audit?.reviewRuleCount ?? undefined, caption: report.accessibilityEvidence ? `${report.accessibilityEvidence.rulesEvaluated.length} rules checked / ${audit?.reviewRuleCount ?? "?"} manual checks` : "Audit evidence unavailable",
+      unavailable: !audit || audit.status !== "completed" && !audit.failedRuleCount && !audit.reviewRuleCount || audit.failedRuleCount === null || audit.failedRuleCount === undefined || !report.accessibilityEvidence || audit.failedRuleCount === 0 && report.accessibilityEvidence.violations.length > 0 },
   };
   return pdfTopicOverview(report).map(topic => ({ ...topic, visual: visuals[topic.id] }));
 }

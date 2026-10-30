@@ -78,6 +78,11 @@ for (const provider of ["finsweet", "cookiescript", "cookie_information", "osano
         assert.ok(consentConfirmationDiagnosticsSchema.safeParse(packet.confirmationDiagnostics).success);
         assert.equal(packet.confirmationDiagnostics?.diagnosticOnly, true);
         assert.equal(packet.decisionEvidence?.decision === "denied", mode === "saved");
+        if (provider === "osano" && mode === "partial") {
+          assert.ok(packet.confirmationDiagnostics?.policyVersion !== "consent_confirmation_diagnostics.v1" &&
+            packet.confirmationDiagnostics?.reasons.includes("receipt_format_unsupported"));
+          assert.equal(packet.confirmationDiagnostics?.reasons.includes("api_unavailable"), false);
+        }
       });
     });
   }
@@ -199,11 +204,37 @@ for (const mode of ["saved", "no_event", "partial", "opposite", "invalid_necessa
       assert.equal(clicks(), 1);
       assert.equal(packet.refusalRegistration.status, mode === "saved" ? "confirmed" : "unconfirmed");
       assert.equal(packet.decisionEvidence?.decision === "denied", mode === "saved");
+      if (mode === "partial" || mode === "invalid_necessary") {
+        assert.ok(packet.confirmationDiagnostics?.policyVersion !== "consent_confirmation_diagnostics.v1" &&
+          packet.confirmationDiagnostics?.reasons.includes("receipt_format_unsupported"));
+        assert.equal(packet.confirmationDiagnostics?.reasons.includes("api_unavailable"), false);
+      }
       const projection = projectPostRefusalEvidenceForReport({packet});
       // Loopback lab evidence verifies the observer, but cannot become a
       // production report action or a confirmed customer finding.
       assert.equal(projection.execution?.clickCompleted, false);
       assert.equal(projection.execution?.consentConfirmed, false);
+    });
+  });
+}
+
+for (const mode of ["readback_mismatch", "unsupported_tcf_scope"] as const) {
+  test(`Osano Reject preserves the adapter's ${mode} blocker`, async () => {
+    const recipe = buildCanonicalPostRefusalActionRecipes().find(row => row.cmpId === "Osano")!;
+    await fixture(`<section class="osano-cm-window"><p>Choose optional cookies</p>
+      <button class="osano-cm-deny-all" onclick="save();fetch('/click');this.parentElement.hidden=true">Reject all</button></section>
+      <script>window.handlers=[];window.state=undefined;
+      window.Osano={cm:{getConsent:()=>window.state,addEventListener:(name,fn)=>handlers.push(fn)}};
+      window.save=()=>{window.state={ESSENTIAL:'ACCEPT',ANALYTICS:'DENY',MARKETING:'DENY',PERSONALIZATION:'DENY','OPT-OUT':'ACCEPT',STORAGE:'DENY'};
+        ${mode === "unsupported_tcf_scope" ? "window.__tcfapi=()=>{};handlers.forEach(fn=>fn(state));" : "handlers.forEach(fn=>fn({...state,ANALYTICS:'ACCEPT'}));"}};
+      </script>`, async (url, clicks) => {
+      const packet = await observe(url, recipe);
+      assert.equal(clicks(), 1);
+      assert.equal(packet.refusalRegistration.status, "unconfirmed");
+      assert.equal(packet.terminalDecisionEvidence, undefined);
+      assert.ok(packet.confirmationDiagnostics?.reasons.includes(mode === "readback_mismatch"
+        ? "receipt_readback_mismatch" : "configuration_or_groups_unverified"), JSON.stringify(packet.confirmationDiagnostics));
+      assert.equal(packet.confirmationDiagnostics?.reasons.includes("api_unavailable"), false);
     });
   });
 }

@@ -12,6 +12,36 @@ import {
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
 
+test("category qualifier not essential cookies preserves the explicit consent verb", () => {
+  for (const [label, intent] of [
+    ["Reject All Not Essential Cookies", "reject"],
+    ["Deny all not essential cookies", "reject"],
+    ["Decline all not essential cookies", "reject"],
+    ["Accept all not essential cookies", "accept"],
+  ] as const) {
+    const result = classifyConsentControlLabel({ label, hasConsentContext: true, usage: "action" });
+    assert.equal(result.intent, intent, JSON.stringify({ label, result }));
+    assert.equal(result.contextSatisfied, true);
+    assert.equal(result.registryVersion, CONSENT_CONTROL_LABEL_REGISTRY_VERSION);
+  }
+});
+
+test("category qualifier does not mask independent negation, conflict or informational labels", () => {
+  for (const label of [
+    "Do not reject all not essential cookies", "Never reject not essential cookies",
+    "Do not accept all not essential cookies", "Reject all not essential cookies and accept all",
+    "Why reject all not essential cookies", "Learn about rejecting not essential cookies",
+  ]) {
+    const result = classifyConsentControlLabel({ label, hasConsentContext: true, usage: "action" });
+    // "Do not accept" remains the existing explicit refusal phrase; it never becomes Accept.
+    assert.notEqual(result.intent, "accept", label);
+    if (!label.startsWith("Do not accept")) assert.equal(result.intent, "unknown", JSON.stringify({ label, result }));
+  }
+  assert.equal(classifyConsentControlLabel({ label: "Reject All Not Essential Cookies", ariaLabel: "Accept all cookies", hasConsentContext: true, usage: "action" }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ label: "OK", usage: "action", hasConsentContext: false, contextText: "Account preferences" }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ label: "OK", scopeText: "Receive notifications about offers", hasConsentContext: true, usage: "action" }).intent, "unknown");
+});
+
 test("plural Cookies Settings is an observation-only Options label", () => {
   assert.equal(classifyConsentControlLabel({ label: "Cookies Settings", hasConsentContext: true, usage: "observation" }).intent, "options");
   assert.equal(classifyConsentControlLabel({ label: "Cookies Settings", hasConsentContext: true, usage: "action" }).intent, "unknown");
@@ -1330,4 +1360,15 @@ test("retained Arabic necessary-only and manage-choice labels use canonical qual
     assert.equal(result.intent,intent,label);
     assert.equal(result.matchedLocale,"ar");
   }
+});
+
+test("retained necessary-only and Portuguese category labels preserve their consent decision", () => {
+  for (const label of ["Accept Only Required", "Rejeitar todos os cookies não-necessários", "Rejeitar todos os cookies nao necessarios"]) {
+    const value = classifyConsentControlLabel({label, usage:"action", classifierProfile:"multilingual_v1", hasConsentContext:true});
+    assert.equal(value.intent,"reject",JSON.stringify({label,value})); assert.ok(value.confidence>=0.8);
+  }
+  for (const label of ["Não rejeitar todos os cookies não-necessários", "Nunca rejeitar todos os cookies não-necessários", "Como rejeitar todos os cookies não-necessários", "Rejeitar todos os cookies não-necessários e aceitar todos", "Do not accept only required", "Accept only required and accept all cookies", "Why accept only required", "Accept only required terms", "Accept only required subscription", "Accept only required purchase"]) {
+    assert.equal(classifyConsentControlLabel({label, usage:"action", classifierProfile:"multilingual_v1", hasConsentContext:true}).intent,"unknown",label);
+  }
+  assert.equal(classifyConsentControlLabel({label:"Rejeitar todos os cookies não-necessários",ariaLabel:"Aceitar todos",usage:"action",classifierProfile:"multilingual_v1",hasConsentContext:true}).intent,"unknown");
 });

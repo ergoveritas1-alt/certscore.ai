@@ -3,7 +3,7 @@ import test from "node:test";
 import { EventEmitter } from "node:events";
 import { runInNewContext } from "node:vm";
 import { ONETRUST_IKEA_APPLICABILITY as pin, ONETRUST_REVIEWED_SDKS, oneTrustGroupEvidenceSchema, consentDecisionEvidenceSchema } from "@certscore/contracts";
-import { chromium, type BrowserContext, type Page, type Request, type Response } from "playwright";
+import { chromium, type BrowserContext, type CDPSession, type Page, type Request, type Response } from "playwright";
 import { createOneTrustSdkSourceCapture, installOneTrustSdkSourceCapture, readOneTrustSdkSource } from "./onetrust-sdk-source";
 import { captureOneTrustBaseline } from "./onetrust-consent-state";
 import { verifiedChangedOneTrustDecision } from "./consent-action-semantic-state";
@@ -31,6 +31,8 @@ function fixture(productionDigest = false, document = pin.documentUrl as string,
     }}) as unknown as Page;
   const capture = productionDigest ? installOneTrustSdkSourceCapture(scope)
     : createOneTrustSdkSourceCapture(scope,()=>sdk.sdkSha256);
+  const native = Object.assign(new EventEmitter(), { send: async (command: string) => command === "Page.enable" ? {} :
+    { frameTree: { frame: { id: "fixture-main", loaderId: "fixture-loader", url } } } });
   const context = {cookies:async()=>{duringCookieRead?.();return [cookie];}} as unknown as BrowserContext;
   async function receive(change:Record<string,unknown>={}) {
     const req={url:()=>sdk.sdkUrl,method:()=>"GET",resourceType:()=>"script",frame:()=>frame,redirectedFrom:()=>null,...change} as unknown as Request;
@@ -41,8 +43,41 @@ function fixture(productionDigest = false, document = pin.documentUrl as string,
     setCookie:(value:typeof cookie)=>{cookie=value;},setWrites:(value:typeof writes)=>{writes=value;},
     setBody:(value:Buffer)=>{body=value;},deferBody:(value:()=>Promise<Buffer>)=>{deliverBody=value;},
     navigate:(next=document)=>{url=next;emitter.emit("framenavigated",frame);},
+    enableNative: async (deferPair = false) => {
+      capture.bindNativeSession(native as unknown as CDPSession); await new Promise(resolve => setImmediate(resolve));
+      native.emit("Page.frameNavigated", { frame: { id: "fixture-main", loaderId: "fixture-loader", url } });
+      if (!deferPair) emitter.emit("framenavigated", frame);
+    },
+    completeNativePair: async () => {
+      emitter.emit("framenavigated", frame); await new Promise(resolve => setImmediate(resolve));
+    },
+    sameDocumentNoop: async () => {
+      native.emit("Page.navigatedWithinDocument", { frameId: "fixture-main", url, navigationType: "historyApi" });
+      emitter.emit("framenavigated", frame); await new Promise(resolve => setImmediate(resolve));
+    },
     duringRead:(fn:()=>void)=>{duringRead=fn;},duringCookieRead:(fn:()=>void)=>{duringCookieRead=fn;},calls:()=>calls,child};
 }
+
+test("native continuity supports only a fresh baseline and cannot retrofit earlier applicability", async () => {
+  const f = fixture(); await f.enableNative(); await f.receive();
+  const before = await captureOneTrustBaseline(f.context, f.scope);
+  assert.equal(before?.status, "verified"); if (before?.status !== "verified") throw Error("baseline");
+  assert.ok(before.applicability); const retainedBefore = JSON.stringify(before);
+  await f.sameDocumentNoop();
+  const after = await captureOneTrustBaseline(f.context, f.scope);
+  assert.equal(after?.status, "verified"); if (after?.status !== "verified") throw Error("fresh baseline");
+  assert.ok(after.applicability?.source.documentContinuity);
+  assert.notEqual(after.applicability!.source, before.applicability!.source);
+  assert.equal(JSON.stringify(before), retainedBefore, "a checkpoint never mutates an earlier baseline");
+  const at = Date.now(); f.cookie().value = f.after;
+  f.setWrites([{ storageType: "cookie", name: "OptanonConsent", value: f.after, observedAtEpochMs: at, sequence: 1 }]);
+  const input = { context: f.context, scope: f.scope, cookieName: "OptanonConsent", actionAt: at };
+  assert.equal(await verifiedChangedOneTrustDecision({ ...input, oneTrustBaseline: before }), undefined);
+  const result = await verifiedChangedOneTrustDecision({ ...input, oneTrustBaseline: after });
+  assert.equal(result?.decision, "granted");
+  assert.ok(oneTrustGroupEvidenceSchema.safeParse(result?.oneTrustGroupEvidence).success);
+  f.capture.dispose();
+});
 
 test("only actual reviewed SDK bytes pass the production digest", async()=>{
   const f=fixture(true);await f.receive();assert.equal(f.capture.snapshot(),undefined);f.capture.dispose();
@@ -259,4 +294,23 @@ test("identical script elements bind one verified network source; count drift or
 test("more than eight identical script elements exceed the binding budget",async()=>{
  const f=fixture();f.scripts.push(...Array.from({length:8},()=>({...f.scripts[0]!})));await f.receive();
  const baseline=await captureOneTrustBaseline(f.context,f.scope);assert.ok(baseline?.diagnosticReasons?.includes("script_multiple_elements"));if(baseline?.status==="verified")assert.equal(baseline.applicability,undefined);f.capture.dispose();
+});
+
+
+test("interleaved commit source enables a fresh canonical decision without upgrading the earlier baseline", async () => {
+  const f = fixture(); await f.enableNative(true); await f.receive();
+  const early = await captureOneTrustBaseline(f.context, f.scope);
+  assert.equal(early?.status, "verified"); if (early?.status !== "verified") throw Error("baseline");
+  assert.equal(early.applicability, undefined);
+  const retained = JSON.stringify(early);
+  await f.completeNativePair();
+  const fresh = await captureOneTrustBaseline(f.context, f.scope);
+  assert.equal(fresh?.status, "verified"); if (fresh?.status !== "verified") throw Error("baseline");
+  assert.equal(fresh.applicability?.source.documentContinuity?.navigationType, "documentCommit");
+  const at = Date.now(); f.cookie().value = f.after;
+  f.setWrites([{ storageType: "cookie", name: "OptanonConsent", value: f.after, observedAtEpochMs: at, sequence: 1 }]);
+  const input = { context: f.context, scope: f.scope, cookieName: "OptanonConsent", actionAt: at };
+  assert.equal(await verifiedChangedOneTrustDecision({...input, oneTrustBaseline: early}), undefined);
+  assert.equal((await verifiedChangedOneTrustDecision({...input, oneTrustBaseline: fresh}))?.decision, "granted");
+  assert.equal(JSON.stringify(early), retained); f.capture.dispose();
 });

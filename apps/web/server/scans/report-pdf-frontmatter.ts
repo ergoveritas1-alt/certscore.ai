@@ -5,6 +5,7 @@ import { publicReportPdfBaseUrl } from "./report-pdf-public-safety";
 import { SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
 import { pdfSiteIntegrityRemediationEvidence } from "./report-pdf-site-integrity";
 import { pdfGroupRemediation } from "./report-pdf-remediation";
+import { reportStatusLabel } from "../../lib/scans/report-status-presentation";
 
 type Layout = { text(value: string, options?: Partial<PdfLine>): PdfLine[]; heading(value: string): PdfLine };
 
@@ -16,10 +17,10 @@ export function pdfFrontmatter(report: CanonicalReportExport, appUrl: string, la
   const lines: PdfLine[] = [chapter("Top issues and remediation", "findings")];
   for (const [index, group] of groups.entries()) {
     const plan = pdfGroupRemediation(report, group);
-    lines.push({ ...layout.heading(`${index + 1}. ${group.title} - ${group.status}`),
+    lines.push({ ...layout.heading(`${index + 1}. ${group.title} - ${reportStatusLabel(group.status)}`),
       continuationTitle: group.title, keepWithNextHeight: group.id === SITE_INTEGRITY_FINDING_ID ? 500 : 180 });
     for (const observation of group.observations) {
-      lines.push(...layout.text(`${observation.title}: ${observation.status}`, { bold: true, gapAfter: 3 }), ...layout.text(observation.explanation, { size: 9, gapAfter: 5 }));
+      lines.push(...layout.text(`${observation.title}: ${reportStatusLabel(observation.status)}`, { bold: true, gapAfter: 3 }), ...layout.text(observation.explanation, { size: 9, gapAfter: 5 }));
       if (observation.severity) lines.push(...layout.text(`${observation.severity} impact; ${observation.confidence ?? "confidence not established"}.`, { size: 8 }));
     }
     lines.push({ text: "Remediation", bold: true, size: 10, gapBefore: 8, gapAfter: 4, keepWithNextHeight: 65 },

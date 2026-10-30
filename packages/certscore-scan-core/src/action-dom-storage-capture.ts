@@ -11,7 +11,8 @@ export type ActionDomStorageObservation = import("@certscore/contracts").ActionO
  * Event receipt processing is synchronous, bounded, and has no drain task/wait.
  */
 export async function installActionDomStorageCapture(page: Page, targetUrl: string,
-  openSession: () => Promise<CDPSession> = () => page.context().newCDPSession(page)) {
+  openSession: () => Promise<CDPSession> = () => page.context().newCDPSession(page),
+  options: { onSession?: (session: CDPSession) => void } = {}) {
   const startedAtEpochMs = Date.now();
   let targetOrigin = new URL(targetUrl).origin;
   const rows: ActionDomStorageObservation["rows"] = [];
@@ -52,6 +53,8 @@ export async function installActionDomStorageCapture(page: Page, targetUrl: stri
   });
   try {
     session = await openSession();
+    try { options.onSession?.(session); }
+    catch { /* Optional shared-session consumers cannot prevent DOMStorage setup. */ }
     for (const { method, listener } of listeners) session.on(method, listener);
     await session.send("DOMStorage.enable");
     enabled = true;

@@ -1,3 +1,4 @@
+import {consentReceiptCaptureSchema,validateConsentReceiptCapture} from './consent-receipt-capture';
 import { validateComplianzReceiptEnvelope } from "./complianz-consent-state";
 import { cmpPassiveDiagnosticsSchema } from "./cmp-passive-diagnostics";
 import { notificationAcknowledgmentSchema, validateNotificationAcknowledgment } from "./notification-acknowledgment";
@@ -190,6 +191,7 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   completedAt: z.string().datetime(),
   resolver: postRefusalResolverSchema,
   acceptanceRegistration: postAcceptRegistrationSchema,
+  consentReceiptCapture: consentReceiptCaptureSchema.optional(),
   confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
   passiveCmpDiagnostics: cmpPassiveDiagnosticsSchema.optional(),
   observationWindowMs: z.number().int().nonnegative(),
@@ -289,6 +291,10 @@ const postAcceptEvidencePacketBaseSchema = z.object({
     capture:packet.afterActionCapture,storage:packet.storage.postAction,
   },context);
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "accept", context);
+  validateConsentReceiptCapture(packet.consentReceiptCapture,{artifactVersion:packet.artifactVersion,scanId:packet.scanId,action:'accept',
+    targetSha256:packet.actionControlProof?.authorizedTargetSha256,frameIdentitySha256:packet.actionControlProof?.frameIdentitySha256,
+    dispatchedAtMs:packet.acceptanceRegistration.actionDispatchedAtMs,readyAtMs:packet.timing.readyAtMs,completedAt:packet.completedAt,
+    clickOutcome:packet.interactionDiagnostics?.click.outcome},context);
   validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
   for (const evidence of [packet.decisionEvidence, packet.terminalDecisionEvidence?.evidence]) {
     validateComplianzReceiptEnvelope(evidence?.complianzReceiptEvidence, {
