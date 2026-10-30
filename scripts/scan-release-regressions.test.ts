@@ -299,3 +299,12 @@ test("canonical framework scoping and status regressions run for web, API contra
     }
   }
 });
+
+test("MCP contract, manifest and SDK changes run the release drift guard locally", () => {
+  for (const file of ["packages/certscore-api-contracts/src/mcp.ts", "packages/certscore-mcp/tools.manifest.json", "packages/certscore-sdk/src/client.ts"]) {
+    for (const full of [false, true]) {
+      const guard = getPredeployPlan([file], { full }).checks.find(check => check.key === "mcp-release-drift");
+      assert.deepEqual(guard?.command, ["node", "--import", "tsx", "scripts/verify-certscore-mcp-release-guards.ts"]);
+    }
+  }
+});

@@ -39,6 +39,12 @@ const REPORT_PRESENTATION_CHECK: Check = {
   command: ["pnpm", "test:report-presentation"],
 };
 
+const MCP_RELEASE_GUARD_CHECK: Check = {
+  key: "mcp-release-drift",
+  label: "canonical MCP manifest, runtime tools and public documentation agree",
+  command: ["node", "--import", "tsx", "scripts/verify-certscore-mcp-release-guards.ts"],
+};
+
 const EVIDENCE_RECOVERY_CHECK: Check = {
   key: "report-evidence-recovery",
   label: "verified artifact recovery, exact consent documents and policy completeness",
@@ -307,6 +313,7 @@ const ROOT_FULL_CHECKS: Check[] = [
     label: "bootstrap workspace package exports for clean-checkout tests and typechecks",
     command: ["pnpm", "turbo", "run", "build", "--filter=./packages/*"]
   },
+  MCP_RELEASE_GUARD_CHECK,
   {
     key: "deploy-latency-contracts",
     label: "deploy cache, runtime base and exact-SHA typecheck reuse guards",
@@ -398,6 +405,7 @@ const TARGETS: Target[] = [
       CANONICAL_PROJECTION_CHECK,
       { key: "mcp-http-typecheck", label: "MCP dependency build and HTTP typecheck", command: ["pnpm", "--filter", "@certscore/mcp-http", "typecheck"] },
       { key: "mcp-http-tests", label: "MCP HTTP integration and telemetry", command: ["pnpm", "--filter", "@certscore/mcp-http", "test"] },
+      MCP_RELEASE_GUARD_CHECK,
     ],
   },
   {
