@@ -207,16 +207,16 @@ test("full-site JSON and PDF retain scope while homepage projection and score in
   assert.equal(baseline.fullSite,undefined);assert.equal(report.fullSite?.summary.state.requested.maxPages,200);
   const pdf=renderCanonicalReportPdf(report);
   assert.equal(pdf.subarray(0,5).toString(),"%PDF-");
-  assert.match(pdf.toString("latin1"),/Website scan report/);
+  assert.match(pdf.toString("latin1"),/Executive Summary/);
   assert.match(pdf.toString("latin1"), /Site integrity coverage/);
   assert.match(pdf.toString("latin1"), /1 of 2 scanned pages/);
   assert.match(pdf.toString("latin1"), /clinic.example\/unavailable/);
   assert.match(pdf.toString("latin1"),/additional-page-resource/);
   assert.equal(report.fullSite?.resources.length, 1);
-  assert.match(pdf.toString("latin1"),/Full-site score .*GDPR\/ePrivacy-weighted.*51/);
+  assert.match(pdf.toString("latin1"),/Full-site score/);
   assert.equal(report.fullSite?.score?.value,51);
   assert.deepEqual(report.score, { value: 51, scope: "full_site" });
-  assert.match(pdf.toString("latin1"), /35 Tf[^\n]*\(51\)/);
+  assert.match(pdf.toString("latin1"), /23 Tf[^\n]*\(51\)/);
   assert.match(pdf.toString("latin1"),/robots.txt restricts crawl coverage/);
 });
 

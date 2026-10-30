@@ -547,6 +547,8 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   assert.equal(document.components.schemas.ScanJob.properties.postureScores.$ref, "#/components/schemas/PostureScores");
   assert.equal(document.paths["/api/v2/scans/{scanId}/report-evidence"].get.operationId, "getReportEvidencePage");
   assert.equal(document.components.schemas.ReportEvidencePage.properties.workpaper.const, "tracking");
+  assert.deepEqual(document.components.schemas.ReportEvidencePage.properties.reviewFocus.enum, ["gdpr_eprivacy", "ccpa_cpra"]);
+  assert.ok(document.paths["/api/v2/scans/{scanId}/report-evidence"].get.parameters.some(parameter => parameter.name === "reviewFocus"));
   assert.ok(document.components.schemas.ReportEvidencePage.properties.download.properties.csvUrl);
   assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/auth/check"]);

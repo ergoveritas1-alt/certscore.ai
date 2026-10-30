@@ -3,28 +3,29 @@ import test from "node:test";
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 
-test("white-label PDF export authenticates and uses only the viewer workspace branding", async () => {
+test("document exports share workspace branding gates while public Word downloads remain unbranded", async () => {
   const route = fileURLToPath(new URL("../../app/api/scans/[scanId]/report-export/route.ts", import.meta.url));
   const mocks: Record<string, string> = {
-    state: `export const state={signedIn:true,role:'advanced',accessible:true,logo:true,failLogo:false,loaded:[],rendered:[],theme:"white",settings:[]};`,
+    state: `export const state={signedIn:true,role:'advanced',accessible:true,logo:true,failLogo:false,loaded:[],rendered:[],theme:"white",settings:[],ready:true,projection:true,canonical:true,fullSite:false,builds:[],word:[]};`,
     next: `export class NextResponse extends Response { static json(body,options){return new NextResponse(JSON.stringify(body),options);} }`,
     auth: `import {state} from 'test-state'; export async function getCurrentUser(){return state.signedIn ? {id:'viewer'} : null;} export async function getDashboardContext(){return {membership:{role:state.role},organization:{id:'viewer-workspace'},user:{email:'viewer@example.test'}};}`,
     admin: `export function isPlatformAdminEmail(){return false;}`,
-    status: `import {state} from 'test-state'; export async function getPublicScanStatusProjection(){return {reportReady:true,reportGeneration:'v1',organizationId:'different-owner-workspace'};} export async function getOrganizationScanStatusProjection(){return state.accessible ? {id:'scan'} : null;}`,
-    projection: `export async function loadPersistedScanReportProjection(){return {scan:{scanConfigJson:{fullSite:false}},runtimeArtifacts:[]};}`,
-    export: `export function buildCanonicalReportExport(){return {scan:{domainHostname:'example.test'}};}`,
+    status: `import {state} from 'test-state'; export async function getPublicScanStatusProjection(){return {reportReady:state.ready,reportGeneration:'v1',organizationId:'different-owner-workspace'};} export async function getOrganizationScanStatusProjection(){return state.accessible ? {id:'scan'} : null;}`,
+    projection: `import {state} from 'test-state'; export async function loadPersistedScanReportProjection(){return state.projection ? {scan:{scanConfigJson:{fullSite:state.fullSite}},runtimeArtifacts:[]} : null;}`,
+    export: `import {state} from 'test-state'; export function buildCanonicalReportExport(scan,fullSite,focus){state.builds.push({fullSite,focus}); return state.canonical ? {scan:{domainHostname:'example.test'},reviewFocus:focus,fullSite} : null;}`,
     pdf: `import {state} from 'test-state'; export function renderCanonicalReportPdf(report,options){state.rendered.push(options);return Buffer.from('%PDF-1.4');}`,
+    docx: `import {state} from 'test-state'; export const REPORT_DOCX_CONTENT_TYPE="application/vnd.openxmlformats-officedocument.wordprocessingml.document"; export async function renderCanonicalReportDocx(report,options){state.word.push({report,options});return Buffer.from("PK");}`,
     branding: `import {state} from 'test-state'; export async function getWorkspaceBrandingRecord(id){state.settings.push(id);return {name:'Viewer Agency',headerTheme:state.theme};} export async function loadWorkspaceReportLogo(id){state.loaded.push(id);if(state.failLogo)throw new Error('unavailable');return state.logo ? {name:'Viewer Agency',image:{body:Buffer.from('logo'),contentType:'image/png'}} : null;}`,
     visual: `export function getVisualEvidenceArtifacts(){return [];}`,
     object: `export async function loadVisualEvidenceObject(){return null;}`,
-    options: `export async function readFullSiteOptions(){return {allowed:false};}`,
-    fullSite: `export async function loadFullSiteExport(){return null;}`,
+    options: `import {state} from 'test-state'; export async function readFullSiteOptions(){return {allowed:state.fullSite};}`,
+    fullSite: `export async function loadFullSiteExport(){return {scope:'full-site'};}`,
     workpaper: `export function buildTrackingWorkpaper(report){return report;} export function renderTrackingWorkpaperCsv(){return '';}`,
   };
   const output = await build({ stdin: { contents: `export {GET} from ${JSON.stringify(route)}; export {state} from 'test-state';`, resolveDir: process.cwd() },
     bundle: true, write: false, format: "esm", platform: "node", plugins: [{ name: "branding-isolation", setup(api) {
       const entries: Record<string, string> = { "next/server": "next", "test-state": "state" };
-      const suffixes: Record<string, string> = { "/server/auth": "auth", "/platform-admin": "admin", "/scan-status-projection": "status", "/scan-report-projection": "projection", "/report-export": "export", "/report-export-pdf": "pdf", "/report-branding": "branding", "/visual-evidence": "visual", "/visual-evidence-object": "object", "/full-site-options": "options", "/full-site-report": "fullSite", "/tracking-workpaper": "workpaper" };
+      const suffixes: Record<string, string> = { "/server/auth": "auth", "/platform-admin": "admin", "/scan-status-projection": "status", "/scan-report-projection": "projection", "/report-export": "export", "/report-export-pdf": "pdf", "/report-export-docx": "docx", "/report-branding": "branding", "/visual-evidence": "visual", "/visual-evidence-object": "object", "/full-site-options": "options", "/full-site-report": "fullSite", "/tracking-workpaper": "workpaper" };
       api.onResolve({ filter: /.*/ }, args => {
         const key = entries[args.path] ?? Object.entries(suffixes).find(([suffix]) => args.path.endsWith(suffix))?.[1];
         return key ? { path: key, namespace: "mock" } : undefined;
@@ -87,4 +88,54 @@ test("white-label PDF export authenticates and uses only the viewer workspace br
   assert.equal((await request("format=pdf")).status, 409);
   assert.equal((await request("format=json&branding=workspace")).status, 400);
   assert.equal((await request("format=pdf&branding=other-workspace")).status, 400);
+
+  state.signedIn = false; state.role = "user"; state.accessible = false;
+  const brandingReads = state.loaded.length, settingReads = state.settings.length;
+  const word = await request("format=docx&reviewFocus=ccpa_cpra&timeZone=Pacific%2FHonolulu");
+  assert.equal(word.status, 200);
+  assert.equal(word.headers.get("content-type"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  assert.equal(word.headers.get("content-disposition"), 'attachment; filename="certscore-example.test.docx"');
+  assert.equal(word.headers.get("cache-control"), "private, no-store");
+  assert.equal(word.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(await word.text(), "PK");
+  assert.equal(state.word.at(-1).report.reviewFocus, "ccpa_cpra");
+  assert.equal(state.word.at(-1).options.timeZone, "Pacific/Honolulu");
+  assert.equal(state.loaded.length, brandingReads); assert.equal(state.settings.length, settingReads);
+  assert.equal((await request("format=docx")).status, 200);
+  assert.equal(state.word.at(-1).report.reviewFocus, "gdpr_eprivacy");
+  assert.equal((await request("format=docx&branding=workspace")).status, 401);
+  state.signedIn = true;
+  assert.equal((await request("format=docx&branding=workspace")).status, 403);
+  state.role = "advanced";
+  const inaccessibleReads = state.loaded.length;
+  assert.equal((await request("format=docx&branding=workspace")).status, 404);
+  assert.equal((await request("format=docx")).status, 200);
+  assert.equal(state.word.at(-1).options.brandName, undefined);
+  assert.equal(state.loaded.length, inaccessibleReads);
+  state.accessible = true; state.logo = false; state.failLogo = false;
+  assert.equal((await request("format=docx&branding=workspace")).status, 409);
+  assert.equal((await request("format=docx")).status, 200);
+  assert.equal(state.word.at(-1).options.brandName, undefined);
+  state.logo = true; state.failLogo = true;
+  assert.equal((await request("format=docx")).status, 409);
+  state.failLogo = false;
+  const brandedWord = await request("format=docx&reviewFocus=ccpa_cpra");
+  assert.equal(brandedWord.status, 200);
+  assert.equal(brandedWord.headers.get("content-disposition"), 'attachment; filename="report-example.test.docx"');
+  assert.equal(state.word.at(-1).options.brandName, "Viewer Agency");
+  assert.equal(state.word.at(-1).options.brandLogo.body.toString(), "logo");
+  assert.equal(state.word.at(-1).options.headerTheme, "black");
+  assert.ok(state.loaded.every((id: string) => id === "viewer-workspace"));
+  state.signedIn = false; state.role = "user"; state.accessible = false;
+  assert.equal((await request("format=docx&timeZone=invalid%2Fzone")).status, 400);
+  assert.equal((await request("format=docx&reviewFocus=invalid")).status, 400);
+  assert.equal((await request("format=docx&scope=full-site")).status, 409);
+  state.fullSite = true;
+  assert.equal((await request("format=docx&scope=full-site&reviewFocus=ccpa_cpra")).status, 200);
+  assert.equal(state.word.at(-1).report.fullSite.scope, "full-site");
+  state.ready = false; assert.equal((await request("format=docx")).status, 404);
+  state.ready = true; state.projection = false; assert.equal((await request("format=docx")).status, 404);
+  state.projection = true; state.canonical = false; assert.equal((await request("format=docx")).status, 409);
+  state.canonical = true;
+  assert.equal((await request("format=json")).headers.get("content-type"), "application/json; charset=utf-8");
 });

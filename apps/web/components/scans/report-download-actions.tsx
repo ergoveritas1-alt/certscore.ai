@@ -1,6 +1,8 @@
 import React from "react";
 import { ReportPdfDownloadLink } from "./report-pdf-download-link";
 
+import { ReportDocumentDownloadLink } from "./report-document-download-link";
+
 type ReportDownloadActionsProps = { scanId: string; canExportPdf?: boolean };
 
 const iconLinkClass =
@@ -23,11 +25,10 @@ function PdfIcon() {
   );
 }
 
-function JsonDownloadIcon() {
+function WordDownloadIcon() {
   return (
     <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
-      <path d="M9 5.5C7 5.5 7 7 7 8.5v1.2c0 1-.7 1.8-1.7 1.8 1 0 1.7.8 1.7 1.8v1.2C7 16 7 17.5 9 17.5M15 5.5c2 0 2 1.5 2 3v1.2c0 1 .7 1.8 1.7 1.8-1 0-1.7.8-1.7 1.8v1.2c0 1.5 0 3-2 3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
-      <path d="M12 8.5v6M9.8 12.3 12 14.5l2.2-2.2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+      <path d="M6 3h8l4 4v14H6zM14 3v4h4M8.5 11l1.5 6 2-4 2 4 1.5-6" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 }
@@ -45,16 +46,16 @@ export function ReportDownloadActions({ scanId, canExportPdf = false }: ReportDo
         <PdfIcon />
         <IconTooltip label="Download report (PDF)" />
       </ReportPdfDownloadLink> : null}
-      <a
-        aria-label="Download JSON report"
+      <ReportDocumentDownloadLink
+        aria-label="Download Word report (DOCX)"
         className={iconLinkClass}
         download
-        href={`/api/scans/${scanId}/report-export?format=json`}
-        title="Download JSON report"
+        href={`/api/scans/${scanId}/report-export?format=docx`}
+        title="Download Word report (DOCX)"
       >
-        <JsonDownloadIcon />
-        <IconTooltip label="Download JSON" />
-      </a>
+        <WordDownloadIcon />
+        <IconTooltip label="Download Word (DOCX)" />
+      </ReportDocumentDownloadLink>
     </div>
   );
 }

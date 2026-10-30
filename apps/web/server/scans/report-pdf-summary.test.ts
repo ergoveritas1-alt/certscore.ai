@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildAssessmentHighlights } from "../../lib/scans/assessment-highlights";
+import { priorityReportFixture } from "./report-priority.fixture";
+import { pdfPriorityReview } from "./report-pdf-priorities";
+import { pdfOtherReviewGroups } from "./report-pdf-reader";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 import { accessibilityAuditFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
 import { pdfSiteAssessment, pdfSummaryTopics } from "./report-pdf-summary";
@@ -28,23 +30,19 @@ test("California PDF retains observed transport facts without EU disclosure conc
   assert.deepEqual(report, before);
 });
 
-test("PDF site assessment uses the scan report writer with canonical observation, qualification and action", () => {
-  const report = reportFixture();
-  const finding = { unifiedFindingId: "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction", severity: "high", summary: "Qualifying non-essential requests were observed during the retained post-Reject capture.", presentation: { findingName: "Non-essential activity after confirmed Reject", suggestedFix: "Update optional services to respect Reject, then retest." } };
-  report.projection.unifiedFindings = [finding] as unknown as CanonicalReportExport["projection"]["unifiedFindings"];
-  const before = structuredClone(report);
-  const expected = buildAssessmentHighlights([{ id: finding.unifiedFindingId, severity: "high", title: finding.presentation.findingName, summary: finding.summary, correctionSteps: [finding.presentation.suggestedFix] }], { kind: "page" }, { score: 64, coverage: { state: "unknown", limitedCount: 0 } });
-  assert.equal(pdfSiteAssessment(report), expected);
-  assert.match(expected, /retained post-Reject capture/);
-  assert.match(expected, /Update optional services/);
-  assert.doesNotMatch(expected, /deduction|point penalty|scoring withheld/i);
+test("PDF site assessment uses the canonical web priority projection and writer", () => {
+  const report = priorityReportFixture(), before = structuredClone(report);
+  const selected = pdfPriorityReview(report);
+  assert.equal(selected.topIssues.length, 1);
+  assert.equal(pdfSiteAssessment(report), selected.highlights.text);
+  assert.doesNotMatch(pdfSiteAssessment(report), /policy_clarity_risk|deduction|point penalty|scoring withheld/i);
   assert.deepEqual(report, before);
 });
 
 test("PDF summary never turns missing findings or unusable control visits into a positive assessment", () => {
   const report = reportFixture();
   report.score.value = null;
-  assert.equal(pdfSiteAssessment(report), "No priority findings are available from this visit.");
+  assert.equal(pdfSiteAssessment(report), "No GDPR/ePrivacy priority issues were identified in the assessed evidence.");
   report.consentControlAssessment!.document.identityStatus = "mismatched";
   const consent = pdfSummaryTopics(report)[0]!.visual;
   assert.equal(consent.kind, "choices");
@@ -77,27 +75,15 @@ test("policy visual counts every retained disclosure, including review rows at t
   assert.equal(policy.other, 0);
 });
 
-test("the PDF assessment leads with projected gaps rather than a lower-confidence supporting storage review", () => {
+test("display-only reviews remain detailed evidence and cannot supply missing canonical priority rows", () => {
   const report = reportFixture();
-  report.gdprEprivacyReview!.rows = [
-    { id: "pre_consent_cookies_storage", label: "Storage", status: "Review signal", rationale: "Cookie essentiality remains unresolved." },
-    { id: "pre_consent_third_party_tracking", label: "Tracking", status: "Gap observed", rationale: "Tracking-classified requests were observed before consent: Example Analytics. The first retained qualifying request was Example Analytics at 1.15s after scan start." },
-    { id: "post_reject_tracking_reduction", label: "After Reject", status: "Gap observed", rationale: "Eligible non-essential tracking activity was observed after the refusal confirmation during the measured post-Reject window." },
-    { id: "privacy_notice_availability", label: "Privacy notice", status: "Gap observed", rationale: "No reachable policy was found in the completed discovery." },
-  ] as NonNullable<CanonicalReportExport["gdprEprivacyReview"]>["rows"];
+  report.gdprEprivacyReview!.rows = [{ id: "pre_consent_cookies_storage", label: "Storage", status: "Review signal", rationale: "Cookie essentiality remains unresolved." }] as NonNullable<CanonicalReportExport["gdprEprivacyReview"]>["rows"];
   report.appendix.evidenceDossier = { checklistDetails: [] } as unknown as CanonicalReportExport["appendix"]["evidenceDossier"];
   const before = structuredClone(report);
-  const text = pdfSiteAssessment(report);
-  assert.match(text, /^Requests from Example Analytics were observed before a consent choice/);
-  assert.match(text, /after Reject was confirmed/);
-  assert.match(text, /No reachable privacy notice/);
-  assert.doesNotMatch(text, /Cookie essentiality|deduction|recovery|needs work/i);
-  assert.deepEqual(report, before);
-  report.gdprEprivacyReview!.rows = [report.gdprEprivacyReview!.rows[0]!];
-  assert.match(pdfSiteAssessment(report), /remains unresolved/);
-  assert.doesNotMatch(pdfSiteAssessment(report), /No priority issues/);
-  assert.equal(pdfSiteAssessment(report), "Cookie essentiality remains unresolved.");
+  assert.equal(pdfPriorityReview(report).topIssues.length, 0);
+  assert.equal(pdfOtherReviewGroups(report)[0]!.observations[0]!.explanation, "Cookie essentiality remains unresolved.");
   assert.doesNotMatch(pdfSiteAssessment(report), /Review the supporting evidence|recommended checks|Prioritize these fixes/);
+  assert.deepEqual(report, before);
 });
 
 test("accessibility zero results require a completed audit and corroborating rule evidence", () => {

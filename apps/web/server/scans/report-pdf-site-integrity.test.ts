@@ -30,7 +30,7 @@ test("hidden-link guidance is shared by canonical presentation and eligible evid
   assert.equal(report.appendix.siteIntegrity!.action, SITE_INTEGRITY_REMEDIATION_TEXT);
   assert.equal(report.projection.unifiedFindings[0]!.presentation.suggestedFix, SITE_INTEGRITY_REMEDIATION_TEXT);
   for (const required of [/Elements search/, /DOM subtree-modification breakpoint/, /CMS blocks/, /remove the anchor/, /Preserve legitimate skip links/, /does not establish compromise/, /page\/CDN caches/, /keyboard-operable/, /Do not visit/]) assert.match(presentation.suggestedFix, required);
-  assert.deepEqual(pdfReviewGroups(report)[0]!.observations[0]!.steps, SITE_INTEGRITY_REMEDIATION.steps);
+  assert.deepEqual(pdfReviewGroups(report)[0]!.observations[0]!.steps, [SITE_INTEGRITY_REMEDIATION_TEXT]);
   assert.deepEqual(report, before);
 });
 

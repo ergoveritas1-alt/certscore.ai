@@ -1013,6 +1013,7 @@ export interface ReportEvidencePage {
   snapshot: string;
   reportUrl: string;
   workpaper?: "tracking";
+  reviewFocus?: "gdpr_eprivacy" | "ccpa_cpra";
   section?: "consent" | "gpc" | "policy" | "tracking" | "transport" | "forms" | "accessibility" | "cmp" | "cms";
   selection?: { version: "certscore.report-evidence-selection.v1"; fields: string[]; notReturnedFields: string[]; interpretation: string };
   download?: { url: string; csvUrl?: string; mediaType: "application/json"; expiresAt?: string; bytes: number; authentication: "same_access_rules_as_mcp" | "short_lived_report_link" | "public"; instructions: string };

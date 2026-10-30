@@ -35,7 +35,7 @@ export function reconstructReportEvidencePages(pages: readonly ReportEvidencePag
   if (!first) throw new Error("No report evidence pages returned.");
   let offset = 0;
   for (const [index, page] of pages.entries()) {
-    if (page.scanId !== first.scanId || page.snapshot !== first.snapshot || page.section !== first.section || page.workpaper !== first.workpaper
+    if (page.scanId !== first.scanId || page.snapshot !== first.snapshot || page.section !== first.section || page.reviewFocus !== first.reviewFocus || page.workpaper !== first.workpaper
       || page.pagination.offset !== offset || page.pagination.returned !== page.entries.length || page.pagination.total !== first.pagination.total
       || page.pagination.complete !== (index === pages.length - 1)) throw new Error("Incomplete or mismatched report evidence snapshot.");
     offset += page.entries.length;

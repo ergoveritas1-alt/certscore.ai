@@ -173,8 +173,10 @@ test("Accept and Reject cards appear together in expandable consent surfaces", a
   assert.match(choicePathCardSource, /<div className="mt-2\.5 border-t border-zinc-200 pt-2\.5">/);
   assert.match(modelSource, /Saved consent did not match Accept/);
   assert.match(modelSource, /consent record saved afterward still said analytics and advertising were not allowed/);
-  assert.match(modelSource, /projectExecutiveFindingsFromUnifiedPackets/);
-  assert.match(modelSource, /finding\.unifiedFindingId === "acceptance_signal_contradicts_action"/);
+  assert.match(modelSource, /projectReportPriorityFindings/);
+  const prioritySource = await readFile("apps/web/lib/scans/report-priority-projection.ts", "utf8");
+  assert.match(prioritySource, /projectExecutiveFindingsFromUnifiedPackets/);
+  assert.match(prioritySource, /finding\.unifiedFindingId === "acceptance_signal_contradicts_action"/);
   assert.match(modelSource, /acceptContradictionRow \? \[acceptContradictionRow\] : \[\]/);
   assert.doesNotMatch(modelSource, /score-neutral|does not affect score|second score effect/);
 });

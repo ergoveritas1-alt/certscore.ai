@@ -278,16 +278,19 @@ export class CertScoreClient {
     return this.fetchJson<FindingDetail>(`/api/v2/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}`, options);
   }
 
-  async getReportEvidencePage(scanId: string, options: ApiV2RequestOptions & { cursor?: string; timeout?: number; workpaper?: "tracking"; section?: ReportEvidencePage["section"] } = {}): Promise<ReportEvidencePage> {
+  async getReportEvidencePage(scanId: string, options: ApiV2RequestOptions & { cursor?: string; timeout?: number; workpaper?: "tracking"; reviewFocus?: ReportEvidencePage["reviewFocus"]; section?: ReportEvidencePage["section"] } = {}): Promise<ReportEvidencePage> {
     const endpoint = this.url(`/api/v2/scans/${encodeURIComponent(scanId)}/report-evidence`);
     if (options.cursor) endpoint.searchParams.set("cursor", options.cursor);
     if (options.workpaper) endpoint.searchParams.set("workpaper", options.workpaper);
     if (options.section) endpoint.searchParams.set("section", options.section);
-    return this.fetchJson<ReportEvidencePage>(endpoint, options);
+    if (options.reviewFocus) endpoint.searchParams.set("reviewFocus", options.reviewFocus);
+    const page = await this.fetchJson<ReportEvidencePage>(endpoint, options);
+    if (options.reviewFocus && page.reviewFocus !== options.reviewFocus) throw new Error("Mismatched report evidence framework.");
+    return page;
   }
 
   /** Read and reconstruct retained report evidence only when explicitly requested. */
-  async getReportEvidence(scanId: string, options: ApiV2RequestOptions & { section?: ReportEvidencePage["section"]; maxPages?: number } = {}): Promise<ReportEvidenceDocument> {
+  async getReportEvidence(scanId: string, options: ApiV2RequestOptions & { reviewFocus?: ReportEvidencePage["reviewFocus"]; section?: ReportEvidencePage["section"]; maxPages?: number } = {}): Promise<ReportEvidenceDocument> {
     const maxPages = options.maxPages ?? 20;
     if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 100) throw new Error("maxPages must be between 1 and 100.");
     const pages: ReportEvidencePage[] = [];

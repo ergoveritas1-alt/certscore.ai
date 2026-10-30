@@ -1241,7 +1241,7 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
         <div><FullSiteIdentity scanId={report.scan.id} host={report.scan.host} url={report.scan.url} createdAt={<><ReviewFocusCoverageNote report={report} /><ReportCreatedAt scan={report.scan} /></>} duration={<span className="ml-2 tabular-nums">({report.scan.duration} scan)</span>} visualEvidenceHref={report.scan.visualEvidenceHref}
           region={<span className="rounded-md border border-zinc-300 bg-white px-2 py-1">Scanned from {report.scan.origin}</span>}
           reviewFocusControl={<RegulatoryReviewFocus focus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} />}
-          timing={<ReportCoverageTiming duration={report.scan.duration} showDurationInSummary={false}
+          timing={<ReportCoverageTiming scanId={report.scan.id} duration={report.scan.duration} showDurationInSummary={false}
             groups={[
               { title: "Coverage", rows: [["Scan scope", "Single page"], ["Pages scanned", 1], ["Scan region", report.scan.origin]] },
               { title: "Timing", rows: [["Observation window", report.scan.duration]] },

@@ -41,6 +41,7 @@ test("shared SQL reconciles chart, table, prior window and latest time at exact 
     assert.equal(result.rows.length, 3);
     assert.equal(result.rows[0]!.activity_id, "request:reuse");
     assert.equal(Date.parse(result.metrics.newest_at!), Date.parse(result.rows[0]!.activity_at));
+    assert.equal(Date.parse(result.metrics.newest_scan_at!), Date.parse("2026-10-28T19:20Z"), "a later reuse request does not reset time since the last physical scan");
     assert.equal(result.trend.reduce((n,b) => n+b.items,0), result.metrics.items);
     assert.equal(result.regions.reduce((n,b) => n+b.count,0), result.metrics.items);
     assert.equal(result.previous.runs, 1);
@@ -50,7 +51,7 @@ test("shared SQL reconciles chart, table, prior window and latest time at exact 
     assert.deepEqual(emptyPage.metrics, result.metrics, "pagination never changes the chart or total");
     params[27] = "2026-10-28T20:00Z";
     const empty = await run();
-    assert.equal(empty.metrics.items, 0); assert.equal(empty.metrics.newest_at, null);
+    assert.equal(empty.metrics.items, 0); assert.equal(empty.metrics.newest_at, null); assert.equal(empty.metrics.newest_scan_at, null);
     assert.equal(empty.trend.reduce((n,b) => n+b.items,0), 0);
   } finally { await client.query("rollback"); await client.end(); }
 });

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { priorityChecklistRow } from "./report-priority.fixture";
 import type { CanonicalReportExport } from "./report-export";
-import { pdfConfidenceLabel, pdfRegionLabel, pdfReportCounts, pdfReviewGroups, pdfTestedUrl, pdfRelatedCookieServices, pdfRejectTimingEvents } from "./report-pdf-reader";
+import { pdfDetailedReviewGroups, pdfConfidenceLabel, pdfRegionLabel, pdfReportCounts, pdfReviewGroups, pdfTestedUrl, pdfRelatedCookieServices, pdfRejectTimingEvents } from "./report-pdf-reader";
 
 function fixture() {
   return { scan: { id: "scan-1", requestedUrl: "https://example.test/test1.html" },
@@ -17,18 +18,18 @@ function fixture() {
   } as unknown as CanonicalReportExport;
 }
 
-test("one PDF projection groups existing findings and checklist rows without counting GPC or missing evidence as a repair", () => {
+test("detailed evidence retains legacy narrative/checklist groups without making them priorities", () => {
   const report = fixture();
   const before = structuredClone(report);
-  assert.deepEqual(pdfReportCounts(report), { groups: 2, observations: 3, gaps: 2, review: 1 });
-  const groups = pdfReviewGroups(report);
+  assert.deepEqual(pdfReportCounts(report), { groups: 0, observations: 0, gaps: 0, review: 0 });
+  const groups = pdfDetailedReviewGroups(report);
   assert.deepEqual(groups[0]!.observations.map(row => row.id), ["pre_consent_third_party_tracking", "session_replay_fingerprinting_review"]);
   assert.equal(groups[1]!.title, "Privacy policy not found");
   assert.equal(groups[0]!.observations[0]!.severity, "high");
   assert.equal(groups[0]!.observations[0]!.confidence, "Moderate confidence");
   assert.deepEqual(report, before);
   report.gdprEprivacyReview!.rows.push(report.gdprEprivacyReview!.rows[0]!);
-  assert.throws(() => pdfReportCounts(report), /Duplicate canonical/);
+  assert.throws(() => pdfDetailedReviewGroups(report), /Duplicate canonical/);
 });
 
 test("cookie service cross-references do not overwrite cookie purpose, setter or classification", () => {
@@ -47,6 +48,7 @@ test("cookie service cross-references do not overwrite cookie purpose, setter or
 test("Reject timing stays separate from page timing and requires a canonical refusal observation and exclusion proof", () => {
   const report = fixture();
   report.gdprEprivacyReview!.rows.push({ id: "post_reject_tracking_reduction", label: "After Reject", status: "Gap observed", rationale: "Observed activity." } as NonNullable<CanonicalReportExport["gdprEprivacyReview"]>["rows"][number]);
+  report.projection.checklist = [priorityChecklistRow()];
   report.appendix.evidenceDossier!.rejectTiming = { inFlightExclusionVerified: true, windowMs: 8000, networkRequestCount: 1,
     storageWriteCount: 0, registrationTimeIsUpperBound: true, networkRequests: [{ url: "https://metrics.example.test/collect", vendor: "Example", millisecondsAfterConfirmation: 71 }] };
   assert.deepEqual(pdfRejectTimingEvents(report), [{ label: "Reject confirmed", milliseconds: 0 }, { label: "Request started", milliseconds: 71 }]);
@@ -54,6 +56,7 @@ test("Reject timing stays separate from page timing and requires a canonical ref
   assert.deepEqual(pdfRejectTimingEvents(report), []);
   report.appendix.evidenceDossier!.rejectTiming.inFlightExclusionVerified = true;
   report.gdprEprivacyReview!.rows.pop();
+  report.projection.checklist = [];
   assert.deepEqual(pdfRejectTimingEvents(report), []);
 });
 
@@ -74,7 +77,7 @@ test("PDF copy distinguishes service requests from iframe proof and preserves th
   ] as NonNullable<CanonicalReportExport["gdprEprivacyReview"]>["rows"];
   report.projection.unifiedFindings = [];
   const before = structuredClone(report);
-  const observations = pdfReviewGroups(report).flatMap(group => group.observations);
+  const observations = pdfDetailedReviewGroups(report).flatMap(group => group.observations);
   assert.equal(observations[0]!.title, "Social / advertising service requests before consent");
   assert.equal(observations[1]!.title, "Embedded-service requests before consent");
   assert.equal(observations[2]!.status, "Gap observed");

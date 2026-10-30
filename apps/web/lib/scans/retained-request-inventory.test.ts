@@ -9,7 +9,7 @@ test("complete request inventory counts every event without relying on vendor sa
   assert.equal(requests?.length, 3);
   const inventory = buildSinglePageResourceInventory("page", [], requests);
   assert.equal(inventory.resources.length, 2);
-  assert.deepEqual(inventory.requestMetric, {label:"Requests",value:3,counts:{nonEssential:0,review:0,contextual:0,essential:0,unclassified:3},overview:{identifiedServices:0,distinctResources:2,unattributedResources:2,distinctStorage:0,distinctEmbeds:0,distinctClassifications:{requests:{nonEssential:0,review:0,unclassified:2,contextual:0,essential:0},storage:{nonEssential:0,review:0,unclassified:0,contextual:0,essential:0},embeds:{nonEssential:0,review:0,unclassified:0,contextual:0,essential:0}}}});
+  assert.deepEqual(inventory.requestMetric, {label:"Requests",value:3,counts:{nonEssential:0,review:0,contextual:0,essential:0,unclassified:3},overview:{identifiedServices:0,identifiedServiceNames:[],distinctResources:2,unattributedResources:2,distinctStorage:0,distinctEmbeds:0,distinctClassifications:{requests:{nonEssential:0,review:0,unclassified:2,contextual:0,essential:0},storage:{nonEssential:0,review:0,unclassified:0,contextual:0,essential:0},embeds:{nonEssential:0,review:0,unclassified:0,contextual:0,essential:0}}}});
   assert.equal(inventory.resources.reduce((n,row)=>n+row.eventCount,0),3);
   assert.deepEqual(inventory.mix.evidence,[{label:"Unclassified",count:2}]);
   assert.equal(inventory.resources[0]?.occurrence.firstSeenMs,100);

@@ -6,7 +6,7 @@ export type AssessmentHighlightLink = { label: string; targetId: string };
 export type AssessmentHighlightCopy = { text: string; links: AssessmentHighlightLink[] };
 export type AssessmentHighlightsPresentation = AssessmentHighlightCopy & { expanded?: AssessmentHighlightCopy };
 
-export const ASSESSMENT_HIGHLIGHTS_MAX_LENGTH = 500;
+export const ASSESSMENT_HIGHLIGHTS_MAX_LENGTH = 430;
 export const ASSESSMENT_HIGHLIGHTS_EXPANDED_MAX_LENGTH = 1000;
 type Finding = NonNullable<AssessmentBrief["primary"]>;
 function sentence(value: string) { return /[.!?]$/.test(value) ? value : `${value}.`; }

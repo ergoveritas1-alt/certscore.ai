@@ -50,6 +50,13 @@ export const reportEvidencePageOpenApi = {
         "cms"
       ]
     },
+    "reviewFocus": {
+      "type": "string",
+      "enum": [
+        "gdpr_eprivacy",
+        "ccpa_cpra"
+      ]
+    },
     "selection": {
       "type": "object",
       "additionalProperties": false,

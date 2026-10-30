@@ -11,14 +11,15 @@ const strings = (value: unknown): string[] => Array.isArray(value) ? value.filte
 const unique = (values: string[]) => [...new Set(values)];
 
 export function pdfGroupRemediation(report: CanonicalReportExport, group: PdfReviewGroup) {
+  const kind = group.evidenceGroup ?? group.id;
   const ids = [group.id, ...group.observations.map(item => item.id),
-    ...(group.id === "initial-tracking" ? ["preconsent_tracking", "session_replay_observed"] : []),
-    ...(group.id === "refusal" ? ["post_refusal_non_essential_activity", "post_reject_click_tracking"] : [])];
+    ...(kind === "initial-tracking" ? ["preconsent_tracking", "session_replay_observed"] : []),
+    ...(kind === "refusal" ? ["post_refusal_non_essential_activity", "post_reject_click_tracking"] : [])];
   const findings = pdfNarrativeFindings(report).filter(finding => ids.includes(String(finding.unifiedFindingId)));
   const locations: string[] = [];
   const testedUrl = pdfTestedUrl(report);
   locations.push(testedUrl ? `Page: ${testedUrl}` : "Page URL not retained; identify the affected page before changing its source.");
-  if (group.id === "initial-tracking") {
+  if (kind === "initial-tracking") {
     const entities = findings.map(finding => object(object(finding.evidence).entities));
     const requests = unique(entities.flatMap(item => strings(item.runtimeRequestUrls)));
     const cookies = unique(entities.flatMap(item => strings(item.preconsent_cookie_names)));
@@ -26,7 +27,7 @@ export function pdfGroupRemediation(report: CanonicalReportExport, group: PdfRev
     if (cookies.length) locations.push(`Cookie names to inspect: ${cookies.join(", ")}. Snapshot presence does not identify their exact writer.`);
     if (!requests.length) locations.push("Request endpoints/initiators not retained in this issue; use the referenced runtime evidence and reproduce the requests before selecting a tag to change.");
   }
-  if (group.id === "refusal") {
+  if (kind === "refusal") {
     const retained = object(report.projection.checklist?.find(row => row.id === "post_reject_tracking_reduction")?.criticalEvidence?.retainedEvidence);
     if (typeof retained.observationWindowMs === "number" && retained.observationWindowMs > 0) locations.push(`Configured observation target: ${retained.observationWindowMs / 1000} s. This is a re-test target, not a claim that the early-stop scan measured the whole interval; measured results remain in Appendix A.`);
     const records = Array.isArray(retained.postRejectNonEssentialRequests) ? retained.postRejectNonEssentialRequests.map(object) : [];
@@ -36,15 +37,15 @@ export function pdfGroupRemediation(report: CanonicalReportExport, group: PdfRev
     }
     if (!records.length) locations.push(...(report.appendix.evidenceDossier?.rejectTiming?.networkRequests ?? []).map(item => `Post-refusal request: ${item.url}; +${item.millisecondsAfterConfirmation} ms from confirmation.`));
   }
-  if (group.id === "device-identification") locations.push("Use the browser API names in the finding above as source-search terms. If an initiating file/line or transmission link is not retained, trace it before changing functionality; do not assume the APIs identify an offending vendor.");
+  if (kind === "device-identification") locations.push("Use the browser API names in the finding above as source-search terms. If an initiating file/line or transmission link is not retained, trace it before changing functionality; do not assume the APIs identify an offending vendor.");
   for (const finding of findings) {
     const details = object(finding.details);
-    if (group.id === "policy_behavior_conflict" && details.family === "contradiction") {
+    if (kind === "policy_behavior_conflict" && details.family === "contradiction") {
       if (typeof details.policySourceUrl === "string") locations.push(`Policy URL: ${details.policySourceUrl}`);
       if (typeof details.policySnippet === "string") locations.push(`Policy claim to reconcile: "${details.policySnippet}"`);
       locations.push(...strings(object(object(finding.evidence).entities).runtimeRequestUrls).map(url => `Linked runtime request: ${url}`));
     }
-    if (group.id === "california_rights_disclosure_not_observed" && details.family === "california_privacy_review") {
+    if (kind === "california_rights_disclosure_not_observed" && details.family === "california_privacy_review") {
       const parsed = californiaPrivacyReviewSchema.safeParse(details.projection);
       if (parsed.success && parsed.data.scanId === report.scan.id) {
         const projection = parsed.data;
@@ -63,7 +64,7 @@ export function pdfGroupRemediation(report: CanonicalReportExport, group: PdfRev
       guidance: accessibilityCorrectionGuidance(rule.ruleId), verification: accessibilityRemediationVerification(rule.ruleId), reference: rule.helpUrl,
     })) : [];
   if (group.topic === "accessibility" && !rules.length) locations.push("Rule-specific node evidence is unavailable or not bound to this issue. Obtain the referenced rule ID, page and affected element before applying an attribute/template fix; do not assume an image or button failure.");
-  const plan = webmasterRemediation(group.id) ?? fallbackPlan(group);
+  const plan = webmasterRemediation(kind) ?? fallbackPlan(group);
   let withheld = false;
   const publicLocations = unique(locations).filter(location => {
     try { assertPublicReportPdfContent([location]); return true; }

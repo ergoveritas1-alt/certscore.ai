@@ -395,3 +395,11 @@ A null score stays unavailable; coverage limitations do not establish a pass.
 Older immutable Pulse artifacts may omit `postureScores`. Failed and no-go
 attempts do not gain posture scores. These observations are not a compliance
 certification.
+
+
+To match a specific web/PDF/Word framework view, pass `reviewFocus: "gdpr_eprivacy"`
+or `reviewFocus: "ccpa_cpra"` to `getReportEvidence` or `getReportEvidencePage`.
+Omitting it preserves the scan default. Preserve it on every manual cursor read;
+download links retain it automatically. It cannot be combined with a tracking
+workpaper. Both posture scores remain separately typed; this does not rescore or
+create a scan.

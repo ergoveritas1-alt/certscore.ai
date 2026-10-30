@@ -129,7 +129,8 @@ test("regular and public report menus omit PDF downloads", () => {
     const menu = <ShadowReportShareMenu reportUrl="/scan/fixture" scanId="fixture" siteLabel="example.test" />;
     const markup = renderToStaticMarkup(allowed === undefined ? menu : <ReportPdfAccessProvider allowed={allowed}>{menu}</ReportPdfAccessProvider>);
     assert.doesNotMatch(markup, /format=pdf/);
-    assert.match(markup, /format=json/);
+    assert.match(markup, /format=docx/);
+    assert.doesNotMatch(markup, /format=json/);
   }
 });
 

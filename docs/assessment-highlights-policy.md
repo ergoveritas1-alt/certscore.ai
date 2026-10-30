@@ -30,7 +30,7 @@ A next step is optional. There is no minimum paragraph length and no obligation 
 
 ## Shared behavior
 
-Both regulatory views use the shared brief/highlights writer and selection policy. Web executive and regulatory summaries use the same regulatory wrapper. Finding-led results, including eligible supporting observations, take precedence over neutral context. The existing 500-character collapsed and 1,000-character expanded limits, whole qualifications and evidence links remain in force. Recommendations from omitted supporting observations are not attached to a different displayed finding.
+Both regulatory views use the shared brief/highlights writer and selection policy. Web executive and regulatory summaries use the same regulatory wrapper. Finding-led results, including eligible supporting observations, take precedence over neutral context. The 430-character collapsed and 1,000-character expanded limits, whole qualifications and evidence links remain in force. Recommendations from omitted supporting observations are not attached to a different displayed finding.
 
 The PDF summary retains its existing additional checklist presentation logic. Its review-only fallback preserves the projected explanation without appending a generic instruction. Supported gap actions remain intact. These source and action rules apply across surfaces without claiming identical web/PDF prose.
 
@@ -49,3 +49,7 @@ California now lists two top issues: collection under privacy-choice conditions 
 Validation and the exact replay/preview are retained under `artifacts/executive-california-review-2026-10-29/factual-highlights/`: 270 report-highlights tests, including the unchanged 80-case reviewed corpus; two PDF export regressions; full web typecheck; exact actual-customer replay; and unchanged source/evidence checks. Test subsets overlap. No new scan, deployment, flag change, production write, budget increase or recurring cost increase occurred.
 
 The earlier supporting-selection candidate is retained under `artifacts/executive-california-review-2026-10-29/supporting-highlights/`. The current candidate and its 338 report/109 scoring-release regressions are under `artifacts/executive-california-review-2026-10-29/qualified-collection-priority/`. See the current [implementation and ranking audit](certscore-v2/qualified-collection-priority-2026-10-29.md). Prior artifacts remain historical records; their previews are not the current candidate.
+
+## October 30, 2026 collapsed length adjustment
+
+The owner requested a 430-character maximum for non-expanded assessment highlights (previously 500). Both EU and California use the shared writer; the expanded maximum stays 1,000. Preserve whole facts, qualifications, evidence links, ranking, scoring and proof requirements. Do not cut prose mid-sentence to fit. The original reviewed corpus remains historical; the 34 changed presentations are pinned separately in `assessment-highlights-reviewed-430.json`. Counts and lengths in earlier replay notes describe those earlier results. No capture or recurring infrastructure change is involved.

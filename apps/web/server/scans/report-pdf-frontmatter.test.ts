@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { priorityChecklistRow } from "./report-priority.fixture";
 import type { CanonicalReportExport } from "./report-export";
 import { pdfFrontmatter } from "./report-pdf-frontmatter";
 
@@ -13,6 +14,8 @@ test("each issue is immediately followed by its remediation before the next issu
     ] },
     appendix: { evidenceDossier: { checklistDetails: [{ id: "privacy_notice_availability", correctionSteps: ["FIX_POLICY_NOTICE"] }] } },
   } as unknown as CanonicalReportExport;
+  report.projection.checklist = report.gdprEprivacyReview!.rows.map(row => ({ ...priorityChecklistRow(row.id, row.status), label: row.label,
+    note: row.rationale, explanation: row.rationale, criticalEvidence: { ...priorityChecklistRow(row.id, row.status).criticalEvidence, statusBasis: row.rationale, retainedEvidence: { trackerPriority: "high", ...priorityChecklistRow(row.id, row.status).criticalEvidence.retainedEvidence } } }));
   const before = structuredClone(report);
   const lines = pdfFrontmatter(report, "http://localhost:3000", {
     text: (text, options) => [{ text, ...options }], heading: text => ({ text, kind: "section" }),
@@ -21,13 +24,14 @@ test("each issue is immediately followed by its remediation before the next issu
   assert.deepEqual(chapters, ["Top issues and remediation", "How to re-test"]);
   const text = lines.map(line => line.text).join("\n");
   assert.doesNotMatch(text, /review areas|distinct checklist|Related observations|States:|Affected page:|Service request observations|Remediation plan/);
-  const trackingEvidence = lines.findIndex(line => line.text === "TRACKING_EVIDENCE");
+  const trackingEvidence = lines.findIndex(line => line.text.includes("Tracking was established by the retained finding"));
   const trackingFix = lines.findIndex(line => line.text.startsWith("1. In DevTools Network"));
-  const policyHeading = lines.findIndex(line => line.kind === "section" && line.text.startsWith("2. Privacy policy"));
-  const policyEvidence = lines.findIndex(line => line.text === "POLICY_EVIDENCE");
+  const policyHeading = lines.findIndex(line => line.kind === "section" && line.text.startsWith("1. Privacy policy"));
+  const trackingHeading = lines.findIndex(line => line.kind === "section" && line.text.startsWith("2. Tracking"));
+  const policyEvidence = lines.findIndex(line => line.text.includes("POLICY_EVIDENCE"));
   const policyFix = lines.findIndex(line => line.text.startsWith("1. Check the scanned page's footer"));
-  assert.ok(trackingEvidence >= 0 && trackingEvidence < trackingFix && trackingFix < policyHeading);
-  assert.ok(policyHeading < policyEvidence && policyEvidence < policyFix);
+  assert.ok(policyHeading >= 0 && policyHeading < policyEvidence && policyEvidence < policyFix && policyFix < trackingHeading);
+  assert.ok(trackingHeading < trackingEvidence && trackingEvidence < trackingFix);
   assert.equal(lines.filter(line => line.text === "Remediation").length, 2);
   assert.deepEqual(report, before);
 });

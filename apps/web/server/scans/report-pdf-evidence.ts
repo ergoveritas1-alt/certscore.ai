@@ -6,6 +6,7 @@ import { reportRowInFocus, reportSectionInFocus } from "../../lib/scans/report-f
 export function scopeCanonicalReportPdf(report: CanonicalReportExport): CanonicalReportExport {
   const eu = reportSectionInFocus("gdpr-transparency",report.reviewFocus);
   return {...report,
+    ...(report.limitations ? {limitations:report.limitations.filter(limitation=>limitation.code!=="privacy_opt_out_execution_not_tested" || reportSectionInFocus("privacy",report.reviewFocus))}:{}),
     gpcResponse:reportSectionInFocus("gpc",report.reviewFocus)?report.gpcResponse:null,
     privacyAuditEvidence:reportSectionInFocus("privacy",report.reviewFocus)?report.privacyAuditEvidence:null,
     gdprEprivacyReview:report.gdprEprivacyReview?{...report.gdprEprivacyReview,rows:report.gdprEprivacyReview.rows.filter(row=>reportRowInFocus(row.id,report.reviewFocus))}:null,

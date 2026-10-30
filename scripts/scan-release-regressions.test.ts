@@ -292,7 +292,7 @@ test("CMP runtime visitor and coordinator edits run offline halt gates in fast a
 });
 
 test("canonical framework scoping and status regressions run for web, API contracts and PDF changes",()=>{
-  for(const file of ["apps/web/lib/scans/report-framework-scope.ts","apps/web/lib/scans/report-status-presentation.ts","packages/certscore-api-contracts/src/detailed-evidence.ts","scripts/report-pdf-v2/render.py"]){
+  for(const file of ["apps/web/lib/scans/report-framework-scope.ts","apps/web/lib/scans/report-status-presentation.ts","apps/web/lib/scans/report-priority-projection.ts","apps/web/lib/scans/report-form-inventory.ts","apps/web/lib/scans/report-runtime-inventory.ts","apps/web/server/scans/report-inventory-parity.test.ts","apps/web/server/scans/report-executive-summary.ts","apps/web/server/scans/report-executive-docx.ts","apps/web/server/scans/assets/report-score-glyphs.json","scripts/report-score-glyphs.py","apps/web/server/scans/report-forms-parity.test.ts","apps/web/server/scans/report-pdf-priorities.ts","packages/certscore-api-contracts/src/detailed-evidence.ts","scripts/report-pdf-v2/render.py","apps/web/server/scans/report-export-docx.ts","scripts/preview-report-docx.ts","scripts/report-cross-surface-parity.test.mts","scripts/report-evidence-framework-route.test.ts","scripts/audit-report-export-parity.ts"]){
     for(const full of [false,true]){
       const check=getPredeployPlan([file],{full}).checks.find(row=>row.key==="report-presentation");
       assert.deepEqual(check?.command,["pnpm","test:report-presentation"]);

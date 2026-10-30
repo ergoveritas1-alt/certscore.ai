@@ -27,13 +27,14 @@ for (const [surface, build] of [["scans", buildTimelineReportModel], ["scanso2",
     assert.ok("findings" in report);
     assert.deepEqual(report.findings, []);
     assert.doesNotMatch(report.verdict, /high-priority remediation|needs work|low risk|all clear/);
-    assert.match(report.verdict, /Coverage/);
+    assert.equal(report.verdict, "No priority findings are available from this visit.");
   });
 
-  test(`${surface}: a retained zero score still uses the existing high-priority band`, () => {
+  test(`${surface}: a retained zero score does not invent a priority without a finding`, () => {
     const report = build(emptyAssessment(0));
     assert.ok("findings" in report);
     assert.deepEqual(report.findings, []);
-    assert.match(report.verdict, /high-priority remediation/);
+    assert.equal(report.verdict, "No priority findings are available from this visit.");
+    assert.equal(report.score.value, 0);
   });
 }

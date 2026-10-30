@@ -23,3 +23,17 @@ test("a tracking cursor cannot be reused for a different report representation",
   assert.ok(page.pagination.nextCursor);
   assert.throws(() => buildReportEvidencePage({ scanId, report: { inventory: rows }, cursor: page.pagination.nextCursor }), ReportPageCursorError);
 });
+
+
+test("explicit EU/California evidence views validate their scope and bind continuation cursors", () => {
+  for (const reviewFocus of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
+    assert.deepEqual(parseReportEvidenceRequest(new URLSearchParams({ section: "policy", reviewFocus })), { tracking: false, csv: false, download: false, section: "policy", reviewFocus });
+  }
+  for (const query of ["reviewFocus=other", "reviewFocus=", "reviewFocus=gdpr_eprivacy&reviewFocus=ccpa_cpra", "workpaper=tracking&reviewFocus=ccpa_cpra"]) assert.equal(parseReportEvidenceRequest(new URLSearchParams(query)), null);
+  const input = { scanId: "9ba99a8c-b1ad-44c1-985f-92cef760ab40", report: { rows: Array.from({ length: 100 }, (_, i) => ({ i, text: "x".repeat(1000) })) } };
+  const first = buildReportEvidencePage({ ...input, reviewFocus: "ccpa_cpra" });
+  assert.match(first.reportUrl, /reviewFocus=ccpa_cpra/); assert.equal(first.reviewFocus, "ccpa_cpra");
+  assert.ok(first.pagination.nextCursor);
+  assert.throws(() => buildReportEvidencePage({ ...input, reviewFocus: "gdpr_eprivacy", cursor: first.pagination.nextCursor }), ReportPageCursorError);
+  assert.throws(() => buildReportEvidencePage({ ...input, cursor: first.pagination.nextCursor }), ReportPageCursorError);
+});

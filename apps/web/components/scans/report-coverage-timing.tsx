@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
 /** Shared disclosure; callers supply retained coverage and timing facts. */
-export function ReportCoverageTiming({ duration, showDurationInSummary = true, groups, started, completed, pagesCsvHref }: {
+export function ReportCoverageTiming({ scanId, duration, showDurationInSummary = true, groups, started, completed, pagesCsvHref }: {
+  scanId: string;
   duration: string;
   showDurationInSummary?: boolean;
   groups: { title: string; rows: (readonly [string, ReactNode] | ReactNode[])[] }[];
@@ -23,6 +24,10 @@ export function ReportCoverageTiming({ duration, showDurationInSummary = true, g
             <dt className="text-zinc-500">{label}</dt><dd className="text-right font-medium tabular-nums text-zinc-800" title={value === "Unavailable" ? "Unavailable" : undefined}>{value === "Unavailable" ? "-" : value}</dd>
           </div>)}</dl>
         </div>)}
+      </div>
+      <div className="mt-3 border-t border-zinc-200 pt-2 text-[11px] leading-4">
+        <p className="text-zinc-500">scan_id</p>
+        <p className="mt-1 select-all break-all font-mono text-zinc-700">{scanId}</p>
       </div>
       <dl className="mt-2 border-t border-zinc-200 pt-2 text-[11px] leading-4">{[["Started", started], ["Completed", completed]].map(([label, value]) => <div key={label} className="flex justify-between gap-3 py-0.5"><dt className="text-zinc-500">{label}</dt><dd className="text-right tabular-nums text-zinc-600">{value}</dd></div>)}</dl>
     </div>

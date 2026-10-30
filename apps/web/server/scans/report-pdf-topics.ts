@@ -1,8 +1,10 @@
+import { reportRequestInventory } from "./report-request-inventory";
 import { pdfNarrativeFindings } from "./report-pdf-evidence";
 import { getReportUnifiedFinding, getReportUnifiedFindingByAlias, getReportEvidenceCategory } from "@website-signal-risk-scanner/shared";
 import { CERT_SCORE_FINDING_REGISTRY } from "../../lib/scans/finding-registry";
 import { isGdprTransparencyReportRowId } from "../../lib/scans/gdpr-transparency-report-contract";
 import type { CanonicalReportExport } from "./report-export";
+import { reportFormInventory } from "./report-form-inventory";
 
 export const PDF_REPORT_TOPICS = [
   { id: "consent", title: "CMP and consent" },
@@ -86,8 +88,8 @@ export function pdfTopicOverview(report: CanonicalReportExport) {
     const selected = findings.filter(finding => pdfDisplayTopic(pdfTopicForFinding(finding)) === topic.id);
     let detail = rows.length ? `${rows.length} checklist rows retained` : "Evidence unavailable";
     if (topic.id === "storage") detail = `${report.appendix.cookieAndTrackerInventory.summary.cookieRows} cookies; ${report.appendix.cookieAndTrackerInventory.summary.storageRows ?? 0} local/session storage rows`;
-    if (topic.id === "external") detail = `${report.appendix.cookieAndTrackerInventory.summary.trackerRows} service / tracker rows retained`;
-    if (topic.id === "forms") detail = `${report.appendix.dataCollectionSurfaces.summary.totalForms} forms; ${report.appendix.dataCollectionSurfaces.assessmentStatus.replaceAll("_", " ")}`;
+    if (topic.id === "external") { const requests = reportRequestInventory(report); detail = requests ? `${requests.metric!.value} request events; ${requests.totalResources} distinct request resources before choice` : `${report.appendix.cookieAndTrackerInventory.summary.trackerRows} service / tracker rows retained`; }
+    if (topic.id === "forms") { const inventory = reportFormInventory(report); detail = `${inventory.totalForms} form observations; ${inventory.limited ? "limited coverage" : inventory.hasCombinedInventory ? "observed inventory" : "initial-page inventory"}`; }
     if (topic.id === "accessibility" && report.accessibilityAudit) detail = `${report.accessibilityAudit.status}; ${report.accessibilityAudit.failedRuleCount ?? "unknown"} failed automated rules`;
     if (topic.id === "consent" && report.consentControlAssessment) detail = `${report.consentControlAssessment.assessmentStatus} consent assessment`;
     if (["storage", "external"].includes(topic.id) && report.appendix.cookieAndTrackerInventory.presentationStatus === "insufficient_evidence") detail = "Inventory evidence unavailable";

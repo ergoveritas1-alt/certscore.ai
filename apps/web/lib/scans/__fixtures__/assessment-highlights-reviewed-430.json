@@ -1,0 +1,1118 @@
+{
+  "broad:mackolik.com:gdpr_eprivacy": {
+    "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. “Mixed content”: HTTP subresources were retained on an HTTPS page. Other findings: “Third-party embeds before consent”. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Classified non-essential pre-consent storage”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Mixed content”",
+        "targetId": "evidence-row-transport_security_mixed_content"
+      },
+      {
+        "label": "“Third-party embeds before consent”",
+        "targetId": "evidence-row-third_party_iframe_pre_consent"
+      }
+    ],
+    "expanded": {
+      "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. “Mixed content”: HTTP subresources were retained on an HTTPS page. “Third-party embeds before consent”: Third-party frames loaded before recorded consent; this alone does not establish tracking. “Activity after a Reject click — review”: Partial evidence: 12 tracking requests began after the Reject control was clicked (including Yandex, X/Twitter, PubMatic, Taboola, Index Exchange); first observed 0.07s after the click. “Device identification / fingerprinting signal”: Device-identification or fingerprinting-like browser API signals were observed: Navigator.plugins, OfflineAudioContext.startRendering, HTMLCanvasElement.toDataURL, and plugins; first seen 9.32s after scan start. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Classified non-essential pre-consent storage”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Mixed content”",
+          "targetId": "evidence-row-transport_security_mixed_content"
+        },
+        {
+          "label": "“Third-party embeds before consent”",
+          "targetId": "evidence-row-third_party_iframe_pre_consent"
+        },
+        {
+          "label": "“Activity after a Reject click — review”",
+          "targetId": "evidence-row-post_reject_tracking_reduction"
+        },
+        {
+          "label": "“Device identification / fingerprinting signal”",
+          "targetId": "evidence-row-device_identification_fingerprinting_signal_observed"
+        }
+      ]
+    }
+  },
+  "broad:adinaeden.com:gdpr_eprivacy": {
+    "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. Other findings: “Decline consent control” and “Third-party embeds before consent”. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Classified non-essential pre-consent storage”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Decline consent control”",
+        "targetId": "evidence-row-reject_all_path_availability"
+      },
+      {
+        "label": "“Third-party embeds before consent”",
+        "targetId": "evidence-row-social_media_embed_pre_consent"
+      }
+    ],
+    "expanded": {
+      "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were retained before consent. First retained item: _shopify_essential (adinaeden.com): unknown, first observed 1.506s after scan start. Essentiality was not confirmed for every item. “Decline consent control”: The sufficiently retained first-layer consent surface did not show a reject, necessary-only, or equivalent refusal option. First-layer presentation expectations can vary by jurisdiction, so manual review is recommended. “Third-party embeds before consent”: A social/media embed, plugin, widget, or pixel loaded before any recorded consent action: Meta/Facebook and Pinterest; first seen 6.65s after scan start. “Session replay signal”: Session replay or behavioral analytics signals were observed: Hotjar; first seen 5.88s after scan start; before any recorded consent action. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Classified non-essential pre-consent storage”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Decline consent control”",
+          "targetId": "evidence-row-reject_all_path_availability"
+        },
+        {
+          "label": "“Third-party embeds before consent”",
+          "targetId": "evidence-row-social_media_embed_pre_consent"
+        },
+        {
+          "label": "“Session replay signal”",
+          "targetId": "evidence-row-session_replay_fingerprinting_review"
+        }
+      ]
+    }
+  },
+  "broad:www.nwnatural.com:gdpr_eprivacy": {
+    "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. Other findings: “Tracking and embedded content before consent” and “Keyboard navigation accessibility issue and Low text contrast”. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Classified non-essential pre-consent storage”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Tracking and embedded content before consent”",
+        "targetId": "evidence-row-pre_consent_third_party_tracking"
+      },
+      {
+        "label": "“Keyboard navigation accessibility issue and Low text contrast”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were retained before consent. First retained item: test_cookie (Google Ads / DoubleClick): non_essential, first observed 5.949s after scan start. Essentiality was not confirmed for every item. “Tracking and embedded content before consent”: Tracking requests and embedded content were observed before consent. “Keyboard navigation accessibility issue and Low text contrast”: Automated accessibility checks found failures on 1 tested page (5 element failures). Interactive controls were nested inside other interactive controls. Low-contrast text was detected on 1 tested page (1 element failure). Retained examples measured 4.46:1 (required 4.5:1). “Decline consent control”: Partial support from scan evidence; No observable refusal path was retained before non-essential activity. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Classified non-essential pre-consent storage”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Tracking and embedded content before consent”",
+          "targetId": "evidence-row-pre_consent_third_party_tracking"
+        },
+        {
+          "label": "“Keyboard navigation accessibility issue and Low text contrast”",
+          "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“Decline consent control”",
+          "targetId": "evidence-row-reject_all_path_availability"
+        }
+      ]
+    }
+  },
+  "broad:www.nwnatural.com:ccpa_cpra": {
+    "text": "“GPC choice-enforcement risk observed”: Global Privacy Control (GPC) was verified in the page request and browser setting. Samples include 16 tracking requests; 10 collected data. Other findings: “Keyboard navigation accessibility issue and Low text contrast”. Check that GPC sets the sale/sharing opt-out and controls advertising collection.",
+    "links": [
+      {
+        "label": "“GPC choice-enforcement risk observed”",
+        "targetId": "gpc-evidence"
+      },
+      {
+        "label": "“Keyboard navigation accessibility issue and Low text contrast”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“GPC choice-enforcement risk observed”: Global Privacy Control (GPC) was verified in the page request and browser setting. Samples include 16 tracking requests; 10 collected data. “Keyboard navigation accessibility issue and Low text contrast”: Automated accessibility checks found failures on 1 tested page (5 element failures). Interactive controls were nested inside other interactive controls. Low-contrast text was detected on 1 tested page (1 element failure). Retained examples measured 4.46:1 (required 4.5:1). Check that GPC sets the sale/sharing opt-out and controls advertising collection.",
+      "links": [
+        {
+          "label": "“GPC choice-enforcement risk observed”",
+          "targetId": "gpc-evidence"
+        },
+        {
+          "label": "“Keyboard navigation accessibility issue and Low text contrast”",
+          "targetId": "accessibility-evidence"
+        }
+      ]
+    }
+  },
+  "broad:forzafootball.com:gdpr_eprivacy": {
+    "text": "“Third-party embeds before consent”: A social/media embed, plugin, widget, or pixel loaded before any recorded consent action: Meta/Facebook; first seen 1.25s after scan start. Other findings: “Pre-consent storage classification review” and “Decline consent control”. Check the embed's purpose and consent requirements; delay consent-dependent loading until the relevant choice, then retest.",
+    "links": [
+      {
+        "label": "“Third-party embeds before consent”",
+        "targetId": "evidence-row-social_media_embed_pre_consent"
+      },
+      {
+        "label": "“Pre-consent storage classification review”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Decline consent control”",
+        "targetId": "evidence-row-reject_all_path_availability"
+      }
+    ],
+    "expanded": {
+      "text": "“Third-party embeds before consent”: A social/media embed, plugin, widget, or pixel loaded before any recorded consent action: Meta/Facebook; first seen 1.25s after scan start. “Pre-consent storage classification review”: Cookies or browser storage were retained before consent. First retained item: _ga (forzafootball.com): non_essential, present in periodic pre-consent snapshot. Essentiality was not confirmed for every item. “Decline consent control”: Partial support from scan evidence; No observable refusal path was retained before non-essential activity. Check the embed's purpose and consent requirements; delay consent-dependent loading until the relevant choice, then retest.",
+      "links": [
+        {
+          "label": "“Third-party embeds before consent”",
+          "targetId": "evidence-row-social_media_embed_pre_consent"
+        },
+        {
+          "label": "“Pre-consent storage classification review”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Decline consent control”",
+          "targetId": "evidence-row-reject_all_path_availability"
+        }
+      ]
+    }
+  },
+  "broad:msnbc.com:gdpr_eprivacy": {
+    "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. “Mixed content”: HTTP subresources were retained on an HTTPS page. Other findings: “Tracking and embedded content before consent”. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Classified non-essential pre-consent storage”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Mixed content”",
+        "targetId": "evidence-row-transport_security_mixed_content"
+      },
+      {
+        "label": "“Tracking and embedded content before consent”",
+        "targetId": "evidence-row-pre_consent_third_party_tracking"
+      }
+    ],
+    "expanded": {
+      "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were retained before consent. First retained item: sa-user-id (tags.srv.stackadapt.com): non_essential, first observed 1.989s after scan start. Essentiality was not confirmed for every item. “Mixed content”: HTTP subresources were retained on an HTTPS page. “Tracking and embedded content before consent”: Tracking requests and embedded content were observed before consent. “Pointer-target size and spacing issue and other accessibility checks”: Pointer targets failed the size or spacing check. Elements used ARIA attributes that their roles do not allow; Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (7 element failures). Retained examples measured 2.84:1 (required 4.5:1). Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Classified non-essential pre-consent storage”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Mixed content”",
+          "targetId": "evidence-row-transport_security_mixed_content"
+        },
+        {
+          "label": "“Tracking and embedded content before consent”",
+          "targetId": "evidence-row-pre_consent_third_party_tracking"
+        },
+        {
+          "label": "“Pointer-target size and spacing issue and other accessibility checks”",
+          "targetId": "accessibility-evidence"
+        }
+      ]
+    }
+  },
+  "broad:msnbc.com:ccpa_cpra": {
+    "text": "“GPC choice-enforcement risk observed”. Other findings: “Pointer-target size and spacing issue and other accessibility checks”. Check the collected data's purpose and whether the recorded opt-out applies; correct affected services and retest with GPC.",
+    "links": [
+      {
+        "label": "“GPC choice-enforcement risk observed”",
+        "targetId": "gpc-evidence"
+      },
+      {
+        "label": "“Pointer-target size and spacing issue and other accessibility checks”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“GPC choice-enforcement risk observed”: Global Privacy Control (GPC) was verified in the page request and browser setting. Consent platform recorded sale state: opted out; sharing state: opted out. Samples include 27 tracking requests; 22 collected data. “Pointer-target size and spacing issue and other accessibility checks”: Automated accessibility checks found failures on 1 tested page (18 element failures). Pointer targets failed the size or spacing check. Automated accessibility checks found failures on 1 tested page (7 element failures). Elements used ARIA attributes that their roles do not allow; Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (7 element failures). Retained examples measured 2.84:1 (required 4.5:1). Check the collected data's purpose and whether the recorded opt-out applies; correct affected services and retest with GPC.",
+      "links": [
+        {
+          "label": "“GPC choice-enforcement risk observed”",
+          "targetId": "gpc-evidence"
+        },
+        {
+          "label": "“Pointer-target size and spacing issue and other accessibility checks”",
+          "targetId": "accessibility-evidence"
+        }
+      ]
+    }
+  },
+  "broad:svb.com:gdpr_eprivacy": {
+    "text": "“Non-essential pre-consent cookies/storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. Other findings: “Third-party embeds before consent” and “Decline consent control”. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Non-essential pre-consent cookies/storage”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Third-party embeds before consent”",
+        "targetId": "evidence-row-social_media_embed_pre_consent"
+      },
+      {
+        "label": "“Decline consent control”",
+        "targetId": "evidence-row-reject_all_path_availability"
+      }
+    ],
+    "expanded": {
+      "text": "“Non-essential pre-consent cookies/storage”: Cookies or browser storage were retained before consent. First retained item: EPiStateMarker (www.svb.com): unknown, first observed 1.277s after scan start. Essentiality was not confirmed for every item. “Third-party embeds before consent”: A social/media embed, plugin, widget, or pixel loaded before any recorded consent action: LinkedIn; first seen 3.05s after scan start. “Decline consent control”: Partial support from scan evidence; No observable refusal path was retained before non-essential activity. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Non-essential pre-consent cookies/storage”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Third-party embeds before consent”",
+          "targetId": "evidence-row-social_media_embed_pre_consent"
+        },
+        {
+          "label": "“Decline consent control”",
+          "targetId": "evidence-row-reject_all_path_availability"
+        }
+      ]
+    }
+  },
+  "broad:healthline.com:gdpr_eprivacy": {
+    "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. “Tracking and embedded content before consent”: Tracking requests and embedded content were observed before consent. Other findings: “Low text contrast”. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Classified non-essential pre-consent storage”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Tracking and embedded content before consent”",
+        "targetId": "evidence-row-pre_consent_third_party_tracking"
+      },
+      {
+        "label": "“Low text contrast”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were retained before consent. First retained item: id5 (id5-sync.com): non_essential, first observed 4.147s after scan start. Essentiality was not confirmed for every item. “Tracking and embedded content before consent”: Tracking requests and embedded content were observed before consent. “Low text contrast”: Low-contrast text was detected on 1 tested page (3 element failures). Retained examples measured 1.38:1 (required 3:1). “Decline consent control”: Partial support from scan evidence; No observable refusal path was retained before non-essential activity. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Classified non-essential pre-consent storage”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Tracking and embedded content before consent”",
+          "targetId": "evidence-row-pre_consent_third_party_tracking"
+        },
+        {
+          "label": "“Low text contrast”",
+          "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“Decline consent control”",
+          "targetId": "evidence-row-reject_all_path_availability"
+        }
+      ]
+    }
+  },
+  "broad:www.fullstory.com:gdpr_eprivacy": {
+    "text": "“Pre-consent non-essential tracking”. “Keyboard navigation accessibility issue and Low text contrast”: Interactive controls were nested inside other interactive controls. Low-contrast text was detected on 1 tested page (4 element failures). Other findings: “Consent settings access review”. Confirm each service's purpose and necessity; gate consent-dependent requests until consent, then retest.",
+    "links": [
+      {
+        "label": "“Pre-consent non-essential tracking”",
+        "targetId": "evidence-row-pre_consent_third_party_tracking"
+      },
+      {
+        "label": "“Consent settings access review”",
+        "targetId": "evidence-row-options_settings_preferences_control"
+      },
+      {
+        "label": "“Keyboard navigation accessibility issue and Low text contrast”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Pre-consent non-essential tracking”: Tracking-classified requests were observed before consent: Claydar, FullStory, DoubleClick Floodlight. The first retained qualifying request was Claydar at 2.13s after scan start. “Consent settings access review”: A first-layer settings control was not observed alongside Accept and Decline. Where refusal is as easy as acceptance, this need not be a compliance gap. Check how visitors can change or withdraw consent by purpose. “Keyboard navigation accessibility issue and Low text contrast”: Interactive controls were nested inside other interactive controls. Low-contrast text was detected on 1 tested page (4 element failures). Other findings: “Tracking after Reject click”, “Pre-consent storage classification review”, “Session replay signal” and “Device identification / fingerprinting signal”. Confirm each service's purpose and necessity; gate consent-dependent requests until consent, then retest.",
+      "links": [
+        {
+          "label": "“Pre-consent non-essential tracking”",
+          "targetId": "evidence-row-pre_consent_third_party_tracking"
+        },
+        {
+          "label": "“Consent settings access review”",
+          "targetId": "evidence-row-options_settings_preferences_control"
+        },
+        {
+          "label": "“Keyboard navigation accessibility issue and Low text contrast”",
+          "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“Tracking after Reject click”",
+          "targetId": "evidence-row-post_reject_tracking_reduction"
+        },
+        {
+          "label": "“Pre-consent storage classification review”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Session replay signal”",
+          "targetId": "evidence-row-session_replay_fingerprinting_review"
+        },
+        {
+          "label": "“Device identification / fingerprinting signal”",
+          "targetId": "evidence-row-device_identification_fingerprinting_signal_observed"
+        }
+      ]
+    }
+  },
+  "broad:www.fullstory.com:ccpa_cpra": {
+    "text": "“Keyboard navigation accessibility issue and Low text contrast”: Interactive controls were nested inside other interactive controls. Low-contrast text was detected on 1 tested page (4 element failures). Retained examples measured 4.44:1 (required 4.5:1); 2.92:1 (required 4.5:1). Separate the flagged nested interactive controls and fix the flagged contrast or color-only cues; then retest.",
+    "links": [
+      {
+        "label": "“Keyboard navigation accessibility issue and Low text contrast”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Keyboard navigation accessibility issue and Low text contrast”: Automated accessibility checks found failures on 1 tested page (1 element failure). Interactive controls were nested inside other interactive controls. Low-contrast text was detected on 1 tested page (4 element failures). Retained examples measured 4.44:1 (required 4.5:1); 2.92:1 (required 4.5:1). Separate the flagged nested interactive controls and fix the flagged contrast or color-only cues; then retest.",
+      "links": [
+        {
+          "label": "“Keyboard navigation accessibility issue and Low text contrast”",
+          "targetId": "accessibility-evidence"
+        }
+      ]
+    }
+  },
+  "broad:spotify.com:gdpr_eprivacy": {
+    "text": "“Social/media embeds or plugins loaded before consent”: A social/media embed, plugin, widget, or pixel loaded before any recorded consent action: Spotify; first seen 1.69s after scan start. Other findings: “Pointer-target size and spacing issue” and “Pre-consent storage classification review”. Check the embed's purpose and consent requirements; delay consent-dependent loading until the relevant choice, then retest.",
+    "links": [
+      {
+        "label": "“Social/media embeds or plugins loaded before consent”",
+        "targetId": "evidence-row-social_media_embed_pre_consent"
+      },
+      {
+        "label": "“Pointer-target size and spacing issue”",
+        "targetId": "accessibility-evidence"
+      },
+      {
+        "label": "“Pre-consent storage classification review”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      }
+    ],
+    "expanded": {
+      "text": "“Social/media embeds or plugins loaded before consent”: A social/media embed, plugin, widget, or pixel loaded before any recorded consent action: Spotify; first seen 1.69s after scan start. “Pointer-target size and spacing issue”: Automated accessibility checks found failures on 1 tested page (2 element failures). Pointer targets failed the size or spacing check. “Pre-consent storage classification review”: Cookies or browser storage were retained before consent. First retained item: _ga (spotify.com): non_essential, present in periodic pre-consent snapshot. Essentiality was not confirmed for every item. “Decline consent control”: Partial support from scan evidence; No observable refusal path was retained before non-essential activity. Check the embed's purpose and consent requirements; delay consent-dependent loading until the relevant choice, then retest.",
+      "links": [
+        {
+          "label": "“Social/media embeds or plugins loaded before consent”",
+          "targetId": "evidence-row-social_media_embed_pre_consent"
+        },
+        {
+          "label": "“Pointer-target size and spacing issue”",
+          "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“Pre-consent storage classification review”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Decline consent control”",
+          "targetId": "evidence-row-reject_all_path_availability"
+        }
+      ]
+    }
+  },
+  "broad:www.nih.gov:gdpr_eprivacy": {
+    "text": "“Pre-consent storage classification review”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. Other findings: “Text contrast and color cues” and “Decline consent control”. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Pre-consent storage classification review”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Text contrast and color cues”",
+        "targetId": "accessibility-evidence"
+      },
+      {
+        "label": "“Decline consent control”",
+        "targetId": "evidence-row-reject_all_path_availability"
+      }
+    ],
+    "expanded": {
+      "text": "“Pre-consent storage classification review”: Cookies or browser storage were retained before consent. First retained item: _ga_MP1ZEJXS9F (nih.gov): non_essential, present in periodic pre-consent snapshot. Essentiality was not confirmed for every item. “Text contrast and color cues”: Links were not distinguishable from surrounding text without relying on color on 1 tested page (1 element failure). “Decline consent control”: Partial support from scan evidence; No observable refusal path was retained before non-essential activity. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Pre-consent storage classification review”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Text contrast and color cues”",
+          "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“Decline consent control”",
+          "targetId": "evidence-row-reject_all_path_availability"
+        }
+      ]
+    }
+  },
+  "broad:slack.com:gdpr_eprivacy": {
+    "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. Other findings: “Activity after a Reject click — review”. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Classified non-essential pre-consent storage”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Activity after a Reject click — review”",
+        "targetId": "evidence-row-post_reject_tracking_reduction"
+      }
+    ],
+    "expanded": {
+      "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were retained before consent. First retained item: __Secure-ROLLOUT_TOKEN (youtube.com): non_essential, first observed 5.559s after scan start. Essentiality was not confirmed for every item. “Activity after a Reject click — review”: Partial evidence: 1 tracking request began after the Reject control was clicked (including Google); first observed 2.07s after the click. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Classified non-essential pre-consent storage”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Activity after a Reject click — review”",
+          "targetId": "evidence-row-post_reject_tracking_reduction"
+        }
+      ]
+    }
+  },
+  "broad:sentry.io:gdpr_eprivacy": {
+    "text": "“Keyboard navigation accessibility issue and Semantic labeling accessibility issue”: Scrollable regions lacked keyboard access. Command controls lacked accessible names. Enable keyboard access to flagged scrollable regions and name the flagged command controls; then retest.",
+    "links": [
+      {
+        "label": "“Keyboard navigation accessibility issue and Semantic labeling accessibility issue”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Keyboard navigation accessibility issue and Semantic labeling accessibility issue”: Automated accessibility checks found failures on 1 tested page (1 element failure). Scrollable regions lacked keyboard access. Automated accessibility checks found failures on 1 tested page (1 element failure). Command controls lacked accessible names. Enable keyboard access to flagged scrollable regions and name the flagged command controls; then retest.",
+      "links": [
+        {
+          "label": "“Keyboard navigation accessibility issue and Semantic labeling accessibility issue”",
+          "targetId": "accessibility-evidence"
+        }
+      ]
+    }
+  },
+  "broad:sentry.io:ccpa_cpra": {
+    "text": "“Keyboard navigation accessibility issue and Semantic labeling accessibility issue”: Scrollable regions lacked keyboard access. Command controls lacked accessible names. Enable keyboard access to flagged scrollable regions and name the flagged command controls; then retest.",
+    "links": [
+      {
+        "label": "“Keyboard navigation accessibility issue and Semantic labeling accessibility issue”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Keyboard navigation accessibility issue and Semantic labeling accessibility issue”: Automated accessibility checks found failures on 1 tested page (1 element failure). Scrollable regions lacked keyboard access. Automated accessibility checks found failures on 1 tested page (1 element failure). Command controls lacked accessible names. Enable keyboard access to flagged scrollable regions and name the flagged command controls; then retest.",
+      "links": [
+        {
+          "label": "“Keyboard navigation accessibility issue and Semantic labeling accessibility issue”",
+          "targetId": "accessibility-evidence"
+        }
+      ]
+    }
+  },
+  "broad:arstechnica.com:gdpr_eprivacy": {
+    "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. “Semantic labeling accessibility issue”: Links lacked discernible accessible names. Other findings: “Tracking and embedded content before consent”. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Classified non-essential pre-consent storage”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Tracking and embedded content before consent”",
+        "targetId": "evidence-row-pre_consent_third_party_tracking"
+      },
+      {
+        "label": "“Semantic labeling accessibility issue”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were retained before consent. First retained item: test_cookie (doubleclick.net): non_essential, first observed 7.823s after scan start. Essentiality was not confirmed for every item. “Tracking and embedded content before consent”: Tracking requests and embedded content were observed before consent. “Semantic labeling accessibility issue”: Automated accessibility checks found failures on 1 tested page (21 element failures). Links lacked discernible accessible names. “Session replay signal”: Session replay or behavioral analytics signals were observed: Hotjar; before any recorded consent action. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Classified non-essential pre-consent storage”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Tracking and embedded content before consent”",
+          "targetId": "evidence-row-pre_consent_third_party_tracking"
+        },
+        {
+          "label": "“Semantic labeling accessibility issue”",
+          "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“Session replay signal”",
+          "targetId": "evidence-row-session_replay_fingerprinting_review"
+        }
+      ]
+    }
+  },
+  "broad:arstechnica.com:ccpa_cpra": {
+    "text": "“GPC choice-enforcement risk observed”. “Semantic labeling accessibility issue”: Automated accessibility checks found failures on 1 tested page (21 element failures). Links lacked discernible accessible names. Check the collected data's purpose and whether the recorded opt-out applies; correct affected services and retest with GPC.",
+    "links": [
+      {
+        "label": "“GPC choice-enforcement risk observed”",
+        "targetId": "gpc-evidence"
+      },
+      {
+        "label": "“Semantic labeling accessibility issue”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“GPC choice-enforcement risk observed”: Global Privacy Control (GPC) was verified in the page request and browser setting. Consent platform recorded sale state: opted out; sharing state: opted out. Samples include 25 tracking requests; 16 collected data. “Semantic labeling accessibility issue”: Automated accessibility checks found failures on 1 tested page (21 element failures). Links lacked discernible accessible names. Check the collected data's purpose and whether the recorded opt-out applies; correct affected services and retest with GPC.",
+      "links": [
+        {
+          "label": "“GPC choice-enforcement risk observed”",
+          "targetId": "gpc-evidence"
+        },
+        {
+          "label": "“Semantic labeling accessibility issue”",
+          "targetId": "accessibility-evidence"
+        }
+      ]
+    }
+  },
+  "targeted:www.pferdeklinik-roentorf.de:gdpr_eprivacy": {
+    "text": "“Decline consent control”. Other findings: “Third-party embeds before consent” and “Hidden outbound links”. Review the retained first-layer consent-control inventory. If it confirms no reject or necessary-only control, add a visible refusal action and retest regional and device variants.",
+    "links": [
+      {
+        "label": "“Decline consent control”",
+        "targetId": "evidence-row-reject_all_path_availability"
+      },
+      {
+        "label": "“Third-party embeds before consent”",
+        "targetId": "evidence-row-third_party_iframe_pre_consent"
+      },
+      {
+        "label": "“Hidden outbound links”",
+        "targetId": "site-integrity-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Decline consent control”: The sufficiently retained first-layer consent surface did not show a reject, necessary-only, or equivalent refusal option. First-layer presentation expectations can vary by jurisdiction, so manual review is recommended. “Third-party embeds before consent”: At least 3 distinct third-party embeds were retained before a recorded consent action across 10 pages. This establishes pre-consent embedded-service activity, not tracking classification by itself. “Hidden outbound links”: 80 hidden outbound link occurrences were retained across 10 pages, concealed using off-screen positioning or zero-size styling. Review whether these links were intentionally added. Other findings: “Unsupported CMS branch”. Review the retained first-layer consent-control inventory. If it confirms no reject or necessary-only control, add a visible refusal action and retest regional and device variants.",
+      "links": [
+        {
+          "label": "“Decline consent control”",
+          "targetId": "evidence-row-reject_all_path_availability"
+        },
+        {
+          "label": "“Third-party embeds before consent”",
+          "targetId": "evidence-row-third_party_iframe_pre_consent"
+        },
+        {
+          "label": "“Hidden outbound links”",
+          "targetId": "site-integrity-evidence"
+        },
+        {
+          "label": "“Unsupported CMS branch”",
+          "targetId": "cms-security-evidence"
+        }
+      ]
+    }
+  },
+  "targeted:cnn.com:gdpr_eprivacy": {
+    "text": "“Classified non-essential pre-consent storage”. “Tracking and embedded content before consent”: Tracking requests and embedded content were observed before consent. “Decline consent control”: Partial support from scan evidence; No observable refusal path was retained before non-essential activity. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Classified non-essential pre-consent storage”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Tracking and embedded content before consent”",
+        "targetId": "evidence-row-pre_consent_third_party_tracking"
+      },
+      {
+        "label": "“Decline consent control”",
+        "targetId": "evidence-row-reject_all_path_availability"
+      }
+    ],
+    "expanded": {
+      "text": "“Classified non-essential pre-consent storage”: 15 non-essential cookie or browser-storage items were observed before consent. First observed at 2.27s after scan start. Direct write-level timing was captured for 9. “Tracking and embedded content before consent”: Tracking requests and embedded content were observed before consent. “Decline consent control”: Partial support from scan evidence; No observable refusal path was retained before non-essential activity. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Classified non-essential pre-consent storage”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Tracking and embedded content before consent”",
+          "targetId": "evidence-row-pre_consent_third_party_tracking"
+        },
+        {
+          "label": "“Decline consent control”",
+          "targetId": "evidence-row-reject_all_path_availability"
+        }
+      ]
+    }
+  },
+  "targeted:weather.com:gdpr_eprivacy": {
+    "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. “Mixed content”: HTTP subresources were retained on an HTTPS page. Other findings: “Pre-consent non-essential tracking”. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Classified non-essential pre-consent storage”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Mixed content”",
+        "targetId": "evidence-row-transport_security_mixed_content"
+      },
+      {
+        "label": "“Pre-consent non-essential tracking”",
+        "targetId": "evidence-row-pre_consent_third_party_tracking"
+      }
+    ],
+    "expanded": {
+      "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were retained before consent. First retained item: _cc_id (crwdcntrl.net): non_essential, first observed 2.997s after scan start. Essentiality was not confirmed for every item. “Mixed content”: HTTP subresources were retained on an HTTPS page. “Pre-consent non-essential tracking”: Tracking-classified requests were observed before consent: Magnite / Rubicon, OpenX, Amazon Ads. The first retained qualifying request was Magnite / Rubicon at 5.86s after scan start. “Semantic labeling accessibility issue and Low text contrast”: Automated accessibility checks found failures on 1 tested page (2 element failures). Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (15 element failures). Retained examples measured 2.96:1 (required 4.5:1). Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Classified non-essential pre-consent storage”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Mixed content”",
+          "targetId": "evidence-row-transport_security_mixed_content"
+        },
+        {
+          "label": "“Pre-consent non-essential tracking”",
+          "targetId": "evidence-row-pre_consent_third_party_tracking"
+        },
+        {
+          "label": "“Semantic labeling accessibility issue and Low text contrast”",
+          "targetId": "accessibility-evidence"
+        }
+      ]
+    }
+  },
+  "targeted:weather.com:ccpa_cpra": {
+    "text": "“Semantic labeling accessibility issue and Low text contrast”: Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (15 element failures). Retained examples measured 2.96:1 (required 4.5:1). Correct the flagged accessible names and control semantics and fix the flagged contrast or color-only cues; then retest.",
+    "links": [
+      {
+        "label": "“Semantic labeling accessibility issue and Low text contrast”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Semantic labeling accessibility issue and Low text contrast”: Automated accessibility checks found failures on 1 tested page (2 element failures). Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (15 element failures). Retained examples measured 2.96:1 (required 4.5:1). Correct the flagged accessible names and control semantics and fix the flagged contrast or color-only cues; then retest.",
+      "links": [
+        {
+          "label": "“Semantic labeling accessibility issue and Low text contrast”",
+          "targetId": "accessibility-evidence"
+        }
+      ]
+    }
+  },
+  "targeted:unrulymedia.com:gdpr_eprivacy": {
+    "text": "“HTTP-to-HTTPS redirect review”: The explicit HTTP-origin probe served a terminal HTTP 200 response over plaintext HTTP instead of redirecting to HTTPS. “Pre-consent storage classification review”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. Redirect the affected HTTP URLs to their HTTPS equivalents, then verify the redirect path.",
+    "links": [
+      {
+        "label": "“HTTP-to-HTTPS redirect review”",
+        "targetId": "evidence-row-transport_security_http_redirect"
+      },
+      {
+        "label": "“Pre-consent storage classification review”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      }
+    ],
+    "expanded": {
+      "text": "“HTTP-to-HTTPS redirect review”: The explicit HTTP-origin probe served a terminal HTTP 200 response over plaintext HTTP instead of redirecting to HTTPS. “Pre-consent storage classification review”: Cookies or browser storage were retained before consent. First retained item: kqXzdY-HuL (nexxen.com): unknown, present in periodic pre-consent snapshot. Essentiality was not confirmed for every item. Redirect the affected HTTP URLs to their HTTPS equivalents, then verify the redirect path.",
+      "links": [
+        {
+          "label": "“HTTP-to-HTTPS redirect review”",
+          "targetId": "evidence-row-transport_security_http_redirect"
+        },
+        {
+          "label": "“Pre-consent storage classification review”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        }
+      ]
+    }
+  },
+  "targeted:ergoveritas.com:gdpr_eprivacy": {
+    "text": "“Privacy policy not found”: Privacy policy not found within the assessed scope. “Tracking and embedded content before consent”: Tracking requests and embedded content were observed before consent. Other findings: “Google activity after Reject”. Publish a privacy policy explaining the site's personal-data practices. Link the policy clearly from footer navigation and collection forms, and verify the page loads publicly.",
+    "links": [
+      {
+        "label": "“Privacy policy not found”",
+        "targetId": "evidence-row-privacy_notice_availability"
+      },
+      {
+        "label": "“Google activity after Reject”",
+        "targetId": "evidence-row-post_reject_tracking_reduction"
+      },
+      {
+        "label": "“Tracking and embedded content before consent”",
+        "targetId": "evidence-row-pre_consent_third_party_tracking"
+      }
+    ],
+    "expanded": {
+      "text": "“Privacy policy not found”: Privacy policy not found within the assessed scope. “Google activity after Reject”: 2 non-essential Google activity observations were observed 71 ms after confirmed Reject. “Tracking and embedded content before consent”: Tracking requests and embedded content were observed before consent. “Pre-consent storage classification review”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. “Session replay signal”: Session replay or behavioral analytics signals were observed: Microsoft Clarity, Hotjar, and FullStory; first seen 1.15s after scan start; before any recorded consent action. Other findings: “Device identification / fingerprinting signal”. Publish a privacy policy explaining the site's personal-data practices. Link the policy clearly from footer navigation and collection forms, and verify the page loads publicly.",
+      "links": [
+        {
+          "label": "“Privacy policy not found”",
+          "targetId": "evidence-row-privacy_notice_availability"
+        },
+        {
+          "label": "“Google activity after Reject”",
+          "targetId": "evidence-row-post_reject_tracking_reduction"
+        },
+        {
+          "label": "“Tracking and embedded content before consent”",
+          "targetId": "evidence-row-pre_consent_third_party_tracking"
+        },
+        {
+          "label": "“Pre-consent storage classification review”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Session replay signal”",
+          "targetId": "evidence-row-session_replay_fingerprinting_review"
+        },
+        {
+          "label": "“Device identification / fingerprinting signal”",
+          "targetId": "evidence-row-device_identification_fingerprinting_signal_observed"
+        }
+      ]
+    }
+  },
+  "targeted:ergoveritas.com:ccpa_cpra": {
+    "text": "“Privacy policy not found”: Privacy policy not found within the assessed scope. Other findings: “GPC choice-enforcement risk observed”. Publish a privacy policy explaining the site's personal-data practices. Link the policy clearly from footer navigation and collection forms, and verify the page loads publicly.",
+    "links": [
+      {
+        "label": "“Privacy policy not found”",
+        "targetId": "evidence-row-privacy_notice_availability"
+      },
+      {
+        "label": "“GPC choice-enforcement risk observed”",
+        "targetId": "gpc-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Privacy policy not found”: Privacy policy not found within the assessed scope. “GPC choice-enforcement risk observed”: Global Privacy Control (GPC) was verified in the page request and browser setting. Samples include 6 tracking requests; 3 collected data. Publish a privacy policy explaining the site's personal-data practices. Link the policy clearly from footer navigation and collection forms, and verify the page loads publicly.",
+      "links": [
+        {
+          "label": "“Privacy policy not found”",
+          "targetId": "evidence-row-privacy_notice_availability"
+        },
+        {
+          "label": "“GPC choice-enforcement risk observed”",
+          "targetId": "gpc-evidence"
+        }
+      ]
+    }
+  },
+  "targeted:kv.no:gdpr_eprivacy": {
+    "text": "“Cookie notice / cookie policy availability”. “Pre-consent storage classification review”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. Other findings: “Decline consent control”. Check which cookie disclosures apply; provide an accessible notice covering the site's actual cookie purposes and choices, then verify its links.",
+    "links": [
+      {
+        "label": "“Cookie notice / cookie policy availability”",
+        "targetId": "evidence-row-cookie_notice_policy_availability"
+      },
+      {
+        "label": "“Pre-consent storage classification review”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Decline consent control”",
+        "targetId": "evidence-row-reject_all_path_availability"
+      }
+    ],
+    "expanded": {
+      "text": "“Cookie notice / cookie policy availability”: Pre-consent cookie/tracking evidence was retained, but no cookie notice, cookie policy, cookie-settings, declaration, or cookie table disclosure surface was retained. “Pre-consent storage classification review”: Cookies or browser storage were retained before consent. First retained item: amedia:fpbid (kv.no): unknown, present in periodic pre-consent snapshot. Essentiality was not confirmed for every item. “Decline consent control”: Partial support from scan evidence; No observable refusal path was retained before non-essential activity. Check which cookie disclosures apply; provide an accessible notice covering the site's actual cookie purposes and choices, then verify its links.",
+      "links": [
+        {
+          "label": "“Cookie notice / cookie policy availability”",
+          "targetId": "evidence-row-cookie_notice_policy_availability"
+        },
+        {
+          "label": "“Pre-consent storage classification review”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Decline consent control”",
+          "targetId": "evidence-row-reject_all_path_availability"
+        }
+      ]
+    }
+  },
+  "targeted:linear.app:ccpa_cpra": {
+    "text": "“Non-discrimination disclosure not found in the inspected policy”. Other findings: “Keyboard navigation accessibility issue and other accessibility checks”. Review the retained topic inspection and explain each applicable consumer right and how to exercise it. Check business applicability and any exemptions.",
+    "links": [
+      {
+        "label": "“Non-discrimination disclosure not found in the inspected policy”",
+        "targetId": "evidence"
+      },
+      {
+        "label": "“Keyboard navigation accessibility issue and other accessibility checks”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Non-discrimination disclosure not found in the inspected policy”: A complete inspection of retained English policy text and material linked supplements found no consumer-rights disclosure for non-discrimination when exercising privacy rights. This is a scoped disclosure finding, assessed assuming CCPA/CPRA applies; it does not prove requests would be refused. “Keyboard navigation accessibility issue and other accessibility checks”: Scrollable regions lacked keyboard access. Buttons lacked discernible accessible names; Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (16 element failures). Retained examples measured 3.45:1 (required 4.5:1); 1.88:1 (required 4.5:1). Review the retained topic inspection and explain each applicable consumer right and how to exercise it. Check business applicability and any exemptions.",
+      "links": [
+        {
+          "label": "“Non-discrimination disclosure not found in the inspected policy”",
+          "targetId": "evidence"
+        },
+        {
+          "label": "“Keyboard navigation accessibility issue and other accessibility checks”",
+          "targetId": "accessibility-evidence"
+        }
+      ]
+    }
+  },
+  "targeted:www.vianet.ca:gdpr_eprivacy": {
+    "text": "“Decline consent control”. Other findings: “Semantic labeling accessibility issue and Low text contrast” and “Pre-consent storage classification review”. Review the retained first-layer consent-control inventory. If it confirms no reject or necessary-only control, add a visible refusal action and retest regional and device variants.",
+    "links": [
+      {
+        "label": "“Decline consent control”",
+        "targetId": "evidence-row-reject_all_path_availability"
+      },
+      {
+        "label": "“Semantic labeling accessibility issue and Low text contrast”",
+        "targetId": "accessibility-evidence"
+      },
+      {
+        "label": "“Pre-consent storage classification review”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      }
+    ],
+    "expanded": {
+      "text": "“Decline consent control”: The sufficiently retained first-layer consent surface did not show a reject, necessary-only, or equivalent refusal option. First-layer presentation expectations can vary by jurisdiction, so manual review is recommended. “Semantic labeling accessibility issue and Low text contrast”: Automated accessibility checks found failures on 1 tested page (2 element failures). Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (2 element failures). Retained examples measured 3.15:1 (required 4.5:1). “Pre-consent storage classification review”: Cookies or browser storage were retained before consent. First retained item: PHPSESSID (www.vianet.ca): unknown, first observed 0.800s after scan start. Essentiality was not confirmed for every item. Review the retained first-layer consent-control inventory. If it confirms no reject or necessary-only control, add a visible refusal action and retest regional and device variants.",
+      "links": [
+        {
+          "label": "“Decline consent control”",
+          "targetId": "evidence-row-reject_all_path_availability"
+        },
+        {
+          "label": "“Semantic labeling accessibility issue and Low text contrast”",
+          "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“Pre-consent storage classification review”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        }
+      ]
+    }
+  },
+  "targeted:www.vianet.ca:ccpa_cpra": {
+    "text": "“Privacy-rights disclosure not found in the inspected policy”. Other findings: “Semantic labeling accessibility issue and Low text contrast” and “No named sale/sharing choice found in the inspected page”. Review the retained topic inspection and explain each applicable consumer right and how to exercise it. Check business applicability and any exemptions.",
+    "links": [
+      {
+        "label": "“Privacy-rights disclosure not found in the inspected policy”",
+        "targetId": "evidence"
+      },
+      {
+        "label": "“Semantic labeling accessibility issue and Low text contrast”",
+        "targetId": "accessibility-evidence"
+      },
+      {
+        "label": "“No named sale/sharing choice found in the inspected page”",
+        "targetId": "california-privacy-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Privacy-rights disclosure not found in the inspected policy”: A complete inspection of retained English policy text and material linked supplements found no consumer-rights disclosure for the right to delete and non-discrimination when exercising privacy rights. This is a scoped disclosure finding, assessed assuming CCPA/CPRA applies; it does not prove requests would be refused. “Semantic labeling accessibility issue and Low text contrast”: Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (2 element failures). “No named sale/sharing choice found in the inspected page”: The completed inspection did not identify a named sale/sharing choice among the rendered links and buttons. Review whether an opt-out method is required and whether an alternative method applies. Review the retained topic inspection and explain each applicable consumer right and how to exercise it. Check business applicability and any exemptions.",
+      "links": [
+        {
+          "label": "“Privacy-rights disclosure not found in the inspected policy”",
+          "targetId": "evidence"
+        },
+        {
+          "label": "“Semantic labeling accessibility issue and Low text contrast”",
+          "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“No named sale/sharing choice found in the inspected page”",
+          "targetId": "california-privacy-evidence"
+        }
+      ]
+    }
+  },
+  "targeted:www.fandango.com:gdpr_eprivacy": {
+    "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. Other findings: “Tracking and embedded content before consent” and “Keyboard navigation accessibility issue and other accessibility checks”. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Classified non-essential pre-consent storage”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Tracking and embedded content before consent”",
+        "targetId": "evidence-row-pre_consent_third_party_tracking"
+      },
+      {
+        "label": "“Keyboard navigation accessibility issue and other accessibility checks”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. “Tracking and embedded content before consent”: Tracking requests and embedded content were observed before consent. “Keyboard navigation accessibility issue and other accessibility checks”: Interactive controls were nested inside other interactive controls. Command controls lacked accessible names. Low-contrast text was detected on 1 tested page (5 element failures). Retained examples measured 4.1:1 (required 4.5:1). “Device identification / fingerprinting signal”: Device-identification or fingerprinting-like browser API signals were observed: Navigator.plugins, Navigator.mimeTypes, OfflineAudioContext.startRendering, and CanvasRenderingContext2D.getImageData; first seen 18.7s after scan start. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Classified non-essential pre-consent storage”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Tracking and embedded content before consent”",
+          "targetId": "evidence-row-pre_consent_third_party_tracking"
+        },
+        {
+          "label": "“Keyboard navigation accessibility issue and other accessibility checks”",
+          "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“Device identification / fingerprinting signal”",
+          "targetId": "evidence-row-device_identification_fingerprinting_signal_observed"
+        }
+      ]
+    }
+  },
+  "targeted:www.fandango.com:ccpa_cpra": {
+    "text": "“GPC choice-enforcement risk observed”. “Keyboard navigation accessibility issue and other accessibility checks”: Interactive controls were nested inside other interactive controls. Command controls lacked accessible names. Low-contrast text was detected on 1 tested page (5 element failures). Check the collected data's purpose and whether the recorded opt-out applies; correct affected services and retest with GPC.",
+    "links": [
+      {
+        "label": "“GPC choice-enforcement risk observed”",
+        "targetId": "gpc-evidence"
+      },
+      {
+        "label": "“Keyboard navigation accessibility issue and other accessibility checks”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“GPC choice-enforcement risk observed”: Global Privacy Control (GPC) was verified in the page request and browser setting. Consent platform recorded sale state: opted out; sharing state: opted out. All 33 sampled tracking requests collected data. “Keyboard navigation accessibility issue and other accessibility checks”: Automated accessibility checks found failures on 1 tested page (1 element failure). Interactive controls were nested inside other interactive controls. Automated accessibility checks found failures on 1 tested page (1 element failure). Command controls lacked accessible names. Low-contrast text was detected on 1 tested page (5 element failures). Retained examples measured 4.1:1 (required 4.5:1). Check the collected data's purpose and whether the recorded opt-out applies; correct affected services and retest with GPC.",
+      "links": [
+        {
+          "label": "“GPC choice-enforcement risk observed”",
+          "targetId": "gpc-evidence"
+        },
+        {
+          "label": "“Keyboard navigation accessibility issue and other accessibility checks”",
+          "targetId": "accessibility-evidence"
+        }
+      ]
+    }
+  },
+  "targeted:www.gatech.edu:gdpr_eprivacy": {
+    "text": "“Microsoft activity after Reject”: 1 non-essential Microsoft request was observed 1.36 s after confirmed Reject. “Semantic labeling accessibility issue”: Automated accessibility checks found failures on 1 tested page (2 element failures). Links lacked discernible accessible names. Other findings: “Pre-consent non-essential tracking”. Update optional services to respect Reject, then retest tracking and storage after Reject.",
+    "links": [
+      {
+        "label": "“Microsoft activity after Reject”",
+        "targetId": "evidence-row-post_reject_tracking_reduction"
+      },
+      {
+        "label": "“Pre-consent non-essential tracking”",
+        "targetId": "evidence-row-pre_consent_third_party_tracking"
+      },
+      {
+        "label": "“Semantic labeling accessibility issue”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Microsoft activity after Reject”: 1 non-essential Microsoft request was observed 1.36 s after confirmed Reject. “Pre-consent non-essential tracking”: Tracking-classified requests were observed before consent: Microsoft Clarity, Google Analytics. The first retained qualifying request was Microsoft Clarity at 3.47s after scan start. “Semantic labeling accessibility issue”: Automated accessibility checks found failures on 1 tested page (2 element failures). Links lacked discernible accessible names. “Non-essential storage timing review”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. “Session replay signal”: Session replay or behavioral analytics signals were observed: Microsoft Clarity; first seen 3.47s after scan start; before any recorded consent action. Update optional services to respect Reject, then retest tracking and storage after Reject.",
+      "links": [
+        {
+          "label": "“Microsoft activity after Reject”",
+          "targetId": "evidence-row-post_reject_tracking_reduction"
+        },
+        {
+          "label": "“Pre-consent non-essential tracking”",
+          "targetId": "evidence-row-pre_consent_third_party_tracking"
+        },
+        {
+          "label": "“Semantic labeling accessibility issue”",
+          "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“Non-essential storage timing review”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Session replay signal”",
+          "targetId": "evidence-row-session_replay_fingerprinting_review"
+        }
+      ]
+    }
+  },
+  "targeted:www.plannedparenthood.org:gdpr_eprivacy": {
+    "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were observed before consent. Essentiality was not confirmed for every item. “Tracking and embedded content before consent”: Tracking requests and embedded content were observed before consent. Other findings: “Low text contrast”. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+    "links": [
+      {
+        "label": "“Classified non-essential pre-consent storage”",
+        "targetId": "evidence-row-pre_consent_cookies_storage"
+      },
+      {
+        "label": "“Tracking and embedded content before consent”",
+        "targetId": "evidence-row-pre_consent_third_party_tracking"
+      },
+      {
+        "label": "“Low text contrast”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Classified non-essential pre-consent storage”: Cookies or browser storage were retained before consent. First retained item: __Secure-ROLLOUT_TOKEN (youtube.com): non_essential, first observed 4.534s after scan start. Essentiality was not confirmed for every item. “Tracking and embedded content before consent”: Tracking requests and embedded content were observed before consent. “Low text contrast”: Low-contrast text was detected on 1 tested page (6 element failures). “Decline consent control”: Partial support from scan evidence; The retained consent interaction structure shows reject was not available on the first layer. “Session replay signal”: Session replay or behavioral analytics signals were observed: Hotjar; first seen 3.58s after scan start; before any recorded consent action. Check each retained item's purpose; defer confirmed non-essential storage until the relevant consent is given, then retest.",
+      "links": [
+        {
+          "label": "“Classified non-essential pre-consent storage”",
+          "targetId": "evidence-row-pre_consent_cookies_storage"
+        },
+        {
+          "label": "“Tracking and embedded content before consent”",
+          "targetId": "evidence-row-pre_consent_third_party_tracking"
+        },
+        {
+          "label": "“Low text contrast”",
+          "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“Decline consent control”",
+          "targetId": "evidence-row-reject_all_path_availability"
+        },
+        {
+          "label": "“Session replay signal”",
+          "targetId": "evidence-row-session_replay_fingerprinting_review"
+        }
+      ]
+    }
+  },
+  "targeted:www.plannedparenthood.org:ccpa_cpra": {
+    "text": "“GPC choice-enforcement risk observed”: Global Privacy Control (GPC) was verified in the page request and browser setting. Samples include 35 tracking requests; 32 collected data. Other findings: “Non-discrimination disclosure not found in the inspected policy” and “Low text contrast”. Check that GPC sets the sale/sharing opt-out and controls advertising collection.",
+    "links": [
+      {
+        "label": "“GPC choice-enforcement risk observed”",
+        "targetId": "gpc-evidence"
+      },
+      {
+        "label": "“Non-discrimination disclosure not found in the inspected policy”",
+        "targetId": "evidence"
+      },
+      {
+        "label": "“Low text contrast”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“GPC choice-enforcement risk observed”: Global Privacy Control (GPC) was verified in the page request and browser setting. Samples include 35 tracking requests; 32 collected data. “Non-discrimination disclosure not found in the inspected policy”: A complete inspection of retained English policy text and material linked supplements found no consumer-rights disclosure for non-discrimination when exercising privacy rights. This is a scoped disclosure finding, assessed assuming CCPA/CPRA applies; it does not prove requests would be refused. “Low text contrast”: Low-contrast text was detected on 1 tested page (6 element failures). Retained examples measured 3.3:1 (required 4.5:1); 3.19:1 (required 4.5:1); 3.9:1 (required 4.5:1). Check that GPC sets the sale/sharing opt-out and controls advertising collection.",
+      "links": [
+        {
+          "label": "“GPC choice-enforcement risk observed”",
+          "targetId": "gpc-evidence"
+        },
+        {
+          "label": "“Non-discrimination disclosure not found in the inspected policy”",
+          "targetId": "evidence"
+        },
+        {
+          "label": "“Low text contrast”",
+          "targetId": "accessibility-evidence"
+        }
+      ]
+    }
+  }
+}

@@ -2,7 +2,7 @@ import { scanActivityTrafficClassificationCtes } from "../../lib/admin/scan-traf
 
 export type AdminScanActivitySnapshotData = {
   rows: Array<{ activity_at: string; activity_id: string; request_public_id: string | null; row_kind: "request" | "scan"; scan_id: string | null; status: string; no_go_flag: boolean | null; access_posture_class: string | null }>;
-  metrics: { items: number; runs: number; requests: number; completed: number; failed: number; limited: number; no_go: number; active: number; reused: number; newest_at: string | null; p50: number | null; p95: number | null };
+  metrics: { items: number; runs: number; requests: number; completed: number; failed: number; limited: number; no_go: number; active: number; reused: number; newest_at: string | null; newest_scan_at?: string | null; p50: number | null; p95: number | null };
   previous: { runs: number };
   regions: Array<{ value: string; count: number; runs: number; requests: number }>;
   trend: Array<{ n: number; bucket_start: string; bucket_end: string; items: number; runs: number; requests: number; failed: number; limited: number }>;
@@ -51,6 +51,7 @@ export function adminScanActivitySnapshotSql(base: string, boundedTraffic = fals
       count(*) filter (where a.status in ('queued', 'running', 'finalizing'))::int as active,
       count(*) filter (where a.freshness_filter = 'reused')::int as reused,
       max(a.activity_at) as newest_at,
+      max(a.activity_at) filter (where a.row_kind = 'scan') as newest_scan_at,
       percentile_cont(0.5) within group (order by extract(epoch from s.completed_at - coalesce(s.started_at, s.created_at)))
         filter (where a.row_kind = 'scan' and s.completed_at >= coalesce(s.started_at, s.created_at)) as p50,
       percentile_cont(0.95) within group (order by extract(epoch from s.completed_at - coalesce(s.started_at, s.created_at)))

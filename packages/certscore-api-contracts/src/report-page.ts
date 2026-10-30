@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { reportReviewFocusSchema } from "./privacy-audit.js";
 
 export const REPORT_EVIDENCE_SECTIONS = ["consent", "gpc", "policy", "tracking", "transport", "forms", "accessibility", "cmp", "cms"] as const;
 export const reportEvidenceSectionSchema = z.enum(REPORT_EVIDENCE_SECTIONS);
@@ -12,6 +13,7 @@ export const reportEvidencePageSchema = z.object({
   reportUrl: z.string(),
   workpaper: z.literal("tracking").optional(),
   section: reportEvidenceSectionSchema.optional(),
+  reviewFocus: reportReviewFocusSchema.optional(),
   selection: z.object({
     version: z.literal("certscore.report-evidence-selection.v1"),
     fields: z.array(z.string()).max(30),

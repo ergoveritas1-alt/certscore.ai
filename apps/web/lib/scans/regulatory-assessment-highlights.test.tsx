@@ -52,7 +52,7 @@ test("neutral California results follow canonical findings through the shared re
   assert.doesNotMatch(actual.highlights.text, /Next,|Check whether|review how|match collection notices/);
   assert.equal("action" in result, false);
   assert.doesNotMatch(actual.highlights.text, /No named|not observed|non.discrimination|incomplete|ineffective|compliant|adequate|0 issues/i);
-  assert.ok(actual.highlights.text.length <= 500);
+  assert.ok(actual.highlights.text.length <= 430);
   assert.ok(actual.highlights.links.every(link => link.targetId === "california-privacy-evidence"));
   assert.deepEqual(actual.highlights, buildAssessmentHighlightsPresentation([], { kind: "page" }, { assessmentResult: result }));
   assert.deepEqual(r.findings, before);
@@ -179,7 +179,7 @@ for(const focus of ["gdpr_eprivacy","ccpa_cpra"] as const) {
       assert.match(text,/CMS version review/);
       assert.match(text,/installed security fix was not verified/);
       assert.ok(actual.highlights.links.some(link=>link.label.includes("CMS version review")));
-      assert.ok(actual.highlights.text.length<=500);
+      assert.ok(actual.highlights.text.length<=430);
       assert.ok((actual.highlights.expanded?.text.length??0)<=1000);
       assert.deepEqual(findings,before);
       assert.deepEqual(buildRegulatoryAssessmentHighlights(findings,focus,scope,{score:40}).highlights,actual.highlights);

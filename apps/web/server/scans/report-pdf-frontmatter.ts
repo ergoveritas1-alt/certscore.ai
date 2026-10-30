@@ -1,6 +1,6 @@
 import type { CanonicalReportExport } from "./report-export";
 import type { PdfLine } from "./report-export-pdf";
-import { pdfRegionLabel, pdfReviewGroups, pdfTestedUrl } from "./report-pdf-reader";
+import { pdfRegionLabel, pdfReviewGroups, pdfOtherReviewGroups, pdfTestedUrl } from "./report-pdf-reader";
 import { publicReportPdfBaseUrl } from "./report-pdf-public-safety";
 import { SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
 import { pdfSiteIntegrityRemediationEvidence } from "./report-pdf-site-integrity";
@@ -27,7 +27,7 @@ export function pdfFrontmatter(report: CanonicalReportExport, appUrl: string, la
       ...layout.text(`${plan.owner} - Estimated effort: medium`, { bold: true, size: 9 }));
     if (group.id === SITE_INTEGRITY_FINDING_ID) lines.push(...pdfSiteIntegrityRemediationEvidence(report, layout));
     else for (const location of plan.locations) lines.push(...layout.text(location, { size: 8, gapAfter: 3 }));
-    if (group.id === "initial-tracking" && report.appendix.evidenceDossier?.cmp?.provider === "OneTrust") {
+    if ((group.evidenceGroup ?? group.id) === "initial-tracking" && report.appendix.evidenceDossier?.cmp?.provider === "OneTrust") {
       lines.push(...layout.text("For a OneTrust-managed deployment: map each integration to the actual tenant category ID, choose documented Auto-Blocking or script rewriting, and load the blocking configuration before optional tags. Publishing a CMP banner alone does not activate blocking. If using a tag manager, configure the same category grants on every relevant trigger.", { size: 9 }),
         ...layout.text("OneTrust blocking implementation guidance", { href: "https://my.onetrust.com/s/article/UUID-518074a1-a6da-81c3-be52-bae7685d9c94?language=en_US", size: 8 }));
     }
@@ -53,6 +53,18 @@ export function pdfFrontmatter(report: CanonicalReportExport, appUrl: string, la
   if (baseUrl) {
     lines.push(...layout.text("Open the canonical online report", { href: `${baseUrl}/scan/${encodeURIComponent(report.scan.id)}` }));
     if (testedUrl) lines.push(...layout.text("Re-test this page", { href: `${baseUrl}/?url=${encodeURIComponent(testedUrl)}` }));
+  }
+  const others = pdfOtherReviewGroups(report);
+  if (others.length) {
+    lines.push(chapter("Other report findings", "other-findings"));
+    for (const group of others) {
+      lines.push(layout.heading(group.title));
+      for (const observation of group.observations) {
+        lines.push(...layout.text(`${observation.title}: ${reportStatusLabel(observation.status)}`, { bold: true, size: 10 }),
+          ...layout.text(observation.explanation, { size: 9 }));
+        for (const step of observation.steps) lines.push(...layout.text(step, { size: 9 }));
+      }
+    }
   }
   return lines;
 }

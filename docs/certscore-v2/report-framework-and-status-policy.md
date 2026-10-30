@@ -1,5 +1,35 @@
 # CertScore.ai report framework and status presentation
 
+## Shared report priority selection — October 30, 2026
+
+Local implementation only; not deployed. Web reports and native PDF exports now
+use `report-priority-projection.ts` over the same reportable, hydrated canonical
+checklist and unified finding packets. Both apply
+`buildRegulatoryAssessmentHighlights` for framework selection and ranking.
+Full-site reports share the same cached/homepage merge. The local v2 PDF preview
+uses this selection too. There is no independent PDF priority eligibility rule.
+
+The priority count, ordered priority titles and assessment highlights must agree
+for the same evidence, focus and scope. Other reportable narratives remain in
+Detailed evidence / Other report findings; their presence does not add priorities.
+Historical packets without a presentation decision cannot acquire one during
+export. Original findings, qualifications, evidence, scores and historical exports
+remain unchanged. Highlights retain the shared writer's existing length bounds.
+
+The frozen SITS export now selects one GDPR/ePrivacy priority, **Non-essential
+cookies or services after Reject**, in both surfaces. Its Partial concern
+qualification and 80/100 score remain unchanged; all four narrative findings
+remain available. This is retained replay, with no new scan or production claim.
+No capture, recurring cost, model calls or deployment is added: **$0**.
+Regression coverage includes EU, California qualified collection, full-site
+selection, missing choice proof, neutral rows and legacy schemas.
+
+Validation: 141 report-presentation, 340 highlights, 46 related projection and
+full-site, and 18 release-selection tests passed; web typecheck passed. Seven
+PDF layout cases passed, including split-card first-page anchors. All 24 native
+and 20 local v2 pages were visually inspected. Exact source/output hashes and
+retained replay results are in `artifacts/pdf-priority-parity-2026-10-30/`.
+
 Owner-authorized local implementation, October 29, 2026. No deployment or flag
 change. This policy changes presentation over canonical projected evidence; it
 does not change findings, proof requirements, scoring, capture or historical

@@ -146,3 +146,11 @@ test('Light report actions survive omitted navigation without changing the outpu
   const error = { ...raw, isError: true };
   assert.equal(withResponseGuidance('certscore_get_scan_bundle', {}, error, undefined, { toolProfile: 'light' }), error);
 });
+
+
+test("evidence continuation retains the explicit framework without changing the packet", () => {
+  const payload = { scanId: "owned", reviewFocus: "ccpa_cpra", section: "policy", pagination: { nextCursor: "next", complete: false } };
+  const value = guide("certscore_get_report_evidence_page", payload);
+  assert.deepEqual(metadata(value).nextAction.arguments, { scanId: "owned", cursor: "next", section: "policy", reviewFocus: "ccpa_cpra" });
+  assert.equal(value.structuredContent, payload);
+});

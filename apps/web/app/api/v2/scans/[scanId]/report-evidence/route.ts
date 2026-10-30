@@ -28,8 +28,8 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
   const query = new URL(request.url).searchParams;
   const cursor = query.get("cursor");
   const selection = parseReportEvidenceRequest(query);
-  if (!selection) return reply(buildApiV2Error({ code: "invalid_url", message: "Choose one supported section or workpaper=tracking, never both. Format must be download or csv (tracking workpaper only)." }), 400);
-  const { tracking, csv, download, section } = selection;
+  if (!selection) return reply(buildApiV2Error({ code: "invalid_url", message: "Choose one supported section or workpaper=tracking, never both. Format must be download or csv (tracking workpaper only). reviewFocus must be gdpr_eprivacy or ccpa_cpra and cannot be combined with a tracking workpaper." }), 400);
+  const { tracking, csv, download, section, reviewFocus } = selection;
   if (download && cursor) return reply(buildApiV2Error({ code: "invalid_url", message: "Full downloads do not accept a page cursor." }), 400);
   if (!API_V2_SCAN_ID_PATTERN.test(scanId) || (cursor !== null && !/^v1\.[a-f0-9]{64}\.(0|[1-9]\d{0,9})$/.test(cursor))) {
     return reply(buildApiV2Error({ code: "invalid_url", message: "Invalid scan ID or cursor. Restart without a cursor." }), 400);
@@ -65,7 +65,8 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
       } });
       displayReport = buildTrackingWorkpaper(report);
     } else {
-      const { fullSite: _privateConfiguration, ...report } = await buildVerifiedTimelineReportModel(record);
+      const { fullSite: _privateConfiguration, ...baseReport } = await buildVerifiedTimelineReportModel(record);
+      const report = reviewFocus ? { ...baseReport, reviewFocus } : baseReport;
       const isFullSite = record.scan.scanConfigJson?.fullSite === true && (!section || section === "forms" || section === "tracking");
       const fullSite = isFullSite ? await loadFullSiteReport(scanId, new URLSearchParams({ kind: "all" }), true) : null;
       if (isFullSite && !fullSite) return reply(buildApiV2Error({ code: "not_found", message: "Full-site evidence is unavailable; no partial export was returned." }), 404);
@@ -93,6 +94,7 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
     const downloadUrl = new URL(`/api/v2/scans/${scanId}/report-evidence?format=download`, process.env.NEXT_PUBLIC_APP_URL || "https://certscore.ai");
     if (tracking) downloadUrl.searchParams.set("workpaper", "tracking");
     if (section) downloadUrl.searchParams.set("section", section);
+    if (reviewFocus) downloadUrl.searchParams.set("reviewFocus", reviewFocus);
     let expiresAt: string | undefined;
     if (downloadOrganizationId) {
       const issued = issueReportDownloadTicket(scanId, downloadOrganizationId, signingSecret);
@@ -101,7 +103,7 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
     }
     const csvUrl = new URL(downloadUrl);
     csvUrl.searchParams.set("format", "csv");
-    const page = buildReportEvidencePage({ scanId, report: displayReport, cursor, section });
+    const page = buildReportEvidencePage({ scanId, report: displayReport, cursor, section, reviewFocus });
     return reply(reportEvidencePageSchema.parse({ ...page, ...(tracking ? { workpaper: "tracking" } : {}), ...(sectionSelection ? { selection: sectionSelection } : {}), download: {
       url: downloadUrl.toString(),
       ...(tracking ? { csvUrl: csvUrl.toString() } : {}),

@@ -30,6 +30,9 @@ apps/validation-worker/artifacts/*
 output/pdf/*-local.pdf
 output/pdf/*-local.pdf.layout.json
 output/pdf/*-local-source/
+output/docx/*-local.docx
+output/docx/*-local.docx.provenance.json
+output/comparison/
 
 # Logs
 *.log

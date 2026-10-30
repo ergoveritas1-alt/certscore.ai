@@ -46,17 +46,18 @@ test("zero score effect does not turn a review finding into information or mutat
     const r = fixture();
     add(r, finding("policy_clarity_risk"));
     const before = JSON.stringify(r), m = buildReportPdfV2Model(r);
-    assert.equal(m.issues[0]!.tier, "Review");
+    assert.equal(m.otherIssues[0]!.tier, "Review");
     assert.equal(m.score, 80);
-    assert.ok(m.retest);
+    assert.equal(m.retest, null);
+    assert.equal(m.issues.length, 0);
     assert.equal(JSON.stringify(r), before);
 });
 test("only the explicit Accept baseline is informational and requires no repair procedure", () => {
     const r = fixture();
     add(r, finding("post_accept_consent_dependent_activity"));
     const m = buildReportPdfV2Model(r);
-    assert.equal(m.issues[0]!.tier, "For information");
-    assert.deepEqual(m.issues[0]!.steps, []);
+    assert.equal(m.otherIssues[0]!.tier, "For information");
+    assert.deepEqual(m.otherIssues[0]!.steps, []);
     assert.equal(m.retest, null);
 });
 test("refusal and overlap retain every original finding exactly once without inventing a shared cause", () => {
@@ -66,9 +67,10 @@ test("refusal and overlap retain every original finding exactly once without inv
     add(r, finding("accept_reject_outcomes_indistinguishable"));
     const before = JSON.stringify(r), m = buildReportPdfV2Model(r);
     assert.equal(m.findings.length, 2);
-    assert.equal(m.issues.length, 1);
-    assert.deepEqual(m.issues[0]!.findingIds, ["post_reject_click_tracking", "accept_reject_outcomes_indistinguishable"]);
-    const copy = JSON.stringify(m.issues[0]!.blocks);
+    assert.equal(m.otherIssues.length, 1);
+    assert.equal(m.issues.length, 0);
+    assert.deepEqual(m.otherIssues[0]!.findingIds, ["post_reject_click_tracking", "accept_reject_outcomes_indistinguishable"]);
+    const copy = JSON.stringify(m.otherIssues[0]!.blocks);
     assert.match(copy, /partial overlap, not equivalent outcomes/);
     assert.match(copy, /3.0 s; Reject 1.4 s/);
     assert.match(copy, /After Reject click/);
@@ -166,8 +168,8 @@ test("other canonical finding topics keep their own evidence destination and rem
     const r = fixture();
     add(r, finding("transport_security_https_delivery"));
     const m = buildReportPdfV2Model(r);
-    assert.equal(m.issues[0]!.evidenceTarget, "forms-security");
-    assert.equal(m.issues[0]!.expected, "Review the specific recorded observation.");
+    assert.equal(m.otherIssues[0]!.evidenceTarget, "forms-security");
+    assert.equal(m.otherIssues[0]!.expected, "Review the specific recorded observation.");
 });
 test("unsupported frameworks and scopes fail closed instead of reusing GDPR starting-page wording", () => {
     const r = fixture();

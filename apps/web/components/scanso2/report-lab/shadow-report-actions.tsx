@@ -4,6 +4,8 @@ import { useState } from "react";
 import { ReportPdfDownloadLink } from "../../scans/report-pdf-download-link";
 import { useReportPdfAccess } from "../../scans/report-lab/shadow-report-actions";
 
+import { ReportDocumentDownloadLink } from "../../scans/report-document-download-link";
+
 type ShadowReportActionsProps = {
   reportUrl: string;
   scanId: string;
@@ -16,9 +18,11 @@ const menuItemClass =
 
 export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite = false }: ShadowReportActionsProps) {
   const canExportPdf = useReportPdfAccess();
+  const requestedFocus = new URL(reportUrl, "https://certscore.ai").searchParams.get("reviewFocus");
+  const focusQuery = requestedFocus === "gdpr_eprivacy" || requestedFocus === "ccpa_cpra" ? `&reviewFocus=${requestedFocus}` : "";
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const emailSubject = `CertScore scan report for ${siteLabel}`;
-  const emailBody = `Review the CertScore scan report for ${siteLabel}:\n\n${reportUrl}`;
+  const emailSubject = `CertScore.ai scan report for ${siteLabel}`;
+  const emailBody = `Review the CertScore.ai scan report for ${siteLabel}:\n\n${reportUrl}`;
 
   async function copyReportLink() {
     try {
@@ -61,14 +65,14 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
           <span>{fullSite ? "Download full-site PDF" : "Download PDF report"}</span>
           <span aria-hidden="true" className="text-zinc-400">↓</span>
         </ReportPdfDownloadLink> : null}
-        <a
+        <ReportDocumentDownloadLink
           className={menuItemClass}
           download
-          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=json${fullSite ? "&scope=full-site" : ""}`}
+          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=docx${focusQuery}${fullSite ? "&scope=full-site" : ""}`}
         >
-          <span>{fullSite ? "Download full-site JSON" : "Download JSON report"}</span>
-          <span aria-hidden="true" className="font-mono text-xs text-zinc-400">{'{}'}</span>
-        </a>
+          <span>{fullSite ? "Download full-site Word (DOCX)" : "Download Word report (DOCX)"}</span>
+          <span aria-hidden="true" className="font-mono text-xs text-zinc-400">DOCX</span>
+        </ReportDocumentDownloadLink>
       </div>
     </details>
   );

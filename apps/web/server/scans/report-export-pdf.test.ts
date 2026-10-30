@@ -1,3 +1,4 @@
+import { reportExecutiveSummary } from "./report-executive-summary";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildTechnologyInventory } from "@certscore/contracts";
@@ -260,9 +261,9 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
   assert.match(caText,/GPC response/);
   assert.match(euText,/EU-only clause/);
   assert.doesNotMatch(caText,/EU-only clause|Transparency checks/);
-  assert.match(caText,/California score 86 \/ 100/);
+  assert.match(caText,/86 of 100 SCORE California assessment Scan origination:/);
   const caUnknown={...california,californiaScore:{...california.californiaScore,score:null}};
-  assert.match(visiblePdfText(renderCanonicalReportPdf(caUnknown).toString("latin1")),/California score N\/A Unavailable/);
+  assert.match(visiblePdfText(renderCanonicalReportPdf(caUnknown).toString("latin1")),/N\/A of 100 SCORE Unavailable Scan origination:/);
   assert.equal(JSON.stringify(jurisdictional),jurisdictionalBefore);
 
   const pdf = renderCanonicalReportPdf(report);
@@ -277,7 +278,7 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
   assert.doesNotMatch(streams[0]!, /124 139 Td \(To review\) Tj/);
   assert.match(visiblePdfText(streams.slice(1).join("\n")), /Observed evidence only\./);
   for (const [index, topic] of PDF_REPORT_TOPICS.entries()) {
-    assert.ok(visiblePdfText(streams[0]!).includes(topic.title), `Page 1 must include ${topic.title}`);
+    assert.ok(reportExecutiveSummary(report).topics.every(item => visiblePdfText(streams[0]!).includes(item.title)), "Page 1 keeps every projected topic");
     const heading = `Appendix ${String.fromCharCode(65 + index)}: ${topic.title}`;
     assert.equal(streams.filter(stream => stream.includes(`(${heading}) Tj`)).length, 1);
     const chapterStream = streams.find(stream => stream.includes(`(${heading}) Tj`))!;
@@ -287,28 +288,30 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
     if (index) assert.ok(pdfText.indexOf(heading) > pdfText.indexOf(`Appendix ${String.fromCharCode(64 + index)}:`));
   }
   assert.doesNotMatch(streams[0]!, /Appendix A:|No forms found|Controller\/contact disclosure/);
-  assert.match(streams[0]!, /Region: Ireland/);
-  assert.equal(pdfText.match(/Valid SSL\/TLS certificate/g)?.length, 1);
-  assert.equal(pdfText.match(/\(1\. TLS certificate review - Finding\)/g)?.length, 1);
-  assert.ok(pdfText.indexOf("Appendix E: Webserver security") < pdfText.indexOf("Valid SSL/TLS certificate"));
+  assert.match(visiblePdfText(streams[0]!), /Ireland \(EU\)/);
+  assert.equal(streams.slice(1).join("\n").match(/Valid SSL\/TLS certificate/g)?.length, 1);
+  assert.equal(streams.slice(1).join("\n").match(/\(TLS certificate review\) Tj/g)?.length, 1);
+  assert.doesNotMatch(pdfText, /\(1\. TLS certificate review - Finding\)/);
+  assert.match(pdfText, /Other report findings/);
+  assert.ok(streams.slice(1).join("\n").indexOf("Appendix E: Webserver security") < streams.slice(1).join("\n").indexOf("Valid SSL/TLS certificate"));
   assert.doesNotMatch(pdfText, /Appendix [A-Z]: TLS/);
   assert.match(pdfText, /\/Subtype \/Link/);
   assert.match(pdfText, /\/S \/URI/);
-  assert.match(streams[0]!, /CertScore.ai score/);
+  assert.match(streams[0]!, /SCORE/);
   assert.match(streams[0]!, /Top issues/);
   assert.doesNotMatch(streams[0]!, /\([A-H]\) Tj|First third-party request|Reject confirmed/);
   assert.doesNotMatch(pdfText, /\(Overview\) Tj|\(Plan\) Tj|\(Workpaper\) Tj/);
-  assert.match(streams[0]!, /Topic evidence at a glance/);
-  assert.match(streams[0]!, /Site assessment/);
+  assert.match(streams[0]!, /Topic status/);
+  assert.match(streams[0]!, /Report findings/);
   assert.doesNotMatch(streams[0]!, /Findings by topic|\(Topics\)|\(Findings\)/);
-  assert.match(streams[0]!, /35 Tf[^\n]*\(64\)/);
+  assert.match(streams[0]!, /23 Tf[^\n]*\(64\)/);
   assert.doesNotMatch(streams[0]!, /\(82\)/, "The headline must use the canonical overall score, not checklist score");
   assert.match(streams[0]!, / c\nS Q/, "Summary charts must use vector paths");
   const unavailableScore = structuredClone(report); unavailableScore.score.value = null;
   assert.match(renderCanonicalReportPdf(unavailableScore).toString("latin1"), /\(N\/A\)/);
   for (const value of [0, 100]) {
     const boundaryScore = structuredClone(report); boundaryScore.score.value = value;
-    assert.match(renderCanonicalReportPdf(boundaryScore).toString("latin1"), new RegExp(`35 Tf[^\\n]*\\(${value}\\)`));
+    assert.match(renderCanonicalReportPdf(boundaryScore).toString("latin1"), new RegExp(`23 Tf[^\\n]*\\(${value}\\)`));
   }
   assert.match(pdfText, /Accessibility evidence unavailable; conformance remains unknown/);
   assert.match(pdf.toString("latin1"), /Contact form/);
@@ -354,11 +357,20 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
   const blackHeaderPdf = renderCanonicalReportPdf(report, {
     brandName: "Northstar Research (Client Reports)", brandLogo: { body: logo, contentType: "image/png" }, headerTheme: "black",
   });
-  const firstTextStream = (buffer: Buffer) => [...buffer.toString("latin1").matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => match[1]!).find(stream => stream.includes("Executive summary"))!;
-  assert.match(firstTextStream(brandedPdf), /1 1 1 rg 0 690 612 152 re f/);
-  assert.match(firstTextStream(brandedPdf), /23 Tf 0.12 0.18 0.27 rg/);
-  assert.match(firstTextStream(blackHeaderPdf), /0 0 0 rg 0 690 612 152 re f/);
-  assert.match(firstTextStream(blackHeaderPdf), /23 Tf 1 1 1 rg/);
+  const firstTextStream = (buffer: Buffer) => [...buffer.toString("latin1").matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => match[1]!).find(stream => stream.includes("Executive Summary"))!;
+  assert.match(firstTextStream(brandedPdf), /1 1 1 rg 0 716 612 126 re f/);
+  assert.match(firstTextStream(brandedPdf), /27 Tf 0.12 0.18 0.27 rg/);
+  assert.match(firstTextStream(brandedPdf), /\/F2 16 Tf[^\n]*50 805 Td \(Executive Summary\)/);
+  assert.match(firstTextStream(brandedPdf), /144 750 Td \(Northstar Research/);
+  assert.match(visiblePdfText(firstTextStream(brandedPdf)), /SCORE Needs work Scan origination: Ireland \(EU\)/);
+  assert.doesNotMatch(firstTextStream(brandedPdf), /50 823 Td|Targeted review/);
+  for (const stream of [...brandedPdf.toString("latin1").matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => match[1]!).filter(stream => stream.includes("BT /F"))) {
+    const visible = visiblePdfText(stream);
+    assert.ok(visible.includes(`Scan ID: ${report.scan.id}`));
+    assert.match(visible, /Automated technical risk signals for review, not a determination of legal compliance\./);
+  }
+  assert.match(firstTextStream(blackHeaderPdf), /0 0 0 rg 0 716 612 126 re f/);
+  assert.match(firstTextStream(blackHeaderPdf), /27 Tf 1 1 1 rg/);
   assert.match(blackHeaderPdf.toString("latin1"), /0 0 0 rg 0 812 612 30 re f/);
   assert.match(brandedPdf.toString("latin1"), /1 1 1 rg 0 812 612 30 re f/);
   const brandedText = brandedPdf.toString("latin1");
@@ -412,10 +424,11 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
   const richPdf = renderCanonicalReportPdf(richReport, { brandName: "Northstar Research", brandLogo: { body: logo, contentType: "image/png" } });
   assert.equal(JSON.stringify(richReport), richBefore, "Rendering must never change canonical evidence or scoring inputs");
   const richText = richPdf.toString("latin1");
-  const summaryStream = [...richText.matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => match[1]!).find(stream => stream.includes("Executive summary"))!;
-  assert.match(summaryStream, /Priority finding 1/);
+  const summaryStream = [...richText.matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => match[1]!).find(stream => stream.includes("Executive Summary"))!;
+  assert.match(summaryStream, /Other finding/);
+  assert.doesNotMatch(summaryStream, /Selected priority/);
   assert.doesNotMatch(summaryStream, /Appendix A:/);
-  assert.match(summaryStream, /distinct observations/);
+  assert.match(summaryStream, /0 selected priorities/);
   assert.match(richText.slice(richText.indexOf("Appendix G: ADA/WCAG")), /Automated rule evidence: image-alt/);
   assert.match(richText, /\(#image-alt\)/);
   assert.match(richText, /https:\/\/dequeuniversity.com/);
@@ -553,4 +566,24 @@ test("PDF topics group canonical identifiers and metadata without treating unkno
   assert.equal(pdfTopicForFinding({ details: { family: "accessibility" } }), "accessibility");
   assert.equal(pdfTopicForFinding({ details: { family: "cms_security" } }), "security");
   assert.equal(pdfTopicForFinding({ unifiedFindingId: "future_finding", title: "Consent high risk TLS" }), null);
+});
+
+
+test("PDF executive page omits the highlights paragraph while retaining priority cards and evidence", async () => {
+  const { priorityReportFixture } = await import("./report-priority.fixture");
+  const { pdfPriorityReview } = await import("./report-pdf-priorities");
+  for (const focus of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
+    const report = priorityReportFixture();
+    report.reviewFocus = focus;
+    const before = structuredClone(report);
+    const pdf = renderCanonicalReportPdf(report).toString("latin1");
+    const executive = [...pdf.matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => match[1]!).find(stream => stream.includes("Executive Summary"))!;
+    const visible = visiblePdfText(executive);
+    const highlights = pdfPriorityReview(report).highlights.text.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+    assert.ok(!visible.includes(highlights), "Narrative paragraph is omitted in both framework exports");
+    assert.match(visible, /Report findings/);
+    assert.match(visible, /selected priorit/);
+    assert.match(visible, /Topic status/);
+    assert.deepEqual(report, before);
+  }
 });

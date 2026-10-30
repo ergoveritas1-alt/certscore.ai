@@ -49,6 +49,6 @@ test("critical priority and independent uncertainty survive sparse and crowded s
   const result=buildAssessmentHighlightsPresentation(findings,{kind:"site",scannedPages:4});
   assert.match(result.text,/^“Keyboard trap”/);
   assert.match(result.text,/Other journeys were not tested/);
-  assert.ok(result.text.length<=500);
+  assert.ok(result.text.length<=430);
   assert.deepEqual(findings,saved);
 });

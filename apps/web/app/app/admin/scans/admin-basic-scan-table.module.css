@@ -1,125 +1,78 @@
 .table {
-  width: 100%;
   table-layout: fixed;
+}
+
+/* Preserve readable columns and the same table on touch and desktop screens. */
+.basic {
+  min-width: 1430px;
 }
 
 .table th,
 .table td {
   min-width: 0;
-  padding: 0.5rem 0.25rem;
-  vertical-align: top;
+  padding: 0.375rem 0.625rem;
+  vertical-align: middle;
+  line-height: 1rem;
 }
 
 .table th {
   white-space: normal;
-  line-height: 1rem;
   letter-spacing: 0.02em;
 }
 
-.table td:first-child {
-  position: static;
+.table td {
+  white-space: nowrap;
+}
+
+.table td > p {
+  margin-top: 0;
+  line-height: 1rem;
 }
 
 .table td:first-child > span {
-  gap: 0.25rem;
   max-width: 100%;
 }
 
 .table td:first-child > span > span[aria-hidden] {
-  width: 0.5rem;
-  height: 0.5rem;
   flex-shrink: 0;
 }
 
 .table td:first-child > span > span:not([aria-hidden]) {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.table td:nth-child(2) > p,
-.table td:nth-child(7) > p {
-  overflow: visible;
+.table td:nth-child(4) p {
   white-space: normal;
-  text-overflow: clip;
-  overflow-wrap: anywhere;
 }
 
-.table td:nth-child(2) > p {
-  word-break: break-all;
+/* Secondary facts get one line each; longer single facts get at most two. */
+.table td > span[class*="line-clamp-2"] {
+  white-space: normal;
+  line-height: 1rem;
 }
 
-.table td:nth-child(4) > div {
-  display: block;
+.details {
+  position: relative;
+  line-height: 1rem;
 }
 
-.table td:nth-child(4) > div > span {
-  display: inline-block;
-  margin-top: 0.125rem;
-}
-
-.table td:nth-child(6) > p {
-  font-size: 0.625rem;
-  line-height: 0.875rem;
-}
-
-.table td:nth-child(6) summary {
-  padding: 0.125rem 0.25rem;
+.popover {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  z-index: 40;
+  width: 18rem;
+  max-width: calc(100vw - 3rem);
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  background: white;
+  color: #334155;
+  font-size: 0.75rem;
   white-space: normal;
   overflow-wrap: anywhere;
-}
-
-.table td:nth-child(8) {
-  white-space: nowrap;
-}
-
-@media (max-width: 1023px) {
-  .table {
-    display: block;
-  }
-
-  .table colgroup {
-    display: none;
-  }
-
-  .table thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  .table tbody {
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .table tbody tr {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 0.75rem;
-    height: auto;
-    padding: 0.5rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.75rem;
-  }
-
-  .table td {
-    display: block;
-    padding: 0.5rem;
-  }
-
-  .table td::before {
-    content: attr(data-label);
-    display: block;
-    margin-bottom: 0.25rem;
-    color: #64748b;
-    font-size: 0.625rem;
-    font-weight: 600;
-    line-height: 1rem;
-    text-transform: uppercase;
-  }
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
 }

@@ -9,6 +9,8 @@ export function ReportPdfAccessProvider({ allowed, children }: { allowed: boolea
   return <ReportPdfAccess.Provider value={allowed}>{children}</ReportPdfAccess.Provider>;
 }
 
+import { ReportDocumentDownloadLink } from "../report-document-download-link";
+
 type ShadowReportActionsProps = {
   reportUrl: string;
   scanId: string;
@@ -69,14 +71,14 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
           <span>{fullSite ? "Download full-site PDF" : "Download PDF report"}</span>
           <span aria-hidden="true" className="text-zinc-400">↓</span>
         </ReportPdfDownloadLink> : null}
-        <a
+        <ReportDocumentDownloadLink
           className={menuItemClass}
           download
-          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=json${focusQuery}${fullSite ? "&scope=full-site" : ""}`}
+          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=docx${focusQuery}${fullSite ? "&scope=full-site" : ""}`}
         >
-          <span>{fullSite ? "Download full-site JSON" : "Download JSON report"}</span>
-          <span aria-hidden="true" className="font-mono text-xs text-zinc-400">{'{}'}</span>
-        </a>
+          <span>{fullSite ? "Download full-site Word (DOCX)" : "Download Word report (DOCX)"}</span>
+          <span aria-hidden="true" className="font-mono text-xs text-zinc-400">DOCX</span>
+        </ReportDocumentDownloadLink>
       </div>
     </details>
   );

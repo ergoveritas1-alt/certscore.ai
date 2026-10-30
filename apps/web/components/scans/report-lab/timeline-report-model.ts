@@ -1,29 +1,22 @@
+import { CHECKLIST_GROUPS, projectReportPriorityFindings, reportPriorityEvidenceRow } from "../../../lib/scans/report-priority-projection";
 import { projectCaliforniaChoicePresence, projectCaliforniaPolicyChoiceMethods, projectCaliforniaFrictionlessGpcException, projectCaliforniaOptOutPresence } from "../../../lib/scans/california-choice-presence";
 import { retainedConsentVendor } from "../../../lib/scans/retained-consent-vendor";
 import { readCaliforniaPrivacyReviewFromConsent } from "@certscore/contracts";
-import { projectCaliforniaRegulatoryPriorities } from "../../../lib/scans/california-regulatory-priorities";
-import { projectAccessibilityPriorities } from "../../../lib/scans/accessibility-priority";
 import { projectCmpAudit } from "../../../lib/scans/cmp-audit-projection";
-import { groupAccessibilityPriorityEntries } from "../../../lib/scans/accessibility-priority-group";
-import { comparePriorityReviewFindings } from "../../../lib/scans/priority-review-order";
-import { describePostRejectFinding } from "../../../lib/scans/post-reject-finding-copy";
 import { readAccessibilityAudit, projectAccessibilityAuditSummary } from "../../../lib/scans/accessibility-audit-evidence";
-import { projectScanFormsSummary, projectScanScoreExplanation } from "../../../lib/api-v2/scan-report-summary";
-import { projectPostAcceptForms } from "../../../lib/scans/post-accept-form-projection";
+import { projectScanScoreExplanation } from "../../../lib/api-v2/scan-report-summary";
+import { projectReportFormInventory } from "../../../lib/scans/report-form-inventory";
 import { projectRetainedActionTimeline } from "../../../lib/scans/action-timeline-projection";
 import { readPrivacyAuditEvidence } from "../../../lib/scans/report-review-focus";
-import { projectFormDestinationPriority } from "../../../lib/scans/form-destination-report";
-import { formDestinationProjectionSchema } from "@certscore/contracts";
-import { projectCmsSecurityPriority } from "../../../lib/scans/cms-security-report";
+import { FORM_DESTINATION_FINDING_ID, formDestinationProjectionSchema } from "@certscore/contracts";
 import { cmsSecurityProjectionSchema } from "@certscore/contracts";
 import { projectExecutiveRuntimeCards } from "../../../lib/scans/executive-runtime-cards";
-import { selectSiteIntegrityFinding, projectStartingPageSiteIntegrityReport, projectSiteIntegrityPriority } from "../../../lib/scans/site-integrity-report";
+import { selectSiteIntegrityFinding, projectStartingPageSiteIntegrityReport } from "../../../lib/scans/site-integrity-report";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../../../lib/scans/after-action-report-eligibility";
 import { readChoicePathExecution } from "../../../lib/scans/choice-path-execution";
 import { consentControlReportLabels } from "../../../lib/scans/consent-control-report";
 import type { ReviewedPolicy } from "../../../lib/scans/full-site-resource-context";
-import { buildRetainedRequestInventory } from "../../../lib/scans/retained-request-inventory";
-import { buildSinglePageResourceInventory } from "../../../lib/scans/single-page-resource-inventory";
+import { projectReportRuntimeInventory } from "../../../lib/scans/report-runtime-inventory";
 import { afterClickCoverage } from "../after-action-summary";
 import { projectScanReportNoGo } from "../../../lib/scans/scan-report-disposition";
 import { siteMetadataProjectionSchema } from "@certscore/contracts";
@@ -34,17 +27,10 @@ import { getReportableGdprEprivacyCoverageItems } from "../../../lib/scans/gdpr-
 import { GDPR_TRANSPARENCY_REPORT_ROW_ID_SET } from "../../../lib/scans/gdpr-transparency-report-contract";
 import { hydrateChecklistPolicyEvidence } from "../../../lib/scans/checklist-evidence-index";
 import type { UnifiedFindingDisplayPacket } from "../../../lib/scans/unified-findings";
-import {
-  buildChecklistConcernTopFindings,
-  selectCanonicalHighPriorityFindings,
-} from "../../../lib/scans/checklist-concern-top-findings";
-import { projectExecutiveFindingsFromUnifiedPackets } from "../../../lib/scans/executive-findings-projection";
-import type { CertScoreFinding } from "../../../lib/scans/finding-registry";
 import { getHybridRuntimeEvidence } from "../../../lib/scans/hybrid-runtime-evidence";
 import { verifiedPolicyDocumentUrls } from "../../../lib/scans/verified-policy-document-urls";
 import {
   buildNonEssentialInventoryTallies,
-  buildRuntimeInventoryProjectionFromScan,
   classifyInventoryEvidence,
   getInventoryObservationNames,
 } from "../../../lib/scans/runtime-inventory-projection";
@@ -67,36 +53,6 @@ import type {
 import { buildAssessmentHighlightsPresentation } from "../../../lib/scans/assessment-highlights";
 import { HIDDEN_DETAILED_EVIDENCE_ROW_IDS } from "../../../lib/scans/report-evidence-navigation";
 import { buildGpcResponseReportProjection, projectGpcTimeline } from "./gpc-report-projection";
-
-const CHECKLIST_GROUPS = {
-  consent: new Set([
-    "consent_surface_observed",
-    "cmp_framework_signal_observed",
-    "reject_all_path_availability",
-    "accept_consent_control",
-    "options_settings_preferences_control",
-    "post_reject_tracking_reduction",
-    "cookie_notice_policy_availability",
-  ]),
-  tracking: new Set([
-    "pre_consent_third_party_tracking",
-    "third_party_iframe_pre_consent",
-    "social_media_embed_pre_consent",
-    "embedded_content_pre_consent",
-  ]),
-  runtime: new Set([
-    "pre_consent_cookies_storage",
-    "session_replay_fingerprinting_review",
-    "device_identification_fingerprinting_signal_observed",
-  ]),
-  transport: new Set([
-    "transport_security_https_delivery",
-    "transport_security_tls_certificate",
-    "transport_security_http_redirect",
-    "transport_security_mixed_content",
-    "transport_security_form_transport",
-  ]),
-} as const;
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -247,37 +203,6 @@ function checklistStatus(item: GdprEprivacyCoverageChecklistItem): ShadowEvidenc
   return "Context";
 }
 
-function checklistEvidenceJson(item: GdprEprivacyCoverageChecklistItem) {
-  return {
-    assessmentStatus: item.assessmentStatus,
-    checklistItemId: item.id,
-    coverageArea: item.label,
-    evidenceState: item.evidenceState,
-    explanation: item.explanation,
-    note: item.note,
-    status: item.status,
-    subchecks: item.subchecks,
-    tone: item.tone,
-    ...item.criticalEvidence,
-  };
-}
-
-function isPersistenceOnlyRejectEvidence(value: unknown) {
-  const evidence = record(value);
-  if (!evidence) return false;
-  const count = recordNumber(evidence, [
-    "preConsentStorageNotClearedCount",
-    "pre_consent_storage_not_cleared_count",
-  ]) ?? 0;
-  return count > 0 &&
-    evidence.storagePresenceDoesNotEstablishActiveUse === true &&
-    evidence.scoreEffect === "none" &&
-    evidence.postRejectNonEssentialActivityRetained !== true &&
-    evidence.post_reject_non_essential_activity_retained !== true &&
-    evidence.refusalSignalContradictsAction !== true &&
-    evidence.refusal_signal_contradicts_action !== true;
-}
-
 function collectKeyedStrings(
   value: unknown,
   keyPattern: RegExp,
@@ -324,15 +249,7 @@ function policyEvidenceForRow(item: GdprEprivacyCoverageChecklistItem, capturedA
 }
 
 function mapChecklistRow(item: GdprEprivacyCoverageChecklistItem, capturedAt: string): ShadowEvidenceRow {
-  const evidenceJson = checklistEvidenceJson(item);
-  const retainedEvidence = record(evidenceJson.retainedEvidence);
-  const persistenceOnly = item.id === "post_reject_tracking_reduction" &&
-    isPersistenceOnlyRejectEvidence(retainedEvidence);
-  const title = item.id === "post_reject_tracking_reduction"
-    ? describePostRejectFinding(retainedEvidence)?.title ?? (persistenceOnly
-      ? "Same non-essential identifier remained stored after Reject"
-      : "Non-essential activity after confirmed Reject")
-    : item.label;
+  const { evidenceJson, title } = reportPriorityEvidenceRow(item);
   return {
     canonicalEvidenceJson: JSON.stringify(evidenceJson, (_key, value) => typeof value === "bigint" ? value.toString() : value, 2),
     correctionSteps: [],
@@ -388,75 +305,6 @@ function summarizeEvidenceRows(rows: ShadowEvidenceRow[]) {
   return counts;
 }
 
-function mapChecklistFinding(
-  finding: CertScoreFinding,
-  rank: number,
-  evidenceRows: ShadowEvidenceRow[],
-): ShadowFinding {
-  const policyEvidence = finding.evidenceDetails?.policyEvidenceDetails;
-  const rowId = typeof policyEvidence?.rowId === "string" ? policyEvidence.rowId : null;
-  const row = rowId ? evidenceRows.find((candidate) => candidate.id === rowId) : null;
-  const concernKind = typeof policyEvidence?.regulatoryConcernKind === "string"
-    ? policyEvidence.regulatoryConcernKind
-    : null;
-  const category = (() => {
-    if (!row) return finding.section;
-    if (CHECKLIST_GROUPS.runtime.has(row.id)) return "Pre-consent runtime";
-    if (CHECKLIST_GROUPS.tracking.has(row.id)) return "Tracking & external services";
-    if (CHECKLIST_GROUPS.consent.has(row.id)) return "Consent surface";
-    if (CHECKLIST_GROUPS.transport.has(row.id)) return "Transport security";
-    if (/privacy|policy|disclosure|retention|rights|transfer|controller|recipient/i.test(row.id)) return "Policy & transparency";
-    return finding.section;
-  })();
-  const postRejectCopy = row?.id === "post_reject_tracking_reduction"
-    ? describePostRejectFinding(row.evidenceJson.retainedEvidence) : null;
-  const summary = (() => {
-    if (postRejectCopy) return postRejectCopy.summary;
-    if (finding.id === "acceptance_signal_contradicts_action") {
-      return "The visitor clicked Accept, but the consent record saved afterward still said analytics and advertising were not allowed. The saved record should match the visitor’s choice.";
-    }
-    if (row?.id !== "pre_consent_cookies_storage") return finding.shortSummary;
-    const retainedEvidence = record(row.evidenceJson.retainedEvidence);
-    const evidenceRefs = retainedEvidence?.evidenceRefs;
-    const firstRef = Array.isArray(evidenceRefs)
-      ? evidenceRefs.find((value): value is string => typeof value === "string" && value.trim().length > 0)
-      : null;
-    if (!firstRef) return finding.shortSummary;
-    return `Cookies or browser storage were retained before consent. First retained item: ${firstRef.replace(/[.\s]+$/, "")}. Essentiality was not confirmed for every item.`;
-  })();
-  const evidence = postRejectCopy
-    ? finding.evidencePreview.map((item) => item.replace(/Post-choice tracking reduction/gi, postRejectCopy.title))
-    : finding.evidencePreview;
-  return {
-    correctionSteps: row?.correctionSteps.length ? row.correctionSteps : [finding.remediation],
-    ...(finding.section === "Accessibility" ? { priority: "high" as const } : {}),
-    evidence: [...evidence, ...[finding.evidenceDetails?.policyEvidenceDetails?.primaryRuntimeSignal,
-      ...(Array.isArray(finding.evidenceDetails?.policyEvidenceDetails?.groupedRuntimeSignals) ? finding.evidenceDetails.policyEvidenceDetails.groupedRuntimeSignals : [])]
-      .flatMap(signal => signal && typeof signal === "object" && "shortSummary" in signal && typeof signal.shortSummary === "string" ? [signal.shortSummary] : [])],
-    evidenceJson: {
-      ...(row?.evidenceJson ?? {}),
-      groupedEvidence: Array.isArray(policyEvidence?.groupedRuntimeSignals)
-        ? policyEvidence.groupedRuntimeSignals.flatMap(signal => {
-            const id = record(signal)?.id;
-            const supportingRow = evidenceRows.find(candidate => candidate.id === id);
-            return supportingRow ? [{ id, label: supportingRow.title, evidence: supportingRow.evidenceJson }] : [];
-          }) : [],
-      evidenceDetails: finding.evidenceDetails,
-      evidenceRefs: finding.evidenceRefs,
-      findingId: finding.id,
-    },
-    focus: category,
-    id: finding.id,
-    rank,
-    status: finding.section === "Accessibility" ? "Observed" : concernKind === "partial_rating" || finding.id === "acceptance_signal_contradicts_action"
-      ? "Partial concern"
-      : "Potential gap",
-    summary,
-    title: postRejectCopy?.title ?? finding.label,
-    vendors: [],
-  };
-}
-
 function scoreLabel(score: number) {
   if (score < 40) return "Review";
   if (score < 70) return "Watch";
@@ -485,10 +333,6 @@ function reportUrl(scanRecord: ScanDetailResponse) {
   return recordString(snapshot, ["final_effective_url", "requested_url", "page_url"])
     ?? recordString(config, ["url", "targetUrl", "target_url", "normalizedUrl", "normalized_url"])
     ?? (scanRecord.scan.domainHostname ? `https://${scanRecord.scan.domainHostname}` : "");
-}
-
-function countFormFields(forms: Array<{ fields: unknown[] }>) {
-  return forms.reduce((total, form) => total + form.fields.length, 0);
 }
 
 function displayLabel(value: string) {
@@ -683,31 +527,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const evidenceRows = reportableChecklistRows.map((item) => mapChecklistRow(item, capturedAt));
   const consentControlSummary = canonical.consentControlSummary ?? null;
   const controls = consentControlReportLabels(consentControlSummary);
-  const executiveUnifiedFindings = projectExecutiveFindingsFromUnifiedPackets(
-    canonical.ownerUnifiedFindings.filter(
-      (finding) => finding.unifiedFindingId === "acceptance_signal_contradicts_action",
-    ),
-  ).topFindings;
-  let findings = selectCanonicalHighPriorityFindings([
-    ...buildChecklistConcernTopFindings(reportableChecklistRows),
-    ...executiveUnifiedFindings,
-    ...projectAccessibilityPriorities(canonical.ownerUnifiedFindings),
-  ]).map((finding, index) => mapChecklistFinding(finding, index + 1, evidenceRows));
-  const formDestinationPriority = projectFormDestinationPriority(canonical.ownerUnifiedFindings);
-  if (formDestinationPriority) findings.unshift({ ...formDestinationPriority, rank: 1, focus: "Form destinations", vendors: [] });
-  const cmsPriority = projectCmsSecurityPriority(canonical.ownerUnifiedFindings);
-  if (cmsPriority) findings.unshift({ ...cmsPriority, rank: 1, focus: "CMS security", vendors: [] });
-  const integrityPriority = projectSiteIntegrityPriority(canonical.ownerUnifiedFindings);
-  if (integrityPriority) findings.push({ ...integrityPriority, rank: findings.length + 1, focus: "Site integrity", vendors: [] });
-  findings.push(...projectCaliforniaRegulatoryPriorities(canonical.ownerUnifiedFindings).map(finding => ({ ...finding, rank: 1, focus: "CCPA/CPRA", vendors: [] })));
-  findings.sort(comparePriorityReviewFindings);
-  findings = groupAccessibilityPriorityEntries(findings);
-  findings.forEach((finding, index) => { finding.rank = index + 1; });
-  const inventoryProjection = buildRuntimeInventoryProjectionFromScan(scanRecord);
-  const retainedRequests = buildRetainedRequestInventory(getHybridRuntimeEvidence(scanRecord.runtimeArtifacts));
-  const resourceInventory = buildSinglePageResourceInventory(scanRecord.scan.id, inventoryProjection.ungroupedRows, retainedRequests, reviewedPolicies);
-  const inventorySummary = inventoryProjection.inventorySummary.map(metric =>
-    ["Requests", "Network requests"].includes(metric.label) && resourceInventory.requestMetric ? resourceInventory.requestMetric : metric);
+  const findings = projectReportPriorityFindings(reportableChecklistRows, canonical.ownerUnifiedFindings);
+  const { projection: inventoryProjection, resources: resourceInventory, inventorySummary } = projectReportRuntimeInventory(scanRecord, reviewedPolicies);
   const inventory = inventoryProjection.ungroupedRows.map((row) => ({
     category: row.macroCategory,
     confidence: row.confidence.replace(/_/g, " "),
@@ -816,7 +637,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const assessedScore = recordNumber(snapshot, ["certscore_overall"]) ?? canonicalScore;
   const score = Math.max(0, Math.min(100, assessedScore ?? 0));
   const forms = canonical.collectionSurfaceAssessment?.forms ?? [];
-  const afterAcceptForms = projectPostAcceptForms(scanRecord);
+  const formInventory = projectReportFormInventory(scanRecord, canonical);
   const privacyRows = evidenceRows.filter((row) => GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(row.id) || row.id === "outdated_transfer_framework_reference");
   const scoreExplanation = projectScanScoreExplanation(scanRecord, score);
   const californiaPrivacyReview = readCaliforniaPrivacyReviewFromConsent(retainedConsentAssessment(scanRecord));
@@ -876,7 +697,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     accessibilityAudit,
     accessibilityEvidence,
     formDestinations: (() => { const parsed = formDestinationProjectionSchema.safeParse(runtimeArtifacts?.formDestinations); return parsed.success ? parsed.data : null; })(),
-    formDestinationWarning: Boolean(formDestinationPriority),
+    formDestinationWarning: findings.some(finding => finding.id === FORM_DESTINATION_FINDING_ID),
     cmsSecurity: (() => { const cms = cmsSecurityProjectionSchema.safeParse(runtimeArtifacts?.cmsSecurity); return cms.success ? cms.data : null; })(),
     collectionFields,
     runtimeEvidenceGraph: inventoryProjection.runtimeEvidenceGraph,
@@ -938,18 +759,12 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     inventory,
     inventorySummary,
     resourceInventory,
-    afterAcceptFormsLimited: afterAcceptForms.limited,
-    collectionTableRows: [...forms.map(form => {
-      const candidates = record(scanRecord.runtimeArtifacts)?.formSnapshots;
-      const snapshot = Array.isArray(candidates) ? candidates.map(record).find(item => item?.formRef === form.formRef && item?.sourceInventoryHash === canonical.collectionSurfaceAssessment?.sourceHash && item?.pageUrl === form.pageUrl) : null;
-      return { id: form.formRef, form, capturedAt: typeof snapshot?.capturedAt === "string" ? snapshot.capturedAt : "", snapshot: snapshot?.status === "available"
-        ? { status: "available" as const, url: `/api/scans/${encodeURIComponent(scanRecord.scan.id)}/form-snapshot?formRef=${encodeURIComponent(form.formRef)}` }
-        : { status: snapshot?.status === "withheld" ? "withheld" as const : "unavailable" as const, ...(typeof snapshot?.reason === "string" ? { reason: snapshot.reason } : {}) } };
-    }), ...afterAcceptForms.rows],
+    afterAcceptFormsLimited: formInventory.afterAcceptLimited,
+    collectionTableRows: formInventory.rows,
     metrics: {
       domains: vendorSurface.thirdPartyDomains.length,
-      fields: countFormFields(forms),
-      forms: forms.length,
+      fields: formInventory.rows.reduce((total, row) => total + row.form.fields.length, 0),
+      forms: formInventory.rows.length,
       nonEssentialCookiesStorage: nonEssentialInventoryTallies.cookiesStorage,
       nonEssentialRequests: nonEssentialInventoryTallies.requests,
       thirdPartyEmbeds: inventoryProjection.embedRows.filter((row) => row.party === "third_party").length,
@@ -962,7 +777,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     relatedRows: [],
     scan: buildReportIdentity(scanRecord),
     score: { label: scoreLabel(score), value: score },
-    formsSummary: projectScanFormsSummary(scanRecord),
+    formsSummary: formInventory.summary,
     scoreExplanation,
     timeline,
     trackingExternalRows: evidenceRows.filter((row) => CHECKLIST_GROUPS.tracking.has(row.id)),

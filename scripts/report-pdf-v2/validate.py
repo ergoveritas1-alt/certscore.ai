@@ -23,6 +23,9 @@ def check(path):
     assert len(reader.pages) == layout["pages"]
     assert layout["passes"][-1]["targets"] == layout["passes"][-2]["targets"]
     assert layout["passes"][-1]["pages"] == layout["passes"][-2]["pages"]
+    if model and model.get("issues"):
+        targets=layout["passes"][-1]["targets"]
+        assert targets[model["issues"][0]["id"]] == targets["findings"], (path.name,"orphan priority heading or shifted first-card anchor")
     fonts = set()
     links = 0
     minimum = float("inf")
@@ -31,17 +34,20 @@ def check(path):
         # The summary's independent card rows must remain aligned as content
         # changes. Background rectangles capture the full card geometry.
         first=pdf.pages[0]
-        kpis=[r for r in first.rects if abs(r["width"]-(first.width-96)/4)<.1]
+        words=first.extract_words()
+        topic_y=next(w["top"] for w in words if w["text"]=="Topic")
+        card_width=(first.width-96)/4
+        kpis=[r for r in first.rects if abs(r["width"]-card_width)<.1 and r["top"]<topic_y]
         assert len(kpis)==4, (path.name,"missing KPI cards")
         assert max(r["top"] for r in kpis)-min(r["top"] for r in kpis)<.1
         assert max(r["height"] for r in kpis)-min(r["height"] for r in kpis)<.1
-        topics=[r for r in first.rects if abs(r["width"]-(first.width-80)/2)<.1]
+        topics=[r for r in first.rects if abs(r["width"]-card_width)<.1 and r["top"]>topic_y]
         topic_count=len(model["topics"]) if model else 7
-        assert len(topics)==topic_count//2*2, (path.name,"missing topic cards")
-        if topic_count%2:
-            assert len([r for r in first.rects if abs(r["width"]-(first.width-72))<.1])==1, (path.name,"missing full-width final topic")
-        for left,right in zip(topics[::2],topics[1::2]):
-            assert abs(left["top"]-right["top"])<.1 and abs(left["height"]-right["height"])<.1
+        assert len(topics)==topic_count, (path.name,"missing four-column topic cards")
+        for start in range(0,len(topics),4):
+            row=topics[start:start+4]
+            assert max(r["top"] for r in row)-min(r["top"] for r in row)<.1
+        if model and model.get("issues"):assert layout["passes"][-1]["targets"]["findings"]==2, (path.name,"executive summary overflowed page one")
         for n, page in enumerate(pdf.pages, 1):
             texts.append(page.extract_text() or "")
             for char in page.chars:
@@ -57,7 +63,7 @@ def check(path):
     if model:
         if any(t["status"]=="Manual review" for t in model["topics"]):assert "Manual check" in all_text
         if any(t["status"]=="Needs review" for t in model["topics"]):assert "Review" in all_text
-    forbidden = r"site_integrity:|canonical_cookie_registry|unknown_or_partial|not_detected|tag_management|consent_management|session_replay|&lt;|&amp;|Not Not|p\.\s*—|score effect|deduction|\[PLACEHOLDER|Global Privacy Control|\bGPC\b|California privacy.choice|sale / sharing|Needs review|Manual review|Review findings"
+    forbidden = r"<link|<font|site_integrity:|canonical_cookie_registry|unknown_or_partial|not_detected|tag_management|consent_management|session_replay|&lt;|&amp;|Not Not|p\.\s*—|score effect|deduction|\[PLACEHOLDER|Global Privacy Control|\bGPC\b|California privacy.choice|sale / sharing|Needs review|Manual review|Review findings"
     assert not re.search(forbidden, all_text, re.I), (path.name, "unrendered or prohibited copy", re.findall(forbidden, all_text, re.I))
     for page in reader.pages:
         for font_ref in page["/Resources"].get("/Font", {}).values():
@@ -109,10 +115,10 @@ def main():
         cases = [("a4-no-logo", copy.deepcopy(model), "a4"),
                  ("letter-no-logo", copy.deepcopy(model), "letter")]
         empty = copy.deepcopy(model)
-        empty.update(findings=[], issues=[], retest=None)
+        empty.update(findings=[], issues=[], otherIssues=[], priorities=[], retest=None)
         cases.append(("zero-findings", empty, "letter"))
         missing = copy.deepcopy(model)
-        missing.update(findings=[], issues=[], retest=None)
+        missing.update(findings=[], issues=[], otherIssues=[], priorities=[], retest=None)
         missing["sections"] = [s for s in missing["sections"] if s["id"] != "choice-reject"]
         missing["metrics"][2]["value"] = "Unknown"
         cases.append(("no-reject-result", missing, "letter"))

@@ -1,3 +1,5 @@
+import { reportRequestInventory } from "./report-request-inventory";
+import { REPORT_TRANSPORT_CHECKS } from "../../lib/scans/report-runtime-inventory";
 import { pdfNarrativeFindings } from "./report-pdf-evidence";
 import type { CanonicalReportExport } from "./report-export";
 import type { PdfLine } from "./report-export-pdf";
@@ -6,7 +8,7 @@ import { wrapPdfText } from "./report-pdf-fonts";
 import { evidenceSectionCounts, cmsEvidenceVersionLabel } from "../../lib/scans/detailed-evidence-presentation";
 import { TECHNOLOGY_NAMES, TECHNOLOGY_CATEGORY_LABELS, TECHNOLOGY_SCOPE_LABELS } from "@certscore/contracts";
 import { projectConsentControlReport } from "../../lib/scans/consent-control-report";
-import { pdfChoiceWindows, pdfInventoryRows, pdfTimingEvents, pdfRejectTimingEvents } from "./report-pdf-reader";
+import { pdfChoiceWindows, pdfInventoryRows, pdfTimingEvents, pdfRejectTimingEvents, reportFormInventory } from "./report-pdf-reader";
 import { reportSectionInFocus } from "../../lib/scans/report-framework-scope";
 import { reportStatusLabel } from "../../lib/scans/report-status-presentation";
 
@@ -28,14 +30,14 @@ export function pdfEvidenceTable(id: string, headers: string[], rows: string[][]
   const columnWidths = widths ?? headers.map(() => 512 / headers.length);
   const headerCells = headers.map((header, index) => wrapPdfText(header, columnWidths[index]! - 16, 8, true));
   const result: PdfLine[] = [{ text: headers.join(" | "), kind: "tableHeader", tableId: id,
-    cells: headerCells, columnWidths, reservedHeight: Math.max(...headerCells.map(cell => cell.length)) * 11 + 8, gapBefore: 8 }];
+    cells: headerCells, sourceCells: headers, columnWidths, reservedHeight: Math.max(...headerCells.map(cell => cell.length)) * 11 + 8, gapBefore: 8 }];
   for (const row of rows) {
     const wrapped = row.map((cell, index) => wrapPdfText(cell, columnWidths[index]! - 16, 8));
     const count = Math.max(...wrapped.map(cell => cell.length));
     for (let start = 0; start < count; start += 40) {
       const cells = wrapped.map(cell => cell.slice(start, start + 40));
       const height = Math.max(1, ...cells.map(cell => cell.length)) * 11 + 8;
-      result.push({ text: row.join(" | "), kind: "tableRow", tableId: id, cells, columnWidths, reservedHeight: height });
+      result.push({ text: row.join(" | "), kind: "tableRow", tableId: id, cells, columnWidths, sourceCells: start === 0 ? row : undefined, tableRowContinuation: start > 0, reservedHeight: height });
     }
   }
   if (result[1]) result[0]!.keepWithNextHeight = result[1].reservedHeight;
@@ -69,7 +71,7 @@ export function pdfPolicyEvidenceLines(report: CanonicalReportExport, layout: La
     return `${candidate.slice(0, boundary > 90 ? boundary : 180)}...`;
   };
   const lines: PdfLine[] = [...layout.text(appendix.scopeNote, 9),
-    ...layout.text("Condensed disclosure evidence. Excerpts below are shortened for this PDF; full passages, detailed checks and provenance remain in the JSON workpaper.", 9)];
+    ...layout.text("Condensed disclosure evidence. Excerpts below are shortened for this report; full passages, detailed checks and provenance remain in the JSON workpaper.", 9)];
   if (sources.length) lines.push(layout.heading("Policy sources"));
   sources.forEach((source, index) => {
     const detail = details.find(item => item.facts.some(fact => isSource(fact.label) && fact.value === source));
@@ -106,10 +108,12 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
   const sections: Record<PdfReportTopic, PdfLine[]> = { consent: [], storage: [], policy: [], forms: [], security: [], external: [], tls: [], accessibility: [] };
   const dossier = report.appendix.evidenceDossier;
   const runtime = report.appendix.cookieAndTrackerInventory;
+  const requests = reportRequestInventory(report);
   const findings = pdfNarrativeFindings(report);
   const controls = projectConsentControlReport(report.consentControlAssessment, report.scan.id);
   const cmp = dossier?.cmp;
   const collection = report.appendix.dataCollectionSurfaces;
+  const formInventory = reportFormInventory(report);
   const cms = dossier?.cmsSecurity;
   const { storage: storageRows, external: externalRows } = pdfInventoryRows(report);
   const domainCount = (rows: typeof runtime.rows) => new Set(rows.flatMap(row => row.domains)).size;
@@ -120,9 +124,9 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
     consent: [{ label: "CMP checks", value: cmp ? String(cmp.audit.rows.length) : "Unavailable" }, { label: "First-layer choices observed", value: controls ? `${Object.values(controls.controls).filter(state => state === "observed").length} / 3` : "Unavailable" }, { label: "CMP provider", value: cmp?.audit.experience?.provider ?? cmp?.provider ?? "Not retained" }],
     storage: [{ label: "Cookie rows", value: String(runtime.summary.cookieRows) }, { label: "Local / session storage rows", value: String(runtime.summary.storageRows ?? 0) }, { label: "Retained domains", value: String(domainCount(storageRows)) }],
     policy: report.reviewFocus==="ccpa_cpra"?[{label:"California review areas",value:String(report.californiaScore?.reviewCoverage?.families.length??"Not retained") }]:[{ label: "Disclosure checks", value: String(report.appendix.gdprTransparency.rows.length) }, { label: "Retained policy source URLs", value: String(policySources.size) }, { label: "Retained policy passages", value: String(policyPassages.size) }],
-    forms: [{ label: "Retained forms", value: String(collection.summary.totalForms) }, { label: "Retained fields", value: String(collection.summary.totalFields) }, { label: "Destination request records", value: dossier?.formDestinations ? String(dossier.formDestinations.trace.requests.length) : "Not retained" }],
-    security: [{ label: "CMS platforms", value: cms ? String(cms.assessment.detections.length) : "Not retained" }, { label: "Plugins", value: cms?.pluginInventory ? String(cms.pluginInventory.detections.length) : "Not retained" }, { label: "Transport security checks", value: String((report.gdprEprivacyReview?.rows ?? []).filter(row => ["security", "tls"].includes(pdfTopicForRow(row.id) ?? "")).length) }],
-    external: [{ label: "Service rows shown", value: String(externalRows.length) }, { label: "Retained domains", value: String(domainCount(externalRows)) }, { label: "Request evidence rows", value: String(runtime.summary.requestEvidenceRows) }],
+    forms: [{ label: "Observed form records", value: String(formInventory.totalForms) }, { label: "Retained fields", value: String(formInventory.totalFields) }, { label: "Destination request records", value: dossier?.formDestinations ? String(dossier.formDestinations.trace.requests.length) : "Not retained" }],
+    security: [{ label: "CMS platforms", value: cms ? String(cms.assessment.detections.length) : "Not retained" }, { label: "Plugins", value: cms?.pluginInventory ? String(cms.pluginInventory.detections.length) : "Not retained" }, { label: "Transport security checks", value: String((report.gdprEprivacyReview?.rows ?? []).filter(row => REPORT_TRANSPORT_CHECKS.some(([, id]) => id === row.id)).length) }],
+    external: requests ? [{ label: "Identified services", value: String(requests.metric!.overview?.identifiedServices ?? "Unavailable") }, { label: "Request hosts", value: String(requests.distinctHosts) }, { label: "Request events", value: String(requests.metric!.value) }] : [{ label: "Service rows shown", value: String(externalRows.length) }, { label: "Retained domains", value: String(domainCount(externalRows)) }, { label: "Request evidence rows", value: String(runtime.summary.requestEvidenceRows) }],
     tls: [{ label: "TLS checklist rows", value: String((report.gdprEprivacyReview?.rows ?? []).filter(row => pdfTopicForRow(row.id) === "tls").length) }, { label: "Projected findings", value: String(findings.filter(finding => pdfTopicForFinding(finding) === "tls").length) }, { label: "Evidence scope", value: "Starting page" }],
     accessibility: [{ label: "Failed automated rules", value: value(report.accessibilityAudit?.failedRuleCount) }, { label: "Affected nodes", value: value(report.accessibilityAudit?.affectedNodeCount) }, { label: "Manual checks", value: value(report.accessibilityAudit?.reviewRuleCount) }],
   };

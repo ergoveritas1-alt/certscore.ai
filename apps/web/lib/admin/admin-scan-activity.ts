@@ -1,5 +1,12 @@
 import { adminOperationalSnapshotHref } from "./admin-operational-snapshot";
 
+/** Recency at the same refresh as the displayed snapshot; missing is not zero. */
+export function adminScanMinutesSince(lastScanAt: string | null | undefined, refreshedAt: string): number | null {
+  if (!lastScanAt) return null;
+  const elapsed = Date.parse(refreshedAt) - Date.parse(lastScanAt);
+  return Number.isFinite(elapsed) && elapsed >= 0 ? Math.floor(elapsed / 60_000) : null;
+}
+
 export const ADMIN_SCAN_ACTIVITY_PERIODS = ["1h", "4h", "12h", "24h", "7d", "30d", "31d", "1y", "all"] as const;
 export type AdminScanActivityPeriod = typeof ADMIN_SCAN_ACTIVITY_PERIODS[number];
 

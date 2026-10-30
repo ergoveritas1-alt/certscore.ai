@@ -19,6 +19,7 @@ import { StatusBadge } from "../../components/scans/report-finding-row";
 import { SitePriorityReview } from "../../components/scans/site-priority-review";
 import { buildDetailedEvidenceExport } from "./detailed-evidence-report";
 import { buildRegulatoryAssessmentHighlights } from "./regulatory-assessment-highlights";
+import { ASSESSMENT_HIGHLIGHTS_MAX_LENGTH, buildAssessmentHighlightsPresentation } from "./assessment-highlights";
 
 function fixture() {
   const projection = accessibilityProjectionFixture();
@@ -239,23 +240,29 @@ test("privacy concerns lead accessibility without changing canonical statuses or
 test("executive overview preserves the privacy lead and reports accessibility alongside the other consent finding", () => {
   const { packets } = fixture();
   const accessibility = buildSitePriorityReview([], [], [], packets);
-  const copy = buildExecutiveOverview({
-    findings: [{ title: "Classified non-essential pre-consent storage", summary: "Storage was retained before consent." },
-      { title: "Decline consent control", summary: "No refusal control was retained." }, ...accessibility],
-  });
+  const findings = [{ title: "Classified non-essential pre-consent storage", summary: "Storage was retained before consent." },
+    { title: "Decline consent control", summary: "No refusal control was retained." }, ...accessibility];
+  const copy = buildExecutiveOverview({ findings });
   assert.ok(copy.indexOf("pre-consent storage") < copy.indexOf("Semantic labeling accessibility issue"), copy);
-  assert.match(copy, /Other findings: “Decline consent control”/);
-  assert.match(copy, /Form controls lacked associated labels/);
+  assert.match(copy, /“Decline consent control”: No refusal control was retained/);
+  assert.match(copy, /Other findings: “Semantic labeling accessibility issue/);
+  assert.ok(copy.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
+  const expanded = buildAssessmentHighlightsPresentation(findings, { kind: "page" }).expanded!.text;
+  assert.match(expanded, /Form controls lacked associated labels/);
   assert.doesNotMatch(copy, /3 priority issues/);
   assert.doesNotMatch(copy, /element instances|manual review|Tracking activity and cookies\/storage/);
 });
 
 test("executive copy uses the projected accessibility group without adding unprojected audit counts", () => {
   const { packets } = fixture();
-  const copy = buildExecutiveOverview({ findings: buildSitePriorityReview([], [], [], packets) });
+  const findings = buildSitePriorityReview([], [], [], packets);
+  const copy = buildExecutiveOverview({ findings });
   assert.match(copy, /^“Semantic labeling accessibility issue/);
-  assert.match(copy, /Form controls lacked associated labels; Buttons lacked discernible accessible names/);
-  assert.match(copy, /Images lacked required text alternatives/);
+  assert.ok(copy.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
+  assert.match(copy, /Correct the flagged accessible names and control semantics/);
+  const expanded = buildAssessmentHighlightsPresentation(findings, { kind: "page" }).expanded!.text;
+  assert.match(expanded, /Form controls lacked associated labels; Buttons lacked discernible accessible names/);
+  assert.match(expanded, /Images lacked required text alternatives/);
   assert.doesNotMatch(copy, /4 accessibility issues|critical|high-impact|site-wide breakdown|narrow review|visitor choice/i);
 });
 

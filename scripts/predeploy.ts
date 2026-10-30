@@ -382,7 +382,7 @@ const TARGETS: Target[] = [
   {
     key: "report-presentation-scope",
     label: "report contracts and local PDF presentation",
-    matches: file => file.startsWith("packages/certscore-api-contracts/") || file.startsWith("scripts/report-pdf-v2/") || file === "scripts/preview-report-pdf-v2.ts",
+    matches: file => file.startsWith("packages/certscore-api-contracts/") || file.startsWith("scripts/report-pdf-v2/") || file === "scripts/preview-report-pdf-v2.ts" || file === "scripts/preview-report-docx.ts" || file === "scripts/report-score-glyphs.py" || file === "apps/web/server/scans/assets/report-score-glyphs.json" || file === "scripts/report-evidence-framework-route.test.ts" || file === "scripts/report-cross-surface-parity.test.mts" || file === "scripts/audit-report-export-parity.ts",
     checks: [REPORT_PRESENTATION_CHECK],
   },
   {

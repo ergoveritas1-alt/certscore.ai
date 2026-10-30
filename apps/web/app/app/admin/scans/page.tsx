@@ -19,7 +19,7 @@ import { AdminTrafficFilters } from "../../../../components/admin/admin-traffic-
 import { AdminOperationalSnapshot } from "../../../../components/admin/admin-operational-snapshot";
 import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
 import { adminOperationalSnapshotDelta, adminOperationalSnapshotHref } from "../../../../lib/admin/admin-operational-snapshot";
-import { ADMIN_SCAN_ACTIVITY_PERIODS, adminScanActivityHref, adminScanActivityPeriodLabel, resolveAdminScanActivityPeriod } from "../../../../lib/admin/admin-scan-activity";
+import { ADMIN_SCAN_ACTIVITY_PERIODS, adminScanActivityHref, adminScanActivityPeriodLabel, resolveAdminScanActivityPeriod, adminScanMinutesSince } from "../../../../lib/admin/admin-scan-activity";
 import { adminTrafficScopeVisibility, resolveAdminTrafficScope } from "../../../../lib/admin/admin-traffic-scope";
 import {
   adminPolicyEvidenceDiagnosticTitle,
@@ -42,11 +42,21 @@ function CreatedViaCell({ scan }: { scan: AdminScanListItem }) {
   const title = origin?.requestId
     ? `Original creation request: ${origin.requestId} · ${formatAdminDateTime(origin.requestedAt)}`
     : "Creation source from retained scan metadata; original request details unavailable. Unknown means attribution could not be verified.";
-  return <td data-label="Created via" role="cell" className="px-2.5 py-1.5">
-    <p className="text-[9px] text-slate-500">Scan audience: {origin?.trafficClass ?? "unknown"}</p>
-    {origin?.requestId ? <details><summary className="cursor-pointer rounded bg-sky-50 px-2 py-1 text-sky-800" title={title}>{label}</summary><p className="mt-1 break-all text-[10px]">{origin.requestId}<br />{formatAdminDateTime(origin.requestedAt)}{origin.requestId.startsWith("pulse_req_") ? <Link className="block text-sky-700 underline" href={`/app/admin/pulse/${encodeURIComponent(origin.requestId)}`}>Open request</Link> : null}</p></details>
-      : <span className="inline-flex rounded bg-slate-50 px-2 py-1 text-slate-700" title={title}>{label}</span>}
-    {scan.rowKind === "request" ? <p className="mt-1 text-[10px] text-slate-500">Requested via: {SCAN_CREATION_SOURCES[scanCreationSource(scan.requestChannel)]}{scan.requestResolutionMode === "reused_existing_scan" ? " · Reused" : " · No new scan"}</p> : null}
+  const requestLabel = scan.rowKind === "request"
+    ? `Requested via: ${SCAN_CREATION_SOURCES[scanCreationSource(scan.requestChannel)]}${scan.requestResolutionMode === "reused_existing_scan" ? " · Reused" : " · No new scan"}`
+    : null;
+  const audienceLabel = `Scan audience: ${origin?.trafficClass ?? "unknown"}`;
+  return <td data-label="Created via" role="cell" className="relative px-2.5 py-1.5 has-[details[open]]:z-40">
+    <details className={basicTableStyles.details}>
+      <summary className="cursor-pointer truncate rounded bg-sky-50 px-1 text-sky-800" title={title}>{label}</summary>
+      <div className={basicTableStyles.popover}>
+        <p>{audienceLabel}</p>
+        {requestLabel ? <p>{requestLabel}</p> : null}
+        <p>{title}</p>
+        {origin?.requestId?.startsWith("pulse_req_") ? <Link className="text-sky-700 underline" href={`/app/admin/pulse/${encodeURIComponent(origin.requestId)}`}>Open request</Link> : null}
+      </div>
+    </details>
+    <p className="truncate text-[10px] text-slate-500" title={[audienceLabel, requestLabel].filter(Boolean).join(" · ")}>{requestLabel ?? audienceLabel}</p>
   </td>;
 }
 
@@ -208,9 +218,9 @@ function AdminScanSummaryCells({ scan }: { scan: AdminScanListItem }) {
 }
 
 function AdminBasicScanTable({ scans }: { scans: AdminScanListItem[] }) {
-  return <table aria-label="Basic scan activity" role="table" className={`${basicTableStyles.table} w-full table-fixed text-left text-xs`}>
+  return <table aria-label="Basic scan activity" role="table" className={`${basicTableStyles.table} ${basicTableStyles.basic} w-full table-fixed text-left text-xs`}>
     <colgroup>
-      {[10, 13, 10, 14, 5, 12, 12, 8, 8, 4, 4].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}
+      {[110, 180, 125, 260, 75, 210, 180, 80, 100, 55, 55].map((width, index) => <col key={index} style={{ width }} />)}
     </colgroup>
     <thead role="rowgroup" className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500"><tr role="row">
       {[...ADMIN_SCAN_SUMMARY_COLUMNS, { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }].map(({ label, title }) => <th role="columnheader" key={label} title={title} className="border-b border-slate-200 font-semibold">{label}</th>)}
@@ -440,6 +450,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
         breakdown={operationalSnapshot.regions.map((region) => ({ label: formatScanFromLabel(region.value as typeof SCAN_FROM_VALUES[number]), value: snapshotNumber(region.count), detail: `${region.runs} runs · ${region.requests} request-only`, href: snapshotHref({ scanFrom: region.value }) }))}
         health={{ label: m.newest_at ? `Latest matching activity: ${formatAdminDateTime(m.newest_at)}` : "No matching activity", status: m.newest_at ? "current" : "quiet" }}
         refreshedAt={formatAdminDateTime(operationalSnapshot.refreshedAt)}
+        minutesSinceLastScan={adminScanMinutesSince(m.newest_scan_at, operationalSnapshot.refreshedAt)}
         windowLabel={`${operationalSnapshot.window.start ? formatAdminDateTime(operationalSnapshot.window.start) : "All retained history"} — ${formatAdminDateTime(operationalSnapshot.window.end)} (exclusive cutoff)`}
         metrics={snapshotMetrics}
         period={activeTimeSpan}
@@ -503,8 +514,8 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           searchParams={{ createdVia: activeCreatedVia ?? "", q: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, traffic: trafficScope, details: showReportDetails ? "1" : "" }}
           showPageJump
         />
-        <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-          {showReportDetails ? <table className="w-[3957px] min-w-[3957px] table-fixed text-left text-xs">
+        <div role="region" aria-label="Scrollable scan activity table" tabIndex={0} className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600">
+          {showReportDetails ? <table aria-label="Detailed scan activity" className={`${basicTableStyles.table} w-[3957px] min-w-[3957px] table-fixed text-left text-xs`}>
             <colgroup>
               <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "115px" }} /><col style={{ width: "173px" }} /><col style={{ width: "75px" }} /><col style={{ width: "190px" }} /><col style={{ width: "170px" }} />
               <col style={{ width: "70px" }} /><col style={{ width: "100px" }} /><col style={{ width: "75px" }} /><col style={{ width: "65px" }} /><col style={{ width: "65px" }} /><col style={{ width: "65px" }} /><col style={{ width: "156px" }} />
@@ -539,7 +550,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                     <td className="px-2.5 py-1.5 font-medium tabular-nums text-slate-800" title="Distinct entities qualifying for a post-Reject deduction across cookies and services; — means unavailable or entity attribution unresolved">{scan.scoringEntityCounts?.reject ?? "—"}</td>
                     <td className="px-2.5 py-1.5 font-medium tabular-nums text-slate-800" title="Distinct entities with GPP propagation inconsistencies qualifying for the applied deduction; — means unavailable or not assessed">{scan.scoringEntityCounts?.gpp ?? "—"}</td>
                     <td className="px-2.5 py-1.5">
-                      <p className="line-clamp-2 break-words font-medium leading-4 text-slate-800" title={[cmpVendorName, evidenceTitle("Consent mechanism", matrix?.privacyConsent.mechanism ?? null)].filter(Boolean).join(" · ")}>
+                      <p className="truncate font-medium leading-4 text-slate-800" title={[cmpVendorName, evidenceTitle("Consent mechanism", matrix?.privacyConsent.mechanism ?? null)].filter(Boolean).join(" · ")}>
                         {cmpVendorName ?? <>Mechanism {evidenceMark(matrix?.privacyConsent.mechanism ?? null)}</>}
                       </p>
                       <p className="mt-0.5 flex gap-2 text-[10px]"><EvidenceCode code="Privacy" label="Privacy notice" result={matrix?.privacyConsent.privacyNotice ?? null} /><EvidenceCode code="CMP" label="CMP framework" result={matrix?.privacyConsent.cmp ?? null} /></p>
@@ -558,7 +569,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                     <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${freshness.className}`}>{freshness.label}</span></td>
                     <td className="px-2.5 py-1.5 font-medium uppercase text-slate-700" title={scan.primaryLanguage ? `${scan.primaryLanguageConfidence ?? "unknown"} confidence · ${(scan.primaryLanguageSource ?? "unknown").replaceAll("_", " ")}` : "No reliable retained language evidence"}>{scan.primaryLanguage ?? "—"}</td>
                     <td className="px-2.5 py-1.5" title={accessLabel}>
-                      <span className={`line-clamp-2 leading-4 ${status.label === "No-go" || status.label === "Failed" ? "font-semibold text-rose-700" : "text-slate-700"}`}>{accessLabel}</span>
+                      <span className={`${!scan.noGoFlag && scan.interruptionLabel ? "truncate" : "line-clamp-2 whitespace-normal"} leading-4 ${status.label === "No-go" || status.label === "Failed" ? "font-semibold text-rose-700" : "text-slate-700"}`}>{accessLabel}</span>
                       {!scan.noGoFlag && scan.interruptionLabel ? <p className="truncate text-[10px] text-slate-400" title={scan.interruptionReason ?? undefined}>{scan.interruptionLabel}</p> : null}
                     </td>
                     <td className="truncate px-2.5 py-1.5 text-slate-700" title={scan.industry ?? undefined}>{scan.industry ?? "—"}</td>

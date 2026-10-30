@@ -12,7 +12,7 @@ for (const canary of canaries) {
       const before = structuredClone(canary);
       const findings = selectRegulatoryReview(canary.findings, focus).topIssues as AssessmentHighlightFinding[];
       const result = buildAssessmentHighlightsPresentation(findings, page);
-      assert.ok(result.text.length <= 500);
+      assert.ok(result.text.length <= 430);
       assert.ok(result.expanded && result.expanded.text.length <= 1000);
       assert.ok(result.links.filter(link => link.label !== "Detailed evidence").length >= 3);
       assert.ok(result.expanded.links.some(link => link.targetId === "accessibility-evidence"));
@@ -54,7 +54,7 @@ test("severity and finding families: prioritize canonical findings and preserve 
       const result = buildAssessmentHighlightsPresentation([finding], page, { score: 100 });
       assert.ok(result.text.includes(summary));
       assert.ok(result.text.includes(finding.correctionSteps[0]!));
-      assert.ok(result.text.length <= 500);
+      assert.ok(result.text.length <= 430);
       assert.equal(result.expanded, undefined);
       assert.doesNotMatch(result.text, /all clear|compliant|minor|legal violation|high-priority remediation/);
     }
@@ -85,7 +85,7 @@ test("empty, near-empty and large inputs have hard bounds without padding or los
     const findings = Array.from({ length: 10 }, (_, index) => ({ id: `finding-${index}`, title: `Review ${index}`, summary: `${"a".repeat(length)}. This is unconfirmed.`, correctionSteps: ["b".repeat(length)] }));
     const before = structuredClone(findings);
     const result = buildAssessmentHighlightsPresentation(findings, page);
-    assert.ok(result.text.length <= 500);
+    assert.ok(result.text.length <= 430);
     assert.ok(!result.expanded || result.expanded.text.length <= 1000);
     for (const copy of [result.text, result.expanded?.text ?? ""]) {
       if (copy.includes("aaa")) assert.ok(copy.includes("This is unconfirmed."));

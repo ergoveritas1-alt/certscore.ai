@@ -1,15 +1,20 @@
+import { reportExecutiveSummary } from "./report-executive-summary";
+import { REPORT_EXPORT_DISCLAIMER } from "./report-export-footer";
+import { reportRequestInventory } from "./report-request-inventory";
 import { pdfNarrativeFindings, scopeCanonicalReportPdf } from "./report-pdf-evidence";
 import { reportSectionInFocus } from "../../lib/scans/report-framework-scope";
 import { reportStatusLabel } from "../../lib/scans/report-status-presentation";
 import { assertPublicReportPdfContent, publicReportPdfBaseUrl } from "./report-pdf-public-safety";
-import { pdfTestedUrl, pdfRegionLabel, pdfPublicWords, pdfConfidenceLabel, pdfReviewGroups, pdfReportCounts, pdfInventoryRows, pdfRelatedCookieServices } from "./report-pdf-reader";
+import { pdfTestedUrl, pdfRegionLabel, pdfPublicWords, pdfConfidenceLabel, pdfReviewGroups, pdfOtherReviewGroups, pdfReportCounts, pdfInventoryRows, pdfRelatedCookieServices, reportFormInventory } from "./report-pdf-reader";
+import { reportFormPhaseLabel } from "../../lib/scans/report-form-inventory";
+import { reportFormScopeNote } from "./report-form-inventory";
 import { pdfConsentVisualFocus, type PdfVisualFocus } from "./report-pdf-visual";
 import { createHash } from "node:crypto";
 import { pdfLocalDate, pdfTimeZone } from "./report-pdf-time";
 import { pdfFrontmatter } from "./report-pdf-frontmatter";
 import { getGdprEprivacyPostureTone } from "../../lib/scans/regulatory-coverage-score";
 import { pdfAppendixActions, PDF_TOPIC_VERIFICATION } from "./report-pdf-actions";
-import { pdfSiteAssessment, pdfSummaryTopics, type SummaryVisual } from "./report-pdf-summary";
+import { pdfSummaryTopics, type SummaryVisual } from "./report-pdf-summary";
 import { appendixEvidenceLines, pdfEvidenceTable } from "./report-pdf-appendices";
 import { normalizeReportHeaderTheme, REPORT_HEADER_PALETTES, type ReportHeaderTheme } from "../../lib/report-header-theme";
 import { fitPdfText, pdfTextWidth, wrapPdfText } from "./report-pdf-fonts";
@@ -248,6 +253,8 @@ export type PdfLine = {
   internalDestination?: string;
   tableId?: string;
   cells?: string[][];
+  sourceCells?: string[];
+  tableRowContinuation?: boolean;
   columnWidths?: number[];
   chart?: { title: string; bars: Array<{ label: string; value: number }> };
   overview?: { metrics: Array<{ label: string; value: string }>; observed: number; review: number; limited: number; checks: number };
@@ -274,10 +281,11 @@ function sectionHeading(text: string, pageBreakBefore = false): PdfLine {
   };
 }
 
-function reportLines(report: CanonicalReportExport, image: PdfImage | null, appUrl: string, visualFocus: PdfVisualFocus | null): PdfLine[] {
+function reportLines(report: CanonicalReportExport, image: PdfImage | null, appUrl: string, visualFocus: PdfVisualFocus | null, wrapText = true): PdfLine[] {
   const review = report.gdprEprivacyReview;
   const runtimeAppendix = report.appendix.cookieAndTrackerInventory;
   const collectionAppendix = report.appendix.dataCollectionSurfaces;
+  const formInventory = reportFormInventory(report);
   const transportRows = review?.rows.filter((row) => isTransportSecurityRowId(row.id)) ?? [];
   const mainChecklistRows = review?.rows.filter((row) =>
     !isGdprTransparencyReportRowId(row.id) && !isTransportSecurityRowId(row.id)
@@ -359,9 +367,21 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
       sectionHeading("Full-site resource inventory"),
       ...wrappedLines(`${f.resources.length} distinct resources across observed pages. Page IDs map to the coverage list above. The JSON download contains every resource row.`),
       ...f.resources.slice(0, 500).flatMap(row => wrappedLines(`${row.occurrence.kind}: ${row.occurrence.label} | ${row.occurrence.vendor ?? "Unknown vendor"} | ${row.purposes.join(", ")} | ${row.pageIds.length} page(s): ${row.pageIds.join(", ")}`)),
-      ...(f.resources.length > 500 ? wrappedLines("PDF shows the first 500 resources. Download the full-site JSON for the complete inventory.") : []),
+      ...(f.resources.length > 500 ? wrappedLines("This report shows the first 500 resources. Open the full-site JSON workpaper for the complete inventory.") : []),
       sectionHeading("Homepage audit"),
     ]);
+  }
+
+  const initialRequests = reportRequestInventory(report);
+  lines = sections.external;
+  if (initialRequests) {
+    lines.push(sectionHeading("Initial-page request inventory"),
+      ...wrappedLines(`${initialRequests.metric!.value} request events; ${initialRequests.totalResources} distinct request resources before a choice. ${initialRequests.metric!.overview?.identifiedServices ?? "Unavailable"} identified ${initialRequests.metric!.overview?.identifiedServices === 1 ? "service" : "services"} in the initial-page resource inventory.`),
+      ...pdfEvidenceTable("initial-request-inventory", ["Method / resource", "Vendor / classification", "Events / first seen"], initialRequests.rows.map(row => [
+        `${row.method ?? "Not retained"} ${row.resource}`, `${row.vendor ?? "Unidentified"}; ${row.classification}`,
+        `${row.eventCount} events; ${row.firstSeenMs === null ? "Timing unavailable" : `+${row.firstSeenMs} ms`}`,
+      ]), [270, 142, 100]));
+    if (initialRequests.omittedResources) lines.push(...wrappedLines(`${initialRequests.omittedResources} additional resource rows are available in the online inventory.`, { size: 9 }));
   }
 
   lines = sections.security;
@@ -381,7 +401,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
 
   lines = reportContext;
   lines.push(sectionHeading("Review scope"));
-  if (review) {
+  if (review && report.reviewFocus === "gdpr_eprivacy") {
     lines.push(
       ...wrappedLines(review.reviewSummary.coverageText),
       ...wrappedLines(review.reviewSummary.priorityReviewText, { gapAfter: 3 }),
@@ -389,7 +409,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
         text: `Summary counts: ${review.summaryCounts.gap_observed} observed gaps; ${review.summaryCounts.potential_concern} potential concerns; ${review.summaryCounts.review_signal} review signals; ${review.summaryCounts.technical_limitation} technical limitations.`,
       },
     );
-  } else {
+  } else if (report.reviewFocus === "gdpr_eprivacy") {
     lines.push({ text: "A persisted GDPR/ePrivacy checklist presentation was not available for this scan." });
   }
 
@@ -441,7 +461,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
   if (runtimeAppendix.summary.omittedRows > 0) {
     lines.push({ text: `${runtimeAppendix.summary.omittedRows} rows were omitted by the bounded 500-row export limit.`, gapAfter: 3 });
   }
-  sections.external.push(sectionHeading("Service and domain inventory"), ...wrappedLines(runtimeAppendix.scopeNote, { size: 9 }),
+  if (!initialRequests || pdfInventoryRows(report).external.length) sections.external.push(sectionHeading(initialRequests ? "Service observations" : "Service and domain inventory"), ...wrappedLines(runtimeAppendix.scopeNote, { size: 9 }),
     ...wrappedLines(`${pdfInventoryRows(report).external.length} service rows shown from ${runtimeAppendix.summary.trackerRows} source rows. ${runtimeAppendix.summary.omittedRows} inventory rows omitted by the export limit.`));
   const inventoryCounts = { storage: 0, external: 0 };
   const displayedServices = new Set<string>();
@@ -475,18 +495,19 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
 
   lines = sections.forms;
   lines.push(sectionHeading("Data collection surfaces"));
-  lines.push(...wrappedLines(collectionAppendix.scopeNote, { size: 9, gapAfter: 4 }));
+  lines.push(...wrappedLines(reportFormScopeNote(report), { size: 9, gapAfter: 4 }));
   lines.push(...wrappedLines(
-    `Inventory summary: ${collectionAppendix.summary.totalForms} retained forms; ${collectionAppendix.summary.totalFields} retained fields; assessment ${titleCase(collectionAppendix.assessmentStatus)}.`,
+    `Inventory summary: ${formInventory.totalForms} retained forms; ${formInventory.totalFields} retained fields. ${report.fullSite ? "Page inventories" : "Initial page"}: ${formInventory.initialForms ?? "unavailable"}; after Accept: ${formInventory.afterAcceptForms ?? "unavailable in this export"}.`,
     { bold: true, gapAfter: 3 },
   ));
-  lines.push(...wrappedLines(collectionAppendix.presentationMessage, { gapAfter: 3 }));
+  lines.push(...wrappedLines(`Initial-page assessment: ${collectionAppendix.presentationMessage}`, { gapAfter: 3 }));
+  if (formInventory.afterAcceptForms !== null) lines.push(...wrappedLines(`After Accept: ${formInventory.afterAcceptForms} retained form observations. ${collectionAppendix.reportInventory?.afterAcceptLimited ? "After-Accept capture was limited; additional forms may not have been captured. " : ""}Capture phase is shown for each form; no form was submitted and field values were not retained.`, { size: 9, gapAfter: 4 }));
   if (collectionAppendix.pageUrl) {
     lines.push(...wrappedLines(`Assessed page: ${collectionAppendix.pageUrl}`, { size: 9, gapAfter: 2 }));
   }
   if (collectionAppendix.coverage) {
     lines.push(...wrappedLines(
-      `Coverage: ${titleCase(collectionAppendix.coverage.status)}; document scope ${titleCase(collectionAppendix.coverage.documentScope)}; interaction mode ${titleCase(collectionAppendix.coverage.interactionMode)}; inspected ${collectionAppendix.coverage.inspectedFormCandidateCount} form candidates and ${collectionAppendix.coverage.inspectedFieldCandidateCount} field candidates.`,
+      `Initial-page coverage: ${titleCase(collectionAppendix.coverage.status)}; document scope ${titleCase(collectionAppendix.coverage.documentScope)}; interaction mode ${titleCase(collectionAppendix.coverage.interactionMode)}; inspected ${collectionAppendix.coverage.inspectedFormCandidateCount} form candidates and ${collectionAppendix.coverage.inspectedFieldCandidateCount} field candidates.`,
       { size: 9, gapAfter: 2 },
     ));
   }
@@ -502,16 +523,17 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
       gapAfter: 3,
     }));
   }
-  if (collectionAppendix.forms.length === 0) {
+  if (formInventory.rows.length === 0) {
     lines.push({
       text: collectionAppendix.assessmentStatus === "not_observed"
-        ? "No forms found."
+        ? "No forms found in the initial-page inventory."
         : "No form rows were retained; the assessment message above governs interpretation.",
     });
   }
-  collectionAppendix.forms.forEach((form, formIndex) => {
+  formInventory.rows.forEach((row, formIndex) => {
+    const form = row.form;
     lines.push({
-      text: `${formIndex + 1}. ${form.title ?? titleCase(form.surfaceType)}`,
+      text: `${formIndex + 1}. ${form.title ?? titleCase(form.surfaceType)} - ${reportFormPhaseLabel(row, Boolean(report.fullSite))}`,
       size: 11,
       bold: true,
       gapAfter: 1,
@@ -523,6 +545,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
       `Page: ${form.pageUrl} | Structure: ${titleCase(form.structure)} | Surface type: ${titleCase(form.surfaceType)} | Method: ${titleCase(form.method)}`,
       { indent: 10, size: 9 },
     ));
+    if (row.captureLimited) lines.push(...wrappedLines("Bounded form capture; missing forms and fields remain unknown.", { size: 9 }));
     lines.push(...wrappedLines(
       `Action: ${titleCase(form.actionRelationship)}${form.actionHostname ? ` (${form.actionHostname})` : ""} | Fields retained: ${form.retainedFieldCount} of ${form.candidateFieldCount} | Truncated: ${yesNo(form.fieldsTruncated)} | Confidence: ${formatConfidence(form.confidence)} | Basis: ${titleCase(form.directVsInferred)}`,
       { indent: 10, size: 9, gapAfter: 2 },
@@ -645,8 +668,9 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
     ...wrappedLines(`Scan ID: ${report.scan.id}`, { size: 8 }),
     ...wrappedLines(workpaper ? "Open technical workpaper (JSON)" : "Download the technical workpaper (JSON) alongside this PDF from the scan report.", { size: 9, href: workpaper, gapAfter: 6 }),
   ];
-  const allLines = [...frontmatter, ...appendixLines, ...methodology].map(line => ({ ...line, text: pdfPublicWords(line.text), cells: line.cells?.map(cell => cell.map(pdfPublicWords)) }));
-  assertPublicReportPdfContent(allLines.flatMap(line => [line.text, line.href ?? "", ...(line.cells?.flat() ?? [])]));
+  const allLines = [...frontmatter, ...appendixLines, ...methodology].map(line => ({ ...line, text: pdfPublicWords(line.text), cells: line.cells?.map(cell => cell.map(pdfPublicWords)), sourceCells: line.sourceCells?.map(pdfPublicWords) }));
+  assertPublicReportPdfContent(allLines.flatMap(line => [line.text, line.href ?? "", ...(line.cells?.flat() ?? []), ...(line.sourceCells ?? [])]));
+  if (!wrapText) return allLines;
   return allLines.flatMap((line, paragraphIndex) => {
     // Tables have a five-point bottom border offset. Give following prose a
     // real gutter rather than drawing its ascenders through that border.
@@ -662,6 +686,13 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
       keepWithNextHeight: index === parts.length - 1 ? line.keepWithNextHeight : (line.size ?? 10) + 4,
     }));
   });
+}
+
+/** Shared, scoped report paragraphs and evidence tables before PDF pagination.
+ * Word consumes these same projected findings, statuses and remediation. */
+export function canonicalReportDocumentContent(report: CanonicalReportExport, appUrl = "https://certscore.ai") {
+  const scoped = scopeCanonicalReportPdf(report);
+  return { report: scoped, lines: reportLines(scoped, null, appUrl, null, false) };
 }
 
 function paginate(lines: PdfLine[]) {
@@ -775,7 +806,7 @@ function lineX(line: PdfLine, hasBrandLogo: boolean) {
 }
 
 function brandLogoCommand(image: PdfImage) {
-  const frame = { x: 48, y: 733, width: 64, height: 64 };
+  const frame = { x: 50, y: 728, width: 80, height: 80 };
   const scale = Math.min(frame.width / image.width, frame.height / image.height);
   const drawWidth = image.width * scale;
   const drawHeight = image.height * scale;
@@ -883,216 +914,86 @@ function chartArc(cx: number, cy: number, radius: number, start: number, end: nu
   return parts.join("\n");
 }
 
-/** Fixed first page; charts summarize canonical scores and already-projected findings. */
-function executivePage(report: CanonicalReportExport, hasLogo: boolean, headerTheme: ReportHeaderTheme, topicPages: Map<string, number>, timeZone: string) {
-  const palette = REPORT_HEADER_PALETTES[headerTheme];
-  const commands: string[] = [];
-  const links: Array<{ topic: string; rect: number[] }> = [];
-  const accent = "0.04 0.47 0.64";
-  const muted = "0.38 0.44 0.52";
-  const text = (value: unknown, x: number, y: number, size = 10, bold = false, color = "0.12 0.18 0.27", width = 562 - x) => {
-    commands.push(`BT /${bold ? "F2" : "F1"} ${size} Tf ${color} rg ${x} ${y} Td (${pdfString(fitPdfText(ascii(value), width, size, bold))}) Tj ET`);
+/** Executive page follows the retained reference design; data stays canonical. */
+function executivePage(report: CanonicalReportExport, hasLogo: boolean, headerTheme: ReportHeaderTheme, topicPages: Map<string, number>, timeZone: string, brandName: string) {
+  const model = reportExecutiveSummary(report), palette = REPORT_HEADER_PALETTES[headerTheme];
+  const commands: string[] = [], links: Array<{ topic: string; rect: number[] }> = [];
+  const ink = "0.07 0.10 0.16", muted = "0.30 0.35 0.42", accent = "0.04 0.44 0.60", orange = "0.58 0.24 0.02";
+  const text = (value: unknown, x: number, y: number, size = 9, bold = false, color = ink, width = 562 - x) =>
+    commands.push(`BT /${bold ? "F2" : "F1"} ${size} Tf ${color} rg ${x} ${y} Td (${pdfString(fitPdfText(ascii(String(value ?? "").replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replaceAll("×", "x")), width, size, bold))}) Tj ET`);
+  const box = (x: number, y: number, w: number, h: number, fill: string, border = "0.83 0.85 0.88") => {
+    const r = 5, k = r * .55228475;
+    commands.push(`${fill} rg ${border} RG 0.6 w ${x+r} ${y} m ${x+w-r} ${y} l ${x+w-r+k} ${y} ${x+w} ${y+r-k} ${x+w} ${y+r} c ${x+w} ${y+h-r} l ${x+w} ${y+h-r+k} ${x+w-r+k} ${y+h} ${x+w-r} ${y+h} c ${x+r} ${y+h} l ${x+r-k} ${y+h} ${x} ${y+h-r+k} ${x} ${y+h-r} c ${x} ${y+r} l ${x} ${y+r-k} ${x+r-k} ${y} ${x+r} ${y} c h B`);
   };
-  const center = (value: string, x: number, y: number, size: number, bold = false, color = "0.12 0.18 0.27") =>
-    text(value, x - pdfTextWidth(value, size, bold) / 2, y, size, bold, color);
-  const card = (x: number, y: number, width: number, height: number, background = "1 1 1") =>
-    commands.push(`${background} rg ${x} ${y} ${width} ${height} re f\n0.86 0.90 0.93 RG 0.6 w ${x} ${y} ${width} ${height} re S`);
-  const ring = (cx: number, cy: number, radius: number, width: number, start: number, end: number, color: string) => {
-    if (Math.abs(end - start) < 0.00001) return;
-    commands.push(`q ${color} RG ${width} w 0 J\n${chartArc(cx, cy, radius, start, end)}\nS Q`);
+  const lines = (value: string, x: number, y: number, width: number, size = 9, maximum = 3, bold = false, color = muted) => {
+    const wrapped = wrapPdfText(ascii(String(value ?? "").replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replaceAll("×", "x")), width, size, bold);
+    wrapped.slice(0, maximum).forEach((line, index) => text(index === maximum - 1 && wrapped.length > maximum ? `${line}...` : line, x, y - index * (size + 2), size, bold, color, width));
+    return Math.min(wrapped.length, maximum) * (size + 2);
   };
-  const titleX = hasLogo ? 126 : 50;
-  text("Executive summary", titleX, 785, 23, true, palette.foreground);
-  text(compactText(report.scan.domainHostname ?? "Website scan", 48), titleX, 762, 14, true, palette.foreground);
-  text(`${report.fullSite ? "Website scan report | " : ""}${pdfTestedUrl(report) ?? report.reviewFocusLabel}`, titleX, 741, 9, false, palette.muted);
-  text(`Completed: ${pdfLocalDate(report.scan.completedAt, timeZone)} (${timeZone}) | Region: ${pdfRegionLabel(report.scan.scanFrom)}`, 50, 716, 8, false, palette.muted);
-
-  const rawScore = report.reviewFocus === "ccpa_cpra" ? report.californiaScore?.score ?? null : report.score?.value;
-  const score = typeof rawScore === "number" && Number.isFinite(rawScore) && rawScore >= 0 && rawScore <= 100 ? rawScore : null;
-  const reviewGroups = pdfReviewGroups(report);
-  const reportCounts = pdfReportCounts(report);
-  const topics = pdfSummaryTopics(report);
-  const severityGroups = [
-    { label: "Gap observed", count: reviewGroups.filter(group => group.status === "Gap observed").length, color: "0.76 0.24 0.22" },
-    { label: "Review signal", count: reviewGroups.filter(group => group.status === "Review signal").length, color: "0.87 0.60 0.19" },
-    { label: "Other findings", count: reviewGroups.filter(group => !["Gap observed", "Review signal"].includes(group.status)).length, color: accent },
-  ];
-
-  const assessment = pdfSiteAssessment(report).replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
-  const assessmentHeight = Math.min(150, Math.max(124, 66 + wrapPdfText(ascii(assessment), 484, 10).length * 11.5));
-  const assessmentBottom = 674 - assessmentHeight;
-  const metricTop = assessmentBottom - 14;
-  const metricHeight = metricTop - 370;
-  const metricCenter = 370 + metricHeight / 2;
-  card(50, assessmentBottom, 512, assessmentHeight);
-  text("Site assessment", 64, 653, 12, true, accent);
-  text(`${report.reviewFocusLabel} | ${report.reviewFocus === "ccpa_cpra" ? "Starting-page assessment" : titleCase(report.executiveSummary.posture)}`, 64, 636, 10, true);
-  let narrativeSize = 10;
-  let narrative = wrapPdfText(ascii(assessment), 484, narrativeSize);
-  while ((narrative.length - 1) * (narrativeSize + 1.5) > 84 && narrativeSize > 7.5) {
-    narrativeSize -= 0.25;
-    narrative = wrapPdfText(ascii(assessment), 484, narrativeSize);
-  }
-  narrative.forEach((line, index) => text(line, 64, 620 - index * (narrativeSize + 1.5), narrativeSize, false, "0.25 0.31 0.39", 484));
-
-  card(50, 370, 144, metricHeight);
-  text(report.reviewFocus === "ccpa_cpra" ? "California score" : "CertScore.ai score", 64, metricTop - 19, 10, true);
-  ring(122, metricCenter, 34, 7, Math.PI / 2, Math.PI / 2 - 2 * Math.PI, "0.88 0.93 0.95");
-  if (score !== null) ring(122, metricCenter, 34, 7, Math.PI / 2, Math.PI / 2 - 2 * Math.PI * score / 100, accent);
-  const scoreText = score === null ? "N/A" : String(score);
-  const scoreSize = score === null ? 26 : Math.min(35, 70 * 35 / pdfTextWidth(scoreText, 35, true));
-  center(scoreText, 122, metricCenter - 6, scoreSize, true, accent);
-  center(score === null ? "Unavailable" : "/ 100", 122, metricCenter - 21, 8, false, muted);
-  center(report.reviewFocus !== "ccpa_cpra" && report.score?.scope === "full_site" ? "Full-site score" : "Starting-page score", 122, 381, 7.5, false, muted);
-  text(score === null ? "Unavailable" : report.reviewFocus === "ccpa_cpra" ? "Starting-page assessment" : getGdprEprivacyPostureTone(score).ratingLabel, 60, metricTop - 33, 7, true, muted, 124);
-
-  // One finding total, in the severity doughnut. No duplicate finding KPI.
-  card(204, 370, 144, metricHeight);
-  text("Top issues", 218, metricTop - 19, 10, true);
-  text(`${reportCounts.observations} distinct observations`, 218, metricTop - 32, 7, false, muted);
-  ring(276, metricCenter + 5, 25, 9, Math.PI / 2, Math.PI / 2 - Math.PI * 2, "0.88 0.93 0.95");
-  let angle = Math.PI / 2;
-  for (const group of severityGroups) {
-    const next = angle - (reviewGroups.length ? group.count / reviewGroups.length * 2 * Math.PI : 0);
-    ring(276, metricCenter + 5, 25, 9, angle, next, group.color);
-    angle = next;
-  }
-  center(String(reportCounts.groups), 276, metricCenter + 1, 20, true);
-  center("review areas", 276, metricCenter - 11, 6.5, false, muted);
-  severityGroups.forEach((group, index) => {
-    const y = 400 - index * 11;
-    commands.push(`${group.color} rg 218 ${y} 5 5 re f`);
-    text(group.label, 228, y, 7, false, muted, 92);
-    text(group.count, 327, y, 7, true);
+  const titleX = hasLogo ? 144 : 50;
+  const identityWidth = 392 - titleX;
+  text("Executive Summary", 50, 805, 16, true, palette.foreground, 350);
+  text(report.scan.domainHostname ?? "Website report", titleX, 772, 27, true, palette.foreground, identityWidth);
+  text(brandName, titleX, 750, 8.5, false, palette.muted, identityWidth);
+  text(`${report.reviewFocusLabel} | ${model.scoreScope}`, titleX, 735, 8.5, false, palette.muted, identityWidth);
+  text(pdfLocalDate(report.scan.completedAt, timeZone), titleX, 722, 8.5, false, palette.muted, identityWidth);
+  const cx = 530, cy = 760, radius = 28;
+  commands.push(`q 0.89 0.90 0.92 RG 6 w ${chartArc(cx, cy, radius, Math.PI / 2, Math.PI / 2 - 2 * Math.PI)}\nS Q`);
+  if (model.score !== null && model.score > 0) commands.push(`q ${accent} RG 6 w ${chartArc(cx, cy, radius, Math.PI / 2, Math.PI / 2 - 2 * Math.PI * model.score / 100)}\nS Q`);
+  const score = model.score === null ? "N/A" : String(model.score);
+  text(score, cx - pdfTextWidth(score, 23, true) / 2, cy - 4, 23, true, palette.foreground, 60);
+  text("of 100", cx - 13, cy - 18, 8, false, palette.muted, 40);
+  text("SCORE", 408, 775, 8, true, palette.muted, 85);
+  lines(model.rating, 408, 757, 85, 10, 2, true, palette.foreground);
+  lines(`Scan origination: ${pdfRegionLabel(report.scan.scanFrom)}`, 408, 722, 154, 8.5, 2, false, palette.muted);
+  commands.push(`0.13 0.16 0.20 RG 1 w 50 716 m 562 716 l S`);
+  const metricTop = 701, metricHeight = 64, tileWidth = 122, tileGap = 8;
+  model.metrics.forEach((metric, index) => {
+    const x = 50 + index * (tileWidth + tileGap), hot = metric.attention;
+    box(x, metricTop - metricHeight, tileWidth, metricHeight, hot ? "1 0.96 0.90" : "0.95 0.96 0.97", hot ? "0.89 0.59 0.32" : "0.95 0.96 0.97");
+    text(metric.value, x + 10, metricTop - 23, 21, true, hot ? orange : ink, tileWidth - 20);
+    text(metric.label, x + 10, metricTop - 37, 8.5, true, ink, tileWidth - 20);
+    lines(metric.note, x + 10, metricTop - 49, tileWidth - 20, 7.5, 2, false, hot ? orange : muted);
   });
-
-  card(358, 370, 204, metricHeight);
-  text("Priority findings and next actions", 370, metricTop - 19, 10, true, "0.12 0.18 0.27", 180);
-  const priority = reviewGroups.slice(0, 3);
-  if (!priority.length) {
-    wrapPdfText("No GDPR/ePrivacy priority findings selected; review the detailed evidence.", 176, 9)
-      .forEach((line, index) => text(line, 370, 466 - index * 12, 9, false, muted, 176));
+  let y = metricTop - metricHeight - 24;
+  text("Report findings", 50, y, 13, true);
+  text(`${model.priorityCount} selected ${model.priorityCount === 1 ? "priority" : "priorities"}; ${model.findings.length} findings`, 335, y, 8, false, muted, 227);
+  y -= 12;
+  if (!model.findings.length) {
+    box(50, y - 48, 512, 48, "0.97 0.98 0.99");
+    text("No priority findings selected", 64, y - 20, 10, true);
+    text("See the topic assessments and detailed evidence.", 64, y - 35, 9, false, muted);
+    y -= 58;
   }
-  priority.forEach((group, index) => {
-    const y = metricTop - 36 - index * (metricHeight - 32) / 3;
-    const title = wrapPdfText(ascii(`${index + 1}. ${group.title}`), 160, 8, true);
-    const titleLines = (metricHeight - 32) / 3 >= 40 ? 2 : 1;
-    title.slice(0, titleLines).forEach((line, lineIndex) => text(lineIndex === titleLines - 1 && title.length > titleLines ? `${line}...` : line, 370, y - lineIndex * 9, 8, true, "0.12 0.18 0.27", 160));
-    text(`${group.status} - see issue and actions`, 370, y - Math.min(titleLines, title.length) * 9 - 8, 7.25, false, muted, 180);
-    links.push({ topic: "findings", rect: [358, y - 32, 562, y + 8] });
+  const available = y - 201;
+  const visible = model.findings.slice(0, Math.max(1, Math.min(4, Math.floor(available / 82))));
+  const cardHeight = Math.min(92, available / Math.max(1, visible.length) - 7);
+  visible.forEach((finding, index) => {
+    const top = y, warm = ["high", "critical", "medium"].includes(finding.impact.toLowerCase());
+    box(50, top - cardHeight, 512, cardHeight, warm ? "1 0.98 0.95" : "1 1 1", warm ? "0.90 0.60 0.34" : "0.80 0.82 0.86");
+    commands.push(`${warm ? "0.77 0.36 0.06" : "0.61 0.65 0.71"} rg 50 ${top - cardHeight} 3 ${cardHeight} re f`);
+    text(index + 1, 64, top - 22, 12, true);
+    const titleHeight = lines(finding.title, 86, top - 18, 335, 10, 2, true, ink);
+    const maxLines = Math.max(1, Math.min(4, Math.floor((cardHeight - titleHeight - 22) / 10.5)));
+    lines(finding.summary, 86, top - 21 - titleHeight, 333, 8.5, maxLines);
+    text(finding.priority ? "Selected priority" : finding.status === "For information" ? "For information" : "Other finding", 435, top - 18, 7.5, true, finding.priority ? orange : muted, 115);
+    text(`${titleCase(finding.impact)} impact`, 435, top - 32, 7.5, true, muted, 115);
+    lines(finding.confidence, 435, top - 46, 115, 7.5, 2);
+    text(`Details p.${topicPages.get(finding.target) ?? "-"}`, 435, top - cardHeight + 10, 8, true, accent, 115);
+    links.push({ topic: finding.target, rect: [50, top - cardHeight, 562, top] });
+    y -= cardHeight + 7;
   });
-
-  text("Topic evidence at a glance", 50, 350, 12, true);
-  text("Select a topic for its appendix", 412, 350, 7.5, false, muted, 150);
-  const observed = "0.09 0.55 0.45";
-  const review = "0.82 0.48 0.12";
-  const neutral = "0.72 0.77 0.82";
-  const statusColor = (status: string) => status === "Observed" ? observed
-    : ["Gap observed", "Potential gap", "Review signal", "Review recommended"].includes(status) ? review : neutral;
-  const circle = (cx: number, cy: number, r: number, color: string) =>
-    commands.push(`${color} rg ${chartArc(cx, cy, r, 0, Math.PI * 2)} h f`);
-  const drawVisual = (visual: SummaryVisual, x: number, y: number, width: number) => {
-    if (visual.kind === "choices") {
-      text(visual.provider ?? "First-layer controls", x + 8, y + 55, 7, true, muted, width - 16);
-      if (!visual.choices) text("Visit evidence unavailable", x + 8, y + 32, 7, false, muted, width - 16);
-      else visual.choices.forEach((choice, index) => {
-        const baseline = y + 43 - index * 10;
-        text(choice.label, x + 8, baseline, 7, false, muted, 39);
-        text(choice.status, x + 49, baseline, 7, true, statusColor(choice.status), width - 57);
-      });
-    } else if (visual.kind === "checks") {
-      const choices = visual.checks;
-      if (!choices) text("Unavailable", x + 8, y + 31, 8, false, muted, 105);
-      else choices.forEach((choice, index) => {
-        const left = x + 8 + index * 35;
-        commands.push(`0.94 0.96 0.97 rg ${left} ${y + 25} 31 24 re f`);
-        circle(left + 15.5, y + 42, 2.7, statusColor(choice.status));
-        text(choice.label, left + 2, y + 29, 6.5, false, muted, 29);
-      });
-    } else if (visual.kind === "bars") {
-      if (visual.unavailable) text("Unavailable", x + 8, y + 31, 8, false, muted, 105);
-      else visual.bars.forEach((bar, index) => {
-        const bottom = y + 41 - index * 15;
-        text(bar.label, x + 8, bottom, 7, false, muted, 37);
-        commands.push(`0.88 0.93 0.95 rg ${x + 47} ${bottom} 48 6 re f`);
-        if (bar.value) commands.push(`${accent} rg ${x + 47} ${bottom} ${48 * bar.value / Math.max(1, ...visual.bars.map(item => item.value))} 6 re f`);
-        text(bar.value, x + 100, bottom, 7, true, accent, 14);
-      });
-    } else if (visual.kind === "matrix") {
-      commands.push(`0.65 0.74 0.80 RG 0.8 w ${x + 9} ${y + 24} 24 29 re S`);
-      [[visual.observed, "Observed", observed], [visual.review, "To review", review], [visual.other, "Other", neutral]].forEach(([count, label, color], index) => {
-        const baseline = y + 44 - index * 10;
-        commands.push(`${color} RG 1.5 w ${x + 14} ${baseline + 1} m ${x + 28} ${baseline + 1} l S`);
-        text(count, x + 43, baseline, 7, true, String(color), 17);
-        text(label, x + 62, baseline, 6.5, false, muted, 51);
-      });
-    } else if (visual.kind === "flow" && visual.forms === 0) {
-      text("No forms on the", x + 8, y + 43, 8, false, muted, 105);
-      text("starting page", x + 8, y + 31, 8, false, muted, 105);
-    } else if (visual.kind === "flow") {
-      [[visual.forms, "forms"], [visual.fields, "fields"]].forEach(([count, label], index) => {
-        const left = x + 8 + index * 61;
-        commands.push(`0.94 0.96 0.97 rg ${left} ${y + 24} 43 29 re f`);
-        text(count, left + 6, y + 40, 12, true, accent, 31);
-        text(label, left + 6, y + 29, 6.5, false, muted, 31);
-      });
-      commands.push(`${accent} RG 0.8 w ${x + 53} ${y + 38} m ${x + 65} ${y + 38} l S ${x + 62} ${y + 41} m ${x + 65} ${y + 38} l ${x + 62} ${y + 35} l S`);
-    } else if (visual.kind === "transport") {
-      text("Transport security", x + 8, y + 58, 6.5, true, muted, width - 16);
-      visual.checks.forEach((check, index) => {
-        const positive: Record<string, string> = { "HTTPS delivery": "HTTPS delivery: verified", "HTTP redirect": "HTTP redirect: verified", "Mixed-content check": "Mixed content: none found", "HTTPS certificate": "Certificate: validated" };
-        text(check.status === "Observed" ? positive[check.label] ?? `${check.label}: Observed` : `${check.label}: ${check.status}`, x + 8, y + 46 - index * 9, 7, false, muted, width - 16);
-      });
-    } else if (visual.kind === "services") {
-      if (visual.unavailable) text("Inventory unavailable", x + 8, y + 40, 8, false, muted, width - 16);
-      else {
-        text(`${visual.services} services / ${visual.domains} domains`, x + 8, y + 49, 8, true, accent, width - 16);
-        const counts = visual.purposes.slice(0, 4).map(purpose => `${purpose.label}: ${purpose.value}`);
-        text(counts.slice(0, 2).join(" / "), x + 8, y + 36, 7, false, muted, width - 16);
-        text(counts.slice(2, 4).join(" / "), x + 8, y + 24, 7, false, muted, width - 16);
-      }
-    } else if (visual.kind === "network") {
-      const cx = x + 58;
-      if (!visual.unavailable) visual.domains.slice(0, 3).forEach((domain, index) => {
-        const nx = x + [16, 101, 58][index]!;
-        const ny = y + [46, 46, 27][index]!;
-        commands.push(`${neutral} RG 0.7 w ${cx} ${y + 40} m ${nx} ${ny} l S`);
-        circle(nx, ny, 4, accent);
-      });
-      circle(cx, y + 40, 8, "0.88 0.93 0.95");
-      text("Site", cx - 6, y + 38, 6, true, accent, 18);
-      if (visual.unavailable) text("Unavailable", x + 8, y + 25, 7, false, muted, 105);
-    } else if (visual.kind === "certificate") {
-      commands.push(`0.65 0.74 0.80 RG 0.8 w ${x + 9} ${y + 24} 22 29 re S ${x + 14} ${y + 46} m ${x + 26} ${y + 46} l S ${x + 14} ${y + 41} m ${x + 26} ${y + 41} l S`);
-      circle(x + 20, y + 31, 3, statusColor(visual.status));
-      wrapPdfText(visual.status, 72, 9).forEach((line, index) => text(line, x + 39, y + 40 - index * 10, 9, true, statusColor(visual.status), 72));
-    } else if (visual.kind === "columns") {
-      if (visual.unavailable) text("Unavailable", x + 8, y + 31, 8, false, muted, 105);
-      else if(visual.statusLabel === "Manual check" && !visual.failures){
-        text(visual.statusLabel,x+8,y+36,8,true,muted,105);
-        text(`${visual.reviewItems ?? 0} inconclusive checks`,x+8,y+21,7,false,muted,105);
-      }
-      else if (!visual.counts.length) {
-        text("0 automated rule failures", x + 8, y + 43, 8, true, muted, width - 16);
-        text(`${visual.nodes ?? 0} affected nodes`, x + 8, y + 29, 7, false, muted, width - 16);
-      } else {
-        text(`${visual.failures ?? visual.counts.length} rule failures / ${visual.nodes ?? visual.counts.reduce((total, count) => total + count, 0)} nodes`, x + 8, y + 55, 8, true, accent, width - 16);
-        const issues = visual.issues ?? [];
-        issues.slice(0, 3).forEach((issue, index) => text(index === 2 && issues.length > 3 ? `${issues.length - 2} further rule types` : issue,
-          x + 8, y + 43 - index * 10, 7, false, muted, width - 16));
-      }
-    }
-    text(visual.caption, x + 8, y + 10, 6.8, false, muted, width - 16);
-  };
-  topics.forEach((topic, index) => {
-    const width = index < 4 ? 121.25 : (512 - 18) / 3;
-    const x = index < 4 ? 50 + index * 130.25 : 50 + (index - 4) * (width + 9);
-    const y = index < 4 ? 251 : 157;
-    card(x, y, width, 84);
-    wrapPdfText(ascii(topic.title), width - 36, 8).slice(0, 2).forEach((line, row) => text(line, x + 8, y + 70 - row * 9, 8, true, "0.12 0.18 0.27", width - 36));
-    text(`p.${topicPages.get(topic.id) ?? "-"}`, x + width - 28, y + 70, 6, false, muted, 20);
-    drawVisual(topic.visual, x, y, width);
-    links.push({ topic: topic.id, rect: [x, y, x + width, y + 84] });
+  if (model.findings.length > visible.length) { text(`${visible.length} of ${model.findings.length} findings shown; all findings remain in Detailed evidence.`, 50, y - 3, 8, false, muted); y -= 17; }
+  const topicTop = Math.min(y - 17, 195);
+  text("Topic status", 50, topicTop, 12, true);
+  const gap = 8, width = 122, height = 43;
+  model.topics.forEach((topic, index) => {
+    const x = 50 + index % 4 * (width + gap), top = topicTop - 10 - Math.floor(index / 4) * (height + gap);
+    box(x, top - height, width, height, "1 1 1");
+    lines(topic.title, x + 8, top - 13, width - 16, 8, 2, true, ink);
+    text(topic.status, x + 8, top - 34, 7.5, true, ["Review", "Manual check", "Limited", "Partial"].includes(topic.status) ? orange : accent, width - 39);
+    text(`p.${topicPages.get(topic.target) ?? "-"}`, x + width - 29, top - 34, 7.5, false, muted, 24);
+    links.push({ topic: topic.target, rect: [x, top - height, x + width, top] });
   });
   return { commands, links };
 }
@@ -1210,16 +1111,15 @@ export function renderCanonicalReportPdf(
   pages.forEach((pageLines, pageIndex) => {
     let y = 790;
     const commands: string[] = [
-      pageIndex === 0 ? "0.973 0.98 0.988 rg 0 0 612 842 re f" : "1 1 1 rg 0 0 612 842 re f",
+      "1 1 1 rg 0 0 612 842 re f",
       pageIndex === 0
-        ? `${palette.background} rg 0 690 612 152 re f\n0.055 0.647 0.914 rg 0 686 612 4 re f\nBT /F2 9 Tf ${palette.muted} rg ${options.brandName ? 50 : 485} 814 Td (${pdfString(fitPdfText(brandName, options.brandName ? 512 : 77, 9, true))}) Tj ET`
+        ? `${palette.background} rg 0 716 612 126 re f`
         : `${palette.background} rg 0 812 612 30 re f\n0.055 0.647 0.914 rg 0 809 612 3 re f\nBT /F2 8 Tf ${palette.foreground} rg 50 823 Td (${pdfString(fitPdfText(`${brandName}  -  ${report.reviewFocusLabel} evidence report`, 512, 8, true))}) Tj ET`,
     ];
     if (pageIndex === 0 && brandLogo) {
-      if (options.brandName) commands.push("1 1 1 rg 48 733 64 64 re f");
       commands.push(brandLogoCommand(brandLogo));
     }
-    const executive = pageIndex === 0 ? executivePage(report, Boolean(brandLogo), headerTheme, topicPages, timeZone) : null;
+    const executive = pageIndex === 0 ? executivePage(report, Boolean(brandLogo), headerTheme, topicPages, timeZone, brandName) : null;
     if (executive) commands.push(...executive.commands);
     const annotations: number[] = (executive?.links ?? []).map(link =>
       add(`<< /Type /Annot /Subtype /Link /Rect [${link.rect.join(" ")}] /Border [0 0 0] /Dest (${link.topic}) >>`));
@@ -1280,13 +1180,15 @@ export function renderCanonicalReportPdf(
       commands.push(`BT /${line.bold ? "F2" : "F1"} ${size} Tf ${textColor(line)} rg ${lineX(line, Boolean(brandLogo))} ${y} Td (${pdfString(line.text)}) Tj ET`);
       y -= size + 4 + (line.gapAfter ?? 0);
     }
-    commands.push("0.796 0.835 0.882 RG 0.6 w 50 42 m 562 42 l S");
-    commands.push(`BT /F1 8 Tf 0.392 0.455 0.545 rg 50 27 Td (${pdfString(fitPdfText(`${brandName}  |  ${report.scan.domainHostname ?? "Website report"}`, 370, 8))}) Tj ET`);
+    commands.push("0.796 0.835 0.882 RG 0.6 w 50 54 m 562 54 l S");
+    commands.push(`BT /F1 8 Tf 0.392 0.455 0.545 rg 50 41 Td (${pdfString(fitPdfText(`${brandName}  |  ${report.scan.domainHostname ?? "Website report"}`, 370, 8))}) Tj ET`);
+    commands.push(`BT /F1 7.5 Tf 0.392 0.455 0.545 rg 50 28 Td (${pdfString(`Scan ID: ${report.scan.id}`)}) Tj ET`);
+    commands.push(`BT /F1 7.5 Tf 0.392 0.455 0.545 rg 50 15 Td (${pdfString(REPORT_EXPORT_DISCLAIMER)}) Tj ET`);
     if (pageIndex > 0) {
-      commands.push("BT /F2 8 Tf 0.04 0.47 0.64 rg 440 27 Td (Summary) Tj ET");
-      annotations.push(add("<< /Type /Annot /Subtype /Link /Rect [436 23 483 38] /Border [0 0 0] /Dest (executive) >>"));
+      commands.push("BT /F2 8 Tf 0.04 0.47 0.64 rg 440 41 Td (Summary) Tj ET");
+      annotations.push(add("<< /Type /Annot /Subtype /Link /Rect [436 37 483 50] /Border [0 0 0] /Dest (executive) >>"));
     }
-    commands.push(`BT /F2 8 Tf 0.278 0.333 0.412 rg 512 27 Td (Page ${pageIndex + 1} / ${pages.length}) Tj ET`);
+    commands.push(`BT /F2 8 Tf 0.278 0.333 0.412 rg 512 41 Td (Page ${pageIndex + 1} / ${pages.length}) Tj ET`);
     const content = commands.join("\n");
     assertPublicReportPdfContent([content]);
     const contentId = add(`<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}\nendstream`);
@@ -1303,7 +1205,7 @@ export function renderCanonicalReportPdf(
   if (workpaperDestination) for (const topic of PDF_REPORT_TOPICS) destinations.set(`${topic.id}-sources`, workpaperDestination);
   const destinationNames = [...destinations.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, target]) => `(${name}) [${pageIds[target.pageIndex]} 0 R /XYZ null ${target.y + 20} null]`).join(" ");
   const outlineId = add("");
-  const chapters = [{ id: "executive", title: "Executive summary" }, { id: "findings", title: "Top issues and remediation" }, { id: "retest", title: "How to re-test" }, ...PDF_REPORT_TOPICS.map((topic, index) => ({ id: topic.id, title: `Appendix ${String.fromCharCode(65 + index)}: ${topic.title}` })), { id: "methodology", title: "Methodology and limitations" }];
+  const chapters = [{ id: "executive", title: "Executive summary" }, { id: "findings", title: "Top issues and remediation" }, { id: "retest", title: "How to re-test" }, ...(pdfOtherReviewGroups(report).length ? [{ id: "other-findings", title: "Other report findings" }] : []), ...PDF_REPORT_TOPICS.map((topic, index) => ({ id: topic.id, title: `Appendix ${String.fromCharCode(65 + index)}: ${topic.title}` })), { id: "methodology", title: "Methodology and limitations" }];
   const chapterIds = chapters.map(() => add(""));
   chapters.forEach((chapter, index) => {
     const id = chapterIds[index]!;

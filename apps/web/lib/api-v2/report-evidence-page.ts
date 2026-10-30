@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ReportEvidencePage, ReportEvidenceSection } from "@certscore/api-contracts";
+import type { ReportEvidencePage, ReportEvidenceSection, ReportReviewFocus } from "@certscore/api-contracts";
 
 type Entry = ReportEvidencePage["entries"][number];
 const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), "utf8");
@@ -26,9 +26,9 @@ function entriesFor(value: any, path = ""): Entry[] {
   return [{ path, value: Array.isArray(value) ? [] : {} }, ...Object.entries(value).flatMap(([key, child]) => entriesFor(child, `${path}/${escapePointer(key)}`))];
 }
 export class ReportPageCursorError extends Error {}
-export function buildReportEvidencePage(input: { scanId: string; report: unknown; cursor?: string | null; section?: ReportEvidenceSection }): ReportEvidencePage {
+export function buildReportEvidencePage(input: { scanId: string; report: unknown; cursor?: string | null; section?: ReportEvidenceSection; reviewFocus?: ReportReviewFocus }): ReportEvidencePage {
   const report = canonical(input.report);
-  const snapshot = createHash("sha256").update(JSON.stringify({ version: 1, scanId: input.scanId, report, ...(input.section ? { section: input.section } : {}) })).digest("hex");
+  const snapshot = createHash("sha256").update(JSON.stringify({ version: 1, scanId: input.scanId, report, ...(input.section ? { section: input.section } : {}), ...(input.reviewFocus ? { reviewFocus: input.reviewFocus } : {}) })).digest("hex");
   const entries = entriesFor(report);
   let offset = 0;
   if (input.cursor) {
@@ -45,7 +45,8 @@ export function buildReportEvidencePage(input: { scanId: string; report: unknown
   const next = offset + page.length;
   return {
     type: "certscore_report_evidence_page", version: 1, scanId: input.scanId, snapshot,
-    reportUrl: `https://certscore.ai/scan/${input.scanId}`,
+    reportUrl: `https://certscore.ai/scan/${input.scanId}${input.reviewFocus ? `?reviewFocus=${input.reviewFocus}` : ""}`,
+    ...(input.reviewFocus ? { reviewFocus: input.reviewFocus } : {}),
     ...(input.section ? { section: input.section } : {}),
     entries: page,
     pagination: { offset, returned: page.length, total: entries.length, complete: next === entries.length, nextCursor: next < entries.length ? `v1.${snapshot}.${next}` : null },

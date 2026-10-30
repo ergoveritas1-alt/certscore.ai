@@ -231,7 +231,7 @@ test("known finding families have concrete fallback steps at every severity", ()
     assert.match(result.text, expected);
     assert.match(result.text, /wider scope is unverified/);
     assert.doesNotMatch(result.text, /Review the supporting evidence/);
-    assert.ok(result.text.length <= 500);
+    assert.ok(result.text.length <= 430);
     assert.equal(result.links.length, 1);
   }
 });
@@ -283,6 +283,6 @@ test("grouped nested controls and contrast retain observed facts with matching f
   assert.match(result.text,/Interactive controls were nested/);
   assert.match(result.text,/Low-contrast text was detected/);
   assert.match(result.text,/Separate the flagged nested interactive controls/);
-  assert.ok(result.text.length<=500);
+  assert.ok(result.text.length<=430);
   assert.equal(result.links[0]?.targetId,"accessibility-evidence");
 });

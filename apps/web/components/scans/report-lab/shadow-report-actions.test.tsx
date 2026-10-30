@@ -35,7 +35,10 @@ test("Share menus retain the report downloads without tracking workpaper options
   for (const fullSite of [false, true]) {
     const html = markup(true, fullSite);
     assert.match(html, /format=pdf/);
-    assert.match(html, /format=json/);
+    assert.match(html, /format=docx/);
+    assert.match(html, /reviewFocus=ccpa_cpra/);
+    assert.match(html, /Download (?:full-site )?Word report \(DOCX\)|Download full-site Word \(DOCX\)/);
+    assert.doesNotMatch(html, /format=json|Download JSON/);
     assert.doesNotMatch(html, /Download tracking|format=csv|workpaper=tracking/);
   }
 });

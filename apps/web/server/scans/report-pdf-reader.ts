@@ -1,3 +1,4 @@
+import { pdfPriorityReview, PDF_FINDING_ROW_IDS, pdfPrioritySourceIds } from "./report-pdf-priorities";
 import type { CanonicalReportExport } from "./report-export";
 import { pdfNarrativeFindings } from "./report-pdf-evidence";
 import { pdfTopicForFinding, pdfTopicForRow, type PdfReportTopic } from "./report-pdf-topics";
@@ -6,13 +7,12 @@ import { readChecklistRemediation } from "../../lib/scans/checklist-remediation"
 import { SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
 import { SITE_INTEGRITY_REMEDIATION } from "../../lib/scans/site-integrity-remediation";
 import { reportRowInFocus } from "../../lib/scans/report-framework-scope";
+import { reportFindingSummary } from "../../lib/scans/report-finding-summary";
+export { reportFormInventory } from "./report-form-inventory";
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const string = (value: unknown) => typeof value === "string" ? value : "";
-const findingRows: Record<string, string> = {
-  preconsent_tracking: "pre_consent_third_party_tracking", session_replay_observed: "session_replay_fingerprinting_review",
-  post_refusal_non_essential_activity: "post_reject_tracking_reduction", post_reject_click_tracking: "post_reject_tracking_reduction",
-};
+const findingRows = PDF_FINDING_ROW_IDS;
 const groups: Record<string, { key: string; title: string }> = {
   pre_consent_third_party_tracking: { key: "initial-tracking", title: "Tracking before a consent choice" },
   pre_consent_cookies_storage: { key: "initial-tracking", title: "Tracking before a consent choice" },
@@ -29,7 +29,7 @@ export type PdfReviewObservation = {
   id: string; title: string; status: string; explanation: string; steps: string[]; topic: PdfReportTopic;
   severity?: string; confidence?: string;
 };
-export type PdfReviewGroup = { id: string; title: string; status: string; observations: PdfReviewObservation[]; topic: PdfReportTopic };
+export type PdfReviewGroup = { evidenceGroup?: string; id: string; title: string; status: string; observations: PdfReviewObservation[]; topic: PdfReportTopic };
 
 export function pdfTestedUrl(report: CanonicalReportExport) {
   return report.scan.requestedUrl ?? report.consentControlAssessment?.scan.requestedUrl ?? report.appendix.dataCollectionSurfaces?.pageUrl ?? null;
@@ -46,7 +46,7 @@ export function pdfConfidenceLabel(value: unknown) {
   return score >= 0.8 ? "High confidence" : score >= 0.5 ? "Moderate confidence" : "Limited confidence - verify first";
 }
 
-export function pdfReviewGroups(report: CanonicalReportExport): PdfReviewGroup[] {
+export function pdfDetailedReviewGroups(report: CanonicalReportExport): PdfReviewGroup[] {
   const rows = (report.gdprEprivacyReview?.rows ?? []).filter(row=>reportRowInFocus(row.id,report.reviewFocus));
   const findings = pdfNarrativeFindings(report);
   const details = report.appendix.evidenceDossier?.checklistDetails ?? [];
@@ -91,6 +91,26 @@ export function pdfReviewGroups(report: CanonicalReportExport): PdfReviewGroup[]
   return [...result.values()].sort((left, right) => Number(right.status === "Gap observed") - Number(left.status === "Gap observed"));
 }
 
+/** One group per canonical web priority; supporting observations do not add
+ * another priority or change the selected finding's qualification. */
+export function pdfReviewGroups(report: CanonicalReportExport): PdfReviewGroup[] {
+  return pdfPriorityReview(report).topIssues.map(finding => {
+    const rowId = typeof finding.evidenceJson.checklistItemId === "string" ? finding.evidenceJson.checklistItemId : finding.id;
+    const packet = pdfNarrativeFindings(report).find(item => item.unifiedFindingId === finding.id || findingRows[string(item.unifiedFindingId)] === rowId);
+    const topic = pdfTopicForRow(rowId) ?? (packet ? pdfTopicForFinding(packet) : null) ?? (finding.priority === "high" && finding.id.startsWith("accessibility") ? "accessibility" : "policy");
+    return { id: finding.id, evidenceGroup: groups[rowId]?.key ?? finding.id, title: finding.title, status: finding.status, topic,
+      observations: [{ id: rowId, title: finding.title, status: finding.status, explanation: finding.summary, steps: finding.correctionSteps, topic,
+        severity: finding.severity, confidence: packet ? pdfConfidenceLabel(object(packet.presentation).confidenceScore) : undefined }] };
+  });
+}
+
+/** Full retained narrative/checklist evidence stays separate from priority totals. */
+export function pdfOtherReviewGroups(report: CanonicalReportExport): PdfReviewGroup[] {
+  const covered = new Set(pdfPriorityReview(report).topIssues.flatMap(pdfPrioritySourceIds));
+  return pdfDetailedReviewGroups(report).map(group => ({ ...group, observations: group.observations.filter(row => !covered.has(row.id)) }))
+    .filter(group => group.observations.length > 0);
+}
+
 export function pdfChoiceWindows(report: CanonicalReportExport) {
   const rows = report.appendix.evidenceDossier?.cmp?.audit.rows ?? [];
   return rows.flatMap(row => row.supportingEvidence?.inventory?.choiceActivity ?? [])
@@ -128,26 +148,28 @@ export function pdfTimingEvents(report: CanonicalReportExport) {
 
 export function pdfRejectTimingEvents(report: CanonicalReportExport) {
   const timing = report.appendix.evidenceDossier?.rejectTiming;
-  if (!timing?.inFlightExclusionVerified || !pdfReviewGroups(report).some(group => group.id === "refusal")) return [];
+  if (!timing?.inFlightExclusionVerified || !pdfReviewGroups(report).some(group => (group.evidenceGroup ?? group.id) === "refusal")) return [];
   const request = timing.networkRequests?.slice().sort((left, right) => left.millisecondsAfterConfirmation - right.millisecondsAfterConfirmation)[0];
   return request ? [{ label: "Reject confirmed", milliseconds: 0 }, { label: "Request started", milliseconds: request.millisecondsAfterConfirmation }] : [];
 }
 
 export function pdfRemediationOwner(group: PdfReviewGroup) {
   return group.id === "privacy-notice" || group.topic === "policy" ? "Legal / privacy owner · M" :
-    ["refusal", "initial-tracking"].includes(group.id) ? "Marketing / tag manager + developer · M" : "Developer · M";
+    ["refusal", "initial-tracking"].includes(group.evidenceGroup ?? group.id) ? "Marketing / tag manager + developer · M" : "Developer · M";
 }
 
 export function pdfReportCounts(report: CanonicalReportExport) {
   const reviewGroups = pdfReviewGroups(report);
   const observations = reviewGroups.flatMap(group => group.observations);
   return { groups: reviewGroups.length, observations: observations.length,
-    gaps: observations.filter(row => row.status === "Gap observed").length,
-    review: observations.filter(row => row.status === "Review signal").length };
+    gaps: observations.filter(row => ["Gap observed", "Potential gap"].includes(row.status)).length,
+    review: observations.filter(row => ["Review signal", "Partial concern", "Review"].includes(row.status)).length };
 }
 
 export function pdfPublicWords(value: string) {
-  return value.replace(/\bretained\s+/gi, "").replace(/\b3rd[- ]party\b/gi, "third-party")
+  return reportFindingSummary(value).replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/;\s*canonical_cookie_registry\.v\d+\b/g, "")
+    .replace(/\bretained\s+/gi, "").replace(/\b3rd[- ]party\b/gi, "third-party")
     .replace(/\bURLS\b/g, "URLs").replace(/\b1 review signals\b/g, "1 review signal")
     .replace(/\s+;/g, ";").replace(/Sccs Assumed Unverified/gi, "SCCs assumed, not verified")
     .replace(/\bredirected_to_https\b/g, "redirected to HTTPS").replace(/\bperiodic_cookie_snapshot\b/g, "periodic cookie snapshot")

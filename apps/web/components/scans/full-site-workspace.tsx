@@ -1,4 +1,5 @@
 "use client";
+import { mergeHomepagePriorityFindings } from "../../lib/scans/report-priority-merge";
 import { formCountStatus } from "@certscore/api-contracts";
 import { trackFullSiteCompletion } from "../../lib/analytics/scan-conversions";
 import { flushSync } from "react-dom";
@@ -507,6 +508,7 @@ export function FullSiteWorkspace({
         </details> : null;
   const scanDuration = duration(Number.isFinite(startTime) && timingEnd !== null ? Math.max(0, Math.floor((timingEnd - startTime) / 1000) * 1000) : null);
   const timing = <ReportCoverageTiming
+    scanId={scanId}
     duration={scanDuration}
     showDurationInSummary={initialPending}
     groups={[{ title: "Coverage", rows: [["Pages discovered", coverage?.discovered ?? "Loading…"],
@@ -550,7 +552,7 @@ export function FullSiteWorkspace({
   const inventorySummary = <ReportInventorySummary formCountStatus={formCountStatus((formCount ?? 0) + afterAcceptForms.length, formsLimited || afterAcceptFormsLimited)} forms={[...(data?.collectionSurfaces?.rows ?? []), ...afterAcceptForms]} onLoadDetails={() => requestDetails()} detailsLoading={!data && detailsRequested} onViewEvidence={anchor => { flushSync(() => { setTab("resources"); requestDetails(anchor ?? "report-forms"); }); }} formCount={formCount} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={overview?.score?.siteIntegrity} hiddenLinkSummary={preview?.hiddenLinks} hiddenLinkDestinations={preview?.hiddenLinkDestinations} />;
   const homePriorities = homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }));
   const cachedPriorities = overview?.score?.priorityReview;
-  const priorityFindings = cachedPriorities ? [...cachedPriorities, ...homePriorities.filter(row => (row.id.startsWith("california_privacy_choice_") || row.id === "california_sale_sharing_opt_out_activity" || row.id === "california_notice_at_collection_destination_error" || row.id === "california_rights_information_destination_error") && !cachedPriorities.some(existing => existing.id === row.id))] : homePriorities;
+  const priorityFindings = mergeHomepagePriorityFindings(cachedPriorities, homePriorities);
   const reviewScore = overview?.score ? { ...overview.score, priorityReview: priorityFindings } : overview?.score;
   return (
     <FullSiteRegionContext.Provider value={state?.region ?? initialNotice?.region}>

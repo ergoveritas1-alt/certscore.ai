@@ -538,3 +538,10 @@ Historical records remain unchanged and the score is the existing CertScore scor
 ### Focused report sections (0.2.26)
 
 For a specific question, call `certscore_get_report_evidence_page` with the existing `scanId` and one `section`: `consent`, `gpc`, `policy`, `tracking`, `transport`, or `forms`. Preserve that selector with every returned cursor. Shared scan identity, score, findings and coverage remain unchanged. Selection happens before deduplication, so references stay inside the selected document. `selection.notReturnedFields` describes missing delivery, never verified absence. JSON download links preserve the selected section. Use `workpaper="tracking"` separately for the starting-page workpaper and CSV; never combine `section` and `workpaper`. No additional scan, model call or evidence capture is performed.
+
+
+`certscore_get_report_evidence_page` accepts optional `reviewFocus: "gdpr_eprivacy"`
+or `"ccpa_cpra"` to match that web/PDF/Word view of the same retained scan. Keep
+it with the same section and cursor during continuation. Download links preserve
+the framework. Omitting it retains the scan default; it cannot be combined with
+`workpaper`. Existing read quotas and capture/proof requirements are unchanged.

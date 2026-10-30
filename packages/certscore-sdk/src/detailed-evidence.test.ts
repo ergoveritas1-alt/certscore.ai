@@ -74,3 +74,22 @@ test("cookie comparison evidence preserves candidate templates and expiry arithm
   assert.deepEqual(result.cmpAudit?.rows[0]?.supportingEvidence?.inventory?.cookies, cookies);
   assert.equal(result.cmpAudit?.rows[0]?.supportingEvidence?.cookieComparison?.possibleTemplateNameCount, 1);
 });
+
+
+test("explicit report framework survives SDK pagination and drift fails closed", async () => {
+  const original = globalThis.fetch, calls: string[] = [];
+  try {
+    globalThis.fetch = async input => {
+      calls.push(String(input));
+      assert.equal(new URL(String(input)).searchParams.get("reviewFocus"), "ccpa_cpra");
+      return Response.json(page([{ path: "", value: { reviewFocus: "ccpa_cpra" } }], { reviewFocus: "ccpa_cpra" }));
+    };
+    const client = new CertScoreClient({ apiKey: "test-key" });
+    assert.equal((await client.getReportEvidence(scanId, { section: "cmp", reviewFocus: "ccpa_cpra" })).reviewFocus, "ccpa_cpra");
+    globalThis.fetch = async () => Response.json(page([{ path: "", value: {} }], { reviewFocus: "gdpr_eprivacy" }));
+    await assert.rejects(client.getReportEvidence(scanId, { section: "cmp", reviewFocus: "ccpa_cpra" }), /Mismatched/);
+    const a = page([{ path: "", value: {} }], { reviewFocus: "ccpa_cpra", pagination: { offset: 0, returned: 1, total: 2, complete: false, nextCursor: "next" } });
+    const b = page([{ path: "/x", value: true }], { reviewFocus: "gdpr_eprivacy", pagination: { offset: 1, returned: 1, total: 2, complete: true, nextCursor: null } });
+    assert.throws(() => reconstructReportEvidencePages([a, b]), /mismatched/);
+  } finally { globalThis.fetch = original; }
+});

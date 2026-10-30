@@ -2,7 +2,8 @@
 
 Local preview only. The authenticated export route, native v1 renderer, workspace
 branding loader, scanner, findings, scoring and deployment configuration are
-unchanged. This preview supports canonical v8 **starting-page GDPR/ePrivacy**
+unchanged by the preview. Native PDF and web priority selection are shared.
+This preview supports canonical v8 **starting-page GDPR/ePrivacy**
 exports. Other frameworks and full-site reports fail closed pending parity work.
 
 ## Render
@@ -25,7 +26,7 @@ node --import tsx scripts/preview-report-pdf-v2.ts \
 after checking the scan ID. Those images never supply findings or receipt proof.
 Without images, text branding remains. `--brand-name` overrides the saved name;
 the fallback is **CertScore.ai**. `--paper a4` selects A4. Default paper is Letter.
-Without `REPORT_TEMPLATE=v2`, the CLI uses the unchanged v1 renderer.
+Without `REPORT_TEMPLATE=v2`, the CLI uses the native v1 renderer.
 
 The adjacent `*-source` directory records the immutable source SHA256, output
 SHA256, asset hashes and view model. The source export is never rewritten.
@@ -56,8 +57,12 @@ they do not prove that every possible content combination will fit.
 - The TypeScript view model consumes the frozen canonical report export and
   existing PDF readers. No raw evidence bundle, network read, classification,
   scoring or consent inference is added.
-- Every selected narrative finding is represented exactly once. Related review
-  findings may share an issue; grouping does not infer a common root cause.
+- Top issues use the web's canonical priority projection and framework ranking.
+  The metric counts selected priorities, not all reportable narrative packets.
+  All narrative findings remain in the Report findings table and detailed cards;
+  cards outside the selected priority set appear under Other report findings.
+  Related supporting findings may share a card; grouping does not infer a common
+  root cause. Split cards retain their first-page link destinations.
 - Framework selection uses the shared regulatory review catalog. California-only
   findings and GPC/California choice panels are excluded from the EU preview;
   original multi-framework packets and scores remain in the canonical export.

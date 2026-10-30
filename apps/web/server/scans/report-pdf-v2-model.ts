@@ -1,11 +1,17 @@
+import { reportRequestInventory } from "./report-request-inventory";
+import { REPORT_EXPORT_DISCLAIMER } from "./report-export-footer";
+import { REPORT_TRANSPORT_CHECKS } from "../../lib/scans/report-runtime-inventory";
+import { pdfPriorityReview, pdfPrioritySourceIds } from "./report-pdf-priorities";
 import { pdfNarrativeFindings } from "./report-pdf-evidence";
-import { pdfChoiceWindows, pdfConfidenceLabel, pdfRegionLabel, pdfTestedUrl } from "./report-pdf-reader";
+import { pdfChoiceWindows, pdfConfidenceLabel, pdfRegionLabel, pdfTestedUrl, reportFormInventory } from "./report-pdf-reader";
+import { reportFormPhaseLabel } from "../../lib/scans/report-form-inventory";
 import { pdfDisplayTopic, pdfTopicForFinding } from "./report-pdf-topics";
 import { assertPublicReportPdfContent, publicReportPdfBaseUrl } from "./report-pdf-public-safety";
 import { pdfTimeZone } from "./report-pdf-time";
 import { getGdprEprivacyPostureTone } from "../../lib/scans/regulatory-coverage-score";
 import type { CanonicalReportExport } from "./report-export";
 import { REPORT_STATUS_LABELS, REPORT_FOLLOW_UP, accessibilityReportFollowUp } from "../../lib/scans/report-status-presentation";
+import { reportFindingSummary } from "../../lib/scans/report-finding-summary";
 export type PdfV2Status = "Observed" | "Needs review" | "Review" | "Partial" | "Manual review" | "Not observed" | "Not applicable" | "For information" | "Not tested";
 export type PdfV2Block = {
     kind: "text";
@@ -106,7 +112,7 @@ const date = (v: unknown, tz: string, includeTime = false) => {
     return shortZone ? formatted.replace(/(?:GMT[+-][\d:]+|UTC|GMT)$/, shortZone) : formatted;
 };
 const expiry = (v: unknown, tz: string) => typeof v === "number" && Number.isFinite(v) ? date(new Date(v * 1000).toISOString(), tz) : "Not recorded";
-const cleanSummary = (v: unknown) => pdfV2Words(v).replace(/\s*(?:It (?:corroborates review without adding a second score effect|does not affect score)|This is an informational behavior record and does not affect score)\./gi, "");
+const cleanSummary = (v: unknown) => reportFindingSummary(pdfV2Words(v));
 /** Local v2 view over the frozen canonical export. No raw bundle input, no
  * classifier, scoring, receipt inference, network request or state mutation. */
 export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
@@ -126,6 +132,8 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
     const auditRows = report.appendix.evidenceDossier?.cmp?.audit.rows ?? [];
     const windows = pdfChoiceWindows(report), accept = windows.find(v => v.action === "accept"), reject = windows.find(v => v.action === "reject");
     const inventory = report.appendix.cookieAndTrackerInventory, forms = report.appendix.dataCollectionSurfaces, details = report.appendix.evidenceDossier?.checklistDetails ?? [];
+    const formInventory = reportFormInventory(report);
+    const initialRequests = reportRequestInventory(report);
     const inventoryOf = (key: string) => auditRows.flatMap(row => arr(obj(row.supportingEvidence?.inventory)[key]).map(obj));
     const cookies = inventoryOf("cookies"), declarations = inventoryOf("declarations"), services = inventoryOf("services"), categories = inventoryOf("categories");
     const comparison = auditRows.find(row => row.supportingEvidence?.cookieComparison)?.supportingEvidence?.cookieComparison;
@@ -188,9 +196,24 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
     const metric = (label: string, value: unknown, note: string) => ({ label, value: scalar(value), note });
     const preCounts = inventory.summary.inventoryMetrics ?? [];
     const preStorage = preCounts.find(m => m.label === "Cookies & storage");
-    const preNonEssential = typeof preStorage?.counts?.nonEssential === "number" ? preStorage.counts.nonEssential : null;
+    const preNonEssential = inventory.presentationStatus !== "insufficient_evidence" && typeof preStorage?.counts?.nonEssential === "number" ? preStorage.counts.nonEssential : null;
     const preServiceRows = inventory.rows.filter(r => r.preConsent && r.type !== "cookie" && r.type !== "storage");
     const policyRows = report.appendix.gdprTransparency.rows;
+    const priorityReview = pdfPriorityReview(report);
+    const priorities = priorityReview.topIssues;
+    const narrativeIssues = [...issues];
+    const priorityIssues = priorities.map(priority => {
+        const sourceIds = pdfPrioritySourceIds(priority);
+        const original = narrativeIssues.find(issue => issue.findingIds.some(id => sourceIds.includes(id)));
+        const id = `priority-${priority.id}`;
+        return { ...(original ?? { tier: "Review" as const, impact: priority.severity ?? "Not recorded", confidence: "Confidence not established", findingIds: [], findingNumbers: [], owner: "Review owner", evidenceTarget: "consent", blocks: [], expected: "Verify the recorded finding using the retained examples.", steps: priority.correctionSteps }),
+            id, title: priority.title, summary: priority.summary, priorityId: priority.id,
+            ...(priority.correctionSteps.length ? { steps: priority.correctionSteps } : {}),
+        };
+    });
+    const otherIssues = narrativeIssues.filter(issue => !priorityIssues.some(priority => priority.findingIds.some(id => issue.findingIds.includes(id))));
+    issues.splice(0, issues.length, ...priorityIssues);
+    const allIssues = [...issues, ...otherIssues];
     const policySources = unique(details.filter(d => d.topic === "policy").flatMap(d => d.facts.filter(f => ["sourceUrl", "selectedPolicySectionUrl", "Policy provenance / sourceUrl"].includes(f.label)).map(f => f.value)));
     const sections: PdfV2Section[] = [];
     const section = (id: string, title: string, status: PdfV2Status, summary: string, coverage: string, blocks: PdfV2Block[]) => sections.push({ id, title, shortTitle: title, status, summary, coverage, blocks });
@@ -203,7 +226,7 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
     const allRequests = windows.flatMap(w => w.requests.map(r => ({ ...r, action: w.action })));
     const serviceStates = (name: string) => {
         const states: string[] = [];
-        if (preServiceRows.some(r => r.vendor.toLowerCase() === name.toLowerCase() || r.products.some(p => p.toLowerCase() === name.toLowerCase())))
+        if (preServiceRows.some(r => r.vendor.toLowerCase() === name.toLowerCase() || (r.products ?? []).some(p => p.toLowerCase() === name.toLowerCase())))
             states.push("Before a choice");
         for (const action of ["accept", "reject"] as const)
             if (allRequests.some(r => r.action === action && r.vendor.toLowerCase() === name.toLowerCase()))
@@ -248,7 +271,7 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
     ]);
     const preCookies = inventory.rows.filter(r => r.preConsent && (r.type === "cookie" || r.type === "storage"));
     const storageStatus: PdfV2Status = inventory.presentationStatus === "insufficient_evidence" ? "Partial" : "Observed";
-    section("storage", "B · Cookies and browser storage", storageStatus, `${preCookies.length} cookie/storage inventory rows were recorded before a choice. Post-choice cookie names are listed separately in Appendix A.4.`, "Snapshot presence, an observed write and active use are distinct. This report does not infer a new write from presence alone.", [
+    section("storage", "B · Cookies and browser storage", storageStatus, `${inventory.presentationStatus === "insufficient_evidence" ? "Cookie/storage inventory unavailable" : `${preCookies.length} cookie/storage inventory rows were recorded before a choice`}. Post-choice cookie names are listed separately in Appendix A.4.`, "Snapshot presence, an observed write and active use are distinct. This report does not infer a new write from presence alone.", [
         table("Before a choice", ["Cookie / storage item", "Recorded purpose", "First seen", "Recorded classification"], preCookies.map(r => [r.cookieNames.join(", ") || r.resourceNames.join(", "), r.purpose.join(", "), r.firstSeenMs === null ? "Not recorded" : `${r.firstSeenMs / 1000} s`, pdfV2Words(r.evidenceClassification)]), { mono: [0], widths: [.31, .31, .13, .25] }),
         table("State coverage", ["State", "Inventory"], [["Before a choice", `${preCookies.length} inventory rows`], ["After Accept", `${cookies.filter(c => arr(c.observedIn).includes("after_accept")).length} cookie names in the CMP comparison`], ["After Reject", `${report.appendix.evidenceDossier?.rejectTiming?.storageWriteCount ?? "Not recorded"} storage-write events in the post-Reject assessment`]]),
     ]);
@@ -260,9 +283,11 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
         heading("C.2 Policy-clarity review"), text(findings.find(f => f.id === "policy_clarity_risk")?.summary ?? "No policy-clarity finding was projected."),
         table("C.3 Recorded source URLs", ["Source"], policySources.map((u, i) => [`S${i + 1}: ${u}`]), { mono: [0] }),
     ]);
-    const security = details.filter(d => d.topic === "security" || d.topic === "tls");
-    section("forms-security", "D · Forms / E · Transport security", security.length ? "Observed" : "Not tested", forms.coverage?.status === "complete" ? `${forms.summary.totalForms} forms and ${forms.summary.totalFields} fields were found in the completed main-document inventory. No form was submitted.` : "Form inventory coverage is partial or unavailable. Counts describe recorded items only; no form was submitted.", "Form inventory and transport observations have distinct scopes. HTTPS checks are not a full server-security audit.", [
-        table("D · Form scope", ["Measurement", "Recorded value"], [["Forms found", String(forms.summary.totalForms)], ["Field candidates inspected", scalar(forms.coverage?.inspectedFieldCandidateCount)], ["Inventory coverage", pdfV2Words(forms.coverage?.status)]]),
+    const security = details.filter(d => REPORT_TRANSPORT_CHECKS.some(([, id]) => id === d.id));
+    section("forms-security", "D · Forms / E · Transport security", formInventory.totalForms ? "Observed" : security.length ? "Observed" : "Not tested", `${formInventory.totalForms} form observations and ${formInventory.totalFields} retained fields. Initial page: ${formInventory.initialForms ?? "unavailable"}; after Accept: ${formInventory.afterAcceptForms ?? "unavailable in this export"}. ${formInventory.limited ? formInventory.hasCombinedInventory ? "Form coverage is limited; additional forms may not have been captured. " : "Form inventory coverage is partial or unavailable. " : ""}No form was submitted.`, "Form observations retain their capture phase. Initial-page coverage does not describe later captures. HTTPS checks are not a full server-security audit.", [
+        table("D · Form scope", ["Measurement", "Recorded value"], [["Form observations", String(formInventory.totalForms)], ["Initial-page forms", scalar(formInventory.initialForms)], ["After Accept forms", scalar(formInventory.afterAcceptForms)], ["Retained fields", String(formInventory.totalFields)], ["Initial-page inventory coverage", pdfV2Words(forms.coverage?.status)], ["After Accept coverage", formInventory.summary?.afterAcceptCapture === "limited" ? "Limited" : formInventory.summary?.afterAcceptCapture === "retained" ? "Recorded" : "Unavailable in this export"]]),
+        ...formInventory.rows.flatMap((row, index) => [heading(`D.${index + 1} Form ${index + 1} · ${reportFormPhaseLabel(row)}`), text(`${row.form.title ?? row.form.surfaceType.replaceAll("_", " ")} · ${row.form.pageUrl}. Method: ${row.form.method}; action: ${row.form.actionHostname ?? row.form.actionRelationship}. ${row.form.fields.length} retained ${row.form.fields.length === 1 ? "field" : "fields"}.${row.captureLimited ? " Capture was limited." : ""}`),
+          table(`Form ${index + 1} fields`, ["Label", "Element / type", "Recorded category", "Required / state"], row.form.fields.map(field => [field.label ?? "Label not retained", `${field.elementType} / ${field.inputType ?? "Not recorded"}`, field.semanticCategory.replaceAll("_", " "), `${field.required ? "Required" : "Not required"}; ${field.disabled ? "disabled" : field.readOnly ? "read-only" : "available"}`]), { widths: [.28, .20, .27, .25] })]),
         table("E.1 Transport assessments", ["Check", "Saved assessment", "Evidence"], security.map(d => [d.label, pdfV2Status(d.status), pdfV2Words(d.explanation)]), { widths: [.25, .16, .59], compact: true }),
         table("E.2 Certificate facts", ["Recorded fact", "Value"], security.filter(d => d.id === "transport_security_tls_certificate").flatMap(d => d.facts.filter(f => /\/ (subject|issuer|validFrom|validTo|chainCertificateCount)$/.test(f.label)).map(f => [f.label.split(" / ").at(-1)!.replace(/([a-z])([A-Z])/g, "$1 $2"), f.value])), { widths: [.32, .68], compact: true }),
         table("Recorded HTTP redirect sequence", ["Sequence / destination"], security.filter(d => d.id === "transport_security_http_redirect").flatMap(d => d.facts.filter(f => f.label.startsWith("httpProbeRedirectChain")).map(f => [f.value])), { mono: [0], compact: true }),
@@ -274,8 +299,13 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
     const conflicts = domains.filter(host => { const rows = allRequests.filter(r => r.hostname === host); return rows.some(a => rows.some(b => a.action !== b.action && a.path === b.path && a.nonEssential !== b.nonEssential)); });
     if (conflicts.length)
         diagnostics.push(`Recorded request classification differs across states for ${conflicts.join(", ")}; no PDF-side reclassification or count rewrite performed.`);
-    const externalStatus: PdfV2Status = refusal ? "Needs review" : preServiceRows.length || allRequests.length ? "Observed" : "Not tested";
-    section("external", "F · Services and domains", externalStatus, `${preServiceRows.length} pre-choice service rows and ${domains.length} distinct request hosts across the recorded choice-session samples. These denominators are separate.`, "Before-choice inventory and post-choice sessions are displayed separately.", [
+    const externalStatus: PdfV2Status = refusal ? "Needs review" : initialRequests || preServiceRows.length || allRequests.length ? "Observed" : "Not tested";
+    section("external", "F · Services and domains", externalStatus, initialRequests ? `${initialRequests.metric!.value} request events and ${initialRequests.totalResources} distinct request resources before a choice; ${domains.length} distinct hosts across recorded choice-session samples.` : `${preServiceRows.length} pre-choice service rows and ${domains.length} distinct request hosts across the recorded choice-session samples. These denominators are separate.`, "Before-choice inventory and post-choice sessions are displayed separately.", [
+        ...(initialRequests ? [
+          table("Initial-page network inventory", ["Measurement", "Recorded value"], [["Request events before a choice", String(initialRequests.metric!.value)], ["Distinct request resources", String(initialRequests.totalResources)], ["Identified services in initial-page inventory", scalar(initialRequests.metric!.overview?.identifiedServices)], ["Distinct request hosts", scalar(initialRequests.distinctHosts)]]),
+          table("Initial-page request resources", ["Method / resource", "Vendor / classification", "Events"], initialRequests.rows.map(row => [`${row.method ?? "Not retained"} ${row.resource}`, `${row.vendor ?? "Unidentified"}; ${row.classification}`, String(row.eventCount)]), { mono: [0], widths: [.56, .30, .14], compact: true }),
+          ...(initialRequests.omittedResources ? [text(`${initialRequests.omittedResources} additional resource rows are available in the online inventory.`, true)] : []),
+        ] : []),
         table("F.1 Before a choice", ["Service", "Purpose", "Observed host"], preServiceRows.map(r => [r.vendor, r.purpose.join(", "), r.domains.join(", ")]), { widths: [.25, .35, .40] }),
         table("F.2 Hosts across choice samples", ["Host", "Recorded vendor", "After Accept", "After Reject"], domains.map(host => { const rows = allRequests.filter(r => r.hostname === host); const state = (a: "accept" | "reject") => { const s = rows.filter(r => r.action === a); return !s.length ? "Not observed in sample" : s.some(r => r.nonEssential) ? "Seen; non-essential recorded" : "Seen; other activity recorded"; }; return [host, unique(rows.map(requestName)).join(", "), state("accept"), state("reject")]; }), { mono: [0], widths: [.31, .23, .23, .23], compact: true }),
         ...(conflicts.length ? [text(`For ${conflicts.join(", ")}, a matching sanitized path has different recorded classifications between sessions. Both observations are preserved; this view does not change canonical classification.`, true)] : []),
@@ -291,14 +321,14 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
     ]);
     const links = base ? { online: `${base}/app/scans/${encodeURIComponent(report.scan.id)}?reviewFocus=${report.reviewFocus}`, workpaper: `${base}/api/scans/${encodeURIComponent(report.scan.id)}/report-export?format=json&reviewFocus=${report.reviewFocus}`, retest: `${base}/?url=${encodeURIComponent(pdfTestedUrl(report) ?? "")}` } : { online: null, workpaper: null, retest: null };
     const model = { version: "certscore.report-pdf-preview.v2", presentation: {statusLabels: REPORT_STATUS_LABELS, followUp: REPORT_FOLLOW_UP}, scanId: report.scan.id, domain: report.scan.domainHostname ?? "Website report", url: pdfTestedUrl(report) ?? "Not recorded", finalUrl: forms.pageUrl ?? report.consentControlAssessment?.document?.canonicalDocumentId ?? "Not recorded",
-        brandName: options.brandName?.trim() || "CertScore.ai", framework: report.reviewFocusLabel, score: report.score.value, rating: getGdprEprivacyPostureTone(report.score.value).ratingLabel,
+        brandName: options.brandName?.trim() || "CertScore.ai", footerDisclaimer: REPORT_EXPORT_DISCLAIMER, framework: report.reviewFocusLabel, score: report.score.value, rating: getGdprEprivacyPostureTone(report.score.value).ratingLabel,
         location: pdfRegionLabel(report.scan.scanFrom), date: date(report.scan.completedAt, tz, true), utc: date(report.scan.completedAt, "UTC", true), timeZone: tz, scope: report.reviewScope,
-        metrics: [metric("Report findings", findings.length, `${issues.filter(i => i.tier !== "For information").length} review areas + ${issues.filter(i => i.tier === "For information").length} informational baselines`), metric("Before a choice", preNonEssential ?? "Unknown", "classified non-essential cookies/storage; requests counted separately"), metric("After Reject", reject?.nonEssentialRequestCount ?? "Unknown", reject ? unique(reject.requests.filter(r => r.nonEssential).map(requestName)).map(v => `${v} ×${reject.requests.filter(r => r.nonEssential && requestName(r) === v).length}`).join(" · ") || "classified non-essential request events" : "No recorded request window"), metric("Disclosure text observed", `${policyRows.filter(r => r.status === "Observed").length}/${policyRows.length}`, "text presence; adequacy is a separate assessment")],
-        findings: findings.map(({ packet, ...f }) => ({ ...f, issueTarget: issues.find(i => i.findingIds.includes(f.id))!.id })), issues, sections, links,
-        topics: [{ title: "CMP and consent", status: consentStatus, target: "consent", summary: consentSummary }, { title: "Privacy policy", status: policyStatus, target: "policy", summary: `${policyRows.filter(r => r.status === "Observed").length}/${policyRows.length} disclosure rows with text; presence is not adequacy.` }, { title: "Cookies and storage", status: storageStatus, target: "storage", summary: `${preCookies.length} inventory rows before a choice; post-choice evidence is separate.` }, { title: "External services", status: externalStatus, target: "external", summary: `${domains.length} distinct request hosts across choice-session samples.` }, { title: "Transport security", status: !security.length ? "Not tested" : security.some(d => pdfV2Status(d.status) !== "Observed") ? "Partial" : "Observed", target: "forms-security", summary: `${security.length} saved assessments; not a full server-security audit.` }, { title: "Accessibility", status: accessibilityStatus, target: "accessibility", summary: axe ? `${axe.rulesEvaluated.length} evaluated rules; ${axeSummary?.failedRuleCount ?? "unknown"} failed and ${axeSummary?.reviewRuleCount ?? "unknown"} review rules.` : "No structured result recorded." }, { title: "Forms", status: forms.assessmentStatus === "not_observed" ? "Not observed" : forms.summary.totalForms ? "Observed" : "Partial", target: "forms-security", summary: `${forms.summary.totalForms} forms found; no data entry or submission.` }].map(v => ({ ...v, status: v.status as PdfV2Status })),
+        metrics: [metric("Top issues", priorities.length, `${findings.length} report findings retained`), metric("Before a choice", preNonEssential ?? "Unknown", "classified non-essential cookies/storage; requests counted separately"), metric("After Reject", reject?.nonEssentialRequestCount ?? "Unknown", reject ? unique(reject.requests.filter(r => r.nonEssential).map(requestName)).map(v => `${v} ×${reject.requests.filter(r => r.nonEssential && requestName(r) === v).length}`).join(" · ") || "classified non-essential request events" : "No recorded request window"), metric("Disclosure text observed", `${policyRows.filter(r => r.status === "Observed").length}/${policyRows.length}`, "text presence; adequacy is a separate assessment")],
+        findings: findings.map(({ packet, ...f }) => ({ ...f, issueTarget: allIssues.find(i => i.findingIds.includes(f.id))!.id })), issues, otherIssues, priorities: priorities.map(f => ({id:f.id,title:f.title,status:f.status})), highlights: priorityReview.highlights, sections, links,
+        topics: [{ title: "CMP and consent", status: consentStatus, target: "consent", summary: consentSummary }, { title: "Privacy policy", status: policyStatus, target: "policy", summary: `${policyRows.filter(r => r.status === "Observed").length}/${policyRows.length} disclosure rows with text; presence is not adequacy.` }, { title: "Cookies and storage", status: storageStatus, target: "storage", summary: inventory.presentationStatus === "insufficient_evidence" ? "Inventory unavailable." : `${preCookies.length} inventory rows before a choice; post-choice evidence is separate.` }, { title: "External services", status: externalStatus, target: "external", summary: initialRequests ? `${initialRequests.metric!.value} requests before a choice; ${domains.length} distinct hosts across choice-session samples.` : `${domains.length} distinct request hosts across choice-session samples.` }, { title: "Transport security", status: !security.length ? "Not tested" : security.some(d => pdfV2Status(d.status) !== "Observed") ? "Partial" : "Observed", target: "forms-security", summary: `${security.length} saved assessments; not a full server-security audit.` }, { title: "Accessibility", status: accessibilityStatus, target: "accessibility", summary: axe ? `${axe.rulesEvaluated.length} evaluated rules; ${axeSummary?.failedRuleCount ?? "unknown"} failed and ${axeSummary?.reviewRuleCount ?? "unknown"} review rules.` : "No structured result recorded." }, { title: "Forms", status: formInventory.totalForms ? "Observed" : formInventory.limited ? "Partial" : forms.assessmentStatus === "not_observed" ? "Not observed" : "Partial", target: "forms-security", summary: `${formInventory.totalForms} form observations${formInventory.afterAcceptForms ? `; ${formInventory.afterAcceptForms} after Accept` : ""}.${formInventory.limited ? " Limited coverage." : ""} No data entry or submission.` }].map(v => ({ ...v, status: v.status as PdfV2Status })),
         retest: issues.some(i => i.tier !== "For information") ? { issues: issues.filter(i => i.tier !== "For information").map(i => ({ title: i.title, do: i.steps[0] ?? "Review the source evidence.", expected: i.expected })), windows: windows.map(w => ({ choice: w.action, windowMs: w.windowMs })), location: pdfRegionLabel(report.scan.scanFrom) } : null,
         methodology: ["This is an automated technical risk-signal report, not a certification or determination of legal compliance.", "This report describes the recorded starting-page visit and its bounded choice sessions.", "Click completion, choice registration, request presence, storage presence and collection purpose are distinct evidence concepts.", "A request or cookie not observed during a bounded window may appear later, elsewhere or in a different state.", "Changing review focus reuses this visit's evidence; it does not run a new scan.", "Scores and findings come from the recorded assessment."],
-        diagnostics, trace: { findingIds: findings.map(f => f.id), reportVersion: report.artifactVersion, assessmentSource: report.consentControlAssessment?.provenance ?? null } };
+        diagnostics, trace: { priorityFindingIds: priorities.map(f => f.id), findingIds: findings.map(f => f.id), reportVersion: report.artifactVersion, assessmentSource: report.consentControlAssessment?.provenance ?? null } };
     const publicValues: string[] = [];
     const collect = (v: unknown) => { if (typeof v === "string")
         publicValues.push(v);

@@ -661,6 +661,7 @@ export async function loadFullSiteExport(scanId: string) {
     timing: report.timing,
     pages: report.pages.rows,
     resources: report.resources.rows,
+    ...(report.collectionSurfaces ? { collectionSurfaces: report.collectionSurfaces } : {}),
     inventoryHref: `/api/scans/${scanId}/full-site`,
     pageEvidenceHrefTemplate: `/api/scans/${scanId}/full-site?detailPage={pageId}`,
   };

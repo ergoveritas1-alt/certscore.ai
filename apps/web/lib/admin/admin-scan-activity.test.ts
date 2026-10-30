@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminScanActivityOperationalStatus, ADMIN_SCAN_ACTIVITY_PERIODS, adminScanActivityHref, adminScanActivityWindow, resolveAdminScanActivityPeriod } from "./admin-scan-activity";
+import { adminScanMinutesSince, adminScanActivityOperationalStatus, ADMIN_SCAN_ACTIVITY_PERIODS, adminScanActivityHref, adminScanActivityWindow, resolveAdminScanActivityPeriod } from "./admin-scan-activity";
+
+test("last-scan minutes use the refresh instant across time zones and preserve unknown timestamps", () => {
+  const refreshed = "2026-10-30T12:03:29-07:00";
+  assert.equal(adminScanMinutesSince("2026-10-30T19:00:00Z", refreshed), 3);
+  assert.equal(adminScanMinutesSince("2026-10-30T19:03:00Z", refreshed), 0);
+  assert.equal(adminScanMinutesSince(null, refreshed), null);
+  assert.equal(adminScanMinutesSince("invalid", refreshed), null);
+  assert.equal(adminScanMinutesSince("2026-10-30T20:00:00Z", refreshed), null);
+});
 
 test("legacy conflicting scopes resolve to the explicit table period; new pages default to 24h", () => {
   assert.equal(resolveAdminScanActivityPeriod({ timeSpan: "31d", snapshot: "24h" }), "31d");

@@ -9,7 +9,7 @@ const build=(domain:string)=>{
   const before=structuredClone(source);
   const result=buildAssessmentHighlightsPresentation(source.findings as AssessmentHighlightFinding[],source.scope as AssessmentScope);
   assert.deepEqual(source,before);
-  assert.ok(result.text.length<=500);
+  assert.ok(result.text.length<=430);
   assert.ok(!result.expanded||result.expanded.text.length<=1000);
   return result;
 };
@@ -32,9 +32,9 @@ test("cookie disclosure and unconfirmed consent interfaces get applicable next s
 });
 
 test("sitewide storage and hidden links include corrections with necessary conditions",()=>{
-  const storage=build("cnn.com").text;
-  assert.match(storage,/15 non-essential/);
-  assert.match(storage,/Check each retained item's purpose; defer confirmed non-essential storage/);
+  const storage=build("cnn.com");
+  assert.match(storage.expanded!.text,/15 non-essential/);
+  assert.match(storage.text,/Check each retained item's purpose; defer confirmed non-essential storage/);
   const hidden=build("www.pferdeklinik-roentorf.de");
   assert.match(hidden.text,/remove unintended links or make intended navigation visible/);
   assert.match(hidden.text,/preserving legitimate skip links/);

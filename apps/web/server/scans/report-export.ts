@@ -13,7 +13,6 @@ import {
   type CollectionSurfaceAssessment,
 } from "@certscore/contracts";
 import {
-  buildRuntimeInventoryProjectionFromScan,
   classifyInventoryEvidence,
   deriveRuntimeInventoryPresentationState,
 } from "../../lib/scans/runtime-inventory-projection";
@@ -22,6 +21,9 @@ import { getPersistedCanonicalReportProjection } from "./persisted-canonical-rep
 import { isGdprTransparencyReportRowId } from "../../lib/scans/gdpr-transparency-report-contract";
 import { selectSiteIntegrityFinding } from "../../lib/scans/site-integrity-report";
 import { deriveCaliforniaRegulatoryScore } from "../../lib/scans/california-regulatory-score";
+import { projectReportFormInventory, type ReportFormInventory } from "../../lib/scans/report-form-inventory";
+
+import { projectReportRuntimeInventory } from "../../lib/scans/report-runtime-inventory";
 
 export const CANONICAL_REPORT_EXPORT_VERSION = "canonical-report-export-v8" as const;
 const MAX_APPENDIX_INVENTORY_ROWS = 500;
@@ -123,9 +125,9 @@ function buildExecutiveSummary(input: {
 }
 
 function buildRuntimeAppendix(scanRecord: ScanDetailResponse, normalizedConcerns: Array<Record<string, unknown>>) {
-  let projection: ReturnType<typeof buildRuntimeInventoryProjectionFromScan>;
+  let runtime: ReturnType<typeof projectReportRuntimeInventory>;
   try {
-    projection = buildRuntimeInventoryProjectionFromScan({
+    runtime = projectReportRuntimeInventory({
       ...scanRecord,
       trackerVendors: Array.isArray(scanRecord.trackerVendors) ? scanRecord.trackerVendors : [],
     });
@@ -148,6 +150,9 @@ function buildRuntimeAppendix(scanRecord: ScanDetailResponse, normalizedConcerns
       rows: [],
     };
   }
+  const { projection, resources, inventorySummary } = runtime;
+  const requestRows = resources.resources.filter(row => row.kind === "request");
+  const requestMetric = resources.requestMetric;
   const runtimeCoverageLimited = normalizedConcerns.some((concern) => {
     const evidenceBundle = record(concern.evidenceBundle);
     const rawEvidence = record(evidenceBundle?.rawEvidence);
@@ -168,7 +173,7 @@ function buildRuntimeAppendix(scanRecord: ScanDetailResponse, normalizedConcerns
     presentationStatus: presentation.status,
     presentationMessage: presentation.message,
     summary: {
-      inventoryMetrics: projection.inventorySummary,
+      inventoryMetrics: inventorySummary,
       totalRows: projection.ungroupedRows.length,
       includedRows: retainedRows.length,
       omittedRows: Math.max(0, projection.ungroupedRows.length - retainedRows.length),
@@ -178,6 +183,21 @@ function buildRuntimeAppendix(scanRecord: ScanDetailResponse, normalizedConcerns
       groupedEntities: projection.groupedRows.length,
       requestEvidenceRows: projection.requestRows.length,
       dataFlowRows: projection.dataFlows.length,
+    },
+    requestInventory: {
+      scope: "starting_page_before_choice" as const,
+      status: requestMetric ? "retained" as const : "unavailable" as const,
+      metric: requestMetric ?? null,
+      totalResources: requestMetric ? requestRows.length : null,
+      distinctHosts: requestMetric ? new Set(requestRows.map(row => row.occurrence.domain)).size : null,
+      servicePurposes: [...new Set(resources.services.flatMap(service => service.purposes))].map(purpose => ({ label: purpose, value: resources.services.filter(service => service.context.identity && service.purposes.includes(purpose)).length })),
+      omittedResources: Math.max(0, requestRows.length - MAX_APPENDIX_INVENTORY_ROWS),
+      rows: requestRows.slice(0, MAX_APPENDIX_INVENTORY_ROWS).map(row => ({
+        resource: row.name, vendor: row.occurrence.vendor, domain: row.occurrence.domain,
+        method: typeof row.occurrence.details?.method === "string" ? row.occurrence.details.method : null,
+        classification: row.inventoryEvidence, eventCount: row.eventCount, firstSeenMs: row.occurrence.firstSeenMs,
+        evidenceRefs: row.occurrence.evidenceRefs,
+      })),
     },
     rows: retainedRows.map((row, index) => ({
       rowNumber: index + 1,
@@ -274,6 +294,7 @@ function buildGdprTransparencyAppendix(
 
 function buildDataCollectionSurfacesAppendix(
   assessment: CollectionSurfaceAssessment | null | undefined,
+  reportInventory?: ReportFormInventory,
 ) {
   const forms = assessment?.forms ?? [];
   const fieldCount = forms.reduce((total, form) => total + form.fields.length, 0);
@@ -307,6 +328,7 @@ function buildDataCollectionSurfacesAppendix(
     limitationKeys: assessment?.limitationKeys ?? [],
     evidenceRefs: assessment?.evidenceRefs ?? [],
     forms,
+    ...(reportInventory ? { reportInventory } : {}),
   };
 }
 
@@ -415,6 +437,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
       cookieAndTrackerInventory: buildRuntimeAppendix(scanRecord, normalizedConcerns),
       dataCollectionSurfaces: buildDataCollectionSurfacesAppendix(
         canonical.collectionSurfaceAssessment ?? null,
+        projectReportFormInventory(scanRecord, canonical, fullSite?.collectionSurfaces),
       ),
       gdprTransparency: buildGdprTransparencyAppendix(canonical.checklistPresentation),
     },
