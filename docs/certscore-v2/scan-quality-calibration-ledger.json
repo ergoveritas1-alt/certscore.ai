@@ -2946,10 +2946,43 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://jobvite.com/"
+    },
+    "https://airandspaceforces.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-28T03:57:05.865Z",
+      "lastContactAt": "2026-10-31T03:57:05.865Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized passive reference/candidate diagnostic 20261031T034940Z-manual-live-geometry-pairs-12b40ea8; cooldown waived for these two visits only; no-go/holds retained. Not rotating inventory or baseline.",
+      "state": "cooldown",
+      "url": "https://airandspaceforces.com/"
+    },
+    "https://routenote.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-28T03:58:49.923Z",
+      "lastContactAt": "2026-10-31T03:58:49.923Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized passive reference/candidate diagnostic 20261031T034940Z-manual-live-geometry-pairs-12b40ea8; cooldown waived for these two visits only; no-go/holds retained. Not rotating inventory or baseline.",
+      "state": "cooldown",
+      "url": "https://routenote.com/"
+    },
+    "https://ae.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-28T04:02:12.931Z",
+      "lastContactAt": "2026-10-31T04:02:12.931Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized passive reference/candidate diagnostic 20261031T034940Z-manual-live-geometry-pairs-12b40ea8; cooldown waived for these two visits only; no-go/holds retained. Not rotating inventory or baseline.",
+      "state": "cooldown",
+      "url": "https://ae.com/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-29T22:16:44.545Z",
+  "updatedAt": "2026-10-31T04:02:43.966Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -3120,6 +3153,9 @@
     "https://bonfire.com/",
     "https://homechef.com/",
     "https://netsparkmobile.com/",
-    "https://jobvite.com/"
+    "https://jobvite.com/",
+    "https://ae.com/",
+    "https://airandspaceforces.com/",
+    "https://routenote.com/"
   ]
 }
