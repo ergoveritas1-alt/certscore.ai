@@ -10,8 +10,7 @@ import {createHash} from "node:crypto";
 import {mkdir, readFile, readdir, writeFile} from "node:fs/promises";
 import path from "node:path";
 import {redirectPublicationHarness} from "../apps/web/server/scans/redirect-publication.fixture";
-import {CANONICAL_POST_ACCEPT_RECIPE_SET_ID} from "../packages/certscore-scan-core/src/post-accept-cmp-recipes";
-import {CANONICAL_POST_REFUSAL_RECIPE_SET_ID} from "../packages/certscore-scan-core/src/post-refusal-cmp-recipes";
+import {postAcceptLambdaDispatchConfigSchema, postRefusalLambdaDispatchConfigSchema} from "@certscore/contracts";
 
 const arg = (key: string) => process.argv[process.argv.indexOf(key) + 1];
 
@@ -22,10 +21,25 @@ async function main() {
   assert.ok(Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 3);
   const publicTarget = process.argv.includes("--owned-target") ? arg("--owned-target") : undefined;
   if (publicTarget) assert.ok(["https://ergoveritas.com/testar1.html", "https://ergoveritas.com/testar2.html"].includes(publicTarget), "only existing owned canaries are supported");
+  // Wire versions are validated by the dispatch contracts; registry recipe-set
+  // generation versions are a different namespace and cannot be substituted.
+  const config = (action: "accept" | "reject") => (action === "accept" ? postAcceptLambdaDispatchConfigSchema : postRefusalLambdaDispatchConfigSchema).parse({enabled: true, rolloutMode: "owned_canary", dispatchDelayMs: 0,
+        actionSearchTimeoutMs: action === "accept" ? 14000 : 1500, confirmationTimeoutMs: action === "accept" ? 2000 : 1500,
+        observationWindowMs: action === "accept" ? 3000 : 8000,
+        resolver: publicTarget ? {kind: "canonical_cmp_registry", recipeSetId: action === "accept" ? "canonical-consent-control-accept-v6" : "canonical-consent-control-reject-v23"}
+          : {kind: "named_cmp", cmpCanonicalName: "OneTrust", confirmation: {kind: "local_storage_equals", key: "consent", expectedValue: action === "accept" ? "granted" : "denied"}},
+        interactionAuthorization: publicTarget ? {kind: "owned_canary", authorizationId: "ergoveritas_owned_post_refusal_canary.v1"}
+          : {kind: "loopback", authorizationId: "loopback_local_lab"}});
+  const validatedConfigs = {accept: config("accept"), reject: config("reject")};
+  if (process.argv.includes("--validate-only")) {
+    await writeFile(path.join(out, "validated-dispatch-configs.json"), JSON.stringify(validatedConfigs, null, 2));
+    process.stdout.write("Both dispatch wire configurations validated offline; no browser or public request started.\n");
+    return;
+  }
   const pin = async (directory: string) => {
     const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard",
       "packages/certscore-scan-core/src", "packages/certscore-contracts/src", "packages/shared/src", "packages/certscore-vendor-resolver/src", "packages/web-bot-auth/src",
-      "apps/v2-dag-lambda/src", "apps/web/server/scans", "pnpm-lock.yaml"], {cwd: directory, encoding: "utf8"}).trim().split("\n");
+      "apps/v2-dag-lambda/src", "apps/web/server/scans", "pnpm-lock.yaml", "scripts/evaluate-ar-local-report.ts"], {cwd: directory, encoding: "utf8"}).trim().split("\n");
     return Object.fromEntries(await Promise.all([...new Set(files)].sort().map(async file => [file, createHash("sha256").update(await readFile(path.join(directory, file))).digest("hex")])));
   };
   const sourcePins = {baseline: await pin(baseline), candidate: await pin(root)};
@@ -62,13 +76,6 @@ async function main() {
       const cwd = arm === "baseline" ? baseline : root, id = `ar-report-${arm}-${repeat}`, target = publicTarget ?? `http://localhost:3000/site/${id}`;
       const runStartedAtMs = Date.now();
       const artifacts = path.join(out, `${id}-artifacts`), summaryPath = path.join(out, `${id}.scanner.json`);
-      const config = (action: string) => ({enabled: true, rolloutMode: "owned_canary", dispatchDelayMs: 0,
-        actionSearchTimeoutMs: action === "accept" ? 14000 : 1500, confirmationTimeoutMs: action === "accept" ? 2000 : 1500,
-        observationWindowMs: action === "accept" ? 3000 : 8000,
-        resolver: publicTarget ? {kind: "canonical_cmp_registry", recipeSetId: action === "accept" ? CANONICAL_POST_ACCEPT_RECIPE_SET_ID : CANONICAL_POST_REFUSAL_RECIPE_SET_ID}
-          : {kind: "named_cmp", cmpCanonicalName: "OneTrust", confirmation: {kind: "local_storage_equals", key: "consent", expectedValue: action === "accept" ? "granted" : "denied"}},
-        interactionAuthorization: publicTarget ? {kind: "owned_canary", authorizationId: "ergoveritas_owned_post_refusal_canary.v1"}
-          : {kind: "loopback", authorizationId: "loopback_local_lab"}});
       const code = await new Promise<number | null>((resolve, reject) => {
         const child = spawn(process.execPath, ["--import", "tsx", path.join(cwd, "scripts/run-local-v2-dag-lambda-parity.ts"),
           "--target-url", target, "--profile", "standard", "--no-debug-overrides", "--artifact-dir", artifacts, "--out", summaryPath,
