@@ -82,3 +82,25 @@ the corrected projection; historical records without a basis keep their original
 score availability. No deployment, fresh scan, browser work or model call occurs.
 Incremental metadata storage/processing is estimated below $0.02/month at
 100,000 scans, disclosed before implementation; capture budgets are unchanged.
+
+## November 1 retained document-response repair
+
+The owner requested fixes following the October 31 public MCP burst. New local
+materializations may use `usable_starting_page_score.v4-document-response` when
+independent same-origin visits finish at different paths and the initial
+navigation-attempt summary lacks success, while the original usable runtime
+document has positive retained success proof. This requires an exact native
+main-document request/2xx response pair, unique request identity, loader-bound
+runtime metadata, matching URLs, ordered timestamps before that snapshot and
+the report's separately retained document. Subframes, subresources, service
+worker responses, duplicate identities, other origins and missing proof remain
+ineligible. Existing usable-runtime checks still apply; degraded navigation is
+not upgraded. Historical v1–v3 proofs and score weights remain unchanged.
+
+The original checksum-verified wesco.com bundle and manifest publish once with
+both posture scores in an offline canonical replay. Missing optional auxiliary
+assets remain unavailable. The sanitized regression covers assessment,
+persistence, API, report and PDF. No live visit, new model call, production
+deployment or historical report rewrite is included. Added bounded provenance
+storage/processing is estimated below $0.05/month at 100,000 scans under existing
+retention and capacity; all capture and infrastructure budgets remain unchanged.

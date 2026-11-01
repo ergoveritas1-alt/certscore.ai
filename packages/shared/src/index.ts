@@ -53,3 +53,4 @@ export * from "./full-site-crawl";
 export * from "./full-site-urls";
 
 export * from "./mcp-response-summary";
+export * from "./mcp-free-authentication";

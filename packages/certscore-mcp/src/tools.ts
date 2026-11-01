@@ -1,6 +1,12 @@
 import { pulseResponseSchema, privacyAuditEvidenceSchema, privacyAuditSummarySchema, apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema, scanFormsSummarySchema, scanScoreExplanationSchema, apiAccessibilityAuditSummarySchema, describeGpcActivityComparison } from "@certscore/api-contracts";
 
 import { bundleReviewNavigation } from "./review-navigation.js";
+import * as shared from "@website-signal-risk-scanner/shared";
+
+// Native ESM sees the CommonJS package under default; the published bundle
+// resolves its TypeScript sources and exposes the named exports directly.
+const sharedPolicy = (Reflect.get(shared, "default") as typeof shared | undefined) ?? shared;
+const { MCP_FREE_AUTHENTICATION_MESSAGE, MCP_FREE_AUTHENTICATION_INTRO_MESSAGE, sharedMcpPoolAuthenticationOffer } = sharedPolicy;
 
 import { withResponseCapture, transferResponseCapture } from "./response-capture.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -68,6 +74,12 @@ type ActionableError = {
   mcpCode?: number;
 };
 
+function optionalFreeAuthenticationText(record: Record<string, unknown>) {
+  return record.upgradeMessage === MCP_FREE_AUTHENTICATION_MESSAGE || record.upgradeMessage === MCP_FREE_AUTHENTICATION_INTRO_MESSAGE
+    ? `Optional for ongoing use: ${record.upgradeMessage} Finish the current scan workflow before changing connections.`
+    : null;
+}
+
 function toolResultSummary(payload: unknown) {
   if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
     return "CertScore tool call completed. Read structuredContent for the result.";
@@ -108,7 +120,8 @@ function toolResultSummary(payload: unknown) {
     : typeof provenanceRecord?.mode === "string"
       ? `; provenance=${provenanceRecord.mode}`
       : "";
-  return `CertScore ${type}${status}${scanId}${score}${preliminary}${provenance}${report}. Full result is in structuredContent.`;
+  const optionalAuthentication = optionalFreeAuthenticationText(record);
+  return `CertScore.ai ${type}${status}${scanId}${score}${preliminary}${provenance}${report}. Full result is in structuredContent.${optionalAuthentication ? `\n${optionalAuthentication}` : ""}`;
 }
 
 export function toToolResult(payload: unknown, text?: string): CallToolResult {
@@ -152,12 +165,15 @@ export function toToolError(error: unknown, context: { scanCreation?: boolean } 
   const creationRateLimit = terminalError?.creationRateLimit && typeof terminalError.creationRateLimit === "object" && !Array.isArray(terminalError.creationRateLimit)
     ? terminalError.creationRateLimit
     : null;
+  const sharedPoolOffer = status === 429 ? sharedMcpPoolAuthenticationOffer(creationRateLimit) : null;
   const recommendedNextAction = targetRejected
     ? reasonCode === "non_public_target"
       ? "Ask for a publicly reachable HTTP or HTTPS website, then call certscore_scan_site with that URL. Do not retry this private or ineligible target or try to bypass the public-target checks."
       : 'Check the spelling and DNS of the intended hostname, then call certscore_scan_site with the actual public website URL, for example {"url":"https://example.com"}. A bare domain is accepted, but example.com and www.example.com are different hostnames; use www only if it is the intended site. Do not repeat the same invalid request. If the correct URL is unclear, ask the user.'
     : creationRateLimit
-      ? `No scan was created. Wait at least ${retryAfterSeconds ?? 30} seconds before retrying. To answer now, use certscore_get_latest_domain_scan if an existing scan meets the user's needs. Do not reconnect or create duplicate requests to bypass a quota.`
+      ? sharedPoolOffer
+        ? `No scan was created. On anonymous Light, wait at least ${retryAfterSeconds ?? 30} seconds before retrying. ${sharedPoolOffer}`
+        : `No scan was created. Wait at least ${retryAfterSeconds ?? 30} seconds before retrying. To answer now, use certscore_get_latest_domain_scan if an existing scan meets the user's needs. Do not reconnect or create duplicate requests to bypass a quota.`
     : typeof terminalError?.recommendedNextAction === "string"
     ? terminalError.recommendedNextAction
     : retryable
@@ -1254,6 +1270,7 @@ export function scanSiteText(value: Record<string, any>, leadingLines: string[] 
     canonicalScanProvenanceText(value),
     OBSERVATION_ONLY_DISCLAIMER,
     INTERPRETATION_STATEMENT,
+    ...(optionalFreeAuthenticationText(value) ? [optionalFreeAuthenticationText(value)!] : []),
   ]);
 }
 

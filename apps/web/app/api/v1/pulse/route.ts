@@ -975,6 +975,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       },
       requesterIpContext: {
         anonymousMcpSurface: requester.anonymousMcpSurface,
+        anonymousMcpSessionHash: requester.anonymousMcpSessionHash,
         anonymousRequesterNetwork: requester.anonymousRequesterNetwork,
         ipHash: requester.ipHash,
         sourceIp: requester.sourceIp

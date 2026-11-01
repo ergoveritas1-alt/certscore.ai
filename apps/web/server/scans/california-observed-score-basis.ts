@@ -1,4 +1,4 @@
-import { californiaObservedScoreBasisSchema, getUsableRuntimeVisitSnapshot, type CanonicalEvidenceBundle } from "@certscore/contracts";
+import { californiaObservedScoreBasisSchema, getUsableRuntimeVisitSnapshot, type CanonicalEvidenceBundle, type DomSnapshotArtifact } from "@certscore/contracts";
 import { parse } from "tldts";
 import { createHash } from "node:crypto";
 
@@ -25,6 +25,35 @@ function apexWwwPair(left: string, right: string) {
   } catch { return false; }
 }
 
+/** An initial navigation may fail before the original runtime document settles.
+ * Require its own native main-document request/response and loader-bound
+ * metadata; a subresource, another lane, a later response or URL alone cannot
+ * replace positive navigation proof. No new capture or request is performed. */
+function runtimeDocumentResponse(bundle: CanonicalEvidenceBundle, snapshot: DomSnapshotArtifact) {
+  const technology = snapshot.siteMetadata?.technology;
+  const id = technology?.responseRequestId;
+  if (!id || technology.responseDocumentToken !== snapshot.documentIdentity?.token) return undefined;
+  const requests = bundle.networkEvents.filter(row => row.requestId === id);
+  const responses = bundle.networkResponseEvents.filter(row => row.requestId === id);
+  if (requests.length !== 1 || responses.length !== 1) return undefined;
+  const request = requests[0]!, response = responses[0]!;
+  const sameDocument = (value: string | undefined) => value !== undefined && documentUrl(value) === documentUrl(snapshot.url);
+  if (request.resourceType !== "document" || request.isMainFrame !== true || request.frameContext?.isMainFrame !== true ||
+      request.isSubFrame === true || request.frameContext?.isSubFrame === true ||
+      request.sourceScanner !== "pre_consent_runtime" || response.sourceScanner !== "pre_consent_runtime" ||
+      request.scenario !== "fresh_pre_consent" || response.scenario !== "fresh_pre_consent" ||
+      request.consentStateAtTime !== "pre_consent" || response.consentStateAtTime !== "pre_consent" ||
+      !sameDocument(request.url) || !sameDocument(response.responseUrl) || !sameDocument(response.url) ||
+      response.metadataCapture !== "complete" || response.directVsInferred !== "direct" ||
+      typeof response.status !== "number" || !Number.isInteger(response.status) || response.status < 200 || response.status >= 300 ||
+      response.networkConnection?.source !== "response_request_binding" ||
+      response.networkConnection.status !== "server_observed" || response.networkConnection.requestId !== id ||
+      response.networkConnection.fromServiceWorker !== false ||
+      !Number.isFinite(request.timestampMs) || !Number.isFinite(response.timestampMs) ||
+      request.timestampMs < 0 || response.timestampMs < request.timestampMs || response.timestampMs > snapshot.capturedAtMs) return undefined;
+  return id;
+}
+
 /** Uses only retained runtime-lane evidence after canonical bundle verification.
  * It does not borrow consent/policy completeness or invent missing observations. */
 export function projectCaliforniaObservedScoreBasis(bundle:CanonicalEvidenceBundle,
@@ -39,6 +68,7 @@ export function projectCaliforniaObservedScoreBasis(bundle:CanonicalEvidenceBund
   // verified bundle. A merged consent-lane DOM file must not stand in for it.
   if(!snapshot)return undefined;
   let apexWwwRecovery = false;
+  let responseRequestId: string | undefined;
   if (!exactSnapshot) {
     const runtimeUrl=documentUrl(snapshot.url);
     const lane=bundle.scanLaneRuns?.find(row=>row.laneId==="runtime_evidence");
@@ -52,13 +82,16 @@ export function projectCaliforniaObservedScoreBasis(bundle:CanonicalEvidenceBund
         attempt.outcome === "success" && typeof attempt.httpStatus === "number" && attempt.httpStatus >= 200 && attempt.httpStatus < 300 &&
         attempt.effectiveUrl === runtimeUrl && lane.navigationAttempts!.some(initial =>
           initial.sequence < attempt.sequence && initial.mode === "initial_https_navigation" && initial.effectiveUrl === startingPage)));
+    const successfulNavigation = lane?.navigationAttempts?.some(attempt=>attempt.outcome==="success" &&
+      typeof attempt.httpStatus==="number" && attempt.httpStatus>=200 && attempt.httpStatus<300);
+    if (!successfulNavigation && !apexWwwRecovery) responseRequestId = runtimeDocumentResponse(bundle, snapshot);
     if (!runtimeUrl || (!apexWwwRecovery && new URL(runtimeUrl).origin !== new URL(exactFinalUrl).origin) ||
         !bundle.domSnapshots.some(row=>documentUrl(row.url)===exactFinalUrl &&
           (!apexWwwRecovery || row.documentIdentity?.source === "cdp_loader_id" && Boolean(row.documentIdentity.token) && row.documentIdentity.token !== snapshot.documentIdentity!.token && Boolean(row.artifactId) && Boolean(row.path))) ||
-        !lane?.navigationAttempts?.some(attempt=>attempt.outcome==="success" &&
-          typeof attempt.httpStatus==="number" && attempt.httpStatus>=200 && attempt.httpStatus<300)) return undefined;
+        (!successfulNavigation && !responseRequestId)) return undefined;
   }
-  const parsed=californiaObservedScoreBasisSchema.safeParse({policyVersion:exactSnapshot ? "usable_starting_page_score.v1" : apexWwwRecovery ? "usable_starting_page_score.v3-apex-www-recovery" : "usable_starting_page_score.v2-independent-visit",
+  const parsed=californiaObservedScoreBasisSchema.safeParse({policyVersion:exactSnapshot ? "usable_starting_page_score.v1" : responseRequestId ? "usable_starting_page_score.v4-document-response" : apexWwwRecovery ? "usable_starting_page_score.v3-apex-www-recovery" : "usable_starting_page_score.v2-independent-visit",
+    ...(responseRequestId ? {responseRequestId,routeEvidence:"runtime_document_response.v1"} : {}),
     ...(apexWwwRecovery ? {startingPageUrlSha256:createHash("sha256").update(bundle.normalizedUrl).digest("hex"),routeEvidence:"retained_https_apex_www_recovery.v1"} : {}),
     ...(!exactSnapshot ? {runtimeDocumentUrlSha256:createHash("sha256").update(snapshot.url).digest("hex")} : {}),
     scanId:bundle.scanId,documentUrl:finalUrl,sourceHash:source.sha256,

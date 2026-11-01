@@ -1,0 +1,193 @@
+{
+  "provenance": {
+    "scanId": "c26eab24-86e2-4b87-a217-81a57fb2900e",
+    "sourceSha256": "b11c59d6392733d5ac0581ec81cf623771965fe7d27235455eeda316ff79796a",
+    "scope": "Sanitized original lane/document/response proof only. Not a capture or a production evidence source."
+  },
+  "url": "https://wesco.com/",
+  "normalizedUrl": "https://wesco.com/",
+  "runtimeCoverage": {
+    "coverageStatus": "usable",
+    "limitationKeys": [
+      "scan_no_go_diagnostics"
+    ],
+    "fallbackModesUsed": [],
+    "observationCounts": {
+      "networkEvents": 155,
+      "thirdPartyRequests": 102,
+      "cookieEvents": 24,
+      "cookiesBeforeConsent": 14,
+      "normalizedVendors": 15,
+      "observedJourneys": 114
+    },
+    "silentEmpty": false,
+    "notes": [
+      "Potential no-go evidence was observed but contradicted by retained normal-site evidence, so the scan continued."
+    ]
+  },
+  "scanLaneRuns": [
+    {
+      "laneId": "consent_proof",
+      "physicalInvocationId": "86ecd0d2-8cc1-4b52-b6d6-60b04c8ff235",
+      "region": "us-west-1",
+      "phaseName": "preConsentRuntimeScanner",
+      "startedAt": "2026-10-31T20:40:21.500Z",
+      "firstResponseAt": "2026-10-31T20:40:21.981Z",
+      "firstResponseOffsetMs": 484,
+      "firstHttpStatus": 301,
+      "firstEffectiveUrl": "https://wesco.com/",
+      "navigationCount": 1,
+      "navigationAttempts": [
+        {
+          "sequence": 1,
+          "mode": "initial_https_navigation",
+          "outcome": "http_error",
+          "httpStatus": 403,
+          "durationMs": 226,
+          "effectiveUrl": "https://wesco.com/"
+        }
+      ],
+      "challengeDetected": false,
+      "challengeType": null,
+      "executionOutcome": "degraded",
+      "accessOutcome": "unknown",
+      "completedAt": "2026-10-31T20:40:45.089Z",
+      "durationMs": 23589
+    },
+    {
+      "laneId": "runtime_evidence",
+      "physicalInvocationId": "b1f8fa25-e661-4e03-a45b-de156816e2a4",
+      "region": "us-west-1",
+      "phaseName": "preConsentRuntimeScanner",
+      "startedAt": "2026-10-31T20:40:21.481Z",
+      "firstResponseAt": "2026-10-31T20:40:22.003Z",
+      "firstResponseOffsetMs": 524,
+      "firstHttpStatus": 301,
+      "firstEffectiveUrl": "https://wesco.com/",
+      "navigationCount": 1,
+      "navigationAttempts": [
+        {
+          "sequence": 1,
+          "mode": "initial_https_navigation",
+          "outcome": "http_error",
+          "httpStatus": 403,
+          "durationMs": 227,
+          "effectiveUrl": "https://wesco.com/"
+        }
+      ],
+      "challengeDetected": false,
+      "challengeType": null,
+      "executionOutcome": "success",
+      "accessOutcome": "representative_page",
+      "completedAt": "2026-10-31T20:40:42.581Z",
+      "durationMs": 21100
+    },
+    {
+      "laneId": "policy_evidence",
+      "physicalInvocationId": "26622104-37b8-4b49-9122-a10ae590d143",
+      "region": "us-west-1",
+      "phaseName": "policySurfaceScanner",
+      "startedAt": "2026-10-31T20:40:21.472Z",
+      "firstResponseAt": "2026-10-31T20:40:21.555Z",
+      "firstResponseOffsetMs": 87,
+      "firstHttpStatus": 301,
+      "firstEffectiveUrl": "https://wesco.com/",
+      "navigationCount": 1,
+      "navigationAttempts": [],
+      "challengeDetected": false,
+      "challengeType": null,
+      "executionOutcome": "degraded",
+      "accessOutcome": "access_denied",
+      "completedAt": "2026-10-31T20:40:53.372Z",
+      "durationMs": 31900
+    }
+  ],
+  "runtimeMetadataSnapshots": [
+    {
+      "artifactId": "dom_text_pre_consent",
+      "capturedAtMs": 18390,
+      "path": "/tmp/certscore-v2-dag-lambda/c26eab24-86e2-4b87-a217-81a57fb2900e/worker-runtime_evidence-dom-text-pre-consent.txt",
+      "url": "https://www.wesco.com/us/en.html",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "7278D4008A90EB690D65A74BB68E46C9"
+      },
+      "pagePhase": "network_idle",
+      "consentStateAtTime": "pre_consent",
+      "textExcerpt": "Supply Chain, Electrical, and Distribution Services",
+      "siteMetadata": {
+        "contractVersion": "certscore.site-metadata.v1",
+        "technology": {
+          "version": "certscore.technology-capture.v1",
+          "observations": [],
+          "responseRequestId": "req_7495",
+          "responseDocumentToken": "7278D4008A90EB690D65A74BB68E46C9"
+        }
+      }
+    }
+  ],
+  "domSnapshots": [
+    {
+      "artifactId": "dom_text_pre_consent",
+      "capturedAtMs": 10429,
+      "path": "/tmp/certscore-v2-dag-lambda/c26eab24-86e2-4b87-a217-81a57fb2900e/dom-text-pre-consent.txt",
+      "url": "https://www.wesco.com/us/en.html",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "F6BFC73FBB40977FAEBB4AB8A383D088"
+      },
+      "pagePhase": "network_idle",
+      "consentStateAtTime": "pre_consent"
+    },
+    {
+      "artifactId": "dom_text_pre_consent_recovery",
+      "capturedAtMs": 25487,
+      "path": "/tmp/certscore-v2-dag-lambda/c26eab24-86e2-4b87-a217-81a57fb2900e/worker-consent_proof-dom-text-pre-consent-recovery.txt",
+      "url": "https://www.wesco.com/",
+      "pagePhase": "dom_content_loaded",
+      "consentStateAtTime": "pre_consent"
+    }
+  ],
+  "networkEvents": [
+    {
+      "eventId": "net_7496",
+      "timestampMs": 3849,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "url": "https://www.wesco.com/us/en.html",
+      "frameContext": {
+        "frameId": "frame_e6b91951",
+        "frameUrl": "https://www.wesco.com/",
+        "isMainFrame": true,
+        "isSubFrame": false
+      },
+      "requestId": "req_7495",
+      "resourceType": "document",
+      "isMainFrame": true,
+      "isSubFrame": false
+    }
+  ],
+  "networkResponseEvents": [
+    {
+      "eventId": "resp_7497",
+      "timestampMs": 3874,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "url": "https://www.wesco.com/us/en.html",
+      "directVsInferred": "direct",
+      "metadataCapture": "complete",
+      "requestId": "req_7495",
+      "responseUrl": "https://www.wesco.com/us/en.html",
+      "status": 200,
+      "networkConnection": {
+        "source": "response_request_binding",
+        "status": "server_observed",
+        "requestId": "req_7495",
+        "redirectedFromRequestId": "req_7492",
+        "fromServiceWorker": false
+      }
+    }
+  ]
+}

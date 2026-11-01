@@ -7,6 +7,7 @@ import { CopyMcpValue, McpLightScanDemo, McpLightTrackedLink } from "../../../co
 import { CodeBlock } from "../../developers/developer-pages";
 import { MCP_LIGHT_CURSOR_DIRECTORY_URL, MCP_LIGHT_CURSOR_INSTALL_URL, MCP_LIGHT_ROLE_PROMPTS } from "../../../lib/mcp-light-public-links";
 import { MCP_LIGHT_QUOTA_SUMMARY } from "../../../lib/mcp-light-quota-copy";
+import { MCP_FREE_AUTHENTICATION, MCP_FREE_AUTHENTICATION_ALLOWANCE } from "@website-signal-risk-scanner/shared";
 import { PUBLIC_CERTSCORE_MCP_VERSION } from "../../../lib/public-integration-versions";
 import { createBreadcrumbSchema, createFaqPageSchema, createPageMetadata, createSoftwareApplicationSchema } from "../../../lib/seo";
 
@@ -368,14 +369,14 @@ export default function McpLightPage() {
 
         <section className="rounded-xl border border-slate-200 bg-white p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Light-to-Authenticated migration</p>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-950">Upgrade when Light becomes a constraint</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">Upgrade when you need a dedicated higher-volume allowance, production or team access, backend automation, access to previous workspace scans and diagnostic tools.</p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-950">Keep scanning with a free account</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">Anonymous scanning stays free. For sustained use, free Hosted OAuth offers {MCP_FREE_AUTHENTICATION_ALLOWANCE.dailyNewScans} new scans per rolling 24 hours, up to {MCP_FREE_AUTHENTICATION_ALLOWANCE.hourlyNewScans} per rolling hour per active workspace, outside the shared anonymous allowance. No paid plan is required. Your MCP activity is linked to your account.</p>
           <div className="mt-5 grid gap-4 text-sm md:grid-cols-2">
             <div className="rounded-lg bg-slate-50 p-4"><strong className="text-slate-950">What changes</strong><p className="mt-2 leading-6 text-slate-600">Use the full endpoint, authenticate with hosted OAuth or a local scoped API key, and receive the quota and tools granted to that access.</p></div>
             <div className="rounded-lg bg-slate-50 p-4"><strong className="text-slate-950">What stays compatible</strong><p className="mt-2 leading-6 text-slate-600">Core identifiers and canonical response fields—including <code>scanId</code>, status, score, risk, coverage, and timestamps—remain compatible.</p></div>
           </div>
           <p className="mt-5 text-sm font-semibold text-slate-950">Need more scans or advanced tools? Upgrade to Authenticated MCP.</p>
-          <div className="mt-5 flex flex-wrap gap-3"><Link className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white" href="/developers/mcp#hosted-oauth-start">Connect Hosted OAuth</Link> <Link className="text-sm text-sky-700" href="/releases/mcp-hosted-oauth">Read the workspace access release</Link><a className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800" href="mailto:support@certscore.ai?subject=CertScore.ai%20MCP%20higher-volume%20access">Contact support</a></div>
+          <div className="mt-5 flex flex-wrap gap-3"><Link className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white" href={MCP_FREE_AUTHENTICATION.signupUrl}>Create a free account</Link><Link className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800" href="/developers/mcp#hosted-oauth-start">Connect Hosted OAuth</Link> <Link className="text-sm text-sky-700" href="/releases/mcp-hosted-oauth">Read the workspace access release</Link></div>
         </section>
         <p className="text-sm leading-6 text-slate-500">{agentDisclaimer}</p>
       </div>

@@ -1,4 +1,5 @@
 import { MCP_LIGHT_QUOTA_SUMMARY } from "../../../lib/mcp-light-quota-copy";
+import { MCP_FREE_AUTHENTICATION, MCP_FREE_AUTHENTICATION_ALLOWANCE } from "@website-signal-risk-scanner/shared";
 import { PUBLIC_CERTSCORE_MCP_VERSION } from "../../../lib/public-integration-versions";
 import { MCP_OAUTH_ELIGIBILITY, MCP_OAUTH_AUTHORIZATION, MCP_OAUTH_RECONNECT } from "../../../lib/mcp-public-copy";
 import type { Metadata } from "next";
@@ -327,16 +328,18 @@ full      maxBytes=12000 or higher`}</CodeBlock>
           </div>
         </Section>
 
-        <Section eyebrow="Light-to-Authenticated migration" title="Upgrade when Light becomes a constraint">
+        <Section eyebrow="Light-to-Authenticated migration" title="Keep scanning with a free account">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Upgrade when you need a dedicated higher-volume allowance, production or team access, backend automation,
-            access to previous scans or advanced diagnostic tools with self-serve OAuth access.
+            Anonymous scanning stays free. Free Hosted OAuth offers {MCP_FREE_AUTHENTICATION_ALLOWANCE.dailyNewScans} new scans per rolling 24 hours,
+            up to {MCP_FREE_AUTHENTICATION_ALLOWANCE.hourlyNewScans} per rolling hour per active workspace, outside the shared anonymous allowance.
+            No paid plan is required. Your MCP activity is linked to your account.
           </p>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-lg border border-slate-200 bg-white p-4"><h3 className="font-semibold text-slate-950">What changes</h3><p className="mt-2 text-sm leading-6 text-slate-600">Use the full endpoint and authenticate with hosted OAuth or a local scoped API key. Quota and tool availability follow the granted access.</p></div>
             <div className="rounded-lg border border-slate-200 bg-white p-4"><h3 className="font-semibold text-slate-950">What stays compatible</h3><p className="mt-2 text-sm leading-6 text-slate-600">Core identifiers and canonical response fields—including <code>scanId</code>, status, score, risk, coverage, and timestamps—remain compatible.</p></div>
           </div>
           <p className="max-w-3xl text-sm font-semibold leading-7 text-slate-900">Need more scans or advanced tools? Upgrade to Authenticated MCP.</p>
+          <p className="text-sm leading-7 text-slate-600"><Link className="font-semibold text-sky-700 underline underline-offset-4" href={MCP_FREE_AUTHENTICATION.signupUrl}>Create a free CertScore.ai account</Link>, then <a className="font-semibold text-sky-700 underline underline-offset-4" href="#hosted-oauth-start">connect Hosted OAuth</a>. Authentication is optional and does not reset active quotas.</p>
         </Section>
 
         <div id="authenticated-mcp">

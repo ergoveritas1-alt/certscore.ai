@@ -11,6 +11,7 @@ import { getAllowedOrigins, getEnv } from "./env.js";
 import { McpHttpSessionStore } from "./session-store.js";
 import { oauthSessionIdentity, oauthSessionMismatch, type OAuthSessionIdentity } from "./session-identity.js";
 import { McpReadThrottle, mcpReadCallsFromJsonRpc, mcpReadRateLimitGuidance } from "./read-throttle.js";
+import { declaredInvitationConversation, McpConversationInvitations } from "./free-auth-invitation.js";
 import { anonymousMcpRequester, anonymousMcpRequesterFromHeaders, anonymousSessionBinding, authenticatedMcpCallerBinding } from "./requester-identity.js";
 import { createHostedMcpTelemetry } from "./telemetry.js";
 import { createMicrosoftEntraTokenValidator, microsoftEntraSessionBinding } from "./microsoft-entra-auth.js";
@@ -39,6 +40,7 @@ const sessions = new McpHttpSessionStore({
   ttlSeconds: env.SESSION_TTL_SECONDS
 });
 const readThrottle = new McpReadThrottle();
+const conversationInvitations = new McpConversationInvitations();
 // Only populated after HTTP authentication and session binding succeed. Never
 // mutate session-global credentials: overlapping calls may use different tokens.
 const requestCorrelation = new AsyncLocalStorage<string>();
@@ -474,6 +476,9 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       sessionId: () => transport.sessionId ?? null,
       surface
     });
+    const initialInvitationConversation = declaredInvitationConversation(req.headers, env.jwtSecret);
+    const invitationConversation = (headers: Readonly<Record<string, unknown>> | null) => headers && "openai-conversation-id" in headers
+      ? declaredInvitationConversation(headers, env.jwtSecret) : initialInvitationConversation;
     const server = createCertScoreMcpServer({
       resolveApiKey: sessionSurface === "oauth" ? () => {
         const credential = requestCredential.getStore();
@@ -500,8 +505,18 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         ? "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html"
         : null,
       resolveRequestId: () => requestCorrelation.getStore(),
+      resolveFreeAuthenticationOffer: anonymous && light && !microsoft && !marketplace
+        ? (created, context) => {
+          const conversation = invitationConversation(context.headers);
+          return conversation ? conversationInvitations.offer(conversation, created) : undefined;
+        } : undefined,
       onToolInvocationStarted: request => telemetry.observeToolRequestStarted(request),
       onToolInvocation: (observation, context) => {
+        if (light && anonymous && !microsoft && !marketplace && observation.freeAuthenticationOffer) {
+          console.log(JSON.stringify({ event: "mcp_http.free_auth_offer_returned", source: "mcp-http",
+            offer: observation.freeAuthenticationOffer, scanDecision: observation.scanDecision,
+            contextBasis: invitationConversation(context.headers) ? "declared_conversation" : "mcp_session" }));
+        }
         const invocationSource = context.headers
           ? anonymousMcpRequesterFromHeaders(context.headers)
           : requestSource;
@@ -671,6 +686,8 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
           data: {
             code: "rate_limited",
             accountUrl: guidance.accountUrl,
+            authenticationOptional: guidance.authenticationOptional,
+            authenticationSetupUrl: guidance.authenticationSetupUrl,
             anonymousLightLimitChangedByAccount: guidance.anonymousLightLimitChangedByAccount,
             equivalentRequestLimit: guidance.equivalentRequestLimit,
             limitDescription: guidance.limitDescription,

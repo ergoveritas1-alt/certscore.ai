@@ -1,5 +1,5 @@
 import { query, queryOne, withWriteTransaction } from "@website-signal-risk-scanner/db";
-import { DEFAULT_SCAN_FROM, normalizeScanFrom, type ScanFrom, type ApiReadRateCostClass } from "@website-signal-risk-scanner/shared";
+import { DEFAULT_SCAN_FROM, normalizeScanFrom, freeMcpAuthenticationOffer, type ScanFrom, type ApiReadRateCostClass } from "@website-signal-risk-scanner/shared";
 import { randomUUID } from "node:crypto";
 import {
   PULSE_API_VERSION,
@@ -870,7 +870,14 @@ export async function releaseLightMcpScanConcurrencyClaim(claimId: string) {
 
 export async function getLightMcpNewScanQuotaState(input: { ipKey: string; sessionKey: string; now?: Date }) {
   await ensurePulseTables();
-  const row = await queryOne<LightMcpNewScanUsageRow>(LIGHT_MCP_NEW_SCAN_USAGE_SQL, [
+  const row = await queryOne<LightMcpNewScanUsageRow & { session_new_scan_count: number | string }>(`select usage.*,
+    (select count(distinct claim.scan_id)::int
+       from light_mcp_active_scan_claims claim
+      where claim.requester_key = $1
+        and claim.claimed_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'
+        and claim.expires_at > now() - interval '1 day'
+        and claim.scan_id is not null) as session_new_scan_count
+    from (${LIGHT_MCP_NEW_SCAN_USAGE_SQL}) usage`, [
     input.sessionKey,
     input.ipKey,
     LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds
@@ -887,7 +894,11 @@ export async function getLightMcpNewScanQuotaState(input: { ipKey: string; sessi
     limit,
     remaining,
     resetAt: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString(),
-    used: limit - remaining
+    used: limit - remaining,
+    // A failed reservation has no bound scan. Shared fallback keys cannot
+    // identify a session and must not create a personalized usage milestone.
+    freeAuthenticationMessage: input.sessionKey.startsWith("session:")
+      ? freeMcpAuthenticationOffer({ sessionNewScans: Number(row?.session_new_scan_count ?? 0) }) : null
   };
 }
 

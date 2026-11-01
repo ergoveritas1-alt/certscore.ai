@@ -76,7 +76,14 @@ export class McpHttpSessionStore {
     this.prune();
     let evicted = 0;
     while (this.sessions.size >= this.options.maxCount) {
-      const oldest = [...this.sessions.entries()].sort((a, b) => a[1].lastSeenAt - b[1].lastSeenAt)[0];
+      // One-pass LRU selection bounds initialization work without favoring an
+      // authentication class or treating anonymous access as abusive.
+      let oldest: [string, McpHttpSession] | undefined;
+      for (const entry of this.sessions) {
+        if (!oldest || entry[1].lastSeenAt < oldest[1].lastSeenAt) {
+          oldest = entry;
+        }
+      }
       if (!oldest) {
         break;
       }

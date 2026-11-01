@@ -15,8 +15,8 @@ export type AdminScanActivityPeriod = typeof ADMIN_SCAN_ACTIVITY_PERIODS[number]
 export function adminScanActivityOperationalStatus(row: { row_kind: "scan" | "request"; scan_id: string | null; status: string; no_go_flag: boolean | null; access_posture_class: string | null }) {
   const label = row.row_kind === "request" && !row.scan_id && ["rejected", "rate_limited", "failed", "expired"].includes(row.status)
     ? ({ rejected: "Rejected", rate_limited: "Rate limited", failed: "Failed", expired: "Expired" } as Record<string, string>)[row.status]!
-    : row.no_go_flag ? "No-go"
     : row.status === "failed" ? "Failed"
+    : row.no_go_flag ? "No-go"
     : row.status === "running" ? "Running"
     : row.status === "queued" ? "Queued"
     : row.status === "finalizing" ? "Finalizing"

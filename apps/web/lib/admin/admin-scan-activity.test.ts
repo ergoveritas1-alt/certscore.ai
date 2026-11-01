@@ -47,6 +47,7 @@ test("operational state stays bound to the chart snapshot when enrichment sees a
   assert.equal(adminScanActivityOperationalStatus({ ...running, status: "completed" }).label, "Completed");
   assert.equal(adminScanActivityOperationalStatus({ ...running, status: "finalizing" }).label, "Finalizing");
   assert.equal(adminScanActivityOperationalStatus({ ...running, no_go_flag: true }).label, "No-go");
+  assert.equal(adminScanActivityOperationalStatus({ ...running, status: "failed", no_go_flag: true }).label, "Failed");
   assert.equal(adminScanActivityOperationalStatus({ ...running, status: "completed", access_posture_class: "robots_limited" }).label, "Limited");
   assert.equal(adminScanActivityOperationalStatus({ ...running, row_kind: "request", scan_id: null, status: "rejected" }).label, "Rejected");
 });

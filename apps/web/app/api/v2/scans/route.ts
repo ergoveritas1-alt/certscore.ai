@@ -12,11 +12,12 @@ import { getPublicScanRecord } from "../../../../server/scans/get-public-scan-re
 import { getPulseRequesterContext } from "../../../../lib/pulse/request";
 import { getAnonymousScanDailyQuotaState, getLightMcpNewScanQuotaState } from "../../../../server/pulse/repository";
 import { lightMcpScanIpKey, lightMcpScanRequesterKey } from "../../../../server/pulse/anonymous-scan-quota";
+import { MCP_FREE_AUTHENTICATION_MESSAGE, sharedMcpPoolAuthenticationOffer } from "@website-signal-risk-scanner/shared";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const HIGHER_VOLUME_MESSAGE = "If you need higher-volume scanning, create an account at https://certscore.ai/login?mode=create_account and contact support@certscore.ai to request a custom automated-access allowance. Creating an account does not automatically change this anonymous endpoint's limit.";
+const HIGHER_VOLUME_MESSAGE = MCP_FREE_AUTHENTICATION_MESSAGE;
 
 function requestId(request: Request) {
   return request.headers.get("x-request-id") ?? crypto.randomUUID();
@@ -69,7 +70,7 @@ function scanAgeSeconds(completedAt: string | null | undefined) {
 }
 
 function freshnessMetadata(input: {
-  anonymousQuota: { limit: number; remaining: number; resetAt: string } | null;
+  anonymousQuota: { limit: number; remaining: number; resetAt: string; freeAuthenticationMessage?: string | null } | null;
   completedAt?: string | null;
   freshness: "latest" | "refresh";
   resolutionMode: string | null;
@@ -92,8 +93,9 @@ function freshnessMetadata(input: {
     anonymousQuotaRemaining: input.anonymousQuota?.remaining ?? null,
     anonymousQuotaResetAt: input.anonymousQuota?.resetAt ?? null,
     upgradeSupportEmail: input.anonymousQuota ? "support@certscore.ai" : null,
-    upgradeMessage: input.anonymousQuota
-      ? HIGHER_VOLUME_MESSAGE
+    upgradeMessage: !reused && input.anonymousQuota
+      ? input.anonymousQuota.freeAuthenticationMessage ?? (input.anonymousQuota.remaining === 0 &&
+        input.anonymousQuota.freeAuthenticationMessage === undefined ? HIGHER_VOLUME_MESSAGE : null)
       : null,
     recommendedNextTool: input.terminal ? "certscore_get_scan_bundle" : "certscore_get_scan_status"
   };
@@ -245,7 +247,11 @@ export async function POST(request: Request) {
         anonymousQuotaRemaining: anonymousQuota?.remaining ?? null,
         anonymousQuotaResetAt: anonymousQuota?.resetAt ?? null,
         upgradeSupportEmail: anonymousQuota ? "support@certscore.ai" : null,
-        upgradeMessage: anonymousQuota ? HIGHER_VOLUME_MESSAGE : null
+        upgradeMessage: anonymousRequester?.anonymousMcpSurface === "mcp_light" && pulseResponse.status === 429
+          ? sharedMcpPoolAuthenticationOffer(pulseBody?.error?.creationRateLimit) ??
+            (pulseBody?.error?.creationRateLimit?.scope !== "surface" && anonymousQuota && (!("freeAuthenticationMessage" in anonymousQuota) ||
+              anonymousQuota.freeAuthenticationMessage !== null) ? HIGHER_VOLUME_MESSAGE : null)
+          : null
       },
       headers: retryAfter ? { "Retry-After": retryAfter } : undefined,
       requestId: id,

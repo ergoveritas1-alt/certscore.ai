@@ -1,3 +1,5 @@
+import { MCP_FREE_AUTHENTICATION_MESSAGE, MCP_SHARED_POOL_FREE_AUTHENTICATION_MESSAGE } from "@website-signal-risk-scanner/shared";
+
 export const ANONYMOUS_SCAN_DAILY_LIMIT = 20;
 export const LIGHT_MCP_NEW_SCAN_POLICY = {
   burstWindowSeconds: 10 * 60,
@@ -195,8 +197,9 @@ export class AnonymousScanQuotaError extends Error {
     const retryDelay = formatAnonymousScanRetryDelay(retryAfterSeconds);
     const burstMinutes = Math.max(1, Math.round((options?.windowSeconds ?? LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds) / 60));
     const recovery = scope === "surface"
-      ? "This is a shared public-Light limit; registering an account will not bypass the active window. Contact support@certscore.ai if it repeatedly affects legitimate use."
-      : `If you need higher-volume scanning, create an account at https://certscore.ai/login?mode=create_account and contact support@certscore.ai to request a custom automated-access allowance. Creating an account does not automatically change the ${anonymousLimitName}.`;
+      ? window === "daily" ? MCP_SHARED_POOL_FREE_AUTHENTICATION_MESSAGE
+        : "This is a shared public-Light limit; registering an account will not bypass the active window. Contact support@certscore.ai if it repeatedly affects legitimate use."
+      : `${MCP_FREE_AUTHENTICATION_MESSAGE} Creating an account does not automatically change the ${anonymousLimitName}. Contact support@certscore.ai for a custom allowance.`;
     super(
       window === "concurrent"
         ? `No scan was created because the anonymous Light MCP already has ${limit} active scans for the ${scope} scope. Retry in ${retryDelay}, after an active scan has had time to finish. ${recovery}`
@@ -208,7 +211,9 @@ export class AnonymousScanQuotaError extends Error {
     this.name = "AnonymousScanQuotaError";
     this.limit = limit;
     this.retryAfterSeconds = retryAfterSeconds;
-    this.recommendedNextAction = `No scan was created. Retry the same request in ${retryDelay}. If the limit continues after that delay, contact support@certscore.ai.`;
+    this.recommendedNextAction = scope === "surface" && window === "daily"
+      ? `No scan was created. Anonymous retries must wait ${retryDelay}. ${MCP_SHARED_POOL_FREE_AUTHENTICATION_MESSAGE}`
+      : `No scan was created. Retry the same request in ${retryDelay}. If the limit continues after that delay, contact support@certscore.ai.`;
     this.scope = scope;
     this.window = window;
     this.windowSeconds = window === "burst"

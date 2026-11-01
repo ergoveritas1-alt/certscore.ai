@@ -6,6 +6,7 @@ import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { signCertScoreAccessToken } from "@certscore/mcp-auth";
+import shared from "@website-signal-risk-scanner/shared";
 import { exportJWK, generateKeyPair, SignJWT, type JWTPayload } from "jose";
 
 async function unusedPort() {
@@ -191,8 +192,11 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
   let authenticatedInternalProof: string | undefined;
   let authenticatedInternalTimestamp: string | undefined;
   let scanCreateRequestCount = 0;
-  const apiServer = createHttpServer((request, response) => {
+  let upstreamProjectionRequests = 0;
+  const anonymousSessionCreates = new Map<string, number>();
+  const apiServer = createHttpServer(async (request, response) => {
     const requestUrl = new URL(request.url ?? "/", apiOrigin);
+    if (request.method === "GET" && requestUrl.pathname.startsWith("/api/v2/scans/")) upstreamProjectionRequests++;
     if (request.method === "GET" && requestUrl.pathname === "/api/v2/scans/00000000-0000-4000-8000-000000000124/report-evidence") {
       const second = requestUrl.searchParams.has("cursor");
       response.writeHead(200, { "content-type": "application/json" });
@@ -212,13 +216,31 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
       anonymousRequesterIp = request.headers["x-certscore-anonymous-requester-ip"]?.toString();
       anonymousRequesterProof = request.headers["x-certscore-anonymous-requester-proof"]?.toString();
       anonymousRequesterSession = request.headers["x-certscore-anonymous-requester-session"]?.toString();
+      let requestBody = "";
+      for await (const chunk of request) requestBody += String(chunk);
+      const requestedUrl = JSON.parse(requestBody).url as string;
+      if (requestedUrl === "https://shared-pool.test/") {
+        response.writeHead(429, { "content-type": "application/json", "Retry-After": "120" });
+        response.end(JSON.stringify({ error: { code: "rate_limited", message: shared.MCP_SHARED_POOL_FREE_AUTHENTICATION_MESSAGE,
+          retryable: true, retryAfterSeconds: 120,
+          creationRateLimit: { kind: "new_scan", scope: "surface", windowId: "daily", limit: 200, used: 200, remaining: 0, windowSeconds: null } },
+          upgradeMessage: shared.MCP_SHARED_POOL_FREE_AUTHENTICATION_MESSAGE }));
+        return;
+      }
+      const count = anonymousSessionCreates.get(anonymousRequesterSession ?? "") ?? 0;
+      anonymousSessionCreates.set(anonymousRequesterSession ?? "", count + 1);
       response.writeHead(202, { "content-type": "application/json" });
       response.end(JSON.stringify({
         type: "certscore_scan_job",
         jobId: "anonymous-mcp-job",
-        scanId: "00000000-0000-4000-8000-000000000123",
+        scanId: requestedUrl === "https://conversation-one.test/" ? "00000000-0000-4000-8000-000000000125"
+          : requestedUrl === "https://conversation-two.test/" ? "00000000-0000-4000-8000-000000000126"
+          : requestedUrl === "https://conversation-three.test/" ? "00000000-0000-4000-8000-000000000127"
+          : "00000000-0000-4000-8000-000000000123",
         domain: "example.com",
-        status: "queued"
+        status: "queued",
+        executionMode: "new_scan", reused: false, quotaConsumed: true,
+        upgradeMessage: anonymousSurface === "mcp_light" ? shared.freeMcpAuthenticationOffer({ sessionNewScans: count + 1 }) : null
       }));
       return;
     }
@@ -987,6 +1009,40 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.equal(lightCreated.isError, undefined);
     assert.equal(anonymousSurface, "mcp_light");
     assert.equal(anonymousRequesterIp, "160.79.104.9");
+    assert.equal((lightCreated.structuredContent as Record<string, unknown>)?.upgradeMessage, null);
+    const secondCreated = await lightClient.callTool({ name: "certscore_scan_site", arguments: { url: "https://example.com", freshness: "refresh" } });
+    assert.equal(secondCreated.isError, undefined);
+    assert.equal((secondCreated.structuredContent as Record<string, unknown>)?.upgradeMessage, shared.MCP_FREE_AUTHENTICATION_INTRO_MESSAGE);
+    const secondCreatedText = (secondCreated as { content: Array<{ text: string }> }).content[0]!.text;
+    assert.match(secondCreatedText, /Keep scanning free/);
+    assert.match(secondCreatedText, /Finish the current scan workflow/);
+    const conversationCreate = async (conversation: string, url: string, ip: string) => {
+      const transport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/light`), {
+        requestInit: { headers: { "x-forwarded-for": ip, "openai-conversation-id": conversation } }
+      });
+      const client = new Client({ name: "free-invitation-fixture", version: "0.1.0" });
+      await client.connect(transport);
+      try {
+        const result = await client.callTool({ name: "certscore_scan_site", arguments: { url } });
+        assert.equal(result.isError, undefined);
+        return { result, admissionSession: anonymousRequesterSession };
+      } finally { await client.close(); }
+    };
+    const firstConversation = await conversationCreate("private-repeat-conversation", "https://conversation-one.test/", "198.51.100.91");
+    assert.equal((firstConversation.result.structuredContent as Record<string, unknown>).upgradeMessage, null);
+    const repeatedConversation = await conversationCreate("private-repeat-conversation", "https://conversation-two.test/", "198.51.100.92");
+    assert.equal((repeatedConversation.result.structuredContent as Record<string, unknown>).upgradeMessage, shared.MCP_FREE_AUTHENTICATION_INTRO_MESSAGE);
+    assert.notEqual(firstConversation.admissionSession, repeatedConversation.admissionSession, "conversation hints must not merge quota/session identities");
+    const differentConversation = await conversationCreate("private-different-conversation", "https://conversation-three.test/", "198.51.100.92");
+    assert.equal((differentConversation.result.structuredContent as Record<string, unknown>).upgradeMessage, null, "sharing an IP must not merge invitation contexts");
+    const poolLimited = await lightClient.callTool({ name: "certscore_scan_site", arguments: { url: "https://shared-pool.test/" } });
+    assert.equal(poolLimited.isError, true);
+    const poolPayload = JSON.parse((poolLimited as { content: Array<{ text: string }> }).content[0]!.text);
+    assert.equal(poolPayload.error.retryAfterSeconds, 120);
+    assert.equal(poolPayload.error.creationRateLimit.scope, "surface");
+    assert.match(poolPayload.error.recommendedNextAction, /connect Hosted OAuth for a separate workspace allowance/);
+    assert.match(poolPayload.error.recommendedNextAction, /Existing workspace limits still apply/);
+    assert.equal(poolPayload.error.scanStarted, false);
 
     const completedBundle = await lightClient.callTool({
       name: "certscore_get_scan_bundle",
@@ -1048,6 +1104,28 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.equal(throttledBody.error.data.supportEmail, "support@certscore.ai");
     assert.equal(throttledBody.error.data.upgradeAvailable, true);
     assert.equal(throttledBody.error.data.anonymousLightLimitChangedByAccount, false);
+    const readsBeforeRetries = upstreamProjectionRequests;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      const retryResponse: Response = await fetch(`${origin}/mcp/light`, {
+        method: "POST", headers: { "content-type": "application/json", "mcp-session-id": lightTransport.sessionId!, "x-forwarded-for": "160.79.104.9" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 9100 + attempt, method: "tools/call",
+          params: { name: "certscore_get_scan_bundle", arguments: { scanId: "00000000-0000-4000-8000-000000000123" } } }),
+      });
+      assert.equal(retryResponse.status, 429);
+      const body = await retryResponse.json() as any;
+      assert.equal(body.error.data.policyVersion, shared.API_READ_RATE_POLICY.version);
+      assert.equal(body.error.data.scope, "callerTarget");
+      assert.equal(body.error.data.windowId, "burst");
+      assert.notEqual(body.error.data.reason, "retry_after_ignored_cooldown");
+      assert.equal(Number(retryResponse.headers.get("retry-after")), body.error.data.retryAfterSeconds);
+    }
+    assert.equal(upstreamProjectionRequests, readsBeforeRetries, "existing denials must not fan out to report projection");
+    await lightClient.callTool({ name: "certscore_get_scan_status", arguments: { scanId: "00000000-0000-4000-8000-000000000123" } });
+    assert.equal(upstreamProjectionRequests, readsBeforeRetries + 1, "terminal-read limits must let status polling reach the upstream fixture");
+    assert.match(diagnostics, /mcp_http\.free_auth_offer_returned/);
+    assert.match(diagnostics, /"offer":"shared_pool"/);
+    assert.equal(diagnostics.includes("private-repeat-conversation"), false);
+    assert.equal(diagnostics.includes("private-different-conversation"), false);
     await lightClient.close();
 
     const secondProviderTransport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/light`), {

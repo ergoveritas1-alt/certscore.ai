@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { MCP_FREE_AUTHENTICATION_MESSAGE, MCP_FREE_AUTHENTICATION_INTRO_MESSAGE } from "@website-signal-risk-scanner/shared/dist/mcp-free-authentication.js";
 import { apiAccessibilityAuditSummarySchema } from "@certscore/api-contracts";
 import { readFileSync } from "node:fs";
 import { CertScoreError, type PulseResult } from "@certscore/sdk";
@@ -7,6 +8,21 @@ import { mcpScanBundleOutputSchema, mcpScanStatusOutputSchema, mcpPreConsentCook
 import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, pulseReportText, scanBundleText, scanSiteText, scanStatusText, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
 
 const budgetCore = JSON.parse(readFileSync(new URL('./test-fixtures/bundle-budget-core.json', import.meta.url), 'utf8'));
+
+test("optional free authentication guidance preserves the current scan and next tool", () => {
+  const payload = { type: "certscore_scan_job", status: "queued", scanId: "current-scan",
+    recommendedNextTool: "certscore_get_scan_status", upgradeMessage: MCP_FREE_AUTHENTICATION_MESSAGE };
+  const result = toToolResult(payload);
+  assert.deepEqual(result.structuredContent, payload);
+  const text = (result.content[0] as { text: string }).text;
+  assert.match(text, /scanId=current-scan/);
+  assert.match(text, /No paid plan is required/);
+  assert.match(text, /Finish the current scan workflow/);
+  const scanText = scanSiteText({ ...payload, upgradeMessage: MCP_FREE_AUTHENTICATION_INTRO_MESSAGE });
+  assert.match(scanText, /Keep scanning free/);
+  assert.match(scanText, /certscore_get_scan_status/);
+  assert.doesNotMatch((toToolResult({ ...payload, upgradeMessage: null }).content[0] as { text: string }).text, /Hosted OAuth/);
+});
 
 test('5 KB bundles preserve complete posture coverage, accessibility and forms without mutating retained input', () => {
   for (const detail of ['summary', 'findings', 'evidence', 'full'] as const) {
@@ -306,7 +322,7 @@ test("toToolResult returns concise text and structured content without duplicati
   const result = toToolResult({ type: "fixture", ok: true });
   assert.deepEqual(result.structuredContent, { type: "fixture", ok: true });
   assert.equal(result.content[0]?.type, "text");
-  assert.equal(result.content[0]?.text, "CertScore fixture. Full result is in structuredContent.");
+  assert.equal(result.content[0]?.text, "CertScore.ai fixture. Full result is in structuredContent.");
 });
 
 test("guided active scan status withholds the report URL until the canonical report is ready", () => {

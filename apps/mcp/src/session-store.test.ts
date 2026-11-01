@@ -35,3 +35,42 @@ test("lookup cannot extend a session; authorized touch renews its idle TTL", (t)
   assert.equal(store.get("rejected"), null);
   assert.equal(store.get("authorized")?.expiresAt, 101_900);
 });
+
+test("anonymous and authenticated sessions retain the same thirty-minute idle allowance", t => {
+  t.mock.timers.enable({ apis: ["Date"], now: 100_000 });
+  const store = new McpHttpSessionStore({ maxCount: 500, ttlSeconds: 1800 });
+  store.set("idle-light", { ...fakeSession(), surface: "light" });
+  store.set("active-light", { ...fakeSession(), surface: "light" });
+  store.set("oauth", { ...fakeSession(), surface: "oauth" });
+  t.mock.timers.tick(600_000);
+  assert.ok(store.get("idle-light"));
+  assert.ok(store.get("oauth"));
+  t.mock.timers.tick(1_199_000);
+  store.touch("active-light");
+  t.mock.timers.tick(1_001);
+  assert.equal(store.get("idle-light"), null);
+  assert.ok(store.get("active-light"));
+  assert.equal(store.get("oauth"), null);
+  assert.equal(store.size, 1);
+});
+
+test("capacity evicts least recently active sessions fairly across authentication classes", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: 100_000 });
+  const store = new McpHttpSessionStore({ maxCount: 2, ttlSeconds: 1800 });
+  let closed = 0;
+  store.set("oauth", { ...fakeSession(), surface: "oauth" });
+  t.mock.timers.tick(1);
+  store.set("light", { ...fakeSession(), surface: "light", server: { close: async () => { closed++; } } });
+  t.mock.timers.tick(1);
+  store.touch("oauth");
+  store.set("next", { ...fakeSession(), surface: "light" });
+  assert.equal(store.get("light"), null);
+  assert.ok(store.get("oauth"));
+  assert.deepEqual(store.size, 2);
+  assert.equal(closed, 1);
+  t.mock.timers.tick(1);
+  store.touch("next");
+  store.set("another-light", { ...fakeSession(), surface: "light" });
+  assert.equal(store.get("oauth"), null, "an idle credential-bound session has no priority over active free use");
+  assert.ok(store.get("next"));
+});

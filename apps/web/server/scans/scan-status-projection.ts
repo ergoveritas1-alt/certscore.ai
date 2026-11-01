@@ -3,10 +3,9 @@ import "server-only";
 import { apiV2PreConsentRuntimePreviewSchema, type ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
 import { queryOne } from "@website-signal-risk-scanner/db";
 import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
-import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 import { terminalReportPublicationError } from "./report-publication-read-state";
+import { readableReportProjectionSql, requiresPersistedReportPublicationSql } from "./scan-report-publication-sql";
 import {
-  MAX_SCAN_REPORT_PROJECTION_BYTES,
   READABLE_SCAN_REPORT_PROJECTION_VERSIONS,
   SCAN_REPORT_PROJECTION_VERSION
 } from "./scan-report-projection-contract";
@@ -136,10 +135,7 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
   };
 }
 
-const REQUIRES_PUBLICATION_SQL = `(coalesce(s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}', false)
-  or publication_request.scan_id is not null
-  or exists (select 1 from scan_events runtime_result
-              where runtime_result.scan_id = s.id and runtime_result.event_type = 'v2_lambda_result.received'))`;
+const REQUIRES_PUBLICATION_SQL = requiresPersistedReportPublicationSql("s", "publication_request");
 
 const PROJECTION_SQL = `select s.id,
        s.organization_id,
@@ -218,13 +214,7 @@ const PROJECTION_SQL = `select s.id,
            when ${REQUIRES_PUBLICATION_SQL} then exists (
              select 1 from scan_snapshots projection
               where projection.scan_id = s.id
-                and projection.report_projection_status = 'ready'
-                and projection.report_projection_version = any(array[${READABLE_SCAN_REPORT_PROJECTION_VERSIONS.map((version) => `'${version}'`).join(", ")}])
-                and projection.report_projection_computed_at is not null
-                and projection.report_projection_source_hash ~ '^[0-9a-f]{64}$'
-                and projection.report_projection_payload is not null
-                and projection.report_projection_payload_sha256 ~ '^[0-9a-f]{64}$'
-                and projection.report_projection_payload_size_bytes between 1 and ${MAX_SCAN_REPORT_PROJECTION_BYTES}
+                and ${readableReportProjectionSql("projection")}
            )
            else exists (
              select 1 from scan_events ready

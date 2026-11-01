@@ -7,6 +7,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { CERTSCORE_MCP_VERSION, getCertScoreMcpDoctorReport } from "./index.js";
 import { createCertScoreMcpServer } from "./server.js";
+import { MCP_FREE_AUTHENTICATION_INTRO_MESSAGE } from "@website-signal-risk-scanner/shared/dist/mcp-free-authentication.js";
 
 type MockResponse = {
   delayMs?: number;
@@ -88,6 +89,24 @@ function parseToolJson(result: Awaited<ReturnType<Client["callTool"]>>) {
   assert.equal(first?.type, "text");
   return JSON.parse(first.text) as Record<string, unknown>;
 }
+
+test("optional invitation continuity failures preserve the created scan and API fallback without another creation", async () => {
+  const id = "00000000-0000-4000-8000-000000000123";
+  const mock = installFetch([{ status: 202, body: { type: "certscore_scan_job", scanId: id, jobId: id,
+    status: "queued", executionMode: "new_scan", reused: false, upgradeMessage: MCP_FREE_AUTHENTICATION_INTRO_MESSAGE } }]);
+  try {
+    await withMcpClient(async client => {
+      const result = await client.callTool({ name: "certscore_scan_site", arguments: { url: "https://example.com/" } });
+      assert.equal(result.isError, undefined);
+      const payload = parseToolJson(result);
+      assert.equal(payload.scanId, id);
+      assert.equal(payload.upgradeMessage, MCP_FREE_AUTHENTICATION_INTRO_MESSAGE);
+      assert.equal(payload.recommendedNextTool, "certscore_get_scan_status");
+      assert.equal(mock.calls.length, 1);
+    }, { toolProfile: "light", initialPreConsentPreviewWaitMs: 0,
+      resolveFreeAuthenticationOffer: () => { throw new Error("local invitation state unavailable"); } });
+  } finally { mock.restore(); }
+});
 
 test("request credential failures never fall back to the initialization credential", async () => {
   const mock = installFetch([]);

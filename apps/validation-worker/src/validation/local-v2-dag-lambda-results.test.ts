@@ -1,5 +1,5 @@
 import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { SQSClient, ReceiveMessageCommand } from "@aws-sdk/client-sqs";
+import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand, ChangeMessageVisibilityCommand } from "@aws-sdk/client-sqs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile } from "node:fs/promises";
@@ -20,12 +20,59 @@ import {
   isRuntimePreviewReadyMessage,
   mirrorLocalV2DagLambdaArtifacts,
   parseLambdaResultMessage,
+  pollLocalV2DagLambdaResultQueueOnce,
   productionArtifactChainRejectReason,
   startLocalV2DagLambdaResultPoller,
   verifyPreConsentRuntimePreviewPacket,
   verifyProductionArtifactChain,
   type LambdaRuntimePreviewMessage,
 } from "./local-v2-dag-lambda-results";
+
+test("full policy-review slots preserve the SQS lease instead of exhausting receives in a hot loop", async () => {
+  const deleted: string[] = [];
+  const started: string[] = [];
+  const finish: Array<() => void> = [];
+  const messages = [1, 2, 3].map(n => ({
+    Body: JSON.stringify({ contractVersion: "certscore.v2.lambda-policy-evidence-ready.v1", messageKind: "policy_evidence_ready", scanId: `fixture-${n}` }),
+    MessageId: `message-${n}`, ReceiptHandle: `receipt-${n}`,
+  }));
+  let delivery = messages;
+  const client = { async send(command: unknown) {
+    if (command instanceof ReceiveMessageCommand) {
+      assert.equal(command.input.VisibilityTimeout, 240);
+      return { Messages: delivery };
+    }
+    if (command instanceof DeleteMessageCommand) {
+      deleted.push(command.input.ReceiptHandle!);
+      return {};
+    }
+    if (command instanceof ChangeMessageVisibilityCommand) assert.fail("capacity pressure must not release or delete the unprocessed packet");
+    assert.fail("unexpected SQS command");
+  } } as unknown as SQSClient;
+  const processPolicyEvidence = async (input: { raw: string }) => {
+    started.push(JSON.parse(input.raw).scanId);
+    await new Promise<void>(resolve => finish.push(resolve));
+  };
+  const poll = () => pollLocalV2DagLambdaResultQueueOnce({ client,
+    queueUrl: "https://sqs.us-west-1.amazonaws.com/123456789012/fixture", queueRegion: "us-west-1",
+    targetEnvironment: "local", processPolicyEvidence });
+  try {
+    await poll();
+    assert.deepEqual(started, ["fixture-1", "fixture-2"]);
+    assert.deepEqual(deleted, []);
+    for (const resolve of finish.splice(0)) resolve();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.deepEqual(deleted, ["receipt-1", "receipt-2"]);
+    // Simulate the third packet's next delivery after its unchanged lease.
+    delivery = [messages[2]!];
+    await poll();
+    assert.deepEqual(started, ["fixture-1", "fixture-2", "fixture-3"]);
+  } finally {
+    for (const resolve of finish) resolve();
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
+  assert.deepEqual(deleted, ["receipt-1", "receipt-2", "receipt-3"]);
+});
 
 test("web and validation retain failed runtime sources and bounded eligibility reasons only on the matching failed attempt", () => {
   const terminalLaneEvidence = {

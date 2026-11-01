@@ -148,6 +148,18 @@ test("shared Light scan quota guidance does not imply registration bypasses the 
 test("session-scoped Light quota guidance identifies the anonymous Connector limit", () => {
   const error = new AnonymousScanQuotaError(60, { lightMcp: true, limit: 20, scope: "session", window: "burst", windowSeconds: 600 });
 
-  assert.match(error.message, /create an account at https:\/\/certscore\.ai\/login\?mode=create_account/i);
+  assert.match(error.message, /Create a free CertScore\.ai account: https:\/\/certscore\.ai\/login\?mode=create_account/i);
   assert.match(error.message, /does not automatically change the anonymous Light MCP limit/i);
+});
+
+test("shared daily pool exhaustion offers the free OAuth path even for a first-time caller", () => {
+  const error = new AnonymousScanQuotaError(3600, { lightMcp: true, limit: 200, used: 200, scope: "surface", window: "daily" });
+  assert.match(error.message, /shared anonymous daily scan pool is full/);
+  assert.match(error.recommendedNextAction, /Anonymous retries must wait 60 minutes/);
+  assert.match(error.recommendedNextAction, /connect Hosted OAuth for a separate workspace allowance/);
+  assert.match(error.recommendedNextAction, /login\?mode=create_account/);
+  assert.match(error.message, /No paid plan is required/);
+  assert.equal(error.retryAfterSeconds, 3600);
+  assert.equal(error.scope, "surface");
+  assert.equal(error.used, 200);
 });

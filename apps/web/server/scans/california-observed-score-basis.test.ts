@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { californiaPrivacyReviewSchema, consentControlAssessmentSchema, deriveConsentControlAssessment, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { californiaCoverageFixture, CA_FIXTURE_SOURCE, CA_FIXTURE_URL } from "./california-review-coverage.fixture";
@@ -8,6 +9,48 @@ import { deriveCaliforniaRegulatoryScore } from "../../lib/scans/california-regu
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import { buildApiV2PostureScores } from "../../lib/api-v2/posture-scores";
 import { projectPrivacyAuditEvidence } from "./privacy-audit-projection";
+
+test("retained Wesco response proves its runtime document independently of a blocked consent visit", () => {
+  const retained = JSON.parse(readFileSync("apps/web/server/scans/test-fixtures/retained-wesco-runtime-response.json", "utf8"));
+  const f = fixture();
+  Object.assign(f.bundle, retained, { scanId: retained.provenance.scanId });
+  const reportUrl = "https://www.wesco.com/";
+  const source = { verificationStatus: "verified", sha256: retained.provenance.sourceSha256 };
+  const before = JSON.stringify(f.bundle);
+  const proof = projectCaliforniaObservedScoreBasis(f.bundle, source, reportUrl);
+  assert.equal(proof?.policyVersion, "usable_starting_page_score.v4-document-response");
+  assert.equal(proof?.documentToken, f.bundle.runtimeMetadataSnapshots![0]!.documentIdentity!.token);
+  assert.equal(proof?.documentUrl, reportUrl);
+  const child = projectCaliforniaPrivacyReview(f.bundle, source, reportUrl, f.policyEvidence)!;
+  assert.ok(child?.contractVersion === "certscore.california-privacy-review.v10" && child.observedScoreBasis);
+  assert.equal(deriveCaliforniaRegulatoryScore({ assessment: child, checklistRows: [], unifiedFindings: [] }).score, 100);
+  assert.equal(JSON.stringify(f.bundle), before);
+  const mutations: Array<(bundle: CanonicalEvidenceBundle) => void> = [
+    b => { b.runtimeMetadataSnapshots![0]!.siteMetadata!.technology!.responseDocumentToken = "other-loader"; },
+    b => { b.runtimeMetadataSnapshots![0]!.siteMetadata!.technology!.responseRequestId = "other-request"; },
+    b => { b.runtimeMetadataSnapshots![0]!.documentIdentity = undefined; },
+    b => { b.networkEvents[0]!.isMainFrame = false; },
+    b => { b.networkEvents[0]!.frameContext!.isMainFrame = false; },
+    b => { b.networkEvents[0]!.resourceType = "fetch"; },
+    b => { b.networkResponseEvents[0]!.status = 403; },
+    b => { b.networkResponseEvents[0]!.status = undefined; },
+    b => { b.networkResponseEvents[0]!.status = Number.NaN; },
+    b => { b.networkResponseEvents[0]!.responseUrl = "https://other.test/"; },
+    b => { b.networkResponseEvents[0]!.networkConnection!.fromServiceWorker = true; },
+    b => { b.networkResponseEvents[0]!.networkConnection!.requestId = "other-request"; },
+    b => { b.networkResponseEvents[0]!.timestampMs = b.runtimeMetadataSnapshots![0]!.capturedAtMs + 1; },
+    b => { b.networkEvents.push(structuredClone(b.networkEvents[0]!)); },
+    b => { b.networkResponseEvents.push(structuredClone(b.networkResponseEvents[0]!)); },
+    b => { b.scanLaneRuns.find(row => row.laneId === "runtime_evidence")!.accessOutcome = "access_denied"; },
+    b => { b.domSnapshots = []; },
+  ];
+  for (const mutate of mutations) {
+    const b = structuredClone(f.bundle); mutate(b);
+    assert.equal(projectCaliforniaObservedScoreBasis(b, source, reportUrl), undefined);
+  }
+  assert.equal(projectCaliforniaObservedScoreBasis(f.bundle, { ...source, verificationStatus: "unverified" }, reportUrl), undefined);
+  assert.equal(projectCaliforniaObservedScoreBasis(f.bundle, source, "https://other.test/"), undefined);
+});
 
 function fixture() {
   const f=californiaCoverageFixture();

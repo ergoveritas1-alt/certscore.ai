@@ -1073,13 +1073,14 @@ function startPolicyEvidenceReadyMessageProcessing(input: {
   queueUrl: string;
   raw: string;
   targetEnvironment: LambdaTargetEnvironment;
+  processPolicyEvidence?: (input: Parameters<typeof processPolicyEvidenceReadyMessage>[0]) => Promise<unknown>;
 }) {
   if (policyEvidenceBackgroundTasks.size >= POLICY_EVIDENCE_BACKGROUND_CONCURRENCY) {
     return false;
   }
   const task = (async () => {
     try {
-      await processPolicyEvidenceReadyMessage({
+      await (input.processPolicyEvidence ?? processPolicyEvidenceReadyMessage)({
         consumer: {
           approximateReceiveCount: parseSqsInteger(input.message.Attributes?.ApproximateReceiveCount),
           consumerReceivedAt: new Date().toISOString(),
@@ -2363,12 +2364,13 @@ async function processEmbeddedPolicyEvidenceBeforeScoreMaterialization(input: {
   }
 }
 
-async function pollOnce(input: {
+export async function pollLocalV2DagLambdaResultQueueOnce(input: {
   client: SQSClient;
   queueUrl: string;
   queueRegion: string;
   targetEnvironment: LambdaTargetEnvironment;
   webBaseUrl?: string;
+  processPolicyEvidence?: (input: Parameters<typeof processPolicyEvidenceReadyMessage>[0]) => Promise<unknown>;
 }) {
   const response = await input.client.send(new ReceiveMessageCommand({
     MessageSystemAttributeNames: [
@@ -2455,14 +2457,12 @@ async function pollOnce(input: {
         queueUrl: input.queueUrl,
         raw: rawMessage,
         targetEnvironment: input.targetEnvironment,
+        processPolicyEvidence: input.processPolicyEvidence,
       });
-      if (!started) {
-        await input.client.send(new ChangeMessageVisibilityCommand({
-          QueueUrl: input.queueUrl,
-          ReceiptHandle: receiptHandle(message),
-          VisibilityTimeout: 0,
-        }));
-      }
+      // ReceiveMessage already owns a bounded visibility lease. Preserve it
+      // when review slots are full: immediate release hot-loops the same packet
+      // through maxReceiveCount before an occupied slot can finish. Terminal
+      // result consumption and no-review-after-terminal checks stay unchanged.
       return { deleted: 0, failed: 0, handled: started ? 1 : 0 };
     }
     const disposition = classifyV2DagLambdaResultDisposition(rawMessage);
@@ -3104,7 +3104,7 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
     while (!stopped) {
       let pollFailed = false;
       try {
-        await pollOnce({
+        await pollLocalV2DagLambdaResultQueueOnce({
           client,
           queueRegion,
           queueUrl,

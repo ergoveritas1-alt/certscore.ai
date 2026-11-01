@@ -12,6 +12,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolRequestSchema, ErrorCode, McpError, type RequestInfo } from "@modelcontextprotocol/sdk/types.js";
 import { sanitizeMcpTaskContext, type McpTaskContext } from "@website-signal-risk-scanner/shared/dist/mcp-product-context.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
+import { freeMcpAuthenticationOfferKind, sharedMcpPoolAuthenticationOffer } from "@website-signal-risk-scanner/shared/dist/mcp-free-authentication.js";
 import { boundEvidencePacket, buildScanBundle, exportFindings, findingListText, limitPreConsentRows, markdownReportText, MAX_EVIDENCE_PACKET_CHARS, normalizeDetail, normalizeFormat, paginateFindingList, preConsentInventoryText, pulseReportText, scanBundleText, scanSiteText, scanStatusText, toInvalidArgumentsToolError, toInvalidScanIdToolError, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
 
 export interface CertScoreMcpOptions {
@@ -31,6 +32,9 @@ export interface CertScoreMcpOptions {
   initialPreConsentPreviewWaitMs?: number;
   exampleDomainDemoUrl?: string | null;
   resolveRequestId?: () => string | undefined;
+  /** Host-only invitation continuity. Never changes admission or credentials.
+   * Undefined preserves the API's session-based offer; null suppresses it. */
+  resolveFreeAuthenticationOffer?: (created: Record<string, unknown>, requestContext: McpToolInvocationRequestContext) => string | null | undefined;
   onToolInvocationStarted?: (input: { requestId: string; toolName: string; startedAt: string }) => void | Promise<void>;
   onToolInvocation?: (
     observation: McpToolInvocationObservation,
@@ -71,6 +75,8 @@ type GetLatestDomainScanInput = { domain: string; scanFrom?: "eu_de" | "eu_ie" |
 type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?: number; scanFrom?: "eu_de" | "eu_ie" | "california" };
 
 export type McpToolInvocationObservation = {
+  /** Safe offer variant for aggregate host logs, not anonymous user identity. */
+  freeAuthenticationOffer?: "intro" | "reminder" | "shared_pool";
   requestId?: string;
   timing?: { startedAt: string; responseGeneratedAt: string };
   callerInput?: McpCallerInput;
@@ -333,8 +339,13 @@ export function projectMcpToolInvocationObservation(input: {
         : result.reused === false || executionMode === "new_scan" || result.quotaConsumed === true
           ? "new"
           : "unavailable";
+  const poolOffer = rateLimited ? sharedMcpPoolAuthenticationOffer(error?.creationRateLimit) : null;
+  const freeAuthenticationOffer = freeMcpAuthenticationOfferKind(result.upgradeMessage)
+    ?? (poolOffer && typeof error?.message === "string" && error.message.includes(poolOffer)
+      ? "shared_pool" as const : null);
 
   return {
+    ...(freeAuthenticationOffer ? { freeAuthenticationOffer } : {}),
     requestArguments: projectMcpTelemetryArguments(args),
     ...(rateLimited ? { rateLimit: projectMcpRateLimit(error ?? result) } : {}),
     durationMs: Math.max(0, Math.min(Math.round(input.durationMs), 3_600_000)),
@@ -600,6 +611,14 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           freshness: input.freshness ?? "latest",
           scanFrom: input.scanFrom
         });
+        try {
+          const offer = options.resolveFreeAuthenticationOffer?.(created as unknown as Record<string, unknown>, { headers: extra.requestInfo?.headers ?? null });
+          if (offer !== undefined) created.upgradeMessage = offer;
+        } catch {
+          // Optional discovery must never turn a successfully created scan into
+          // an error or prompt the client to create a duplicate scan.
+          console.warn(JSON.stringify({ event: "mcp.free_auth_offer_unavailable" }));
+        }
         creationCompleted = true;
         console.log(JSON.stringify({
           event: "mcp.certscore_scan_site.creation_completed",

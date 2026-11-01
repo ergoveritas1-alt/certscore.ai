@@ -11,6 +11,7 @@ const {
   apiReadRateLimitGuidance,
   apiReadRateUnits
 } = sharedPolicy;
+const { MCP_FREE_AUTHENTICATION_MESSAGE, MCP_FREE_AUTHENTICATION } = sharedPolicy;
 
 const CERTSCORE_ACCOUNT_URL = "https://certscore.ai/login?mode=create_account";
 const CERTSCORE_SUPPORT_EMAIL = "support@certscore.ai";
@@ -124,7 +125,7 @@ export function mcpReadRateLimitGuidance(call: McpReadCall, decision: {
   const callerScoped = decision.scope === "callerTarget" || decision.scope === "caller";
   const anonymousLightUpgrade = callerScoped && options.anonymousLight === true;
   const upgradeMessage = anonymousLightUpgrade
-    ? `If you need higher-volume scanning, create an account at ${CERTSCORE_ACCOUNT_URL} and contact ${CERTSCORE_SUPPORT_EMAIL} to request a custom automated-access allowance. Creating an account does not automatically change the anonymous Light MCP limit.`
+    ? `${MCP_FREE_AUTHENTICATION_MESSAGE} Creating an account does not automatically change the anonymous Light MCP limit.`
     : callerScoped
       ? `If you need higher-volume scanning, contact ${CERTSCORE_SUPPORT_EMAIL} to request a custom automated-access allowance for your authenticated MCP account.`
     : `This is a shared service or scan-resource limit; registering an account will not bypass the active window. Contact ${CERTSCORE_SUPPORT_EMAIL} if this repeatedly affects legitimate use.`;
@@ -134,6 +135,8 @@ export function mcpReadRateLimitGuidance(call: McpReadCall, decision: {
 
   return {
     accountUrl: anonymousLightUpgrade ? CERTSCORE_ACCOUNT_URL : null,
+    authenticationOptional: anonymousLightUpgrade,
+    authenticationSetupUrl: anonymousLightUpgrade ? MCP_FREE_AUTHENTICATION.setupUrl : null,
     anonymousLightLimitChangedByAccount: false,
     equivalentRequestLimit,
     limitDescription,

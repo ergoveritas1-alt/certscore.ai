@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { verifyCertScoreAccessToken } from "@certscore/mcp-auth";
+import { MCP_FREE_AUTHENTICATION_ALLOWANCE } from "@website-signal-risk-scanner/shared";
 
 export type IntegrationApiKeyScope = "pulse:read" | "pulse:scan" | "mcp";
 
@@ -54,8 +55,8 @@ export const INTEGRATION_API_KEY_HOURLY_LIMIT = 60;
 export const INTEGRATION_API_KEY_DAILY_LIMIT = 500;
 export const INTEGRATION_ORGANIZATION_HOURLY_LIMIT = 300;
 export const INTEGRATION_ORGANIZATION_DAILY_LIMIT = 2500;
-export const OAUTH_SCAN_CREATE_HOURLY_LIMIT = 20;
-export const OAUTH_SCAN_CREATE_DAILY_LIMIT = 100;
+export const OAUTH_SCAN_CREATE_HOURLY_LIMIT = MCP_FREE_AUTHENTICATION_ALLOWANCE.hourlyNewScans;
+export const OAUTH_SCAN_CREATE_DAILY_LIMIT = MCP_FREE_AUTHENTICATION_ALLOWANCE.dailyNewScans;
 export const SELF_SERVE_READ_ONLY_KEY_EXPIRES_IN_DAYS = 90;
 export const SELF_SERVE_READ_ONLY_EMAIL_DAILY_ISSUANCE_LIMIT = 2;
 export const SELF_SERVE_READ_ONLY_EMAIL_WINDOW_ISSUANCE_LIMIT = 5;

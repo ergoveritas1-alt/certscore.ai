@@ -15,6 +15,7 @@ import { ensureMonitorSiteRequestsTable } from "../monitor-site/monitor-site-req
 import { LOCAL_V2_DAG_LAMBDA_RESULT_RECEIVED_EVENT_TYPE } from "../scans/local-v2-dag-lambda-dispatch";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "../scans/local-v2-dag-scan-config";
 import { adminNoGoSql } from "./admin-no-go";
+import { reportAwareScanStatusSql } from "../scans/scan-report-publication-sql";
 import { getAdminUsersOrderBy, type AdminUsersSortDirection, type AdminUsersSortKey } from "./admin-users-sort";
 import { normalizeAdminExactHostname, normalizeAdminExactScanId, parseAdminActivitySearch } from "../../lib/admin/activity-search";
 import { MAC_MINI_SCAN_BOT_API_KEY_NAMES } from "../../lib/admin/mac-mini-scan-bot";
@@ -286,7 +287,7 @@ function adminScanActivityBaseSql(metadataOnly = false, boundedTraffic = false) 
       s.id as scan_id,
       null::text as request_public_id,
       coalesce(s.completed_at, s.started_at, s.created_at) as activity_at,
-      s.status,
+      ${reportAwareScanStatusSql("s", "ss", "publication_request")} as status,
       ${scanCreatedViaSql("s.id", "s.scan_config_json")} as created_via_filter,
       case
         when coalesce(
@@ -378,6 +379,7 @@ function adminScanActivityBaseSql(metadataOnly = false, boundedTraffic = false) 
     left join public.industries ind on ind.id = d.industry_primary_id
     left join public.scan_snapshots ss on ss.scan_id = s.id
     left join public.scan_runtime_artifacts sra on sra.scan_id = s.id
+    left join public.scan_score_materialization_requests publication_request on publication_request.scan_id = s.id
     where (
       $1::text is null
       or s.id::text ilike '%' || $1 || '%'
