@@ -1,13 +1,14 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {extractExportRow,exportedState} from './audit-progress-export';
 import {progressEngine} from './audit-progress-engine';
-import {makeContracts,publicSource,namespaceSealed,monthMetricRegistry} from './audit-progress-contracts';
+import {makeContracts,publicSource,namespaceSealed,monthMetricRegistry,PUBLIC_SOURCE_PAIRS} from './audit-progress-contracts';
 import {METRICS,mergeVerifiedProgress} from './audit-progress';
 import {QUANTITIES,evidenceMetricRegistry} from './audit-progress-evidence';
 const ref={file:'/retained/export.json',sha256:'a'.repeat(64),role:'fixture'};
 const base:any={scanId:'11111111-1111-4111-8111-111111111111',domain:'example.com',scanStatus:'completed',timestamps:{createdAt:'2026-10-26T12:00:00Z'},meta:{projectionVersion:'pulse-public-v4',reportProjectionVersion:'scan-report-projection-v27'},consentSurfaceEvidence:{firstLayerConsentChoices:{rejectControlObserved:false,capturedBeforeInteraction:true,layerInspected:'first_layer',controlInventoryComplete:true}}};
 const row=(extra:any={})=>extractExportRow({...base,...extra},ref);
 const metric=METRICS.find(m=>m.id==='control.reject')!;
+const v10meta={projectionVersion:'pulse-public-v10',reportProjectionVersion:'scan-report-projection-v27'};
 function aggregate(rows:any[],metrics:any[]=[metric],quantities:any[]=[]) {return progressEngine().aggregate({days:[{date:'2026-10-26',completeDay:false,inventoryHours:0},{date:'2026-10-27',completeDay:false,inventoryHours:0}],metrics,quantities,findingIds:['x']},rows);}
 test('concerns, gaps, not-testable and not-confirmed never become control observations or not-checked',()=>{
  for(const state of ['Partial concern','Potential gap','Not confirmed','Not testable','Unknown','Not checked']){
@@ -71,4 +72,32 @@ test('sealed-only historical checklist measures survive without duplicating publ
  assert.ok(monthMetricRegistry([metric],[metric,m]).some(x=>x.id==='sealed.'+m.id));
  assert.ok(!monthMetricRegistry([m],[m]).some(x=>x.id==='sealed.'+m.id));
  const r=row({consentSurfaceEvidence:{}});assert.equal(aggregate([r])[0].metrics[metric.id].rate,null);assert.equal(aggregate([r])[0].metrics[metric.id].denominator,1);
+});
+
+test('v10 adoption is exact-pair scoped and future/intermediate schemas still fail closed',()=>{
+ assert.equal(publicSource({meta:v10meta}),'public_export/pulse-public-v10/scan-report-projection-v27');
+ for(const meta of [{...v10meta,reportProjectionVersion:'scan-report-projection-v26'},{projectionVersion:'pulse-public-v10'},...['v6','v7','v8','v9','v11'].map(v=>({...v10meta,projectionVersion:'pulse-public-'+v}))])assert.throws(()=>publicSource({meta}),/Unreviewed/);
+ const contract=makeContracts([metric],[]).metrics[0]!;assert.deepEqual(contract.supportedVersions,PUBLIC_SOURCE_PAIRS);assert.ok(!contract.supportedVersions.includes('pulse-public-v10/scan-report-projection-v26'));
+});
+
+test('v10 checklist-only, unknown and complete negative inventories retain separate meanings',()=>{
+ const evidence={gdprEprivacyChecklistRows:{items:[{id:'reject_all_path_availability',evidenceLabel:'Partial concern',status:'Review signal'}]}};
+ for(const [first,expected] of [[{},'unavailable'],[{rejectControlObserved:null},'unknown'],[{rejectControlObserved:false,capturedBeforeInteraction:true,layerInspected:'first_layer',controlInventoryComplete:true},'not_observed'],[{rejectControlObserved:true,capturedBeforeInteraction:true,layerInspected:'first_layer'},'observed']]as const){
+  const r=row({...evidence,meta:v10meta,consentSurfaceEvidence:{firstLayerConsentChoices:first}});
+  assert.equal(r.states['control.reject'],expected);assert.equal(r.states['checklist.reject_all_path_availability'],'partial_concern');assert.equal(r.states['verdict.reject_all_path_availability'],'review_signal');
+ }
+});
+
+test('v10 public confirmation summaries do not replace initial status or bound terminal witnesses',()=>{
+ const execution={policyVersion:'choice_path_execution.v1',status:'succeeded_with_confirmation',clickCompleted:true,observationCompleted:true,consentConfirmed:true};
+ // Use the same validated execution shape as the retained public observation.
+ const r=row({meta:v10meta,postAcceptObservation:{status:'unconfirmed',execution,confirmation:{contractVersion:'choice_confirmation_summary.v2',terminalDecisionVerified:true,initialRegistrationStatus:'confirmed'}}});
+ assert.equal(r.states['execution.accept'],'succeeded_with_confirmation');assert.equal(r.states['registration.accept'],'unconfirmed');assert.equal(r.states['terminal.accept'],'unavailable');
+});
+
+test('v10 and v5 remain separate series with no pooled rate, median or cross-version delta',()=>{
+ const a=row({meta:v10meta,formsSummary:{totalObserved:0}}),b=row({scanId:'22222222-2222-4222-8222-222222222222',meta:{...v10meta,projectionVersion:'pulse-public-v5'},formsSummary:{totalObserved:4}});
+ const q=QUANTITIES.find(q=>q.id==='forms.observed')!,d=aggregate([a,b],[metric],[q])[0];
+ assert.equal(d.metrics[metric.id].denominator,2);assert.equal(d.metrics[metric.id].rate,null);assert.equal(Object.keys(d.metrics[metric.id].series).length,2);assert.equal(d.quantities[q.id].median,null);
+ const next={...a,createdAt:'2026-10-27T12:00:00Z'};assert.equal(aggregate([b,next])[1].metrics[metric.id].deltaPp,null);
 });

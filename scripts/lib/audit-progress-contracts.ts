@@ -1,8 +1,13 @@
 /** Versioned audit semantics. This module never changes product assessments. */
 import type { Metric, ProgressRow } from './audit-progress';
 export const METRIC_CONTRACT_VERSION = 'certscore.audit-metrics.v1';
-export const PUBLIC_VERSIONS = ['pulse-public-v4', 'pulse-public-v5'];
+export const PUBLIC_VERSIONS = ['pulse-public-v4', 'pulse-public-v5', 'pulse-public-v10'];
 export const PROJECTION_VERSIONS = ['scan-report-projection-v26', 'scan-report-projection-v27'];
+// Reviewed pairs only: v10 was retained/reviewed with v27, never v26.
+export const PUBLIC_SOURCE_PAIRS = [
+  ...['pulse-public-v4', 'pulse-public-v5'].flatMap(a=>PROJECTION_VERSIONS.map(b=>`${a}/${b}`)),
+  'pulse-public-v10/scan-report-projection-v27',
+];
 export function returnedState(value: unknown, present = value !== undefined): string {
   if (!present) return 'unavailable';
   if (value === null) return 'unknown';
@@ -19,6 +24,7 @@ export function checklistEvidence(row: any): string {
 export function publicSource(report: any): string {
   const a=report.meta?.projectionVersion, b=report.meta?.reportProjectionVersion;
   if (a && !PUBLIC_VERSIONS.includes(a) || b && !PROJECTION_VERSIONS.includes(b)) throw Error(`Unreviewed public schema: ${a}/${b}`);
+  if (a === 'pulse-public-v10' && !PUBLIC_SOURCE_PAIRS.includes(`${a}/${b}`)) throw Error(`Unreviewed public schema: ${a}/${b}`);
   return `public_export/${a??'historical_unversioned'}/${b??'historical_unversioned'}`;
 }
 export function sealedSource(row: ProgressRow): string {
@@ -70,7 +76,7 @@ export function metricContract(m:any,kind='state') {
   if(key.startsWith('accessibility')){eligible='Readable reportable scans except explicit required=false; missing required or counts remain unavailable';mapping+=' Engine, engine version and scope are separate comparison series.';}
   if(quantity){field=m.path;mapping='Only nonnegative safe integers; missing/null/invalid values excluded from median, counted as missing within the eligible population. Zero remains measured.';}
   if(/^(site|technology|graph|form)\./.test(key)&&quantity){source='Source-bound sealed projection only';mapping+=' Deferred graph references and inline graph counts use separate series.';}
-  return {id,kind,version:METRIC_CONTRACT_VERSION,meaning,eligiblePopulation:eligible,numerator:quantity?'Sum and median of valid measured values':m.success?.length?m.success:'No primary success rate; state-specific counts only',denominator:quantity?'measured for median; all eligible plus missing shown':eligible,source,field,stateMapping:mapping,supportedVersions:sealed?['retained typed schema validation; each assessment/projection version separated']:PUBLIC_VERSIONS.flatMap(a=>PROJECTION_VERSIONS.map(b=>`${a}/${b}`)),comparison:'Same metric, source, schema, policy/engine scope and population only. Mixed-source aggregate rate and delta are null; per-source series remain visible. No interpolation across missing days.',direction:'Descriptive prevalence/coverage only; not accuracy, improvement or compliance'};
+  return {id,kind,version:METRIC_CONTRACT_VERSION,meaning,eligiblePopulation:eligible,numerator:quantity?'Sum and median of valid measured values':m.success?.length?m.success:'No primary success rate; state-specific counts only',denominator:quantity?'measured for median; all eligible plus missing shown':eligible,source,field,stateMapping:mapping,supportedVersions:sealed?['retained typed schema validation; each assessment/projection version separated']:PUBLIC_SOURCE_PAIRS,comparison:'Same metric, source, schema, policy/engine scope and population only. Mixed-source aggregate rate and delta are null; per-source series remain visible. No interpolation across missing days.',direction:'Descriptive prevalence/coverage only; not accuracy, improvement or compliance'};
 }
 export function makeContracts(metrics:any[],quantities:any[]) {
   return {version:METRIC_CONTRACT_VERSION,metrics:metrics.map(m=>metricContract(m)),quantities:quantities.map(m=>metricContract(m,'quantity')),findings:{version:METRIC_CONTRACT_VERSION,meaning:'Returned canonical finding prevalence, without reclassification or rescoring',numerator:'Reports containing the exact returned canonical ID within a complete valid inventory',denominator:'Complete returned inventories of the same source/schema; incomplete/unavailable inventories and their positive findings remain separately counted',source:'Public projectedFindings.items and cap only; never internal finding-ID fallback',stateMapping:'Positive returned IDs retained even in truncated inventories; absent ID is not zero unless inventory completeness is explicit and coherent; top selection unknown when unavailable',supportedVersions:PUBLIC_VERSIONS,comparison:'Separate public schema/projection/resolver/policy series; no mixed-series delta'},missing:'Unavailable fields/files are distinct from explicit unknown, not_confirmed, not_testable and genuinely not_checked. ID-selection proof never implies detailed evidence verification.'};
