@@ -11,8 +11,12 @@ export type ConsentControlReadOptions = {
   trackActualRead?: (pending: Promise<unknown>) => void;
   /** An already-bound element keeps inspection and dispatch on the same node. */
   boundElement?: ElementHandle<HTMLElement | SVGElement>;
+  /** Gate the dedicated CDP executor's final backend hit-target binding. */
+  bindClosedShadowTarget?: boolean;
   /** Called after final preparation, immediately before the one input command. */
   onDispatch?: () => void;
+  /** Internal synchronous commit after preparation/validation, before input. */
+  onDispatchCommitted?: () => void;
 };
 
 // A caller timeout does not cancel the underlying browser command. Keep the
@@ -247,12 +251,17 @@ export async function dispatchLocatorClickWithVerifiedGeometry(
       throw new Error("Verified-geometry consent control is no longer safely actionable.");
     }
     assertDispatchAllowed?.();
-    const clickRemainingMs = deadlineAtMs - Date.now();
+    let clickRemainingMs = deadlineAtMs - Date.now();
     if (options.signal?.aborted || !Number.isFinite(clickRemainingMs) || clickRemainingMs <= 0) {
       throw new Error("Verified-geometry consent control dispatch budget exhausted.");
     }
     options.onDispatch?.();
     assertDispatchAllowed?.();
+    clickRemainingMs = deadlineAtMs - Date.now();
+    if (options.signal?.aborted || !Number.isFinite(clickRemainingMs) || clickRemainingMs <= 0) {
+      throw new Error("Verified-geometry consent control dispatch budget exhausted.");
+    }
+    options.onDispatchCommitted?.();
     // A Locator can resolve a replacement node after the proof above. A handle
     // fails closed on detach instead of transferring consent authorization.
     await element.click({ force: true, timeout: Math.max(1, clickRemainingMs) });

@@ -3,7 +3,7 @@ import test from "node:test";
 import { createHash } from "node:crypto";
 import type { Frame, Locator, Page } from "playwright";
 import type { ConsentActionControlProof } from "@certscore/contracts";
-import { assertReviewedRejectDispatchAllowed, buildConsentActionControlProof } from "./cmp-action-control-proof.js";
+import { assertConsentActionDispatchAllowed, assertReviewedRejectDispatchAllowed, buildConsentActionControlProof } from "./cmp-action-control-proof.js";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -194,4 +194,42 @@ test("expired proof timer stays stopped when the wall clock has not advanced", a
   assert.deepEqual(result, {status:"label_unverifiable",reason:"control_proof_deadline_exhausted"});
   pending.resolve(); await new Promise(resolve=>setImmediate(resolve));
   assert.equal(f.callbacks(),0); assert.equal(f.commands.includes("uniqueness"),false);
+});
+
+for (const deadlineMs of [undefined, 200]) {
+  test(`failed bound proof returns its known mismatch while disposal is pending: deadline=${deadlineMs ?? "unset"}`, async () => {
+    const cleanup = deferred<void>();
+    let reads = 0, disposals = 0;
+    const handle = {isVisible: async () => true, isEnabled: async () => true,
+      evaluate: async () => ++reads === 1 ? "interactive" : reads === 2
+        ? {scopeInteractive: true, boundingBoxInViewport: true, centerHitTargetRelation: "control_or_descendant"}
+        : {visibleText: "Reject all"},
+      dispose: async () => {disposals++; await cleanup.promise;}};
+    const f = proofFixture();
+    const control = {elementHandle: async () => handle} as unknown as Locator;
+    const second = proofFixture({page: f.request.page});
+    const result = buildConsentActionControlProof({...f.request, control, bindElement: true,
+      ...(deadlineMs === undefined ? {} : {deadlineAtMs: Date.now() + deadlineMs})});
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      const first = await Promise.race([result, new Promise<undefined>(resolve => {timer = setTimeout(resolve, 50);})]);
+      assert.equal(first?.status, "label_mismatch");
+      assert.equal(disposals, 1);
+      const blocked = await buildConsentActionControlProof({...second.request, deadlineAtMs: Date.now() + 100});
+      assert.deepEqual(blocked, {status: "label_unverifiable", reason: "control_proof_read_pending"});
+      assert.deepEqual(second.commands, []);
+    } finally {if (timer) clearTimeout(timer);cleanup.resolve();await result;}
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal((await buildConsentActionControlProof({...second.request, deadlineAtMs: Date.now() + 1000})).status, "verified");
+  });
+}
+
+test("the final observer dispatch guard rejects an expired wall-clock budget even before its abort timer runs", async t => {
+  let now = 1000;t.mock.method(Date, "now", () => now);
+  const f = proofFixture(), signal = new AbortController().signal;
+  assert.doesNotThrow(() => assertConsentActionDispatchAllowed(f.request.page, signal, undefined, 1100));
+  now = 1100;
+  assert.equal(signal.aborted, false);
+  assert.throws(() => assertConsentActionDispatchAllowed(f.request.page, signal, undefined, 1100), /dispatch_budget_exhausted/);
+  assert.doesNotThrow(() => assertConsentActionDispatchAllowed(f.request.page, signal));
 });

@@ -12,7 +12,8 @@ import {pathToFileURL} from "node:url";
 
 const arg = (key: string) => process.argv[process.argv.indexOf(key) + 1];
 const actions = ["accept", "reject"] as const;
-const cases = ["direct", "localized", "shadow", "frame", "ready", "ambiguous", "opaque", "replacement", "fragment", "reload"];
+const arms = ["baseline", "candidate_default_off", "candidate"] as const;
+const cases = ["direct", "localized", "shadow", "scoped", "closed_shadow", "frame", "ready", "ambiguous", "opaque", "replacement", "fragment", "reload"];
 const source = path.resolve(process.argv[1]!);
 
 async function worker() {
@@ -35,11 +36,13 @@ async function worker() {
       const url = `http://localhost:3000/fixture/${fixture}/${action}/${id}`;
       const expected = action === "accept" ? "granted" : "denied";
       const recipe = {recipeId: "paired-local-fixture-v1", resolverMethod: "local_fixture_recipe", controlSelector: "#choice", bannerSelector: "#banner",
+        ...(fixture === "scoped" ? {controlSelector: "#banner", accessibleControl: {kind: "scoped_accessible_control", scopeSelector: "#banner", intent: action}} : {}),
+        ...(fixture === "closed_shadow" ? {controlSelector: "#host", bannerSelector: "#host", accessibleControl: {kind: "closed_shadow_accessible_control", scopeSelector: "#host", intent: action}} : {}),
         ...(["frame", "reload"].includes(fixture) ? {controlFrameUrl: `${url}?frame=1`} : {}),
         confirmation: {kind: "local_storage_equals", key: "consent", expectedValue: expected}};
       const started = Date.now();let mutation: Promise<unknown> | undefined, packet: any, error: string | undefined;
       try {
-        const input = {browser, boundControlDispatch: arm === "candidate", url, scanId: id,
+        const input = {browser, ...(arm === "candidate" ? {boundControlDispatch: true} : arm === "baseline" ? {boundControlDispatch: false} : {}), url, scanId: id,
           interactionAuthorization: {kind: "loopback", authorizationId: "loopback_local_lab"},
           actionSearchTimeoutMs: action === "accept" ? 14000 : 1500,
           confirmationTimeoutMs: action === "accept" ? 2000 : 1500,
@@ -62,7 +65,8 @@ async function worker() {
       const clicks = await fetch(`http://localhost:3000/clicks/${id}`).then(r => r.json()) as any[];
       const registration = packet?.acceptanceRegistration ?? packet?.refusalRegistration;
       const capture = packet?.afterActionCapture;
-      rows.push({id, arm, repeat, fixture, action, browser: browser.version(), runtime: "local-macos-chromium", region: "local-no-aws",
+      rows.push({id, arm, repeat, fixture, action, bindingMode: arm === "candidate" ? "explicit-enabled" : arm === "baseline" ? "baseline-disabled" : "input-and-environment-unset",
+        browser: browser.version(), runtime: "local-macos-chromium", region: "local-no-aws",
         totalMs: Date.now() - started, clicks, intendedClick: clicks.length === 1 && clicks[0].action === action,
         wrongClick: clicks.some(row => row.action !== action), expectedConfirmation: !["opaque", "replacement", "ambiguous", "reload"].includes(fixture), confirmed: registration?.status === "confirmed",
         observationComplete: capture?.activationStatus === "completed" && capture.stopReason === "window_elapsed" ||
@@ -96,7 +100,7 @@ async function main() {
     const listener = `const button=root.querySelector('#choice');button.onclick=()=>{${["opaque","reload"].includes(fixture!) ? "" : `localStorage.setItem('consent','${action === "accept" ? "granted" : "denied"}');`}const sent=fetch('/clicked/${id}/${action}');${fixture === "fragment" ? "location.hash='choice';" : ""}${fixture === "reload" ? "sent.then(()=>location.reload());" : ""}};button.disabled=false;`;
     const reloadState = fixture === "reload" && (clicks.get(id!)?.length ?? 0) > 0 ? `localStorage.setItem('consent','${action === "accept" ? "granted" : "denied"}');` : "";
     let content = ["frame", "reload"].includes(fixture!) && !url.search ? `<iframe src="${url.pathname}?frame=1"></iframe>`
-      : fixture === "shadow" ? `<div id="host"></div><script>const root=document.querySelector('#host').attachShadow({mode:'open'});root.innerHTML=${JSON.stringify(html)};${listener}</script>`
+      : ["shadow", "closed_shadow"].includes(fixture!) ? `<div id="host"></div><script>const root=document.querySelector('#host').attachShadow({mode:'${fixture === "closed_shadow" ? "closed" : "open"}'});root.innerHTML=${JSON.stringify(html)};${listener}</script>`
       : `${html}<script>const root=document;${reloadState}${fixture === "ready" ? `setTimeout(()=>{${listener}},250)` : listener}</script>`;
     res.setHeader("content-type", "text/html");res.end(`<!doctype html><html lang="${fixture === "localized" ? "de" : "en"}"><head><title>A/R fixture</title></head><body>${content}</body></html>`);
   });
@@ -109,11 +113,14 @@ async function main() {
   await writeFile(path.join(out, "source-pins.json"), JSON.stringify(sourcePins, null, 2));
   const runs: any[] = [];
   try {
-    for (let repeat = 0; repeat < 3; repeat++) for (const arm of repeat % 2 ? ["candidate", "baseline"] : ["baseline", "candidate"]) {
+    for (let repeat = 0; repeat < 3; repeat++) for (const arm of [...arms.slice(repeat), ...arms.slice(0, repeat)]) {
       const root = arm === "baseline" ? baseline : candidate, destination = path.join(out, `${arm}-${repeat}`);
       const code = await new Promise<number | null>((resolve, reject) => {
+        const environment = {...process.env, TSX_TSCONFIG_PATH: path.join(root, "tsconfig.base.json")};
+        if (arm === "candidate_default_off") delete environment.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED;
+        else environment.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED = arm === "candidate" ? "1" : "0";
         const child = spawn(process.execPath, ["--import", "tsx", source, "--worker", "--root", root, "--arm", arm, "--repeat", String(repeat), "--out", destination],
-          {cwd: root, env: {...process.env, TSX_TSCONFIG_PATH: path.join(root, "tsconfig.base.json"), CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED: arm === "candidate" ? "1" : "0"}, stdio: "inherit"});
+          {cwd: root, env: environment, stdio: "inherit"});
         child.once("error", reject);child.once("exit", resolve);
       });
       runs.push({arm, repeat, exitCode: code});
@@ -123,7 +130,7 @@ async function main() {
     }
     const rows = (await Promise.all(runs.map(run => readFile(path.join(out, `${run.arm}-${run.repeat}`, "rows.json"), "utf8").then(JSON.parse)))).flat();
     const quantile = (values: number[], p: number) => [...values].sort((a,b)=>a-b)[Math.ceil(values.length*p)-1];
-    const summary = Object.fromEntries(["baseline", "candidate"].map(arm => {
+    const summary = Object.fromEntries(arms.map(arm => {
       const selected = rows.filter(row => row.arm === arm);
       return [arm, {denominator: selected.length, intendedClicks: selected.filter(r=>r.intendedClick).length,
         wrongClicks: selected.filter(r=>r.wrongClick).length, confirmations: selected.filter(r=>r.confirmed).length, correctConfirmations: selected.filter(r=>r.confirmed && r.expectedConfirmation).length,
@@ -132,7 +139,7 @@ async function main() {
         medianMs: quantile(selected.map(r=>r.totalMs), .5), p95Ms: quantile(selected.map(r=>r.totalMs), .95)}];
     }));
     assertSourcePins(sourcePins, {baseline: await pin(baseline), candidate: await pin(candidate)});
-    const provenance = {baseline, candidate, sourcePinsVerified: true, baselineCommit: "5894539fbb27acb3130d4afdf55bc196974a50c6", fixtureOnly: true,
+    const provenance = {baseline, candidate, sourcePinsVerified: true, baselineCommit: execFileSync("git", ["rev-parse", "HEAD"], {cwd: baseline, encoding: "utf8"}).trim(), fixtureOnly: true,
       noPublicTargets: true, noAws: true, repetitions: 3, sourceSha256: createHash("sha256").update(await readFile(source)).digest("hex")};
     await writeFile(path.join(out, "summary.json"), JSON.stringify({provenance, summary, rows}, null, 2));
     process.stdout.write(JSON.stringify(summary, null, 2));

@@ -140,3 +140,16 @@ test("geometry dispatch cleanup cannot delay its result or repeat input", async 
     assert.equal(f.disposals(), 1);
   } finally {if (timer) clearTimeout(timer);cleanup.resolve();}
 });
+
+for (const boundary of ["lifecycle", "final_guard"] as const) {
+  test(`geometry dispatch rechecks its wall-clock deadline after ${boundary}`, async t => {
+    let now = 1000, guards = 0;
+    t.mock.method(Date, "now", () => now);
+    const f = fixture();
+    await assert.rejects(dispatchLocatorClickWithVerifiedGeometry(f.control, 100,
+      () => {if (++guards === 2 && boundary === "final_guard") now += 101;},
+      {onDispatch: () => {if (boundary === "lifecycle") now += 101;}}), /budget exhausted/);
+    assert.equal(f.clicks(), 0);
+    assert.equal(f.disposals(), 1);
+  });
+}

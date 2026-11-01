@@ -150,8 +150,11 @@ export async function waitForTransparentConsentControl(input: {
 }
 
 /** Synchronous last-mile check, including after geometry/CDP awaits. */
-export function assertConsentActionDispatchAllowed(page: Page, signal?: AbortSignal, authorizedTargetSha256?: string) {
+export function assertConsentActionDispatchAllowed(page: Page, signal?: AbortSignal, authorizedTargetSha256?: string, deadlineAtMs?: number) {
   if (signal?.aborted) throw new Error("abort_requested_before_action");
+  if (deadlineAtMs !== undefined && (!Number.isFinite(deadlineAtMs) || Date.now() >= deadlineAtMs)) {
+    throw new Error("consent_action_dispatch_budget_exhausted");
+  }
   if (authorizedTargetSha256 && sha256(normalizedTarget(page.url())) !== authorizedTargetSha256) {
     throw new Error("redirect_target_not_authorized");
   }
@@ -207,7 +210,7 @@ export type ConsentActionControlProofInput = {
 
 export async function buildConsentActionControlProof(input: ConsentActionControlProofInput): Promise<ConsentActionControlProofResolution> {
   try { return await boundedControlProof(input, async guard => {
-    if (!input.bindElement || input.expectedAccessibleControl || !("elementHandle" in input.control)) {
+    if (!input.bindElement || input.expectedAccessibleControl?.kind === "closed_shadow_accessible_control" || !("elementHandle" in input.control)) {
       return buildConsentActionControlProofWithinBoundary(input, guard);
     }
     let element: ElementHandle<HTMLElement | SVGElement> | null = null;
@@ -222,7 +225,11 @@ export async function buildConsentActionControlProof(input: ConsentActionControl
       retained = true;
       return {...result, boundElement: element};
     } finally {
-      if (element && !retained) await guard.track((element as ElementHandle).dispose().catch(() => undefined));
+      if (element && !retained) {
+        const rejectedElement = element as ElementHandle;
+        // Preserve read backpressure without withholding the known proof result.
+        void guard.track(Promise.resolve().then(() => rejectedElement.dispose()).catch(() => undefined));
+      }
     }
   }); }
   catch (error) {

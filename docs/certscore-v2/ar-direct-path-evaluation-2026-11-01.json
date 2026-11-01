@@ -306,5 +306,7 @@
       }
     }
   ],
-  "independentReviewStatus": "blocked_no_attached_reviewer_human_delegation_authorization_required"
+  "independentReviewStatus": "blocked_no_attached_reviewer_human_delegation_authorization_required",
+  "historicalImplementationCommit": "1314f95e56e9e8c4ec87cd30447eb928c817756e",
+  "supersededByReviewRepairs": true
 }

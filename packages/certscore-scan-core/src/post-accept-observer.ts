@@ -219,7 +219,10 @@ export interface PostAcceptObserverInput {
   resultBudgetMs?: number;
   browser?: Browser;
   signal?: AbortSignal;
+  /** Legacy preparation notification; it does not establish input dispatch. */
   onLifecycleEvent?: (event: { type: "action_dispatched"; atMs: number }) => void;
+  /** Input attempt committed; notification runs after the dispatch call settles. */
+  onActionDispatchCommitted?: (event: { type: "action_dispatched"; atMs: number }) => void;
   onLateFormDetected?: () => void;
   outDir?: string;
   interactionAuthorization: PostRefusalInteractionAuthorization;
@@ -1161,24 +1164,32 @@ export async function runPostAcceptObserver(
         control,
         selectedRecipe,
         useVerifiedGeometryDispatch,
-        () => { sourceFrameBinding.assertCurrent(); assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256); },
-        { deadlineAtMs: resultBudgetDeadlineAtMs, signal: effectiveSignal, scope: confirmationScope, boundElement: boundControlElement },
+        () => { sourceFrameBinding.assertCurrent(); assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs); },
+        { deadlineAtMs: resultBudgetDeadlineAtMs, signal: effectiveSignal, scope: confirmationScope, boundElement: boundControlElement, bindClosedShadowTarget: boundControlDispatch },
         () => {
+          sourceFrameBinding.assertCurrent();
+          assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs);
           actionDispatchedAtEpochMs = Date.now();
           actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
-          try { input.onLifecycleEvent?.({type: "action_dispatched", atMs: actionDispatchedAtMs}); }
-          catch { limitations.push("lifecycle_listener_failed"); }
-          sourceFrameBinding.assertCurrent();
-          assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256);
           receiptCapture?.dispatch(actionDispatchedAtEpochMs);
           actionDispatched = true;
           graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
+        },
+        () => {
+          try { input.onLifecycleEvent?.({type: "action_dispatched", atMs: elapsed(parentScanStartedAtMs)}); }
+          catch { limitations.push("lifecycle_listener_failed"); }
+          sourceFrameBinding.assertCurrent();
+          assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs);
         },
       );
     } catch (error) {
       clickError = error;
     } finally {
       page.off("framenavigated", watchActionDocument);
+    }
+    if (actionDispatched) {
+      try { input.onActionDispatchCommitted?.({type: "action_dispatched", atMs: actionDispatchedAtMs}); }
+      catch { limitations.push("lifecycle_listener_failed"); }
     }
     if (!actionDispatched) {
       const cancelledBeforeInput = cancellation();
@@ -2133,6 +2144,7 @@ async function dispatchAcceptControl(
   assertDispatchAllowed?: () => void,
   readOptions?: ConsentControlReadOptions,
   onDispatch?: () => void,
+  onBeforeDispatch?: () => void,
 ) {
   assertDispatchAllowed?.();
   const boundControl = readOptions?.boundElement ?? control;
@@ -2144,15 +2156,16 @@ async function dispatchAcceptControl(
     assertDispatchAllowed?.();
   }
   if (recipe.accessibleControl?.kind === "closed_shadow_accessible_control") {
-    await dispatchClosedShadowAccessibleControl(page, recipe.accessibleControl, assertDispatchAllowed, onDispatch);
+    await dispatchClosedShadowAccessibleControl(page, recipe.accessibleControl, assertDispatchAllowed, onBeforeDispatch, readOptions, onDispatch);
     return;
   }
   if (useVerifiedGeometryDispatch) {
-    await dispatchLocatorClickWithVerifiedGeometry(control, 2_000, assertDispatchAllowed, {...readOptions, onDispatch});
+    await dispatchLocatorClickWithVerifiedGeometry(control, 2_000, assertDispatchAllowed, {...readOptions, onDispatch: onBeforeDispatch, onDispatchCommitted: onDispatch});
     return;
   }
-  onDispatch?.();
+  onBeforeDispatch?.();
   assertDispatchAllowed?.();
+  onDispatch?.();
   await boundControl.click({ timeout: 2_000 });
 }
 

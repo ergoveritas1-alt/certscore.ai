@@ -6,7 +6,9 @@ import {runPostAcceptObserver} from "./post-accept-observer";
 import {runPostRefusalObserver} from "./post-refusal-observer";
 
 for (const action of ["accept", "reject"] as const) {
-  test(`${action}: cancellation at the final lifecycle boundary sends no input command`, async () => {
+  for (const dispatchMode of ["enabled", "unset"] as const) test(`${action}: ${dispatchMode} cancellation at the final lifecycle boundary sends no input command`, async () => {
+    const previousFlag = process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED;
+    if (dispatchMode === "unset") delete process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED;
     let clicks = 0;
     const server = createServer((req, res) => {
       if (req.url === "/clicked") {clicks++;res.end("ok");return;}
@@ -18,7 +20,8 @@ for (const action of ["accept", "reject"] as const) {
     try {
       const recipe = {recipeId: "cancel-boundary-fixture-v1", resolverMethod: "local_fixture_recipe" as const, controlSelector: "#choice", bannerSelector: "#banner",
         confirmation: {kind: "local_storage_equals" as const, key: "consent", expectedValue: action === "accept" ? "granted" : "denied"}};
-      const input = {scanId: `cancel-boundary-${action}`, url: `http://127.0.0.1:${(server.address() as {port:number}).port}/`, boundControlDispatch: true,
+      const input = {scanId: `cancel-boundary-${action}`, url: `http://127.0.0.1:${(server.address() as {port:number}).port}/`,
+        ...(dispatchMode === "enabled" ? {boundControlDispatch: true} : {}),
         actionSearchTimeoutMs: 1500, confirmationTimeoutMs: 100, observationWindowMs: 150, signal: controller.signal,
         interactionAuthorization: {kind: "loopback" as const, authorizationId: "loopback_local_lab"}, onLifecycleEvent: () => controller.abort()};
       const packet = action === "accept"
@@ -29,7 +32,11 @@ for (const action of ["accept", "reject"] as const) {
       assert.equal(registration.status, "aborted");
       assert.equal(registration.actionDispatchedAtMs, undefined);
       assert.equal(packet.cancellation.outcome, "aborted_before_action");
-    } finally {await new Promise<void>(resolve => server.close(()=>resolve()));}
+    } finally {
+      if (previousFlag === undefined) delete process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED;
+      else process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED = previousFlag;
+      await new Promise<void>(resolve => server.close(()=>resolve()));
+    }
   });
   for (const boundControlDispatch of [false, true]) {
     test(`${action}: ${boundControlDispatch ? "bound" : "legacy"} dispatch retains rerender outcomes without retry`, async () => {

@@ -2,6 +2,11 @@
 
 Local implementation and verification, November 1, 2026. Production rollout is on hold.
 
+Review follow-up: runtime source has changed after implementation `1314f95e`.
+The 120-action tables below are historical evidence for that commit; they are
+not final measurements of the reviewed source. A new unset/default-off/enabled
+cohort and the two explicitly approved public-canary scans remain to complete.
+
 The candidate repairs reproduced wrong-click and false-confirmation defects. It
 does not establish a population-wide success-rate improvement or a best-in-class
 benchmark result. Full scanner-to-report latency verification remains blocked.
@@ -85,7 +90,14 @@ paired evaluation. Abort/target-change/uncertain-input outcomes retain their
 existing limited status rather than acquiring another wait or click.
 
 Closed-shadow controls keep their dedicated CDP executor; they do not acquire
-the native ElementHandle binding. Duplicate frame URLs remain conservatively
+the native ElementHandle binding. When the binding gate is enabled, two concurrent
+CDP reads recheck the current hit target and complete ancestry under the bound
+button (depth four, at most 64 nodes). Preparation and input reads share a
+conservative two-second cap clipped by the existing branch deadline. Failed or
+cancelled validation never commits an action timestamp, receipt or production
+checkpoint. CDP cleanup does not block the result. This remains best-effort
+coordinate dispatch with a residual DOM race before the press; it is not atomic
+element binding. Duplicate frame URLs remain conservatively
 ambiguous where the existing resolver cannot identify a unique scope. Actual
 cross-origin/OOPIF and closed-shadow production coverage has not been newly
 benchmarked. Multiple fragment transitions can remain limited under the bound
@@ -214,15 +226,17 @@ results, not proof that no real-world path can regress.
 
 ## Independent review status
 
-Independent code/evidence review is **not complete**. On the follow-up review
-request, the live collaboration inventory contained only the implementing root
-agent; no separate reviewer was attached and no Codex CLI was available on PATH.
-The environment requires explicit human authorization to spawn a sub-agent.
-The parent's orchestration instruction alone does not supply that human grant.
-No reviewer was started or simulated. A separate reviewer must inspect commit
-`1314f95e56e9e8c4ec87cd30447eb928c817756e` against the deployed base and the
-retained evidence, then report findings. Implementation self-review and passing
-tests must not be described as independent sign-off.
+A separate reviewer supplied by the parent identified the scoped-accessible
+binding bypass and failed-proof cleanup/deadline defects. All were reproduced
+locally and repaired. Additional closed-shadow replacement and pre-validation
+dispatch-bookkeeping defects were reproduced and repaired under the same gate.
+Legacy preparation callbacks remain available for compatibility; production
+checkpoints now use a separate notification after actual dispatch commitment.
+No user callback runs between final validation and the internal input commit.
+
+Final code/evidence sign-off remains pending the frozen follow-up diff and
+verification. The initial 120-action cohort is not evidence for these repairs.
+No reviewer was spawned locally and no permissions changed.
 
 ## Local core-to-publication integration
 
@@ -265,9 +279,9 @@ attempted, and there is no full-report latency acceptance result. The prepared
 repository's AWS/DB I/O doubles; it must not be presented as production queue,
 database-lock or browser-rendering performance.
 
-The parent has requested that specific approval; it remains pending.
-Specific approval for the two external owned-canary scans, followed by a fresh
-eligibility check and independently reviewed outcomes, is required to close
-that gate. Keep production rollout off meanwhile. A broader binding rollback
+Ben explicitly approved the two public scans of `https://ergoveritas.com/testar2.html`
+on November 1 at 17:16 UTC. The previous rejected operation is confirmed
+unexecuted. A fresh central-history/eligibility check and the frozen reviewed
+source must precede the permitted retry. The scans have not yet started. Keep production rollout off meanwhile. A broader binding rollback
 is the default-off option; ordinary bug-fix rollback would require reverting
 the reviewed source commit. Historical reports are not rewritten.

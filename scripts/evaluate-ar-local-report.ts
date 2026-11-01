@@ -5,9 +5,13 @@
 import assert from "node:assert/strict";
 import {createServer} from "node:http";
 import {spawn} from "node:child_process";
+import {execFileSync} from "node:child_process";
+import {createHash} from "node:crypto";
 import {mkdir, readFile, readdir, writeFile} from "node:fs/promises";
 import path from "node:path";
 import {redirectPublicationHarness} from "../apps/web/server/scans/redirect-publication.fixture";
+import {CANONICAL_POST_ACCEPT_RECIPE_SET_ID} from "../packages/certscore-scan-core/src/post-accept-cmp-recipes";
+import {CANONICAL_POST_REFUSAL_RECIPE_SET_ID} from "../packages/certscore-scan-core/src/post-refusal-cmp-recipes";
 
 const arg = (key: string) => process.argv[process.argv.indexOf(key) + 1];
 
@@ -18,6 +22,14 @@ async function main() {
   assert.ok(Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 3);
   const publicTarget = process.argv.includes("--owned-target") ? arg("--owned-target") : undefined;
   if (publicTarget) assert.ok(["https://ergoveritas.com/testar1.html", "https://ergoveritas.com/testar2.html"].includes(publicTarget), "only existing owned canaries are supported");
+  const pin = async (directory: string) => {
+    const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard",
+      "packages/certscore-scan-core/src", "packages/certscore-contracts/src", "packages/shared/src", "packages/certscore-vendor-resolver/src", "packages/web-bot-auth/src",
+      "apps/v2-dag-lambda/src", "apps/web/server/scans", "pnpm-lock.yaml"], {cwd: directory, encoding: "utf8"}).trim().split("\n");
+    return Object.fromEntries(await Promise.all([...new Set(files)].sort().map(async file => [file, createHash("sha256").update(await readFile(path.join(directory, file))).digest("hex")])));
+  };
+  const sourcePins = {baseline: await pin(baseline), candidate: await pin(root)};
+  await writeFile(path.join(out, "source-pins.json"), JSON.stringify(sourcePins, null, 2));
   const clicks = new Map<string, number>();
   const server = createServer(async (req, res) => {
     const url = new URL(req.url!, "http://localhost:3000");
@@ -41,16 +53,19 @@ async function main() {
       }</script></body></html>`);
   });
   await new Promise<void>((resolve, reject) => {server.once("error", reject);server.listen(3000, "localhost", resolve);});
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
   const h = await redirectPublicationHarness();
   const rows: any[] = [];
   try {
     for (let repeat = 0; repeat < repetitions; repeat++) for (const arm of repeat % 2 ? ["candidate", "baseline"] : ["baseline", "candidate"]) {
       const cwd = arm === "baseline" ? baseline : root, id = `ar-report-${arm}-${repeat}`, target = publicTarget ?? `http://localhost:3000/site/${id}`;
+      const runStartedAtMs = Date.now();
       const artifacts = path.join(out, `${id}-artifacts`), summaryPath = path.join(out, `${id}.scanner.json`);
       const config = (action: string) => ({enabled: true, rolloutMode: "owned_canary", dispatchDelayMs: 0,
         actionSearchTimeoutMs: action === "accept" ? 14000 : 1500, confirmationTimeoutMs: action === "accept" ? 2000 : 1500,
         observationWindowMs: action === "accept" ? 3000 : 8000,
-        resolver: publicTarget ? {kind: "canonical_cmp_registry", recipeSetId: action === "accept" ? "canonical-consent-control-accept-v6" : "canonical-consent-control-reject-v23"}
+        resolver: publicTarget ? {kind: "canonical_cmp_registry", recipeSetId: action === "accept" ? CANONICAL_POST_ACCEPT_RECIPE_SET_ID : CANONICAL_POST_REFUSAL_RECIPE_SET_ID}
           : {kind: "named_cmp", cmpCanonicalName: "OneTrust", confirmation: {kind: "local_storage_equals", key: "consent", expectedValue: action === "accept" ? "granted" : "denied"}},
         interactionAuthorization: publicTarget ? {kind: "owned_canary", authorizationId: "ergoveritas_owned_post_refusal_canary.v1"}
           : {kind: "loopback", authorizationId: "loopback_local_lab"}});
@@ -83,7 +98,7 @@ async function main() {
         const hostname = new URL(target).hostname;
         const record = {scan: {id, domainHostname: hostname, status: "completed", scanType: "full", scanFromValue: "california",
           createdAt: bundle.startedAt, startedAt: bundle.startedAt, completedAt: bundle.completedAt, pagesRequested: 1, pagesScanned: 1,
-          scanConfigJson: {processor, hostname, normalizedUrl: target, execution: {v2DagParallel: {localOnly: true, artifactOnly: true, profile: "standard"}}}},
+          scanConfigJson: {processor, hostname, normalizedUrl: target, execution: {v2DagParallel: {localOnly: true, artifactOnly: true, profile: "standard"}, localV2Dag: {outDir: summary.artifactRoot}}}},
           signalEnrichmentWorkflow: {findingsReady: true, mergedSignalsReady: true},
           events: [{id: `${id}-result`, eventType: "v2_lambda_result.received", createdAt: bundle.completedAt, metadataJson: {...message, processor}}],
           pageEvidence: [], policyEnrichment: [], policyReviewQueue: [], preconsentViolations: [], primaryPolicyEnrichment: null,
@@ -101,12 +116,19 @@ async function main() {
         await writeFile(path.join(out, `${id}.report.json`), JSON.stringify({api, report}, null, 2));
         assert.equal((await fetch(`http://localhost:3000/report/${id}`)).status, 200);
         Object.assign(row, {targetKind: publicTarget ? "existing-owned-canary" : "loopback-fixture", scannerMs: summary.elapsedMs, publicationAndHttpMs: Date.now() - publicationStarted,
-          localReportReadyMs: summary.elapsedMs + Date.now() - publicationStarted, result: "ready", postAccept: summary.postAccept, postRefusal: summary.postRefusal,
-          intendedAcceptClicks: clicks.get(`/clicked/${id}/accept`) ?? 0, intendedRejectClicks: clicks.get(`/clicked/${id}/reject`) ?? 0});
+          fullLocalReportWallMs: Date.now() - runStartedAtMs, localReportReadyMs: summary.elapsedMs + Date.now() - publicationStarted,
+          result: "ready", postAccept: summary.postAccept, postRefusal: summary.postRefusal,
+          ...(publicTarget ? {actualClickCounters: "unavailable-on-public-target"} : {
+            intendedAcceptClicks: clicks.get(`/clicked/${id}/accept`) ?? 0, intendedRejectClicks: clicks.get(`/clicked/${id}/reject`) ?? 0})});
       } catch (error) {row.result = "failed";row.error = String(error);}
       rows.push(row);await writeFile(path.join(out, "report-runs.json"), JSON.stringify(rows, null, 2));process.stdout.write(`${JSON.stringify(row)}\n`);
+      assert.deepEqual({baseline: await pin(baseline), candidate: await pin(root)}, sourcePins, "source drift during scan/report evaluation");
       if (row.result === "failed") throw new Error("Stop after a failed scan/report; retain the attempt without automatic retry.");
     }
-  } finally {await h.close();await new Promise<void>(resolve => server.close(()=>resolve()));}
+    await writeFile(path.join(out, "source-pins-verified.json"), JSON.stringify({verified: true, rows: rows.length, publisherSourceRoot: root, productionDatabaseAndQueueMeasured: false}, null, 2));
+  } finally {
+    if (previousAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    await h.close();await new Promise<void>(resolve => server.close(()=>resolve()));
+  }
 }
 void main().catch(error => {console.error(error);process.exitCode = 1;});
