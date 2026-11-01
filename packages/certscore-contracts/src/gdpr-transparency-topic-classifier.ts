@@ -69,6 +69,9 @@ type GdprTransparencySemanticRule = {
   locale: SupportedGdprTransparencyLocale;
   matchedTerm: string;
   pattern?: RegExp;
+  sourcePattern?: RegExp;
+  retainSourceClause?: boolean;
+  sourceExcerptGroup?: string;
   sectionOnly?: boolean;
   rejectNegatedClause?: boolean;
   topic: GdprTransparencyTopic;
@@ -83,6 +86,18 @@ export const RESIDENCE_RELATIVE_TRANSFER_PATTERN = /\b(?:personal (?:data|inform
 
 const MAX_EXCERPT_CHARS = 360;
 const DEFAULT_MAX_MATCHES = 24;
+
+// Affirmative, bounded source clauses. Retain the original wording, including
+// destination/template context and the distinction between detailed and
+// anonymized data. These identify disclosures, not implementation or compliance.
+const TRANSFER_SAFEGUARD_CLAUSE = /(?:^|(?<=[.!?]\s))(?:we )?include standard data protection clauses \(approved by the ICO for transferring personal data outside the UK and EEA\) in our contracts with (?:those|these) third parties(?: [–—-] these are the clauses approved under Article 46\.2 of the UK GDPR)?\./i;
+const VISITOR_JURISDICTION_TRANSFER_CLAUSE = /(?:^|(?<=[.!?]\s))it means that this information (?:may|will|can) be transferred to \[?((?!(?:country|destination|location|your|insert|select|unknown|tbd|tba|name|example|sample|placeholder|unspecified|not|enter|replace|todo|choose)\b)[\p{L}][\p{L} '-]{1,50}?)\]? and maintained on \[?\1[’']s\]? database, where located outside of your state, province, country or other governmental jurisdiction where the data protection laws may differ than those from your jurisdiction\./iu;
+const DECLARED_RIGHTS_ENUMERATION_CLAUSE = /(?:^|(?<=[.!?]\s)|(?<=Requests for your information ))you have rights to access, correct, delete, restrict,? (?:or|and) object to (?:personal )?data use\./i;
+const NAMED_CONTROLLER_RETENTION_CLAUSE = /(?:^|(?<=[.!?]\s))as a data controller, to operate the services for our clients, (?=\p{L})(?:(?!\b(?:not|never|no|without|neither|denies|deny|disclaims?|cannot)\b|n['’]t\b)[\p{L}\d &'’-]){2,61}? retains detailed data collected for [1-9]\d{0,3} (?:days?|months?|years?) and in an aggregate, anonymi[sz]ed fashion for up to (?:[1-9]\d{0,3}|one|two|three|four|five|six|seven|eight|nine|ten) (?:days?|months?|years?)\./iu;
+// A standalone retained basis witness is affirmative in its stated scope. When
+// extracting it from a larger source, verify the enclosing processing clause
+// before selecting the short witness; a closing parenthesis cannot supply proof.
+const GERMAN_INTEREST_BASIS_CLAUSE = /(?:^|\bauf dieser website werden unter einsatz (?:(?!\b(?:nicht|kein\w*|niemals|nie)\b)[^!?\r\n]){1,260}?)(?<basis>auf basis unseres berechtigten interesses an der (?:(?!\b(?:nicht|kein\w*|niemals|nie)\b)[^.!?\r\n]){1,100}? gemäß art\. 6 abs\. 1 lit\. f dsgvo daten gesammelt und gespeichert\.)/iu;
 
 /** Reject incidental German topic words before they become retained witnesses.
  * Shared by extraction and read-side validation; does not infer missing topics. */
@@ -135,8 +150,185 @@ function findEnglishBehavioralProfilingDisclosure(normalized: string) {
     basis: clause.startsWith("we ") ? "individual_interest_tracking" as const : "newsletter_engagement_personalization" as const} : null;
 }
 
+// Retained Dolby account-information lifecycle. Keep the data subject and the
+// retention criterion in one affirmative sentence, allowing bounded examples.
+export const PROVIDED_ACCOUNT_INFORMATION_RETENTION_PATTERN = /(?:^|[.!?]\s+)(?:the )?information you provide when (?:setting up|creating) (?:an|your) account(?:\s*\([^()]{1,120}\))?\s+(?:will be|is) (?:retained|kept|stored) until (?:your|the) account is (?:closed|deleted|terminated)(?: or (?:closed|deleted|terminated))?(?:[.;](?=\s|$)|$)/i;
+
+/** Retained entrant-data lifecycle: event-relative criterion, stated purposes
+ * and subsequent removal stay together. No precise duration is inferred. */
+export const COMPETITION_ENTRANT_RETENTION_PATTERN = /(?:^|(?<=[.!?]\s))data relating to competition entrants will be retained for a reasonable period after the competition closes to assist us to operate competitions in a consistent manner and to deal with any queries\.\s+data will then be removed from our systems and will not be used for marketing(?:\.(?=\s|$)|$)/i;
+
+/** An explicit category/purpose retention criterion, including its original
+ * punctuation. Paragraph boundaries may be retained as markup; do not borrow
+ * neighboring opt-out wording or reinterpret the criterion as a fixed period. */
+export const PERSONAL_CATEGORY_PURPOSE_RETENTION_PATTERN = /(?:^|(?<=[.!?]\s)|(?<=<p>))we retain each category of personal information, including sensitive personal information, for as long as needed or permitted in light of the purpose\(s\) for which it was collected(?:\.(?=\s|<|&nbsp;|&#160;|&#xa0;|$)|$)/i;
+
+/** Contact details/mail address, named recipient categories and prize-delivery
+ * purpose remain in one affirmative source sentence. This does not establish
+ * an advertising purpose, actual transmission or any cookie/vendor activity. */
+export const COMPETITION_PRIZE_RECIPIENT_PATTERN = /(?:^|(?<=[.!?]\s))on the occasion that a third party, such as the product supplier, advertising agency or PR company who sponsor that competition is to provide prize\(s\) directly, your contact details and, if applicable mailing address, will be passed to the third party for the sole reason of delivering the prize(?:\.(?=\s|$)|$)/i;
+
+/** Keep an explicitly named controller and its complete own postal address
+ * together; company/street abbreviations are not the end of this witness. */
+export const POLISH_CONTROLLER_POSTAL_STATEMENT_PATTERN = /(?:^|(?<=[.!?]\s))(?:(?:ochrona danych osobowych|administrator danych osobowych|administratorem danych osobowych)\s+){0,3}(?<statement>administratorem danych osobowych podanych przez użytkownika jest [\p{L}\d][\p{L}\d .&'’-]{1,100}? z siedzibą w [\p{L}][\p{L} '-]{1,60}? \(\d{2}-\d{3}\),\s+ul\.\s+[\p{L}][\p{L} .'-]{1,80}?\s+\d{1,5}[a-z]?(?:\/\d{1,5}[a-z]?)?)(?=$|[.;](?:\s|$)|\s+(?:informacja o powołaniu|$))/iu;
+
+/** Keep the consent basis and its withdrawal endpoint in the same affirmative
+ * processing-period sentence; a right to withdraw alone is not retention. */
+export const POLISH_CONSENT_PROCESSING_PERIOD_PATTERN = /(?:^|(?<=[.!?]\s))(?:jeśli|jeżeli) przetwarzanie odbywa się na podstawie zgody,\s+dane osobowe przetwarzane są do jej wycofania(?:\.(?=\s|$)|$)/iu;
+
+/** Purpose-limited personal-data storage, not infrastructure location or a
+ * bare statement of purpose. Source punctuation/negation stays significant. */
+export const PORTUGUESE_PURPOSE_STORAGE_PERIOD_PATTERN = /(?:^|(?<=[.!?]\s))o armazenamento dos dados pessoais será feito pelo tempo necessário para a finalidade para a qual foram coletados(?: ou enquanto forem relevantes para os interesses legítimos d[ao] [\p{L}][\p{L}\d .&'-]{0,79})?(?:\.(?=\s|$)|$)/iu;
+
+/** Retained Polish correspondence scope, named personal data, processing and
+ * a concrete communication/case-resolution purpose in one source sentence. */
+export const POLISH_CORRESPONDENCE_PURPOSE_PATTERN = /(?:^|(?<=[.!?]\s))w przypadku kierowania do administratora za pośrednictwem:\s+tradycyjnej korespondencji lub poczty e-mail niezwiązanej z usługami świadczonymi na rzecz nadawcy lub inną zawartą z nim umową,\s+dane osobowe zawarte w tej korespondencji są przetwarzane wyłącznie w celu komunikacji i rozwiązania sprawy, której dotyczy korespondencja(?:\.(?=\s|$)|$)/iu;
+
+/** The independent retained basis sentence names processing, legitimate interest
+ * and its correspondence activity; a purpose heading cannot supply this fact. */
+export const POLISH_CORRESPONDENCE_BASIS_PATTERN = /(?:^|(?<=[.!?]\s))podstawą prawną przetwarzania jest uzasadniony interes administratora\s+\(art\.\s*6 ust\.\s*1 lit\.\s*f RODO\) polegający na obsłudze korespondencji kierowanej do niego w związku z jego działalnością(?:\.(?=\s|$)|$)/iu;
+
+const POLISH_PURPOSE_HEADING = "(?:(?:[ivxlcdm]+|\\d+) )?(?:cele (?:oraz podstawy prawne )?|podstawy prawne )przetwarzania danych(?: osobowych)?";
+const POLISH_PURPOSE_HEADING_ONLY_PATTERN = new RegExp(`^${POLISH_PURPOSE_HEADING}(?: ${POLISH_PURPOSE_HEADING}){0,2}(?: korespondencja tradycyjna i e-mailowa(?: \\d+)?){0,8}(?: \\d+)?$`, "iu");
+
+/** A heading/list ordinal states neither a processing purpose nor a basis. */
+export function hasOnlyPolishPurposeHeading(value: string): boolean {
+  return POLISH_PURPOSE_HEADING_ONLY_PATTERN.test(normalizeGdprTransparencyText(value));
+}
+
+/** A glossary definition of the officer role is not the publisher's DPO.
+ * An independent explicit own-officer email route may coexist in one quote;
+ * an unrelated support/contact address cannot rescue the definition. */
+export function hasOnlyPortugueseDpoDefinition(value: string): boolean {
+  const text = normalizeGdprTransparencyText(value);
+  if (!/\bpessoa natural ou juridica indicada pelo agente de tratamento para atuar como canal de comunicacao entre o controlador os titulares de dados e a anpd\b/iu.test(text)) return false;
+  return !/\b(?:our (?:data protection officer|dpo) can be contacted at|nosso (?:encarregado(?: de proteção de dados)?|dpo) pode ser contatado (?:pelo|por) e-mail)\s*:?\s*[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/iu.test(value);
+}
+
+/** A retained Dutch privacy enquiry route: bind the named contact to the same
+ * named addressee, PO box and postcode. A bare contact label/form is insufficient. */
+export const DUTCH_PRIVACY_POSTAL_CONTACT_PATTERN = /\bvragen hebben over (?:dit|ons) privacybeleid\b(?:(?!\b(?:niet|geen|nooit)\b)[^.!?]){0,240}?\bneem dan contact op met (?:het |de )?([\p{L}][\p{L}\d &'’-]{1,80}?) via onderstaande contactgegevens(?: of dit formulier)?\s*:\s*\1\s+postbus\s+[1-9]\d{0,6}\s+[1-9]\d{3}\s?[a-z]{2}\s+[\p{L}]{2,60}\b/iu;
+
+/** The inflected Polish controller role needs both a concrete email and the
+ * explicit same-paragraph personal-data enquiry scope, not a server admin. */
+export const POLISH_CONTROLLER_ENQUIRY_CONTACT_PATTERN = /\bkontakt z administratorem jest możliwy poprzez adres e-mail\s*:\s*[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b(?:(?!\b(?:nie|nigdy)\b)[^!?\r\n]){0,220}?\bwe wszystkich sprawach dotyczących przetwarzania danych osobowych oraz korzystania z praw związanych z przetwarzaniem danych należy kontaktować z administratorem\b/iu;
+
+/** Portability to another controller does not identify the policy's controller.
+ * Keep an independent retained privacy-contact route eligible in the same text. */
+export function hasOnlyOtherDutchControllerReferences(value: string): boolean {
+  if (DUTCH_PRIVACY_POSTAL_CONTACT_PATTERN.test(value)) return false;
+  const text = normalizeGdprTransparencyText(value);
+  const mentions = [...text.matchAll(/\bverwerkingsverantwoordelijken?\b/g)];
+  return mentions.length > 0 && mentions.every(match =>
+    /\bandere\s+$/.test(text.slice(Math.max(0, match.index! - 24), match.index)));
+}
+
 /** Canonical precision-first clause rules for wording too variable to list as literal headings. */
 const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] = [
+  {
+    locale: "en", matchedTerm: "personal-data transfer safeguards in third-party contracts",
+    pattern: /\binclude standard data protection clauses\b/i,
+    sourcePattern: TRANSFER_SAFEGUARD_CLAUSE, retainSourceClause: true, topic: "international_transfers",
+  },
+  {
+    locale: "en", matchedTerm: "named destination outside the visitor's jurisdiction",
+    pattern: /\bthis information (?:may|will|can) be transferred\b/i,
+    sourcePattern: VISITOR_JURISDICTION_TRANSFER_CLAUSE, retainSourceClause: true, topic: "international_transfers",
+  },
+  {
+    locale: "en", matchedTerm: "affirmative personal-data rights enumeration",
+    pattern: /\byou have rights to access correct delete restrict\b/i,
+    sourcePattern: DECLARED_RIGHTS_ENUMERATION_CLAUSE, retainSourceClause: true, topic: "data_subject_rights",
+  },
+  {
+    locale: "en", matchedTerm: "controller's detailed-data retention and separate anonymized period",
+    pattern: /\bas a data controller\b/i,
+    sourcePattern: NAMED_CONTROLLER_RETENTION_CLAUSE, retainSourceClause: true, topic: "data_retention",
+  },
+  {
+    locale: "de", matchedTerm: "website processing on the publisher's stated legitimate-interest basis",
+    pattern: /\bauf basis unseres berechtigten interesses\b/i,
+    sourcePattern: GERMAN_INTEREST_BASIS_CLAUSE, retainSourceClause: true, sourceExcerptGroup: "basis", topic: "legal_basis",
+  },
+  {
+    locale: "pl",
+    matchedTerm: "uzasadniony interes jako podstawa przetwarzania korespondencji",
+    pattern: /\bpodstawa prawna przetwarzania jest uzasadniony interes administratora\b.{0,100}\bpolegajacy na obsłudze korespondencji kierowanej do niego w zwiazku z jego działalnoscia\b/iu,
+    sourcePattern: POLISH_CORRESPONDENCE_BASIS_PATTERN,
+    retainSourceClause: true,
+    topic: "legal_basis",
+  },
+  {
+    locale: "pl",
+    matchedTerm: "dane korespondencji przetwarzane w celu komunikacji i rozwiazania sprawy",
+    pattern: /\bw przypadku kierowania do administratora za posrednictwem\b.{0,200}\bdane osobowe zawarte w tej korespondencji sa przetwarzane wyłacznie w celu komunikacji i rozwiazania sprawy ktorej dotyczy korespondencja\b/iu,
+    sourcePattern: POLISH_CORRESPONDENCE_PURPOSE_PATTERN,
+    retainSourceClause: true,
+    topic: "processing_purposes",
+  },
+  {
+    locale: "pl",
+    matchedTerm: "okres przetwarzania na podstawie zgody do jej wycofania",
+    pattern: /\b(?:jesli|jezeli) przetwarzanie odbywa sie na podstawie zgody dane osobowe przetwarzane sa do jej wycofania\b/iu,
+    sourcePattern: POLISH_CONSENT_PROCESSING_PERIOD_PATTERN,
+    retainSourceClause: true,
+    topic: "data_retention",
+  },
+  {
+    locale: "pt",
+    matchedTerm: "armazenamento de dados pessoais pelo tempo necessario para a finalidade de coleta",
+    pattern: /\bo armazenamento dos dados pessoais sera feito pelo tempo necessario para a finalidade para a qual foram coletados\b/iu,
+    sourcePattern: PORTUGUESE_PURPOSE_STORAGE_PERIOD_PATTERN,
+    retainSourceClause: true,
+    topic: "data_retention",
+  },
+  {
+    locale: "pl",
+    matchedTerm: "kontakt z administratorem w sprawach danych osobowych przez e-mail",
+    pattern: /\bkontakt z administratorem jest mozliwy poprzez adres e[- ]mail\b.{0,260}\bwe wszystkich sprawach dotyczacych przetwarzania danych osobowych\b/iu,
+    sourcePattern: POLISH_CONTROLLER_ENQUIRY_CONTACT_PATTERN,
+    retainSourceClause: true,
+    topic: "controller_contact",
+  },
+  {
+    locale: "nl",
+    matchedTerm: "privacyvragen met naamgebonden postbus en postcode",
+    pattern: /\bvragen hebben over (?:dit|ons) privacybeleid\b.{0,260}\bneem dan contact op met\b.{0,180}\bpostbus\s+\d{1,7}\s+\d{4}\s?[a-z]{2}\b/iu,
+    sourcePattern: DUTCH_PRIVACY_POSTAL_CONTACT_PATTERN,
+    retainSourceClause: true,
+    topic: "controller_contact",
+  },
+  {
+    locale: "en",
+    matchedTerm: "entrant contact and mailing details passed to prize-delivery recipient categories",
+    pattern: /\bon the occasion that a third party such as the product supplier advertising agency or pr company who sponsor that competition is to provide prize s directly your contact details and if applicable mailing address will be passed to the third party for the sole reason of delivering the prize\b/i,
+    sourcePattern: COMPETITION_PRIZE_RECIPIENT_PATTERN,
+    retainSourceClause: true,
+    topic: "recipients_or_vendor_categories",
+  },
+  {
+    locale: "en",
+    matchedTerm: "personal-information categories retained according to their collection purpose",
+    pattern: /\bwe retain each category of personal information including sensitive personal information for as long as needed or permitted in light of the purpose s for which it was collected\b/i,
+    sourcePattern: PERSONAL_CATEGORY_PURPOSE_RETENTION_PATTERN,
+    retainSourceClause: true,
+    topic: "data_retention",
+  },
+  {
+    locale: "en",
+    matchedTerm: "competition entrant data retained after close for administration and queries, then removed",
+    pattern: /\bdata relating to competition entrants will be retained for a reasonable period after the competition closes to assist us to operate competitions in a consistent manner and to deal with any queries data will then be removed from our systems and will not be used for marketing\b/i,
+    sourcePattern: COMPETITION_ENTRANT_RETENTION_PATTERN,
+    retainSourceClause: true,
+    topic: "data_retention",
+  },
+  {
+    locale: "en",
+    matchedTerm: "provided account information retained until account closure",
+    pattern: /\b(?:the )?information you provide when (?:setting up|creating) (?:an|your) account\b.{0,140}\b(?:will be|is) (?:retained|kept|stored) until (?:your|the) account is (?:closed|deleted|terminated)\b/i,
+    sourcePattern: PROVIDED_ACCOUNT_INFORMATION_RETENTION_PATTERN,
+    topic: "data_retention",
+  },
   {
     locale: "en",
     matchedTerm: "information retained for as long as needed or account active",
@@ -2205,6 +2397,12 @@ export function classifyGdprTransparencyTopics(
       /\b(?:personal data|personal information|user data|data about you|account (?:data|information)|legal effects?|significantly affects?|similarly significant effects?)\b/i.test(normalizedText)
     )
     .filter((rule) => {
+      // Normalization removes sentence/question punctuation and parentheses.
+      // This rule additionally requires the exact affirmative source sentence.
+      if (rule.sourcePattern) {
+        rule.sourcePattern.lastIndex = 0;
+        if (!rule.sourcePattern.test(sourceText)) return false;
+      }
       if (rule.sectionOnly) {
         if (!normalizedSectionHeading || !normalizedSectionBody) return false;
         if (rule.headingPattern) rule.headingPattern.lastIndex = 0;
@@ -2238,8 +2436,11 @@ export function classifyGdprTransparencyTopics(
     if (selected.has(selectionKey)) {
       continue;
     }
-    const evidenceExcerpt = boundedEvidenceExcerptFromIndex(evidenceSourceText, evidenceSearchIndex, term.phrase);
-    if (!evidenceExcerpt || hasIncidentalGermanDisclosureTerms(evidenceExcerpt, term.topic)) continue;
+    const evidenceExcerpt = boundedEvidenceExcerptFromIndex(evidenceSourceText, evidenceSearchIndex, term.phrase, MAX_EXCERPT_CHARS, term.topic);
+    if (!evidenceExcerpt || hasIncidentalGermanDisclosureTerms(evidenceExcerpt, term.topic) ||
+      term.topic === "dpo_contact" && hasOnlyPortugueseDpoDefinition(evidenceExcerpt) ||
+      ["processing_purposes", "legal_basis"].includes(term.topic) && hasOnlyPolishPurposeHeading(evidenceExcerpt) ||
+      term.topic === "controller_contact" && hasOnlyOtherDutchControllerReferences(evidenceExcerpt)) continue;
     selected.set(selectionKey, {
       classifierProvenance: "gdpr_transparency_topic_classifier.v1",
       confidence: confidenceFor(term),
@@ -2267,10 +2468,19 @@ export function classifyGdprTransparencyTopics(
       ? `${rule.topic}:${rule.locale}`
       : rule.topic;
     if (selected.has(selectionKey)) continue;
-    const evidenceExcerpt = rule.sectionOnly && input.section
+    // Keep this rule's exact source-bound clause; normalized first-match
+    // windows could select an earlier question or mismatched addressee.
+    const sourceMatch = rule.retainSourceClause ? rule.sourcePattern?.exec(evidenceSourceText) : undefined;
+    const sourceClause = rule.sourceExcerptGroup ? sourceMatch?.groups?.[rule.sourceExcerptGroup] : sourceMatch?.[0];
+    const evidenceExcerpt = rule.retainSourceClause
+      ? sourceClause && sourceClause.length <= MAX_EXCERPT_CHARS ? sourceClause : undefined
+      : rule.sectionOnly && input.section
       ? boundedSectionSemanticEvidenceExcerpt(input.section, rule)
-      : boundedEvidenceExcerptFromIndex(evidenceSourceText, evidenceSearchIndex, semanticRuleAnchor(normalizedText, rule));
-    if (!evidenceExcerpt || hasIncidentalGermanDisclosureTerms(evidenceExcerpt, rule.topic)) continue;
+      : boundedEvidenceExcerptFromIndex(evidenceSourceText, evidenceSearchIndex, semanticRuleAnchor(normalizedText, rule), MAX_EXCERPT_CHARS, rule.topic);
+    if (!evidenceExcerpt || hasIncidentalGermanDisclosureTerms(evidenceExcerpt, rule.topic) ||
+      rule.topic === "dpo_contact" && hasOnlyPortugueseDpoDefinition(evidenceExcerpt) ||
+      ["processing_purposes", "legal_basis"].includes(rule.topic) && hasOnlyPolishPurposeHeading(evidenceExcerpt) ||
+      rule.topic === "controller_contact" && hasOnlyOtherDutchControllerReferences(evidenceExcerpt)) continue;
     selected.set(selectionKey, {
       classifierProvenance: "gdpr_transparency_topic_classifier.v1",
       confidence: rule.confidence ?? (rule.sectionOnly ? 0.88 : 0.86),
@@ -2341,6 +2551,7 @@ function boundedSectionSemanticEvidenceExcerpt(
     bodyIndex,
     semanticRuleAnchor(normalizeGdprTransparencyText(body), rule),
     bodyBudget,
+    rule.topic,
   );
   return `${prefix}${bodyExcerpt}`.slice(0, MAX_EXCERPT_CHARS).trim();
 }
@@ -2571,7 +2782,7 @@ function hasPrivacyDisclosureContext(normalizedText: string) {
   // Russian policy prose commonly uses the genitive rather than the nominative
   // personal-data label in the locale registry.
   if (/персональных данных/iu.test(normalizedText)) return true;
-  if (/\b(?:privacy|gdpr|dsgvo|dati personali|protezione dei dati|titolare del trattamento|responsabili? del trattamento|diritti degli interessati|articolo (?:6|13|28|44))\b/i.test(normalizedText)) {
+  if (/\b(?:privacy|gdpr|dsgvo|rodo|dati personali|protezione dei dati|titolare del trattamento|responsabili? del trattamento|diritti degli interessati|articolo (?:6|13|28|44))\b/i.test(normalizedText)) {
     return true;
   }
   return PRIVACY_EVIDENCE_LOCALE_REGISTRY.some((entry) =>
@@ -2583,7 +2794,7 @@ function hasPrivacyDisclosureContext(normalizedText: string) {
 }
 
 function hasLocalizedSemanticDisclosureContext(normalizedText: string) {
-  return /(?:datenverarbeitung|personenbezogene daten|ihre daten|ip-adresse|donnees personnelles|vos donnees|adresse ip|datos personales|sus datos|tus datos|direccion ip|dati personali|i suoi dati|i tuoi dati|indirizzo ip|persoonsgegevens|uw gegevens|jouw gegevens|ip-adres|dane osobowe|panstwa dane|twoje dane|adres ip|dados pessoais|seus dados|endereco ip)/i.test(normalizedText);
+  return /(?:datenverarbeitung|personenbezogene daten|ihre daten|ip-adresse|donnees personnelles|vos donnees|adresse ip|datos personales|sus datos|tus datos|direccion ip|dati personali|i suoi dati|i tuoi dati|indirizzo ip|persoonsgegevens|uw gegevens|jouw gegevens|ip-adres|dane osobowe|danych osobowych|panstwa dane|twoje dane|adres ip|dados pessoais|seus dados|endereco ip)/i.test(normalizedText);
 }
 
 function usesBoundarylessScript(value: string) {
@@ -2721,6 +2932,7 @@ function boundedEvidenceExcerptFromIndex(
   searchIndex: ReturnType<typeof buildEvidenceSearchIndex> | undefined,
   phrase: string,
   maximumChars = MAX_EXCERPT_CHARS,
+  topic?: GdprTransparencyTopic,
 ): string {
   const normalizedPhrase = normalizeGdprTransparencyText(phrase);
   if (!sourceText || !searchIndex) {
@@ -2732,6 +2944,11 @@ function boundedEvidenceExcerptFromIndex(
   if (matchIndexes.length === 0) {
     // Never attach a document introduction to an unlocated topic match.
     return "";
+  }
+  if (topic === "controller_contact") {
+    const postalStatement = POLISH_CONTROLLER_POSTAL_STATEMENT_PATTERN.exec(sourceText)?.groups?.statement;
+    if (postalStatement && postalStatement.length <= maximumChars &&
+      normalizeGdprTransparencyText(postalStatement).includes(normalizedPhrase)) return postalStatement;
   }
   return matchIndexes
     .map((matchIndex, occurrenceIndex) => {
@@ -2753,9 +2970,10 @@ function boundedEvidenceExcerptFromIndex(
         score: substantiveEvidenceOccurrenceScore(excerpt, normalizedPhrase),
       };
     })
+    .filter(({ excerpt }) => topic !== "dpo_contact" || !hasOnlyPortugueseDpoDefinition(excerpt))
     .sort((left, right) =>
       right.score - left.score || left.occurrenceIndex - right.occurrenceIndex
-    )[0]?.excerpt ?? sourceText.slice(0, maximumChars);
+    )[0]?.excerpt ?? (topic === "dpo_contact" ? "" : sourceText.slice(0, maximumChars));
 }
 
 function boundedCompleteEvidenceWindow(

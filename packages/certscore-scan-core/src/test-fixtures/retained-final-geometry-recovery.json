@@ -1,0 +1,191 @@
+[
+  {
+    "site": "airandspaceforces.com",
+    "scanId": "0ea87633-db58-40db-a4bc-1a73e3f91c23",
+    "sources": [
+      {
+        "kind": "CanonicalEvidenceBundle.json",
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T025730Z-manual-consent-four-originals-152731c7/originals/0ea87633-db58-40db-a4bc-1a73e3f91c23/CanonicalEvidenceBundle.json",
+        "sha256": "985b51f42dd5f2d114d309c22fa647c3dc4fb54e4991cef498fe4ee3cff2594b",
+        "bytes": 1271805
+      },
+      {
+        "kind": "manifest.json",
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T025730Z-manual-consent-four-originals-152731c7/originals/0ea87633-db58-40db-a4bc-1a73e3f91c23/manifest.json",
+        "sha256": "605c1d41dde76d1467bf415437e229d811ee874d97cee84138ad802df7521ed3",
+        "bytes": 23777
+      },
+      {
+        "kind": "ConsentControlGeometryEvidence.json",
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T025730Z-manual-consent-four-originals-152731c7/originals/0ea87633-db58-40db-a4bc-1a73e3f91c23/ConsentControlGeometryEvidence.json",
+        "sha256": "6a14be56b859f549c681a9f5bd500c7f7ce0ca4ed379db0807a7d02fb9249f4a",
+        "bytes": 46090
+      }
+    ],
+    "context": "ConsentDetails[#IABV2SETTINGS#]AboutThis website uses cookiesWe use cookies to personalize content and ads, to provide social media features and to analyze our traffic. We also share information about your use of our site with our social media, advertising and analytics partners who may combine it with other information that you\u2019ve provided to them or that they\u2019ve collected from your use of their services.[#GPC_BANNER_ICON#][#GPC_TOAST_TEXT#]Consent SelectionNecessary Preferences Statistics Marketing Show detailsDetailsNecessary 14 Necessary cookies help make a website usable by enabling basic functions like page navigation and access to secure areas of the website. The website cannot function properly without these cookies.Cookiebot1Learn more about this providerCookieConsentStores the user's cookie consent state for the current domainMaximum Storage Duration: 1 monthType: HTTP CookieGoogle5Learn more about this providerSome of the data collected by this provider is for the purposes of personalization and measuring advertising effectiveness. The provider may use the IP Addresses for ads measurement and ads personalization.FCNEC [x2]Checks whether the cookie consent banner is activ",
+    "controls": [
+      {
+        "label": "Close banner",
+        "ariaLabel": "Close banner",
+        "role": null,
+        "id": null
+      },
+      {
+        "label": "Consent",
+        "ariaLabel": null,
+        "role": "tab",
+        "id": "#CybotCookiebotDialogNavDeclaration"
+      },
+      {
+        "label": "Details",
+        "ariaLabel": null,
+        "role": "tab",
+        "id": "#CybotCookiebotDialogNavDetails"
+      },
+      {
+        "label": "About",
+        "ariaLabel": null,
+        "role": "tab",
+        "id": "#CybotCookiebotDialogNavAbout"
+      },
+      {
+        "label": "OK",
+        "ariaLabel": null,
+        "role": null,
+        "id": "#CybotCookiebotDialogBodyLevelButtonAccept"
+      }
+    ],
+    "retainedCoverage": {
+      "inventoryTruncated": false,
+      "documentReadyState": "complete",
+      "mainFrameAvailable": true,
+      "documentAndFramesStable": true,
+      "frameCount": 8,
+      "capturedFrameCount": 8
+    },
+    "latestTypedInventoryOutcome": "complete_empty",
+    "latestTypedReadyState": "complete",
+    "latestTypedBoundedRecoveryOutcome": null,
+    "fixtureScope": "Controlled owned structural/semantic fixture using retained label/context and frame-count family; not original layout or old frame reconstruction"
+  },
+  {
+    "site": "ae.com",
+    "scanId": "7e78ae39-e824-4fe7-be31-0d29a3231a8b",
+    "sources": [
+      {
+        "kind": "CanonicalEvidenceBundle.json",
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T025730Z-manual-consent-four-originals-152731c7/originals/7e78ae39-e824-4fe7-be31-0d29a3231a8b/CanonicalEvidenceBundle.json",
+        "sha256": "79e80ea170c5522aabdbf8a733e539427e76ab8e5a1e1e08aa3af6ede3ec46a6",
+        "bytes": 1478450
+      },
+      {
+        "kind": "manifest.json",
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T025730Z-manual-consent-four-originals-152731c7/originals/7e78ae39-e824-4fe7-be31-0d29a3231a8b/manifest.json",
+        "sha256": "c4b12b690092f90fa0c662fdcf766745eb3559344daade7ec171438c7cdbc696",
+        "bytes": 23461
+      },
+      {
+        "kind": "ConsentControlGeometryEvidence.json",
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T025730Z-manual-consent-four-originals-152731c7/originals/7e78ae39-e824-4fe7-be31-0d29a3231a8b/ConsentControlGeometryEvidence.json",
+        "sha256": "e6f6a70768fc86ae83eb1ec9da23202ac510d5caaf7c816226c6c205cd19aee3",
+        "bytes": 44035
+      }
+    ],
+    "context": "We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our Terms of Service, and acknowledge our Privacy Notice. Manage Your Privacy Choices. OK",
+    "controls": [
+      {
+        "label": "Your Privacy Choices",
+        "ariaLabel": null,
+        "role": null,
+        "id": "#clarip-do-not-sell-link"
+      },
+      {
+        "label": "OK",
+        "ariaLabel": "dismiss cookie message",
+        "role": "button",
+        "id": null
+      }
+    ],
+    "retainedCoverage": {
+      "inventoryTruncated": false,
+      "documentReadyState": "interactive",
+      "mainFrameAvailable": true,
+      "documentAndFramesStable": false,
+      "frameCount": 12,
+      "capturedFrameCount": 10
+    },
+    "latestTypedInventoryOutcome": "complete_with_controls",
+    "latestTypedReadyState": "interactive",
+    "latestTypedBoundedRecoveryOutcome": "geometry_incomplete",
+    "fixtureScope": "Controlled owned structural/semantic fixture using retained label/context and frame-count family; not original layout or old frame reconstruction"
+  },
+  {
+    "site": "routenote.com",
+    "scanId": "d3ae9743-d41e-40c5-a243-f766d62a8052",
+    "sources": [
+      {
+        "kind": "CanonicalEvidenceBundle.json",
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T025730Z-manual-consent-four-originals-152731c7/originals/d3ae9743-d41e-40c5-a243-f766d62a8052/CanonicalEvidenceBundle.json",
+        "sha256": "40810ae4f79c99f6dbd56ea6792d59f42e06eb6b60babf0f6cbcc9ab99762541",
+        "bytes": 2110096
+      },
+      {
+        "kind": "manifest.json",
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T025730Z-manual-consent-four-originals-152731c7/originals/d3ae9743-d41e-40c5-a243-f766d62a8052/manifest.json",
+        "sha256": "7c8f30c6cb487bb78b062618ff450b39c56b15df970df34ae85ec2854a7bd1d8",
+        "bytes": 28396
+      },
+      {
+        "kind": "ConsentControlGeometryEvidence.json",
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T025730Z-manual-consent-four-originals-152731c7/originals/d3ae9743-d41e-40c5-a243-f766d62a8052/ConsentControlGeometryEvidence.json",
+        "sha256": "49e402cae9a64531f74e0abd2900abe22974990caca5740a310ba59548ad7072",
+        "bytes": 45846
+      }
+    ],
+    "context": "ConsentDetails[#IABV2SETTINGS#]AboutThis website uses cookiesWe use cookies to personalise content and ads, to provide social media features and to analyse our traffic. We also share information about your use of our site with our social media, advertising and analytics partners who may combine it with other information that you\u2019ve provided to them or that they\u2019ve collected from your use of their services. [#GPC_BANNER_ICON#][#GPC_TOAST_TEXT#]Consent SelectionNecessary Preferences Statistics Marketing Show detailsDetailsNecessary 99 Necessary cookies help make a website usable by enabling basic functions like page navigation and access to secure areas of the website. The website cannot function properly without these cookies.Cloudflare1Learn more about this providercf.turnstile.uThis cookie is used to distinguish between humans and bots. Maximum Storage Duration: PersistentType: HTML Local StorageDeezer2Learn more about this providerdzr_uniq_idRequired for the embedded media player to operate. Maximum Storage Duration: 180 daysType: HTTP CookiesidPreserves users states across page requests.Maximum Storage Duration: SessionType: HTTP CookieGoogle13Learn more about this providerSome ",
+    "controls": [
+      {
+        "label": "Consent",
+        "ariaLabel": null,
+        "role": "tab",
+        "id": "#CybotCookiebotDialogNavDeclaration"
+      },
+      {
+        "label": "Details",
+        "ariaLabel": null,
+        "role": "tab",
+        "id": "#CybotCookiebotDialogNavDetails"
+      },
+      {
+        "label": "About",
+        "ariaLabel": null,
+        "role": "tab",
+        "id": "#CybotCookiebotDialogNavAbout"
+      },
+      {
+        "label": "Do not sell or share my personal information",
+        "ariaLabel": null,
+        "role": null,
+        "id": "#CybotCookiebotDialogBodyButtonDecline"
+      },
+      {
+        "label": "OK",
+        "ariaLabel": null,
+        "role": null,
+        "id": "#CybotCookiebotDialogBodyButtonAccept"
+      }
+    ],
+    "retainedCoverage": {
+      "inventoryTruncated": false,
+      "documentReadyState": "complete",
+      "mainFrameAvailable": true,
+      "documentAndFramesStable": true,
+      "frameCount": 3,
+      "capturedFrameCount": 3
+    },
+    "latestTypedInventoryOutcome": "partial",
+    "latestTypedReadyState": "complete",
+    "latestTypedBoundedRecoveryOutcome": null,
+    "fixtureScope": "Controlled owned structural/semantic fixture using retained label/context and frame-count family; not original layout or old frame reconstruction"
+  }
+]

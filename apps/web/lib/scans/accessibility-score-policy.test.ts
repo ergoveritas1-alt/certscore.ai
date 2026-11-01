@@ -5,6 +5,8 @@ import { buildApiV2PostureScores } from "../api-v2/posture-scores";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { accessibilityProjectionFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
+import { normalizeAccessibilityRule } from "../../../../packages/certscore-scan-core/src/accessibility-audit";
+import type { Result } from "axe-core";
 import type { AccessibilityRuleObservation } from "@certscore/contracts";
 import { accessibilityDeductionBreakdown, buildFocusAccessibilityScoreEffects } from "./accessibility-score-policy";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
@@ -65,13 +67,39 @@ function imageLink(exact: boolean) {
   link.representativeNodes[0] = { ...link.representativeNodes[0]!, selectors: [exact ? "#link" : "p:nth-child(2) > a[target]:nth-child(2)"], htmlSnippet: "<a href target><img src style></a>" };
   return [image, link, rule("color-contrast"), rule("meta-viewport"), rule("target-size")];
 }
-test("verified image-link overlap charges the stronger category once; ambiguous identity is explicitly unresolved", () => {
-  for (const [exact, expected] of [[true, "verified"], [false, "unresolved"]] as const) {
+test("selector-only image-link overlap preserves conservative charging but remains unresolved", () => {
+  for (const exact of [true,false]) {
     const result = accessibilityDeductionBreakdown(effects(project(imageLink(exact))));
     assert.equal(result.deductionPoints, 11);
-    assert.equal(result.imageLinkOverlap, expected);
+    assert.equal(result.imageLinkOverlap, "unresolved");
   }
   assert.equal(points(project([...imageLink(true), rule("label")])), 12, "an independent labeling barrier must not erase image-alt scoring");
+});
+
+test("selector-only overlap cannot claim verified native identity at any retention precision",()=>{
+  for(const precision of ['approximate','unchanged',undefined] as const) {
+    const rules=imageLink(true);
+    for(const rule of rules.slice(0,2)) {
+      const node=rule.representativeNodes[0]!;
+      if(precision)node.selectorRetention={version:'sanitized_selectors.v1',precision};
+      else delete node.selectorRetention;
+    }
+    const before=structuredClone(rules),result=accessibilityDeductionBreakdown(effects(project(rules)));
+    assert.equal(result.imageLinkOverlap,'unresolved');
+    assert.equal(result.deductionPoints,11,'conservative overlap weights remain unchanged');
+    assert.deepEqual(rules,before);
+  }
+});
+
+test("distinct raw parent selectors stay unresolved after privacy redaction through the canonical pipeline",()=>{
+  const normalized=(id:string,target:string,html:string)=>normalizeAccessibilityRule({id,impact:'serious',tags:['wcag2a'],help:'Review',description:'Synthetic retained observation',
+    helpUrl:`https://dequeuniversity.com/rules/axe/4.11/${id}`,nodes:[{target:[target],html,any:[],all:[],none:[]}] } as Result);
+  const image=normalized('image-alt','a[data-slot="different-parent"] > img','<img src="private">');
+  const link=normalized('link-name','a[data-slot="other-link"]','<a href="/private"><img src="private"></a>');
+  assert.equal(image.representativeNodes[0]!.selectorRetention?.precision,'approximate');
+  const result=accessibilityDeductionBreakdown(effects(project([image,link])));
+  assert.equal(result.imageLinkOverlap,'unresolved');
+  assert.equal(result.deductionPoints,4,'existing conservative shared-family treatment is preserved');
 });
 
 test("captured DOM identity resolves differently scoped selectors and distinguishes separate barriers", () => {

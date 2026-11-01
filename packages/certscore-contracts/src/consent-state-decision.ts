@@ -26,6 +26,15 @@ export function decodeCanonicalConsentDecision(key: string, value: string, regis
   try { decoded = decodeURIComponent(value); } catch { /* Use the original bounded value. */ }
   // Split Complianz categories can never supply an all-purpose decision alone.
   if (key.startsWith("cmplz_")) return unverified("group_universe_incomplete");
+  // The reviewed legacy CookieYes writer merges base64 JSON preferences with
+  // fields for its configured checkboxes. Neither that aggregate, an individual
+  // category nor the viewed-policy flag is a generic whole-choice scalar.
+  if (key === "CookieLawInfoConsent" || key === "viewed_cookie_policy" || key.startsWith("cookielawinfo-checkbox-")) {
+    return unverified("group_universe_incomplete");
+  }
+  // Cookie Information writes approved/denied JSON lists from configured state.
+  // An unbound receipt is not an exact whole-choice scalar either.
+  if (key === "CookieInformationConsent") return unverified("group_universe_incomplete");
   if (key === "cookieyes-consent") return decodeCookieYesDecision(decoded, unverified);
   if (/^OptanonConsent(?:_[a-zA-Z0-9_-]+)?$/.test(key) && decoded.includes("groups=")) {
     const groups = new URLSearchParams(decoded).getAll("groups");

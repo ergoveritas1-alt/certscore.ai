@@ -15,6 +15,9 @@ test("verified main-frame pixels remain measurable when child frames change only
     pageUrl: g.pageUrl, capturedAt: g.capturedAt, screenshotArtifactRef: g.screenshotArtifactRef!, inventoryComplete: true,
     frameRevisionBeforeImage: 7, frameRevisionAtMainRead: 7, candidateIds: g.candidates.map(c => c.candidateId)};
   assert.ok(verifiedMainFrameVisualCapture(g));
+  const historical = structuredClone(g);
+  historical.controlInspection!.version = "control_specific_inspection.v3";
+  assert.ok(verifiedMainFrameVisualCapture(historical), "Version 3 keeps its existing main-frame proof semantics.");
   const result = await measureConsentControlVisualComparison(fixture);
   assert.equal(result?.version, "consent_control_visual_comparison.v2");
   assert.equal(hasMaterialAcceptVisualProminence(result!), false);

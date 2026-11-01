@@ -17,6 +17,8 @@ export type OneTrustBaseline = ({
   status: "verified"; identityHash: string; valueHash: string;
   coverage: "complete" | "partial";
   groupIds: string[]; configurationHash: string;
+  /** Exact URL observed for this ephemeral pre-action baseline. */
+  documentUrl?: string;
   applicability?: OneTrustApplicabilityEvidence;
 }) & { diagnosticReasons?: ConsentConfirmationReason[] };
 
@@ -115,14 +117,17 @@ export function oneTrustCookieIdentityHash(cookie: { name: string; domain: strin
 }
 
 export async function captureOneTrustBaseline(context: BrowserContext, scope: Page | Frame): Promise<OneTrustBaseline | undefined> {
+  const documentUrl = scope.url();
   let diagnosticReason: ConsentConfirmationReason | undefined;
   const diagnosticReasons: ConsentConfirmationReason[] = [];
   const configuration = await readConfiguration(scope, reason => { diagnosticReason = reason; if (!diagnosticReasons.includes(reason) && diagnosticReasons.length < 12) diagnosticReasons.push(reason); });
+  if (scope.url() !== documentUrl) return {status:"invalid",reason:"configuration_unverifiable",diagnosticReason:"sdk_document_changed"};
   // New actions require a known pre-click category universe. An unavailable
   // API cannot authorize legacy subset decoding; historical packet decoding
   // remains independent and unchanged.
   if (!configuration || configuration === "invalid") return { status: "invalid", reason: "configuration_unverifiable", diagnosticReason, diagnosticReasons };
   const cookie = await readCookie(context, scope, reason => { diagnosticReason = reason; });
+  if (scope.url() !== documentUrl) return {status:"invalid",reason:"configuration_unverifiable",diagnosticReason:"sdk_document_changed"};
   if (configuration.applicability && configuration.applicability.source !== readOneTrustSdkSource(scope)) {
     return {status:"invalid",reason:"configuration_unverifiable",diagnosticReason:"configuration_changed"};
   }
@@ -132,7 +137,7 @@ export async function captureOneTrustBaseline(context: BrowserContext, scope: Pa
   if ([...groups.keys()].some((id) => !configuration.groups.some((group) => group.id === id))) {
     return { status: "invalid", reason: "cookie_groups_unconfigured", diagnosticReason: "receipt_groups_unconfigured" };
   }
-  return { status: "verified", diagnosticReasons, identityHash: cookie.identityHash, valueHash: hash(cookie.value),
+  return { status: "verified", documentUrl, diagnosticReasons, identityHash: cookie.identityHash, valueHash: hash(cookie.value),
     coverage: groups.size === configuration.groups.length ? "complete" : "partial",
     groupIds: [...groups.keys()].sort(), configurationHash: configuration.configurationHash,
     ...(configuration.applicability ? {applicability:configuration.applicability} : {}) };
@@ -147,10 +152,14 @@ export async function verifyOneTrustCookieDecision(context: BrowserContext, scop
       baseline.reason === "cookie_missing_or_ambiguous" ? "baseline_receipt_unverified" : "configuration_unverifiable"));
     return undefined;
   }
+  const documentUrl = scope.url();
+  if (baseline.documentUrl !== undefined && baseline.documentUrl !== documentUrl) { diagnostic?.("sdk_document_changed"); return undefined; }
   const configuration = await readConfiguration(scope, diagnostic);
+  if (scope.url() !== documentUrl) { diagnostic?.("sdk_document_changed"); return undefined; }
   if (!configuration || configuration === "invalid") return undefined;
   if (configuration.configurationHash !== baseline.configurationHash) { diagnostic?.("configuration_changed"); return undefined; }
   const cookie = await readCookie(context, scope, diagnostic);
+  if (scope.url() !== documentUrl) { diagnostic?.("sdk_document_changed"); return undefined; }
   if (configuration.applicability && configuration.applicability.source !== readOneTrustSdkSource(scope)) {
     diagnostic?.("configuration_changed"); return undefined;
   }

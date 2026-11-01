@@ -1,4 +1,5 @@
 import { complianzReceiptEvidenceSchema, complianzReceiptDecision } from "./complianz-consent-state";
+import { cookieYesLegacyReceiptEvidenceSchema, cookieYesLegacyReceiptDecision } from "./cookieyes-legacy-consent-state";
 import { z } from "zod";
 import { oneTrustApplicabilityEvidenceSchema, oneTrustEffectiveGroups } from "./onetrust-applicability";
 
@@ -68,6 +69,7 @@ export const consentDecisionEvidenceSchema = z.object({
   tcfApiSource: z.enum(["addEventListener", "getTCData"]).optional(),
   oneTrustGroupEvidence: oneTrustGroupEvidenceSchema.optional(),
   complianzReceiptEvidence: complianzReceiptEvidenceSchema.optional(),
+  cookieYesLegacyReceiptEvidence: cookieYesLegacyReceiptEvidenceSchema.optional(),
 }).strict().superRefine((evidence, context) => {
   if (evidence.basis === "verified_state" && (!evidence.observedStateSha256 || evidence.observedAtMs === undefined || !evidence.timestampBasis)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Verified decisions require a retained state hash and timestamp provenance." });
@@ -81,9 +83,17 @@ export const consentDecisionEvidenceSchema = z.object({
   if (evidence.complianzReceiptEvidence) {
     const proof = evidence.complianzReceiptEvidence;
     if (evidence.basis !== "verified_state" || evidence.timestampBasis !== "instrumented_state_write" ||
-      evidence.oneTrustGroupEvidence || evidence.tcfPurposeEvidence || evidence.tcfApiSource ||
+      evidence.oneTrustGroupEvidence || evidence.cookieYesLegacyReceiptEvidence || evidence.tcfPurposeEvidence || evidence.tcfApiSource ||
       evidence.observedStateSha256 !== proof.stateSha256 || evidence.decision !== complianzReceiptDecision(proof)) {
       context.addIssue({code:z.ZodIssueCode.custom, message:"Complianz decisions require their complete exclusive receipt proof."});
+    }
+  }
+  if (evidence.cookieYesLegacyReceiptEvidence) {
+    const proof = evidence.cookieYesLegacyReceiptEvidence;
+    if (evidence.basis !== "verified_state" || evidence.timestampBasis !== "instrumented_state_write" ||
+      evidence.oneTrustGroupEvidence || evidence.complianzReceiptEvidence || evidence.tcfPurposeEvidence || evidence.tcfApiSource ||
+      evidence.observedStateSha256 !== proof.stateSha256 || evidence.decision !== cookieYesLegacyReceiptDecision(proof)) {
+      context.addIssue({code: z.ZodIssueCode.custom, message: "Legacy CookieYes decisions require their exclusive complete current-category receipt proof."});
     }
   }
   if (evidence.oneTrustGroupEvidence) {

@@ -6,7 +6,7 @@ import { readPrivacyAuditEvidence } from "../scans/report-review-focus";
 import { projectScanPostureScores } from "./posture-scores";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../scans/after-action-report-eligibility";
 import { readChoicePathExecution } from "../scans/choice-path-execution";
-import { deriveAfterActionSummary, afterActionInterpretation } from "./after-action-summary";
+import { deriveAfterActionSummary, afterActionInterpretation, deriveChoiceConfirmationSummary } from "./after-action-summary";
 import {
   CANONICAL_SCAN_ID_PATTERN,
   apiV2DomainLatestScanSchema,
@@ -554,6 +554,7 @@ export function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse
   );
   if (!isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "reject")) return undefined;
   const afterAction = deriveAfterActionSummary(projection, "reject");
+  const confirmation = deriveChoiceConfirmationSummary(projection, "reject");
   const execution = readChoicePathExecution(projection, "reject");
   const status = stringOrNull(projection?.status);
   if (!status || !supportedStatuses.has(status)) {
@@ -670,6 +671,7 @@ export function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse
       | "unsupported"
       | "aborted",
     ...(afterAction ? { afterAction } : {}),
+    ...(confirmation ? { confirmation } : {}),
     ...(execution ? { execution } : {}),
     refusalExercised: projection?.refusalExercised === true,
     observationCount: confirmed ? Math.max(0, finiteInt(projection?.observationCount) ?? 0) : 0,
@@ -731,6 +733,7 @@ export function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse)
   );
   if (!isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "accept")) return undefined;
   const afterAction = deriveAfterActionSummary(projection, "accept");
+  const confirmation = deriveChoiceConfirmationSummary(projection, "accept");
   const execution = readChoicePathExecution(projection, "accept");
   const status = stringOrNull(projection?.status);
   const limitationCode = stringOrNull(coverage?.limitationCode);
@@ -769,6 +772,7 @@ export function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse)
     return {
       status: afterAction && status === "unconfirmed" ? "unconfirmed" as const : indeterminateReason === "accept_control_not_observed" ? "not_attempted" as const : "aborted" as const,
       ...(afterAction ? { afterAction } : {}),
+      ...(confirmation ? { confirmation } : {}),
       ...(execution ? { execution } : {}),
       acceptanceExercised: false,
       observationCount: 0,
@@ -857,6 +861,7 @@ export function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse)
       | "unsupported"
       | "aborted",
     ...(afterAction ? { afterAction } : {}),
+    ...(confirmation ? { confirmation } : {}),
     ...(execution ? { execution } : {}),
     acceptanceExercised: projection?.acceptanceExercised === true,
     observationCount: confirmed ? Math.max(0, finiteInt(projection?.observationCount) ?? 0) : 0,

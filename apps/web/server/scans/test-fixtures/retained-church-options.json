@@ -1,0 +1,95 @@
+{
+  "site": "churchofengland.org",
+  "scanId": "9c468225-a6db-49cf-a116-b949c6953d20",
+  "source": {
+    "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T025730Z-manual-consent-four-originals-152731c7/originals/9c468225-a6db-49cf-a116-b949c6953d20/ConsentControlGeometryEvidence.json",
+    "sha256": "8f58d15f57e3fc4f10ccb8f9414df39a7108e7b19cdd52ec2a35b781a247672e",
+    "bytes": 34824
+  },
+  "context": "Our use of cookiesWe use necessary cookies to make our site work. We'd also like to set optional analytics and marketing cookies to help us improve it and show you relevant content. These are our \"Recommended Settings\". We won't set optional cookies unless you enable them. Using this tool will set a cookie on your device to remember your preferences.For more detailed information, please check our For more information about the cookies we use, see our Cookies page(Opens in a new window)Accept Recommended SettingsNecessary CookiesNecessary cookies enable core functionality such as security, network management and accessibility. You may disable these by changing your browser settings, but this may affect how the website functions.",
+  "controls": [
+    {
+      "label": "Set cookie preferences.",
+      "ariaLabel": "Set cookie preferences.",
+      "expectedIntent": "options",
+      "sourceCandidateId": "candidate_1"
+    },
+    {
+      "label": "Accept Recommended Settings",
+      "ariaLabel": null,
+      "expectedIntent": "unknown",
+      "sourceCandidateId": "candidate_0"
+    },
+    {
+      "label": "Close",
+      "ariaLabel": "Close",
+      "expectedIntent": "unknown",
+      "sourceCandidateId": "candidate_2"
+    }
+  ],
+  "candidate": {
+    "candidateId": "candidate_1",
+    "label": "Set cookie preferences.",
+    "normalizedLabel": "set cookie preferences.",
+    "actionType": "other",
+    "presentationType": "dedicated_button",
+    "placementType": "unknown",
+    "tagName": "button",
+    "semanticallyInteractive": true,
+    "ariaLabel": "Set cookie preferences.",
+    "selectorHint": "#ccc-icon",
+    "containerSelectorHint": "#ccc",
+    "containerId": "container_1",
+    "layer": "first_layer",
+    "frameContext": {
+      "frameKind": "main_frame",
+      "frameUrl": "https://www.churchofengland.org/"
+    },
+    "enabled": true,
+    "computedStyle": {
+      "display": "block",
+      "visibility": "visible",
+      "opacity": "1",
+      "pointerEvents": "auto",
+      "position": "fixed",
+      "zIndex": "20"
+    },
+    "boundingBox": {
+      "x": 1286,
+      "y": 820,
+      "width": 80,
+      "height": 80,
+      "top": 820,
+      "right": 1366,
+      "bottom": 900,
+      "left": 1286
+    },
+    "viewport": {
+      "width": 1366,
+      "height": 900
+    },
+    "intersectsViewport": true,
+    "clippedByScrollableAncestor": false,
+    "occlusion": {
+      "center": true,
+      "topLeft": true,
+      "topRight": true,
+      "bottomLeft": true,
+      "bottomRight": true,
+      "checkedPoints": 5,
+      "hitSelectorHints": []
+    },
+    "screenshotArtifactRef": "/tmp/certscore-v2-dag-lambda/9c468225-a6db-49cf-a116-b949c6953d20/lanes/consent_proof/screenshot-pre-consent-settled.png",
+    "classifierRegistryVersion": "consent-control-label-registry.v22",
+    "classifierReasonCodes": [
+      "no_term_match"
+    ],
+    "classifierConfidence": 0.2,
+    "consentContextConfirmed": true,
+    "decisionStatus": "ambiguous",
+    "reasons": [
+      "unclassified_control"
+    ]
+  },
+  "scope": "Exact retained label/ancestor context for controlled local fixture; not original layout, historical reclassification or current public scan"
+}

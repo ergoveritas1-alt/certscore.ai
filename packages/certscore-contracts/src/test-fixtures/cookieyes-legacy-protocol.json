@@ -1,0 +1,73 @@
+{
+  "scope": "Synthetic documented protocol fixtures, not AB or user receipt values",
+  "source": {
+    "url": "https://plugins.svn.wordpress.org/cookie-law-info/tags/2.1.2/public/js/cookie-law-info-public.js",
+    "sha256": "6c52384c7b0641dd1ead85d079c22d39bcc6dc5f2537afb1e6396bb619771a3f",
+    "bytes": 34179
+  },
+  "sourceLines": {
+    "names": [
+      1,
+      3
+    ],
+    "writer": [
+      863,
+      887
+    ]
+  },
+  "semantics": "Writer merges an earlier base64 JSON cookie, adds ver from configuration, then replaces fields corresponding to current preference checkboxes. The viewed_cookie_policy flag alone is not category consent.",
+  "cases": [
+    {
+      "name": "all_selected",
+      "cookieName": "CookieLawInfoConsent",
+      "decodedFixture": {
+        "ver": 1,
+        "necessary": true,
+        "functional": true,
+        "analytics": true,
+        "advertisement": true
+      },
+      "value": "eyJ2ZXIiOjEsIm5lY2Vzc2FyeSI6dHJ1ZSwiZnVuY3Rpb25hbCI6dHJ1ZSwiYW5hbHl0aWNzIjp0cnVlLCJhZHZlcnRpc2VtZW50Ijp0cnVlfQ==",
+      "expectedWholeDecision": "unknown",
+      "reason": "Configuration/current checkbox universe is not established by this standalone preference cookie."
+    },
+    {
+      "name": "mixed_selection",
+      "cookieName": "CookieLawInfoConsent",
+      "decodedFixture": {
+        "ver": 1,
+        "necessary": true,
+        "functional": true,
+        "analytics": false,
+        "advertisement": false
+      },
+      "value": "eyJ2ZXIiOjEsIm5lY2Vzc2FyeSI6dHJ1ZSwiZnVuY3Rpb25hbCI6dHJ1ZSwiYW5hbHl0aWNzIjpmYWxzZSwiYWR2ZXJ0aXNlbWVudCI6ZmFsc2V9",
+      "expectedWholeDecision": "unknown",
+      "reason": "Configuration/current checkbox universe is not established by this standalone preference cookie."
+    },
+    {
+      "name": "partial_selection",
+      "cookieName": "CookieLawInfoConsent",
+      "decodedFixture": {
+        "ver": 1,
+        "analytics": true
+      },
+      "value": "eyJ2ZXIiOjEsImFuYWx5dGljcyI6dHJ1ZX0=",
+      "expectedWholeDecision": "unknown",
+      "reason": "Configuration/current checkbox universe is not established by this standalone preference cookie."
+    },
+    {
+      "name": "preserved_old_key",
+      "cookieName": "CookieLawInfoConsent",
+      "decodedFixture": {
+        "ver": 1,
+        "analytics": true,
+        "retired_custom_category": false,
+        "ccpaOptout": true
+      },
+      "value": "eyJ2ZXIiOjEsImFuYWx5dGljcyI6dHJ1ZSwicmV0aXJlZF9jdXN0b21fY2F0ZWdvcnkiOmZhbHNlLCJjY3BhT3B0b3V0Ijp0cnVlfQ==",
+      "expectedWholeDecision": "unknown",
+      "reason": "Configuration/current checkbox universe is not established by this standalone preference cookie."
+    }
+  ]
+}

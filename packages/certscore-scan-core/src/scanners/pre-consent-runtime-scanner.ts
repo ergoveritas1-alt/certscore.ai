@@ -1,4 +1,6 @@
 import { consentGeometryCheckpoint } from "../consent-geometry-checkpoint.js";
+import { reconcileConsentGeometryInventoryCoverage } from "../consent-geometry-inventory-coverage.js";
+import {createFinalConsentGeometryRefresh, finalConsentGeometryRefreshReason, prepareFinalConsentGeometryArtifact} from "../consent-final-geometry-refresh.js";
 import {retainDomOptOutLabel,retainDomOptOutSearch} from "../dom-opt-out-label.js";
 import {captureBoundRuntimeTextSnapshot,retainRuntimeOptOutSearch,type RuntimeTextCapture} from "../runtime-opt-out-text.js";
 import {isGateRuntimeTextTarget} from "@certscore/contracts";
@@ -106,6 +108,7 @@ import {
 import {
   buildConsentGeometryEgressDiagnostic,
   classifyConsentGeometryAccess,
+  type ConsentGeometryAccessDiagnostic,
   collectConsentGeometryPageAccess,
   isRetainedBlockingFrameChallengeBound,
 } from "../consent-geometry-access.js";
@@ -1011,7 +1014,12 @@ export async function preConsentRuntimeScanner(
     };
     const googleConsentMode = captureGoogleConsentModeRequest({ url: requestUrl, requestId, timestampMs: event.timestampMs });
     if (googleConsentMode) event.googleConsentMode = googleConsentMode;
-    formTracing?.request(requestId, requestUrl, request.method(), event.timestampMs, payload.body, currentBrowserDocumentIdentity(page)?.token ?? "");
+    // Passive form events are main-document only. Child requests must not borrow
+    // its loader token or consume the form tracer's bounded request inventory.
+    if (isMainFrame) {
+      const documentToken = currentBrowserDocumentIdentity(page)?.token;
+      if (documentToken) formTracing?.request(requestId, requestUrl, request.method(), event.timestampMs, payload.body, documentToken);
+    }
     networkEvents.push(event);
     cmpInitialization?.recordRequest(event);
     impactCapture?.recordRequest(event);
@@ -1120,7 +1128,12 @@ export async function preConsentRuntimeScanner(
   let supplementalScreenshotAttempted = false;
   let consentGeometryDiagnosticWritten = false;
   let latestRetainedConsentGeometry: ConsentControlGeometryArtifact | undefined;
+  let latestRetainedConsentGeometryAccess: ConsentGeometryAccessDiagnostic | undefined;
   let consentGeometryArtifactRetained = false;
+  const finalizeConsentGeometryCoverage = (observation: ConsentUiObservation) =>
+    reconcileConsentGeometryInventoryCoverage({ observation,
+      geometry: consentGeometryArtifactRetained ? latestRetainedConsentGeometry : null,
+      scanStartedAtMs: input.scanStartedAtMs });
   // The settled packet can satisfy timing readiness while the dedicated
   // diagnostic remains pending, including its screenshot/scroll recovery.
   let pairedConsentGeometryProof: { geometry: ConsentControlGeometryArtifact; frames: Frame[]; frameRevision: number } | undefined;
@@ -1325,13 +1338,13 @@ export async function preConsentRuntimeScanner(
           "pre_consent_soft_deadline_before_observation_retained",
         )
       : undefined;
-    const retainedConsentUiObservations = captureConsentEvidence
+    const retainedConsentUiObservations = (captureConsentEvidence
       ? retainedConsentUiObservation
         ? [retainedConsentUiObservation, ...fallbackConsentUiObservations]
         : deadlineConsentUiObservation
           ? [deadlineConsentUiObservation]
           : [...fallbackConsentUiObservations]
-      : [];
+      : []).map(finalizeConsentGeometryCoverage);
     const retainedEvidence =
       networkEvents.length > 0 ||
       networkResponseEvents.length > 0 ||
@@ -1897,6 +1910,7 @@ export async function preConsentRuntimeScanner(
         );
         consentGeometryArtifactRetained = true;
         latestRetainedConsentGeometry = earlyConsentGeometry;
+        latestRetainedConsentGeometryAccess = earlyGeometryAccess;
         consentGeometryDiagnosticWritten = true;
         preScreenshotConsentObservation = reconcileConsentUiObservationWithCompletedGeometry({
           artifactPath: earlyGeometryArtifactPath,
@@ -2203,6 +2217,7 @@ export async function preConsentRuntimeScanner(
             );
             consentGeometryArtifactRetained = true;
             latestRetainedConsentGeometry = pairedGeometry.geometry;
+            latestRetainedConsentGeometryAccess = pairedGeometry.access;
             if (geometryComplete) {
               // An eligible measured pair completes the existing protected
               // packet now. Avoid a later duplicate screenshot after chat or
@@ -2930,6 +2945,7 @@ export async function preConsentRuntimeScanner(
         );
         consentGeometryArtifactRetained = true;
         latestRetainedConsentGeometry = pairedGeometry.geometry;
+        latestRetainedConsentGeometryAccess = pairedGeometry.access;
         consentGeometryDiagnosticWritten = true;
         return reconcileConsentUiObservationWithCompletedGeometry({
           artifactPath: geometryArtifactPath,
@@ -3246,6 +3262,7 @@ export async function preConsentRuntimeScanner(
                 );
                 consentGeometryArtifactRetained = true;
                 latestRetainedConsentGeometry = synchronizedGeometry.geometry;
+                latestRetainedConsentGeometryAccess = synchronizedGeometry.access;
                 consentGeometryDiagnosticWritten = true;
                 consentObservation = reconcileConsentUiObservationWithCompletedGeometry({
                   artifactPath: synchronizedGeometryArtifactPath,
@@ -3780,6 +3797,7 @@ export async function preConsentRuntimeScanner(
         });
         consentGeometryArtifactRetained = true;
         latestRetainedConsentGeometry = geometry;
+        latestRetainedConsentGeometryAccess = access;
         consentGeometryDiagnosticWritten = true;
         consentObservation = reconcileConsentUiObservationWithCompletedGeometry({
           artifactPath: geometryArtifactPath,
@@ -3840,11 +3858,67 @@ export async function preConsentRuntimeScanner(
         finalDocumentIdentity,
       )
     );
-    const stableConsentProofPacket = isStableConsentProofPacket({
+    const previousStableConsentProofPacket = isStableConsentProofPacket({
       geometryArtifactWritten: consentGeometryDiagnosticWritten,
       observation: consentObservation,
       representativeScreenshotAvailable,
     });
+    const freshnessCheckedObservation = finalizeConsentGeometryCoverage(consentObservation);
+    let stableConsentProofPacket = isStableConsentProofPacket({
+      geometryArtifactWritten: consentGeometryDiagnosticWritten,
+      observation: freshnessCheckedObservation,
+      representativeScreenshotAvailable,
+    });
+    // Eligible stale/limited geometry gets the one geometry-only path instead
+    // of legacy settle/inventory/screenshot recovery. Already attempted packet
+    // recovery is never retried here. Preserve ownership of older stale proof
+    // even if it cannot meet the optional read's prerequisites.
+    const finalGeometryRefreshOwnsPacket = (previousStableConsentProofPacket && !stableConsentProofPacket &&
+      freshnessCheckedObservation !== consentObservation) || (input.captureScope === "consent_proof" &&
+      finalConsentGeometryRefreshReason({observation: consentObservation,
+        geometry: consentGeometryArtifactRetained ? latestRetainedConsentGeometry : undefined,
+        scanStartedAtMs: input.scanStartedAtMs}) !== null);
+    if (finalGeometryRefreshOwnsPacket) {
+      const existingInventory = consentObservation;
+      const screenshot = screenshots.find(image => image.captureMethod !== undefined &&
+        ["primary_full_page", "primary_viewport_fallback"].includes(image.captureMethod) &&
+        image.consentStateAtTime === "pre_consent" && image.retentionStatus !== "withheld" && image.displayStatus !== "withheld" &&
+        sameDocumentCaptureBinding({url: image.url, documentIdentity: image.documentIdentity},
+          {url: finalDocumentUrl, documentIdentity: finalDocumentIdentity}));
+      const readState = () => ({url: page.url(), documentIdentity: currentBrowserDocumentIdentity(page),
+        frameRevision: consentFrameRevision, frames: page.frames()});
+      consentObservation = freshnessCheckedObservation;
+      retainedConsentUiObservation = consentObservation;
+      const existingAccess = classifyConsentGeometryAccess({pageUrl: finalDocumentUrl,
+        httpStatus: initialNavigationHttpStatus, bodyText: existingInventory.textExcerpt});
+      if (input.captureScope === "consent_proof" && screenshotMode !== "never" &&
+          existingAccess.status === "loaded" && latestRetainedConsentGeometryAccess?.status === "loaded" && !isTerminalVisualErrorShellText(domText || existingInventory.textExcerpt || "")) {
+        const refresh = createFinalConsentGeometryRefresh({scanStartedAtMs: input.scanStartedAtMs,
+          moduleDeadlineAtMs, signal: effectiveSignal, readState,
+          capture: options => captureConsentControlGeometry(page, {...options,
+            avoidOverlappingFrameReads: true, readFrameRevision: () => consentFrameRevision}),
+          prepare: geometry => prepareFinalConsentGeometryArtifact(
+            input.artifactWriter.artifactPath("ConsentControlGeometryEvidence.json"), geometry,
+            {access: latestRetainedConsentGeometryAccess!, egress: buildConsentGeometryEgressDiagnostic(),
+              domObservedAtMs: existingInventory.observedAtMs,
+              previousGeometryCapturedAt: latestRetainedConsentGeometry!.capturedAt}),
+        });
+        const refreshed = await refresh({observation: existingInventory,
+          geometry: consentGeometryArtifactRetained ? latestRetainedConsentGeometry : undefined, screenshot});
+        timingBreakdown.push({label: "final consent geometry refresh", durationMs: refreshed.elapsedMs,
+          outcome: refreshed.outcome === "retained" ? "completed" : refreshed.outcome === "timed_out" ? "timed_out" : refreshed.attempted ? "failed" : "skipped",
+          detail: `${refreshed.policyVersion}; outcome=${refreshed.outcome}; attempted=${refreshed.attempted}; no additional settle, inventory, screenshot or action`});
+        if (refreshed.geometry && refreshed.artifactPath) {
+          latestRetainedConsentGeometry = refreshed.geometry;
+          consentObservation = finalizeBoundedSameSessionConsentPacket({artifactPath: refreshed.artifactPath,
+            current: existingInventory, recoveryInventory: existingInventory, geometry: refreshed.geometry,
+            pageUrl: finalDocumentUrl, scanStartedAtMs: input.scanStartedAtMs});
+          retainedConsentUiObservation = consentObservation;
+        }
+      }
+      stableConsentProofPacket = isStableConsentProofPacket({geometryArtifactWritten: consentGeometryDiagnosticWritten,
+        observation: finalizeConsentGeometryCoverage(consentObservation), representativeScreenshotAvailable});
+    }
     if (stableConsentProofPacket) {
       recordInstantTiming(
         timingBreakdown,
@@ -3853,7 +3927,7 @@ export async function preConsentRuntimeScanner(
       );
     }
     const boundedSameSessionPacketRecoveryEligible =
-      !stableConsentProofPacket &&
+      !finalGeometryRefreshOwnsPacket && !stableConsentProofPacket &&
       input.captureScope === "consent_proof" &&
       screenshotMode !== "never" &&
       strictConsentDocumentIdentity(finalDocumentUrl) !== null &&
@@ -4075,6 +4149,7 @@ export async function preConsentRuntimeScanner(
               );
               consentGeometryArtifactRetained = true;
               latestRetainedConsentGeometry = recoveryGeometry.geometry;
+              latestRetainedConsentGeometryAccess = recoveryGeometry.access;
               consentGeometryDiagnosticWritten = true;
               consentObservation = finalizeBoundedSameSessionConsentPacket({
                 artifactPath: recoveryGeometryArtifactPath,
@@ -4125,7 +4200,7 @@ export async function preConsentRuntimeScanner(
     if (
       captureConsentEvidence &&
       screenshotMode !== "never" &&
-      !stableConsentProofPacket &&
+      !finalGeometryRefreshOwnsPacket && !stableConsentProofPacket &&
       consentObservation.layerInspected === "first_layer" &&
       consentObservation.controls.length > 0 &&
       !screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_cmp_controls") &&
@@ -4535,6 +4610,8 @@ export async function preConsentRuntimeScanner(
     // Freeze optional response enrichment before returning the canonical lane
     // artifact; a late server-address/size result must not mutate published rows.
     responseCaptureFinalized = true;
+    consentObservation = finalizeConsentGeometryCoverage(consentObservation);
+    retainedConsentUiObservation = consentObservation;
     return {
       accessibilityAudit,
       cmpBasicEvidence: currentCmpBasicEvidence(),
@@ -4655,11 +4732,11 @@ export async function preConsentRuntimeScanner(
         }
       }
     }
-    const retainedConsentUiObservations = captureConsentEvidence
+    const retainedConsentUiObservations = (captureConsentEvidence
       ? retainedConsentUiObservation
         ? [retainedConsentUiObservation, ...fallbackConsentUiObservations]
         : fallbackConsentUiObservations
-      : [];
+      : []).map(finalizeConsentGeometryCoverage);
     const retainedEvidence =
       networkEvents.length > 0 ||
       networkResponseEvents.length > 0 ||

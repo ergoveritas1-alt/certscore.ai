@@ -1,0 +1,5062 @@
+[
+  {
+    "action": "accept",
+    "site": "autoplus.fr",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/cmp-reliability-2026-10-29/remote-original-packets/packets/ef751a6d-39c6-43e7-be81-2da7e6590446/PostAcceptEvidencePacket.json",
+      "sha256": "6a791252f6f2f75d540fc9bf31b2317605c07ea8e0fc94277575225f2734c7d8",
+      "bytes": 190627
+    },
+    "projection": {
+      "retainedActionTiming": {
+        "policyVersion": "retained_action_timing.v1",
+        "action": "accept",
+        "actionDispatchedAtMs": 5060,
+        "firstRequest": {
+          "startedAtMs": 5139,
+          "hostname": "www.autoplus.fr"
+        }
+      },
+      "storageCollectionDiagnostics": {
+        "preAction": {
+          "policyVersion": "action_storage_collection_diagnostics.v1",
+          "cookies": {
+            "status": "complete",
+            "retainedCount": 2,
+            "droppedCount": 0,
+            "sampleLimit": 96
+          },
+          "localStorage": {
+            "status": "complete",
+            "retainedCount": 2,
+            "droppedCount": 0,
+            "sampleLimit": 96
+          },
+          "sessionStorage": {
+            "status": "complete",
+            "retainedCount": 3,
+            "droppedCount": 0,
+            "sampleLimit": 96
+          }
+        },
+        "postAction": {
+          "policyVersion": "action_storage_collection_diagnostics.v1",
+          "cookies": {
+            "status": "complete",
+            "retainedCount": 16,
+            "droppedCount": 0,
+            "sampleLimit": 96
+          },
+          "localStorage": {
+            "status": "complete",
+            "retainedCount": 11,
+            "droppedCount": 0,
+            "sampleLimit": 96
+          },
+          "sessionStorage": {
+            "status": "complete",
+            "retainedCount": 5,
+            "droppedCount": 0,
+            "sampleLimit": 96
+          }
+        }
+      },
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:Didomi:accept:v1",
+        "cmpId": "Didomi"
+      },
+      "resolverDurationMs": 2851,
+      "interactionDiagnostics": {
+        "resolver": {
+          "snapshots": [
+            {
+              "attempt": 1,
+              "elapsedMs": 92,
+              "source": "canonical_geometry",
+              "state": "selector_absent",
+              "selectorMatchCount": 0,
+              "visibleCount": 0,
+              "enabledCount": 0,
+              "labelMatchCount": 0,
+              "actionableCount": 0,
+              "cmpIds": [
+                "Didomi"
+              ],
+              "controlLabels": []
+            },
+            {
+              "attempt": 2,
+              "elapsedMs": 419,
+              "source": "canonical_geometry",
+              "state": "selector_absent",
+              "selectorMatchCount": 1,
+              "visibleCount": 0,
+              "enabledCount": 1,
+              "labelMatchCount": 0,
+              "actionableCount": 0,
+              "cmpIds": [
+                "Didomi"
+              ],
+              "controlLabels": []
+            },
+            {
+              "attempt": 3,
+              "elapsedMs": 780,
+              "source": "canonical_geometry",
+              "state": "selector_absent",
+              "selectorMatchCount": 0,
+              "visibleCount": 0,
+              "enabledCount": 0,
+              "labelMatchCount": 0,
+              "actionableCount": 0,
+              "cmpIds": [
+                "Didomi"
+              ],
+              "controlLabels": []
+            },
+            {
+              "attempt": 4,
+              "elapsedMs": 1813,
+              "source": "named_recipe",
+              "state": "selector_absent",
+              "selectorMatchCount": 0,
+              "visibleCount": 0,
+              "enabledCount": 0,
+              "labelMatchCount": 0,
+              "actionableCount": 0,
+              "cmpIds": [],
+              "controlLabels": []
+            },
+            {
+              "attempt": 5,
+              "elapsedMs": 2359,
+              "source": "canonical_geometry",
+              "state": "multiple_actionable",
+              "selectorMatchCount": 4,
+              "visibleCount": 3,
+              "enabledCount": 4,
+              "labelMatchCount": 2,
+              "actionableCount": 2,
+              "cmpIds": [
+                "Didomi"
+              ],
+              "controlLabels": [
+                "continuer sans accepter →",
+                "accepter & fermer"
+              ]
+            },
+            {
+              "attempt": 6,
+              "elapsedMs": 2735,
+              "source": "canonical_geometry",
+              "state": "selector_absent",
+              "selectorMatchCount": 0,
+              "visibleCount": 0,
+              "enabledCount": 0,
+              "labelMatchCount": 0,
+              "actionableCount": 0,
+              "cmpIds": [],
+              "controlLabels": []
+            },
+            {
+              "attempt": 7,
+              "elapsedMs": 2851,
+              "source": "named_recipe",
+              "state": "single_actionable",
+              "selectorMatchCount": 1,
+              "visibleCount": 1,
+              "enabledCount": 1,
+              "labelMatchCount": 1,
+              "actionableCount": 1,
+              "cmpIds": [
+                "Didomi"
+              ],
+              "controlLabels": []
+            },
+            {
+              "attempt": 8,
+              "elapsedMs": 3066,
+              "source": "control_proof",
+              "state": "candidate_detected",
+              "selectorMatchCount": 1,
+              "visibleCount": 1,
+              "enabledCount": 1,
+              "labelMatchCount": 0,
+              "actionableCount": 0,
+              "cmpIds": [
+                "Didomi"
+              ],
+              "controlLabels": [
+                "Accepter & Fermer: Accepter notre traitement des données et fermer",
+                "Accepter & Fermer"
+              ],
+              "binding": {
+                "selectorSha256": "2efa12eb5669d1c5d47901702b835193f296d23913cda43c049802b684f08d22",
+                "frameIdentitySha256": "8ef68249e3dddb553ab19fe4e976b36c4dcf687e11cea70a9e2182a987821514",
+                "labelSources": [
+                  "aria_label",
+                  "visible_text"
+                ]
+              }
+            }
+          ],
+          "truncated": false
+        },
+        "navigation": {
+          "outcome": "completed",
+          "documentCommitted": true,
+          "finalUrlAuthorized": true,
+          "redirectResolution": {
+            "durationMs": 160,
+            "finalExactTargetSha256": "8ef68249e3dddb553ab19fe4e976b36c4dcf687e11cea70a9e2182a987821514",
+            "redirectCount": 1,
+            "requestedTargetSha256": "2a2301352dea974d16ccb789691ad3afaf617aab4908ac6b885ab39d0b90479b",
+            "status": "resolved"
+          }
+        },
+        "click": {
+          "outcome": "completed",
+          "reResolvedBeforeDispatch": false,
+          "confirmationCheckedAfterError": false
+        }
+      },
+      "afterActionCapture": {
+        "policyVersion": "bounded_after_action_capture.v1",
+        "action": "accept",
+        "activationStatus": "completed",
+        "actionDispatchedAtMs": 5060,
+        "captureEndedAtMs": 9100,
+        "requestedWindowMs": 3000,
+        "stopReason": "window_elapsed",
+        "requestsDropped": 0,
+        "storageSnapshotRetained": true,
+        "storageWriteCoverage": "bounded_main_document_sample",
+        "storageWrites": [
+          {
+            "storageType": "local_storage",
+            "name": "_taboolaStorageDetection",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7243,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "_taboolaStorageDetection",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7243,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "_taboolaStorageDetection",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7243,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "_taboolaStorageDetection",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7243,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "_taboolaStorageDetection",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7243,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "_taboolaStorageDetection",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7243,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "_taboolaStorageDetection",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7243,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "_taboolaStorageDetection",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7243,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "_taboolaStorageDetection",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7243,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "_taboolaStorageDetection",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7243,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "_taboolaStorageDetection",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7243,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "_taboolaStorageDetection",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7244,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "didomi_token",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7280,
+            "nonEssential": false,
+            "vendor": "Didomi"
+          },
+          {
+            "storageType": "local_storage",
+            "name": "didomi_token",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7280,
+            "nonEssential": false,
+            "vendor": "Didomi"
+          },
+          {
+            "storageType": "cookie",
+            "name": "euconsent-v2",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7280,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "euconsent-v2",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7280,
+            "nonEssential": false,
+            "vendor": "Didomi"
+          },
+          {
+            "storageType": "cookie",
+            "name": "rw_didomi_consent_accepted",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7298,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "rw_didomi_consent_accepted",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7302,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "rw_didomi_consent_accepted",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7304,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "rw_didomi_consent_accepted",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7304,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "rw_didomi_consent_accepted",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7305,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "___nrbic",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7325,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "___nrbic",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7325,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "___nrbic",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7325,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "___nrbi",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7326,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "___nrbi",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7326,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "compass_uid",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7326,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "compass_uid",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7326,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "___nrbi",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7326,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "compass_uid",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7330,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "compass_uid",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7330,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "ivid_dev",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7344,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "ivi_ids",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7344,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "ivi_consent_h",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7347,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "marfeel-sdk-store",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7356,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_gcl_au",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7607,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "_gcl_ls",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7608,
+            "nonEssential": true,
+            "vendor": "Google"
+          },
+          {
+            "storageType": "local_storage",
+            "name": "_gcl_ls",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7616,
+            "nonEssential": true,
+            "vendor": "Google"
+          },
+          {
+            "storageType": "cookie",
+            "name": "WysistatAC",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7841,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "Wysistat",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7849,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_gcl_au",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 7926,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "rw_geoloc",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 8024,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_ga_QM0W06Q4LE",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 8180,
+            "nonEssential": true,
+            "vendor": "Google"
+          },
+          {
+            "storageType": "cookie",
+            "name": "_ga",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 8181,
+            "nonEssential": true,
+            "vendor": "Google"
+          },
+          {
+            "storageType": "cookie",
+            "name": "_ga_QM0W06Q4LE",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 8198,
+            "nonEssential": true,
+            "vendor": "Google"
+          },
+          {
+            "storageType": "cookie",
+            "name": "_fbp",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 8254,
+            "nonEssential": true,
+            "vendor": "Meta"
+          },
+          {
+            "storageType": "cookie",
+            "name": "_ga_L2FBH758Y8",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 8391,
+            "nonEssential": true,
+            "vendor": "Google"
+          },
+          {
+            "storageType": "cookie",
+            "name": "_ga",
+            "hostname": "www.autoplus.fr",
+            "observedAtMs": 8397,
+            "nonEssential": true,
+            "vendor": "Google"
+          }
+        ],
+        "requestIds": [
+          "post_accept_request_79",
+          "post_accept_request_80",
+          "post_accept_request_81",
+          "post_accept_request_82",
+          "post_accept_request_83",
+          "post_accept_request_84",
+          "post_accept_request_85",
+          "post_accept_request_86",
+          "post_accept_request_87",
+          "post_accept_request_88",
+          "post_accept_request_89",
+          "post_accept_request_90",
+          "post_accept_request_91",
+          "post_accept_request_92",
+          "post_accept_request_93",
+          "post_accept_request_94",
+          "post_accept_request_95",
+          "post_accept_request_96",
+          "post_accept_request_97",
+          "post_accept_request_98",
+          "post_accept_request_99",
+          "post_accept_request_100",
+          "post_accept_request_101",
+          "post_accept_request_102",
+          "post_accept_request_103",
+          "post_accept_request_104",
+          "post_accept_request_105",
+          "post_accept_request_106",
+          "post_accept_request_107",
+          "post_accept_request_108",
+          "post_accept_request_109",
+          "post_accept_request_110",
+          "post_accept_request_111",
+          "post_accept_request_112",
+          "post_accept_request_113",
+          "post_accept_request_114",
+          "post_accept_request_115",
+          "post_accept_request_116",
+          "post_accept_request_117",
+          "post_accept_request_118",
+          "post_accept_request_119",
+          "post_accept_request_120",
+          "post_accept_request_121",
+          "post_accept_request_122",
+          "post_accept_request_123",
+          "post_accept_request_124",
+          "post_accept_request_125",
+          "post_accept_request_126",
+          "post_accept_request_127",
+          "post_accept_request_128",
+          "post_accept_request_129",
+          "post_accept_request_130",
+          "post_accept_request_131",
+          "post_accept_request_132",
+          "post_accept_request_133",
+          "post_accept_request_134",
+          "post_accept_request_135",
+          "post_accept_request_136",
+          "post_accept_request_137",
+          "post_accept_request_138",
+          "post_accept_request_139",
+          "post_accept_request_140",
+          "post_accept_request_141",
+          "post_accept_request_142",
+          "post_accept_request_143",
+          "post_accept_request_144",
+          "post_accept_request_145",
+          "post_accept_request_146",
+          "post_accept_request_147",
+          "post_accept_request_148",
+          "post_accept_request_149",
+          "post_accept_request_150",
+          "post_accept_request_151",
+          "post_accept_request_152",
+          "post_accept_request_153",
+          "post_accept_request_154",
+          "post_accept_request_155",
+          "post_accept_request_156",
+          "post_accept_request_157",
+          "post_accept_request_158",
+          "post_accept_request_159",
+          "post_accept_request_160",
+          "post_accept_request_161",
+          "post_accept_request_162",
+          "post_accept_request_163",
+          "post_accept_request_164",
+          "post_accept_request_165",
+          "post_accept_request_166",
+          "post_accept_request_167",
+          "post_accept_request_168",
+          "post_accept_request_169",
+          "post_accept_request_170",
+          "post_accept_request_171",
+          "post_accept_request_172",
+          "post_accept_request_173",
+          "post_accept_request_174",
+          "post_accept_request_175",
+          "post_accept_request_176",
+          "post_accept_request_177",
+          "post_accept_request_178",
+          "post_accept_request_179",
+          "post_accept_request_180",
+          "post_accept_request_181",
+          "post_accept_request_182",
+          "post_accept_request_183",
+          "post_accept_request_184",
+          "post_accept_request_185",
+          "post_accept_request_186",
+          "post_accept_request_187",
+          "post_accept_request_188",
+          "post_accept_request_189",
+          "post_accept_request_190",
+          "post_accept_request_191",
+          "post_accept_request_192",
+          "post_accept_request_193",
+          "post_accept_request_194",
+          "post_accept_request_195",
+          "post_accept_request_196",
+          "post_accept_request_197",
+          "post_accept_request_198",
+          "post_accept_request_199",
+          "post_accept_request_200",
+          "post_accept_request_201",
+          "post_accept_request_202",
+          "post_accept_request_203",
+          "post_accept_request_204",
+          "post_accept_request_205",
+          "post_accept_request_206",
+          "post_accept_request_207",
+          "post_accept_request_208",
+          "post_accept_request_209",
+          "post_accept_request_210",
+          "post_accept_request_211",
+          "post_accept_request_212",
+          "post_accept_request_213",
+          "post_accept_request_214",
+          "post_accept_request_215",
+          "post_accept_request_216",
+          "post_accept_request_217",
+          "post_accept_request_218",
+          "post_accept_request_219",
+          "post_accept_request_220",
+          "post_accept_request_221",
+          "post_accept_request_222"
+        ]
+      },
+      "afterActionRequests": [
+        {
+          "requestId": "post_accept_request_79",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-includes/js/jquery/jquery.min.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5139,
+          "completedAtMs": 5297,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_80",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/lazyload-v2.min.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5140,
+          "completedAtMs": 5280,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_81",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/common-utils-video-player-base.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5140,
+          "completedAtMs": 5280,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_82",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/common-utils-jw-player.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5141,
+          "completedAtMs": 5280,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_83",
+          "sanitizedUrl": "https://optiyield.opti-digital.com/pfc/",
+          "hostname": "optiyield.opti-digital.com",
+          "resourceType": "script",
+          "startedAtMs": 5142,
+          "completedAtMs": 5657,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_84",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-includes/js/jquery/jquery-migrate.min.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5143,
+          "completedAtMs": 5323,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_85",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/auto-sites/autoplus/assets/javascripts/scroll-elements-on-x.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5144,
+          "completedAtMs": 5323,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_86",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/auto-sites/autoplus/assets/javascripts/header_v2.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5144,
+          "completedAtMs": 5377,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_87",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/auto-sites/autoplus/assets/javascripts/header_habillage_v2.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5145,
+          "completedAtMs": 5376,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_88",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/libs_loader.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5145,
+          "completedAtMs": 5389,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_89",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/cache/1343caf9-1e7a-4306-a310-ae4cc5ff45c8/1a0953adff582d346f011932ad85ec84d89d5759.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5146,
+          "completedAtMs": 5712,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_90",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/plugins/youtube-embed-plus/scripts/ytprefs.min.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5146,
+          "completedAtMs": 5403,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_91",
+          "sanitizedUrl": "https://storage.googleapis.com/quoteform-widget/index-main.umd.js",
+          "hostname": "storage.googleapis.com",
+          "resourceType": "script",
+          "startedAtMs": 5148,
+          "completedAtMs": 5870,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_92",
+          "sanitizedUrl": "https://sdk.k-words.io/script.js",
+          "hostname": "sdk.k-words.io",
+          "resourceType": "script",
+          "startedAtMs": 5148,
+          "completedAtMs": 5678,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_93",
+          "sanitizedUrl": "https://loadeu.exelator.com/load/",
+          "hostname": "loadeu.exelator.com",
+          "resourceType": "script",
+          "startedAtMs": 5149,
+          "completedAtMs": 5737,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_94",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/slick.min.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5149,
+          "completedAtMs": 5350,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_95",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/jquery.shave.min.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5150,
+          "completedAtMs": 5403,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_96",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/jquery.browser.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5150,
+          "completedAtMs": 5562,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_97",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/common-utils.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5151,
+          "completedAtMs": 5634,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_98",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/optimised-video-player/show_videojs.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5151,
+          "completedAtMs": 5617,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_99",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/optimised-video-player/show_video.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5152,
+          "completedAtMs": 5635,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_100",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/optimised-video-player/show_dai_video.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5152,
+          "completedAtMs": 5560,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_101",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/optimised-video-player/mobile_first_play.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5153,
+          "completedAtMs": 5635,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_102",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/optimised-video-player/playlist.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5153,
+          "completedAtMs": 5636,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_103",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/optimised-video-player/play_selected_video.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5154,
+          "completedAtMs": 5637,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_104",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/optimised-video-player/play_on_click.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5155,
+          "completedAtMs": 5677,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_105",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/optimised-video-player/play_carousel_video.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5172,
+          "completedAtMs": 5637,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_106",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/common-utils-video-player.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5172,
+          "completedAtMs": 5657,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_107",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/common-utils-jw6-player.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5173,
+          "completedAtMs": 5657,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_108",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/common-utils-brightcove.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5173,
+          "completedAtMs": 5709,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_109",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/common-utils-caroussel.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5174,
+          "completedAtMs": 5657,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_110",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/common-utils-playhomevideo.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5175,
+          "completedAtMs": 5657,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_111",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/common-utils-most-popular-video.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5177,
+          "completedAtMs": 5657,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_112",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/main.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5178,
+          "completedAtMs": 5657,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_113",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/megabanner-fixe-scroll.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5178,
+          "completedAtMs": 5657,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_114",
+          "sanitizedUrl": "https://api.dmcdn.net/all.js",
+          "hostname": "api.dmcdn.net",
+          "resourceType": "script",
+          "startedAtMs": 5179,
+          "completedAtMs": 5720,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_115",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/cookies.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5180,
+          "completedAtMs": 5659,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_116",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/rw_datawall_nl.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5180,
+          "completedAtMs": 5657,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_117",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/rw-desktop.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5181,
+          "completedAtMs": 5657,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_118",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/bootstrap/bootstrap-v3.min.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5181,
+          "completedAtMs": 5677,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_119",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/auto-sites/assets/javascripts/main.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5182,
+          "completedAtMs": 5677,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_120",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/core/kiosquemag/assets/javascripts/rw-premium-state.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5182,
+          "completedAtMs": 5677,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_121",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/auto-sites/autoplus/assets/javascripts/main.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5183,
+          "completedAtMs": 5659,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_122",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/auto-sites/autoplus/assets/javascripts/jquery.simplePagination.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5183,
+          "completedAtMs": 5659,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_123",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/bootstrap/base.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5188,
+          "completedAtMs": 5659,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_124",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/bootstrap/footer.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5189,
+          "completedAtMs": 5659,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_125",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/include/functions/actirise/javascripts/actirise.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5191,
+          "completedAtMs": 5678,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_126",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/plugins/youtube-embed-plus/scripts/fitvids.min.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5192,
+          "completedAtMs": 5677,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_127",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/assets/javascripts/rw_share_social.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5193,
+          "completedAtMs": 5677,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_128",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/reworldmedia/include/functions/nl-widget/nl-form.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5194,
+          "completedAtMs": 5678,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_129",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/plugins/disqus-comment-system/media/js/count.js",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 5195,
+          "completedAtMs": 5678,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_130",
+          "sanitizedUrl": "https://adtrack.adleadevent.com/mailNotification.php",
+          "hostname": "adtrack.adleadevent.com",
+          "resourceType": "script",
+          "startedAtMs": 5195,
+          "completedAtMs": 6212,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_131",
+          "sanitizedUrl": "https://www.googletagmanager.com/gtm.js",
+          "hostname": "www.googletagmanager.com",
+          "resourceType": "script",
+          "startedAtMs": 5216,
+          "completedAtMs": 5730,
+          "vendor": "Google",
+          "purpose": "tag_management",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_132",
+          "sanitizedUrl": "https://cdn.xpln.tech/reworld/www.autoplus.fr.js",
+          "hostname": "cdn.xpln.tech",
+          "resourceType": "script",
+          "startedAtMs": 5217,
+          "completedAtMs": 5852,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_133",
+          "sanitizedUrl": "https://cdn.taboola.com/libtrc/unip/1191794/tfa.js",
+          "hostname": "cdn.taboola.com",
+          "resourceType": "script",
+          "startedAtMs": 5354,
+          "completedAtMs": 5870,
+          "vendor": "Taboola",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_134",
+          "sanitizedUrl": "https://e.viously.com/beacon",
+          "hostname": "e.viously.com",
+          "resourceType": "xhr",
+          "startedAtMs": 5469,
+          "completedAtMs": 6188,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_135",
+          "sanitizedUrl": "https://www.googletagmanager.com/gtm.js",
+          "hostname": "www.googletagmanager.com",
+          "resourceType": "script",
+          "startedAtMs": 5485,
+          "completedAtMs": 5869,
+          "vendor": "Google",
+          "purpose": "tag_management",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_136",
+          "sanitizedUrl": "https://notifpush.com/scripts/nadz-sdk.js",
+          "hostname": "notifpush.com",
+          "resourceType": "script",
+          "startedAtMs": 5485,
+          "completedAtMs": 5855,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_137",
+          "sanitizedUrl": "https://itm.ivitrack.com/v1/reworldmedia-tag/itm.js",
+          "hostname": "itm.ivitrack.com",
+          "resourceType": "script",
+          "startedAtMs": 5487,
+          "completedAtMs": 6188,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_138",
+          "sanitizedUrl": "https://connect.facebook.net/en_US/fbevents.js",
+          "hostname": "connect.facebook.net",
+          "resourceType": "script",
+          "startedAtMs": 5489,
+          "completedAtMs": 5873,
+          "vendor": "Meta",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_139",
+          "sanitizedUrl": "https://optiyield.opti-digital.com/pfc/web/config",
+          "hostname": "optiyield.opti-digital.com",
+          "resourceType": "xhr",
+          "startedAtMs": 5700,
+          "completedAtMs": 5869,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_140",
+          "sanitizedUrl": "https://optiyield.opti-digital.com/pfc/web/sdk",
+          "hostname": "optiyield.opti-digital.com",
+          "resourceType": "script",
+          "startedAtMs": 5712,
+          "completedAtMs": 5870,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_141",
+          "sanitizedUrl": "https://loadeu.exelator.com/load/",
+          "hostname": "loadeu.exelator.com",
+          "resourceType": "script",
+          "startedAtMs": 5737,
+          "completedAtMs": 6152,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_142",
+          "sanitizedUrl": "https://notifpush.com/script_parameters/p_500a599678b20ed7.json",
+          "hostname": "notifpush.com",
+          "resourceType": "fetch",
+          "startedAtMs": 5902,
+          "completedAtMs": 6195,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_143",
+          "sanitizedUrl": "https://trc.taboola.com/1191794/trc/3/json",
+          "hostname": "trc.taboola.com",
+          "resourceType": "script",
+          "startedAtMs": 6002,
+          "completedAtMs": 6194,
+          "vendor": "Taboola",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_144",
+          "sanitizedUrl": "https://connect.facebook.net/signals/config/4071526256213643",
+          "hostname": "connect.facebook.net",
+          "resourceType": "script",
+          "startedAtMs": 6150,
+          "completedAtMs": 6376,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_145",
+          "sanitizedUrl": "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+          "hostname": "pagead2.googlesyndication.com",
+          "resourceType": "fetch",
+          "startedAtMs": 6206,
+          "completedAtMs": 6376,
+          "vendor": "Google",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_146",
+          "sanitizedUrl": "https://plausible.k-words.io/api/event",
+          "hostname": "plausible.k-words.io",
+          "resourceType": "xhr",
+          "startedAtMs": 6302,
+          "completedAtMs": 6809,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_147",
+          "sanitizedUrl": "https://load77.exelator.com/pixel.gif",
+          "hostname": "load77.exelator.com",
+          "resourceType": "image",
+          "startedAtMs": 6359,
+          "completedAtMs": 6578,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_148",
+          "sanitizedUrl": "https://gjigle.com/visits-optins",
+          "hostname": "gjigle.com",
+          "resourceType": "fetch",
+          "startedAtMs": 6376,
+          "completedAtMs": 6833,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_149",
+          "sanitizedUrl": "https://cdn.affilinks.com/js/sdk.prod.js",
+          "hostname": "cdn.affilinks.com",
+          "resourceType": "script",
+          "startedAtMs": 6577,
+          "completedAtMs": 7068,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_150",
+          "sanitizedUrl": "https://cdn.smalk.ai/tracker.js",
+          "hostname": "cdn.smalk.ai",
+          "resourceType": "script",
+          "startedAtMs": 6577,
+          "completedAtMs": 6913,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_151",
+          "sanitizedUrl": "https://www.autoplus.fr/wp-content/themes/auto-sites/autoplus/assets/images/font-svg/chevron-left-solid-full.svg",
+          "hostname": "www.autoplus.fr",
+          "resourceType": "image",
+          "startedAtMs": 6715,
+          "completedAtMs": 6754,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_152",
+          "sanitizedUrl": "https://back.k-words.io/api/v1/sites/98d7db8e-a638-453b-bcca-75963cabd4d6",
+          "hostname": "back.k-words.io",
+          "resourceType": "fetch",
+          "startedAtMs": 6743,
+          "completedAtMs": 6933,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_153",
+          "sanitizedUrl": "https://api.smalk.ai/api/v1/projects/6fa9ef31-499a-4d13-8e9c-e5fe86448cf3/framing-config",
+          "hostname": "api.smalk.ai",
+          "resourceType": "fetch",
+          "startedAtMs": 6918,
+          "completedAtMs": 7170,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_154",
+          "sanitizedUrl": "https://api.smalk.ai/api/v1/tracking/track",
+          "hostname": "api.smalk.ai",
+          "resourceType": "fetch",
+          "startedAtMs": 6921,
+          "completedAtMs": 8013,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_155",
+          "sanitizedUrl": "https://back.k-words.io/api/v1/sites/98d7db8e-a638-453b-bcca-75963cabd4d6/pages",
+          "hostname": "back.k-words.io",
+          "resourceType": "fetch",
+          "startedAtMs": 6956,
+          "completedAtMs": 7115,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_156",
+          "sanitizedUrl": "https://manage.affilinks.com/override/site/588280756653002361",
+          "hostname": "manage.affilinks.com",
+          "resourceType": "xhr",
+          "startedAtMs": 7076,
+          "completedAtMs": 8003,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_157",
+          "sanitizedUrl": "https://plausible.k-words.io/api/event",
+          "hostname": "plausible.k-words.io",
+          "resourceType": "xhr",
+          "startedAtMs": 7118,
+          "completedAtMs": 7854,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_158",
+          "sanitizedUrl": "https://plausible.k-words.io/api/event",
+          "hostname": "plausible.k-words.io",
+          "resourceType": "xhr",
+          "startedAtMs": 7120,
+          "completedAtMs": 7856,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_159",
+          "sanitizedUrl": "https://api.privacy-center.org/v1/events",
+          "hostname": "api.privacy-center.org",
+          "resourceType": "xhr",
+          "startedAtMs": 7301,
+          "completedAtMs": 7896,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_160",
+          "sanitizedUrl": "https://tag.audience.acpm.fr/js/on-1.0.min.js",
+          "hostname": "tag.audience.acpm.fr",
+          "resourceType": "script",
+          "startedAtMs": 7311,
+          "completedAtMs": 7865,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_161",
+          "sanitizedUrl": "https://autoplusmag.disqus.com/count.js",
+          "hostname": "autoplusmag.disqus.com",
+          "resourceType": "script",
+          "startedAtMs": 7318,
+          "completedAtMs": 7876,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_162",
+          "sanitizedUrl": "https://ads.stickyadstv.com/auto-user-sync",
+          "hostname": "ads.stickyadstv.com",
+          "resourceType": "image",
+          "startedAtMs": 7322,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_163",
+          "sanitizedUrl": "https://itm.ivitrack.com/v1/commander-frame/2.2614.4/itm.html",
+          "hostname": "itm.ivitrack.com",
+          "resourceType": "document",
+          "startedAtMs": 7380,
+          "completedAtMs": 7548,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_164",
+          "sanitizedUrl": "https://events.newsroom.bi/ingest.php",
+          "hostname": "events.newsroom.bi",
+          "resourceType": "fetch",
+          "startedAtMs": 7442,
+          "completedAtMs": 8657,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_165",
+          "sanitizedUrl": "https://widget.beop.io/sdk.js",
+          "hostname": "widget.beop.io",
+          "resourceType": "script",
+          "startedAtMs": 7674,
+          "completedAtMs": 8052,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_166",
+          "sanitizedUrl": "https://cdn.first-id.fr/sdk/loader/loader.min.js",
+          "hostname": "cdn.first-id.fr",
+          "resourceType": "script",
+          "startedAtMs": 7674,
+          "completedAtMs": 8013,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_167",
+          "sanitizedUrl": "https://www.googletagmanager.com/gtag/js",
+          "hostname": "www.googletagmanager.com",
+          "resourceType": "script",
+          "startedAtMs": 7675,
+          "completedAtMs": 8044,
+          "vendor": "Google",
+          "purpose": "tag_management",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_168",
+          "sanitizedUrl": "https://www.googletagmanager.com/gtag/js",
+          "hostname": "www.googletagmanager.com",
+          "resourceType": "script",
+          "startedAtMs": 7676,
+          "completedAtMs": 8037,
+          "vendor": "Google",
+          "purpose": "tag_management",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_169",
+          "sanitizedUrl": "https://boot.pbstck.com/v1/tag/6d9fdfa6-b822-4b85-849c-36a47bc6c6ec",
+          "hostname": "boot.pbstck.com",
+          "resourceType": "script",
+          "startedAtMs": 7679,
+          "completedAtMs": 8651,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_170",
+          "sanitizedUrl": "https://utiq.autoplus.fr/utiqLoader.js",
+          "hostname": "utiq.autoplus.fr",
+          "resourceType": "script",
+          "startedAtMs": 7679,
+          "completedAtMs": 8651,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_171",
+          "sanitizedUrl": "https://cdn.opecloud.com/ope-pdmp.js",
+          "hostname": "cdn.opecloud.com",
+          "resourceType": "script",
+          "startedAtMs": 7679,
+          "completedAtMs": 8037,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_172",
+          "sanitizedUrl": "https://www.googletagmanager.com/gtag/js",
+          "hostname": "www.googletagmanager.com",
+          "resourceType": "script",
+          "startedAtMs": 7680,
+          "completedAtMs": 8044,
+          "vendor": "Google",
+          "purpose": "tag_management",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_173",
+          "sanitizedUrl": "https://launchpad-wrapper.privacymanager.io/9ba0ab35-89cd-4ac8-928d-703ef03c8414/launchpad-liveramp.js",
+          "hostname": "launchpad-wrapper.privacymanager.io",
+          "resourceType": "script",
+          "startedAtMs": 7681,
+          "completedAtMs": 8028,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_174",
+          "sanitizedUrl": "https://connect.facebook.net/signals/config/1637773377305485",
+          "hostname": "connect.facebook.net",
+          "resourceType": "script",
+          "startedAtMs": 7681,
+          "completedAtMs": 8038,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_175",
+          "sanitizedUrl": "https://analytics.tiktok.com/i18n/pixel/events.js",
+          "hostname": "analytics.tiktok.com",
+          "resourceType": "script",
+          "startedAtMs": 7681,
+          "completedAtMs": 8037,
+          "vendor": "TikTok",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_176",
+          "sanitizedUrl": "https://secure-gl.imrworldwide.com/cgi-bin/m",
+          "hostname": "secure-gl.imrworldwide.com",
+          "resourceType": "image",
+          "startedAtMs": 7681,
+          "completedAtMs": 7971,
+          "vendor": "Nielsen",
+          "purpose": "analytics",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_177",
+          "sanitizedUrl": "https://www.google.com/ccm/collect",
+          "hostname": "www.google.com",
+          "resourceType": "fetch",
+          "startedAtMs": 7682,
+          "completedAtMs": 8045,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_178",
+          "sanitizedUrl": "https://ad.doubleclick.net/ccm/s/collect",
+          "hostname": "ad.doubleclick.net",
+          "resourceType": "fetch",
+          "startedAtMs": 7682,
+          "completedAtMs": 8045,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_179",
+          "sanitizedUrl": "https://www.wysistat.com/images/autoplus/compteur.php",
+          "hostname": "www.wysistat.com",
+          "resourceType": "image",
+          "startedAtMs": 7865,
+          "completedAtMs": 8209,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_180",
+          "sanitizedUrl": "https://pbsj.bricks-co.com/sync",
+          "hostname": "pbsj.bricks-co.com",
+          "resourceType": "xhr",
+          "startedAtMs": 7882,
+          "completedAtMs": 8651,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_181",
+          "sanitizedUrl": "https://acdn.adnxs.com/dmp/up/pixie.js",
+          "hostname": "acdn.adnxs.com",
+          "resourceType": "script",
+          "startedAtMs": 7961,
+          "completedAtMs": 8616,
+          "vendor": "Xandr",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_182",
+          "sanitizedUrl": "https://www.google.com/ccm/collect",
+          "hostname": "www.google.com",
+          "resourceType": "fetch",
+          "startedAtMs": 7975,
+          "completedAtMs": 8660,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_183",
+          "sanitizedUrl": "https://static.mediarithmics.com/tag/2/tag.min.js",
+          "hostname": "static.mediarithmics.com",
+          "resourceType": "script",
+          "startedAtMs": 7994,
+          "completedAtMs": 8616,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_184",
+          "sanitizedUrl": "https://events.mics-notrack.com/v1/sites/autoplus.fr/contextual_targeting.js",
+          "hostname": "events.mics-notrack.com",
+          "resourceType": "script",
+          "startedAtMs": 7995,
+          "completedAtMs": 8657,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_185",
+          "sanitizedUrl": "https://widget.collectiveaudience.co/sdk.js",
+          "hostname": "widget.collectiveaudience.co",
+          "resourceType": "script",
+          "startedAtMs": 8052,
+          "completedAtMs": 8616,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_186",
+          "sanitizedUrl": "https://cdn.first-id.fr/sdk/script/sdk-1.51.0.min.js",
+          "hostname": "cdn.first-id.fr",
+          "resourceType": "script",
+          "startedAtMs": 8052,
+          "completedAtMs": 8616,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_187",
+          "sanitizedUrl": "https://analytics.google.com/g/collect",
+          "hostname": "analytics.google.com",
+          "resourceType": "fetch",
+          "startedAtMs": 8203,
+          "completedAtMs": 8773,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_188",
+          "sanitizedUrl": "https://stats.g.doubleclick.net/g/collect",
+          "hostname": "stats.g.doubleclick.net",
+          "resourceType": "ping",
+          "startedAtMs": 8206,
+          "completedAtMs": 8631,
+          "vendor": "Google",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_189",
+          "sanitizedUrl": "https://analytics.tiktok.com/i18n/pixel/static/main.MWU2MzIzODM0MA.js",
+          "hostname": "analytics.tiktok.com",
+          "resourceType": "script",
+          "startedAtMs": 8225,
+          "completedAtMs": 8632,
+          "vendor": "TikTok",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_190",
+          "sanitizedUrl": "https://connect.facebook.net/signals/config/1074802596328068",
+          "hostname": "connect.facebook.net",
+          "resourceType": "script",
+          "startedAtMs": 8270,
+          "completedAtMs": 8651,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_191",
+          "sanitizedUrl": "https://analytics.google.com/g/collect",
+          "hostname": "analytics.google.com",
+          "resourceType": "fetch",
+          "startedAtMs": 8424,
+          "completedAtMs": 9033,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_192",
+          "sanitizedUrl": "https://stats.g.doubleclick.net/g/collect",
+          "hostname": "stats.g.doubleclick.net",
+          "resourceType": "ping",
+          "startedAtMs": 8424,
+          "completedAtMs": 8656,
+          "vendor": "Google",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_193",
+          "sanitizedUrl": "https://notifpush.com/templates/templateoptinboxperso.js",
+          "hostname": "notifpush.com",
+          "resourceType": "script",
+          "startedAtMs": 8430,
+          "completedAtMs": 8656,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_194",
+          "sanitizedUrl": "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+          "hostname": "pagead2.googlesyndication.com",
+          "resourceType": "fetch",
+          "startedAtMs": 8431,
+          "vendor": "Google",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_195",
+          "sanitizedUrl": "https://www.googletagmanager.com/gtag/destination",
+          "hostname": "www.googletagmanager.com",
+          "resourceType": "script",
+          "startedAtMs": 8600,
+          "vendor": "Google",
+          "purpose": "tag_management",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_196",
+          "sanitizedUrl": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/820786715/",
+          "hostname": "googleads.g.doubleclick.net",
+          "resourceType": "script",
+          "startedAtMs": 8602,
+          "vendor": "Google",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_197",
+          "sanitizedUrl": "https://www.google.com/rmkt/collect/820786715/",
+          "hostname": "www.google.com",
+          "resourceType": "fetch",
+          "startedAtMs": 8603,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_198",
+          "sanitizedUrl": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/820786715/",
+          "hostname": "googleads.g.doubleclick.net",
+          "resourceType": "script",
+          "startedAtMs": 8604,
+          "vendor": "Google",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_199",
+          "sanitizedUrl": "https://www.google.com/rmkt/collect/820786715/",
+          "hostname": "www.google.com",
+          "resourceType": "fetch",
+          "startedAtMs": 8604,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_200",
+          "sanitizedUrl": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/820786715/",
+          "hostname": "googleads.g.doubleclick.net",
+          "resourceType": "script",
+          "startedAtMs": 8605,
+          "vendor": "Google",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_201",
+          "sanitizedUrl": "https://www.google.com/rmkt/collect/820786715/",
+          "hostname": "www.google.com",
+          "resourceType": "fetch",
+          "startedAtMs": 8605,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_202",
+          "sanitizedUrl": "https://www.google.com/ccm/collect",
+          "hostname": "www.google.com",
+          "resourceType": "fetch",
+          "startedAtMs": 8605,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_203",
+          "sanitizedUrl": "https://www.google.com/ccm/collect",
+          "hostname": "www.google.com",
+          "resourceType": "fetch",
+          "startedAtMs": 8606,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_204",
+          "sanitizedUrl": "https://icu.newsroom.bi/ingest.php",
+          "hostname": "icu.newsroom.bi",
+          "resourceType": "fetch",
+          "startedAtMs": 8653,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_205",
+          "sanitizedUrl": "https://gjigle.com/visits-optins",
+          "hostname": "gjigle.com",
+          "resourceType": "fetch",
+          "startedAtMs": 8679,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_206",
+          "sanitizedUrl": "https://ib.adnxs.com/pixie/up",
+          "hostname": "ib.adnxs.com",
+          "resourceType": "fetch",
+          "startedAtMs": 8681,
+          "vendor": "Xandr",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_207",
+          "sanitizedUrl": "https://events.mediarithmics.com/v1/conf.js",
+          "hostname": "events.mediarithmics.com",
+          "resourceType": "script",
+          "startedAtMs": 8724,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_208",
+          "sanitizedUrl": "https://widget.collectiveaudience.co/en/public/chunks/13.0.54/3463839683bb60a07923.js",
+          "hostname": "widget.collectiveaudience.co",
+          "resourceType": "script",
+          "startedAtMs": 8732,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_209",
+          "sanitizedUrl": "https://widget.collectiveaudience.co/en/public/chunks/13.0.54/3de81aca9af870048cb6.js",
+          "hostname": "widget.collectiveaudience.co",
+          "resourceType": "script",
+          "startedAtMs": 8733,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_210",
+          "sanitizedUrl": "https://pdmp.dcapi.dmp.3lift.com/web/visit",
+          "hostname": "pdmp.dcapi.dmp.3lift.com",
+          "resourceType": "fetch",
+          "startedAtMs": 8772,
+          "vendor": "TripleLift",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_211",
+          "sanitizedUrl": "https://pdmp.papi-public.us-west-2.dmp.3lift.com/v1/targeting",
+          "hostname": "pdmp.papi-public.us-west-2.dmp.3lift.com",
+          "resourceType": "fetch",
+          "startedAtMs": 8773,
+          "vendor": "TripleLift",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_212",
+          "sanitizedUrl": "https://analytics.tiktok.com/i18n/pixel/static/identify_0504602d.js",
+          "hostname": "analytics.tiktok.com",
+          "resourceType": "script",
+          "startedAtMs": 8900,
+          "vendor": "TikTok",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_213",
+          "sanitizedUrl": "https://analytics-ipv6.tiktokw.us/ipv6/enrich_ipv6",
+          "hostname": "analytics-ipv6.tiktokw.us",
+          "resourceType": "ping",
+          "startedAtMs": 8901,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_214",
+          "sanitizedUrl": "https://analytics.tiktok.com/api/v2/pixel",
+          "hostname": "analytics.tiktok.com",
+          "resourceType": "ping",
+          "startedAtMs": 8905,
+          "vendor": "TikTok",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_215",
+          "sanitizedUrl": "https://analytics.tiktok.com/api/v2/pixel",
+          "hostname": "analytics.tiktok.com",
+          "resourceType": "ping",
+          "startedAtMs": 8911,
+          "vendor": "TikTok",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_accept_request_216",
+          "sanitizedUrl": "https://launchpad.privacymanager.io/latest/launchpad.bundle.js",
+          "hostname": "launchpad.privacymanager.io",
+          "resourceType": "script",
+          "startedAtMs": 8943,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_217",
+          "sanitizedUrl": "https://connect.facebook.net/signals/config/3856678577721467",
+          "hostname": "connect.facebook.net",
+          "resourceType": "script",
+          "startedAtMs": 8975,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_218",
+          "sanitizedUrl": "https://notifpush.com/scripts/wpn2.js",
+          "hostname": "notifpush.com",
+          "resourceType": "script",
+          "startedAtMs": 9036,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_219",
+          "sanitizedUrl": "https://events.newsroom.bi/data/rfv.php",
+          "hostname": "events.newsroom.bi",
+          "resourceType": "fetch",
+          "startedAtMs": 9070,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_220",
+          "sanitizedUrl": "https://events.newsroom.bi/data2/rfv.php",
+          "hostname": "events.newsroom.bi",
+          "resourceType": "fetch",
+          "startedAtMs": 9074,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_221",
+          "sanitizedUrl": "https://events.newsroom.bi/recirculation/recirculation.php",
+          "hostname": "events.newsroom.bi",
+          "resourceType": "fetch",
+          "startedAtMs": 9075,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_accept_request_222",
+          "sanitizedUrl": "https://events.newsroom.bi/recirculation/recirculation.php",
+          "hostname": "events.newsroom.bi",
+          "resourceType": "fetch",
+          "startedAtMs": 9096,
+          "nonEssential": false
+        }
+      ],
+      "afterActionStorage": [
+        {
+          "storageType": "cookie",
+          "name": "_ga_QM0W06Q4LE",
+          "hostname": "autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "7ee9c6de9bab6bb26fa3655f15b9bd91668a8d01dcec6ffec69d6c55cf3302ad",
+          "valueHash": "9721546f48960796d639aa1c67f4a40b1e27c999a5aa924bdc76faa8605750db",
+          "vendor": "Google",
+          "purpose": "analytics",
+          "nonEssential": true
+        },
+        {
+          "storageType": "cookie",
+          "name": "_fbp",
+          "hostname": "autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "84ac5588a9288182168ce54df6c024d969f84148e2dea4333be19377d952e95e",
+          "valueHash": "8d32d71e7718d18f51be30a0a3decdabb1e34808cf5bdde586b2658a032f111d",
+          "vendor": "Meta",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "storageType": "cookie",
+          "name": "_ga",
+          "hostname": "autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "a29e56a7e6db321d42696b29195b73b1be9a5a3b2c804a707f7a35de43453ceb",
+          "valueHash": "005baf4a51f1aa3d2ed7bfdf20890976fb775d9926e18b5fe8555ee9587d19e2",
+          "vendor": "Google",
+          "purpose": "analytics",
+          "nonEssential": true
+        },
+        {
+          "storageType": "cookie",
+          "name": "_ga_L2FBH758Y8",
+          "hostname": "autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "b905400321551e9952053372eb0e1e46d3911b63816d5030bb4884a61bed022b",
+          "valueHash": "dfd8ba944113c8a81c0506f76f8550937a1bd6f7933c07b74fda3e11d0971973",
+          "vendor": "Google",
+          "purpose": "analytics",
+          "nonEssential": true
+        },
+        {
+          "storageType": "local_storage",
+          "name": "_gcl_ls",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "62b798ae6985c625842ad82bf0e26a3c117540e1b1461c23e8b534d2f7a8bd4c",
+          "valueHash": "2928b54c39bab567add12b9b9c181bd62925ebd960b4bfa2c8c568c3038b7858",
+          "vendor": "Google",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "storageType": "cookie",
+          "name": "rw_didomi_consent_accepted",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "3cf87df611a24e51868b8ff78d76939d8a59ca99549bf6e4f2e7b56c7ae4f500",
+          "valueHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "_gcl_au",
+          "hostname": "autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "41ee7ed888b3d06f0448ead667ca4e25f21b9d4171e3882b275c2c1223686839",
+          "valueHash": "3d13bee8260f64544f403f0252cd794d6fe0127ef9d16247f4f03a0ca30a3268",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "euconsent-v2",
+          "hostname": "autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "5151acc3b98af05da51a35b2ff8d67aea8578fecd04b721f81fed04676d8635c",
+          "valueHash": "d097f8c06de29930cff4439da2db5159c8dc4bfb69d4e62ee1fe580755b6b530",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "didomi_token",
+          "hostname": "autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "554510ce13f7d34bef6694b4bd548d6540827511971d6f80d42592bbd68ecf80",
+          "valueHash": "86deeac925904a6d672256dd8613fa6d5c800c2d17e9f36c937366e113015d93",
+          "vendor": "Didomi",
+          "purpose": "consent_management",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "ivi_consent_h",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "64847d6a98d18a31b5f8d852bf09fd3d51812478576a41ad97d35c996aa55713",
+          "valueHash": "aaa8f389379a8475ba813ed8ae195d954d963b9ac97fed0137376230ef54a102",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "SA",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "6bf096070029dbc3621f4ba20cc18e23a416b88ce4f88107efe017059e736707",
+          "valueHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "___nrbi",
+          "hostname": "autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "9b3db98ee321e5ed7275220e98f9d797643eacbba7f11c5cd9efef5c89cd26b8",
+          "valueHash": "df01f04f38d5a306e30e6d36bd03a2ea156bb417f690dff92738a1fb985a01c5",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "Wysistat",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "c68fd1e0a1f731b2babb32b0fc4444503c259a699f111ae6714b7eb06ed7cd6c",
+          "valueHash": "c910c8dca3045c19bfe022917218c23173d5a4e65cf5210f4d0f4cb428540f50",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "ivid_dev",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "c779445d70457680d5853465b965ed93a7e9ace62b866d61ee5e9c237de29301",
+          "valueHash": "72036c0f8f7dd8f5264cf63fdf579889bb3a2e5e76fa242a130a139585c76b53",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "compass_uid",
+          "hostname": "autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "c9fad839a81f8f7c406d708d6fffa538f7b35e1f57bcdeba71a1f3d227ad0b0c",
+          "valueHash": "b63ce090108f9af369945b3d491d0b3e600c8d25a17a62b604c30ee137e75c54",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "___nrbic",
+          "hostname": "autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "e761c7190707bee3069351145a3c606e1f72783223c5d397a9a5c713f3bdfffa",
+          "valueHash": "907ac555e2fb21538dfc7f33d85087b0258674feac38d91322fe1ca7f5361791",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "nadz_dailyVisits",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "f0e55e1e2dc4506f576c4393e771bc4bfa373b8280ccc8ab53b944ac48abd3e0",
+          "valueHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+          "nonEssential": false
+        },
+        {
+          "storageType": "local_storage",
+          "name": "rw_geoloc",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "14cbe54197f155ba33d692227d72b282ebd561ceff3182e6f5859128b851dd6c",
+          "valueHash": "ce0b708c734f73d630cee50fde72c594a235b73da364e9a9f222b05e7a174ddf",
+          "nonEssential": false
+        },
+        {
+          "storageType": "local_storage",
+          "name": "lastExternalReferrerTime",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "214acebb986afa5168ca5fe9b718fec9054c9b9f5f1acfe922e04b57077cffd9",
+          "valueHash": "0c7daa2c1bdf1cb842fbc6dab33498d6792ae5dd13f422a1a6c5c71efc500377",
+          "nonEssential": false
+        },
+        {
+          "storageType": "local_storage",
+          "name": "ivi_ids",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "74e3d4accde3c36e5d6778bd7550b5e43aa1f1a5fdc27f2728fbc1c480f5966d",
+          "valueHash": "609bb3280419491206898d35e5ea5bd8ace13416ef08bdc6011b8eb46577b5e6",
+          "nonEssential": false
+        },
+        {
+          "storageType": "local_storage",
+          "name": "didomi_token",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "779fd6fc4a18b140318690d67499bbcb0287cafdb003f95853662e89fe20c8b7",
+          "valueHash": "86deeac925904a6d672256dd8613fa6d5c800c2d17e9f36c937366e113015d93",
+          "vendor": "Didomi",
+          "purpose": "consent_management",
+          "nonEssential": false
+        },
+        {
+          "storageType": "local_storage",
+          "name": "euconsent-v2",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "952f28425dedba42eea91ea3b54ec445866bdd5d4b95a31666b1026a060afa97",
+          "valueHash": "d097f8c06de29930cff4439da2db5159c8dc4bfb69d4e62ee1fe580755b6b530",
+          "vendor": "Didomi",
+          "purpose": "consent_management",
+          "nonEssential": false
+        },
+        {
+          "storageType": "local_storage",
+          "name": "lastExternalReferrer",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "954ba8ffb83c62f32b810e4e2dcda77e0f7522c88201168b53c6fdccd158eec3",
+          "valueHash": "2e1cfa82b035c26cbbbdae632cea070514eb8b773f616aaeaf668e2f0be8f10d",
+          "nonEssential": false
+        },
+        {
+          "storageType": "local_storage",
+          "name": "kwords",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "9a4443824aabea204bd449682d35c9b7ed041656299df83eaa8b1f0b4c9e6738",
+          "valueHash": "c062831d6ee186372f1e49ab8784aaa9ff330bfd6c313fc0c6b25ac5ff77c27a",
+          "nonEssential": false
+        },
+        {
+          "storageType": "local_storage",
+          "name": "sumbia",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "a89d9dde49c22fbaba35ed4d7ed629e1a630f8658ca755dd5d377142f074be2a",
+          "valueHash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "nonEssential": false
+        },
+        {
+          "storageType": "local_storage",
+          "name": "marfeel-sdk-store",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "d5e082c8fc3d8fa77c6bf2707417da6638785254577b87c708dfc842cee2c6b5",
+          "valueHash": "7f6be40099033f91196e1fbd9703c7188f6ddf2affe9dbc83955df257070cf14",
+          "nonEssential": false
+        },
+        {
+          "storageType": "local_storage",
+          "name": "eng_mt",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "e6512f1add6d6256b0291a26e839dbeae13ffb745447096dd5ec6f70dd20ff69",
+          "valueHash": "f5b4f81eec43156d2f2358336e61e747d7726d4c8868651f074f844b1477924f",
+          "nonEssential": false
+        },
+        {
+          "storageType": "session_storage",
+          "name": "loadURL",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "3d6affb5d2894827676346df0f5633eb0f1f68388a60a3b8d1bd028842760ef1",
+          "valueHash": "8ef68249e3dddb553ab19fe4e976b36c4dcf687e11cea70a9e2182a987821514",
+          "nonEssential": false
+        },
+        {
+          "storageType": "session_storage",
+          "name": "___nrbi",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "4d69efdbcf86ec870fe700103b2dc7d8ba79d74ea07343179598454ad9050afe",
+          "valueHash": "2f4c18c14395e7a8df8fae1663f104e88f5c9d7cc6737aa57bf817de54b1f330",
+          "nonEssential": false
+        },
+        {
+          "storageType": "session_storage",
+          "name": "marfeel-sdk-store",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "67b2addac8ac09dd9983d62436759c1b4847ea39c361ce9b8ffda32ea0239e1d",
+          "valueHash": "7f6be40099033f91196e1fbd9703c7188f6ddf2affe9dbc83955df257070cf14",
+          "nonEssential": false
+        },
+        {
+          "storageType": "session_storage",
+          "name": "v_aot",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "7b6c79eee548d9c7110ee9a2a6238894832a7e63d034b166aae975cf0629b3e7",
+          "valueHash": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
+          "nonEssential": false
+        },
+        {
+          "storageType": "session_storage",
+          "name": "___nrbic",
+          "hostname": "www.autoplus.fr",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "b56cdcfa49ffcec33db34e91b0552b80b8d5fe97ff327265df3a89f8582c9acb",
+          "valueHash": "f0ebb11339589b79221c66d6b8cbcf9fcfae3720613a58392a5377b64afd53ce",
+          "nonEssential": false
+        }
+      ],
+      "terminalDecisionEvidence": {
+        "policyVersion": "bounded_terminal_consent_decision.v1",
+        "action": "accept",
+        "authorizedTargetSha256": "8ef68249e3dddb553ab19fe4e976b36c4dcf687e11cea70a9e2182a987821514",
+        "readStartedAtMs": 7838,
+        "readCompletedAtMs": 8016,
+        "evidence": {
+          "policyVersion": "semantic_consent_registration.v2",
+          "decision": "granted",
+          "basis": "verified_state",
+          "observedStateSha256": "d097f8c06de29930cff4439da2db5159c8dc4bfb69d4e62ee1fe580755b6b530",
+          "observedAtMs": 8016,
+          "timestampBasis": "verified_state_observed",
+          "tcfPurposeEvidence": {
+            "policyVersion": "iab_tcf_sparse_purposes.v1",
+            "tcfPolicyVersion": 5,
+            "cmpId": 7,
+            "cmpVersion": 1,
+            "explicitPurposeIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11
+            ]
+          },
+          "tcfApiSource": "addEventListener"
+        }
+      },
+      "decisionEvidence": {
+        "policyVersion": "semantic_consent_registration.v2",
+        "decision": "unknown",
+        "basis": "unverified"
+      },
+      "captureCoverage": {
+        "requestsDroppedBeforeAction": 78,
+        "requestsDroppedAfterAction": 0
+      },
+      "contractVersion": "certscore.post_accept_report_projection.v1",
+      "completedAt": "2026-09-28T23:21:58.745Z",
+      "actionControlProof": {
+        "contractVersion": "certscore.consent_action_control_proof.v2",
+        "action": "accept",
+        "observedAtMs": 4187,
+        "accessibleLabel": "Accepter & Fermer: Accepter notre traitement des données et fermer",
+        "labelSource": "aria_label",
+        "actionSemantics": "direct_label",
+        "classifierIntent": "accept",
+        "classifierConfidence": 0.91,
+        "matchedLocale": "fr",
+        "matchStrength": "direct",
+        "classifierReasonCodes": [
+          "matched_accept",
+          "match_strength_direct",
+          "context_satisfied"
+        ],
+        "cmpId": "Didomi",
+        "recipeId": "canonical-cmp:Didomi:accept:v1",
+        "selectorHint": "#didomi-notice-agree-button",
+        "frameIdentitySha256": "8ef68249e3dddb553ab19fe4e976b36c4dcf687e11cea70a9e2182a987821514",
+        "authorizedTargetSha256": "8ef68249e3dddb553ab19fe4e976b36c4dcf687e11cea70a9e2182a987821514",
+        "visible": true,
+        "enabled": true,
+        "uniquelyActionable": true
+      },
+      "evidenceDisposition": "indeterminate",
+      "indeterminateReason": "acceptance_registration_not_confirmed",
+      "contradictionObserved": false,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "observationCount": 0,
+      "observationWindowMs": 3000,
+      "packetSha256": "6a791252f6f2f75d540fc9bf31b2317605c07ea8e0fc94277575225f2734c7d8",
+      "postAcceptActivity": [],
+      "productionProjectable": false,
+      "acceptanceExercised": false,
+      "registrationStatus": "unconfirmed",
+      "resolverMethod": "tcf_api_cmp_registry_recipe",
+      "status": "unconfirmed"
+    }
+  },
+  {
+    "action": "reject",
+    "site": "catonetworks.com",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/cmp-reliability-2026-10-29/remote-original-packets/packets/6f50035b-c9d9-4d67-85f6-a498e6850d4a/PostRefusalEvidencePacket.json",
+      "sha256": "f07e88da148cd08f15146a6ff0e7d23531b33e04be111075b672165eb5a476b0",
+      "bytes": 169740
+    },
+    "projection": {
+      "sourceIdentity": {
+        "policyVersion": "post_reject_source_identity.v1",
+        "scanId": "6f50035b-c9d9-4d67-85f6-a498e6850d4a",
+        "targetSha256": "b65564bc6c69d485a10ba38a6153e04417a68113b931cb102e96b7af3aa50d74"
+      },
+      "scoringEvidence": {
+        "version": "post_reject_scoring_evidence.v1",
+        "actionDispatchedAtMs": 4561,
+        "preActionCapturedAtMs": 3828,
+        "postActionCapturedAtMs": 12578,
+        "requests": [
+          {
+            "requestId": "post_refusal_request_50",
+            "sanitizedUrl": "https://www.catonetworks.com/_Incapsula_Resource",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "image",
+            "startedAtMs": 4604,
+            "completedAtMs": 4621,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_51",
+            "sanitizedUrl": "https://www.catonetworks.com/wp-content/plugins/trinity-audio/js/the_content-hook-script.js",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "script",
+            "startedAtMs": 4653,
+            "completedAtMs": 4958,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_52",
+            "sanitizedUrl": "https://www.catonetworks.com/wp-content/plugins/sitepress-multilingual-cms/res/js/cookies/language-cookie.js",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "script",
+            "startedAtMs": 4653,
+            "completedAtMs": 4957,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_53",
+            "sanitizedUrl": "https://www.catonetworks.com/wp-content/plugins/sitepress-multilingual-cms/templates/language-switchers/legacy-dropdown/script.min.js",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "script",
+            "startedAtMs": 4654,
+            "completedAtMs": 4957,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_54",
+            "sanitizedUrl": "https://www.catonetworks.com/wp-content/plugins/airfleet-nexus/build/modules/preload-links/frontend/index.js",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "script",
+            "startedAtMs": 4654,
+            "completedAtMs": 4958,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_55",
+            "sanitizedUrl": "https://www.catonetworks.com/wp-content/plugins/airfleet-nexus/build/modules/support-navigation-container-width/frontend/index.js",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "script",
+            "startedAtMs": 4655,
+            "completedAtMs": 4958,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_56",
+            "sanitizedUrl": "https://www.googletagmanager.com/gtm.js",
+            "hostname": "www.googletagmanager.com",
+            "resourceType": "script",
+            "startedAtMs": 5626,
+            "completedAtMs": 5789,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Google",
+            "purpose": "tag_management",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_57",
+            "sanitizedUrl": "https://munchkin.marketo.net/munchkin.js",
+            "hostname": "munchkin.marketo.net",
+            "resourceType": "script",
+            "startedAtMs": 5636,
+            "completedAtMs": 5686,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Adobe",
+            "purpose": "analytics",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_58",
+            "sanitizedUrl": "https://munchkin.marketo.net/165/munchkin.js",
+            "hostname": "munchkin.marketo.net",
+            "resourceType": "script",
+            "startedAtMs": 5688,
+            "completedAtMs": 5712,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Adobe",
+            "purpose": "analytics",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_59",
+            "sanitizedUrl": "https://www.catonetworks.com/cookie-notice/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 5708,
+            "completedAtMs": 6747,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_60",
+            "sanitizedUrl": "https://www.catonetworks.com/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 5709,
+            "completedAtMs": 6747,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_61",
+            "sanitizedUrl": "https://www.googletagmanager.com/gtag/js",
+            "hostname": "www.googletagmanager.com",
+            "resourceType": "script",
+            "startedAtMs": 5917,
+            "completedAtMs": 6294,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Google",
+            "purpose": "tag_management",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_62",
+            "sanitizedUrl": "https://www.googletagmanager.com/gtag/js",
+            "hostname": "www.googletagmanager.com",
+            "resourceType": "script",
+            "startedAtMs": 5929,
+            "completedAtMs": 6296,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Google",
+            "purpose": "tag_management",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_63",
+            "sanitizedUrl": "https://www.googletagmanager.com/gtag/js",
+            "hostname": "www.googletagmanager.com",
+            "resourceType": "script",
+            "startedAtMs": 5930,
+            "completedAtMs": 6296,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Google",
+            "purpose": "tag_management",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_64",
+            "sanitizedUrl": "https://www.googletagmanager.com/gtag/js",
+            "hostname": "www.googletagmanager.com",
+            "resourceType": "script",
+            "startedAtMs": 5930,
+            "completedAtMs": 6297,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Google",
+            "purpose": "tag_management",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_65",
+            "sanitizedUrl": "https://catonetworks.chilipiper.com/concierge-js/cjs/concierge.js",
+            "hostname": "catonetworks.chilipiper.com",
+            "resourceType": "script",
+            "startedAtMs": 5942,
+            "completedAtMs": 6238,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_66",
+            "sanitizedUrl": "https://cdn.drda.io/scripts/analytics/next/dreamdata.cl.min.js",
+            "hostname": "cdn.drda.io",
+            "resourceType": "script",
+            "startedAtMs": 5942,
+            "completedAtMs": 6297,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_67",
+            "sanitizedUrl": "https://consent.cookiebot.com/logconsent.ashx",
+            "hostname": "consent.cookiebot.com",
+            "resourceType": "script",
+            "startedAtMs": 6224,
+            "completedAtMs": 6754,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Cookiebot",
+            "purpose": "consent_management",
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_68",
+            "sanitizedUrl": "https://www.googletagmanager.com/gtag/destination",
+            "hostname": "www.googletagmanager.com",
+            "resourceType": "script",
+            "startedAtMs": 6731,
+            "completedAtMs": 7045,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Google",
+            "purpose": "tag_management",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_69",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/architecture/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 6776,
+            "completedAtMs": 7188,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_70",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/ai-security-for-end-users/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 6777,
+            "completedAtMs": 7188,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_71",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/ai-security-for-applications/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 6779,
+            "completedAtMs": 7415,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_72",
+            "sanitizedUrl": "https://www.google-analytics.com/g/collect",
+            "hostname": "www.google-analytics.com",
+            "resourceType": "fetch",
+            "startedAtMs": 7028,
+            "completedAtMs": 7201,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Google",
+            "purpose": "analytics",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_73",
+            "sanitizedUrl": "https://www.google-analytics.com/g/collect",
+            "hostname": "www.google-analytics.com",
+            "resourceType": "fetch",
+            "startedAtMs": 7031,
+            "completedAtMs": 7209,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Google",
+            "purpose": "analytics",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_74",
+            "sanitizedUrl": "https://pagead2.googlesyndication.com/ccm/collect",
+            "hostname": "pagead2.googlesyndication.com",
+            "resourceType": "fetch",
+            "startedAtMs": 7032,
+            "completedAtMs": 7198,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Google",
+            "purpose": "advertising",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_75",
+            "sanitizedUrl": "https://pagead2.googlesyndication.com/ccm/collect",
+            "hostname": "pagead2.googlesyndication.com",
+            "resourceType": "fetch",
+            "startedAtMs": 7032,
+            "completedAtMs": 7198,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Google",
+            "purpose": "advertising",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_76",
+            "sanitizedUrl": "https://pagead2.googlesyndication.com/ccm/collect",
+            "hostname": "pagead2.googlesyndication.com",
+            "resourceType": "fetch",
+            "startedAtMs": 7033,
+            "completedAtMs": 7198,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Google",
+            "purpose": "advertising",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_77",
+            "sanitizedUrl": "https://consent.cookiebot.com/Scripts/widgetIcon.min.js",
+            "hostname": "consent.cookiebot.com",
+            "resourceType": "script",
+            "startedAtMs": 7033,
+            "completedAtMs": 7189,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Cookiebot",
+            "purpose": "consent_management",
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_78",
+            "sanitizedUrl": "https://cdn.dreamdata.cloud/api/v1/p",
+            "hostname": "cdn.dreamdata.cloud",
+            "resourceType": "fetch",
+            "startedAtMs": 7044,
+            "completedAtMs": 7310,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_79",
+            "sanitizedUrl": "https://consentcdn.cookiebot.com/consentconfig/c0ae9b80-f181-4dbc-b494-95428ebf50dd/state.js",
+            "hostname": "consentcdn.cookiebot.com",
+            "resourceType": "script",
+            "startedAtMs": 7055,
+            "completedAtMs": 7187,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Cookiebot",
+            "purpose": "consent_management",
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_80",
+            "sanitizedUrl": "https://pagead2.googlesyndication.com/ccm/collect",
+            "hostname": "pagead2.googlesyndication.com",
+            "resourceType": "fetch",
+            "startedAtMs": 7175,
+            "completedAtMs": 7214,
+            "inFlightAtRefusalRegistration": false,
+            "vendor": "Google",
+            "purpose": "advertising",
+            "nonEssential": true
+          },
+          {
+            "requestId": "post_refusal_request_81",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/agentic-ai-security/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 7198,
+            "completedAtMs": 7533,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_82",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/agentic-threat-prevention/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 7210,
+            "completedAtMs": 7540,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_83",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/firewall-as-a-service-fwaas/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 7421,
+            "completedAtMs": 7745,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_84",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/secure-web-gateway-swg/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 7539,
+            "completedAtMs": 7840,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_85",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/intrusion-prevention-system-ips/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 7541,
+            "completedAtMs": 7885,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_86",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/cato-malware-prevention/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 7748,
+            "completedAtMs": 8200,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_87",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/dns-security/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 7842,
+            "completedAtMs": 8347,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_88",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/remote-browser-isolation-rbi/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 7888,
+            "completedAtMs": 8338,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_89",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/iot-ot-security/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 8203,
+            "completedAtMs": 8541,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_90",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/cloud-access-security-broker-casb/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 8339,
+            "completedAtMs": 8643,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_91",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/data-loss-prevention-dlp/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 8348,
+            "completedAtMs": 8677,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_92",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/universal-zero-trust-network-access-ztna/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 8544,
+            "completedAtMs": 8861,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_93",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/cato-browser-extension/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 8647,
+            "completedAtMs": 8963,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_94",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/software-defined-wan-sd-wan/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 8678,
+            "completedAtMs": 8975,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_95",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/global-private-backbone/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 8862,
+            "completedAtMs": 9185,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_96",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/cloud-datacenter-integration/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 8967,
+            "completedAtMs": 9268,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_97",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/digital-experience-monitoring-dem/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 8978,
+            "completedAtMs": 9280,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_98",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/extended-detection-and-response-xdr/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 9187,
+            "completedAtMs": 9760,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_99",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/endpoint-protection-epp/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 9270,
+            "completedAtMs": 9912,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_100",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/cato-management-application-cma/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 9282,
+            "completedAtMs": 9926,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_101",
+            "sanitizedUrl": "https://www.catonetworks.com/platform/cato-api/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 9762,
+            "completedAtMs": 10105,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_102",
+            "sanitizedUrl": "https://www.catonetworks.com/solutions/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 9914,
+            "completedAtMs": 10235,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_103",
+            "sanitizedUrl": "https://www.catonetworks.com/solutions/ai-security/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 9927,
+            "completedAtMs": 10269,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_104",
+            "sanitizedUrl": "https://www.catonetworks.com/solutions/next-gen-networking/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 10109,
+            "completedAtMs": 10398,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_105",
+            "sanitizedUrl": "https://www.catonetworks.com/solutions/zero-trust-security-sse/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 10238,
+            "completedAtMs": 10565,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_106",
+            "sanitizedUrl": "https://www.catonetworks.com/solutions/universal-ztna/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 10270,
+            "completedAtMs": 10580,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_107",
+            "sanitizedUrl": "https://www.catonetworks.com/solutions/sase-platform/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 10399,
+            "completedAtMs": 10692,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_108",
+            "sanitizedUrl": "https://www.catonetworks.com/solutions/cato-xops/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 10577,
+            "completedAtMs": 10883,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_109",
+            "sanitizedUrl": "https://www.catonetworks.com/use-cases/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 10585,
+            "completedAtMs": 10912,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_110",
+            "sanitizedUrl": "https://www.catonetworks.com/solutions/smb/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 10917,
+            "completedAtMs": 11233,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_111",
+            "sanitizedUrl": "https://www.catonetworks.com/solutions/frontier-ai/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 10918,
+            "completedAtMs": 11215,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_112",
+            "sanitizedUrl": "https://www.catonetworks.com/ai-powered-security/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 10919,
+            "completedAtMs": 11213,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_113",
+            "sanitizedUrl": "https://www.catonetworks.com/ai-powered-autonomous-sase-platform/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 11217,
+            "completedAtMs": 11516,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_114",
+            "sanitizedUrl": "https://www.catonetworks.com/services/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 11219,
+            "completedAtMs": 11550,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_115",
+            "sanitizedUrl": "https://www.catonetworks.com/services/managed-sase/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 11234,
+            "completedAtMs": 11549,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_116",
+            "sanitizedUrl": "https://www.catonetworks.com/customers/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 11556,
+            "completedAtMs": 11902,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_117",
+            "sanitizedUrl": "https://www.catonetworks.com/partners/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 11557,
+            "completedAtMs": 11870,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_118",
+            "sanitizedUrl": "https://www.catonetworks.com/partners/partners-services-provider/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 11559,
+            "completedAtMs": 11890,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_119",
+            "sanitizedUrl": "https://www.catonetworks.com/cloud-providers/aws/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 11871,
+            "completedAtMs": 12199,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_120",
+            "sanitizedUrl": "https://www.catonetworks.com/partners/managed-services-provider/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 11892,
+            "completedAtMs": 12199,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_121",
+            "sanitizedUrl": "https://www.catonetworks.com/partners/reseller/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 11904,
+            "completedAtMs": 12203,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_122",
+            "sanitizedUrl": "https://www.catonetworks.com/partners/agent/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 12201,
+            "completedAtMs": 12512,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_123",
+            "sanitizedUrl": "https://www.catonetworks.com/integrations/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 12202,
+            "completedAtMs": 12504,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_124",
+            "sanitizedUrl": "https://www.catonetworks.com/partner-onboarding/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 12207,
+            "completedAtMs": 12515,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          },
+          {
+            "requestId": "post_refusal_request_125",
+            "sanitizedUrl": "https://www.catonetworks.com/company/",
+            "hostname": "www.catonetworks.com",
+            "resourceType": "other",
+            "startedAtMs": 12507,
+            "inFlightAtRefusalRegistration": false,
+            "nonEssential": false
+          }
+        ],
+        "storageWrites": [],
+        "preActionStorage": [
+          {
+            "storageType": "cookie",
+            "name": "visid_incap_947512",
+            "hostname": "catonetworks.com",
+            "identityBasis": "cookie_name_domain_path_partition",
+            "identityHash": "0db02363eadf332bddb012736c7162d621b52b80bd432c16362a39e6d2f45a9d",
+            "valueHash": "3612a1d32ec524c157193386b4681b2b03d155724dac18d5bbb0c6a1ade68837",
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "nlbi_947512",
+            "hostname": "catonetworks.com",
+            "identityBasis": "cookie_name_domain_path_partition",
+            "identityHash": "adecea4526d9b25db9f6840d974efa2e1bf96f905de4e2d761355f64e81bed91",
+            "valueHash": "355c8c8d38af2673033bedb7a60c6d6cc52f8fd0fbc2175d9cd1b2b4ab5c911c",
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "incap_ses_361_947512",
+            "hostname": "catonetworks.com",
+            "identityBasis": "cookie_name_domain_path_partition",
+            "identityHash": "efdaa7c6b6fa39cabda6fdccf4c282780d4b6f1651852111b5d74cda59b23bf4",
+            "valueHash": "784cf0a37ed3b54714af3320354a8e13bed04d45be85b6927ca2fe8722b2f9fa",
+            "nonEssential": false
+          }
+        ],
+        "postActionStorage": [
+          {
+            "storageType": "cookie",
+            "name": "visid_incap_947512",
+            "hostname": "catonetworks.com",
+            "identityBasis": "cookie_name_domain_path_partition",
+            "identityHash": "0db02363eadf332bddb012736c7162d621b52b80bd432c16362a39e6d2f45a9d",
+            "valueHash": "3612a1d32ec524c157193386b4681b2b03d155724dac18d5bbb0c6a1ade68837",
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "CookieConsent",
+            "hostname": "www.catonetworks.com",
+            "identityBasis": "cookie_name_domain_path_partition",
+            "identityHash": "98da446ba802aebea467fc75d237d164f65548dbf69f4fd2e2c154c388568161",
+            "valueHash": "f4963246e21379f498f44ae307b4a9316c07c76828151808e2005dd508f74014",
+            "vendor": "Cookiebot",
+            "purpose": "consent_management",
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "nlbi_947512",
+            "hostname": "catonetworks.com",
+            "identityBasis": "cookie_name_domain_path_partition",
+            "identityHash": "adecea4526d9b25db9f6840d974efa2e1bf96f905de4e2d761355f64e81bed91",
+            "valueHash": "355c8c8d38af2673033bedb7a60c6d6cc52f8fd0fbc2175d9cd1b2b4ab5c911c",
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "incap_ses_361_947512",
+            "hostname": "catonetworks.com",
+            "identityBasis": "cookie_name_domain_path_partition",
+            "identityHash": "efdaa7c6b6fa39cabda6fdccf4c282780d4b6f1651852111b5d74cda59b23bf4",
+            "valueHash": "784cf0a37ed3b54714af3320354a8e13bed04d45be85b6927ca2fe8722b2f9fa",
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "pageViews",
+            "hostname": "www.catonetworks.com",
+            "identityBasis": "origin_storage_key",
+            "identityHash": "c8548660d19f27bc294b625c34dc6da6a176e33d3cd9fd5d76ab7db41ae1305e",
+            "valueHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+            "nonEssential": false
+          }
+        ]
+      },
+      "interactionDiagnostics": {
+        "resolver": {
+          "snapshots": [
+            {
+              "attempt": 1,
+              "elapsedMs": 1051,
+              "source": "canonical_geometry",
+              "state": "canonical_reject_absent",
+              "selectorMatchCount": 8,
+              "visibleCount": 0,
+              "enabledCount": 8,
+              "labelMatchCount": 0,
+              "actionableCount": 0,
+              "cmpIds": [
+                "Cookiebot"
+              ],
+              "controlLabels": []
+            },
+            {
+              "attempt": 2,
+              "elapsedMs": 1566,
+              "source": "named_recipe",
+              "state": "single_actionable",
+              "selectorMatchCount": 1,
+              "visibleCount": 1,
+              "enabledCount": 1,
+              "labelMatchCount": 1,
+              "actionableCount": 1,
+              "cmpIds": [
+                "Cookiebot"
+              ],
+              "controlLabels": []
+            },
+            {
+              "attempt": 3,
+              "elapsedMs": 1932,
+              "source": "control_proof",
+              "state": "candidate_detected",
+              "selectorMatchCount": 1,
+              "visibleCount": 1,
+              "enabledCount": 1,
+              "labelMatchCount": 0,
+              "actionableCount": 0,
+              "cmpIds": [
+                "Cookiebot"
+              ],
+              "controlLabels": [
+                "Reject All"
+              ],
+              "binding": {
+                "selectorSha256": "1b00faa46eea07d33c72830e3cbf27e634d32fa3afb7af7cbdaea1252522cba0",
+                "frameIdentitySha256": "b65564bc6c69d485a10ba38a6153e04417a68113b931cb102e96b7af3aa50d74",
+                "labelSources": [
+                  "visible_text"
+                ]
+              }
+            }
+          ],
+          "truncated": false
+        },
+        "navigation": {
+          "outcome": "completed",
+          "documentCommitted": true,
+          "finalUrlAuthorized": true,
+          "redirectResolution": {
+            "durationMs": 1680,
+            "finalExactTargetSha256": "b65564bc6c69d485a10ba38a6153e04417a68113b931cb102e96b7af3aa50d74",
+            "redirectCount": 2,
+            "requestedTargetSha256": "3165804d77be111761731850b4e57eb8aa7a4f57b686032c7c103a095924f19a",
+            "status": "resolved"
+          }
+        },
+        "click": {
+          "outcome": "completed",
+          "reResolvedBeforeDispatch": false,
+          "confirmationCheckedAfterError": false
+        }
+      },
+      "retainedActionTiming": {
+        "policyVersion": "retained_action_timing.v1",
+        "action": "reject",
+        "actionDispatchedAtMs": 4561,
+        "observationEndedAtMs": 12578,
+        "firstRequest": {
+          "startedAtMs": 4604,
+          "hostname": "www.catonetworks.com"
+        }
+      },
+      "storageCollectionDiagnostics": {
+        "preAction": {
+          "policyVersion": "action_storage_collection_diagnostics.v1",
+          "cookies": {
+            "status": "complete",
+            "retainedCount": 3,
+            "droppedCount": 0,
+            "sampleLimit": 96
+          },
+          "localStorage": {
+            "status": "empty",
+            "retainedCount": 0,
+            "droppedCount": 0,
+            "sampleLimit": 96
+          },
+          "sessionStorage": {
+            "status": "empty",
+            "retainedCount": 0,
+            "droppedCount": 0,
+            "sampleLimit": 96
+          }
+        },
+        "postAction": {
+          "policyVersion": "action_storage_collection_diagnostics.v1",
+          "cookies": {
+            "status": "complete",
+            "retainedCount": 4,
+            "droppedCount": 0,
+            "sampleLimit": 96
+          },
+          "localStorage": {
+            "status": "empty",
+            "retainedCount": 0,
+            "droppedCount": 0,
+            "sampleLimit": 96
+          },
+          "sessionStorage": {
+            "status": "complete",
+            "retainedCount": 1,
+            "droppedCount": 0,
+            "sampleLimit": 96
+          }
+        }
+      },
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "afterActionCapture": {
+        "policyVersion": "bounded_after_action_capture.v2",
+        "action": "reject",
+        "activationStatus": "completed",
+        "actionDispatchedAtMs": 4561,
+        "captureEndedAtMs": 12578,
+        "requestedWindowMs": 8000,
+        "stopReason": "window_elapsed",
+        "requestsDropped": 0,
+        "storageSnapshotRetained": true,
+        "storageWriteCoverage": "bounded_main_document_sample",
+        "storageWrites": [
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6184,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6190,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6191,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6192,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6193,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6195,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6195,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "persisted-queue:v1:bf336c31-f362-4441-84e4-496e029d6693:dest-Segment.io:lock",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6742,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "__tld__",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6756,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "__tld__",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6758,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "CookieConsent",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6775,
+            "nonEssential": false,
+            "vendor": "Cookiebot"
+          },
+          {
+            "storageType": "cookie",
+            "name": "initialTrafficSource",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6991,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "__utmzzses",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6991,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6996,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6996,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6997,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6998,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6998,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 6998,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7004,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7004,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7005,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7005,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7005,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7006,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7006,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7006,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7007,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7007,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7007,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7008,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7011,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "cookiebottest",
+            "hostname": "www.catonetworks.com",
+            "observedAtMs": 7011,
+            "nonEssential": false
+          }
+        ],
+        "requestIds": [
+          "post_refusal_request_50",
+          "post_refusal_request_51",
+          "post_refusal_request_52",
+          "post_refusal_request_53",
+          "post_refusal_request_54",
+          "post_refusal_request_55",
+          "post_refusal_request_56",
+          "post_refusal_request_57",
+          "post_refusal_request_58",
+          "post_refusal_request_59",
+          "post_refusal_request_60",
+          "post_refusal_request_61",
+          "post_refusal_request_62",
+          "post_refusal_request_63",
+          "post_refusal_request_64",
+          "post_refusal_request_65",
+          "post_refusal_request_66",
+          "post_refusal_request_67",
+          "post_refusal_request_68",
+          "post_refusal_request_69",
+          "post_refusal_request_70",
+          "post_refusal_request_71",
+          "post_refusal_request_72",
+          "post_refusal_request_73",
+          "post_refusal_request_74",
+          "post_refusal_request_75",
+          "post_refusal_request_76",
+          "post_refusal_request_77",
+          "post_refusal_request_78",
+          "post_refusal_request_79",
+          "post_refusal_request_80",
+          "post_refusal_request_81",
+          "post_refusal_request_82",
+          "post_refusal_request_83",
+          "post_refusal_request_84",
+          "post_refusal_request_85",
+          "post_refusal_request_86",
+          "post_refusal_request_87",
+          "post_refusal_request_88",
+          "post_refusal_request_89",
+          "post_refusal_request_90",
+          "post_refusal_request_91",
+          "post_refusal_request_92",
+          "post_refusal_request_93",
+          "post_refusal_request_94",
+          "post_refusal_request_95",
+          "post_refusal_request_96",
+          "post_refusal_request_97",
+          "post_refusal_request_98",
+          "post_refusal_request_99",
+          "post_refusal_request_100",
+          "post_refusal_request_101",
+          "post_refusal_request_102",
+          "post_refusal_request_103",
+          "post_refusal_request_104",
+          "post_refusal_request_105",
+          "post_refusal_request_106",
+          "post_refusal_request_107",
+          "post_refusal_request_108",
+          "post_refusal_request_109",
+          "post_refusal_request_110",
+          "post_refusal_request_111",
+          "post_refusal_request_112",
+          "post_refusal_request_113",
+          "post_refusal_request_114",
+          "post_refusal_request_115",
+          "post_refusal_request_116",
+          "post_refusal_request_117",
+          "post_refusal_request_118",
+          "post_refusal_request_119",
+          "post_refusal_request_120",
+          "post_refusal_request_121",
+          "post_refusal_request_122",
+          "post_refusal_request_123",
+          "post_refusal_request_124",
+          "post_refusal_request_125"
+        ],
+        "requestAncestry": [
+          {
+            "requestId": "post_refusal_request_50",
+            "rootStartedAtMs": 4604
+          },
+          {
+            "requestId": "post_refusal_request_51",
+            "rootStartedAtMs": 4653
+          },
+          {
+            "requestId": "post_refusal_request_52",
+            "rootStartedAtMs": 4653
+          },
+          {
+            "requestId": "post_refusal_request_53",
+            "rootStartedAtMs": 4654
+          },
+          {
+            "requestId": "post_refusal_request_54",
+            "rootStartedAtMs": 4654
+          },
+          {
+            "requestId": "post_refusal_request_55",
+            "rootStartedAtMs": 4655
+          },
+          {
+            "requestId": "post_refusal_request_56",
+            "rootStartedAtMs": 5626
+          },
+          {
+            "requestId": "post_refusal_request_57",
+            "rootStartedAtMs": 5636
+          },
+          {
+            "requestId": "post_refusal_request_58",
+            "rootStartedAtMs": 5688
+          },
+          {
+            "requestId": "post_refusal_request_59",
+            "rootStartedAtMs": 5708
+          },
+          {
+            "requestId": "post_refusal_request_60",
+            "rootStartedAtMs": 5709
+          },
+          {
+            "requestId": "post_refusal_request_61",
+            "rootStartedAtMs": 5917
+          },
+          {
+            "requestId": "post_refusal_request_62",
+            "rootStartedAtMs": 5929
+          },
+          {
+            "requestId": "post_refusal_request_63",
+            "rootStartedAtMs": 5930
+          },
+          {
+            "requestId": "post_refusal_request_64",
+            "rootStartedAtMs": 5930
+          },
+          {
+            "requestId": "post_refusal_request_65",
+            "rootStartedAtMs": 5942
+          },
+          {
+            "requestId": "post_refusal_request_66",
+            "rootStartedAtMs": 5942
+          },
+          {
+            "requestId": "post_refusal_request_67",
+            "rootStartedAtMs": 6224
+          },
+          {
+            "requestId": "post_refusal_request_68",
+            "rootStartedAtMs": 6731
+          },
+          {
+            "requestId": "post_refusal_request_69",
+            "rootStartedAtMs": 6776
+          },
+          {
+            "requestId": "post_refusal_request_70",
+            "rootStartedAtMs": 6777
+          },
+          {
+            "requestId": "post_refusal_request_71",
+            "rootStartedAtMs": 6779
+          },
+          {
+            "requestId": "post_refusal_request_72",
+            "rootStartedAtMs": 7028
+          },
+          {
+            "requestId": "post_refusal_request_73",
+            "rootStartedAtMs": 7031
+          },
+          {
+            "requestId": "post_refusal_request_74",
+            "rootStartedAtMs": 7032
+          },
+          {
+            "requestId": "post_refusal_request_75",
+            "rootStartedAtMs": 7032
+          },
+          {
+            "requestId": "post_refusal_request_76",
+            "rootStartedAtMs": 7033
+          },
+          {
+            "requestId": "post_refusal_request_77",
+            "rootStartedAtMs": 7033
+          },
+          {
+            "requestId": "post_refusal_request_78",
+            "rootStartedAtMs": 7044
+          },
+          {
+            "requestId": "post_refusal_request_79",
+            "rootStartedAtMs": 7055
+          },
+          {
+            "requestId": "post_refusal_request_80",
+            "rootStartedAtMs": 7175
+          },
+          {
+            "requestId": "post_refusal_request_81",
+            "rootStartedAtMs": 7198
+          },
+          {
+            "requestId": "post_refusal_request_82",
+            "rootStartedAtMs": 7210
+          },
+          {
+            "requestId": "post_refusal_request_83",
+            "rootStartedAtMs": 7421
+          },
+          {
+            "requestId": "post_refusal_request_84",
+            "rootStartedAtMs": 7539
+          },
+          {
+            "requestId": "post_refusal_request_85",
+            "rootStartedAtMs": 7541
+          },
+          {
+            "requestId": "post_refusal_request_86",
+            "rootStartedAtMs": 7748
+          },
+          {
+            "requestId": "post_refusal_request_87",
+            "rootStartedAtMs": 7842
+          },
+          {
+            "requestId": "post_refusal_request_88",
+            "rootStartedAtMs": 7888
+          },
+          {
+            "requestId": "post_refusal_request_89",
+            "rootStartedAtMs": 8203
+          },
+          {
+            "requestId": "post_refusal_request_90",
+            "rootStartedAtMs": 8339
+          },
+          {
+            "requestId": "post_refusal_request_91",
+            "rootStartedAtMs": 8348
+          },
+          {
+            "requestId": "post_refusal_request_92",
+            "rootStartedAtMs": 8544
+          },
+          {
+            "requestId": "post_refusal_request_93",
+            "rootStartedAtMs": 8647
+          },
+          {
+            "requestId": "post_refusal_request_94",
+            "rootStartedAtMs": 8678
+          },
+          {
+            "requestId": "post_refusal_request_95",
+            "rootStartedAtMs": 8862
+          },
+          {
+            "requestId": "post_refusal_request_96",
+            "rootStartedAtMs": 8967
+          },
+          {
+            "requestId": "post_refusal_request_97",
+            "rootStartedAtMs": 8978
+          },
+          {
+            "requestId": "post_refusal_request_98",
+            "rootStartedAtMs": 9187
+          },
+          {
+            "requestId": "post_refusal_request_99",
+            "rootStartedAtMs": 9270
+          },
+          {
+            "requestId": "post_refusal_request_100",
+            "rootStartedAtMs": 9282
+          },
+          {
+            "requestId": "post_refusal_request_101",
+            "rootStartedAtMs": 9762
+          },
+          {
+            "requestId": "post_refusal_request_102",
+            "rootStartedAtMs": 9914
+          },
+          {
+            "requestId": "post_refusal_request_103",
+            "rootStartedAtMs": 9927
+          },
+          {
+            "requestId": "post_refusal_request_104",
+            "rootStartedAtMs": 10109
+          },
+          {
+            "requestId": "post_refusal_request_105",
+            "rootStartedAtMs": 10238
+          },
+          {
+            "requestId": "post_refusal_request_106",
+            "rootStartedAtMs": 10270
+          },
+          {
+            "requestId": "post_refusal_request_107",
+            "rootStartedAtMs": 10399
+          },
+          {
+            "requestId": "post_refusal_request_108",
+            "rootStartedAtMs": 10577
+          },
+          {
+            "requestId": "post_refusal_request_109",
+            "rootStartedAtMs": 10585
+          },
+          {
+            "requestId": "post_refusal_request_110",
+            "rootStartedAtMs": 10917
+          },
+          {
+            "requestId": "post_refusal_request_111",
+            "rootStartedAtMs": 10918
+          },
+          {
+            "requestId": "post_refusal_request_112",
+            "rootStartedAtMs": 10919
+          },
+          {
+            "requestId": "post_refusal_request_113",
+            "rootStartedAtMs": 11217
+          },
+          {
+            "requestId": "post_refusal_request_114",
+            "rootStartedAtMs": 11219
+          },
+          {
+            "requestId": "post_refusal_request_115",
+            "rootStartedAtMs": 11234
+          },
+          {
+            "requestId": "post_refusal_request_116",
+            "rootStartedAtMs": 11556
+          },
+          {
+            "requestId": "post_refusal_request_117",
+            "rootStartedAtMs": 11557
+          },
+          {
+            "requestId": "post_refusal_request_118",
+            "rootStartedAtMs": 11559
+          },
+          {
+            "requestId": "post_refusal_request_119",
+            "rootStartedAtMs": 11871
+          },
+          {
+            "requestId": "post_refusal_request_120",
+            "rootStartedAtMs": 11892
+          },
+          {
+            "requestId": "post_refusal_request_121",
+            "rootStartedAtMs": 11904
+          },
+          {
+            "requestId": "post_refusal_request_122",
+            "rootStartedAtMs": 12201
+          },
+          {
+            "requestId": "post_refusal_request_123",
+            "rootStartedAtMs": 12202
+          },
+          {
+            "requestId": "post_refusal_request_124",
+            "rootStartedAtMs": 12207
+          },
+          {
+            "requestId": "post_refusal_request_125",
+            "rootStartedAtMs": 12507
+          }
+        ]
+      },
+      "afterActionRequests": [
+        {
+          "requestId": "post_refusal_request_50",
+          "sanitizedUrl": "https://www.catonetworks.com/_Incapsula_Resource",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "image",
+          "startedAtMs": 4604,
+          "completedAtMs": 4621,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_51",
+          "sanitizedUrl": "https://www.catonetworks.com/wp-content/plugins/trinity-audio/js/the_content-hook-script.js",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "script",
+          "startedAtMs": 4653,
+          "completedAtMs": 4958,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_52",
+          "sanitizedUrl": "https://www.catonetworks.com/wp-content/plugins/sitepress-multilingual-cms/res/js/cookies/language-cookie.js",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "script",
+          "startedAtMs": 4653,
+          "completedAtMs": 4957,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_53",
+          "sanitizedUrl": "https://www.catonetworks.com/wp-content/plugins/sitepress-multilingual-cms/templates/language-switchers/legacy-dropdown/script.min.js",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "script",
+          "startedAtMs": 4654,
+          "completedAtMs": 4957,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_54",
+          "sanitizedUrl": "https://www.catonetworks.com/wp-content/plugins/airfleet-nexus/build/modules/preload-links/frontend/index.js",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "script",
+          "startedAtMs": 4654,
+          "completedAtMs": 4958,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_55",
+          "sanitizedUrl": "https://www.catonetworks.com/wp-content/plugins/airfleet-nexus/build/modules/support-navigation-container-width/frontend/index.js",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "script",
+          "startedAtMs": 4655,
+          "completedAtMs": 4958,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_56",
+          "sanitizedUrl": "https://www.googletagmanager.com/gtm.js",
+          "hostname": "www.googletagmanager.com",
+          "resourceType": "script",
+          "startedAtMs": 5626,
+          "completedAtMs": 5789,
+          "vendor": "Google",
+          "purpose": "tag_management",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_57",
+          "sanitizedUrl": "https://munchkin.marketo.net/munchkin.js",
+          "hostname": "munchkin.marketo.net",
+          "resourceType": "script",
+          "startedAtMs": 5636,
+          "completedAtMs": 5686,
+          "vendor": "Adobe",
+          "purpose": "analytics",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_58",
+          "sanitizedUrl": "https://munchkin.marketo.net/165/munchkin.js",
+          "hostname": "munchkin.marketo.net",
+          "resourceType": "script",
+          "startedAtMs": 5688,
+          "completedAtMs": 5712,
+          "vendor": "Adobe",
+          "purpose": "analytics",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_59",
+          "sanitizedUrl": "https://www.catonetworks.com/cookie-notice/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 5708,
+          "completedAtMs": 6747,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_60",
+          "sanitizedUrl": "https://www.catonetworks.com/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 5709,
+          "completedAtMs": 6747,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_61",
+          "sanitizedUrl": "https://www.googletagmanager.com/gtag/js",
+          "hostname": "www.googletagmanager.com",
+          "resourceType": "script",
+          "startedAtMs": 5917,
+          "completedAtMs": 6294,
+          "vendor": "Google",
+          "purpose": "tag_management",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_62",
+          "sanitizedUrl": "https://www.googletagmanager.com/gtag/js",
+          "hostname": "www.googletagmanager.com",
+          "resourceType": "script",
+          "startedAtMs": 5929,
+          "completedAtMs": 6296,
+          "vendor": "Google",
+          "purpose": "tag_management",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_63",
+          "sanitizedUrl": "https://www.googletagmanager.com/gtag/js",
+          "hostname": "www.googletagmanager.com",
+          "resourceType": "script",
+          "startedAtMs": 5930,
+          "completedAtMs": 6296,
+          "vendor": "Google",
+          "purpose": "tag_management",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_64",
+          "sanitizedUrl": "https://www.googletagmanager.com/gtag/js",
+          "hostname": "www.googletagmanager.com",
+          "resourceType": "script",
+          "startedAtMs": 5930,
+          "completedAtMs": 6297,
+          "vendor": "Google",
+          "purpose": "tag_management",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_65",
+          "sanitizedUrl": "https://catonetworks.chilipiper.com/concierge-js/cjs/concierge.js",
+          "hostname": "catonetworks.chilipiper.com",
+          "resourceType": "script",
+          "startedAtMs": 5942,
+          "completedAtMs": 6238,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_66",
+          "sanitizedUrl": "https://cdn.drda.io/scripts/analytics/next/dreamdata.cl.min.js",
+          "hostname": "cdn.drda.io",
+          "resourceType": "script",
+          "startedAtMs": 5942,
+          "completedAtMs": 6297,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_67",
+          "sanitizedUrl": "https://consent.cookiebot.com/logconsent.ashx",
+          "hostname": "consent.cookiebot.com",
+          "resourceType": "script",
+          "startedAtMs": 6224,
+          "completedAtMs": 6754,
+          "vendor": "Cookiebot",
+          "purpose": "consent_management",
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_68",
+          "sanitizedUrl": "https://www.googletagmanager.com/gtag/destination",
+          "hostname": "www.googletagmanager.com",
+          "resourceType": "script",
+          "startedAtMs": 6731,
+          "completedAtMs": 7045,
+          "vendor": "Google",
+          "purpose": "tag_management",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_69",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/architecture/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 6776,
+          "completedAtMs": 7188,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_70",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/ai-security-for-end-users/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 6777,
+          "completedAtMs": 7188,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_71",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/ai-security-for-applications/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 6779,
+          "completedAtMs": 7415,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_72",
+          "sanitizedUrl": "https://www.google-analytics.com/g/collect",
+          "hostname": "www.google-analytics.com",
+          "resourceType": "fetch",
+          "startedAtMs": 7028,
+          "completedAtMs": 7201,
+          "vendor": "Google",
+          "purpose": "analytics",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_73",
+          "sanitizedUrl": "https://www.google-analytics.com/g/collect",
+          "hostname": "www.google-analytics.com",
+          "resourceType": "fetch",
+          "startedAtMs": 7031,
+          "completedAtMs": 7209,
+          "vendor": "Google",
+          "purpose": "analytics",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_74",
+          "sanitizedUrl": "https://pagead2.googlesyndication.com/ccm/collect",
+          "hostname": "pagead2.googlesyndication.com",
+          "resourceType": "fetch",
+          "startedAtMs": 7032,
+          "completedAtMs": 7198,
+          "vendor": "Google",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_75",
+          "sanitizedUrl": "https://pagead2.googlesyndication.com/ccm/collect",
+          "hostname": "pagead2.googlesyndication.com",
+          "resourceType": "fetch",
+          "startedAtMs": 7032,
+          "completedAtMs": 7198,
+          "vendor": "Google",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_76",
+          "sanitizedUrl": "https://pagead2.googlesyndication.com/ccm/collect",
+          "hostname": "pagead2.googlesyndication.com",
+          "resourceType": "fetch",
+          "startedAtMs": 7033,
+          "completedAtMs": 7198,
+          "vendor": "Google",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_77",
+          "sanitizedUrl": "https://consent.cookiebot.com/Scripts/widgetIcon.min.js",
+          "hostname": "consent.cookiebot.com",
+          "resourceType": "script",
+          "startedAtMs": 7033,
+          "completedAtMs": 7189,
+          "vendor": "Cookiebot",
+          "purpose": "consent_management",
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_78",
+          "sanitizedUrl": "https://cdn.dreamdata.cloud/api/v1/p",
+          "hostname": "cdn.dreamdata.cloud",
+          "resourceType": "fetch",
+          "startedAtMs": 7044,
+          "completedAtMs": 7310,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_79",
+          "sanitizedUrl": "https://consentcdn.cookiebot.com/consentconfig/c0ae9b80-f181-4dbc-b494-95428ebf50dd/state.js",
+          "hostname": "consentcdn.cookiebot.com",
+          "resourceType": "script",
+          "startedAtMs": 7055,
+          "completedAtMs": 7187,
+          "vendor": "Cookiebot",
+          "purpose": "consent_management",
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_80",
+          "sanitizedUrl": "https://pagead2.googlesyndication.com/ccm/collect",
+          "hostname": "pagead2.googlesyndication.com",
+          "resourceType": "fetch",
+          "startedAtMs": 7175,
+          "completedAtMs": 7214,
+          "vendor": "Google",
+          "purpose": "advertising",
+          "nonEssential": true
+        },
+        {
+          "requestId": "post_refusal_request_81",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/agentic-ai-security/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 7198,
+          "completedAtMs": 7533,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_82",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/agentic-threat-prevention/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 7210,
+          "completedAtMs": 7540,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_83",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/firewall-as-a-service-fwaas/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 7421,
+          "completedAtMs": 7745,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_84",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/secure-web-gateway-swg/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 7539,
+          "completedAtMs": 7840,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_85",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/intrusion-prevention-system-ips/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 7541,
+          "completedAtMs": 7885,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_86",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/cato-malware-prevention/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 7748,
+          "completedAtMs": 8200,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_87",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/dns-security/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 7842,
+          "completedAtMs": 8347,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_88",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/remote-browser-isolation-rbi/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 7888,
+          "completedAtMs": 8338,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_89",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/iot-ot-security/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 8203,
+          "completedAtMs": 8541,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_90",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/cloud-access-security-broker-casb/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 8339,
+          "completedAtMs": 8643,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_91",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/data-loss-prevention-dlp/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 8348,
+          "completedAtMs": 8677,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_92",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/universal-zero-trust-network-access-ztna/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 8544,
+          "completedAtMs": 8861,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_93",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/cato-browser-extension/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 8647,
+          "completedAtMs": 8963,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_94",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/software-defined-wan-sd-wan/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 8678,
+          "completedAtMs": 8975,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_95",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/global-private-backbone/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 8862,
+          "completedAtMs": 9185,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_96",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/cloud-datacenter-integration/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 8967,
+          "completedAtMs": 9268,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_97",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/digital-experience-monitoring-dem/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 8978,
+          "completedAtMs": 9280,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_98",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/extended-detection-and-response-xdr/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 9187,
+          "completedAtMs": 9760,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_99",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/endpoint-protection-epp/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 9270,
+          "completedAtMs": 9912,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_100",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/cato-management-application-cma/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 9282,
+          "completedAtMs": 9926,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_101",
+          "sanitizedUrl": "https://www.catonetworks.com/platform/cato-api/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 9762,
+          "completedAtMs": 10105,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_102",
+          "sanitizedUrl": "https://www.catonetworks.com/solutions/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 9914,
+          "completedAtMs": 10235,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_103",
+          "sanitizedUrl": "https://www.catonetworks.com/solutions/ai-security/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 9927,
+          "completedAtMs": 10269,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_104",
+          "sanitizedUrl": "https://www.catonetworks.com/solutions/next-gen-networking/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 10109,
+          "completedAtMs": 10398,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_105",
+          "sanitizedUrl": "https://www.catonetworks.com/solutions/zero-trust-security-sse/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 10238,
+          "completedAtMs": 10565,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_106",
+          "sanitizedUrl": "https://www.catonetworks.com/solutions/universal-ztna/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 10270,
+          "completedAtMs": 10580,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_107",
+          "sanitizedUrl": "https://www.catonetworks.com/solutions/sase-platform/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 10399,
+          "completedAtMs": 10692,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_108",
+          "sanitizedUrl": "https://www.catonetworks.com/solutions/cato-xops/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 10577,
+          "completedAtMs": 10883,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_109",
+          "sanitizedUrl": "https://www.catonetworks.com/use-cases/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 10585,
+          "completedAtMs": 10912,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_110",
+          "sanitizedUrl": "https://www.catonetworks.com/solutions/smb/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 10917,
+          "completedAtMs": 11233,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_111",
+          "sanitizedUrl": "https://www.catonetworks.com/solutions/frontier-ai/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 10918,
+          "completedAtMs": 11215,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_112",
+          "sanitizedUrl": "https://www.catonetworks.com/ai-powered-security/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 10919,
+          "completedAtMs": 11213,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_113",
+          "sanitizedUrl": "https://www.catonetworks.com/ai-powered-autonomous-sase-platform/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 11217,
+          "completedAtMs": 11516,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_114",
+          "sanitizedUrl": "https://www.catonetworks.com/services/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 11219,
+          "completedAtMs": 11550,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_115",
+          "sanitizedUrl": "https://www.catonetworks.com/services/managed-sase/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 11234,
+          "completedAtMs": 11549,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_116",
+          "sanitizedUrl": "https://www.catonetworks.com/customers/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 11556,
+          "completedAtMs": 11902,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_117",
+          "sanitizedUrl": "https://www.catonetworks.com/partners/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 11557,
+          "completedAtMs": 11870,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_118",
+          "sanitizedUrl": "https://www.catonetworks.com/partners/partners-services-provider/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 11559,
+          "completedAtMs": 11890,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_119",
+          "sanitizedUrl": "https://www.catonetworks.com/cloud-providers/aws/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 11871,
+          "completedAtMs": 12199,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_120",
+          "sanitizedUrl": "https://www.catonetworks.com/partners/managed-services-provider/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 11892,
+          "completedAtMs": 12199,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_121",
+          "sanitizedUrl": "https://www.catonetworks.com/partners/reseller/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 11904,
+          "completedAtMs": 12203,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_122",
+          "sanitizedUrl": "https://www.catonetworks.com/partners/agent/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 12201,
+          "completedAtMs": 12512,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_123",
+          "sanitizedUrl": "https://www.catonetworks.com/integrations/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 12202,
+          "completedAtMs": 12504,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_124",
+          "sanitizedUrl": "https://www.catonetworks.com/partner-onboarding/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 12207,
+          "completedAtMs": 12515,
+          "nonEssential": false
+        },
+        {
+          "requestId": "post_refusal_request_125",
+          "sanitizedUrl": "https://www.catonetworks.com/company/",
+          "hostname": "www.catonetworks.com",
+          "resourceType": "other",
+          "startedAtMs": 12507,
+          "nonEssential": false
+        }
+      ],
+      "afterActionStorage": [
+        {
+          "storageType": "cookie",
+          "name": "visid_incap_947512",
+          "hostname": "catonetworks.com",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "0db02363eadf332bddb012736c7162d621b52b80bd432c16362a39e6d2f45a9d",
+          "valueHash": "3612a1d32ec524c157193386b4681b2b03d155724dac18d5bbb0c6a1ade68837",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "CookieConsent",
+          "hostname": "www.catonetworks.com",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "98da446ba802aebea467fc75d237d164f65548dbf69f4fd2e2c154c388568161",
+          "valueHash": "f4963246e21379f498f44ae307b4a9316c07c76828151808e2005dd508f74014",
+          "vendor": "Cookiebot",
+          "purpose": "consent_management",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "nlbi_947512",
+          "hostname": "catonetworks.com",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "adecea4526d9b25db9f6840d974efa2e1bf96f905de4e2d761355f64e81bed91",
+          "valueHash": "355c8c8d38af2673033bedb7a60c6d6cc52f8fd0fbc2175d9cd1b2b4ab5c911c",
+          "nonEssential": false
+        },
+        {
+          "storageType": "cookie",
+          "name": "incap_ses_361_947512",
+          "hostname": "catonetworks.com",
+          "identityBasis": "cookie_name_domain_path_partition",
+          "identityHash": "efdaa7c6b6fa39cabda6fdccf4c282780d4b6f1651852111b5d74cda59b23bf4",
+          "valueHash": "784cf0a37ed3b54714af3320354a8e13bed04d45be85b6927ca2fe8722b2f9fa",
+          "nonEssential": false
+        },
+        {
+          "storageType": "session_storage",
+          "name": "pageViews",
+          "hostname": "www.catonetworks.com",
+          "identityBasis": "origin_storage_key",
+          "identityHash": "c8548660d19f27bc294b625c34dc6da6a176e33d3cd9fd5d76ab7db41ae1305e",
+          "valueHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+          "nonEssential": false
+        }
+      ],
+      "terminalDecisionEvidence": {
+        "policyVersion": "bounded_terminal_consent_decision.v1",
+        "action": "reject",
+        "authorizedTargetSha256": "b65564bc6c69d485a10ba38a6153e04417a68113b931cb102e96b7af3aa50d74",
+        "readStartedAtMs": 12348,
+        "readCompletedAtMs": 12368,
+        "evidence": {
+          "policyVersion": "semantic_consent_registration.v2",
+          "decision": "denied",
+          "basis": "verified_state",
+          "observedStateSha256": "f4963246e21379f498f44ae307b4a9316c07c76828151808e2005dd508f74014",
+          "observedAtMs": 6775,
+          "timestampBasis": "instrumented_state_write"
+        }
+      },
+      "decisionEvidence": {
+        "policyVersion": "semantic_consent_registration.v2",
+        "decision": "unknown",
+        "basis": "unverified"
+      },
+      "captureCoverage": {
+        "requestsDroppedBeforeAction": 29,
+        "requestsDroppedAfterAction": 0
+      },
+      "contractVersion": "certscore.post_refusal_report_projection.v1",
+      "completedAt": "2026-10-02T00:00:27.469Z",
+      "actionControlProof": {
+        "contractVersion": "certscore.consent_action_control_proof.v2",
+        "action": "reject",
+        "observedAtMs": 3984,
+        "accessibleLabel": "Reject All",
+        "labelSource": "visible_text",
+        "actionSemantics": "direct_label",
+        "classifierIntent": "reject",
+        "classifierConfidence": 0.91,
+        "matchedLocale": "en",
+        "matchStrength": "direct",
+        "classifierReasonCodes": [
+          "matched_reject",
+          "match_strength_direct",
+          "context_satisfied"
+        ],
+        "cmpId": "Cookiebot",
+        "recipeId": "canonical-cmp:Cookiebot:reject:v3",
+        "selectorHint": "#CybotCookiebotDialogBodyButtonDecline, #CybotCookiebotDialogBodyLevelButtonLevelOptinDeclineAll",
+        "frameIdentitySha256": "b65564bc6c69d485a10ba38a6153e04417a68113b931cb102e96b7af3aa50d74",
+        "authorizedTargetSha256": "b65564bc6c69d485a10ba38a6153e04417a68113b931cb102e96b7af3aa50d74",
+        "visible": true,
+        "enabled": true,
+        "uniquelyActionable": true
+      },
+      "evidenceDisposition": "indeterminate",
+      "indeterminateReason": "refusal_registration_not_confirmed",
+      "contradictionObserved": false,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "refusal_registration_not_confirmed"
+      ],
+      "observationCount": 0,
+      "observationWindowMs": 8000,
+      "packetSha256": "f07e88da148cd08f15146a6ff0e7d23531b33e04be111075b672165eb5a476b0",
+      "postRefusalActivity": [],
+      "preConsentStorageNotCleared": [],
+      "productionProjectable": false,
+      "refusalExercised": false,
+      "registrationStatus": "unconfirmed",
+      "resolverMethod": "tcf_api_cmp_registry_recipe",
+      "status": "unconfirmed"
+    }
+  }
+]

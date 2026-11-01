@@ -989,8 +989,8 @@ test("first-party identifier parameter is classified without retaining its value
 });
 
 
-test("v7 and v8 bound cookie evidence keep their own purpose and reject mismatched markers",()=>{
- for(const version of ["certscore.cookie-purpose.v7","certscore.cookie-purpose.v8"] as const){
+test("v7 through v11 bound cookie evidence keep their own purpose and reject mismatched markers",()=>{
+ for(const version of ["certscore.cookie-purpose.v7","certscore.cookie-purpose.v8","certscore.cookie-purpose.v9","certscore.cookie-purpose.v10","certscore.cookie-purpose.v11"] as const){
   const classification=resolveCanonicalCookieClassification("_cc_aud",{cookieDomain:"crwdcntrl.net"},version);
   const event={...cookieEvent({eventId:"bound-cookie",cookieName:"_cc_aud",hostname:"crwdcntrl.net",registrableDomain:"crwdcntrl.net"}),cookieClassification:classification,cookiePurpose:classification.category,cookieEssentiality:classification.essentiality,cookieEssentialityReasonCodes:[`cookie_purpose_policy:${version}`]};
   const row=classifyCookieEvents([event],[])[0]!;assert.equal(row.cookiePurpose,classification.category);assert.equal(row.cookieEssentiality,classification.essentiality);

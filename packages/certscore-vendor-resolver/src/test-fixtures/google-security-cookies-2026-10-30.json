@@ -1,0 +1,317 @@
+[
+  {
+    "site": "mobcup.com.co",
+    "scanId": "2afec526-0afb-49e7-934d-d4722e81322c",
+    "sourceSha256": "4804c6f603f3b6fabae3032526c27a6bd040d3aae21d79965b02c8e15c657b7c",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "mobcup.com.co",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "online2pdf.com",
+    "scanId": "48c01ceb-076e-4553-b7d4-1fd8958a13ff",
+    "sourceSha256": "16ab558f734f5910bd02e91685dbdb1e32ca594a02b1d567cd2793a722ffc460",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "online2pdf.com",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "lacapital.com.ar",
+    "scanId": "dd6120f8-8eaf-4008-823f-fb8fd5146ac9",
+    "sourceSha256": "1792ef35d58fadfa0b75c6b1966c6f496662b058664a364a23cffd5aa2de8450",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "lacapital.com.ar",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "showtv.com.tr",
+    "scanId": "d06200c8-fea0-45e4-9d12-13d50acf448c",
+    "sourceSha256": "27e6023929c00a53ad8bd4a1cbc99c36c1cf348a13496428b08170c6bcc275a0",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "showtv.com.tr",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "hkej.com",
+    "scanId": "0117691a-9141-4aa1-9743-ce783e9c2673",
+    "sourceSha256": "d83c613e2f7da3f33fe15be29e10b7b2505026c3432031e49329229c63f64a19",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "hkej.com",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "setn.com",
+    "scanId": "948c831f-281d-4f5d-93fd-7277941f4658",
+    "sourceSha256": "4e0537096df56c58df999405bf5ee3445c519dca3e4523581a0115d9b26718c8",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "setn.com",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "tichyseinblick.de",
+    "scanId": "3916e59a-4b5e-4761-8c68-1cebfe3e601b",
+    "sourceSha256": "d386756a6bde51bea64d4b91f6dc39363fa6ad80ddcc700c398d00b35fb892af",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "tichyseinblick.de",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "blogcms.jp",
+    "scanId": "f4618c81-b7d8-4715-9661-8a43fc3e3f16",
+    "sourceSha256": "005303835890a9f715930a761a5b01f71af18e2c480fff040588c76907c05ae4",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "livedoor.com",
+      "party": "third_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "whyy.org",
+    "scanId": "0c10a02b-c2db-40dc-91be-9e68dc6aa2fe",
+    "sourceSha256": "cc16407ac00ac3aaefe54dd741c0b72e019f28d15dae5465506975c8b2c70173",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "whyy.org",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "niedziela.pl",
+    "scanId": "26b9041f-7efa-4525-b754-1ec2179b8a9f",
+    "sourceSha256": "e348ca8824d7a8eb85b8db972b117aa220f42f56b3d3e2d439583bf2bd66302e",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "niedziela.pl",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "dailyecho.co.uk",
+    "scanId": "20435b28-8c73-41c4-a687-df8068e3eed5",
+    "sourceSha256": "e2cd2a30b37bd7ead3dc481c3fd6251b53841d4e2db2216d54d175ea799645d0",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "dailyecho.co.uk",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "novosti.rs",
+    "scanId": "0b538595-0e2e-4f50-8649-fcc60226c331",
+    "sourceSha256": "41fcf97e25da09589465b966b68635e592bc36532caccf756e85eb1373dac0d7",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "novosti.rs",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "u-car.com.tw",
+    "scanId": "ea1491fc-459b-47a3-8a95-7520b600f1c6",
+    "sourceSha256": "9ad218b8955075b1909c8919efde44921464c34d92cb8bd3df2dd3ff60ae92ea",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "u-car.com.tw",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "kanaloco.jp",
+    "scanId": "188cdd25-c7bf-489b-92ea-3f2d27828811",
+    "sourceSha256": "7a1327776f32460d7001be64337d54e6c967561b2a26214798a255b532d57f8a",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "kanaloco.jp",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  },
+  {
+    "site": "pvstory.com",
+    "scanId": "843d086a-e925-4c43-bfe9-72574f01ab71",
+    "sourceSha256": "d12e36c2a7fa989990279e4ef837031a89b11da06f3a51b90833b30765754100",
+    "cookie": {
+      "cookieName": "__eoi",
+      "domain": "pvstory.com",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ]
+    }
+  }
+]

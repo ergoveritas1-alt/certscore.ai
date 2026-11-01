@@ -13,6 +13,47 @@ import test from "node:test";
 
 const webRequire = createRequire(path.resolve("apps/web/package.json"));
 
+test("a verified redirect-only runtime publishes one unscored limitation across report and API", async () => {
+  const h = await redirectPublicationHarness();
+  const previousAppUrl=process.env.NEXT_PUBLIC_APP_URL;process.env.NEXT_PUBLIC_APP_URL="http://localhost:3000";
+  try {
+    const scanId="20000000-0000-4000-8000-000000000001",url="https://origin.example/",finalUrl="https://destination.example/";
+    const outDir=path.join(h.directory,"redirect-notice");await mkdir(outDir);
+    const bundle:any={schemaVersion:"certscore.v2.canonical-evidence-bundle.v1",scanId,url,normalizedUrl:url,
+      startedAt:"2026-10-31T10:00:00.000Z",completedAt:"2026-10-31T10:00:10.000Z",
+      domSnapshots:[{artifactId:"consent-dom",capturedAtMs:6000,url:finalUrl,path:"/retained/consent.txt",consentStateAtTime:"pre_consent",textExcerpt:"Destination products, company information and support contacts.",documentIdentity:{source:"cdp_loader_id",token:"consent"}}],
+      runtimeCoverage:{coverageStatus:"usable",limitationKeys:[],silentEmpty:false,observationCounts:{}},
+      consentUiObservations:[],policySurfaceObservations:[],networkEvents:[],cookieEvents:[],iframeEvents:[],modulesRun:[],screenshots:[],runtimeTimeline:[]};
+    withOriginalRuntimeForPublication(bundle);
+    bundle.runtimeMetadataSnapshots[0].url=url;
+    bundle.runtimeMetadataSnapshots[0].textExcerpt="You will be automatically re-directed to our consumer site momentarily, or you may navigate to Example Company content at our new location by following this link: https://destination.example/";
+    const body=JSON.stringify(bundle),manifest=JSON.stringify({auxiliaryArtifacts:[]});
+    await writeFile(path.join(outDir,"CanonicalEvidenceBundle.json"),body);await writeFile(path.join(outDir,"LocalV2DagLambdaManifest.json"),manifest);
+    const digest=(value:string)=>({sha256:createHash("sha256").update(value).digest("hex"),sizeBytes:Buffer.byteLength(value)});
+    const metadata={artifactOnly:true,productionFindingIntegration:false,processor:"local-certscore-v2-dag-parallel-v1",
+      artifactPointers:{scanArtifactUri:`s3://offline-fixture/${scanId}/CanonicalEvidenceBundle.json`,manifestUri:`s3://offline-fixture/${scanId}/LocalV2DagLambdaManifest.json`},
+      artifactMetadata:{scanArtifactUri:digest(body),manifestUri:digest(manifest)}};
+    const record:any={scan:{id:scanId,domainHostname:"origin.example",status:"completed",scanType:"full",scanFromValue:"california",createdAt:bundle.startedAt,startedAt:bundle.startedAt,completedAt:bundle.completedAt,pagesRequested:1,pagesScanned:1,
+      scanConfigJson:{processor:metadata.processor,hostname:"origin.example",normalizedUrl:url,execution:{v2DagParallel:{localOnly:true,artifactOnly:true,profile:"standard"},localV2Dag:{outDir}}}},
+      signalEnrichmentWorkflow:{findingsReady:true,mergedSignalsReady:true},events:[{id:"redirect",eventType:"v2_lambda_result.received",createdAt:bundle.completedAt,metadataJson:metadata}],
+      pageEvidence:[],policyEnrichment:[],policyReviewQueue:[],preconsentViolations:[],primaryPolicyEnrichment:null,runtimeArtifacts:{},signals:[],snapshot:{},trackerVendors:[],validationFindings:[]};
+    h.state.record=record;
+    assert.equal((await h.pipeline.publishCanonicalScanReportProjection({organizationId:null,scanId,publicationTrigger:"authorized_worker"})).status,"ready");
+    const writes=h.state.writes.filter((x:{sql:string})=>x.sql.includes("insert into public.scan_snapshots"));assert.equal(writes.length,1);
+    const p=writes[0].params;const saved=h.pipeline.readPersistedScanReportProjection({scan:record.scan,snapshot:{report_projection_status:"ready",report_projection_version:p[28],report_projection_computed_at:bundle.completedAt,report_projection_payload:JSON.parse(p[37]),report_projection_payload_sha256:p[38],report_projection_payload_size_bytes:p[39]}});
+    const api=h.pipeline.buildApiV2ScanResource(saved),report=h.pipeline.buildCanonicalReportExport(saved);
+    assert.equal(api.resultDisposition,"no_go");assert.equal(api.noGo.reasonCode,"redirect_only_page");
+    assert.equal(api.score,null);assert.equal(api.postureScores,undefined,"A no-go result must not expose posture scores");
+    assert.equal(report.resultDisposition,"no_go");assert.equal(report.score.value,null);assert.equal(report.californiaScore.score,null);
+    const pdf=h.pipeline.renderCanonicalReportPdf(report).toString("latin1");
+    assert.match(pdf,/redirect notice/i);
+    assert.ok(pdf.indexOf("A redirect notice was captured") < pdf.indexOf("Report findings"),"The executive page must explain an unscored capture before its findings");
+  } finally {
+    if(previousAppUrl===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=previousAppUrl;
+    await h.close();
+  }
+});
+
 test("publication skips stale loaded/materialized generations before expensive projection and preserves the final guard", async () => {
   await mkdir(path.resolve("tmp"), { recursive: true });
   const directory = await mkdtemp(path.resolve("tmp/publisher-speed-"));
@@ -130,7 +171,7 @@ test("redirected retained evidence publishes once through assessment, concerns, 
   try {
     const { pipeline, state } = harness;
     // Proen and Varify URL shapes, plus unchanged root/non-slash controls.
-    for (const [index, pathname] of ["/web/", "/en/", "/", "/en", "/th", "/login?state=consent-session"].entries()) {
+    for (const [index, pathname] of ["/web/", "/en/", "/", "/en", "/th", "/login?state=consent-session", "/empty-partial"].entries()) {
       const scanId = `00000000-0000-4000-8000-00000000000${index}`;
       const requestedUrl = "https://redirect-fixture.test/";
       const finalUrl = `https://redirect-fixture.test${pathname}`;
@@ -155,6 +196,10 @@ test("redirected retained evidence publishes once through assessment, concerns, 
         withOriginalRuntimeForPublication(bundle as any);
         delete (bundle as any).policySurfaceInspection.privacyChoiceInspection;
         (bundle as any).runtimeMetadataSnapshots[0].url = index === 4 ? "https://redirect-fixture.test/th/home" : "https://redirect-fixture.test/login?state=runtime-session";
+      }
+      if(index===6){
+        (bundle as any).runtimeMetadataSnapshots[0].url=finalUrl;
+        bundle.runtimeCoverage.coverageStatus="limited_partial";
       }
       const expectedCaliforniaScore = index >= 4 ? 100 : 94;
       const bundleBytes = JSON.stringify(bundle);

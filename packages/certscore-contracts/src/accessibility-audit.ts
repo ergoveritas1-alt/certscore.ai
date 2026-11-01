@@ -22,6 +22,10 @@ const nodeSchema = z.object({
   mainDocumentBound: z.literal(true).optional(),
   captureState: z.literal("opened_navigation_menu").optional(),
   selectors: z.array(selectorSchema).min(1).max(ACCESSIBILITY_LIMITS.selectorsPerNode),
+  // Optional for historical compatibility. "Unchanged" describes retention,
+  // never selector uniqueness, present-day validity or an executable locator.
+  selectorRetention: z.object({ version: z.literal("sanitized_selectors.v1"),
+    precision: z.enum(["unchanged", "approximate"]) }).strict().optional(),
   htmlSnippet: z.string().min(1).max(500),
   failureSummary: z.string().min(1).max(800),
   // Opaque identities share one audit/document scope; no DOM text or attributes.
@@ -36,6 +40,13 @@ const nodeSchema = z.object({
     fontSize: z.string().max(40).optional(), fontWeight: z.string().max(40).optional(),
   }).optional(),
 }).strict();
+
+export function accessibilitySelectorHint(node: Pick<z.infer<typeof nodeSchema>, "selectors" | "selectorRetention">) {
+  const label = node.selectorRetention?.precision === "approximate" ? "Approximate selector hints (redacted or truncated)"
+    : node.selectorRetention?.precision === "unchanged" ? "Retained selector paths (uniqueness unverified)"
+    : "Sanitized selector hints (exactness unverified)";
+  return `${label}: ${node.selectors.map(selector => Array.isArray(selector) ? selector.join(" >>> ") : selector).join(", ")}`;
+}
 export const accessibilityRuleObservationSchema = z.object({
   ruleId: z.string().min(1).max(100),
   impact: z.enum(["minor", "moderate", "serious", "critical"]).nullable(),

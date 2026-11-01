@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import retainedAccount from "./test-fixtures/retained-account-retention.json";
+import retainedDutchContact from "./test-fixtures/retained-dutch-privacy-contact.json";
+import retainedPolishContact from "./test-fixtures/retained-polish-controller-contact.json";
+import retainedLifecycleRetention from "./test-fixtures/retained-lifecycle-retention.json";
+import retainedPolishPurpose from "./test-fixtures/retained-polish-correspondence-purpose.json";
+import retainedPortugueseDpo from "./test-fixtures/retained-portuguese-dpo-definition.json";
 import { classifyGdprTransparencyTopics } from "./gdpr-transparency-topic-classifier";
 import { INADEQUATE_PURPOSE_WITNESSES, DATA_BOUND_PURPOSE_TABLE } from "./test-fixtures/policy-topic-witnesses";
 
@@ -16,6 +22,88 @@ import {
   looksLikeArticle13TableOfContents,
   type Article13DisclosureRejectionMode,
 } from "./article13-disclosure-rejection";
+
+test("all DPO read modes reject a retained role definition even with an unrelated contact email", () => {
+  const f = retainedPortugueseDpo;
+  for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+    for (const text of [f.historicalSignal.evidenceText, f.historicalSelectedWitness.selectedPolicySectionExcerpt,
+      `${f.historicalSignal.evidenceText} Contact support@example.test for support.`,
+    ]) assert.equal(article13DisclosureRejectReason(text, "dpo_contact", { mode }), "insufficient_row_specific_terms", mode);
+    const contact = `${f.definitionSection.heading} ${f.definitionSection.textExcerpt} Our data protection officer can be contacted at dpo@example.test.`;
+    assert.equal(article13DisclosureRejectReason(contact, "dpo_contact", { mode }), null, mode);
+  }
+});
+
+test("Polish correspondence purpose needs the substantive clause in every read mode", () => {
+  const f = retainedPolishPurpose;
+  assert.equal(hasSubstantiveProcessingPurposesEvidence(f.clause), true);
+  for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+    assert.equal(article13DisclosureRejectReason(f.clause, "processing_purposes", { mode }), null, mode);
+    assert.equal(article13DisclosureRejectReason(f.legalBasisClause, "legal_basis", { mode }), null, mode);
+    for (const topic of ["processing_purposes", "legal_basis"])
+      assert.equal(article13DisclosureRejectReason(f.historicalSelectedWitness.selectedPolicySectionExcerpt, topic, { mode }), "insufficient_row_specific_terms", `${mode}:${topic}`);
+  }
+  assert.equal(hasSubstantiveProcessingPurposesEvidence(f.clause.replace(/\.$/, "?")), false);
+});
+
+test("retained lifecycle criteria are substantive retention across all read modes", () => {
+  for (const f of retainedLifecycleRetention) {
+    for (const text of [f.clause, f.section.textExcerpt]) {
+      assert.equal(hasSubstantiveRetentionEvidence(text), true, f.site);
+      for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const)
+        assert.equal(article13DisclosureRejectReason(text, "data_retention", { mode }), null, `${f.site}:${mode}`);
+    }
+    assert.equal(hasSubstantiveRetentionEvidence(f.clause.replace(/\.$/, "?")), false);
+  }
+});
+
+test("Polish controller contact survives all read modes without providing DPO evidence", () => {
+  const text = retainedPolishContact.contactSection.textExcerpt;
+  for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+    assert.equal(article13DisclosureRejectReason(text, "controller_contact", { mode }), null, mode);
+    assert.notEqual(article13DisclosureRejectReason(text, "dpo_contact", { mode }), null, mode);
+    assert.notEqual(article13DisclosureRejectReason(text.replace("rodo@niedziela.pl", "[adres niedostępny]"), "controller_contact", { mode }), null, mode);
+  }
+});
+
+test("retained Dutch own-contact evidence qualifies while another-controller and link-only quotes do not", () => {
+  for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+    assert.equal(article13DisclosureRejectReason(retainedDutchContact.contactSection.textExcerpt, "controller_contact", { mode }), null, mode);
+    assert.equal(article13DisclosureRejectReason(retainedDutchContact.otherControllerCandidate.evidenceText, "controller_contact", { mode }), "insufficient_row_specific_terms", mode);
+    if (mode === "multilingual_classifier")
+      assert.notEqual(article13DisclosureRejectReason(retainedDutchContact.englishPartialSignal.evidenceText, "controller_contact", { mode }), null, mode);
+    assert.notEqual(article13DisclosureRejectReason(retainedDutchContact.contactSection.textExcerpt, "dpo_contact", { mode }), null, mode);
+  }
+  // A reference to another controller cannot veto an independently retained own route.
+  assert.equal(article13DisclosureRejectReason(retainedDutchContact.otherControllerCandidate.evidenceText + " " + retainedDutchContact.contactSection.textExcerpt,
+    "controller_contact", { mode: "multilingual_classifier" }), null);
+});
+
+test("retained account-information closure criterion is substantive retention in every evidence mode", () => {
+  assert.equal(retainedAccount.documentFetchState, "fetched");
+  assert.ok(retainedAccount.historicalRejectedSignal.evidenceText.includes(retainedAccount.accountClause));
+  for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+    assert.equal(article13DisclosureRejectReason(retainedAccount.accountClause, "data_retention", { mode }), null);
+    assert.equal(article13DisclosureRejectReason(retainedAccount.historicalRejectedSignal.evidenceText, "data_retention", { mode }), null);
+  }
+  const matches = classifyGdprTransparencyTopics({ section: { body: retainedAccount.accountClause } }).matches;
+  assert.ok(matches.some(m => m.topic === "data_retention"));
+});
+
+test("account lifecycle recognition cannot borrow unrelated data, negation, questions or missing criteria", () => {
+  for (const text of [
+    "The information you provide when setting up an account (e.g., name and email address) will not be retained until your account is closed or deleted.",
+    "The information you provide when setting up an account will be retained until your account is closed?",
+    "How the information you provide when setting up an account will be retained until your account is closed.",
+    "The information you provide when setting up an account will be retained.",
+    "The information you provide when setting up an account is used to register you. An acoustics file may be retained for up to two years.",
+  ]) {
+    assert.equal(hasSubstantiveRetentionEvidence(text), false, text);
+    assert.notEqual(article13DisclosureRejectReason(text, "data_retention", { mode: "retained_report" }), null, text);
+    assert.ok(!classifyGdprTransparencyTopics({ section: { body: text } }).matches.some(m =>
+      m.matchedTerm === "provided account information retained until account closure"), text);
+  }
+});
 
 test("purpose table headers and consent-withdrawal references need a concrete outcome in every mode", () => {
   for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {

@@ -1,6 +1,6 @@
 import { buildReportAppendixEvidence } from "./report-export-evidence";
 import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
-import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
+import { projectScanReportNoGo, resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 import { californiaAssessmentPresentation } from "../../lib/scans/california-assessment-presentation";
 import type { FullSiteReportExport } from "./full-site-report";
 import { readAccessibilityAudit, projectAccessibilityAuditSummary } from "../../lib/scans/accessibility-audit-evidence";
@@ -335,6 +335,7 @@ function buildDataCollectionSurfacesAppendix(
 export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullSite?: FullSiteReportExport, requestedFocus?: unknown) {
   const canonical = getPersistedCanonicalReportProjection(scanRecord);
   if (!canonical) return null;
+  const noGo = projectScanReportNoGo(scanRecord);
   const retainedScore = scanRecord.snapshot?.certscore_overall;
   const usableRetainedScore = typeof retainedScore === "number" && Number.isFinite(retainedScore) && retainedScore >= 0 && retainedScore <= 100 &&
     (!scanRecord.snapshot?.report_projection_status || scanRecord.snapshot.report_projection_status === "ready") ? retainedScore : null;
@@ -365,6 +366,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
   ];
 
   return {
+    ...(noGo ?? {}),
     ...(fullSite ? { fullSite } : {}),
     artifactType: "certscore_canonical_report_export",
     artifactVersion: CANONICAL_REPORT_EXPORT_VERSION,

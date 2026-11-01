@@ -1,0 +1,311 @@
+[
+  {
+    "site": "niedziela.pl",
+    "scanId": "26b9041f-7efa-4525-b754-1ec2179b8a9f",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/26b9041f-7efa-4525-b754-1ec2179b8a9f/ConsentControlGeometryEvidence.json",
+      "sha256": "e2971976373dd73c40f966112c2a24d43ffeb5a9050702b36be0b5e81bf0dc0d",
+      "bytes": 15356
+    },
+    "context": "W związku z tym, iż od dnia 25 maja 2018 roku obowiązuje Rozporządzenie Parlamentu Europejskiego i Rady (UE) 2016/679 z dnia 27 kwietnia 2016r. w sprawie ochrony osób fizycznych w związku z przetwarzaniem danych osobowych i w sprawie swobodnego przepływu takich danych oraz uchylenia Dyrektywy 95/46/WE (ogólne rozporządzenie o ochronie danych) uprzejmie Państwa informujemy, iż nasza organizacja, mając szczególnie na względzie bezpieczeństwo danych osobowych, które przetwarza, wdrożyła System Zarządzania Bezpieczeństwem Informacji w rozumieniu odpowiednich polityk ochrony danych (zgodnie z art. 24 ust. 2 przedmiotowego rozporządzenia ogólnego). W celu dochowania należytej staranności w kontekście ochrony danych osobowych, Zarząd Instytutu NIEDZIELA wyznaczył w organizacji Inspektora Ochrony Danych. Więcej o polityce prywatności czytaj TUTAJ. Akceptuję",
+    "coverage": {
+      "inventoryTruncated": false,
+      "documentReadyState": "complete",
+      "mainFrameAvailable": true,
+      "documentAndFramesStable": false,
+      "frameCount": 12,
+      "capturedFrameCount": 11
+    },
+    "controls": [
+      {
+        "label": "Więcej o polityce prywatności czytaj TUTAJ",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "Akceptuję",
+        "tagName": "a",
+        "actionType": "accept_all",
+        "decisionStatus": "confirmed_visible"
+      }
+    ],
+    "scope": "Source context for controlled owned structural fixtures; not original layout or current public rendering"
+  },
+  {
+    "site": "portaldecompraspublicas.com.br",
+    "scanId": "61ae6a56-a340-4fcd-9d47-f91f795ef3f4",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/61ae6a56-a340-4fcd-9d47-f91f795ef3f4/ConsentControlGeometryEvidence.json",
+      "sha256": "d4f7dbb1f09e1d4e145914261f6905dd7cdefa6d62f1da3907377f5f4a0d81ef",
+      "bytes": 27263
+    },
+    "context": "Controle sua privacidade AdOpt Nosso site usa cookies para melhorar a navegação. Usamos cookies para compartilhar dados de análise, publicidade, dados de usuários e personalização de anúncios com o Google. Política de Privacidade - Política de Cookies Desenvolvido por AdOpt Minhas opções Não venda Aceitar",
+    "coverage": {
+      "inventoryTruncated": false,
+      "documentReadyState": "interactive",
+      "mainFrameAvailable": true,
+      "documentAndFramesStable": false,
+      "frameCount": 1,
+      "capturedFrameCount": 1
+    },
+    "controls": [
+      {
+        "label": "Aceitar",
+        "tagName": "button",
+        "actionType": "accept_all",
+        "decisionStatus": "confirmed_visible"
+      },
+      {
+        "label": "Política de Privacidade",
+        "tagName": "a",
+        "actionType": "policy_link",
+        "decisionStatus": "footer_or_policy_link"
+      },
+      {
+        "label": "Política de Cookies",
+        "tagName": "a",
+        "actionType": "policy_link",
+        "decisionStatus": "footer_or_policy_link"
+      },
+      {
+        "label": "Minhas opções",
+        "tagName": "button",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "Não venda",
+        "tagName": "button",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "AdOpt",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "hidden"
+      },
+      {
+        "label": "AdOpt",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "hidden"
+      }
+    ],
+    "scope": "Source context for controlled owned structural fixtures; not original layout or current public rendering"
+  },
+  {
+    "site": "relution.io",
+    "scanId": "77285ad4-c300-4ed2-9ac8-dd5a8a6ba289",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/77285ad4-c300-4ed2-9ac8-dd5a8a6ba289/ConsentControlGeometryEvidence.json",
+      "sha256": "57fca3ba777cfab6c1d2386491a9113599cf8e246624f69cb63e6cf9fa7b00ae",
+      "bytes": 56343
+    },
+    "context": "Opt-out for personal information & cookiesWhen you visit our website we and our partners collect personal information from you regarding your internet activity (e.g. online identifier, IP address, browsing history) and may set cookies or use similar technologies on your device in order to personalize the advertising that you see. This helps us to show you more relevant ads and improves your internet experience. We also use it in order to measure results or align our website content. Our partners may sell this information to third parties. You can opt out of our sharing of your information with third parties here: Do Not Sell My Personal InformationFunktionMarketingOkaySave + ExitCookies | Privacy page | ImprintCookie Banner powered by consentmanager.net",
+    "coverage": {
+      "inventoryTruncated": true,
+      "documentReadyState": "complete",
+      "mainFrameAvailable": true,
+      "documentAndFramesStable": true,
+      "frameCount": 4,
+      "capturedFrameCount": 4
+    },
+    "controls": [
+      {
+        "label": "consentmanager.net",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "Do Not Sell My Personal Information",
+        "tagName": "a",
+        "actionType": "do_not_sell_share",
+        "decisionStatus": "confirmed_visible"
+      },
+      {
+        "label": "",
+        "tagName": "div",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "Purpose: Marketing",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "Okay",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "Cookies",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "Privacy page",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "Imprint",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "Language: en",
+        "tagName": "div",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "Privacy settings",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "RELUTION SUMMIT 2026 JETZT VORMERKEN RELUTIONFÜRSICHEREMOBILELÖSUNGENIMBRIGHTSITE-UMFELD Relution steht auf der Liste der erlaubten MDM-Server-Produkte für den ",
+        "tagName": "ul",
+        "actionType": "other",
+        "decisionStatus": "covered"
+      },
+      {
+        "label": "Save + Exit",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "hidden"
+      }
+    ],
+    "scope": "Source context for controlled owned structural fixtures; not original layout or current public rendering"
+  },
+  {
+    "site": "purexbox.com",
+    "scanId": "d2b3a279-a476-44ae-a15e-3c9d3c294a6b",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/d2b3a279-a476-44ae-a15e-3c9d3c294a6b/ConsentControlGeometryEvidence.json",
+      "sha256": "8adb04eb67233064781441d0de40bb13c4932e0c9b9d1f311b37909fde9c9263",
+      "bytes": 44845
+    },
+    "context": "Your privacy is important to us. This website uses cookies to view and retain your site interactions, enable site functionality, enhance user experience, perform analytics, and for advertising and marketing purposes. We may share this data with third parties. Please click I Consent below to give us permission to do this. You understand that once you agree, we have no control over these third parties’ use of your information. By making a selection below or closing this box and continuing to use the site, you agree to our Privacy PolicyMore Options I Consent",
+    "coverage": {
+      "inventoryTruncated": false,
+      "documentReadyState": "complete",
+      "mainFrameAvailable": true,
+      "documentAndFramesStable": false,
+      "frameCount": 7,
+      "capturedFrameCount": 7
+    },
+    "controls": [
+      {
+        "label": "Privacy Policy",
+        "tagName": "a",
+        "actionType": "policy_link",
+        "decisionStatus": "footer_or_policy_link"
+      },
+      {
+        "label": "Your privacy is important to us. This website uses cookies to view and retain your site interactions, enable site functionality, enhance user experience, perfor",
+        "tagName": "div",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "More Options",
+        "tagName": "button",
+        "actionType": "manage_preferences",
+        "decisionStatus": "dom_present_not_visible"
+      },
+      {
+        "label": "I Consent",
+        "tagName": "button",
+        "actionType": "accept_all",
+        "decisionStatus": "dom_present_not_visible"
+      },
+      {
+        "label": "Manage Topics",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "hidden"
+      }
+    ],
+    "scope": "Source context for controlled owned structural fixtures; not original layout or current public rendering"
+  },
+  {
+    "site": "ab.pl",
+    "scanId": "d67a293c-d1ec-42af-96bf-1a6d3bdf6d10",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/d67a293c-d1ec-42af-96bf-1a6d3bdf6d10/ConsentControlGeometryEvidence.json",
+      "sha256": "ffeb873f688f62ca9ee2bf887cb8417ece581a2148cc57931b862607b4dd61ca",
+      "bytes": 31698
+    },
+    "context": "W ramach naszej witryny stosujemy pliki cookies. W celu świadczenia usług na najwyższym poziomie, system może być dostosowywany do indywidualnych potrzeb. W przypadku zaakceptowania wszystkich plików cookies, możemy gromadzić i przekazywać dane dotyczące Państwa działań w naszej witrynie. Możecie Państwo dokonać w każdym momencie zmiany ustawień dotyczących cookies klikając „ustawienia plików cookies” u dołu strony. Więcej szczegółów można znaleźć pod adresem Polityka Prywatności.Ustawienia plików cookiesZaakceptuj wszystkie",
+    "coverage": {
+      "inventoryTruncated": false,
+      "documentReadyState": "interactive",
+      "mainFrameAvailable": true,
+      "documentAndFramesStable": true,
+      "frameCount": 1,
+      "capturedFrameCount": 1
+    },
+    "controls": [
+      {
+        "label": "Ustawienia plików cookies",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "ambiguous"
+      },
+      {
+        "label": "Polityka Prywatności",
+        "tagName": "a",
+        "actionType": "policy_link",
+        "decisionStatus": "footer_or_policy_link"
+      },
+      {
+        "label": "Zaakceptuj wszystkie",
+        "tagName": "a",
+        "actionType": "accept_all",
+        "decisionStatus": "confirmed_visible"
+      },
+      {
+        "label": "Niezbędne pliki cookies",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "hidden"
+      },
+      {
+        "label": "on",
+        "tagName": "input",
+        "actionType": "other",
+        "decisionStatus": "hidden"
+      },
+      {
+        "label": "Funkcjonalne pliki cookies",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "hidden"
+      },
+      {
+        "label": "Analityczne pliki cookies",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "hidden"
+      },
+      {
+        "label": "Pokaż więcej",
+        "tagName": "a",
+        "actionType": "other",
+        "decisionStatus": "hidden"
+      }
+    ],
+    "scope": "Source context for controlled owned structural fixtures; not original layout or current public rendering"
+  }
+]

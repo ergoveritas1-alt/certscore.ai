@@ -1,0 +1,461 @@
+[
+  {
+    "site": "rijksmuseum.nl",
+    "scanId": "130e1803-3083-49a9-8f0b-4ebd2fcb7d0f",
+    "sourceSha256": "4af0da4a8ca8a25905c0b9170008d906c45fe1dcb2350e7352610cc179d50e65",
+    "candidate": {
+      "candidateId": "candidate_2",
+      "label": "Nee, liever niet",
+      "normalizedLabel": "nee, liever niet",
+      "actionType": "other",
+      "presentationType": "dedicated_button",
+      "placementType": "unknown",
+      "tagName": "button",
+      "semanticallyInteractive": true,
+      "selectorHint": "div.buttons-row button",
+      "containerSelectorHint": "div.cookie-consent-bar-wrap div.cookie-consent-bar",
+      "containerId": "container_1",
+      "layer": "first_layer",
+      "frameContext": {
+        "frameKind": "main_frame",
+        "frameUrl": "https://www.rijksmuseum.nl/nl"
+      },
+      "enabled": true,
+      "computedStyle": {
+        "display": "inline-block",
+        "visibility": "visible",
+        "opacity": "1",
+        "pointerEvents": "auto",
+        "position": "relative",
+        "zIndex": "auto"
+      },
+      "boundingBox": {
+        "x": 235.8,
+        "y": 822.59,
+        "width": 107.48,
+        "height": 44,
+        "top": 822.59,
+        "right": 343.28,
+        "bottom": 866.59,
+        "left": 235.8
+      },
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "intersectsViewport": true,
+      "clippedByScrollableAncestor": false,
+      "occlusion": {
+        "center": true,
+        "topLeft": true,
+        "topRight": true,
+        "bottomLeft": true,
+        "bottomRight": true,
+        "checkedPoints": 5,
+        "hitSelectorHints": []
+      },
+      "screenshotArtifactRef": "/tmp/certscore-v2-dag-lambda/130e1803-3083-49a9-8f0b-4ebd2fcb7d0f/lanes/consent_proof/screenshot-pre-consent.png",
+      "classifierRegistryVersion": "consent-control-label-registry.v22",
+      "classifierReasonCodes": [
+        "no_term_match"
+      ],
+      "classifierConfidence": 0.2,
+      "consentContextConfirmed": true,
+      "decisionStatus": "ambiguous",
+      "reasons": [
+        "unclassified_control"
+      ]
+    },
+    "expectedIntent": "reject",
+    "expectedLocale": "nl"
+  },
+  {
+    "site": "dolby.com",
+    "scanId": "328e3893-bdc0-4e1d-8cee-922af52f5425",
+    "sourceSha256": "e54a8a9a900b887b9121b12d744028432d381549247f9238a174f0e31f344643",
+    "candidate": {
+      "candidateId": "candidate_0",
+      "label": "Reject Non-Necessary",
+      "normalizedLabel": "reject non-necessary",
+      "actionType": "other",
+      "presentationType": "dedicated_button",
+      "placementType": "unknown",
+      "tagName": "button",
+      "semanticallyInteractive": true,
+      "selectorHint": "#onetrust-reject-all-handler",
+      "containerSelectorHint": "#onetrust-button-group",
+      "containerId": "container_6",
+      "layer": "first_layer",
+      "frameContext": {
+        "frameKind": "main_frame",
+        "frameUrl": "https://www.dolby.com/"
+      },
+      "enabled": true,
+      "computedStyle": {
+        "display": "inline-block",
+        "visibility": "visible",
+        "opacity": "1",
+        "pointerEvents": "auto",
+        "position": "static",
+        "zIndex": "auto"
+      },
+      "boundingBox": {
+        "x": 792.27,
+        "y": 800.65,
+        "width": 505.44,
+        "height": 41.61,
+        "top": 800.65,
+        "right": 1297.7,
+        "bottom": 842.26,
+        "left": 792.27
+      },
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "intersectsViewport": true,
+      "clippedByScrollableAncestor": false,
+      "scrollableAncestor": {
+        "selectorHint": "#onetrust-banner-sdk",
+        "boundingBox": {
+          "x": 0,
+          "y": 739.91,
+          "width": 1366,
+          "height": 160.09,
+          "top": 739.91,
+          "right": 1366,
+          "bottom": 900,
+          "left": 0
+        }
+      },
+      "occlusion": {
+        "center": true,
+        "topLeft": true,
+        "topRight": true,
+        "bottomLeft": true,
+        "bottomRight": true,
+        "checkedPoints": 5,
+        "hitSelectorHints": []
+      },
+      "screenshotArtifactRef": "/tmp/certscore-v2-dag-lambda/328e3893-bdc0-4e1d-8cee-922af52f5425/lanes/consent_proof/screenshot-pre-consent-cmp-controls.png",
+      "classifierRegistryVersion": "consent-control-label-registry.v22",
+      "classifierReasonCodes": [
+        "privacy_opt_out_context"
+      ],
+      "classifierConfidence": 0.2,
+      "consentContextConfirmed": true,
+      "decisionStatus": "ambiguous",
+      "reasons": [
+        "unclassified_control"
+      ]
+    },
+    "expectedIntent": "reject",
+    "expectedLocale": "en"
+  },
+  {
+    "site": "pigu.lt",
+    "scanId": "49bf8887-f17e-4f58-bf8a-0de59280937c",
+    "sourceSha256": "e2608398016c4681500515d589f193592eab52f85da7b0a9634386111b36bd10",
+    "candidate": {
+      "candidateId": "candidate_1",
+      "label": "Valdyti sutikimus",
+      "normalizedLabel": "valdyti sutikimus",
+      "actionType": "other",
+      "presentationType": "dedicated_button",
+      "placementType": "unknown",
+      "tagName": "button",
+      "semanticallyInteractive": true,
+      "selectorHint": "div.c-consent__action button",
+      "containerSelectorHint": "div.c-consent__table div.c-consent__action",
+      "containerId": "container_5",
+      "layer": "first_layer",
+      "frameContext": {
+        "frameKind": "main_frame",
+        "frameUrl": "https://pigu.lt/lt/"
+      },
+      "enabled": true,
+      "computedStyle": {
+        "display": "flex",
+        "visibility": "visible",
+        "opacity": "1",
+        "pointerEvents": "auto",
+        "position": "static",
+        "zIndex": "auto"
+      },
+      "boundingBox": {
+        "x": 947.5,
+        "y": 661.5,
+        "width": 288,
+        "height": 40,
+        "top": 661.5,
+        "right": 1235.5,
+        "bottom": 701.5,
+        "left": 947.5
+      },
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "intersectsViewport": true,
+      "clippedByScrollableAncestor": false,
+      "occlusion": {
+        "center": true,
+        "topLeft": true,
+        "topRight": true,
+        "bottomLeft": true,
+        "bottomRight": true,
+        "checkedPoints": 5,
+        "hitSelectorHints": []
+      },
+      "classifierRegistryVersion": "consent-control-label-registry.v22",
+      "classifierReasonCodes": [
+        "no_term_match"
+      ],
+      "classifierConfidence": 0.2,
+      "consentContextConfirmed": true,
+      "decisionStatus": "ambiguous",
+      "reasons": [
+        "unclassified_control"
+      ]
+    },
+    "expectedIntent": "options",
+    "expectedLocale": "lt"
+  },
+  {
+    "site": "pigu.lt",
+    "scanId": "49bf8887-f17e-4f58-bf8a-0de59280937c",
+    "sourceSha256": "e2608398016c4681500515d589f193592eab52f85da7b0a9634386111b36bd10",
+    "candidate": {
+      "candidateId": "candidate_2",
+      "label": "Tęsti be sutikimo",
+      "normalizedLabel": "tęsti be sutikimo",
+      "actionType": "other",
+      "presentationType": "dedicated_button",
+      "placementType": "unknown",
+      "tagName": "button",
+      "semanticallyInteractive": true,
+      "selectorHint": "div.c-consent__action button",
+      "containerSelectorHint": "div.c-consent__table div.c-consent__action",
+      "containerId": "container_5",
+      "layer": "first_layer",
+      "frameContext": {
+        "frameKind": "main_frame",
+        "frameUrl": "https://pigu.lt/lt/"
+      },
+      "enabled": true,
+      "computedStyle": {
+        "display": "flex",
+        "visibility": "visible",
+        "opacity": "1",
+        "pointerEvents": "auto",
+        "position": "static",
+        "zIndex": "auto"
+      },
+      "boundingBox": {
+        "x": 947.5,
+        "y": 709.5,
+        "width": 288,
+        "height": 40,
+        "top": 709.5,
+        "right": 1235.5,
+        "bottom": 749.5,
+        "left": 947.5
+      },
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "intersectsViewport": true,
+      "clippedByScrollableAncestor": false,
+      "occlusion": {
+        "center": true,
+        "topLeft": true,
+        "topRight": true,
+        "bottomLeft": true,
+        "bottomRight": true,
+        "checkedPoints": 5,
+        "hitSelectorHints": []
+      },
+      "classifierRegistryVersion": "consent-control-label-registry.v22",
+      "classifierReasonCodes": [
+        "no_term_match"
+      ],
+      "classifierConfidence": 0.2,
+      "consentContextConfirmed": true,
+      "decisionStatus": "ambiguous",
+      "reasons": [
+        "unclassified_control"
+      ]
+    },
+    "expectedIntent": "reject",
+    "expectedLocale": "lt"
+  },
+  {
+    "site": "matas.dk",
+    "scanId": "86009375-9c41-4a07-ba73-6a0a58032af6",
+    "sourceSha256": "605fd4585b2b1fb2ca36ab1cb540bfc5e7e911fb0b6f4fc7a154ffc4f928a621",
+    "candidate": {
+      "candidateId": "candidate_5",
+      "label": "Nødvendige",
+      "normalizedLabel": "nødvendige",
+      "actionType": "other",
+      "presentationType": "dedicated_button",
+      "placementType": "unknown",
+      "tagName": "button",
+      "semanticallyInteractive": true,
+      "ariaLabel": "Nødvendige",
+      "selectorHint": "#coi-banner__only-necessary",
+      "containerSelectorHint": "#coi-banner-wrapper",
+      "containerId": "container_1",
+      "layer": "first_layer",
+      "frameContext": {
+        "frameKind": "main_frame",
+        "frameUrl": "https://www.matas.dk/"
+      },
+      "enabled": true,
+      "computedStyle": {
+        "display": "block",
+        "visibility": "visible",
+        "opacity": "1",
+        "pointerEvents": "auto",
+        "position": "static",
+        "zIndex": "auto"
+      },
+      "boundingBox": {
+        "x": 252.5,
+        "y": 549.73,
+        "width": 180,
+        "height": 43.98,
+        "top": 549.73,
+        "right": 432.5,
+        "bottom": 593.72,
+        "left": 252.5
+      },
+      "viewport": {
+        "width": 1025,
+        "height": 675
+      },
+      "intersectsViewport": true,
+      "clippedByScrollableAncestor": false,
+      "scrollableAncestor": {
+        "selectorHint": "#coi-banner-wrapper",
+        "boundingBox": {
+          "x": 212.5,
+          "y": 61.28,
+          "width": 600,
+          "height": 552.44,
+          "top": 61.28,
+          "right": 812.5,
+          "bottom": 613.72,
+          "left": 212.5
+        }
+      },
+      "occlusion": {
+        "center": true,
+        "topLeft": true,
+        "topRight": true,
+        "bottomLeft": true,
+        "bottomRight": true,
+        "checkedPoints": 5,
+        "hitSelectorHints": []
+      },
+      "screenshotArtifactRef": "/tmp/certscore-v2-dag-lambda/86009375-9c41-4a07-ba73-6a0a58032af6/lanes/consent_proof/screenshot-pre-consent-geometry-proof.png",
+      "classifierRegistryVersion": "consent-control-label-registry.v22",
+      "classifierReasonCodes": [
+        "no_term_match"
+      ],
+      "classifierConfidence": 0.2,
+      "consentContextConfirmed": true,
+      "decisionStatus": "ambiguous",
+      "reasons": [
+        "unclassified_control"
+      ]
+    },
+    "expectedIntent": "reject",
+    "expectedLocale": "da"
+  },
+  {
+    "site": "matas.dk",
+    "scanId": "86009375-9c41-4a07-ba73-6a0a58032af6",
+    "sourceSha256": "605fd4585b2b1fb2ca36ab1cb540bfc5e7e911fb0b6f4fc7a154ffc4f928a621",
+    "candidate": {
+      "candidateId": "candidate_6",
+      "label": "Tilpas",
+      "normalizedLabel": "tilpas",
+      "actionType": "other",
+      "presentationType": "dedicated_button",
+      "placementType": "unknown",
+      "tagName": "button",
+      "semanticallyInteractive": true,
+      "ariaLabel": "Tilpas",
+      "selectorHint": "button[aria-label=\"Tilpas\"]",
+      "containerSelectorHint": "#coi-banner-wrapper",
+      "containerId": "container_1",
+      "layer": "first_layer",
+      "frameContext": {
+        "frameKind": "main_frame",
+        "frameUrl": "https://www.matas.dk/"
+      },
+      "enabled": true,
+      "computedStyle": {
+        "display": "block",
+        "visibility": "visible",
+        "opacity": "1",
+        "pointerEvents": "auto",
+        "position": "static",
+        "zIndex": "auto"
+      },
+      "boundingBox": {
+        "x": 442.5,
+        "y": 549.73,
+        "width": 135,
+        "height": 43.98,
+        "top": 549.73,
+        "right": 577.5,
+        "bottom": 593.72,
+        "left": 442.5
+      },
+      "viewport": {
+        "width": 1025,
+        "height": 675
+      },
+      "intersectsViewport": true,
+      "clippedByScrollableAncestor": false,
+      "scrollableAncestor": {
+        "selectorHint": "#coi-banner-wrapper",
+        "boundingBox": {
+          "x": 212.5,
+          "y": 61.28,
+          "width": 600,
+          "height": 552.44,
+          "top": 61.28,
+          "right": 812.5,
+          "bottom": 613.72,
+          "left": 212.5
+        }
+      },
+      "occlusion": {
+        "center": true,
+        "topLeft": true,
+        "topRight": true,
+        "bottomLeft": true,
+        "bottomRight": true,
+        "checkedPoints": 5,
+        "hitSelectorHints": []
+      },
+      "screenshotArtifactRef": "/tmp/certscore-v2-dag-lambda/86009375-9c41-4a07-ba73-6a0a58032af6/lanes/consent_proof/screenshot-pre-consent-geometry-proof.png",
+      "classifierRegistryVersion": "consent-control-label-registry.v22",
+      "classifierReasonCodes": [
+        "no_term_match"
+      ],
+      "classifierConfidence": 0.2,
+      "consentContextConfirmed": true,
+      "decisionStatus": "ambiguous",
+      "reasons": [
+        "unclassified_control"
+      ]
+    },
+    "expectedIntent": "options",
+    "expectedLocale": "da"
+  }
+]

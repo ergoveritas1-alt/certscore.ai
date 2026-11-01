@@ -7,6 +7,7 @@ type VerifiedState = {
   tcfPurposeEvidence?: ConsentDecisionEvidence["tcfPurposeEvidence"];
   tcfApiSource?: ConsentDecisionEvidence["tcfApiSource"];
   oneTrustGroupEvidence?: ConsentDecisionEvidence["oneTrustGroupEvidence"];
+  cookieYesLegacyReceiptEvidence?: ConsentDecisionEvidence["cookieYesLegacyReceiptEvidence"];
   complianzReceiptEvidence?: ConsentDecisionEvidence["complianzReceiptEvidence"];
 };
 
@@ -46,6 +47,7 @@ export function terminalConsentDecisionRead(input: {
             timestampBasis: state.observedAtEpochMs === undefined ? "verified_state_observed" : "instrumented_state_write",
             ...(state.tcfPurposeEvidence ? { tcfPurposeEvidence: state.tcfPurposeEvidence } : {}),
             ...(state.tcfApiSource ? { tcfApiSource: state.tcfApiSource } : {}),
+            ...(state.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:state.cookieYesLegacyReceiptEvidence} : {}),
             ...(state.complianzReceiptEvidence ? {complianzReceiptEvidence:state.complianzReceiptEvidence} : {}),
             ...(state.oneTrustGroupEvidence ? { oneTrustGroupEvidence: state.oneTrustGroupEvidence } : {}),
           },

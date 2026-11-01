@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { verifyConsentControlInspection, isRelevantConsentInspectionCandidate } from "./consent-control-inspection";
+import { verifyConsentControlInspection, isRelevantConsentInspectionCandidate, CONTROL_INSPECTION_POLICY } from "./consent-control-inspection";
 
 /** Positive main-document comparison scope only. Does not complete the global
  * inventory, establish absence, authorize clicks, or approve image display. */
@@ -23,7 +23,7 @@ export function verifiedMainFrameVisualCapture(geometry: unknown): ConsentMainFr
       !Number.isFinite(Date.parse(g.captureTiming.completedAt)) || Date.parse(g.captureTiming.completedAt) < Date.parse(g.capturedAt) ||
       !Array.isArray(g.candidates)) return undefined;
   const inspection = verifyConsentControlInspection(g.controlInspection, g.candidates);
-  if (!inspection || inspection.version !== "control_specific_inspection.v3") return undefined;
+  if (!inspection || !["control_specific_inspection.v3", CONTROL_INSPECTION_POLICY].includes(inspection.version)) return undefined;
   const main = g.candidates.filter((c: any) => c.frameContext?.frameKind === "main_frame");
   if (main.length !== parsed.data.candidateIds.length || main.some((c: any) => c.frameContext.frameUrl !== g.pageUrl || !parsed.data.candidateIds.includes(c.candidateId))) return undefined;
   const relevant = main.filter((c: any) => isRelevantConsentInspectionCandidate(c, inspection.version));

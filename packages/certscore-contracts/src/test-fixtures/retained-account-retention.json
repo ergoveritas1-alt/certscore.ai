@@ -1,0 +1,15 @@
+{
+  "site": "dolby.com",
+  "scanId": "328e3893-bdc0-4e1d-8cee-922af52f5425",
+  "sourceBundleSha256": "261777bc641a1ca55e4f95f866b34bc318a6306b6a150e26505f29702cc61fde",
+  "sourceUrl": "https://www.dolby.com/about/legal/privacy/privacy-policy/",
+  "documentFetchState": "fetched",
+  "historicalRejectedSignal": {
+    "disclosureType": "data_retention",
+    "evidenceText": "for acoustics file and a renderer coefficient), may be retained for up to two years. The information you provide when setting up an account (e.g., name and email address) will be retained until your account is closed or deleted.",
+    "rejectReason": "insufficient_row_specific_terms",
+    "confidence": 0.68,
+    "source": "deterministic"
+  },
+  "accountClause": "The information you provide when setting up an account (e.g., name and email address) will be retained until your account is closed or deleted."
+}

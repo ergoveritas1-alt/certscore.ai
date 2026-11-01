@@ -3,9 +3,23 @@ import {
   RESIDENCE_RELATIVE_TRANSFER_PATTERN,
   NAMED_DATA_SERVICE_PURPOSE_PATTERN,
   STRUCTURED_DATA_PURPOSE_PATTERN,
+  PROVIDED_ACCOUNT_INFORMATION_RETENTION_PATTERN,
+  COMPETITION_ENTRANT_RETENTION_PATTERN,
+  PERSONAL_CATEGORY_PURPOSE_RETENTION_PATTERN,
+  COMPETITION_PRIZE_RECIPIENT_PATTERN,
+  POLISH_CONTROLLER_POSTAL_STATEMENT_PATTERN,
+  POLISH_CONSENT_PROCESSING_PERIOD_PATTERN,
+  PORTUGUESE_PURPOSE_STORAGE_PERIOD_PATTERN,
+  POLISH_CORRESPONDENCE_PURPOSE_PATTERN,
+  POLISH_CORRESPONDENCE_BASIS_PATTERN,
+  DUTCH_PRIVACY_POSTAL_CONTACT_PATTERN,
+  POLISH_CONTROLLER_ENQUIRY_CONTACT_PATTERN,
   findBehavioralProfilingDisclosure,
   classifyGdprTransparencyTopics,
   hasIncidentalGermanDisclosureTerms,
+  hasOnlyOtherDutchControllerReferences,
+  hasOnlyPolishPurposeHeading,
+  hasOnlyPortugueseDpoDefinition,
   hasUnsupportedGenericPrivacyContact,
   normalizeGdprTransparencyText,
 } from "./gdpr-transparency-topic-classifier";
@@ -46,7 +60,7 @@ export type Article13DisclosureRejectReasonOptions = {
   mode?: Article13DisclosureRejectionMode;
 };
 
-export const ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION = "article13_disclosure_eligibility.v2" as const;
+export const ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION = "article13_disclosure_eligibility.v12" as const;
 
 /** A list of information the law requires is not the information itself.
  * This is a negative semantic guard, never a new source of positive credit. */
@@ -90,11 +104,13 @@ export function isDataSubjectRightsDisclosureEvidenceUsable(value: string) {
 
 /** Data named in the same retained witness, including structural table cells. */
 export function hasProcessingPurposeDataContext(value: string) {
+  if (POLISH_CORRESPONDENCE_PURPOSE_PATTERN.test(normalizeArticle13Whitespace(value))) return true;
   return /\b(?:personal data|personal information|your data|your information|this information|account data|information we collect|data we collect|cookies|processing of data|data will be processed|contact information|financial information|digital information|contact details|email address|device data|application data|application documents|your details|the data|payment information|donation information|technical data|contact data|usage data|name|account information|billing information)\b|\bdata categories\s*:\s*\S/i.test(value);
 }
 
 export function hasSubstantiveProcessingPurposesEvidence(value: string) {
   const text = normalizeArticle13Whitespace(value);
+  if (POLISH_CORRESPONDENCE_PURPOSE_PATTERN.test(text)) return true;
   // A role/rights clause can mention handling data without saying what it is
   // used for. Require named data context in this same bounded witness.
   if (!hasProcessingPurposeDataContext(text)) return false;
@@ -138,6 +154,7 @@ export function hasSubstantiveProcessingPurposesEvidence(value: string) {
 }
 
 export function hasSubstantiveLegalBasisEvidence(value: string) {
+  if (POLISH_CORRESPONDENCE_BASIS_PATTERN.test(normalizeArticle13Whitespace(value))) return true;
   const text = normalizeArticle13Whitespace(value);
   const explicitBasisFraming =
     /\b(?:legal bas(?:is|es)|lawful bas(?:is|es)|basis for processing|art(?:icle)?\.?\s*6|pursuant to art(?:icle)?\.?\s*6)\b/i.test(text);
@@ -207,6 +224,7 @@ export function hasSubstantiveRecipientsEvidence(value: string) {
   ) {
     return false;
   }
+  if (COMPETITION_PRIZE_RECIPIENT_PATTERN.test(text)) return true;
   const meaningfulCategory = /\b(?:service providers?|processors?|subprocessors?|suppliers?|payment processors?|payment (?:and )?delivery service providers?|hosting providers?|cloud providers?|analytics providers?|analytics partners?|advertising partners?|advertising networks?|social media providers?|delivery providers?|shipping providers?|professional advisers?|affiliates?|group companies|law enforcement|regulators?|authorities)\b/i;
   const disclosureAction = /\b(?:share[ds]?|pass(?:ed)? on|disclos(?:e[ds]?|ing)|provid(?:e[ds]?|ing)|transfer(?:red)?|send|sent|(?:make|made) available|receive[ds]?|access|process(?:ed)?|handle[ds]?)\b/i;
   const dataContext = /\b(?:personal data|personal information|your data|your information|information|data)\b/i;
@@ -244,6 +262,11 @@ export function hasSubstantiveRetentionEvidence(value: string) {
   return text.split(/(?<=[.!?])\s+/u).some((sentence) =>
     dataContext.test(sentence) && lifecycleAction.test(sentence) && periodOrCriterion.test(sentence)
   ) || explicitStoragePeriod || completedPurpose || retentionTableRow || accountLifecycle ||
+    PROVIDED_ACCOUNT_INFORMATION_RETENTION_PATTERN.test(text) ||
+    COMPETITION_ENTRANT_RETENTION_PATTERN.test(text) ||
+    PERSONAL_CATEGORY_PURPOSE_RETENTION_PATTERN.test(text) ||
+    POLISH_CONSENT_PROCESSING_PERIOD_PATTERN.test(text) ||
+    PORTUGUESE_PURPOSE_STORAGE_PERIOD_PATTERN.test(text) ||
     /\b(?:do not|does not|don['’]t|will not|won['’]t) keep (?:your )?(?:personal )?(?:data|information) (?:any )?longer than (?:is )?(?:necessary|required)\b/i.test(text) ||
     /\bkeep information for as long as we need (?:it )?to (?:fulfil|fulfill) the purpose\b/i.test(text);
 }
@@ -271,7 +294,18 @@ function hasSubstantivePrivacyContactPoint(value: string) {
  * credit them. A rejected witness is uncertainty, never a missing disclosure. */
 export function article13CrossTopicRejectReason(value: string, topic: Article13DisclosureType | string | undefined): Article13DisclosureRejectReason | null {
   const text = normalizeArticle13Whitespace(value);
+  // This category-scoped declaration still needs a period or criterion. The
+  // generic multilingual keyword path must not turn storage location alone
+  // into retention disclosure; rejection remains uncertainty, never absence.
+  if (topic === "data_retention" && /\bwe retain each category of personal information\b/i.test(text) &&
+      !hasSubstantiveRetentionEvidence(text)) return "insufficient_row_specific_terms";
   const normalized = normalizeGdprTransparencyText(text);
+  if (topic === "dpo_contact" && hasOnlyPortugueseDpoDefinition(text))
+    return "insufficient_row_specific_terms";
+  if (["processing_purposes", "legal_basis"].includes(topic ?? "") && hasOnlyPolishPurposeHeading(text))
+    return "insufficient_row_specific_terms";
+  if (topic === "controller_contact" && hasOnlyOtherDutchControllerReferences(text))
+    return "insufficient_row_specific_terms";
   // Notifying existing recipients about a rights request does not identify a
   // recipient/category. Keep independent category disclosures eligible.
   if (topic === "recipients_or_vendor_categories" &&
@@ -696,7 +730,7 @@ function hasScanCoreRowSpecificArticle13Terms(
   const text = normalizeArticle13Whitespace(value);
   switch (disclosureType) {
     case "controller_contact":
-      return /\b(?:data controller|controller|google llc|google ireland limited|contact (?:our privacy team|google)|questions about (?:this )?(?:privacy )?(?:policy|notice)|privacy officer|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
+      return POLISH_CONTROLLER_POSTAL_STATEMENT_PATTERN.test(text) || POLISH_CONTROLLER_ENQUIRY_CONTACT_PATTERN.test(text) || DUTCH_PRIVACY_POSTAL_CONTACT_PATTERN.test(text) || /\b(?:data controller|controller|google llc|google ireland limited|contact (?:our privacy team|google)|questions about (?:this )?(?:privacy )?(?:policy|notice)|privacy officer|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
         !looksLikeArticle13PageChrome(text, { mode: "scan_core" });
     case "processing_purposes":
       return hasSubstantiveProcessingPurposesEvidence(text);
@@ -730,7 +764,7 @@ function hasRetainedReportRowSpecificArticle13Terms(
   const text = normalizeArticle13Whitespace(value);
   switch (disclosureType) {
     case "controller_contact":
-      return /\b(?:data controller|controller|google llc|google ireland limited|contact (?:our privacy team|google)|questions about (?:this )?(?:privacy )?(?:policy|notice)|privacy officer|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
+      return POLISH_CONTROLLER_POSTAL_STATEMENT_PATTERN.test(text) || POLISH_CONTROLLER_ENQUIRY_CONTACT_PATTERN.test(text) || DUTCH_PRIVACY_POSTAL_CONTACT_PATTERN.test(text) || /\b(?:data controller|controller|google llc|google ireland limited|contact (?:our privacy team|google)|questions about (?:this )?(?:privacy )?(?:policy|notice)|privacy officer|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
         !looksLikeArticle13PageChrome(text, { mode: "retained_report" });
     case "processing_purposes":
       return hasSubstantiveProcessingPurposesEvidence(text);

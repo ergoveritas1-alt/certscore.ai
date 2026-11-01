@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 import { decodeCommonHtmlEntities } from "./gdpr-transparency-topic-classifier";
 import { article13DisclosureRejectReason } from "./article13-disclosure-rejection";
 import { INFORMAL_GERMAN_POLICY_CLAUSES } from "./test-fixtures/policy-topic-witnesses";
+import retainedDutchContact from "./test-fixtures/retained-dutch-privacy-contact.json";
+import retainedPolishContact from "./test-fixtures/retained-polish-controller-contact.json";
+import retainedLifecycleRetention from "./test-fixtures/retained-lifecycle-retention.json";
+import retainedPolishPurpose from "./test-fixtures/retained-polish-correspondence-purpose.json";
+import retainedPortugueseDpo from "./test-fixtures/retained-portuguese-dpo-definition.json";
 import {
   classifyGdprSupplementLink,
   classifyGdprTransparencyTopics,
@@ -11,6 +16,181 @@ import {
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type GdprTransparencyTopic,
 } from "./index.js";
+
+test("retained Portuguese DPO glossary definitions are not officer/contact observations", () => {
+  const f = retainedPortugueseDpo;
+  for (const text of [f.historicalSignal.evidenceText, f.historicalSelectedWitness.selectedPolicySectionExcerpt,
+    `${f.definitionSection.heading} ${f.definitionSection.textExcerpt} Contact support@example.test for support.`,
+  ]) assert.ok(!classifyGdprTransparencyTopics({ text }).matches.some(m => m.topic === "dpo_contact"));
+});
+
+test("a DPO definition does not veto an independently retained explicit own-officer contact", () => {
+  const f = retainedPortugueseDpo;
+  const contact = "Our data protection officer can be contacted at dpo@example.test.";
+  for (const text of [
+    `${f.historicalSignal.evidenceText} ${contact}`,
+    `${f.historicalSelectedWitness.selectedPolicySectionExcerpt} ${"General policy information. ".repeat(30)} ${contact}`,
+    `${f.definitionSection.heading} ${f.definitionSection.textExcerpt} Nosso encarregado de proteção de dados pode ser contatado pelo e-mail: dpo@example.test.`,
+  ]) {
+    const dpo = classifyGdprTransparencyTopics({ text }).matches.find(m => m.topic === "dpo_contact");
+    assert.ok(dpo);
+    assert.ok(text.replace(/\s+/gu, " ").includes(dpo.evidenceExcerpt));
+    assert.match(dpo.evidenceExcerpt, /dpo@example\.test/);
+  }
+});
+
+test("Polish numbered purpose headings select the retained processing clause instead of the heading", () => {
+  const f = retainedPolishPurpose;
+  for (const text of [f.clause, f.section.textExcerpt, `${f.historicalSelectedWitness.selectedPolicySectionExcerpt} ${f.section.textExcerpt}`]) {
+    const purpose = classifyGdprTransparencyTopics({ text }).matches.find(m => m.topic === "processing_purposes");
+    assert.ok(purpose);
+    assert.equal(purpose.evidenceExcerpt, f.clause);
+    assert.ok(text.includes(purpose.evidenceExcerpt));
+    assert.match(purpose.evidenceExcerpt, /Dane Osobowe zawarte w tej korespondencji/);
+    assert.match(purpose.evidenceExcerpt, /w celu komunikacji i rozwiązania sprawy/);
+  }
+});
+
+test("Polish purpose labels and numbered headings supply neither purpose nor legal-basis evidence", () => {
+  const f = retainedPolishPurpose;
+  for (const text of [f.historicalSelectedWitness.selectedPolicySectionExcerpt, f.section.heading,
+    "Cele przetwarzania danych osobowych. 1.",
+    "Podstawy prawne przetwarzania danych osobowych. 2.",
+    `${f.section.heading} ${f.historicalSelectedWitness.selectedPolicySectionExcerpt}`,
+    f.clause.replace("są przetwarzane wyłącznie", "nie są przetwarzane wyłącznie"),
+    f.clause.replace("Dane Osobowe", "Pliki techniczne"),
+    f.clause.replace(/\.$/, "?"),
+  ]) assert.ok(!classifyGdprTransparencyTopics({ text }).matches.some(m =>
+    ["processing_purposes", "legal_basis"].includes(m.topic)), text);
+  const text = `${f.clause.replace(/\.$/, "?")} ${f.clause}`;
+  assert.equal(classifyGdprTransparencyTopics({ text }).matches.find(m => m.topic === "processing_purposes")?.evidenceExcerpt, f.clause);
+});
+
+test("the independent Polish legitimate-interest sentence preserves basis evidence without heading credit", () => {
+  const f = retainedPolishPurpose;
+  for (const text of [f.legalBasisClause, f.section.textExcerpt]) {
+    const basis = classifyGdprTransparencyTopics({ text }).matches.find(m => m.topic === "legal_basis");
+    assert.ok(basis);
+    assert.equal(basis.evidenceExcerpt, f.legalBasisClause);
+  }
+  for (const text of [f.legalBasisClause.replace("jest uzasadniony interes", "nie jest uzasadniony interes"),
+    f.legalBasisClause.replace(/\.$/, "?"),
+    "Podstawą prawną przetwarzania jest. RODO.",
+  ]) assert.ok(!classifyGdprTransparencyTopics({ text }).matches.some(m =>
+    m.matchedTerm === "uzasadniony interes jako podstawa przetwarzania korespondencji"));
+});
+
+test("retained Polish and Portuguese lifecycle criteria keep their exact source witnesses", () => {
+  for (const f of retainedLifecycleRetention) {
+    for (const text of [f.clause, f.section.textExcerpt, "General site information. ".repeat(30) + f.clause]) {
+      const match = classifyGdprTransparencyTopics({ text }).matches.find(m => m.topic === "data_retention");
+      assert.ok(match, f.site);
+      assert.equal(match.matchedLocale, f.locale);
+      assert.ok(text.includes(match.evidenceExcerpt));
+      assert.ok(match.evidenceExcerpt.includes(f.clause));
+    }
+  }
+});
+
+test("lifecycle retention cannot be supplied by rights, infrastructure, missing criteria or questions", () => {
+  for (const f of retainedLifecycleRetention) {
+    const invalids = f.locale === "pl" ? [
+      f.clause.replace("przetwarzane są do", "nie są przetwarzane do"),
+      f.clause.replace("Dane Osobowe", "Pliki techniczne"),
+      f.clause.replace("do jej wycofania", "zgodnie z polityką"),
+      f.clause.replace(/\.$/, "?"),
+      "Masz prawo do wycofania zgody na przetwarzanie danych osobowych.",
+    ] : [
+      f.clause.replace("será feito pelo", "não será feito pelo"),
+      f.clause.replace("Dados Pessoais", "ficheiros técnicos"),
+      f.clause.replace("pelo tempo necessário para a finalidade para a qual foram coletados", "em servidores próprios"),
+      f.clause.replace(/\.$/, "?"),
+      "Os Dados Pessoais podem ser armazenados em servidores próprios ou de terceiros contratados.",
+    ];
+    for (const invalid of invalids) assert.ok(!classifyGdprTransparencyTopics({ text: invalid }).matches.some(m => m.topic === "data_retention"), invalid);
+    const text = `${invalids[3]} ${f.clause}`;
+    const match = classifyGdprTransparencyTopics({ text }).matches.find(m => m.topic === "data_retention");
+    assert.ok(match, f.site);
+    assert.equal(match.evidenceExcerpt, f.clause);
+  }
+});
+
+test("retained Polish controller enquiries bind the contact email to personal-data scope", () => {
+  const text = retainedPolishContact.contactSection.textExcerpt;
+  for (const localeHints of [undefined, ["pl"] as const]) {
+    const contact = classifyGdprTransparencyTopics({ text, localeHints: localeHints ? [...localeHints] : undefined })
+      .matches.find(m => m.topic === "controller_contact");
+    assert.ok(contact);
+    assert.equal(contact.matchedLocale, "pl");
+    assert.ok(text.includes(contact.evidenceExcerpt));
+    assert.match(contact.evidenceExcerpt, /rodo@niedziela\.pl/);
+    assert.match(contact.evidenceExcerpt, /przetwarzania Danych Osobowych/);
+  }
+  const renamed = text.replaceAll("rodo@niedziela.pl", "privacy@example.test").replaceAll("Instytut Niedziela", "Inna Organizacja");
+  assert.ok(classifyGdprTransparencyTopics({ text: renamed }).matches.some(m => m.topic === "controller_contact"));
+});
+
+test("Polish controller enquiries cannot borrow missing, negated, generic or later email witnesses", () => {
+  const text = retainedPolishContact.contactSection.textExcerpt;
+  const invalids = [
+    text.replace("rodo@niedziela.pl", "[adres niedostępny]"),
+    text.replace("jest możliwy", "nie jest możliwy"),
+    text.replace("należy kontaktować", "nie należy kontaktować"),
+    text.replace("adres e-mail:", "adres e-mail?"),
+    text.replace("Danych Osobowych", "serwerów internetowych"),
+    text.replace("z Administratorem.", "z innym podmiotem."),
+    "Kontakt z Administratorem jest możliwy poprzez adres e-mail: admin@example.test. W sprawach serwerów internetowych prosimy o kontakt z administratorem.",
+  ];
+  for (const invalid of invalids) assert.ok(!classifyGdprTransparencyTopics({ text: invalid }).matches.some(m =>
+    m.matchedTerm === "kontakt z administratorem w sprawach danych osobowych przez e-mail"), invalid);
+  const combined = `${invalids[3]} ${text}`;
+  const recovered = classifyGdprTransparencyTopics({ text: combined }).matches.find(m => m.topic === "controller_contact");
+  assert.ok(recovered);
+  assert.ok(text.includes(recovered.evidenceExcerpt));
+  assert.doesNotMatch(recovered.evidenceExcerpt, /e-mail\?/);
+});
+
+test("retained Dutch privacy enquiries keep a named postal route distinct from portability", () => {
+  const text = retainedDutchContact.contactSection.textExcerpt;
+  for (const localeHints of [undefined, ["nl"] as const]) {
+    const matches = classifyGdprTransparencyTopics({ text, localeHints: localeHints ? [...localeHints] : undefined }).matches;
+    const contact = matches.find(m => m.topic === "controller_contact");
+    assert.ok(contact);
+    assert.equal(contact.matchedLocale, "nl");
+    assert.ok(text.includes(contact.evidenceExcerpt));
+    assert.match(contact.evidenceExcerpt, /Rijksmuseum Postbus 74888 1070 DN AMSTERDAM/);
+    assert.ok(!matches.some(m => m.topic === "dpo_contact"));
+  }
+  const unrelated = classifyGdprTransparencyTopics({ text: retainedDutchContact.otherControllerCandidate.evidenceText }).matches;
+  assert.ok(!unrelated.some(m => m.topic === "controller_contact"));
+});
+
+test("Dutch postal contact recognition requires privacy context, matching addressee and a retained endpoint", () => {
+  const text = retainedDutchContact.contactSection.textExcerpt;
+  for (const invalid of [
+    text.replace("dit Privacybeleid", "een bestelling"),
+    text.replace("neem dan contact op", "neem dan geen contact op"),
+    text.replace("neem dan contact op", "neem dan nooit contact op"),
+    text.replace("dit Privacybeleid,", "dit Privacybeleid?"),
+    text.replace("Rijksmuseum Postbus", "Ander Museum Postbus"),
+    text.replace("Postbus 74888 1070 DN AMSTERDAM", "dit formulier"),
+    text.replace("1070 DN", "postcode onbekend"),
+    "Contactgegevens. Rijksmuseum Postbus 74888 1070 DN AMSTERDAM",
+    retainedDutchContact.englishPartialSignal.evidenceText,
+  ]) {
+    assert.ok(!classifyGdprTransparencyTopics({ text: invalid }).matches.some(m =>
+      m.matchedTerm === "privacyvragen met naamgebonden postbus en postcode"), invalid);
+  }
+  const renamed = text.replaceAll("Rijksmuseum", "Voorbeeldmuseum");
+  assert.ok(classifyGdprTransparencyTopics({ text: renamed }).matches.some(m => m.topic === "controller_contact"));
+  const earlierInvalid = text.replace("dit Privacybeleid,", "dit Privacybeleid?").replaceAll("Rijksmuseum", "Ander Museum");
+  const combined = `${earlierInvalid} ${text}`;
+  const recovered = classifyGdprTransparencyTopics({ text: combined }).matches.find(m => m.topic === "controller_contact");
+  assert.ok(recovered);
+  assert.match(recovered.evidenceExcerpt, /Rijksmuseum Postbus/);
+  assert.doesNotMatch(recovered.evidenceExcerpt, /Ander Museum/);
+  assert.ok(combined.includes(recovered.evidenceExcerpt));
+});
 
 test("informal German disclosures retain topic-specific native clauses without relying on the HTML language", () => {
   const text = "Datenschutzerklärung. " + INFORMAL_GERMAN_POLICY_CLAUSES.map(c => c.text).join(" ");

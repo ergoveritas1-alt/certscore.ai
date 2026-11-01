@@ -1,12 +1,13 @@
 import { z } from "zod";
 
 export const LEGACY_CONTROL_INSPECTION_POLICY = "control_specific_inspection.v1" as const;
-export const CONTROL_INSPECTION_POLICY = "control_specific_inspection.v3" as const;
-type InspectionPolicy = typeof CONTROL_INSPECTION_POLICY | typeof LEGACY_CONTROL_INSPECTION_POLICY | "control_specific_inspection.v2";
+export const CONTROL_INSPECTION_POLICY = "control_specific_inspection.v4" as const;
+export const CONTROL_INSPECTION_POLICIES = [LEGACY_CONTROL_INSPECTION_POLICY, "control_specific_inspection.v2", "control_specific_inspection.v3", CONTROL_INSPECTION_POLICY] as const;
+type InspectionPolicy = typeof CONTROL_INSPECTION_POLICIES[number];
 const intents = ["accept", "reject", "options", "privacy_opt_out"] as const;
 export type InspectedConsentIntent = typeof intents[number];
 export const consentControlInspectionSchema = z.object({
-  version: z.enum([LEGACY_CONTROL_INSPECTION_POLICY, "control_specific_inspection.v2", CONTROL_INSPECTION_POLICY]),
+  version: z.enum(CONTROL_INSPECTION_POLICIES),
   structuralCoverage: z.enum(["complete", "limited"]),
   retainedCandidateCount: z.number().int().min(0).max(160),
   captureCoverage: z.object({
@@ -98,6 +99,17 @@ export function classifyConsentInspectionRole(c: {
   if (["checkbox", "radio"].includes(c.inputType ?? "") || ["checkbox", "switch", "radio"].includes(c.role ?? "")) return { role: "category", unresolvedIntents: [] };
   const label = (c.label ?? "").trim().toLocaleLowerCase().replace(/[.!…]+$/u, "").trim();
   const scope = `${c.selectorHint ?? ""} ${c.containerSelectorHint ?? ""}`;
+  // These registered tabs navigate Cookiebot's retained first-layer content.
+  // They are not direct consent choices. An unvisited tab may still lead to
+  // preferences, so Options remains unresolved. This adds no action authority.
+  if (policy === CONTROL_INSPECTION_POLICY && c.actionType === "other" && c.tagName === "a" && c.role === "tab" &&
+      c.linkDestination === "same_document" && (!c.ariaLabel || c.ariaLabel.trim().toLocaleLowerCase() === label) &&
+      c.classifierReasonCodes?.length === 1 && c.classifierReasonCodes[0] === "non_decision_control_role" &&
+      ((c.selectorHint === "#CybotCookiebotDialogNavDeclaration" && label === "consent") ||
+       (c.selectorHint === "#CybotCookiebotDialogNavDetails" && label === "details") ||
+       (c.selectorHint === "#CybotCookiebotDialogNavAbout" && label === "about"))) {
+    return {role: "information", unresolvedIntents: ["options"]};
+  }
   if (policy !== LEGACY_CONTROL_INSPECTION_POLICY) {
     if (c.classifierReasonCodes?.includes("unverified_preferences_navigation")) return { role: "information", unresolvedIntents: ["options"] };
     if (c.tagName === "div" && !["button", "link"].includes(c.role ?? "") &&
@@ -110,7 +122,7 @@ export function classifyConsentInspectionRole(c: {
       return { role: "vendor_list", unresolvedIntents: [] };
     }
   }
-  if (policy === CONTROL_INSPECTION_POLICY && c.tagName === "a" &&
+  if (["control_specific_inspection.v3", CONTROL_INSPECTION_POLICY].includes(policy) && c.tagName === "a" &&
       c.selectorHint === "div.didomi-popup-notice-text a" &&
       /^our [1-9][0-9]{0,3} partners$/.test(label)) return {role: "vendor_list", unresolvedIntents: []};
   if ((/didomi-popup-notice-text/.test(scope) && /^nasi partnerzy(?: \(\d+\))?$/.test(label)) ||

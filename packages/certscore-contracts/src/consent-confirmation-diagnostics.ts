@@ -50,3 +50,27 @@ export type ConsentConfirmationDiagnostics =
   | DiagnosticBase & {policyVersion:"consent_confirmation_diagnostics.v2";reasons:z.infer<typeof v2ReasonSchema>[];initialReasons:z.infer<typeof v2ReasonSchema>[];terminalReasons:z.infer<typeof v2ReasonSchema>[];reasonsTruncated:boolean}
   | DiagnosticBase & {policyVersion:"consent_confirmation_diagnostics.v3";reasons:ConsentConfirmationReason[];initialReasons:ConsentConfirmationReason[];terminalReasons:ConsentConfirmationReason[];reasonsTruncated:boolean};
 export const consentConfirmationDiagnosticsSchema: z.ZodType<ConsentConfirmationDiagnostics> = z.union([legacyDiagnosticsSchema, currentDiagnosticsSchema, preciseDiagnosticsSchema]);
+
+export type ConsentConfirmationReadDiagnostics = {
+  policyVersion: "consent_confirmation_read_diagnostics.v1";
+  diagnosticOnly: true;
+  source: "retained_confirmation_diagnostics";
+  sourceDiagnosticsPolicyVersion: ConsentConfirmationDiagnostics["policyVersion"];
+  passCountLimit: 10_000;
+  initialPasses: number;
+  terminalPasses: number;
+  terminalRead: ConsentConfirmationDiagnostics["terminalRead"];
+};
+
+/** Preserve the recorded read lifecycle, independently of semantic decision
+ * proof. Counts are capped polling passes, not SDK calls or elapsed time.
+ * A retained zero is distinct from missing or invalid diagnostics (null). */
+export function summarizeConsentConfirmationReads(diagnostics: ConsentConfirmationDiagnostics | undefined): ConsentConfirmationReadDiagnostics | null {
+  const parsed = consentConfirmationDiagnosticsSchema.safeParse(diagnostics);
+  if (!parsed.success) return null;
+  const source = parsed.data;
+  return {policyVersion: "consent_confirmation_read_diagnostics.v1", diagnosticOnly: true,
+    source: "retained_confirmation_diagnostics", sourceDiagnosticsPolicyVersion: source.policyVersion,
+    passCountLimit: 10_000, initialPasses: source.initialPasses, terminalPasses: source.terminalPasses,
+    terminalRead: source.terminalRead};
+}

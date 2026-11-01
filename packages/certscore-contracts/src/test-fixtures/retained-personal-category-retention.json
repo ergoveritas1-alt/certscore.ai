@@ -1,0 +1,84 @@
+{
+  "site": "dollargeneral.com",
+  "scanId": "b9650d52-1a77-4079-b596-c6f4a524bfa0",
+  "source": {
+    "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/b9650d52-1a77-4079-b596-c6f4a524bfa0/CanonicalEvidenceBundle.json",
+    "sha256": "42ce52f0af6e8500162629c5f1a87e85b6cd9137bb1331d07ce3ac595a713dfd",
+    "bytes": 1550124
+  },
+  "sourceUrl": "https://www.dollargeneral.com/privacy-policy",
+  "ownership": {
+    "documentRole": "policy_document",
+    "targetRelationship": "target_controller",
+    "ownershipConfidence": 0.98,
+    "ownershipReasonCodes": [
+      "same_registrable_domain_as_scan_target"
+    ]
+  },
+  "documentTextCoverage": {
+    "status": "complete",
+    "sourceTextChars": 111728,
+    "retainedTextChars": 111728,
+    "limitationKeys": []
+  },
+  "contentCoverage": {
+    "status": "truncated",
+    "sourceTextChars": 33036,
+    "extractedSectionCount": 5,
+    "retainedSectionCount": 5,
+    "retainedTableRowCount": 0,
+    "limitationKeys": [
+      "policy_section_text_bounded"
+    ]
+  },
+  "section": {
+    "sourceUrl": "https://www.dollargeneral.com/privacy-policy",
+    "heading": "Policy section",
+    "textExcerpt": "<b>You may make a Request to Opt Out of Sale and \u201cSharing\u201d by completing and submitting the form available at the \u201cYour Privacy Choices\u201d link on the homepage of the Websites.</b></p>\\r\\n<p><u>Retention Period</u></p>\\r\\n<p>We retain each category of Personal Information, including Sensitive Personal Information, for as long as needed or permitted in light of the purpose(s) for which it was collected.&nbsp; The criteria used to determine our retention periods include:&nbsp;</p>\\r\\n<ul>\\r\\n<li>The length of time we provide services to you or have an ongoing relationship with you, and the length of time thereafter during which we may have a legitimate need to reference your Personal Information to address issues that may arise;&nbsp;</li>\\r\\n<li>Whether there is a legal obligation to which we are subject, for example, certain laws require us to keep copies of your transactions for a certain period of time before we can delete them; or</li>\\r\\n<li>Whether retention is advisable in light of",
+    "extractionMethod": "canonical_topic_window",
+    "sourceOffsetBasis": "normalized_visible_text",
+    "documentTextSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+    "evidenceTextSha256": "66740e4fcaf5f5f9a286e8d88b4e884f80eb67317dc76dc156c7e32409b93594",
+    "sourceTextChars": 111728,
+    "extractionState": "complete",
+    "charStart": 70253,
+    "charEnd": 71253,
+    "quality": "strong"
+  },
+  "historicalSelectedWitness": {
+    "coverageArea": "data_retention",
+    "selectedPolicySectionHeading": "Policy section",
+    "selectedPolicySectionExcerpt": "<b>You may make a Request to Opt Out of Sale and \u201cSharing\u201d by completing and submitting the form available at the \u201cYour Privacy Choices\u201d link on the homepage of the Websites.</b></p>\\r\\n<p><u>Retention Period</u></p>\\r\\n<p>We retain each category of Personal Information, including Sensitive Personal Information, for as long as needed or permitted in light of the purpose(s) for which it was collected.&nbsp; The criteria used to determine our retention periods include:&nbsp;</p>\\r\\n<ul>\\r\\n<li>The length of time we provide services to you or have an ongoing relationship with you, and the length of time thereafter during which we may have a legitimate need to reference your Personal Information to address issues that may arise;&nbsp;</li>\\r\\n<li>Whether there is a legal obl",
+    "selectedPolicySectionUrl": "https://www.dollargeneral.com/privacy-policy",
+    "sectionExtractionMethod": "canonical_topic_window",
+    "sourceOffsetBasis": "normalized_visible_text",
+    "sourceDocumentTextSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+    "evidenceTextSha256": "14a4c3d262ba6a72285ed74e1acd60edfa7a6b8c360b18d69eda7b7f126e2e96",
+    "sourceCharStart": 70253,
+    "sourceCharEnd": 71253,
+    "sectionExtractionState": "complete",
+    "evidenceSource": "deterministic",
+    "selectedEvidenceStrength": "limited",
+    "signalObserved": "not_confirmed",
+    "extractionLimitation": "section_retained_without_row_specific_disclosure"
+  },
+  "historicalCandidates": [
+    {
+      "topic": "data_retention",
+      "status": "diagnostic_only",
+      "evidenceText": "at the \"Your Privacy Choices\" link on the homepage of the Websites.</b></p>\\r\\n<p><u>Retention Period</u></p>\\r\\n<p>We retain each category of Personal Information, including Sensitive Personal Information, for as long as needed or permitted in light of the purpose(s) for which it was collected.",
+      "confidence": 0.86,
+      "classifierProvenance": "gdpr_transparency_topic_classifier.v1",
+      "matchedLocale": "en",
+      "matchedTerm": "personal-data retention period or criterion",
+      "matchStrength": "equivalent",
+      "classifierReasonCodes": [
+        "matched_data_retention",
+        "match_strength_equivalent",
+        "variant_semantic_clause"
+      ],
+      "productionCredit": false
+    }
+  ],
+  "clause": "We retain each category of Personal Information, including Sensitive Personal Information, for as long as needed or permitted in light of the purpose(s) for which it was collected."
+}

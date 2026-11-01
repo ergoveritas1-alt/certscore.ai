@@ -39,13 +39,14 @@ export function createGpcRequestProofCapture(now:()=>number){
    try{body=request.postData();}catch{body=undefined;}
    // Do not retain arbitrarily large bodies while waiting for an existing read.
    const hasBody=body!==null;
-   if(body && Buffer.byteLength(body)>32768)body=undefined;
+   let observedBodyByteLength:number|undefined;
+   if(body){const bytes=Buffer.byteLength(body);if(bytes>32768){observedBodyByteLength=bytes;body=undefined;}}
    let resolved=false;
    return (headers?:Record<string,string>)=>{
     if(finished||resolved)return;resolved=true;pending--;
     try{
      const fact=captureCaliforniaRejectRequest({url:event.requestUrl,method:request.method!(),requestId:event.requestId!,startedAtMs:event.timestampMs,
-      httpStatus:statuses.get(event.eventId)??undefined,hasBody,body,headers,headerPolicy:"supplemental",qualificationContext:{gpcDelivered:true,requestAtMs:event.timestampMs}});
+      httpStatus:statuses.get(event.eventId)??undefined,hasBody,body,observedBodyByteLength,headers,headerPolicy:"supplemental",qualificationContext:{gpcDelivered:true,requestAtMs:event.timestampMs}});
      if(!fact){failed++;failureOutcomes.noProof++;return;}
      const proof=gpcRequestProofSchema.parse({...fact,contractVersion:"gpc_request_proof.v1"});
      const capturedAtMs=now();rows.push({eventId:event.eventId,documentToken,capturedAtMs,proof});

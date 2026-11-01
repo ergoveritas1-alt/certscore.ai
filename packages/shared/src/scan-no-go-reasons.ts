@@ -1,6 +1,7 @@
 export const SCAN_NO_GO_REASON_CODES = [
   "blank_or_unusable_page",
   "loading_or_stalled",
+  "redirect_only_page",
   "not_found_404",
   "parked_or_placeholder",
   "site_not_ready",
@@ -54,6 +55,22 @@ export type ScanNoGoReasonPresentation = {
 };
 
 export const SCAN_NO_GO_REASON_PRESENTATIONS: Record<ScanNoGoReasonCode, ScanNoGoReasonPresentation> = {
+  redirect_only_page: {
+    code: "redirect_only_page",
+    customerTitle: "A redirect notice was captured",
+    explanation: "The retained runtime visit showed only a notice directing visitors to another page. CertScore.ai could not assess the destination from that visit.",
+    reportSummary: "The runtime capture contained a redirect notice, so no target score was generated.",
+    recommendedNextAction: "Use the destination URL shown by the site for a separate scan when you want that page assessed.",
+    pageState: "blank_or_unusable",
+    retryLikelyToHelp: false,
+    limitationKind: "scanner_capture_limitation",
+    snapshotStopReasonCode: "homepage_redirect_notice_only",
+    snapshotStopReasonLabel: "Redirect notice captured",
+    snapshotStopReasonDetail: "The original runtime visit retained a redirect notice rather than the destination page. No target score was generated.",
+    snapshotBlockPageClassification: "redirect_only_page",
+    snapshotHomepageFetchStatus: "redirect_notice",
+    snapshotScanOutcome: "homepage_redirect_notice_only",
+  },
   authentication_required: {
     code: "authentication_required",
     customerTitle: "Sign-in required",

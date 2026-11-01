@@ -1,0 +1,86 @@
+[
+  {
+    "site": "niedziela.pl",
+    "scanId": "26b9041f-7efa-4525-b754-1ec2179b8a9f",
+    "locale": "pl",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/26b9041f-7efa-4525-b754-1ec2179b8a9f/CanonicalEvidenceBundle.json",
+      "sha256": "2789206282f98b5a4c80d79efb917b369912cdfa74fb561b7d8f286cffa5f947",
+      "bytes": 1730953
+    },
+    "sourceUrl": "https://www.niedziela.pl/polityka_prywatnosci",
+    "ownership": {
+      "documentRole": "policy_document",
+      "targetRelationship": "target_controller",
+      "ownershipConfidence": 0.98,
+      "ownershipReasonCodes": [
+        "same_registrable_domain_as_scan_target"
+      ]
+    },
+    "documentTextCoverage": {
+      "status": "complete",
+      "sourceTextChars": 16114,
+      "retainedTextChars": 16114,
+      "limitationKeys": []
+    },
+    "section": {
+      "sourceUrl": "https://www.niedziela.pl/polityka_prywatnosci",
+      "heading": "VII. OKRES PRZETWARZANIA DANYCH OSOBOWYCH",
+      "textExcerpt": "1. Okres przetwarzania Danych Osobowych przez Administratora zależy od rodzaju świadczonej usługi i celu przetwarzania. Okres przetwarzania Danych Osobowych może także wynikać z przepisów, gdy stanowią one podstawę przetwarzania. W przypadku przetwarzania Danych Osobowych na podstawie uzasadnionego interesu Administratora, Dane Osobowe przetwarzane są przez okres umożliwiający realizację tego interesu lub do zgłoszenia skutecznego sprzeciwu względem przetwarzania Danych Osobowych. Jeśli przetwarzanie odbywa się na podstawie zgody, Dane Osobowe przetwarzane są do jej wycofania. Gdy podstawę przetwarzania stanowi niezbędność do zawarcia i wykonania umowy, Dane Osobowe są przetwarzane do momentu jej rozwiązania. 2. Okres przetwarzania Danych Osobowych może być przedłużony w przypadku, gdy przetwarzanie jest niezbędne do ustalenia lub dochodzenia roszczeń lub obrony przed roszczeniami, a po tym okresie – jedynie w przypadku i w zakresie, w jakim będą wymagać tego przepisy prawa. Po upływie okresu przetwarzania Dane Osobowe są nieodwracalnie usuwane.",
+      "extractionMethod": "html_heading_hierarchy",
+      "sourceOffsetBasis": "sanitized_html",
+      "documentTextSha256": "8ae69e8b5dd0712d19b1e21d4eba725c562b92c3bfbc44e39e616221f48577f2",
+      "evidenceTextSha256": "e97ded52b66250a22216fdd2133cbcac11ff1af4443375175eaccfcf3853b98e",
+      "sourceTextChars": 93933,
+      "extractionState": "complete",
+      "charStart": 18497,
+      "charEnd": 19651,
+      "quality": "strong"
+    },
+    "clause": "Jeśli przetwarzanie odbywa się na podstawie zgody, Dane Osobowe przetwarzane są do jej wycofania.",
+    "historicalSignals": [],
+    "historicalSelectedWitness": null
+  },
+  {
+    "site": "rdstation.com",
+    "scanId": "54f2b431-fdd0-4ff7-b79b-fd8e79d05d4c",
+    "locale": "pt",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/54f2b431-fdd0-4ff7-b79b-fd8e79d05d4c/CanonicalEvidenceBundle.json",
+      "sha256": "0f8ae80fe999cdee8e6c1a28ef76a1537ca4c760b6e21138c1fb8dc164d64e6a",
+      "bytes": 1070068
+    },
+    "sourceUrl": "https://legal.rdstation.com/pt/privacy-policy/",
+    "ownership": {
+      "documentRole": "policy_document",
+      "targetRelationship": "target_controller",
+      "ownershipConfidence": 0.98,
+      "ownershipReasonCodes": [
+        "same_registrable_domain_as_scan_target"
+      ]
+    },
+    "documentTextCoverage": {
+      "status": "complete",
+      "sourceTextChars": 30045,
+      "retainedTextChars": 30045,
+      "limitationKeys": []
+    },
+    "section": {
+      "sourceUrl": "https://legal.rdstation.com/pt/privacy-policy/",
+      "heading": "7. Armazenamento, Retenção e Exclusão dos Dados Pessoais",
+      "textExcerpt": "A RD adota práticas responsáveis para o armazenamento e exclusão de Dados Pessoais, em conformidade com a legislação aplicável e com o objetivo de garantir a segurança e a privacidade das informações tratadas. Os Dados Pessoais podem ser armazenados em servidores próprios ou de terceiros contratados para esse fim, tanto no Brasil quanto no exterior, conforme a legislação vigente. Podemos utilizar tecnologias de cloud computing e outras soluções emergentes para aprimorar os serviços prestados aos nossos usuários, sempre respeitando os requisitos de proteção de dados. O armazenamento dos Dados Pessoais será feito pelo tempo necessário para a finalidade para a qual foram coletados ou enquanto forem relevantes para os interesses legítimos da RD. A duração do armazenamento também poderá ser estendida caso seja exigido para cumprimento de obrigações legais, contratuais ou regulatórias. Quando não forem mais necessários para o cumprimento de tais finalidades, os dados serão excluídos de forma segura, de acordo com os artigos 15 e 16 da LGPD. O tratamento de Dados Pessoais será encerrado nas seguintes situações:",
+      "extractionMethod": "html_heading_hierarchy",
+      "sourceOffsetBasis": "sanitized_html",
+      "documentTextSha256": "6daa9b49c14f1e14a3aa0e6bcb4f1c536b6b20b4f04ff1591667accc289117d4",
+      "evidenceTextSha256": "204c93a981571dddbe51323af2fe721a0c8d44448353a5b5ccf46e1e39e9c20e",
+      "sourceTextChars": 42815,
+      "extractionState": "complete",
+      "charStart": 29315,
+      "charEnd": 30653,
+      "quality": "strong"
+    },
+    "clause": "O armazenamento dos Dados Pessoais será feito pelo tempo necessário para a finalidade para a qual foram coletados ou enquanto forem relevantes para os interesses legítimos da RD.",
+    "historicalSignals": [],
+    "historicalSelectedWitness": null
+  }
+]

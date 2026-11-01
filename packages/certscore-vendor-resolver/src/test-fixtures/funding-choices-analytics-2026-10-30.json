@@ -1,0 +1,244 @@
+[
+  {
+    "site": "mobcup.com.co",
+    "scanId": "2afec526-0afb-49e7-934d-d4722e81322c",
+    "sourceSha256": "4804c6f603f3b6fabae3032526c27a6bd040d3aae21d79965b02c8e15c657b7c",
+    "cookie": {
+      "cookieName": "FCNEC",
+      "domain": "mobcup.com.co",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ],
+      "firstObservedAtMs": 6867
+    }
+  },
+  {
+    "site": "online2pdf.com",
+    "scanId": "48c01ceb-076e-4553-b7d4-1fd8958a13ff",
+    "sourceSha256": "16ab558f734f5910bd02e91685dbdb1e32ca594a02b1d567cd2793a722ffc460",
+    "cookie": {
+      "cookieName": "FCNEC",
+      "domain": "online2pdf.com",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ],
+      "firstObservedAtMs": 11476
+    }
+  },
+  {
+    "site": "showtv.com.tr",
+    "scanId": "d06200c8-fea0-45e4-9d12-13d50acf448c",
+    "sourceSha256": "27e6023929c00a53ad8bd4a1cbc99c36c1cf348a13496428b08170c6bcc275a0",
+    "cookie": {
+      "cookieName": "FCNEC",
+      "domain": "showtv.com.tr",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ],
+      "firstObservedAtMs": 10880
+    }
+  },
+  {
+    "site": "transparentcalifornia.com",
+    "scanId": "4e19a908-c570-4d1c-8a21-240d151b214a",
+    "sourceSha256": "3832ead91aee14ea34a68587a99bd420767af89c44b573940e38da506d5f2b8f",
+    "cookie": {
+      "cookieName": "FCNEC",
+      "domain": "transparentcalifornia.com",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ],
+      "firstObservedAtMs": 12842
+    }
+  },
+  {
+    "site": "hkej.com",
+    "scanId": "0117691a-9141-4aa1-9743-ce783e9c2673",
+    "sourceSha256": "d83c613e2f7da3f33fe15be29e10b7b2505026c3432031e49329229c63f64a19",
+    "cookie": {
+      "cookieName": "FCNEC",
+      "domain": "hkej.com",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ],
+      "firstObservedAtMs": 12599
+    }
+  },
+  {
+    "site": "setn.com",
+    "scanId": "948c831f-281d-4f5d-93fd-7277941f4658",
+    "sourceSha256": "4e0537096df56c58df999405bf5ee3445c519dca3e4523581a0115d9b26718c8",
+    "cookie": {
+      "cookieName": "FCNEC",
+      "domain": "setn.com",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ],
+      "firstObservedAtMs": 14125
+    }
+  },
+  {
+    "site": "blogcms.jp",
+    "scanId": "f4618c81-b7d8-4715-9661-8a43fc3e3f16",
+    "sourceSha256": "005303835890a9f715930a761a5b01f71af18e2c480fff040588c76907c05ae4",
+    "cookie": {
+      "cookieName": "FCNEC",
+      "domain": "livedoor.com",
+      "party": "third_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ],
+      "firstObservedAtMs": 9477
+    }
+  },
+  {
+    "site": "niedziela.pl",
+    "scanId": "26b9041f-7efa-4525-b754-1ec2179b8a9f",
+    "sourceSha256": "e348ca8824d7a8eb85b8db972b117aa220f42f56b3d3e2d439583bf2bd66302e",
+    "cookie": {
+      "cookieName": "FCNEC",
+      "domain": "niedziela.pl",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ],
+      "firstObservedAtMs": 8823
+    }
+  },
+  {
+    "site": "serebii.net",
+    "scanId": "82fbdb37-3278-4a4f-8813-7d4ea5ff1bc1",
+    "sourceSha256": "db555a43f80278b00b1f4748b9d73189751e2b7cd8e6aff12b9eae4d8eee7229",
+    "cookie": {
+      "cookieName": "FCNEC",
+      "domain": "serebii.net",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ],
+      "firstObservedAtMs": 7136
+    }
+  },
+  {
+    "site": "kanaloco.jp",
+    "scanId": "188cdd25-c7bf-489b-92ea-3f2d27828811",
+    "sourceSha256": "7a1327776f32460d7001be64337d54e6c967561b2a26214798a255b532d57f8a",
+    "cookie": {
+      "cookieName": "FCNEC",
+      "domain": "kanaloco.jp",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ],
+      "firstObservedAtMs": 13281
+    }
+  },
+  {
+    "site": "pvstory.com",
+    "scanId": "843d086a-e925-4c43-bfe9-72574f01ab71",
+    "sourceSha256": "d12e36c2a7fa989990279e4ef837031a89b11da06f3a51b90833b30765754100",
+    "cookie": {
+      "cookieName": "FCNEC",
+      "domain": "pvstory.com",
+      "party": "first_party",
+      "category": "unknown",
+      "essentiality": "unknown",
+      "setMethod": "browser_snapshot",
+      "setAtMs": null,
+      "timingBasis": "periodic_cookie_snapshot",
+      "timingEvidence": "periodic_cookie_snapshot",
+      "essentialityReasonCodes": [
+        "canonical_cookie_knowledge_no_match",
+        "cookie_purpose_policy:certscore.cookie-purpose.v8",
+        "cookie_purpose_unknown:no_registry_match"
+      ],
+      "firstObservedAtMs": 6013
+    }
+  }
+]

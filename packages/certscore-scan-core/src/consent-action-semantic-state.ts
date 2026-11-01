@@ -1,4 +1,7 @@
 import {receiptCaptureToken,retainReceiptWrites,retainReceiptCookies} from './consent-receipt-capture.js';
+import { verifyLegacyCookieYesReceipt, legacyCookieYesIdentity, type CookieYesLegacyBaseline } from "./cookieyes-legacy-consent-state.js";
+import { cookieYesLegacyConfigurationSchema } from "@certscore/contracts";
+import type { Locator } from "playwright";
 import { verifyComplianzReceipt } from "./complianz-consent-state.js";
 import { cmpPassiveReadToken, recordCmpPassiveRead } from "./cmp-passive-diagnostics.js";
 import { decodeCanonicalConsentDecision, type ConsentStateDecision, type OneTrustGroupEvidence, type ConsentConfirmationReason } from "@certscore/contracts";
@@ -22,6 +25,7 @@ export type ActionStateWrite = {
 
 export type SemanticState = {
   oneTrustGroupEvidence?: OneTrustGroupEvidence;
+  cookieYesLegacyReceiptEvidence?: import("@certscore/contracts").CookieYesLegacyReceiptEvidence;
   complianzReceiptEvidence?: import("@certscore/contracts").ComplianzReceiptEvidence;
   stateHash: string;
   key: string;
@@ -33,10 +37,19 @@ export async function readActionStateWrites(scope: Page | Frame): Promise<Action
   return (await readActionStateSnapshot(scope)).writes;
 }
 
-async function readActionStateSnapshot(scope: Page | Frame): Promise<{writes:ActionStateWrite[];complianz:unknown}> {
+async function readActionStateSnapshot(scope: Page | Frame) {
   const token = cmpPassiveReadToken(scope);
   const receiptToken = receiptCaptureToken(scope);
-  const raw = await scope.evaluate(() => {
+  const raw = await scope.evaluate(readConsentActionSnapshot).catch(() => ({writes:[],passive:undefined,complianz:undefined,cookieYesLegacy:undefined,legacyControlBound:false}));
+  retainReceiptWrites(receiptToken,Array.isArray(raw)?raw:raw.writes);
+  if (Array.isArray(raw)) return {writes:raw as ActionStateWrite[],complianz:undefined,cookieYesLegacy:undefined};
+  recordCmpPassiveRead(token,raw.passive);
+  return {writes:raw.writes,complianz:raw.complianz,cookieYesLegacy:raw.cookieYesLegacy};
+}
+
+/** Serialized without imported closures; only own loaded data and bounded DOM
+ * facts. No SDK calls, preference opening, category toggling or consent action. */
+export function readConsentActionSnapshot(control?: Element | void) {
     const target = window as unknown as {
       __certscoreReadCmpPassiveEvents?: () => unknown;
       __certscoreReadPostAcceptWrites?: () => ActionStateWrite[];
@@ -50,7 +63,7 @@ async function readActionStateSnapshot(scope: Page | Frame): Promise<{writes:Act
     try {
       const descriptor=Object.getOwnPropertyDescriptor(window,"complianz");
       const config=descriptor && "value" in descriptor ? descriptor.value : undefined;
-      const own=(key:string)=>{const d=config && Object.getOwnPropertyDescriptor(config,key);return d && "value" in d ? d.value : undefined;};
+      const data={own(key:string){const d=config && Object.getOwnPropertyDescriptor(config,key);return d && "value" in d ? d.value : undefined;}};
       const categoryDescriptor=Object.getOwnPropertyDescriptor(window,"cmplz_categories");
       const categories=categoryDescriptor && !("value" in categoryDescriptor) ? undefined
         : typeof cmplz_categories === "undefined" ? undefined : cmplz_categories;
@@ -58,16 +71,74 @@ async function readActionStateSnapshot(scope: Page | Frame): Promise<{writes:Act
         const d=Object.getOwnPropertyDescriptor(categories,index);return d && "value" in d ? d.value : undefined;
       }) : undefined;
       if (values && values.every(v=>typeof v==="string") &&
-        [false,0,""].includes(own("tcf_active"))) {
-        complianz={prefix:own("prefix"),tcfActive:false,categories:values};
+        [false,0,""].includes(data.own("tcf_active"))) {
+        complianz={prefix:data.own("prefix"),tcfActive:false,categories:values};
       }
     } catch { /* Unsupported configuration supplies no decision proof. */ }
-    return {writes,passive,complianz};
-  }).catch(() => ({writes:[],passive:undefined}));
-  retainReceiptWrites(receiptToken,Array.isArray(raw)?raw:raw.writes);
-  if (Array.isArray(raw)) return {writes:raw,complianz:undefined}; // Existing test/historical read helpers.
-  recordCmpPassiveRead(token,raw.passive);
-  return {writes:raw.writes,complianz:"complianz" in raw ? raw.complianz : undefined};
+    let cookieYesLegacy: unknown;
+    let legacyControlBound = false;
+    try {
+      const data = {own(object: unknown, key: string | number): unknown {
+        if (!object || (typeof object !== "object" && typeof object !== "function")) return undefined;
+        const d = Object.getOwnPropertyDescriptor(object, key); return d && "value" in d ? d.value : undefined;
+      }};
+      const config = data.own(window, "Cli_Data"), cli = data.own(window, "CLI");
+      if (typeof data.own(cli, "generateConsent") === "function" &&
+        data.own(window, "CLI_PREFERNCE_COOKIE") === "CookieLawInfoConsent" &&
+        data.own(window, "CLI_ACCEPT_COOKIE_NAME") === "viewed_cookie_policy") {
+      const bars = document.querySelectorAll("#cookie-law-info-bar"), panels = document.querySelectorAll("#cliSettingsPopup");
+      const boxes = document.querySelectorAll(".cli-user-preference-checkbox");
+      const required = data.own(config, "strictlyEnabled");
+      if (bars.length === 1 && panels.length === 1 && boxes.length > 0 && boxes.length <= 7 &&
+        !Object.getOwnPropertyDescriptor(window, "__tcfapi") &&
+        typeof data.own(cli, "generateConsent") === "function" &&
+        data.own(window, "CLI_PREFERNCE_COOKIE") === "CookieLawInfoConsent" &&
+        data.own(window, "CLI_ACCEPT_COOKIE_NAME") === "viewed_cookie_policy" &&
+        Array.isArray(required) && required.length > 0 && required.length <= 7) {
+        const categories: string[] = [], requiredCategories: unknown[] = [];
+        let valid = true;
+        for (let index = 0; index < boxes.length; index++) {
+          const box = boxes[index]!;
+          const id = box.getAttribute("data-id");
+          if (box.localName !== "input" || box.getAttribute("type") !== "checkbox" ||
+            !panels[0]!.contains(box) || !id || !/^checkbox-[a-z-]{1,24}$/.test(id)) { valid = false; break; }
+          categories.push(id.slice("checkbox-".length));
+        }
+        for (let index = 0; index < required.length; index++) requiredCategories.push(data.own(required, index));
+        if (valid && requiredCategories.every(value => typeof value === "string")) {
+          cookieYesLegacy = {cookieName: "CookieLawInfoConsent", flagName: "viewed_cookie_policy",
+            consentVersion: data.own(config, "consentVersion"), categories: categories.sort(), requiredCategories: requiredCategories.sort()};
+          legacyControlBound = Boolean(control?.isConnected && control.closest("#cookie-law-info-bar") === bars[0]);
+        }
+      }
+      }
+    } catch { /* Incomplete or unsupported current category proof stays unknown. */ }
+    return {writes, passive, complianz, cookieYesLegacy, legacyControlBound};
+}
+
+/** One bounded passive baseline read on the already selected control. The
+ * existing cookie baseline read is reused for both protocol generations. */
+export async function captureCookieYesConfirmationBaseline(scope: Page | Frame, control: Locator, cookiesRead: ReturnType<BrowserContext["cookies"]>) {
+  const documentUrl = scope.url();
+  const cookies = await cookiesRead;
+  // Modern receipts keep their existing path without an added renderer read.
+  if (cookies.some(cookie => cookie.name === "cookieyes-consent")) return undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const factsRead = Promise.race([
+    control.evaluate(readConsentActionSnapshot).catch(() => undefined),
+    new Promise<undefined>(resolve => {timer = setTimeout(() => resolve(undefined), 25);}),
+  ]).finally(() => clearTimeout(timer));
+  const raw = await factsRead;
+  const configuration = cookieYesLegacyConfigurationSchema.safeParse(raw?.cookieYesLegacy);
+  const legacy = cookies.filter(cookie => cookie.name === "CookieLawInfoConsent");
+  const eligible = raw?.legacyControlBound && configuration.success && scope.url() === documentUrl && legacy.length <= 1 &&
+    !cookies.some(cookie => cookie.name === "cookieyes-consent") && !legacy.some(cookie => cookie.httpOnly || cookie.partitionKey);
+  const cookieYesLegacyBaseline: CookieYesLegacyBaseline | undefined = eligible && configuration.success ? {
+    configuration: configuration.data, documentUrl, capturedAtEpochMs: Date.now(),
+    lastSequence: raw?.writes.at(-1)?.sequence ?? 0,
+    ...(legacy[0] ? {beforeValueSha256: sha256(legacy[0].value), beforeIdentitySha256: legacyCookieYesIdentity(legacy[0])} : {}),
+  } : undefined;
+  return cookieYesLegacyBaseline;
 }
 
 export function matchingStateWriteTime(
@@ -85,6 +156,7 @@ type CookieDecisionInput = {
   cookieName: string;
   actionAt: number;
   oneTrustBaseline?: OneTrustBaseline;
+  cookieYesLegacyBaseline?: CookieYesLegacyBaseline;
   onDiagnostic?: (reason: ConsentConfirmationReason) => void;
 };
 
@@ -100,7 +172,12 @@ export async function verifiedChangedOneTrustDecision(input: CookieDecisionInput
   oneTrustBaseline: Extract<OneTrustBaseline, {status: "verified"}>;
 }): Promise<SemanticState | undefined> {
   const receiptToken=receiptCaptureToken(input.scope);
-  const cookies = await input.context.cookies(input.scope.url());
+  const documentUrl = input.scope.url();
+  if (input.oneTrustBaseline.documentUrl !== undefined && input.oneTrustBaseline.documentUrl !== documentUrl) {
+    input.onDiagnostic?.("sdk_document_changed"); return undefined;
+  }
+  const cookies = await input.context.cookies(documentUrl);
+  if (input.scope.url() !== documentUrl) { input.onDiagnostic?.("sdk_document_changed"); return undefined; }
   retainReceiptCookies(receiptToken,cookies,input.cookieName);
   const matching = cookies.filter(cookie => matchesCanonicalCmpCookieName(cookie.name, "OptanonConsent"));
   if (matching.length !== 1) { input.onDiagnostic?.(matching.length ? "receipt_ambiguous" : "receipt_missing"); return undefined; }
@@ -119,9 +196,19 @@ async function verifiedCookieDecisionFromRead(input: CookieDecisionInput,
   // Both reads are passive and independent. Share the existing confirmation
   // window instead of serializing two browser round trips on a busy renderer.
   const receiptToken=receiptCaptureToken(input.scope);
-  const [writes, currentCookies] = await Promise.all([
-    readActionStateWrites(input.scope), candidateCookies ?? input.context.cookies(input.scope.url()),
+  const documentUrl = input.scope.url();
+  const [snapshot, currentCookies] = await Promise.all([
+    readActionStateSnapshot(input.scope), candidateCookies ?? input.context.cookies(documentUrl),
   ]);
+  if (input.oneTrustBaseline && matchesCanonicalCmpCookieName(input.cookieName, "OptanonConsent") &&
+      input.scope.url() !== documentUrl) { input.onDiagnostic?.("sdk_document_changed"); return undefined; }
+  const writes = snapshot.writes;
+  if (input.cookieName === "cookieyes-consent" && input.cookieYesLegacyBaseline) {
+    retainReceiptCookies(receiptToken,currentCookies,"CookieLawInfoConsent");
+    if (input.scope.url() !== documentUrl) {input.onDiagnostic?.("sdk_document_changed"); return undefined;}
+    return verifyLegacyCookieYesReceipt({baseline: input.cookieYesLegacyBaseline, configuration: snapshot.cookieYesLegacy,
+      documentUrl, cookies: currentCookies, writes, actionAt: input.actionAt, readAt: Date.now(), onDiagnostic: input.onDiagnostic});
+  }
   retainReceiptCookies(receiptToken,currentCookies,input.cookieName);
   const cookies = currentCookies.filter((cookie) =>
     matchesCanonicalCmpCookieName(cookie.name, input.cookieName));

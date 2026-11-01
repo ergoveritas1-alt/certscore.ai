@@ -1,0 +1,2946 @@
+[
+  {
+    "caseId": "ae-live-reference",
+    "scope": "Retained passive local diagnostic, not production report or representative accuracy sample",
+    "sources": [
+      {
+        "file": "artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/DiagnosticEvidenceBundle.json",
+        "sha256": "73a44b7be5560cf6bdbbdb364581a5629d2f7a4351ece29db3a5e0991eb047b1",
+        "bytes": 25829
+      },
+      {
+        "file": "artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/ConsentControlGeometryEvidence.json",
+        "sha256": "f1f7750fbe180b3fd19b789de4442dba48095ce70a248d619a9373a608cae119",
+        "bytes": 43222
+      },
+      {
+        "file": "artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/visit-summary.json",
+        "sha256": "c78da4e8da5d9a02215bf97d0a4fb3bcae2237a4a5a20da25886696662c59d72",
+        "bytes": 4838
+      }
+    ],
+    "scanStartedAtMs": 1793419166362,
+    "observation": {
+      "observationId": "consent_ui_pre_consent",
+      "observedAtMs": 18055,
+      "documentUrl": "https://www.ae.com/us/en",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "22BCACBC66AF242C80B4BA86A96B5983"
+      },
+      "documentReadyState": "interactive",
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "captureDiagnostics": {
+        "completedChannels": [
+          "dom_inventory",
+          "accessibility_tree"
+        ],
+        "timedOutChannels": [],
+        "failedChannels": []
+      },
+      "likelyPresent": true,
+      "basis": [
+        "inventory:rapid_first_layer_controls",
+        "canonical_locale_context_matched",
+        "multiple_canonical_control_intents_matched",
+        "canonical_consent_context:en:privacy",
+        "canonical_consent_context:en:cookies",
+        "canonical_consent_context:es:cookies",
+        "canonical_consent_context:de:cookies",
+        "canonical_consent_context:ja:Cookie",
+        "canonical_consent_context:fr:cookies",
+        "canonical_consent_context:pt:cookies",
+        "canonical_consent_context:it:privacy",
+        "canonical_consent_context:it:cookie",
+        "canonical_consent_context:zh:Cookie",
+        "canonical_consent_context:nl:privacy",
+        "canonical_consent_context:nl:cookies",
+        "canonical_consent_context:vi:cookie",
+        "canonical_consent_context:id:cookie",
+        "canonical_consent_context:cs:cookies",
+        "canonical_consent_context:sv:cookies",
+        "canonical_consent_context:uk:cookie",
+        "canonical_consent_context:el:cookies",
+        "canonical_consent_context:ro:cookie",
+        "canonical_consent_context:da:cookies",
+        "canonical_consent_context:sk:cookies",
+        "canonical_consent_context:ca:cookies",
+        "canonical_consent_context:gl:cookies",
+        "canonical_consent_control:en:accept:agree",
+        "control:do_not_sell_share:Your Privacy Choices",
+        "recapture:post_settle_dom_inventory",
+        "settled_control_inventory_completed",
+        "unresolved_visible_consent_decision",
+        "geometry:did_not_corroborate_structured_controls",
+        "inventory:paired_settled_frame_completed",
+        "inventory:accessibility_tree_controls",
+        "canonical_consent_context:en:consent",
+        "inventory:accessibility_tree",
+        "inventory:rapid_post_accessibility",
+        "inventory:rapid_after_accessibility",
+        "inventory:prioritized_early_channels",
+        "adaptive_gate_inventory:10s_without_cmp_runtime",
+        "geometry:checkpoint_precedes_latest_inventory"
+      ],
+      "textExcerpt": "We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our Terms of Service, and acknowledge our Privacy Notice. Manage Your Privacy Choices.",
+      "layerInspected": "first_layer",
+      "visibleChoiceLabels": [
+        "Your Privacy Choices"
+      ],
+      "defaultToggleStatesObserved": null,
+      "nonEssentialDefaultsOff": null,
+      "defaultTogglePurposeLabels": [],
+      "necessaryPreferenceSelectionObserved": null,
+      "necessaryPreferenceLabels": [],
+      "precheckedOptionalPurposeCount": 0,
+      "precheckedOptionalPurposeLabels": [],
+      "acceptControlObserved": false,
+      "rejectControlObserved": false,
+      "managePreferencesControlObserved": false,
+      "controls": [
+        {
+          "label": "Your Privacy Choices",
+          "actionType": "do_not_sell_share",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "#clarip-do-not-sell-link",
+          "visible": true,
+          "matchedTerm": "your privacy choices",
+          "matchedLocale": "en",
+          "matchStrength": "direct",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "matched_privacy_opt_out",
+            "match_strength_direct",
+            "context_satisfied"
+          ],
+          "linkDestination": "same_document"
+        }
+      ],
+      "inventoryDiagnostics": {
+        "candidateContainerCount": 28,
+        "candidateControlCount": 284,
+        "retainedControlCount": 1,
+        "inspectedFrameCount": 0,
+        "inaccessibleFrameCount": 0,
+        "blockingInaccessibleFrameCount": 0,
+        "nonBlockingInaccessibleFrameCount": 0,
+        "nonBlockingInaccessibleFrameReasonCodes": [],
+        "inventorySources": [
+          "viewport",
+          "accessibility_tree"
+        ],
+        "candidateLabels": [
+          "Your Privacy Choices",
+          "Details",
+          "dismiss cookie message",
+          "learn more about cookies",
+          "change i18n settings",
+          "Terms of Service",
+          "Privacy Notice",
+          "Enable Accessibility",
+          "Accessibility Statement",
+          "Shop Women",
+          "Shop Men",
+          "Previous slide",
+          "Next slide",
+          "Show slide 0",
+          "Show slide 1",
+          "Show slide 2",
+          "Stop auto-rotation",
+          "Shop AE",
+          "Shop Aerie",
+          "Account",
+          "Favorites",
+          "0 Checkout",
+          "Search Search",
+          "pause"
+        ],
+        "rejectionReasons": [
+          "no_consent_context",
+          "hidden",
+          "footer_nav_page_chrome",
+          "classifier_other_unknown"
+        ],
+        "timingMarkers": [
+          "rapid_inventory_initial_completed",
+          "rapid_first_layer_inventory",
+          "rapid_snapshot",
+          "early_exit_controls_found",
+          "rapid_inventory_post_settle_completed",
+          "accessibility_tree_inventory_completed",
+          "rapid_inventory_post_accessibility_completed",
+          "immediate_inventory"
+        ]
+      },
+      "evidenceRefs": [
+        {
+          "refId": "dom_text_pre_consent",
+          "artifactId": "dom_text_pre_consent",
+          "path": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/dom-text-pre-consent.txt"
+        }
+      ],
+      "confidence": 0.86
+    },
+    "geometry": {
+      "artifactVersion": "consent_control_geometry.v1",
+      "sourceScanner": "consent_control_geometry_diagnostic",
+      "pageUrl": "https://www.ae.com/us/en",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "22BCACBC66AF242C80B4BA86A96B5983"
+      },
+      "capturedAt": "2026-10-31T03:59:43.207Z",
+      "captureTiming": {
+        "version": "consent_geometry_capture_timing.v1",
+        "mainFrameCompletedAt": "2026-10-31T03:59:43.207Z",
+        "completedAt": "2026-10-31T03:59:43.399Z"
+      },
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+      "cmp": {
+        "detected": false,
+        "confidence": 0,
+        "reasonCodes": [],
+        "matchedSignals": [],
+        "detections": []
+      },
+      "containers": [
+        {
+          "containerId": "container_0",
+          "selectorHint": "div[aria-label=\"Clarip Cookie Consent Banner\"]",
+          "role": "dialog",
+          "ariaLabel": "Clarip Cookie Consent Banner",
+          "classes": "cc-window cc-banner cc-type-info cc-theme-block cc-bottom cc-color-override-767193676 ",
+          "layer": "first_layer",
+          "textExcerpt": "We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our Terms of Service, and acknowledge our Privacy Notice. Manage Your Privacy Choices. OK",
+          "htmlExcerpt": "<div role=\"dialog\" aria-label=\"Clarip Cookie Consent Banner\" aria-describedby=\"cookieconsent:desc\" class=\"cc-window cc-banner cc-type-info cc-theme-block cc-bottom cc-color-override-767193676 \" style=\"\"><!--googleoff: all--><span id=\"cookieconsent:desc\" class=\"cc-message\"> We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our <a href=\"https://s7d2.scene7.com/is/content/aeo/Help/AEO_US_Terms_of_Use.pdf\" tabindex=\"2\">Terms of Service</a>, and acknowledge our <a href=\"https://www.ae.com/privacy\" tabindex=\"3\">Privacy Notice</a>. Manage <a id=\"clarip-do-not-sell-link\" href=\"https://www.ae.com/us/en\" tabindex=\"4\">Your Privacy Choices</a>. <a aria-label=\"learn more about cookies\" role=\"button\" tabindex=\"5\" class=\"cc-link\" href=\"https://www.ae.com/us/en\" target=\"_blank\"> </a></span><div class=\"cc-compliance\"><button aria-label=\"dismiss cookie message\" role=\"button\" tabindex=\"6\" class=\"cc-btn cc-allow\">OK</button></div><!--googleon: all--></div>",
+          "boundingBox": {
+            "x": 0,
+            "y": 838,
+            "width": 1366,
+            "height": 62,
+            "top": 838,
+            "right": 1366,
+            "bottom": 900,
+            "left": 0
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_1",
+          "selectorHint": "#cookieconsent\\:desc",
+          "id": "cookieconsent:desc",
+          "classes": "cc-message",
+          "layer": "first_layer",
+          "textExcerpt": "We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our Terms of Service, and acknowledge our Privacy Notice. Manage Your Privacy Choices.",
+          "htmlExcerpt": "<span id=\"cookieconsent:desc\" class=\"cc-message\"> We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our <a href=\"https://s7d2.scene7.com/is/content/aeo/Help/AEO_US_Terms_of_Use.pdf\" tabindex=\"2\">Terms of Service</a>, and acknowledge our <a href=\"https://www.ae.com/privacy\" tabindex=\"3\">Privacy Notice</a>. Manage <a id=\"clarip-do-not-sell-link\" href=\"https://www.ae.com/us/en\" tabindex=\"4\">Your Privacy Choices</a>. <a aria-label=\"learn more about cookies\" role=\"button\" tabindex=\"5\" class=\"cc-link\" href=\"https://www.ae.com/us/en\" target=\"_blank\"> </a></span>",
+          "boundingBox": {
+            "x": 30,
+            "y": 853,
+            "width": 1250.53,
+            "height": 32,
+            "top": 853,
+            "right": 1280.53,
+            "bottom": 885,
+            "left": 30
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_2",
+          "selectorHint": "#privacy_options",
+          "id": "privacy_options",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<symbol id=\"privacy_options\" viewBox=\"0 0 30 14\"><g id=\"final---dec.11-2020_1_\"><g id=\"_x30_208-our-toggle_2_\" transform=\"translate(-1275 -200)\"></g></g><g id=\"final---dec.11-2020\"><g id=\"_x30_208-our-toggle\" transform=\"translate(-1275 -200)\"><g id=\"Final-Copy-2\" transform=\"translate(1275 200)\"></g></g></g></symbol>",
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "intersectsViewport": false
+        },
+        {
+          "containerId": "container_3",
+          "selectorHint": "[data-testid=\"icon-privacy_options\"]",
+          "classes": "aeo-icon aeo-icon-privacy-options _tag-icon_11q9fj",
+          "layer": "footer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<svg height=\"13px\" width=\"28px\" class=\"aeo-icon aeo-icon-privacy-options _tag-icon_11q9fj\" data-test-icon=\"privacy_options\" data-testid=\"icon-privacy_options\"><use xlink:href=\"#privacy_options\"></use></svg>",
+          "boundingBox": {
+            "x": 882.81,
+            "y": 4909.19,
+            "width": 28,
+            "height": 13,
+            "top": 4909.19,
+            "right": 910.81,
+            "bottom": 4922.19,
+            "left": 882.81
+          },
+          "intersectsViewport": false
+        },
+        {
+          "containerId": "container_4",
+          "selectorHint": "div.panel-heading p",
+          "classes": "cookie-description",
+          "layer": "first_layer",
+          "textExcerpt": "View / Hide Cookies",
+          "htmlExcerpt": "<p class=\"cookie-description\" style=\"margin-top: 8px;\"> <a href=\"javascript:void(0)\" class=\"toggle-third-party-cookies-section\"> View / Hide Cookies </a> </p>",
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "intersectsViewport": false
+        },
+        {
+          "containerId": "container_5",
+          "selectorHint": "#collapse-third-party-cookies",
+          "id": "collapse-third-party-cookies",
+          "classes": "panel-collapse collapse",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div id=\"collapse-third-party-cookies\" class=\"panel-collapse collapse\"> <div class=\"panel-body\"> <div id=\"third-party-cookies-grid\" class=\"data-grid third-party-cookies-grid\"> <table> <thead></thead> <tbody></tbody> </table> </div> <div id=\"third-party-cookies-grid-pagination-block\"></div> </div> </div>",
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "intersectsViewport": false
+        },
+        {
+          "containerId": "container_6",
+          "selectorHint": "#third-party-cookies-grid",
+          "id": "third-party-cookies-grid",
+          "classes": "data-grid third-party-cookies-grid",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div id=\"third-party-cookies-grid\" class=\"data-grid third-party-cookies-grid\"> <table> <thead></thead> <tbody></tbody> </table> </div>",
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "intersectsViewport": false
+        },
+        {
+          "containerId": "container_7",
+          "selectorHint": "#third-party-cookies-grid-pagination-block",
+          "id": "third-party-cookies-grid-pagination-block",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div id=\"third-party-cookies-grid-pagination-block\"></div>",
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "intersectsViewport": false
+        }
+      ],
+      "candidates": [
+        {
+          "candidateId": "candidate_0",
+          "label": "Your Privacy Choices",
+          "normalizedLabel": "your privacy choices",
+          "actionType": "do_not_sell_share",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "#clarip-do-not-sell-link",
+          "containerSelectorHint": "#cookieconsent\\:desc",
+          "containerId": "container_1",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "inline",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 320.41,
+            "y": 869,
+            "width": 110.88,
+            "height": 16,
+            "top": 869,
+            "right": 431.28,
+            "bottom": 885,
+            "left": 320.41
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "matchedTerm": "your privacy choices",
+          "matchedLocale": "en",
+          "matchStrength": "direct",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "matched_privacy_opt_out",
+            "match_strength_direct",
+            "context_satisfied"
+          ],
+          "classifierConfidence": 0.91,
+          "consentContextConfirmed": true,
+          "linkDestination": "same_document",
+          "diagnosticClassifications": [
+            {
+              "classifierProfile": "multilingual_v1",
+              "intent": "privacy_opt_out",
+              "actionType": "do_not_sell_share",
+              "matchedTerm": "your privacy choices",
+              "matchedLocale": "en",
+              "matchStrength": "direct",
+              "classifierRegistryVersion": "consent-control-label-registry.v26",
+              "classifierReasonCodes": [
+                "matched_privacy_opt_out",
+                "match_strength_direct",
+                "context_satisfied"
+              ],
+              "classifierConfidence": 0.91,
+              "productionCredit": false
+            }
+          ],
+          "effectiveVisibility": "direct",
+          "decisionStatus": "confirmed_visible",
+          "reasons": [
+            "visible_first_layer_candidate"
+          ]
+        },
+        {
+          "candidateId": "candidate_1",
+          "label": "Terms of Service",
+          "normalizedLabel": "terms of service",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "#cookieconsent\\:desc a",
+          "containerSelectorHint": "#cookieconsent\\:desc",
+          "containerId": "container_1",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "inline",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 30,
+            "y": 853,
+            "width": 1218.31,
+            "height": 32,
+            "top": 853,
+            "right": 1248.31,
+            "bottom": 885,
+            "left": 30
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "other_document",
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_2",
+          "label": "Privacy Notice",
+          "normalizedLabel": "privacy notice",
+          "actionType": "policy_link",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "#cookieconsent\\:desc a",
+          "containerSelectorHint": "#cookieconsent\\:desc",
+          "containerId": "container_1",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "inline",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 192.89,
+            "y": 869,
+            "width": 75.31,
+            "height": 16,
+            "top": 869,
+            "right": 268.2,
+            "bottom": 885,
+            "left": 192.89
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "other_document",
+          "decisionStatus": "footer_or_policy_link",
+          "reasons": [
+            "footer_or_policy_link"
+          ]
+        },
+        {
+          "candidateId": "candidate_3",
+          "label": "OK",
+          "normalizedLabel": "ok",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "button",
+          "semanticallyInteractive": true,
+          "role": "button",
+          "ariaLabel": "dismiss cookie message",
+          "selectorHint": "button[aria-label=\"dismiss cookie message\"]",
+          "containerSelectorHint": "div[aria-label=\"Clarip Cookie Consent Banner\"]",
+          "containerId": "container_0",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 1280.53,
+            "y": 854,
+            "width": 55.47,
+            "height": 30,
+            "top": 854,
+            "right": 1336,
+            "bottom": 884,
+            "left": 1280.53
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "unproven_acknowledgment_consent"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_4",
+          "label": "The Halloween Shop",
+          "normalizedLabel": "the halloween shop",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "a.link_vAuZy.link_Gsdkf",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "hidden",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 589,
+            "y": 366,
+            "width": 190,
+            "height": 17,
+            "top": 366,
+            "right": 779,
+            "bottom": 383,
+            "left": 589
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": true,
+          "scrollableAncestor": {
+            "selectorHint": "#ember9 div",
+            "boundingBox": {
+              "x": 0,
+              "y": 240,
+              "width": 1366,
+              "height": 0,
+              "top": 240,
+              "right": 1366,
+              "bottom": 240,
+              "left": 0
+            }
+          },
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 5,
+            "hitSelectorHints": [
+              "a.link_twSf5.headless-cms-link",
+              "div.content_4Lkq-.qa-headless-cms-lockup-overlay.cms-16q2sg6 span",
+              "span.qa-headless-cms-copy.copy_RNj\\+f"
+            ]
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "linkDestination": "other_document",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_5",
+          "label": "The Halloween Shop",
+          "normalizedLabel": "the halloween shop",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "a.link_vAuZy.link_Gsdkf",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "hidden",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 589,
+            "y": 366,
+            "width": 190,
+            "height": 17,
+            "top": 366,
+            "right": 779,
+            "bottom": 383,
+            "left": 589
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": true,
+          "scrollableAncestor": {
+            "selectorHint": "#ember10 div",
+            "boundingBox": {
+              "x": 0,
+              "y": 240,
+              "width": 1366,
+              "height": 0,
+              "top": 240,
+              "right": 1366,
+              "bottom": 240,
+              "left": 0
+            }
+          },
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 5,
+            "hitSelectorHints": [
+              "a.link_twSf5.headless-cms-link",
+              "div.content_4Lkq-.qa-headless-cms-lockup-overlay.cms-16q2sg6 span",
+              "span.qa-headless-cms-copy.copy_RNj\\+f"
+            ]
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "linkDestination": "other_document",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_6",
+          "label": "View / Hide Cookies",
+          "normalizedLabel": "view / hide cookies",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "p.cookie-description a",
+          "containerSelectorHint": "div.panel-heading p",
+          "containerId": "container_4",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "child_frame",
+            "frameUrl": "https://cdn.clarip.com/aeo/donotsell/70f20fe0eb8b616bc7c7-dsr-controller.html?1793372726&start=70f20fe0eb8b616bc7c7&client=aeo&brand=www.ae.com&globalDnsDeployment=false&pageUrl=https%3A%2F%2Fwww.ae.com%2Fus%2Fen"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "inline",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 150
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "linkDestination": "unverified",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_7",
+          "label": "Your Privacy Choices",
+          "normalizedLabel": "your privacy choices",
+          "actionType": "do_not_sell_share",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "button",
+          "semanticallyInteractive": true,
+          "selectorHint": "[data-testid=\"legal-and-policies\"] button",
+          "layer": "footer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 765.94,
+            "y": 4908.19,
+            "width": 144.88,
+            "height": 15,
+            "top": 4908.19,
+            "right": 910.81,
+            "bottom": 4923.19,
+            "left": 765.94
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 0,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "matchedTerm": "your privacy choices",
+          "matchedLocale": "en",
+          "matchStrength": "direct",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "matched_privacy_opt_out",
+            "match_strength_direct",
+            "context_satisfied"
+          ],
+          "classifierConfidence": 0.91,
+          "consentContextConfirmed": false,
+          "diagnosticClassifications": [
+            {
+              "classifierProfile": "multilingual_v1",
+              "intent": "privacy_opt_out",
+              "actionType": "do_not_sell_share",
+              "matchedTerm": "your privacy choices",
+              "matchedLocale": "en",
+              "matchStrength": "direct",
+              "classifierRegistryVersion": "consent-control-label-registry.v26",
+              "classifierReasonCodes": [
+                "matched_privacy_opt_out",
+                "match_strength_direct",
+                "context_satisfied"
+              ],
+              "classifierConfidence": 0.91,
+              "productionCredit": false
+            }
+          ],
+          "decisionStatus": "footer_or_policy_link",
+          "reasons": [
+            "footer_or_policy_link"
+          ]
+        },
+        {
+          "candidateId": "candidate_8",
+          "label": "United States ($USD)",
+          "normalizedLabel": "united states ($usd)",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "button",
+          "semanticallyInteractive": true,
+          "ariaLabel": "change i18n settings",
+          "selectorHint": "button[aria-label=\"change i18n settings\"]",
+          "layer": "footer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 604.2,
+            "y": 4872.19,
+            "width": 157.58,
+            "height": 20,
+            "top": 4872.19,
+            "right": 761.78,
+            "bottom": 4892.19,
+            "left": 604.2
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 0,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "decisionStatus": "footer_or_policy_link",
+          "reasons": [
+            "footer_or_policy_link"
+          ]
+        },
+        {
+          "candidateId": "candidate_9",
+          "label": "Privacy Notice",
+          "normalizedLabel": "privacy notice",
+          "actionType": "policy_link",
+          "presentationType": "persistent_link",
+          "placementType": "persistent_surface",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "[data-testid=\"legal-and-policies\"] a",
+          "layer": "footer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "inline",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 349.27,
+            "y": 4907.19,
+            "width": 75.31,
+            "height": 16,
+            "top": 4907.19,
+            "right": 424.58,
+            "bottom": 4923.19,
+            "left": 349.27
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 0,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "linkDestination": "other_document",
+          "decisionStatus": "footer_or_policy_link",
+          "reasons": [
+            "footer_or_policy_link"
+          ]
+        },
+        {
+          "candidateId": "candidate_10",
+          "label": "close",
+          "normalizedLabel": "close",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "button",
+          "semanticallyInteractive": true,
+          "role": "button",
+          "ariaLabel": "close",
+          "selectorHint": "#close-dns-manager",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "child_frame",
+            "frameUrl": "https://cdn.clarip.com/aeo/donotsell/70f20fe0eb8b616bc7c7-dsr-controller.html?1793372726&start=70f20fe0eb8b616bc7c7&client=aeo&brand=www.ae.com&globalDnsDeployment=false&pageUrl=https%3A%2F%2Fwww.ae.com%2Fus%2Fen"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "absolute",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 150
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "matchedTerm": "close",
+          "matchStrength": "direct",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "matched_dismiss",
+            "match_strength_direct"
+          ],
+          "classifierConfidence": 0.84,
+          "consentContextConfirmed": true,
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_11",
+          "label": "Privacy Notice",
+          "normalizedLabel": "privacy notice",
+          "actionType": "policy_link",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "#right-to-opt-out-notice a",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "child_frame",
+            "frameUrl": "https://cdn.clarip.com/aeo/donotsell/70f20fe0eb8b616bc7c7-dsr-controller.html?1793372726&start=70f20fe0eb8b616bc7c7&client=aeo&brand=www.ae.com&globalDnsDeployment=false&pageUrl=https%3A%2F%2Fwww.ae.com%2Fus%2Fen"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "inline",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 150
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "privacy_opt_out_context"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "other_document",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_12",
+          "label": "",
+          "normalizedLabel": "",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "h2.panel-title a",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "child_frame",
+            "frameUrl": "https://cdn.clarip.com/aeo/donotsell/70f20fe0eb8b616bc7c7-dsr-controller.html?1793372726&start=70f20fe0eb8b616bc7c7&client=aeo&brand=www.ae.com&globalDnsDeployment=false&pageUrl=https%3A%2F%2Fwww.ae.com%2Fus%2Fen"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 150
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "empty_label"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "linkDestination": "unverified",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_13",
+          "label": "The most powerful enterprise privacy governance platform",
+          "normalizedLabel": "the most powerful enterprise privacy governance platform",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "ariaLabel": "The most powerful enterprise privacy governance platform",
+          "selectorHint": "#powered-by",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "child_frame",
+            "frameUrl": "https://cdn.clarip.com/aeo/donotsell/70f20fe0eb8b616bc7c7-dsr-controller.html?1793372726&start=70f20fe0eb8b616bc7c7&client=aeo&brand=www.ae.com&globalDnsDeployment=false&pageUrl=https%3A%2F%2Fwww.ae.com%2Fus%2Fen"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 150
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "linkDestination": "other_document",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_14",
+          "label": "learn more about cookies",
+          "normalizedLabel": "learn more about cookies",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "role": "button",
+          "ariaLabel": "learn more about cookies",
+          "selectorHint": "a[aria-label=\"learn more about cookies\"]",
+          "containerSelectorHint": "#cookieconsent\\:desc",
+          "containerId": "container_1",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "none",
+            "visibility": "visible",
+            "opacity": "0.8",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": [
+              "[data-testid=\"sticky-header-promo\"] div.qa-headless-cms-background-without-media.headless-cms-background-without-media.container_iv6Ry.animated-carousel-background"
+            ]
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/reference/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "unverified",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        }
+      ],
+      "controlInspection": {
+        "version": "control_specific_inspection.v3",
+        "retainedCandidateCount": 15,
+        "captureCoverage": {
+          "inventoryTruncated": false,
+          "documentReadyState": "interactive",
+          "mainFrameAvailable": true,
+          "documentAndFramesStable": true,
+          "frameCount": 5,
+          "capturedFrameCount": 5
+        },
+        "structuralCoverage": "limited",
+        "reasonCodes": [
+          "structural_control_inventory_incomplete"
+        ],
+        "candidates": [
+          {
+            "candidateId": "candidate_0",
+            "role": "decision",
+            "unresolvedIntents": []
+          },
+          {
+            "candidateId": "candidate_1",
+            "role": "information",
+            "unresolvedIntents": []
+          },
+          {
+            "candidateId": "candidate_2",
+            "role": "information",
+            "unresolvedIntents": []
+          },
+          {
+            "candidateId": "candidate_3",
+            "role": "unknown",
+            "unresolvedIntents": [
+              "accept",
+              "reject",
+              "options",
+              "privacy_opt_out"
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "firstLayerAccept": false,
+        "firstLayerReject": false,
+        "firstLayerOptions": false,
+        "cmpDetected": false,
+        "confidence": 0.55,
+        "limitations": [
+          "unresolved_visible_consent_decision"
+        ]
+      },
+      "access": {
+        "status": "loaded",
+        "reasonCodes": [],
+        "httpStatus": 200,
+        "title": "Men\u2019s & Women\u2019s Jeans, Clothes & Accessories | American Eagle",
+        "textExcerpt": "Men\u2019s & Women\u2019s Jeans, Clothes & Accessories | American Eagle We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our Terms of Service, and acknowledge our Privacy Notice. Manage Your Privacy Choices. OK Enable Accessibility Accessibility Statement 40-50% off all jeans! Shop Women Shop Men Details Go to Shop AE homepage. Go to Shop Aer"
+      },
+      "egress": {
+        "label": "direct_no_proxy",
+        "proxyConfigured": false,
+        "requiredProxy": false
+      },
+      "artifactOnly": true,
+      "productionFindingIntegration": false
+    }
+  },
+  {
+    "caseId": "ae-live-candidate",
+    "scope": "Retained passive local diagnostic, not production report or representative accuracy sample",
+    "sources": [
+      {
+        "file": "artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/DiagnosticEvidenceBundle.json",
+        "sha256": "9bd1aa8856d754dc9a6f2a2beaf60fcb031bb3b78e3415a151288b811e24c293",
+        "bytes": 25823
+      },
+      {
+        "file": "artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/ConsentControlGeometryEvidence.json",
+        "sha256": "7e78dc07359c82d69fd8b47966effeb106e84c8f59f9cab856b7dd0bf81c8daa",
+        "bytes": 43224
+      },
+      {
+        "file": "artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/visit-summary.json",
+        "sha256": "f4d2ebbbc1e5d1373113a76bb51501d5b893d1dbed7dedfc15b085cbc4bd5c69",
+        "bytes": 4838
+      }
+    ],
+    "scanStartedAtMs": 1793419320679,
+    "observation": {
+      "observationId": "consent_ui_pre_consent",
+      "observedAtMs": 11352,
+      "documentUrl": "https://www.ae.com/us/en",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "094E5AB7CB4858E393A614C9855BF5D1"
+      },
+      "documentReadyState": "interactive",
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "captureDiagnostics": {
+        "completedChannels": [
+          "dom_inventory",
+          "accessibility_tree"
+        ],
+        "timedOutChannels": [],
+        "failedChannels": []
+      },
+      "likelyPresent": true,
+      "basis": [
+        "inventory:rapid_first_layer_controls",
+        "canonical_locale_context_matched",
+        "multiple_canonical_control_intents_matched",
+        "canonical_consent_context:en:privacy",
+        "canonical_consent_context:en:cookies",
+        "canonical_consent_context:es:cookies",
+        "canonical_consent_context:de:cookies",
+        "canonical_consent_context:ja:Cookie",
+        "canonical_consent_context:fr:cookies",
+        "canonical_consent_context:pt:cookies",
+        "canonical_consent_context:it:privacy",
+        "canonical_consent_context:it:cookie",
+        "canonical_consent_context:zh:Cookie",
+        "canonical_consent_context:nl:privacy",
+        "canonical_consent_context:nl:cookies",
+        "canonical_consent_context:vi:cookie",
+        "canonical_consent_context:id:cookie",
+        "canonical_consent_context:cs:cookies",
+        "canonical_consent_context:sv:cookies",
+        "canonical_consent_context:uk:cookie",
+        "canonical_consent_context:el:cookies",
+        "canonical_consent_context:ro:cookie",
+        "canonical_consent_context:da:cookies",
+        "canonical_consent_context:sk:cookies",
+        "canonical_consent_context:ca:cookies",
+        "canonical_consent_context:gl:cookies",
+        "canonical_consent_control:en:accept:agree",
+        "control:do_not_sell_share:Your Privacy Choices",
+        "recapture:post_settle_dom_inventory",
+        "settled_control_inventory_completed",
+        "unresolved_visible_consent_decision",
+        "geometry:did_not_corroborate_structured_controls",
+        "inventory:paired_settled_frame_completed",
+        "inventory:accessibility_tree_controls",
+        "canonical_consent_context:en:consent",
+        "inventory:accessibility_tree",
+        "inventory:rapid_post_accessibility",
+        "inventory:rapid_after_accessibility",
+        "inventory:prioritized_early_channels",
+        "adaptive_gate_inventory:10s_without_cmp_runtime",
+        "geometry:checkpoint_precedes_latest_inventory"
+      ],
+      "textExcerpt": "We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our Terms of Service, and acknowledge our Privacy Notice. Manage Your Privacy Choices.",
+      "layerInspected": "first_layer",
+      "visibleChoiceLabels": [
+        "Your Privacy Choices"
+      ],
+      "defaultToggleStatesObserved": null,
+      "nonEssentialDefaultsOff": null,
+      "defaultTogglePurposeLabels": [],
+      "necessaryPreferenceSelectionObserved": null,
+      "necessaryPreferenceLabels": [],
+      "precheckedOptionalPurposeCount": 0,
+      "precheckedOptionalPurposeLabels": [],
+      "acceptControlObserved": false,
+      "rejectControlObserved": false,
+      "managePreferencesControlObserved": false,
+      "controls": [
+        {
+          "label": "Your Privacy Choices",
+          "actionType": "do_not_sell_share",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "#clarip-do-not-sell-link",
+          "visible": true,
+          "matchedTerm": "your privacy choices",
+          "matchedLocale": "en",
+          "matchStrength": "direct",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "matched_privacy_opt_out",
+            "match_strength_direct",
+            "context_satisfied"
+          ],
+          "linkDestination": "same_document"
+        }
+      ],
+      "inventoryDiagnostics": {
+        "candidateContainerCount": 28,
+        "candidateControlCount": 284,
+        "retainedControlCount": 1,
+        "inspectedFrameCount": 0,
+        "inaccessibleFrameCount": 0,
+        "blockingInaccessibleFrameCount": 0,
+        "nonBlockingInaccessibleFrameCount": 0,
+        "nonBlockingInaccessibleFrameReasonCodes": [],
+        "inventorySources": [
+          "viewport",
+          "accessibility_tree"
+        ],
+        "candidateLabels": [
+          "Your Privacy Choices",
+          "Details",
+          "dismiss cookie message",
+          "learn more about cookies",
+          "change i18n settings",
+          "Terms of Service",
+          "Privacy Notice",
+          "Enable Accessibility",
+          "Accessibility Statement",
+          "Shop Women",
+          "Shop Men",
+          "Previous slide",
+          "Next slide",
+          "Show slide 0",
+          "Show slide 1",
+          "Show slide 2",
+          "Stop auto-rotation",
+          "Shop AE",
+          "Shop Aerie",
+          "Account",
+          "Favorites",
+          "0 Checkout",
+          "Search Search",
+          "pause"
+        ],
+        "rejectionReasons": [
+          "no_consent_context",
+          "hidden",
+          "footer_nav_page_chrome",
+          "classifier_other_unknown"
+        ],
+        "timingMarkers": [
+          "rapid_inventory_initial_completed",
+          "rapid_first_layer_inventory",
+          "rapid_snapshot",
+          "early_exit_controls_found",
+          "rapid_inventory_post_settle_completed",
+          "accessibility_tree_inventory_completed",
+          "rapid_inventory_post_accessibility_completed",
+          "immediate_inventory"
+        ]
+      },
+      "evidenceRefs": [
+        {
+          "refId": "dom_text_pre_consent",
+          "artifactId": "dom_text_pre_consent",
+          "path": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/dom-text-pre-consent.txt"
+        }
+      ],
+      "confidence": 0.86
+    },
+    "geometry": {
+      "artifactVersion": "consent_control_geometry.v1",
+      "sourceScanner": "consent_control_geometry_diagnostic",
+      "pageUrl": "https://www.ae.com/us/en",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "094E5AB7CB4858E393A614C9855BF5D1"
+      },
+      "capturedAt": "2026-10-31T04:02:05.068Z",
+      "captureTiming": {
+        "version": "consent_geometry_capture_timing.v1",
+        "mainFrameCompletedAt": "2026-10-31T04:02:05.068Z",
+        "completedAt": "2026-10-31T04:02:05.282Z"
+      },
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+      "cmp": {
+        "detected": false,
+        "confidence": 0,
+        "reasonCodes": [],
+        "matchedSignals": [],
+        "detections": []
+      },
+      "containers": [
+        {
+          "containerId": "container_0",
+          "selectorHint": "div[aria-label=\"Clarip Cookie Consent Banner\"]",
+          "role": "dialog",
+          "ariaLabel": "Clarip Cookie Consent Banner",
+          "classes": "cc-window cc-banner cc-type-info cc-theme-block cc-bottom cc-color-override-767193676 ",
+          "layer": "first_layer",
+          "textExcerpt": "We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our Terms of Service, and acknowledge our Privacy Notice. Manage Your Privacy Choices. OK",
+          "htmlExcerpt": "<div role=\"dialog\" aria-label=\"Clarip Cookie Consent Banner\" aria-describedby=\"cookieconsent:desc\" class=\"cc-window cc-banner cc-type-info cc-theme-block cc-bottom cc-color-override-767193676 \" style=\"\"><!--googleoff: all--><span id=\"cookieconsent:desc\" class=\"cc-message\"> We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our <a href=\"https://s7d2.scene7.com/is/content/aeo/Help/AEO_US_Terms_of_Use.pdf\" tabindex=\"2\">Terms of Service</a>, and acknowledge our <a href=\"https://www.ae.com/privacy\" tabindex=\"3\">Privacy Notice</a>. Manage <a id=\"clarip-do-not-sell-link\" href=\"https://www.ae.com/us/en\" tabindex=\"4\">Your Privacy Choices</a>. <a aria-label=\"learn more about cookies\" role=\"button\" tabindex=\"5\" class=\"cc-link\" href=\"https://www.ae.com/us/en\" target=\"_blank\"> </a></span><div class=\"cc-compliance\"><button aria-label=\"dismiss cookie message\" role=\"button\" tabindex=\"6\" class=\"cc-btn cc-allow\">OK</button></div><!--googleon: all--></div>",
+          "boundingBox": {
+            "x": 0,
+            "y": 838,
+            "width": 1366,
+            "height": 62,
+            "top": 838,
+            "right": 1366,
+            "bottom": 900,
+            "left": 0
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_1",
+          "selectorHint": "#cookieconsent\\:desc",
+          "id": "cookieconsent:desc",
+          "classes": "cc-message",
+          "layer": "first_layer",
+          "textExcerpt": "We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our Terms of Service, and acknowledge our Privacy Notice. Manage Your Privacy Choices.",
+          "htmlExcerpt": "<span id=\"cookieconsent:desc\" class=\"cc-message\"> We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our <a href=\"https://s7d2.scene7.com/is/content/aeo/Help/AEO_US_Terms_of_Use.pdf\" tabindex=\"2\">Terms of Service</a>, and acknowledge our <a href=\"https://www.ae.com/privacy\" tabindex=\"3\">Privacy Notice</a>. Manage <a id=\"clarip-do-not-sell-link\" href=\"https://www.ae.com/us/en\" tabindex=\"4\">Your Privacy Choices</a>. <a aria-label=\"learn more about cookies\" role=\"button\" tabindex=\"5\" class=\"cc-link\" href=\"https://www.ae.com/us/en\" target=\"_blank\"> </a></span>",
+          "boundingBox": {
+            "x": 30,
+            "y": 853,
+            "width": 1250.53,
+            "height": 32,
+            "top": 853,
+            "right": 1280.53,
+            "bottom": 885,
+            "left": 30
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_2",
+          "selectorHint": "#privacy_options",
+          "id": "privacy_options",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<symbol id=\"privacy_options\" viewBox=\"0 0 30 14\"><g id=\"final---dec.11-2020_1_\"><g id=\"_x30_208-our-toggle_2_\" transform=\"translate(-1275 -200)\"></g></g><g id=\"final---dec.11-2020\"><g id=\"_x30_208-our-toggle\" transform=\"translate(-1275 -200)\"><g id=\"Final-Copy-2\" transform=\"translate(1275 200)\"></g></g></g></symbol>",
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "intersectsViewport": false
+        },
+        {
+          "containerId": "container_3",
+          "selectorHint": "[data-testid=\"icon-privacy_options\"]",
+          "classes": "aeo-icon aeo-icon-privacy-options _tag-icon_11q9fj",
+          "layer": "footer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<svg height=\"13px\" width=\"28px\" class=\"aeo-icon aeo-icon-privacy-options _tag-icon_11q9fj\" data-test-icon=\"privacy_options\" data-testid=\"icon-privacy_options\"><use xlink:href=\"#privacy_options\"></use></svg>",
+          "boundingBox": {
+            "x": 882.81,
+            "y": 4709.06,
+            "width": 28,
+            "height": 13,
+            "top": 4709.06,
+            "right": 910.81,
+            "bottom": 4722.06,
+            "left": 882.81
+          },
+          "intersectsViewport": false
+        },
+        {
+          "containerId": "container_4",
+          "selectorHint": "div.panel-heading p",
+          "classes": "cookie-description",
+          "layer": "first_layer",
+          "textExcerpt": "View / Hide Cookies",
+          "htmlExcerpt": "<p class=\"cookie-description\" style=\"margin-top: 8px;\"> <a href=\"javascript:void(0)\" class=\"toggle-third-party-cookies-section\"> View / Hide Cookies </a> </p>",
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "intersectsViewport": false
+        },
+        {
+          "containerId": "container_5",
+          "selectorHint": "#collapse-third-party-cookies",
+          "id": "collapse-third-party-cookies",
+          "classes": "panel-collapse collapse",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div id=\"collapse-third-party-cookies\" class=\"panel-collapse collapse\"> <div class=\"panel-body\"> <div id=\"third-party-cookies-grid\" class=\"data-grid third-party-cookies-grid\"> <table> <thead></thead> <tbody></tbody> </table> </div> <div id=\"third-party-cookies-grid-pagination-block\"></div> </div> </div>",
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "intersectsViewport": false
+        },
+        {
+          "containerId": "container_6",
+          "selectorHint": "#third-party-cookies-grid",
+          "id": "third-party-cookies-grid",
+          "classes": "data-grid third-party-cookies-grid",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div id=\"third-party-cookies-grid\" class=\"data-grid third-party-cookies-grid\"> <table> <thead></thead> <tbody></tbody> </table> </div>",
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "intersectsViewport": false
+        },
+        {
+          "containerId": "container_7",
+          "selectorHint": "#third-party-cookies-grid-pagination-block",
+          "id": "third-party-cookies-grid-pagination-block",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div id=\"third-party-cookies-grid-pagination-block\"></div>",
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "intersectsViewport": false
+        }
+      ],
+      "candidates": [
+        {
+          "candidateId": "candidate_0",
+          "label": "Your Privacy Choices",
+          "normalizedLabel": "your privacy choices",
+          "actionType": "do_not_sell_share",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "#clarip-do-not-sell-link",
+          "containerSelectorHint": "#cookieconsent\\:desc",
+          "containerId": "container_1",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "inline",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 320.41,
+            "y": 869,
+            "width": 110.88,
+            "height": 16,
+            "top": 869,
+            "right": 431.28,
+            "bottom": 885,
+            "left": 320.41
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "matchedTerm": "your privacy choices",
+          "matchedLocale": "en",
+          "matchStrength": "direct",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "matched_privacy_opt_out",
+            "match_strength_direct",
+            "context_satisfied"
+          ],
+          "classifierConfidence": 0.91,
+          "consentContextConfirmed": true,
+          "linkDestination": "same_document",
+          "diagnosticClassifications": [
+            {
+              "classifierProfile": "multilingual_v1",
+              "intent": "privacy_opt_out",
+              "actionType": "do_not_sell_share",
+              "matchedTerm": "your privacy choices",
+              "matchedLocale": "en",
+              "matchStrength": "direct",
+              "classifierRegistryVersion": "consent-control-label-registry.v26",
+              "classifierReasonCodes": [
+                "matched_privacy_opt_out",
+                "match_strength_direct",
+                "context_satisfied"
+              ],
+              "classifierConfidence": 0.91,
+              "productionCredit": false
+            }
+          ],
+          "effectiveVisibility": "direct",
+          "decisionStatus": "confirmed_visible",
+          "reasons": [
+            "visible_first_layer_candidate"
+          ]
+        },
+        {
+          "candidateId": "candidate_1",
+          "label": "Terms of Service",
+          "normalizedLabel": "terms of service",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "#cookieconsent\\:desc a",
+          "containerSelectorHint": "#cookieconsent\\:desc",
+          "containerId": "container_1",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "inline",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 30,
+            "y": 853,
+            "width": 1218.31,
+            "height": 32,
+            "top": 853,
+            "right": 1248.31,
+            "bottom": 885,
+            "left": 30
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "other_document",
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_2",
+          "label": "Privacy Notice",
+          "normalizedLabel": "privacy notice",
+          "actionType": "policy_link",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "#cookieconsent\\:desc a",
+          "containerSelectorHint": "#cookieconsent\\:desc",
+          "containerId": "container_1",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "inline",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 192.89,
+            "y": 869,
+            "width": 75.31,
+            "height": 16,
+            "top": 869,
+            "right": 268.2,
+            "bottom": 885,
+            "left": 192.89
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "other_document",
+          "decisionStatus": "footer_or_policy_link",
+          "reasons": [
+            "footer_or_policy_link"
+          ]
+        },
+        {
+          "candidateId": "candidate_3",
+          "label": "OK",
+          "normalizedLabel": "ok",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "button",
+          "semanticallyInteractive": true,
+          "role": "button",
+          "ariaLabel": "dismiss cookie message",
+          "selectorHint": "button[aria-label=\"dismiss cookie message\"]",
+          "containerSelectorHint": "div[aria-label=\"Clarip Cookie Consent Banner\"]",
+          "containerId": "container_0",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 1280.53,
+            "y": 854,
+            "width": 55.47,
+            "height": 30,
+            "top": 854,
+            "right": 1336,
+            "bottom": 884,
+            "left": 1280.53
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "unproven_acknowledgment_consent"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_4",
+          "label": "The Halloween Shop",
+          "normalizedLabel": "the halloween shop",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "a.link_vAuZy.link_Gsdkf",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "hidden",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 589,
+            "y": 366,
+            "width": 190,
+            "height": 17,
+            "top": 366,
+            "right": 779,
+            "bottom": 383,
+            "left": 589
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": true,
+          "scrollableAncestor": {
+            "selectorHint": "#ember9 div",
+            "boundingBox": {
+              "x": 0,
+              "y": 240,
+              "width": 1366,
+              "height": 0,
+              "top": 240,
+              "right": 1366,
+              "bottom": 240,
+              "left": 0
+            }
+          },
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 5,
+            "hitSelectorHints": [
+              "a.link_twSf5.headless-cms-link",
+              "div.content_4Lkq-.qa-headless-cms-lockup-overlay.cms-16q2sg6 span",
+              "span.qa-headless-cms-copy.copy_RNj\\+f"
+            ]
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "linkDestination": "other_document",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_5",
+          "label": "The Halloween Shop",
+          "normalizedLabel": "the halloween shop",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "a.link_vAuZy.link_Gsdkf",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "hidden",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 589,
+            "y": 366,
+            "width": 190,
+            "height": 17,
+            "top": 366,
+            "right": 779,
+            "bottom": 383,
+            "left": 589
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": true,
+          "scrollableAncestor": {
+            "selectorHint": "#ember10 div",
+            "boundingBox": {
+              "x": 0,
+              "y": 240,
+              "width": 1366,
+              "height": 0,
+              "top": 240,
+              "right": 1366,
+              "bottom": 240,
+              "left": 0
+            }
+          },
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 5,
+            "hitSelectorHints": [
+              "a.link_twSf5.headless-cms-link",
+              "div.content_4Lkq-.qa-headless-cms-lockup-overlay.cms-16q2sg6 span",
+              "span.qa-headless-cms-copy.copy_RNj\\+f"
+            ]
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "linkDestination": "other_document",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_6",
+          "label": "View / Hide Cookies",
+          "normalizedLabel": "view / hide cookies",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "p.cookie-description a",
+          "containerSelectorHint": "div.panel-heading p",
+          "containerId": "container_4",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "child_frame",
+            "frameUrl": "https://cdn.clarip.com/aeo/donotsell/70f20fe0eb8b616bc7c7-dsr-controller.html?1793372726&start=70f20fe0eb8b616bc7c7&client=aeo&brand=www.ae.com&globalDnsDeployment=false&pageUrl=https%3A%2F%2Fwww.ae.com%2Fus%2Fen"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "inline",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 150
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "linkDestination": "unverified",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_7",
+          "label": "Your Privacy Choices",
+          "normalizedLabel": "your privacy choices",
+          "actionType": "do_not_sell_share",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "button",
+          "semanticallyInteractive": true,
+          "selectorHint": "[data-testid=\"legal-and-policies\"] button",
+          "layer": "footer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 765.94,
+            "y": 4708.06,
+            "width": 144.88,
+            "height": 15,
+            "top": 4708.06,
+            "right": 910.81,
+            "bottom": 4723.06,
+            "left": 765.94
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 0,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "matchedTerm": "your privacy choices",
+          "matchedLocale": "en",
+          "matchStrength": "direct",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "matched_privacy_opt_out",
+            "match_strength_direct",
+            "context_satisfied"
+          ],
+          "classifierConfidence": 0.91,
+          "consentContextConfirmed": false,
+          "diagnosticClassifications": [
+            {
+              "classifierProfile": "multilingual_v1",
+              "intent": "privacy_opt_out",
+              "actionType": "do_not_sell_share",
+              "matchedTerm": "your privacy choices",
+              "matchedLocale": "en",
+              "matchStrength": "direct",
+              "classifierRegistryVersion": "consent-control-label-registry.v26",
+              "classifierReasonCodes": [
+                "matched_privacy_opt_out",
+                "match_strength_direct",
+                "context_satisfied"
+              ],
+              "classifierConfidence": 0.91,
+              "productionCredit": false
+            }
+          ],
+          "decisionStatus": "footer_or_policy_link",
+          "reasons": [
+            "footer_or_policy_link"
+          ]
+        },
+        {
+          "candidateId": "candidate_8",
+          "label": "United States ($USD)",
+          "normalizedLabel": "united states ($usd)",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "button",
+          "semanticallyInteractive": true,
+          "ariaLabel": "change i18n settings",
+          "selectorHint": "button[aria-label=\"change i18n settings\"]",
+          "layer": "footer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 604.2,
+            "y": 4672.06,
+            "width": 157.58,
+            "height": 20,
+            "top": 4672.06,
+            "right": 761.78,
+            "bottom": 4692.06,
+            "left": 604.2
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 0,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "decisionStatus": "footer_or_policy_link",
+          "reasons": [
+            "footer_or_policy_link"
+          ]
+        },
+        {
+          "candidateId": "candidate_9",
+          "label": "Privacy Notice",
+          "normalizedLabel": "privacy notice",
+          "actionType": "policy_link",
+          "presentationType": "persistent_link",
+          "placementType": "persistent_surface",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "[data-testid=\"legal-and-policies\"] a",
+          "layer": "footer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "inline",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 349.27,
+            "y": 4707.06,
+            "width": 75.31,
+            "height": 16,
+            "top": 4707.06,
+            "right": 424.58,
+            "bottom": 4723.06,
+            "left": 349.27
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 0,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "linkDestination": "other_document",
+          "decisionStatus": "footer_or_policy_link",
+          "reasons": [
+            "footer_or_policy_link"
+          ]
+        },
+        {
+          "candidateId": "candidate_10",
+          "label": "close",
+          "normalizedLabel": "close",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "button",
+          "semanticallyInteractive": true,
+          "role": "button",
+          "ariaLabel": "close",
+          "selectorHint": "#close-dns-manager",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "child_frame",
+            "frameUrl": "https://cdn.clarip.com/aeo/donotsell/70f20fe0eb8b616bc7c7-dsr-controller.html?1793372726&start=70f20fe0eb8b616bc7c7&client=aeo&brand=www.ae.com&globalDnsDeployment=false&pageUrl=https%3A%2F%2Fwww.ae.com%2Fus%2Fen"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "absolute",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 150
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "matchedTerm": "close",
+          "matchStrength": "direct",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "matched_dismiss",
+            "match_strength_direct"
+          ],
+          "classifierConfidence": 0.84,
+          "consentContextConfirmed": true,
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_11",
+          "label": "Privacy Notice",
+          "normalizedLabel": "privacy notice",
+          "actionType": "policy_link",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "#right-to-opt-out-notice a",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "child_frame",
+            "frameUrl": "https://cdn.clarip.com/aeo/donotsell/70f20fe0eb8b616bc7c7-dsr-controller.html?1793372726&start=70f20fe0eb8b616bc7c7&client=aeo&brand=www.ae.com&globalDnsDeployment=false&pageUrl=https%3A%2F%2Fwww.ae.com%2Fus%2Fen"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "inline",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 150
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "privacy_opt_out_context"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "other_document",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_12",
+          "label": "",
+          "normalizedLabel": "",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "selectorHint": "h2.panel-title a",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "child_frame",
+            "frameUrl": "https://cdn.clarip.com/aeo/donotsell/70f20fe0eb8b616bc7c7-dsr-controller.html?1793372726&start=70f20fe0eb8b616bc7c7&client=aeo&brand=www.ae.com&globalDnsDeployment=false&pageUrl=https%3A%2F%2Fwww.ae.com%2Fus%2Fen"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 150
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "empty_label"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "linkDestination": "unverified",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_13",
+          "label": "The most powerful enterprise privacy governance platform",
+          "normalizedLabel": "the most powerful enterprise privacy governance platform",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "ariaLabel": "The most powerful enterprise privacy governance platform",
+          "selectorHint": "#powered-by",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "child_frame",
+            "frameUrl": "https://cdn.clarip.com/aeo/donotsell/70f20fe0eb8b616bc7c7-dsr-controller.html?1793372726&start=70f20fe0eb8b616bc7c7&client=aeo&brand=www.ae.com&globalDnsDeployment=false&pageUrl=https%3A%2F%2Fwww.ae.com%2Fus%2Fen"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 150
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": false,
+          "linkDestination": "other_document",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_14",
+          "label": "learn more about cookies",
+          "normalizedLabel": "learn more about cookies",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "role": "button",
+          "ariaLabel": "learn more about cookies",
+          "selectorHint": "a[aria-label=\"learn more about cookies\"]",
+          "containerSelectorHint": "#cookieconsent\\:desc",
+          "containerId": "container_1",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.ae.com/us/en"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "none",
+            "visibility": "visible",
+            "opacity": "0.8",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": [
+              "[data-testid=\"sticky-header-promo\"] div.qa-headless-cms-background-without-media.headless-cms-background-without-media.container_iv6Ry.animated-carousel-background"
+            ]
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/ae.com/candidate/screenshot-pre-consent-settled.png",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "no_term_match"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "unverified",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        }
+      ],
+      "controlInspection": {
+        "version": "control_specific_inspection.v3",
+        "retainedCandidateCount": 15,
+        "captureCoverage": {
+          "inventoryTruncated": false,
+          "documentReadyState": "interactive",
+          "mainFrameAvailable": true,
+          "documentAndFramesStable": false,
+          "frameCount": 10,
+          "capturedFrameCount": 9
+        },
+        "structuralCoverage": "limited",
+        "reasonCodes": [
+          "structural_control_inventory_incomplete"
+        ],
+        "candidates": [
+          {
+            "candidateId": "candidate_0",
+            "role": "decision",
+            "unresolvedIntents": []
+          },
+          {
+            "candidateId": "candidate_1",
+            "role": "information",
+            "unresolvedIntents": []
+          },
+          {
+            "candidateId": "candidate_2",
+            "role": "information",
+            "unresolvedIntents": []
+          },
+          {
+            "candidateId": "candidate_3",
+            "role": "unknown",
+            "unresolvedIntents": [
+              "accept",
+              "reject",
+              "options",
+              "privacy_opt_out"
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "firstLayerAccept": false,
+        "firstLayerReject": false,
+        "firstLayerOptions": false,
+        "cmpDetected": false,
+        "confidence": 0.55,
+        "limitations": [
+          "unresolved_visible_consent_decision"
+        ]
+      },
+      "access": {
+        "status": "loaded",
+        "reasonCodes": [],
+        "httpStatus": 200,
+        "title": "Men\u2019s & Women\u2019s Jeans, Clothes & Accessories | American Eagle",
+        "textExcerpt": "Men\u2019s & Women\u2019s Jeans, Clothes & Accessories | American Eagle We use cookies and other third-party technologies to enhance your experience, personalize content and ads, and analyze your Platform use. By using our Platforms, you agree to the use of these technologies, agree to our Terms of Service, and acknowledge our Privacy Notice. Manage Your Privacy Choices. OK Enable Accessibility Accessibility Statement 40-50% off all jeans! Shop Women Shop Men Details Go to Shop AE homepage. Go to Shop Aer"
+      },
+      "egress": {
+        "label": "direct_no_proxy",
+        "proxyConfigured": false,
+        "requiredProxy": false
+      },
+      "artifactOnly": true,
+      "productionFindingIntegration": false
+    }
+  }
+]

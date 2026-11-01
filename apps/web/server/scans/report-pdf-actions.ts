@@ -1,3 +1,4 @@
+import { accessibilitySelectorHint } from "@certscore/contracts";
 import { pdfNarrativeFindings, pdfFindingLocations } from "./report-pdf-evidence";
 import type { CanonicalReportExport } from "./report-export";
 import { pdfTopicForFinding, type PdfReportTopic } from "./report-pdf-topics";
@@ -98,7 +99,7 @@ export function pdfAppendixActions(report: CanonicalReportExport): Record<PdfRep
     sections.accessibility.push({
     id: rule.ruleId, title: rule.help, status, explanation: rule.description,
     affected: rule.representativeNodes.flatMap(node => [
-      `Selector: ${node.selectors.join(", ")}`,
+      accessibilitySelectorHint(node),
       `Observed issue: ${node.failureSummary}`,
       ...(node.colorContrast ? [`Contrast: measured ${node.colorContrast.contrastRatio ?? "Not retained"}; required ${node.colorContrast.requiredContrastRatio ?? "Not retained"}. Foreground ${node.colorContrast.foregroundColor ?? "Not retained"}; background ${node.colorContrast.backgroundColor ?? "Not retained"}.`] : []),
     ]),

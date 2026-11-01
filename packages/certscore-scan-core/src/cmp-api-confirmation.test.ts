@@ -73,6 +73,8 @@ for (const provider of ["cookiescript", "cookie_information", "finsweet"] as con
           window.state=provider==='cookiescript'?{categories:[]}:provider==='finsweet'?{essential:true,analytics:false,marketing:false,personalization:false}:false;
           window.CookieScript={instance:{categories:()=>window.categories,currentState:()=>window.state}};
           window.CookieInformation={getConsentGivenFor:key=>window.state&&typeof window.state==='object'?window.state[key]:window.state};
+          window.cicl=['cookie_cat_necessary','cookie_cat_functional','cookie_cat_statistic','cookie_cat_marketing'];
+          window.cicc=Object.fromEntries(window.cicl.map(key=>[key,key==='cookie_cat_necessary']));
           window.FinsweetConsentPro={consents:{get:()=>window.state}};
           document.querySelector('button').onclick=()=>{
             fetch('/click');document.querySelector('section').hidden=true;
@@ -82,6 +84,7 @@ for (const provider of ["cookiescript", "cookie_information", "finsweet"] as con
               if(mode==='configuration_changed'){window.categories=['performance'];window.state.categories=['performance'];}
             }else if(provider==='finsweet')window.state=mode==='partial'?{essential:true,analytics:true}:mode==='inapplicable'?{essential:true}:{essential:true,analytics:true,marketing:mode!=='mixed',personalization:true};
             else window.state=mode==='partial'?{cookie_cat_statistic:true}:mode==='inapplicable'?undefined:mode==='mixed'?{cookie_cat_functional:true,cookie_cat_marketing:false,cookie_cat_statistic:true}:true;
+            if(provider==='cookie_information')window.cicc={cookie_cat_necessary:true,...(typeof window.state==='object'?window.state:window.state===undefined?{}:Object.fromEntries(window.cicl.filter(key=>key!=='cookie_cat_necessary').map(key=>[key,window.state])))};
             if(mode==='missing_event')return;
             if(mode==='wrong_document'){const child=document.querySelector('iframe').contentWindow;child.dispatchEvent(new child.Event('${event}'));return;}
             ${provider === "finsweet" ? "document.documentElement" : "window"}.dispatchEvent(new Event('${event}'));

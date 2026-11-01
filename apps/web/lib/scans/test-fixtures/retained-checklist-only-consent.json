@@ -1,0 +1,3093 @@
+{
+  "scope": "Exact retained public checklist rows/summary for projection-only regression; no original capture packets or site layouts",
+  "cases": [
+    {
+      "scanId": "2afec526-0afb-49e7-934d-d4722e81322c",
+      "site": "mobcup.com.co",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/2afec526-0afb-49e7-934d-d4722e81322c.json",
+        "sha256": "4804c6f603f3b6fabae3032526c27a6bd040d3aae21d79965b02c8e15c657b7c",
+        "bytes": 153986
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": false,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Google Funding Choices CMP",
+        "cmpRuntimeSignalLabels": [
+          "fundingchoicesmessages.google.com",
+          "https://fundingchoicesmessages.google.com/i/ca-pub-3445999244031312?[redacted_query]",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxUPxyRKeSJM2KCKUfU1YCaUs8afAIvu0M8AXQE5dCzJLUd_ZoA2zutdajWVnUhXmt28o9rvcJGLIbEvmXFpQT724v7S_cRRI6RKIFz5CrjavdH12XFf7Kz92hnkTZd3lVb4ULvd3g==",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxVkqSnsNeQ-GtjpLos6deDlOlIZbO2A063j2krUd7g3vuv2wjaXEnUUOZhJfUnIczhqWdsQ1ygaBUXOSsJxtjexMwcrb2c8mdU2mEFbyEkKOm8VkF9vRX5WbIyhcUjY4ZUdMe3HKA==",
+          "Google Funding Choices"
+        ],
+        "consentSurfaceObserved": false,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "0ea87633-db58-40db-a4bc-1a73e3f91c23",
+      "site": "airandspaceforces.com",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/0ea87633-db58-40db-a4bc-1a73e3f91c23.json",
+        "sha256": "b33f45a933f38d51c638cd06e566fb916561bdcae9de88aeb91fd5bb11c0a03d",
+        "bytes": 120582
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not confirmed",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not confirmed",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not confirmed",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": true,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Cookiebot CMP",
+        "cmpRuntimeSignalLabels": [
+          "consent.cookiebot.com",
+          "https://consent.cookiebot.com/uc.js",
+          "consentcdn.cookiebot.com",
+          "https://consentcdn.cookiebot.com/consentconfig/20d40a91-8b9b-4662-a73f-efcf5d611d98/settings.json",
+          "https://consentcdn.cookiebot.com/consentconfig/20d40a91-8b9b-4662-a73f-efcf5d611d98/airandspaceforces.com/configuration.js",
+          "CookieConsent",
+          "Cookiebot",
+          "#CybotCookiebotDialog"
+        ],
+        "consentSurfaceObserved": true,
+        "firstVisibleMs": 18591,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "02e70953-c2e2-4919-b15b-c3c80968b165",
+      "site": "palomar.edu",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/02e70953-c2e2-4919-b15b-c3c80968b165.json",
+        "sha256": "b56c913d4238f315280387c385f1a6e9e5ee1f20d8a84410d010fe8cd1f9b8dc",
+        "bytes": 211771
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": false,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": false,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "a39fc75f-3af9-49ce-bf0a-6dcfa59b2600",
+      "site": "chinadxscycp.org",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/a39fc75f-3af9-49ce-bf0a-6dcfa59b2600.json",
+        "sha256": "b71e3e5a6497be0e2a7bc7588efea785832390508f8d3e3ff7d4e40a76ed7ab4",
+        "bytes": 68018
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "dd6120f8-8eaf-4008-823f-fb8fd5146ac9",
+      "site": "lacapital.com.ar",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/dd6120f8-8eaf-4008-823f-fb8fd5146ac9.json",
+        "sha256": "1792ef35d58fadfa0b75c6b1966c6f496662b058664a364a23cffd5aa2de8450",
+        "bytes": 271202
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Google Funding Choices CMP",
+        "cmpRuntimeSignalLabels": [
+          "fundingchoicesmessages.google.com",
+          "https://fundingchoicesmessages.google.com/i/21912588402?[redacted_query]",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxUwT5dxKMt0GjHVXDkXQpbDsdFNLfF98eQea4sl_mqmja7AOsRhS5fq3uK2DyMBYXt9TEuyeJ0ST0EV0ZiKBffpdXpE8D3qSqGWEa5cjq5Y6VQSVAfWVffEgppP6tiVU4ehhlQZBQ==",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxV162de2QWyMul-_wQZFwvb1-fUBTA5KBAydHnRecz-p3-mvVEyL_n02_abspeAdN4wwfuZeZ-c_pMgQ1-aFpfE0wF5ZXWr3b1x5rUEkWwnwU5Z4z-9WPOBGVPeSJcMsv3ZrX1trg==",
+          "Google Funding Choices"
+        ],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "6b1e2700-c632-4233-9e81-4c748c5a4bb7",
+      "site": "lalal.ai",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/6b1e2700-c632-4233-9e81-4c748c5a4bb7.json",
+        "sha256": "62cb7189909c6ef170b470acf2d4dc0f266d22219a5987dfdfa77a00ba727960",
+        "bytes": 252719
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Cookiebot CMP",
+        "cmpRuntimeSignalLabels": [
+          "consent.cookiebot.com",
+          "https://consent.cookiebot.com/uc.js",
+          "consentcdn.cookiebot.com",
+          "https://consentcdn.cookiebot.com/consentconfig/f28b47bd-2d76-4ed7-a8c7-eda641c6c9ee/settings.json",
+          "https://consentcdn.cookiebot.com/consentconfig/f28b47bd-2d76-4ed7-a8c7-eda641c6c9ee/lalal.ai/configuration.js",
+          "CookieConsent",
+          "Cookiebot"
+        ],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "d06200c8-fea0-45e4-9d12-13d50acf448c",
+      "site": "showtv.com.tr",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/d06200c8-fea0-45e4-9d12-13d50acf448c.json",
+        "sha256": "27e6023929c00a53ad8bd4a1cbc99c36c1cf348a13496428b08170c6bcc275a0",
+        "bytes": 219347
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Google Funding Choices CMP",
+        "cmpRuntimeSignalLabels": [
+          "fundingchoicesmessages.google.com",
+          "https://fundingchoicesmessages.google.com/i/31903365?[redacted_query]",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxUZVPNSYpzhyvDDoniru_owhT96mMWYWxUyn5elGH0Sh8VoZGDQmKHjlc1GZy_50196W37I2zxaHjPSYGUX49HQldRJTReIik2Yr3OSJYr1h4bC6OhnFYPWha5XD27dbsD6CaS5vQ==",
+          "Google Funding Choices"
+        ],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "6a824698-0da8-41c7-8f37-d7fd0f34036b",
+      "site": "baochinhphu.vn",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/6a824698-0da8-41c7-8f37-d7fd0f34036b.json",
+        "sha256": "ac74d66793cf481ba1306c895d4d4bef78cb3a121f372b6ff1cb02eb2806922f",
+        "bytes": 139468
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": false,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": false,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "caa08602-2462-4d23-ad60-b3c916c723d7",
+      "site": "bjlhlawyer.com",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/caa08602-2462-4d23-ad60-b3c916c723d7.json",
+        "sha256": "ea9f805bef56149817cbcaeeb288b1d69cc37013f7873bf490a8f51bc42f33d2",
+        "bytes": 104691
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "9c468225-a6db-49cf-a116-b949c6953d20",
+      "site": "churchofengland.org",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/9c468225-a6db-49cf-a116-b949c6953d20.json",
+        "sha256": "9d8b656ed5a6eefe4f65f089e882f67b943c70fdcb70beb6d0a8103573876dba",
+        "bytes": 127753
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not confirmed",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not confirmed",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not confirmed",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": true,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "CIVIC Cookie Control",
+        "cmpRuntimeSignalLabels": [
+          "#ccc-module",
+          "#ccc-recommended-settings",
+          "CIVIC Cookie Control"
+        ],
+        "consentSurfaceObserved": true,
+        "firstVisibleMs": 8511,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "ece6a3a4-9a57-4379-8099-04b70ab28ee5",
+      "site": "goldbett.org",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/ece6a3a4-9a57-4379-8099-04b70ab28ee5.json",
+        "sha256": "da8bb523bc0c4549cfafea1be9e24fde9435a0025fc559d20ec028f20384ba92",
+        "bytes": 62102
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not confirmed",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not confirmed",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not confirmed",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": 18159,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "8eb3d006-2725-46a2-8791-eb81faeee0a2",
+      "site": "ifo.de",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/8eb3d006-2725-46a2-8791-eb81faeee0a2.json",
+        "sha256": "4187ebe889b616ba9f89ca99d49ab3385de655dfe69171033a3a61b25b7ec121",
+        "bytes": 64471
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Klaro",
+        "cmpRuntimeSignalLabels": [
+          ".klaro",
+          "Klaro"
+        ],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "4e19a908-c570-4d1c-8a21-240d151b214a",
+      "site": "transparentcalifornia.com",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/4e19a908-c570-4d1c-8a21-240d151b214a.json",
+        "sha256": "3832ead91aee14ea34a68587a99bd420767af89c44b573940e38da506d5f2b8f",
+        "bytes": 204739
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": false,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Google Funding Choices CMP",
+        "cmpRuntimeSignalLabels": [
+          "fundingchoicesmessages.google.com",
+          "https://fundingchoicesmessages.google.com/i/154013155?[redacted_query]",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxXOnJwL6pGR_cxADCP4Wb5Gg8S9kd5Qo9KyH_w4KrJ5GdA9orbjiqrAWLav7qOvK_A1CmQSiraGWWhjXlF3jpWsLr0akF4UupLrgyfa9cNhmjLGUoyN6OxfqEnjz71yYXjjhi7X9A==",
+          "Google Funding Choices"
+        ],
+        "consentSurfaceObserved": false,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "7b69d9ac-a47a-4ca7-950e-0d14c448fca3",
+      "site": "max.porn",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/7b69d9ac-a47a-4ca7-950e-0d14c448fca3.json",
+        "sha256": "99b9eeaaa93098ccd8a330f9e57a817fc02e6bbdaedb6976897fa324af186c31",
+        "bytes": 96133
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "0117691a-9141-4aa1-9743-ce783e9c2673",
+      "site": "hkej.com",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/0117691a-9141-4aa1-9743-ce783e9c2673.json",
+        "sha256": "d83c613e2f7da3f33fe15be29e10b7b2505026c3432031e49329229c63f64a19",
+        "bytes": 263232
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": false,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Google Funding Choices CMP",
+        "cmpRuntimeSignalLabels": [
+          "fundingchoicesmessages.google.com",
+          "https://fundingchoicesmessages.google.com/i/79812692?[redacted_query]",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxUMDEOSlRExX3OGg0a0aI9mKfPwMHazIST5Cf_c94uR2wdDC_JjqWmhrQhy3tPsNYO4P0Ied7WQI2mSK3ciaKmeN7jFlosyhWGyHGhbW0nI-Q9KDyi8CRlOOpk32_XGGIvJSk2tnQ==",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxVFURF2dwk6ETrKB6GjB4fqUp3jM0GEYZ5qYAHcO8awS-zIriN_FC1KEvH7l4uapzC3I44GQsR38aJ_jfnJSGaD9WbMicNVcWFouV5ROBPt_Pq5Hhy3EEp1mTMDniEdiltKJHaEpQ==",
+          "https://fundingchoicesmessages.google.com/f/AGSKWxUeYFZo5mfen8pHyVxJQrTFEf63jrjT7aUwGgZfOs5gHihaXnVdUckjOmI_S4yT2ayc2SWwxhEVNK2onv_TLyAKCSDHxvg37fL7WH0GtBwzcWQ4zJBIAQejDr6YTCjMzNtdr-DaCg==?[redacted_query]",
+          "Google Funding Choices"
+        ],
+        "consentSurfaceObserved": false,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "948c831f-281d-4f5d-93fd-7277941f4658",
+      "site": "setn.com",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/948c831f-281d-4f5d-93fd-7277941f4658.json",
+        "sha256": "4e0537096df56c58df999405bf5ee3445c519dca3e4523581a0115d9b26718c8",
+        "bytes": 244553
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": false,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Google Funding Choices CMP",
+        "cmpRuntimeSignalLabels": [
+          "fundingchoicesmessages.google.com",
+          "https://fundingchoicesmessages.google.com/i/18689016?[redacted_query]",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxWC49OibjIxI0Kqix3AZrSgXxaN63RRLAKQsR1JQqWSOadCogPPgjg64gWQXBmTcr2jIOeb2OIr_oravD33AXwSFs1LcLA5dZC1zyvYrIPJ3uX1jAt6dvMwAcVOsWxMh7yS8fV12g==",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxXeKgBdv4e0b0Ya628fFP_SS39MNW3LfiEZlYCJFoGj9PGKmngZXTMa7Bx8TqDvFWf00_rMShz2AolALPR1IbV1C5itrZHsZJMWP9Az-aYokzf5y0tqv2IeYFo6rYMHBvSAiNaI1A==",
+          "Google Funding Choices"
+        ],
+        "consentSurfaceObserved": false,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "81780dbb-23b5-4977-baeb-80bfede2bd78",
+      "site": "ab-in-den-urlaub.de",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/81780dbb-23b5-4977-baeb-80bfede2bd78.json",
+        "sha256": "c66519dcf2a745abebd338d9ba5315156697c8ff8759116939564b34b02f179d",
+        "bytes": 90597
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Usercentrics CMP",
+        "cmpRuntimeSignalLabels": [
+          "web.cmp.usercentrics.eu",
+          "v1.api.service.cmp.usercentrics.eu",
+          "app.usercentrics.eu",
+          "uct.service.usercentrics.eu",
+          "consent-api.service.consent.usercentrics.eu",
+          "Usercentrics"
+        ],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "2477f006-d7d1-4ce7-9a7a-f7b0d042065b",
+      "site": "samsonopt.ru",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/2477f006-d7d1-4ce7-9a7a-f7b0d042065b.json",
+        "sha256": "2085bb36899d6364674bcc41f3edb2a18ee014ed3f31525d090381a66cc84784",
+        "bytes": 124281
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "e1f946e2-167b-44cb-9a86-c90303230d0e",
+      "site": "technodom.kz",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/e1f946e2-167b-44cb-9a86-c90303230d0e.json",
+        "sha256": "4cb4a19c978dbfb64c6577a8a9658962c3958902f990dd0def19c2a636c62bc8",
+        "bytes": 214610
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": false,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": false,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "fbc0812c-24a2-4c25-9184-77914024d0ba",
+      "site": "domains.ru",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/fbc0812c-24a2-4c25-9184-77914024d0ba.json",
+        "sha256": "356337d22fedd0604db7904012e8aa27ff5059239801350d8e2ac8af83dd8af1",
+        "bytes": 116373
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "a0f87871-cb0a-4ecf-ba80-4d648ae9ae14",
+      "site": "carleton.ca",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/a0f87871-cb0a-4ecf-ba80-4d648ae9ae14.json",
+        "sha256": "f5941a3020a7cb4dac8193c26ff7a56a775c9f9968ba89b086eca0f1c111733b",
+        "bytes": 291502
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "268d486a-26c7-41e4-a5f0-a2f434cdc714",
+      "site": "gwadar.cn",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/268d486a-26c7-41e4-a5f0-a2f434cdc714.json",
+        "sha256": "1ee552fa54173acb543d15d04f3dc5dfaa4fb06731b29e89b855ca1b6de5f786",
+        "bytes": 62069
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": false,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "7e78ae39-e824-4fe7-be31-0d29a3231a8b",
+      "site": "ae.com",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/7e78ae39-e824-4fe7-be31-0d29a3231a8b.json",
+        "sha256": "df6cfa207620d5be2ecfbd696e0596426d0128fbaf5a2c4bd2722ba2db54f7ad",
+        "bytes": 150988
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": true,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": true,
+        "firstVisibleMs": 8332,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "f4618c81-b7d8-4715-9661-8a43fc3e3f16",
+      "site": "blogcms.jp",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/f4618c81-b7d8-4715-9661-8a43fc3e3f16.json",
+        "sha256": "005303835890a9f715930a761a5b01f71af18e2c480fff040588c76907c05ae4",
+        "bytes": 165216
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Google Funding Choices CMP",
+        "cmpRuntimeSignalLabels": [
+          "fundingchoicesmessages.google.com",
+          "https://fundingchoicesmessages.google.com/i/9116787?[redacted_query]",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxWDIqCENIlcZXwBzBR6oWvP_SRqv6HzIehwMs3O5tXHnNRhDkaEvYTLfZaCeiTcfo35yyPC2_CyLnVWW_HqaHv3A7tavizyBPe-9iJMP-FjZacpDVfgKTzFTgtWR4zPW84es0vxkw==",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxVQjIzM2WC2DnD-4F1n3XaD1bNUkpVBtfmSE1aWYtcCN-2AZ5TDWLxqGPcevuBb8Ba5fbgLXvgGKeEb72eRWLd6iLSHcH8lduy-WOEmF7L5TjsRfmr0AVHlVLlZMOuUjHa_UlC4LQ==",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxXB6L-XgK2uS-cc9SMRlyIkJkRG-lu5JkIGe8ODFIb6Ij9pJP8RBDr9vajG2FItC6OXyyTlW7fWC6AwRs0WKJ9LwAJcHNEGApU7cM4hOYdjxn3GrLdnnpnDAJee3IG89eZNqFAYhQ==",
+          "Google Funding Choices"
+        ],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "376bd378-b48f-4453-b669-b4ee713ac50a",
+      "site": "meetelise.com",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/376bd378-b48f-4453-b669-b4ee713ac50a.json",
+        "sha256": "1ec09a27e20f987ce79d8b7198eca82877df17cbffaeb69aa9404c306945fa64",
+        "bytes": 227476
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": false,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "OneTrust CMP",
+        "cmpRuntimeSignalLabels": [
+          "cdn.cookielaw.org",
+          "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+          "geolocation.onetrust.com",
+          "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js?[redacted_query]",
+          "OptanonConsent",
+          "OptanonWrapper",
+          "Optanon",
+          "OneTrust",
+          "#onetrust-consent-sdk",
+          "#onetrust-banner-sdk",
+          ".ot-sdk-container"
+        ],
+        "consentSurfaceObserved": false,
+        "firstVisibleMs": 10854,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "7c6ca589-018e-4ca2-aa3b-720a53f95977",
+      "site": "fentybeauty.com",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/7c6ca589-018e-4ca2-aa3b-720a53f95977.json",
+        "sha256": "6f64c639517f36a002c8d6c061b6c1f6f622c6e97a067f4c3b213faa50085845",
+        "bytes": 146707
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "d3ae9743-d41e-40c5-a243-f766d62a8052",
+      "site": "routenote.com",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/d3ae9743-d41e-40c5-a243-f766d62a8052.json",
+        "sha256": "a9aa61e745cb546130decd5f27983b86024fe38094a9fa050adf4c10f70e0b6b",
+        "bytes": 184611
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": true,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Cookiebot CMP",
+        "cmpRuntimeSignalLabels": [
+          "consent.cookiebot.com",
+          "https://consent.cookiebot.com/uc.js",
+          "consentcdn.cookiebot.com",
+          "https://consentcdn.cookiebot.com/consentconfig/71efec00-0022-4331-a613-5f68e7a745eb/settings.json",
+          "https://consentcdn.cookiebot.com/consentconfig/71efec00-0022-4331-a613-5f68e7a745eb/routenote.com/configuration.js",
+          "Cookiebot"
+        ],
+        "consentSurfaceObserved": true,
+        "firstVisibleMs": 19075,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "80cd04ac-d891-4cae-a42d-0420c0e4acb2",
+      "site": "ngn.com.tr",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/80cd04ac-d891-4cae-a42d-0420c0e4acb2.json",
+        "sha256": "56ba75ef7197cd1af1c83ed6faa86687e3956fa0af8f140a9756ab736b803a9c",
+        "bytes": 152218
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": false,
+        "cmpFrameworkSignalObserved": false,
+        "cmpName": null,
+        "cmpRuntimeSignalLabels": [],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "82fbdb37-3278-4a4f-8813-7d4ea5ff1bc1",
+      "site": "serebii.net",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/82fbdb37-3278-4a4f-8813-7d4ea5ff1bc1.json",
+        "sha256": "db555a43f80278b00b1f4748b9d73189751e2b7cd8e6aff12b9eae4d8eee7229",
+        "bytes": 236441
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": false,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Google Funding Choices CMP",
+        "cmpRuntimeSignalLabels": [
+          "fundingchoicesmessages.google.com",
+          "https://fundingchoicesmessages.google.com/i/154013155?[redacted_query]",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxVJjjKx0hNVdm_pTRr7aCS6vCmrHhTS9aCCTe-2aKw25tUQxCZz4sz72JmVeipdRvUIHLR_BLYDP_wZ2dw11wWylV6LB29bUgalbYa59W7RqOyzWmYNAoq6HH4qH4Pk1laNT27Ijw==",
+          "https://fundingchoicesmessages.google.com/f/AGSKWxUZBU_Wb5dApFG3ul7L6KC18Kz72ZKXfSgEx6YCaY1s9i3lA65HXPv6lgbxmgImxQYiKVZF_4UpY78OQdT4fgnGZUtlUk74CZdJsWoAvcD9LjRuJowNBUuRFXodqR-ea8LqDS884g==?[redacted_query]",
+          "https://fundingchoicesmessages.google.com/f/AGSKWxUB1BwH2orsDA16LOFQzRbPlE7gQlypmeTL13VbR0Q1SELF_ZzxolBMtfMYhqpb2Mygw5MjfKyXU1jRV1JRcYOFME7DWY15ssMXknXXg8t9D-kzfg5rhHBQ5KRfp1aP8IyiWU6UwQ==?[redacted_query]",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxVdnhG8Ic2euwX8YrkcMc0C1fCvMtuC_fNcqNztvoA2_KKbmb0ZMAx3xG70U7Xs1PQ3Qs47LAFBIeeoRy2sJdYK0t9j_4z1-a_EFkcXEouYXhW9n9ClyPWLCDhuCWAYq4aXMVJd6Q==",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxWdAruUYpqiL46odoYvn12EJI0ofUhp-UjAK1l8vC-KsvFcv8bRUiPN0hRRjqnAAvgXckA78BvXrsJNhd2hwBMUx7oAOlLW0cGOp2qVSF_k42WQJF7dKT5YXzCJvSVBRuviKNV7ew==",
+          "Google Funding Choices"
+        ],
+        "consentSurfaceObserved": false,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "20435b28-8c73-41c4-a687-df8068e3eed5",
+      "site": "dailyecho.co.uk",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/20435b28-8c73-41c4-a687-df8068e3eed5.json",
+        "sha256": "e2cd2a30b37bd7ead3dc481c3fd6251b53841d4e2db2216d54d175ea799645d0",
+        "bytes": 320758
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Sourcepoint CMP",
+        "cmpRuntimeSignalLabels": [
+          "_sp_enable_dfp_personalized_ads",
+          "_sp_su",
+          "_sp_",
+          "Sourcepoint"
+        ],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "0b538595-0e2e-4f50-8649-fcc60226c331",
+      "site": "novosti.rs",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/0b538595-0e2e-4f50-8649-fcc60226c331.json",
+        "sha256": "41fcf97e25da09589465b966b68635e592bc36532caccf756e85eb1373dac0d7",
+        "bytes": 228917
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Consentmanager CMP",
+        "cmpRuntimeSignalLabels": [
+          "cdn.consentmanager.net",
+          "https://cdn.consentmanager.net/delivery/js/cmp_en.min.js",
+          "https://cdn.consentmanager.net/delivery/customdata/bV8xLndfMjA4MTYucl9DQ1BBLmxfc3IuZF84OTcyLnhfMTUudi5wLnRfODk3Mi54dF8yNA.js",
+          "https://cdn.consentmanager.net/delivery/recall/logos/20816",
+          "https://cdn.consentmanager.net/delivery/img/logo1607008635x9685.gif",
+          "https://cdn.consentmanager.net/delivery/whitelabel/cmplogo.svg",
+          "Consentmanager"
+        ],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "ea1491fc-459b-47a3-8a95-7520b600f1c6",
+      "site": "u-car.com.tw",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/ea1491fc-459b-47a3-8a95-7520b600f1c6.json",
+        "sha256": "9ad218b8955075b1909c8919efde44921464c34d92cb8bd3df2dd3ff60ae92ea",
+        "bytes": 232845
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Google Funding Choices CMP",
+        "cmpRuntimeSignalLabels": [
+          "fundingchoicesmessages.google.com",
+          "https://fundingchoicesmessages.google.com/i/424536528?[redacted_query]",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxUUDbAmNQFYEdC2WOM0zQmWhoI5eGXs7ZNs2Z3sPPQ6hZaDGFIIqvy53ZDsWRFF8tVLvswUMsEgWMwk18MiNnZrDkOo9HnpC0e5S-cmpP2zIRAh5H6N_3LT9RNCDB5meQIHkVGy-g==",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxU4ve9l2Q_Oo3P5WDVPqhP5cgZZWqSRz6lHZyfdk179F81JEK3Q2WXiFXJ2PuSrS48mk95hb_6qBL1R5yHscOowl3ynMg7Sh9o7L9PNDLtuhFtMA4ZaRjukOIpYrVAPjn3G-bMnGA==",
+          "Google Funding Choices"
+        ],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "88fef228-08ce-4536-8764-81c5d71c8845",
+      "site": "ncsasports.org",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/88fef228-08ce-4536-8764-81c5d71c8845.json",
+        "sha256": "664950664cd7bad3341a0a9c5a933d8de2da1c6a34e79ead8dc6f19ba2f10e54",
+        "bytes": 249182
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": false,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Ketch CMP",
+        "cmpRuntimeSignalLabels": [
+          "global.ketchcdn.com",
+          "https://global.ketchcdn.com/web/v2/config/img_academy/www_ncsasports_org/boot.js",
+          "ketch",
+          "Ketch"
+        ],
+        "consentSurfaceObserved": false,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    },
+    {
+      "scanId": "843d086a-e925-4c43-bfe9-72574f01ab71",
+      "site": "pvstory.com",
+      "source": {
+        "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T145849Z-scheduled-c59fe53d/cache/evidence/843d086a-e925-4c43-bfe9-72574f01ab71.json",
+        "sha256": "d12e36c2a7fa989990279e4ef837031a89b11da06f3a51b90833b30765754100",
+        "bytes": 149705
+      },
+      "controlRows": [
+        {
+          "id": "reject_all_path_availability",
+          "label": "Decline consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "accept_consent_control",
+          "label": "Accept consent control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        },
+        {
+          "id": "options_settings_preferences_control",
+          "label": "Options / settings / preferences control",
+          "status": "Not testable",
+          "evidenceLabel": "Not testable",
+          "assessmentDirection": "technical_limitation",
+          "assessmentStatus": "coverage_limitation",
+          "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+          "note": "Could not be fully evaluated using source-signal coverage evidence; Missing or incomplete source signal: expected complete; retained limited.",
+          "evidenceRefs": [
+            "Evidence limitation: incomplete canonical consent-control assessment"
+          ],
+          "retainedEvidence": {
+            "policyEvidenceProvenance": null
+          }
+        }
+      ],
+      "surfaceRow": {
+        "id": "consent_surface_observed",
+        "label": "Consent mechanism",
+        "status": "Not confirmed",
+        "evidenceLabel": "Not confirmed",
+        "assessmentDirection": "review_signal",
+        "assessmentStatus": "review_signal",
+        "explanation": "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "note": "Not confirmed by scan evidence; The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        "evidenceRefs": [
+          "Evidence limitation: incomplete ConsentControlAssessment v2"
+        ],
+        "retainedEvidence": {
+          "policyEvidenceProvenance": null
+        }
+      },
+      "consentSummary": {
+        "bannerPresent": null,
+        "cmpDetected": true,
+        "cmpFrameworkSignalObserved": true,
+        "cmpName": "Google Funding Choices CMP",
+        "cmpRuntimeSignalLabels": [
+          "fundingchoicesmessages.google.com",
+          "https://fundingchoicesmessages.google.com/i/ca-pub-8078315702562834?[redacted_query]",
+          "https://fundingchoicesmessages.google.com/el/AGSKWxVyQSxPDMfUBa98qbgCpHyOHZEC3a-HdgwL6xxaz_rUXsKRAngKMAtAon4MNVv3TPba3eYT2dnUWdHO4lK2HFV_urTJNWTkVpKtuUBlluMtOTwXb4SB9RYzNLR3SRzAIqDpCytOdw==",
+          "Google Funding Choices"
+        ],
+        "consentSurfaceObserved": null,
+        "firstVisibleMs": null,
+        "postClickEnforcementTested": false,
+        "requestsBeforeAnyConsentAction": true,
+        "userConsentActionObserved": false
+      }
+    }
+  ]
+}

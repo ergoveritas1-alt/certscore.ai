@@ -1,4 +1,5 @@
 import { reportRequestInventory } from "./report-request-inventory";
+import { accessibilitySelectorHint } from "@certscore/contracts";
 import { REPORT_EXPORT_DISCLAIMER } from "./report-export-footer";
 import { REPORT_TRANSPORT_CHECKS } from "../../lib/scans/report-runtime-inventory";
 import { pdfPriorityReview, pdfPrioritySourceIds } from "./report-pdf-priorities";
@@ -316,7 +317,7 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
     const rules = [...(axe?.violations ?? []).map(r => ({ ...r, result: "Automated failure" })), ...(axe?.reviewItems ?? []).map(r => ({ ...r, result: "Manual review" }))];
     section("accessibility", "G · Accessibility", accessibilityStatus, axe ? `${axe.rulesEvaluated.length} automated rules evaluated; ${axeSummary?.failedRuleCount ?? "unknown"} failed rules and ${axeSummary?.reviewRuleCount ?? "unknown"} rules requiring review.` : "No structured accessibility result is recorded.", "Automated rules only; incomplete checks and sampled examples are not a WCAG conformance audit.", [
         table("G.1 Results", ["Rule", "WCAG tags", "Impact", "Elements", "Result"], rules.map(r => [r.help, r.tags.filter(t => t.startsWith("wcag")).join(", "), pdfV2Words(r.impact), String(r.nodeCount), r.result]), { widths: [.37, .20, .12, .10, .21] }),
-        ...rules.map((r, i) => table(`G.${i + 2} ${r.help} — recorded examples`, ["Selector", "Recorded example / measurement"], r.representativeNodes.map(n => [n.selectors.join("; "), pdfV2Words((r.result === "Manual review" ? n.failureSummary?.replace(/^Fix (?:any|all) of the following:\s*/i, "") : n.failureSummary) || n.htmlSnippet)]), { mono: [0], widths: [.38, .62] })),
+        ...rules.map((r, i) => table(`G.${i + 2} ${r.help} — recorded examples`, ["Selector hints", "Recorded example / measurement"], r.representativeNodes.map(n => [accessibilitySelectorHint(n), pdfV2Words((r.result === "Manual review" ? n.failureSummary?.replace(/^Fix (?:any|all) of the following:\s*/i, "") : n.failureSummary) || n.htmlSnippet)]), { mono: [0], widths: [.38, .62] })),
         ...(axe?.reviewItems.some(r => r.ruleId === "color-contrast") ? [text("Contrast could not be measured for these examples; they require a manual check.", true)] : []),
     ]);
     const links = base ? { online: `${base}/app/scans/${encodeURIComponent(report.scan.id)}?reviewFocus=${report.reviewFocus}`, workpaper: `${base}/api/scans/${encodeURIComponent(report.scan.id)}/report-export?format=json&reviewFocus=${report.reviewFocus}`, retest: `${base}/?url=${encodeURIComponent(pdfTestedUrl(report) ?? "")}` } : { online: null, workpaper: null, retest: null };

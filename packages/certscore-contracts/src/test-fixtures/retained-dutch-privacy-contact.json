@@ -1,0 +1,79 @@
+{
+  "site": "rijksmuseum.nl",
+  "scanId": "130e1803-3083-49a9-8f0b-4ebd2fcb7d0f",
+  "source": {
+    "file": "artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/130e1803-3083-49a9-8f0b-4ebd2fcb7d0f/CanonicalEvidenceBundle.json",
+    "sha256": "12f698328981b0471224d5ce248d3f07db062308feb143088be1bd078342a5c9",
+    "bytes": 2523094
+  },
+  "sourceUrl": "https://www.rijksmuseum.nl/nl/footer/privacybeleid",
+  "ownership": {
+    "documentRole": "policy_document",
+    "targetRelationship": "target_controller",
+    "ownershipConfidence": 0.98,
+    "ownershipReasonCodes": ["same_registrable_domain_as_scan_target"]
+  },
+  "documentTextCoverage": {
+    "status": "complete",
+    "sourceTextChars": 11016,
+    "retainedTextChars": 11016,
+    "limitationKeys": []
+  },
+  "contactSection": {
+    "sourceUrl": "https://www.rijksmuseum.nl/nl/footer/privacybeleid",
+    "heading": "10. Contactgegevens",
+    "textExcerpt": "Mocht u nog vragen hebben over dit Privacybeleid, de manier waarop wij uw persoonsgegevens verwerken of als u uw bovenstaande rechten wilt uitoefenen, neem dan contact op met het Rijksmuseum via onderstaande contactgegevens of dit formulier : Rijksmuseum Postbus 74888 1070 DN AMSTERDAM Dit Privacybeleid wordt van tijd tot tijd bijgewerkt. De inwerkingtreding van dit Privacybeleid is 25 mei 2018. De meest recente versie staat op rijksmuseum.nl .",
+    "extractionMethod": "html_heading_hierarchy",
+    "sourceOffsetBasis": "sanitized_html",
+    "documentTextSha256": "70ad1fad11ec3f950ecae43a31d444be76287386fe8223ebfe4d7c972ae5c4b7",
+    "evidenceTextSha256": "8859aab88651151c787925004baddf45c444c43bf6e2b71de8340b12596e22af",
+    "sourceTextChars": 21844,
+    "extractionState": "complete",
+    "charStart": 21108,
+    "charEnd": 21844,
+    "quality": "strong"
+  },
+  "otherControllerCandidate": {
+    "topic": "controller_contact",
+    "status": "diagnostic_only",
+    "evidenceText": "van de persoonsgegevens die u aan ons hebt verstrekt zodat deze gegevens overgedragen kunnen worden aan een andere verwerkingsverantwoordelijke, een en ander voor zover dit technisch mogelijk is (dataportabiliteit). Recht tot indienen klacht.",
+    "confidence": 0.9,
+    "classifierProvenance": "gdpr_transparency_topic_classifier.v1",
+    "matchedLocale": "nl",
+    "matchedTerm": "verwerkingsverantwoordelijke",
+    "matchStrength": "direct",
+    "classifierReasonCodes": [
+      "matched_controller_contact",
+      "match_strength_direct"
+    ],
+    "productionCredit": false
+  },
+  "historicalSelectedWitness": {
+    "coverageArea": "controller_contact",
+    "selectedPolicySectionHeading": "recht op overdraagbaarheid van gegevens",
+    "selectedPolicySectionExcerpt": "van de persoonsgegevens die u aan ons hebt verstrekt zodat deze gegevens overgedragen kunnen worden aan een andere verwerkingsverantwoordelijke, een en ander voor zover dit technisch mogelijk is (dataportabiliteit). Recht tot indienen klacht.",
+    "selectedPolicySectionUrl": "https://www.rijksmuseum.nl/nl/footer/privacybeleid",
+    "sectionExtractionMethod": "canonical_topic_window",
+    "sourceOffsetBasis": "normalized_visible_text",
+    "sourceDocumentTextSha256": "cc1c8daf7be3f9444b63bf95c31d16ebe2852f502217850b8c72e945c5ae0e53",
+    "evidenceTextSha256": "34239a07a2e7bc8ff26b87f06a08200906d7d0878861eab35e555a1be26b0c3e",
+    "sourceCharStart": 9647,
+    "sourceCharEnd": 10318,
+    "sectionExtractionState": "complete",
+    "evidenceSource": "deterministic",
+    "selectedEvidenceStrength": "strong",
+    "signalObserved": "observed"
+  },
+  "englishPartialSignal": {
+    "disclosureType": "controller_contact",
+    "status": "partial",
+    "evidenceText": "If you have any questions about this Privacy Policy, the way we process your personal data or if you want to exercise any of the above rights, please contact the Rijksmuseum here . This Privacy Policy is updated from time to time. This Privacy Policy enters into force on 25 May 2018. The most recent version is published on rijksmuseum.nl.",
+    "confidence": 0.62,
+    "source": "deterministic",
+    "selectedPolicySectionHeading": "10. Contact information",
+    "selectedPolicySectionExcerpt": "If you have any questions about this Privacy Policy, the way we process your personal data or if you want to exercise any of the above rights, please contact the Rijksmuseum here . This Privacy Policy is updated from time to time. This Privacy Policy enters into force on 25 May 2018. The most recent version is published on rijksmuseum.nl.",
+    "selectedPolicySectionUrl": "https://www.rijksmuseum.nl/en/footer/privacy-policy",
+    "evidenceSource": "deterministic",
+    "selectedEvidenceStrength": "partial"
+  }
+}

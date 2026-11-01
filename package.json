@@ -7,6 +7,7 @@
     "node": ">=22.0.0 <25.0.0"
   },
   "scripts": {
+    "test:retained-audit-fixes": "node scripts/check-retained-audit-fixes.mjs",
     "build": "turbo run build",
     "check-env": "pnpm --filter @website-signal-risk-scanner/web check-env",
     "check-env:validation": "pnpm --filter @website-signal-risk-scanner/validation-worker check-env",

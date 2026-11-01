@@ -1,6 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { decodeCanonicalConsentDecision as decode } from "./consent-state-decision.js";
+import legacy from "./test-fixtures/cookieyes-legacy-protocol.json";
+import cookieInformation from "./test-fixtures/cookie-information-protocol.json";
+
+test("legacy CookieYes preference and checkbox receipts cannot inherit generic scalar whole-choice semantics", () => {
+  for (const source of legacy.cases) {
+    assert.deepEqual(JSON.parse(Buffer.from(source.value, "base64").toString("utf8")), source.decodedFixture,
+      "Fixture follows the reviewed writer's JSON-then-base64 encoding.");
+    assert.equal(decode(source.cookieName, source.value, true), "unknown", source.name);
+  }
+  for (const key of ["CookieLawInfoConsent", "viewed_cookie_policy", "cookielawinfo-checkbox-analytics", "cookielawinfo-checkbox-functional"]) {
+    for (const value of ["granted", "denied", "accepted_all", "rejected_all", "yes", "no", "true", "false"])
+      assert.equal(decode(key, value, true), "unknown", `${key}: ${value}`);
+  }
+});
+
+test("Cookie Information receipt arrays and scalars do not establish the current configured universe", () => {
+  for (const source of cookieInformation.cases) {
+    const value = JSON.stringify(source.receipt);
+    assert.equal(decode("CookieInformationConsent", value, true), "unknown", source.name);
+    assert.equal(decode("CookieInformationConsent", encodeURIComponent(value), true), "unknown", source.name);
+  }
+  for (const value of ["granted", "denied", "accepted_all", "rejected_all"])
+    assert.equal(decode("CookieInformationConsent", value, true), "unknown");
+});
 
 test("generic decisions require a whole-state key and exact semantic value", () => {
   assert.equal(decode("consent", "granted"), "granted");

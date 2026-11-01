@@ -12,6 +12,7 @@ import {
   normalizeGdprTransparencyText,
   type PolicySurfaceObservation,
 } from "@certscore/contracts";
+import { samePolicyDocumentUrl, POLICY_DOCUMENT_IDENTITY_VERSION } from "./policy-surface-url-hygiene";
 
 import {
   GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
@@ -195,7 +196,8 @@ export function adaptGdprTransparencyTopicCandidatesForProduction(
     );
     acceptedProductionSignals.push({
       classifierProvenance: candidate.classifierProvenance,
-      classifierReasonCodes: uniqueStrings([ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION, ...candidate.classifierReasonCodes]).slice(0, 16),
+      classifierReasonCodes: uniqueStrings([ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION,
+        ...(retainedSignal ? [POLICY_DOCUMENT_IDENTITY_VERSION] : []), ...candidate.classifierReasonCodes]).slice(0, 16),
       confidence: candidate.confidence,
       disclosureType: candidate.topic,
       evidenceSource: retainedSignal
@@ -245,7 +247,7 @@ function boundCanonicalRetainedSignal(
       return false;
     }
     const signalUrl = signal.selectedPolicySectionUrl;
-    if (!surfaceUrl || !signalUrl || !samePolicyUrl(surfaceUrl, signalUrl)) {
+    if (!surfaceUrl || !signalUrl || !samePolicyDocumentUrl(surfaceUrl, signalUrl)) {
       return false;
     }
     const evidenceText =
@@ -260,18 +262,6 @@ function boundCanonicalRetainedSignal(
         evidenceText,
       });
   }) ?? null;
-}
-
-function samePolicyUrl(left: string, right: string) {
-  const normalize = (value: string) => {
-    try {
-      const url = new URL(value);
-      return `${url.hostname.replace(/^www\./i, "").toLowerCase()}${url.pathname.replace(/\/$/, "")}`;
-    } catch {
-      return value.trim().replace(/\/$/, "").toLowerCase();
-    }
-  };
-  return normalize(left) === normalize(right);
 }
 
 function rejectReasonForCandidate(

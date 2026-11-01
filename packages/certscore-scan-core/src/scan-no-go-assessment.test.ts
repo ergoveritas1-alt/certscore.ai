@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { brandedSoft404, brandedInterruption } from "../../certscore-contracts/src/test-fixtures/runtime-error-pages";
+import { retainedYandexChallenge, retainedRadwareChallenge } from "../../certscore-contracts/src/test-fixtures/runtime-challenge-pages";
 import type {
   ConsentUiObservation,
   DomSnapshotArtifact,
@@ -977,6 +978,20 @@ test("HTTP200 branded runtime errors remain no-go beyond the short retained quot
     assert.equal(result?.scanNoGoAssessment.decision, "no_go");
     assert.equal(result?.primaryReasonCode, reason);
     assert.match(result!.visualAccessReview.key_visual_evidence.join(" "), reason === "not_found_404" ? /404.*This page/ : /Temporary service interruption/);
+  }
+});
+
+test("complete redirect and browser-verification notices remain capture limitations with successful HTTP", () => {
+  for(const [text,reason] of [
+    ["You will be automatically re-directed to our consumer site momentarily, or you may navigate to Example Company content at our new location by following this link: https://destination.example/","redirect_only_page"],
+    ["Verifying your browser before proceeding... Incident ID: test-incident-123","captcha_or_challenge"],
+    [retainedYandexChallenge,"captcha_or_challenge"],
+    [retainedRadwareChallenge,"captcha_or_challenge"],
+  ] as const){
+    assert.equal(classifyScanNoGoTextForCalibration(text)?.reasonCode,reason);
+    const result=buildScanNoGoAssessment(scanEvidence({text,screenshots:[],firstPartySuccesses:8}));
+    assert.equal(result?.primaryReasonCode,reason);
+    assert.equal(result?.scanNoGoAssessment.decision,"no_go");
   }
 });
 

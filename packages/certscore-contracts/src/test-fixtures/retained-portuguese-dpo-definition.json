@@ -1,0 +1,86 @@
+{
+  "site": "rdstation.com",
+  "scanId": "54f2b431-fdd0-4ff7-b79b-fd8e79d05d4c",
+  "source": {
+    "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/54f2b431-fdd0-4ff7-b79b-fd8e79d05d4c/CanonicalEvidenceBundle.json",
+    "sha256": "0f8ae80fe999cdee8e6c1a28ef76a1537ca4c760b6e21138c1fb8dc164d64e6a",
+    "bytes": 1070068
+  },
+  "sourceUrl": "https://legal.rdstation.com/pt/privacy-policy/",
+  "ownership": {
+    "documentRole": "policy_document",
+    "targetRelationship": "target_controller",
+    "ownershipConfidence": 0.98,
+    "ownershipReasonCodes": [
+      "same_registrable_domain_as_scan_target"
+    ]
+  },
+  "contentCoverage": {
+    "status": "truncated",
+    "sourceTextChars": 30045,
+    "extractedSectionCount": 32,
+    "retainedSectionCount": 19,
+    "retainedTableRowCount": 0,
+    "limitationKeys": [
+      "policy_section_inventory_bounded",
+      "policy_section_text_bounded"
+    ]
+  },
+  "definitionSection": {
+    "sourceUrl": "https://legal.rdstation.com/pt/privacy-policy/",
+    "heading": "Encarregado ou Data Protection Officer (“DPO”):",
+    "textExcerpt": "Pessoa natural ou jurídica indicada pelo Agente de Tratamento para atuar como canal de comunicação entre o Controlador, os titulares de dados e a ANPD.",
+    "extractionMethod": "html_labeled_block",
+    "sourceOffsetBasis": "sanitized_html",
+    "documentTextSha256": "6daa9b49c14f1e14a3aa0e6bcb4f1c536b6b20b4f04ff1591667accc289117d4",
+    "evidenceTextSha256": "9fc442f1180383d58ae8fcf16f37a51af050629c8881906a46eb52ed4101f84b",
+    "sourceTextChars": 42815,
+    "extractionState": "complete",
+    "charStart": 5159,
+    "charEnd": 5411,
+    "quality": "partial"
+  },
+  "historicalSelectedWitness": {
+    "coverageArea": "dpo_contact",
+    "selectedPolicySectionHeading": "data protection officer",
+    "selectedPolicySectionExcerpt": "Encarregado ou Data Protection Officer (“DPO”): Pessoa natural ou jurídica indicada pelo Agente de Tratamento para atuar como canal de comunicação entre o Controlador, os titulares de dados e a ANPD. Fornecedor(es): são pessoas físicas ou jurídicas que prestam algum tipo de serviço contratado pelo RD. Leads: pessoas que demonstram interesse nos produtos ou serviços da RD ou de seus Clientes, seja por meio de ações como o preenchimento de formulários, inscrição em newsletters, ou outro tipo de contato e interação. Lei Geral de Proteção de Dados (“LGPD“): Lei nº 13.709/2018 que regula o tratamento de Dados Pessoais realizado no território brasileiro ou que tenha por objetivo fornecer bens ou serviços para indivíduos localizados no território nacional ou ainda que os Dados objeto do tratamento tenham sido coletados no território brasileiro.",
+    "selectedPolicySectionUrl": "https://legal.rdstation.com/pt/privacy-policy/",
+    "sectionExtractionMethod": "canonical_topic_window",
+    "sourceOffsetBasis": "normalized_visible_text",
+    "sourceDocumentTextSha256": "85a149a172ac32a12070d49901c5ef3073fec408315e14d473b0a058672dd37c",
+    "evidenceTextSha256": "9bf063f37c152fcaad846b68292c5afc6d80b224f83da371a347492ffde37eae",
+    "sourceCharStart": 2292,
+    "sourceCharEnd": 3141,
+    "sectionExtractionState": "complete",
+    "evidenceSource": "deterministic",
+    "selectedEvidenceStrength": "strong",
+    "signalObserved": "observed"
+  },
+  "historicalSignal": {
+    "disclosureType": "dpo_contact",
+    "status": "observed",
+    "evidenceText": "Encarregado ou Data Protection Officer (“DPO”): Pessoa natural ou jurídica indicada pelo Agente de Tratamento para atuar como canal de comunicação entre o Controlador, os titulares de dados e a ANPD. Fornecedor(es): são pessoas físicas ou jurídicas que prestam algum tipo de serviço contratado pelo RD. Leads: pessoas que demonstram interesse nos produtos ou serviços da RD ou de seus Clientes, seja por meio de ações como o preenchimento de formulários, inscrição em newsletters, ou outro tipo de contato e interação.",
+    "confidence": 0.9,
+    "source": "deterministic",
+    "selectedPolicySectionHeading": "data protection officer",
+    "selectedPolicySectionExcerpt": "Encarregado ou Data Protection Officer (“DPO”): Pessoa natural ou jurídica indicada pelo Agente de Tratamento para atuar como canal de comunicação entre o Controlador, os titulares de dados e a ANPD. Fornecedor(es): são pessoas físicas ou jurídicas que prestam algum tipo de serviço contratado pelo RD. Leads: pessoas que demonstram interesse nos produtos ou serviços da RD ou de seus Clientes, seja por meio de ações como o preenchimento de formulários, inscrição em newsletters, ou outro tipo de contato e interação. Lei Geral de Proteção de Dados (“LGPD“): Lei nº 13.709/2018 que regula o tratamento de Dados Pessoais realizado no território brasileiro ou que tenha por objetivo fornecer bens ou serviços para indivíduos localizados no território nacional ou ainda que os Dados objeto do tratamento tenham sido coletados no território brasileiro.",
+    "selectedPolicySectionUrl": "https://legal.rdstation.com/pt/privacy-policy/",
+    "evidenceSource": "deterministic",
+    "selectedEvidenceStrength": "strong"
+  },
+  "historicalCandidate": {
+    "topic": "dpo_contact",
+    "status": "diagnostic_only",
+    "evidenceText": "Encarregado ou Data Protection Officer (\"DPO\"): Pessoa natural ou jurídica indicada pelo Agente de Tratamento para atuar como canal de comunicação entre o Controlador, os titulares de dados e a ANPD. Fornecedor(es): são pessoas físicas ou jurídicas que prestam algum tipo de serviço contratado pelo RD.",
+    "confidence": 0.9,
+    "classifierProvenance": "gdpr_transparency_topic_classifier.v1",
+    "matchedLocale": "en",
+    "matchedTerm": "data protection officer",
+    "matchStrength": "direct",
+    "classifierReasonCodes": [
+      "matched_dpo_contact",
+      "match_strength_direct"
+    ],
+    "productionCredit": false
+  }
+}

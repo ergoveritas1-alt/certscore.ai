@@ -3,6 +3,7 @@ import type { Frame, Page } from "playwright";
 import type { CmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
 
 export type DocumentedConsentProvider = "cookie_information" | "cookiescript" | "finsweet";
+export const COOKIE_INFORMATION_STATE_POLICY = "cookie_information_active_categories.v2";
 
 /** Passive documented getters and saved-decision events only. No queues,
  * initialization, consent setters, UI actions or network calls are invoked.
@@ -10,7 +11,7 @@ export type DocumentedConsentProvider = "cookie_information" | "cookiescript" | 
  */
 export async function readDocumentedConsentApi(scope: Page | Frame, provider: DocumentedConsentProvider): Promise<CmpApiConsentSnapshot | undefined> {
   let timer: NodeJS.Timeout | undefined;
-  const raw = await Promise.race([scope.evaluate(({ provider }) => {
+  const raw = await Promise.race([scope.evaluate(({ provider, cookieInformationPolicy }) => {
     type State = { canonicalState: string; decision: "granted" | "denied" | "mixed" | "unknown"; configuration: string };
     type Tracker = { api: unknown; sequence: number; at?: number; state?: State };
     const target = window as unknown as {
@@ -33,11 +34,33 @@ export async function readDocumentedConsentApi(scope: Page | Frame, provider: Do
       let entries: Array<[string, boolean]>;
       let configuration: string[];
       if (provider === "cookie_information") {
-        configuration = ["cookie_cat_functional", "cookie_cat_marketing", "cookie_cat_statistic"];
-        const values = configuration.map(key => target.CookieInformation!.getConsentGivenFor!(key));
+        // The reviewed writer installs its active universe in cicl, and its
+        // getter returns cicc[category]. Reuse those already-loaded own data
+        // properties in this existing evaluation: no extra getter or SDK call.
+        const data = {own(object: unknown, key: string): unknown {
+          if (!object || typeof object !== "object" && typeof object !== "function") return undefined;
+          const d = Object.getOwnPropertyDescriptor(object, key);
+          return d && "value" in d ? d.value : undefined;
+        }};
+        const active = data.own(window, "cicl"), state = data.own(window, "cicc");
+        const known = ["cookie_cat_necessary", "cookie_cat_functional", "cookie_cat_statistic", "cookie_cat_marketing", "cookie_cat_unclassified"];
+        if (!Array.isArray(active)) return undefined;
+        const length = data.own(active, "length");
+        if (typeof length !== "number" || !Number.isInteger(length) || length < 1 || length > known.length) return undefined;
+        const categories: string[] = [];
+        for (let index = 0; index < length; index++) {
+          const key = data.own(active, String(index));
+          if (typeof key !== "string" || !known.includes(key) || categories.includes(key)) return undefined;
+          categories.push(key);
+        }
+        if (!categories.includes("cookie_cat_necessary") || data.own(state, "cookie_cat_necessary") !== true) return undefined;
+        const optional = categories.filter(key => key !== "cookie_cat_necessary").sort();
+        if (!optional.length) return undefined;
+        configuration = [cookieInformationPolicy, ...categories.sort()];
+        const values = optional.map(key => data.own(state, key));
         if (values.every(value => value === undefined)) return {canonicalState: "unregistered", configuration: JSON.stringify(configuration), decision: "unknown"};
         if (values.some(value => typeof value !== "boolean")) return undefined;
-        entries = configuration.map((key, index) => [key, values[index] as boolean]);
+        entries = optional.map((key, index) => [key, values[index] as boolean]);
       } else if (provider === "finsweet") {
         configuration = ["analytics", "marketing", "personalization"];
         const raw = target.FinsweetConsentPro!.consents!.get!();
@@ -85,11 +108,12 @@ export async function readDocumentedConsentApi(scope: Page | Frame, provider: Do
       else for (const event of provider === "cookie_information" ? ["CookieInformationConsentGiven"] : ["CookieScriptReject", "CookieScriptAcceptAll", "CookieScriptAccept"]) window.addEventListener(event, handler.listener);
     }
     const live = reader.read();
+    if (provider === "cookie_information" && !live) return undefined;
     // A malformed latest event or a changed live API cannot reuse old proof.
     if (tracker.sequence && (!live || !tracker.state || tracker.state.canonicalState !== live.canonicalState || tracker.state.configuration !== live.configuration)) return undefined;
     return { canonicalState: live?.canonicalState ?? "unregistered", decision: live?.decision ?? "unknown" as const,
       configuration: live?.configuration, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.at };
-  }, { provider }).catch(() => undefined),
+  }, { provider, cookieInformationPolicy: COOKIE_INFORMATION_STATE_POLICY }).catch(() => undefined),
     new Promise<undefined>(resolve => {timer = setTimeout(() => resolve(undefined), 150);}),
   ]).finally(() => {if (timer) clearTimeout(timer);});
   if (!raw) return undefined;

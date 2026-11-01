@@ -9,7 +9,7 @@ export { classifyCanonicalCollectionEndpoint, isCanonicalAdvertisingCollectionCa
 export { inspectGpcRequestQualification, GPC_REQUEST_QUALIFICATION_POLICY } from "./gpc-request-qualification";
 export { decodeGppRequest, applyGppRequestCmpContext } from "./gpp-request-decoder";
 import { cookieClassificationSchema, type CookieClassification } from "@certscore/contracts";
-import { COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge as cookieKnowledge, type CanonicalCookieContext, type CanonicalCookieKnowledge } from "./cookie-knowledge-base";
+import { COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge as cookieKnowledge, type CanonicalCookieContext, type CanonicalCookieKnowledge } from "./cookie-knowledge-base";
 import type {
   EndpointGeographyPrecision,
   EndpointGeographyStatus,
@@ -29,6 +29,9 @@ export {
   COOKIE_PURPOSE_CANDIDATE_VERSION,
   AXEPTIO_COOKIE_PURPOSE_POLICY,
   COOKIE_PURPOSE_POLICY,
+  GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY,
+  X_COOKIE_PURPOSE_POLICY,
+  REVIEWED_COOKIE_PURPOSE_POLICY,
   C3_COOKIE_PURPOSE_POLICY,
   VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY,
   LEGACY_COOKIE_PURPOSE_POLICY,
@@ -46,6 +49,8 @@ export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR
 
 export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-27-cmp-expansion-v19";
 export const C3_COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-23-v5";
+export const COOKIE_X_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-30-v7";
+export const COOKIE_CURRENT_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-30-v8";
 export const COOKIE_REVIEW_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-27-v6";
 export const COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-21-v4";
 
@@ -5372,8 +5377,8 @@ export function getCanonicalVendorRegistryManifest() {
   return {
     contractVersion: "vendor-registry-manifest-v1" as const,
     resolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
-    cookieProviderResolverVersion: COOKIE_REVIEW_PROVIDER_RESOLVER_VERSION,
-    rules: [...rules, ...auditedCookieProviderRules, ...currentCookieProviderRules, ...coverageCookieProviderRules, ...c3CookieProviderRules, ...reviewedCookieProviderRules].map(rule => ({
+    cookieProviderResolverVersion: COOKIE_CURRENT_PROVIDER_RESOLVER_VERSION,
+    rules: [...rules, ...auditedCookieProviderRules, ...currentCookieProviderRules, ...coverageCookieProviderRules, ...c3CookieProviderRules, ...reviewedCookieProviderRules, ...xExactCookieProviderRules, ...fundingChoicesAnalyticsCookieProviderRules].map(rule => ({
       ruleId: rule.basisLabel,
       ...rule.identity,
       entity: rule.entity,
@@ -5703,8 +5708,8 @@ export function resolveVendorObservations(
     const storageKey = input.storageKey;
     const domSelector = input.domSelector;
 
-    const cookieRules = input.type === "cookie" && [COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
-      ? [...rules, ...auditedCookieProviderRules, ...([COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY,PRIOR_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion) ? currentCookieProviderRules : []), ...([COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY,VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion)?coverageCookieProviderRules:[]), ...([COOKIE_PURPOSE_POLICY,C3_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion)?c3CookieProviderRules:[]), ...(input.cookiePurposePolicyVersion===COOKIE_PURPOSE_POLICY?reviewedCookieProviderRules:[])] : rules;
+    const cookieRules = input.type === "cookie" && [COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
+      ? [...(input.cookiePurposePolicyVersion===COOKIE_PURPOSE_POLICY?fundingChoicesAnalyticsCookieProviderRules:[]), ...([COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion)?xExactCookieProviderRules:[]), ...rules, ...auditedCookieProviderRules, ...([COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY,PRIOR_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion) ? currentCookieProviderRules : []), ...([COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY,VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion)?coverageCookieProviderRules:[]), ...([COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY,C3_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion)?c3CookieProviderRules:[]), ...([COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY,REVIEWED_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion)?reviewedCookieProviderRules:[])] : rules;
     for (const rule of cookieRules) {
       const matchedHost = hostname
         ? matchesAny(hostname, rule.hostPatterns) && !matchesAny(hostname, rule.excludeHostPatterns)
@@ -5770,9 +5775,9 @@ export function resolveVendorObservations(
             : matchedCookie ? "cookie_name" : "hostname";
       const registryAttribution: VendorRegistryAttribution = {
         contractVersion: "vendor-registry-attribution-v1",
-        resolverVersion: input.type === "cookie" && [COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
+        resolverVersion: input.type === "cookie" && [COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === input.cookiePurposePolicyVersion)
           ? input.cookiePurposePolicyVersion === HEAP_COOKIE_PURPOSE_POLICY
-            ? "certscore-cookie-provider-2026-10-15-v3" : input.cookiePurposePolicyVersion===COOKIE_PURPOSE_POLICY ? COOKIE_REVIEW_PROVIDER_RESOLVER_VERSION : [COOKIE_PURPOSE_POLICY,C3_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion) ? C3_COOKIE_PROVIDER_RESOLVER_VERSION : COOKIE_PROVIDER_RESOLVER_VERSION
+            ? "certscore-cookie-provider-2026-10-15-v3" : input.cookiePurposePolicyVersion===COOKIE_PURPOSE_POLICY ? COOKIE_CURRENT_PROVIDER_RESOLVER_VERSION : [GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion) ? COOKIE_X_PROVIDER_RESOLVER_VERSION : input.cookiePurposePolicyVersion===REVIEWED_COOKIE_PURPOSE_POLICY ? COOKIE_REVIEW_PROVIDER_RESOLVER_VERSION : [COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY,C3_COOKIE_PURPOSE_POLICY].some(v=>v===input.cookiePurposePolicyVersion) ? C3_COOKIE_PROVIDER_RESOLVER_VERSION : COOKIE_PROVIDER_RESOLVER_VERSION
           : CANONICAL_VENDOR_RESOLVER_VERSION,
         ...rule.identity,
         ruleIds: [rule.basisLabel],
@@ -6376,6 +6381,37 @@ const reviewedCookieProviderRules: VendorRule[] = [{
   ]},
 }];
 
+// Exact-name/domain X rules are cookie-only; request/source identities stay unchanged.
+const xExactCookieProviderRules: VendorRule[] = [
+  { name: "muc_ads", product: "Twitter Pixel", purpose: "advertising", hosts: /^(?:[a-z0-9-]+\.)*t\.co$/ },
+  { name: "personalization_id", product: "X/Twitter Social Widgets", purpose: "personalization", hosts: /^(?:[a-z0-9-]+\.)*(?:twitter|x)\.com$/ },
+].map(entry => ({
+  ...rules.find(rule => rule.vendor === "X/Twitter" && rule.product === entry.product)!,
+  // Generic vendor purpose has no personalization category. Do not upgrade it
+  // to advertising; the cookie's typed purpose remains personalization.
+  purpose: entry.purpose === "personalization" ? "unknown" as const : "advertising" as const,
+  servicePurpose: entry.purpose === "personalization" ? "Social media embed" as const : "Advertising" as const,
+  regulatoryRelevance: entry.purpose === "personalization" ? ["personalization", "cross_site_tracking"] : ["advertising", "ad_measurement"],
+  cookiePatterns: [new RegExp(`^${entry.name}$`)], hostPatterns: [entry.hosts], urlPatterns: [], storageKeyPatterns: [],
+  requireHostPatternForCookieMatch: true, requireUrlPatternMatch: false,
+  basisLabel: `x_exact_${entry.name}_v9`, confidence: 0.98,
+  review: { reviewedAt: "2026-10-30", reviewer: "CertScore.ai exact-cookie source review",
+    sourceUrls: ["https://help.x.com/en/rules-and-policies/x-cookies"] },
+}));
+
+// Cookie-only attribution reuses the existing Funding Choices entity/service.
+// This analytics observation does not establish a consent decision or CMP readiness.
+const fundingChoicesAnalyticsCookieProviderRules: VendorRule[] = [{
+  ...rules.find(rule => rule.product === "Google Funding Choices CMP")!,
+  purpose: "analytics", servicePurpose: "Analytics", regulatoryRelevance: ["analytics"],
+  cookiePatterns: [/^FCNEC$/],
+  hostPatterns: [/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/],
+  urlPatterns: [], storageKeyPatterns: [], requireHostPatternForCookieMatch: true, requireUrlPatternMatch: false,
+  basisLabel: "google_funding_choices_exact_analytics_cookie_v11", confidence: 0.98,
+  review: { reviewedAt: "2026-10-30", reviewer: "CertScore.ai exact-cookie source review",
+    sourceUrls: ["https://business.safety.google/adscookies/", "https://business.safety.google/static/assets/csv/adcookies.csv"] },
+}];
+
 function cookieUnknownReason(knowledge: CanonicalCookieKnowledge): CookieClassification["unknownReason"] {
   if (knowledge.category!=="unknown" && knowledge.essentiality!=="unknown") return null;
   if (knowledge.ruleId?.endsWith("_context_required")) return "missing_context";
@@ -6386,7 +6422,7 @@ function cookieUnknownReason(knowledge: CanonicalCookieKnowledge): CookieClassif
 }
 
 export function resolveCanonicalCookieClassification(name: string, context: Pick<CanonicalCookieContext, "cookieDomain"> = {},
-  policyVersion: typeof COOKIE_PURPOSE_POLICY | typeof C3_COOKIE_PURPOSE_POLICY | typeof VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY = COOKIE_PURPOSE_POLICY): CookieClassification {
+  policyVersion: typeof COOKIE_PURPOSE_POLICY | typeof GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY | typeof X_COOKIE_PURPOSE_POLICY | typeof REVIEWED_COOKIE_PURPOSE_POLICY | typeof C3_COOKIE_PURPOSE_POLICY | typeof VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY = COOKIE_PURPOSE_POLICY): CookieClassification {
   const knowledge = cookieKnowledge(name, { ...context, purposePolicyVersion: policyVersion });
   const domain = context.cookieDomain?.replace(/^\.+/, "").toLowerCase() || null;
   const resolution = resolveCanonicalVendor({ type: "cookie", cookieName: name, hostname: domain ?? undefined, cookiePurposePolicyVersion: policyVersion });
@@ -6399,12 +6435,12 @@ export function resolveCanonicalCookieClassification(name: string, context: Pick
   if(!provider&&coverage&&knowledge.vendor===coverage.vendor){
     const rule=rules.find(r=>r.vendor===coverage.vendor&&r.product===coverage.product);
     if(rule)provider={vendor:rule.vendor,product:rule.product,entity:rule.entity,registryAttribution:{...rule.identity,
-      contractVersion:"vendor-registry-attribution-v1",resolverVersion:policyVersion===COOKIE_PURPOSE_POLICY?COOKIE_REVIEW_PROVIDER_RESOLVER_VERSION:[COOKIE_PURPOSE_POLICY,C3_COOKIE_PURPOSE_POLICY].some(v=>v===policyVersion)?C3_COOKIE_PROVIDER_RESOLVER_VERSION:CANONICAL_VENDOR_RESOLVER_VERSION,ruleIds:[rule.basisLabel],matchKind:"cookie_name"}};
+      contractVersion:"vendor-registry-attribution-v1",resolverVersion:policyVersion===COOKIE_PURPOSE_POLICY?COOKIE_CURRENT_PROVIDER_RESOLVER_VERSION:[GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY].some(v=>v===policyVersion)?COOKIE_X_PROVIDER_RESOLVER_VERSION:policyVersion===REVIEWED_COOKIE_PURPOSE_POLICY?COOKIE_REVIEW_PROVIDER_RESOLVER_VERSION:[COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY,C3_COOKIE_PURPOSE_POLICY].some(v=>v===policyVersion)?C3_COOKIE_PROVIDER_RESOLVER_VERSION:CANONICAL_VENDOR_RESOLVER_VERSION,ruleIds:[rule.basisLabel],matchKind:"cookie_name"}};
   }
   return cookieClassificationSchema.parse({ version: policyVersion, cookieName: name, cookieDomain: domain,
     category: knowledge.category, essentiality: knowledge.essentiality, documentedPurposes: knowledge.documentedPurposes ?? [],
     ruleId: knowledge.ruleId ?? "unresolved", provider,
-    ...(policyVersion===COOKIE_PURPOSE_POLICY?{unknownReason:cookieUnknownReason(knowledge)}:{}) });
+    ...([COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY,REVIEWED_COOKIE_PURPOSE_POLICY].some(v=>v===policyVersion)?{unknownReason:cookieUnknownReason(knowledge)}:{}) });
 }
 
 export { isAdvertisingIdentityValue } from "./advertising-identifiers";

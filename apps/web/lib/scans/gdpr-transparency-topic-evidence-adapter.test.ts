@@ -1,3 +1,4 @@
+import retainedContact from "./test-fixtures/retained-policy-contact.json";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DATA_BOUND_PURPOSE_TABLE, INADEQUATE_PURPOSE_WITNESSES } from "../../../../packages/certscore-contracts/src/test-fixtures/policy-topic-witnesses";
@@ -1165,4 +1166,45 @@ test("accepted candidates prefer validated same-topic retained quotes and reject
     assert.equal(result.acceptedProductionSignals.length, 1);
     assert.equal(result.acceptedProductionSignals[0]!.evidenceText, expected);
   }
+});
+
+test("retained contact witness cannot rescue another query, scheme, port, alias or path", () => {
+  const source = retainedContact.sourceUrl;
+  const signal = retainedContact.signal as NonNullable<Parameters<
+    typeof adaptGdprTransparencyTopicCandidatesForProduction
+  >[0]["surface"]["article13DisclosureSignals"]>[number];
+  const run = (url: string) => adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true, policyTextQuality: { usable: true }, pageUrl: url,
+    surface: surface([candidate({ topic: "controller_contact", matchedLocale: "en", matchedTerm: "controller contact",
+      evidenceText: "Details of another data controller may be supplied when required by law." })], {
+      normalizedUrl: url, url, article13DisclosureSignals: [signal],
+    }),
+  });
+  const accepted = run(source);
+  assert.equal(accepted.acceptedProductionSignals.length, 1);
+  assert.equal(accepted.acceptedProductionSignals[0]?.evidenceText, signal.selectedPolicySectionExcerpt);
+  assert.ok(accepted.acceptedProductionSignals[0]?.classifierReasonCodes.includes("policy_document_identity.v1"));
+  assert.equal(run(source + "#contact").acceptedProductionSignals.length, 1);
+  for (const other of [source + "?revision=other", source.replace("https:", "http:"),
+    source.replace("www.dolby.com", "www.dolby.com:8443"), source.replace("www.dolby.com", "dolby.com"),
+    source.replace(/\/$/, ""), source.replace("privacy-policy", "PRIVACY-POLICY")]) {
+    assert.deepEqual(run(other).acceptedProductionSignals, [], other);
+  }
+});
+
+test("a substantive candidate from the current document does not borrow a mismatched retained witness", () => {
+  const url = "https://example.test/privacy?revision=current";
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true, policyTextQuality: { usable: true }, pageUrl: url,
+    surface: surface([candidate({ topic: "controller_contact", matchedLocale: "en", matchedTerm: "controller contact",
+      evidenceText: "Example Ltd is the controller of your personal data. Contact our privacy team at privacy@example.test." })], {
+      normalizedUrl: url, url,
+      article13DisclosureSignals: [{ ...retainedContact.signal, disclosureType: "controller_contact",
+        status: "observed", source: "deterministic", evidenceSource: "deterministic", selectedEvidenceStrength: "strong" }],
+    }),
+  });
+  assert.equal(result.acceptedProductionSignals.length, 1);
+  assert.equal(result.acceptedProductionSignals[0]?.evidenceSource, "gdpr_transparency_topic_candidate");
+  assert.equal(result.acceptedProductionSignals[0]?.selectedPolicySectionUrl, url);
+  assert.ok(!result.acceptedProductionSignals[0]?.classifierReasonCodes.includes("policy_document_identity.v1"));
 });

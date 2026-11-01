@@ -1,10 +1,144 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import retainedAccount from "../../certscore-contracts/src/test-fixtures/retained-account-retention.json";
+import retainedCompetition from "../../certscore-contracts/src/test-fixtures/retained-competition-retention.json";
+import retainedPostalController from "../../certscore-contracts/src/test-fixtures/retained-polish-postal-controller.json";
+import retainedCategoryRetention from "../../certscore-contracts/src/test-fixtures/retained-personal-category-retention.json";
+import retainedPrizeRecipients from "../../certscore-contracts/src/test-fixtures/retained-prize-recipient-disclosure.json";
+import retainedDutchContact from "../../certscore-contracts/src/test-fixtures/retained-dutch-privacy-contact.json";
+import retainedPolishContact from "../../certscore-contracts/src/test-fixtures/retained-polish-controller-contact.json";
+import retainedLifecycleRetention from "../../certscore-contracts/src/test-fixtures/retained-lifecycle-retention.json";
+import retainedPolishPurpose from "../../certscore-contracts/src/test-fixtures/retained-polish-correspondence-purpose.json";
+import retainedPortugueseDpo from "../../certscore-contracts/src/test-fixtures/retained-portuguese-dpo-definition.json";
 import { createHash } from "node:crypto";
 import { INFORMAL_GERMAN_POLICY_CLAUSES, INADEQUATE_PURPOSE_WITNESSES, DATA_BOUND_PURPOSE_TABLE } from "../../certscore-contracts/src/test-fixtures/policy-topic-witnesses";
 import { extractPolicySections, retainedArticle13SectionEvidenceFromSections, gdprTransparencyTopicCandidatesFromText } from "./scanners/policy-surface-scanner";
 
 const sourceUrl = "https://publisher.example/privacy";
+
+test("prize recipient witness selects the explicit contact-data clause instead of aggregate survey results", () => {
+  const f = retainedPrizeRecipients;
+  const section = {...f.section, extractionState: "complete" as const, quality: "strong" as const,
+    extractionMethod: "html_heading_hierarchy" as const, sourceOffsetBasis: "sanitized_html" as const};
+  const witness = retainedArticle13SectionEvidenceFromSections([section], f.sourceUrl)
+    .find(w => w.coverageArea === "recipients_or_vendor_categories");
+  assert.equal(witness?.signalObserved, "observed");
+  assert.equal(witness?.selectedPolicySectionExcerpt, f.clause);
+  assert.equal(witness?.sourceDocumentTextSha256, f.section.documentTextSha256);
+  assert.equal(witness?.selectedPolicySectionUrl, f.sourceUrl);
+  assert.equal(witness?.evidenceTextSha256, createHash("sha256").update(f.clause).digest("hex"));
+});
+
+test("retained markup-bearing policy section yields the exact category retention witness and original source binding", () => {
+  const f = retainedCategoryRetention;
+  const section = {...f.section, extractionState: "complete" as const, quality: "strong" as const,
+    extractionMethod: "canonical_topic_window" as const, sourceOffsetBasis: "normalized_visible_text" as const};
+  const witness = retainedArticle13SectionEvidenceFromSections([section], f.sourceUrl)
+    .find(w => w.coverageArea === "data_retention");
+  assert.equal(witness?.signalObserved, "observed");
+  assert.equal(witness?.selectedPolicySectionExcerpt, f.clause);
+  assert.equal(witness?.selectedPolicySectionUrl, f.sourceUrl);
+  assert.equal(witness?.sourceDocumentTextSha256, f.section.documentTextSha256);
+  assert.equal(witness?.evidenceTextSha256, createHash("sha256").update(f.clause).digest("hex"));
+});
+
+test("controller witness retains the complete postal quote and original truncated-section proof", () => {
+  const f = retainedPostalController;
+  const section = {...f.section, extractionState: "truncated" as const, quality: "strong" as const,
+    extractionMethod: "html_heading_hierarchy" as const, sourceOffsetBasis: "sanitized_html" as const};
+  const witness = retainedArticle13SectionEvidenceFromSections([section], f.sourceUrl).find(w => w.coverageArea === "controller_contact");
+  assert.ok(witness);
+  assert.equal(witness.selectedPolicySectionExcerpt, f.clause);
+  assert.equal(witness.selectedPolicySectionUrl, f.sourceUrl);
+  assert.equal(witness.sourceDocumentTextSha256, f.section.documentTextSha256);
+  assert.equal(witness.evidenceTextSha256, createHash("sha256").update(f.clause).digest("hex"));
+  assert.equal(witness.sectionExtractionState, "truncated");
+  assert.equal(witness.extractionLimitation, "selected_policy_section_truncated_by_retention_limit");
+});
+
+test("retained entrant-data lifecycle produces an exact bounded source witness", () => {
+  const f = retainedCompetition;
+  const sections = extractPolicySections({html: "", visibleText: f.section.textExcerpt, sourceUrl: f.sourceUrl});
+  const witness = retainedArticle13SectionEvidenceFromSections(sections, f.sourceUrl)
+    .find(w => w.coverageArea === "data_retention" && w.signalObserved === "observed");
+  assert.ok(witness);
+  assert.equal(witness.selectedPolicySectionExcerpt, f.clause);
+  assert.equal(witness.selectedPolicySectionUrl, f.sourceUrl);
+  assert.equal(witness.evidenceTextSha256, createHash("sha256").update(f.clause).digest("hex"));
+});
+
+test("a retained DPO definition cannot remain an observed scanner witness", () => {
+  const f = retainedPortugueseDpo;
+  const sections = extractPolicySections({ html: "", sourceUrl: f.sourceUrl,
+    visibleText: f.historicalSelectedWitness.selectedPolicySectionExcerpt });
+  const dpo = retainedArticle13SectionEvidenceFromSections(sections, f.sourceUrl).find(w => w.coverageArea === "dpo_contact");
+  assert.equal(f.historicalSignal.status, "observed");
+  assert.equal(dpo?.signalObserved, "not_confirmed");
+  if (dpo) assert.equal(dpo.selectedPolicySectionUrl, f.sourceUrl);
+});
+
+test("retained purpose extraction replaces a numbered heading with its source sentence", () => {
+  const f = retainedPolishPurpose;
+  const sections = extractPolicySections({ html: "", sourceUrl: f.sourceUrl,
+    visibleText: `${f.historicalSelectedWitness.selectedPolicySectionExcerpt} ${f.section.textExcerpt}` });
+  const purpose = retainedArticle13SectionEvidenceFromSections(sections, f.sourceUrl).find(w => w.coverageArea === "processing_purposes");
+  assert.equal(purpose?.signalObserved, "observed");
+  assert.equal(purpose?.selectedPolicySectionUrl, f.sourceUrl);
+  assert.equal(purpose?.selectedPolicySectionExcerpt, f.clause);
+  assert.equal(purpose?.evidenceTextSha256, createHash("sha256").update(f.clause).digest("hex"));
+});
+
+test("retained lifecycle criteria produce complete source-bound retention witnesses", () => {
+  for (const f of retainedLifecycleRetention) {
+    const sections = extractPolicySections({ html: "", visibleText: f.section.textExcerpt, sourceUrl: f.sourceUrl });
+    const retention = retainedArticle13SectionEvidenceFromSections(sections, f.sourceUrl).find(w => w.coverageArea === "data_retention");
+    assert.equal(retention?.signalObserved, "observed", f.site);
+    assert.equal(retention?.selectedPolicySectionUrl, f.sourceUrl);
+    assert.ok(f.section.textExcerpt.includes(retention!.selectedPolicySectionExcerpt));
+    assert.ok(retention!.selectedPolicySectionExcerpt.includes(f.clause));
+    assert.equal(retention?.evidenceTextSha256, createHash("sha256").update(retention!.selectedPolicySectionExcerpt).digest("hex"));
+  }
+});
+
+test("retained Polish controller enquiries produce a source-bound witness", () => {
+  const f = retainedPolishContact;
+  const witnesses = retainedArticle13SectionEvidenceFromSections(
+    [f.contactSection] as Parameters<typeof retainedArticle13SectionEvidenceFromSections>[0], f.sourceUrl);
+  const contact = witnesses.find(w => w.coverageArea === "controller_contact");
+  assert.equal(f.historicalSelectedWitness.signalObserved, "not_confirmed");
+  assert.equal(contact?.signalObserved, "observed");
+  assert.equal(contact?.selectedPolicySectionUrl, f.sourceUrl);
+  assert.ok(`${f.contactSection.heading} ${f.contactSection.textExcerpt}`.includes(contact!.selectedPolicySectionExcerpt));
+  assert.match(contact!.selectedPolicySectionExcerpt, /rodo@niedziela\.pl/);
+  assert.equal(contact?.evidenceTextSha256, createHash("sha256").update(contact!.selectedPolicySectionExcerpt).digest("hex"));
+  assert.notEqual(witnesses.find(w => w.coverageArea === "dpo_contact")?.signalObserved, "observed");
+});
+
+test("retained Dutch contact witness replaces an unrelated controller portability reference", () => {
+  const f = retainedDutchContact;
+  const sections = [
+    { ...f.contactSection, heading: "Recht op overdraagbaarheid van gegevens", textExcerpt: f.otherControllerCandidate.evidenceText },
+    f.contactSection,
+  ];
+  const witnesses = retainedArticle13SectionEvidenceFromSections(sections as Parameters<typeof retainedArticle13SectionEvidenceFromSections>[0], f.sourceUrl);
+  const contact = witnesses.find(w => w.coverageArea === "controller_contact");
+  assert.equal(contact?.signalObserved, "observed");
+  assert.equal(contact?.selectedPolicySectionUrl, f.sourceUrl);
+  assert.equal(contact?.selectedPolicySectionHeading, f.contactSection.heading);
+  assert.match(contact!.selectedPolicySectionExcerpt, /Postbus 74888 1070 DN/);
+  assert.equal(contact?.evidenceTextSha256, createHash("sha256").update(contact!.selectedPolicySectionExcerpt).digest("hex"));
+  assert.notEqual(witnesses.find(w => w.coverageArea === "dpo_contact")?.signalObserved, "observed");
+});
+
+test("retained Dolby account lifecycle produces a source-bound retention witness", () => {
+  const text = retainedAccount.historicalRejectedSignal.evidenceText;
+  const sections = extractPolicySections({ html: "", sourceUrl: retainedAccount.sourceUrl, visibleText: text });
+  const witnesses = retainedArticle13SectionEvidenceFromSections(sections, retainedAccount.sourceUrl);
+  const retention = witnesses.find(w => w.coverageArea === "data_retention" && w.signalObserved === "observed");
+  assert.ok(retention);
+  assert.ok(text.includes(retention.selectedPolicySectionExcerpt));
+  assert.equal(retention.selectedPolicySectionUrl, retainedAccount.sourceUrl);
+});
 test("source extraction preserves informal German topic witnesses and original offset/hash proof", () => {
   const text = "Datenschutzerklärung. " + INFORMAL_GERMAN_POLICY_CLAUSES.map(c => c.text).join(" ");
   const sections = extractPolicySections({html: "", sourceUrl, visibleText: text});

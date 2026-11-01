@@ -30,6 +30,21 @@ function fixture() {
   return { projection, observation: projection.observation, audit, packets };
 }
 
+test("rendered selector hints distinguish approximate, unchanged and historical retention",()=>{
+  const {audit,observation}=fixture();
+  const node=observation.violations[0]!.representativeNodes[0]!;
+  node.selectors=['input[data-kind]'];
+  for(const precision of ['approximate','unchanged',undefined] as const) {
+    if(precision)node.selectorRetention={version:'sanitized_selectors.v1',precision};
+    else delete node.selectorRetention;
+    const before=structuredClone(observation);
+    const html=renderToStaticMarkup(<AccessibilityEvidence audit={audit} observation={observation}/>);
+    assert.match(html,precision==='approximate'?/Approximate selector hints \(redacted or truncated\)/:
+      precision==='unchanged'?/Retained selector paths \(uniqueness unverified\)/:/Sanitized selector hints \(exactness unverified\)/);
+    assert.deepEqual(observation,before);
+  }
+});
+
 test("frame changes have the same explicit coverage reason in the report and shared export", () => {
   const projection = accessibilityProjectionFixture({ status: "limited", rulesEvaluated: [], violations: [], reviewItems: [], limitations: ["frames_changed"] });
   const observation = projection.observation;

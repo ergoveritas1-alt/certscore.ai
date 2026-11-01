@@ -77,26 +77,44 @@ export function installConsentReceiptCapture(page:Page,input:{scanId:string;acti
  page.on('framenavigated',navigation);
  const handle={token():Token|undefined{if(closed||invalid||input.signal?.aborted)return;if(spent>=4){limited=true;return;}return{capture:handle,epoch,phase,url:page.url()};},
   phase(value:ConsentReceiptObservation['phase']){phase=value;},dispatch(at:number){dispatched=at;phase='initial';},
+  // A permanently ineligible cookie branch may keep one diagnostic read per
+  // invocation. Skipped intermediate snapshots must remain incomplete evidence.
+  markObservationsTruncated(){if(!closed)truncated=true;},
   record(token:Token,key:string,value:string|undefined,base:Omit<ConsentReceiptObservation,'phase'|'keySha256'|'readAtEpochMs'|'available'|'format'|'facts'|'factsLimited'|'omittedFields'|'valueSha256'>,exactWrite?:{assignment?:string;url?:string;limited?:boolean;configuration?:boolean;partialApi?:boolean;omittedFields?:number}){
    if(closed||invalid||input.signal?.aborted||token.epoch!==epoch||token.url!==page.url())return;
    if(spent>=4){limited=true;return;}const start=performance.now();
    try{
-    if(value!==undefined&&value.length>2048){truncated=true;return;}
+    const oversized=value!==undefined&&value.length>2048;
+    if(oversized)truncated=true;
     if(token.phase==='baseline'&&dispatched!==undefined){limited=true;return;}
     if((base.writeObservedAtEpochMs??0)>Date.now()||(base.eventObservedAtEpochMs??0)>Date.now()){limited=true;return;}
-    const signature=JSON.stringify([token.phase,key,value,base]);if(seen.has(signature))return;
+    // Oversized values are available inputs, not missing receipts. Retain only
+    // that fact: do not hash, copy or interpret an out-of-budget value.
+    const signature=JSON.stringify([token.phase,key,oversized?{oversized:true}:value,base]);if(seen.has(signature))return;
     const max=token.phase==='initial'?16:8;if(inspections[token.phase]>=max){truncated=true;return;}
     inspections[token.phase]++;seen.add(signature);
     let identitySha256=base.identitySha256;
-    if(exactWrite?.assignment&&exactWrite.url&&value!==undefined){const proof=captureExactCookieWrite({assignment:exactWrite.assignment,url:exactWrite.url,observedAtMs:0,source:'main_document_setter'});
+    if(!oversized&&exactWrite?.assignment&&exactWrite.url&&value!==undefined){const proof=captureExactCookieWrite({assignment:exactWrite.assignment,url:exactWrite.url,observedAtMs:0,source:'main_document_setter'});
      if(proof?.valueHash===hash(value))identitySha256=proof.identityHash;}
     const row:ConsentReceiptObservation={...base,...(identitySha256?{identitySha256}:{}),phase:token.phase,keySha256:hash(key),readAtEpochMs:Date.now(),available:value!==undefined,
-     ...(value===undefined?{format:base.source==='api'?'api':'opaque',facts:[],factsLimited:false,omittedFields:0}:{valueSha256:hash(value),...projectReceiptValue(key,value,base.source==='api')})};
+     ...(value===undefined?{format:base.source==='api'?'api':'opaque',facts:[],factsLimited:false,omittedFields:0}:{...(oversized?{}:{valueSha256:hash(value)}),...projectReceiptValue(key,value,base.source==='api')})};
     if(exactWrite?.limited)row.factsLimited=true;
     if(exactWrite?.configuration)row.format='configuration';
     if(exactWrite?.partialApi)row.format='api_partial';
     if(exactWrite?.omittedFields)row.omittedFields=Math.min(4096,row.omittedFields+exactWrite.omittedFields);
-    if(rows.length===8||JSON.stringify([...rows,row]).length>7000){truncated=true;return;}rows.push(row);
+    const fits=(candidate:ConsentReceiptObservation[])=>candidate.length<=8&&JSON.stringify(candidate).length<=7000;
+    if(!fits([...rows,row])){
+     truncated=true;
+     if(oversized||value===undefined)return;
+     // Newly retained availability markers must not displace a later bounded
+     // value. Only these limited, unhashed markers may yield their output slot.
+     const preferred=[...rows,row];
+     while(!fits(preferred)){
+      const index=preferred.findIndex(r=>r.available&&r.valueSha256===undefined&&r.factsLimited&&r.facts.length===0);
+      if(index<0)return;preferred.splice(index,1);
+     }
+     rows=preferred;return;
+    }rows.push(row);
    }catch{limited=true;}finally{spent+=performance.now()-start;}
   },
   finish(binding?:{targetSha256?:string;frameIdentitySha256?:string;clickOutcome?:string},at=Date.now()):ConsentReceiptCapture|undefined{

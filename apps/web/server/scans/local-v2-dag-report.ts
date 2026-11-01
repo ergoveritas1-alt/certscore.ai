@@ -8,11 +8,13 @@ import { reportArtifactIdentityKey, verifyReportArtifactTransfer } from "../../.
 import { withVerifiedConsentVisualSource } from "./consent-visual-provenance";
 import { deriveConsentScreenshotCrops } from "./consent-banner-crop";
 import { createVerifiedPolicyTextCache } from "./verified-policy-text-cache";
+import { decodeBoundedPolicyText } from "./policy-text-decoding";
 import { postAcceptEvidencePacketSchema } from "@certscore/contracts";
 import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-projection";
 import { assessOutdatedTransferDisclosure } from "../../lib/scans/outdated-transfer-disclosure-policy";
 import { projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
 import { projectCaliforniaPrivacyReview } from "./california-privacy-review-projection";
+import { projectCaliforniaObservedScoreBasis } from "./california-observed-score-basis";
 import { isConsentControlInteractionEligible } from "@certscore/contracts";
 import { readGpcActivityComparison } from "../../lib/scans/gpc-activity-comparison";
 import { ReportPublicationInvariantError } from "./report-publication-invariant";
@@ -39,6 +41,8 @@ import { projectGdprNarrowPosture } from "./gdpr-narrow-projection";
 import { bindNarrowGeometry } from "./gdpr-narrow-geometry";
 import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
+  assessRuntimeVisitSnapshot,
+  classifyRuntimeErrorPage,
   assessArticle13PolicyTextQuality,
   looksLikeArticle13CodeOrConfigText,
   classifyConsentControlLabel,
@@ -1305,6 +1309,14 @@ function resolvePolicySurfaceTextEvidence(
   }
   const retained = context?.artifactsById?.get(reference.artifactId);
   if (retained) {
+    if (retained.artifactId !== reference.artifactId || retained.fileName !== reference.fileName) {
+      return {
+        ...retained,
+        text: undefined,
+        verificationStatus: "verification_failed",
+        failureReason: "policy_text_artifact_reference_mismatch",
+      };
+    }
     const expectedChars = surface.documentTextCoverage?.retainedTextChars;
     if (retained.text !== undefined && expectedChars !== undefined &&
       retained.text.length !== expectedChars) {
@@ -1320,7 +1332,7 @@ function resolvePolicySurfaceTextEvidence(
   const resolved = resolvePolicyTextArtifactPath(reference.artifactPath, context?.localOutDir);
   if (resolved) {
     try {
-      const text = readFileSync(resolved, "utf8").replace(/\s+/g, " ").trim();
+      const text = decodeBoundedPolicyText(readFileSync(resolved));
       return {
         artifactId: reference.artifactId,
         fileName: reference.fileName,
@@ -1899,8 +1911,7 @@ export async function readProjectedPolicyTextArtifact(pointer: LocalV2DagLambdaA
       if (!candidate) continue;
       if (!pointer.sha256 || !pointer.sizeBytes || pointer.sizeBytes > 1_000_000) throw new Error("Invalid retained policy text bounds.");
       const body = verifyLocalV2DagLambdaArtifactBody({ body: await readFile(candidate), expectedSha256: pointer.sha256, expectedSizeBytes: pointer.sizeBytes });
-      if (body.includes(0)) throw new Error("Invalid retained policy text.");
-      return { text: body.toString("utf8").replace(/\s+/g, " ").trim(), sha256: pointer.sha256, sizeBytes: body.byteLength };
+      return { text: decodeBoundedPolicyText(body), sha256: pointer.sha256, sizeBytes: body.byteLength };
     }
   }
   return readLocalV2DagPolicyTextArtifactFromS3(pointer);
@@ -1927,11 +1938,8 @@ export async function readLocalV2DagPolicyTextArtifactFromS3(
       expectedSha256: pointer.sha256,
       expectedSizeBytes: pointer.sizeBytes,
   });
-  if (body.includes(0)) {
-    throw new Error("Policy text artifact is not valid bounded UTF-8 text.");
-  }
   return {
-    text: body.toString("utf8").replace(/\s+/g, " ").trim(),
+    text: decodeBoundedPolicyText(body),
     sha256,
     sizeBytes: body.byteLength,
   };
@@ -2046,13 +2054,10 @@ async function loadVerifiedLocalPolicyTextArtifacts(input: {
         expectedSha256: pointer.sha256,
         expectedSizeBytes: pointer.sizeBytes,
       });
-      if (body.includes(0)) {
-        throw new Error("Policy text artifact is not valid bounded UTF-8 text.");
-      }
       return [reference.artifactId, {
         artifactId: reference.artifactId,
         fileName: reference.fileName,
-        text: body.toString("utf8").replace(/\s+/g, " ").trim(),
+        text: decodeBoundedPolicyText(body),
         sha256: pointer.sha256,
         sizeBytes: body.byteLength,
         uri: pointer.uri,
@@ -3038,10 +3043,13 @@ export function summarizePolicySurfaces(
       row.surface.url,
     ]),
   });
-  const policyTextQuality = assessArticle13PolicyTextQuality(text, { mode: "retained_report" });
   const observedPolicyTopicHints = uniqueStrings(article13Surfaces.flatMap((row) => row.surface.observedTopics ?? []));
-  const article13SignalCandidates = article13Surfaces.flatMap((row) => {
+  const article13SignalDispositions = article13Surfaces.flatMap((row) => {
     const fullPolicyText = readPolicySurfaceTextArtifact(row.surface, options.policyTextEvidenceContext);
+    // A sibling document cannot supply or invalidate this document's quality.
+    // The adapter separately preserves supported retained-section positives
+    // when full text is unavailable; absence coverage keeps its aggregate guards.
+    const documentQuality = assessArticle13PolicyTextQuality(fullPolicyText ?? "", { mode: "retained_report" });
     return (row.surface.article13DisclosureSignals ?? []).map((signal) => {
       const evidenceText = firstString(signal.evidenceText);
       const retainedSectionExcerpt = firstString(signal.selectedPolicySectionExcerpt);
@@ -3055,7 +3063,7 @@ export function summarizePolicySurfaces(
       const supportingContactContext = signal.disclosureType === "supervisory_authority"
         ? extractSupervisoryAuthoritySupportingContactContext(retainedPolicyContext ?? evidenceText ?? "")
         : null;
-      return {
+      const candidate = {
         confidence: signal.confidence,
         disclosureType: signal.disclosureType,
         evidenceText,
@@ -3070,6 +3078,12 @@ export function summarizePolicySurfaces(
         selectedPolicySectionUrl: firstString(signal.selectedPolicySectionUrl) ?? row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
         supportingContactContext,
         surfaceUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url
+      };
+      return {
+        candidate,
+        rejectReason: documentQuality.usable
+          ? retainedArticle13SignalRejectReason(evidenceText ?? "", signal.disclosureType)
+          : "code_or_non_policy_excerpt" as const,
       };
     });
   });
@@ -3123,9 +3137,7 @@ export function summarizePolicySurfaces(
     }))
   );
   const validatedArticle13DisclosureSignals = [
-    ...(policyTextQuality.usable
-      ? article13SignalCandidates.filter((signal) => retainedArticle13SignalRejectReason(signal.evidenceText ?? "", signal.disclosureType) === null)
-      : []),
+    ...article13SignalDispositions.filter(({rejectReason}) => rejectReason === null).map(({candidate}) => candidate),
     ...gdprTransparencyAcceptedArticle13Signals
   ];
   const dedupedArticle13DisclosureSignals = dedupePolicyDisclosureRows(validatedArticle13DisclosureSignals, {
@@ -3152,10 +3164,7 @@ export function summarizePolicySurfaces(
         surfaceUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url
       }))
     ),
-    ...article13SignalCandidates.flatMap((signal) => {
-      const rejectReason = policyTextQuality.usable
-        ? retainedArticle13SignalRejectReason(signal.evidenceText ?? "", signal.disclosureType)
-        : "code_or_non_policy_excerpt" as const;
+    ...article13SignalDispositions.flatMap(({candidate: signal, rejectReason}) => {
       return rejectReason
         ? [{
             confidence: signal.confidence,
@@ -5286,6 +5295,7 @@ export function buildLocalV2ScanNoGoAssessment(input: {
   runtimeActivityObserved: boolean;
   lowRuntimeActivity: boolean;
   requestedUrl?: string | null;
+  sourceBundle?: { verificationStatus?: string; sha256?: string };
 }) {
   const providedAssessment = input.bundle.scan_no_go_assessment ?? input.bundle.scanNoGoAssessment ?? null;
   const providedScanNoGo = getProvidedLocalV2ScanNoGoAssessment(input.bundle);
@@ -5294,6 +5304,33 @@ export function buildLocalV2ScanNoGoAssessment(input: {
   }
   if (providedAssessment) {
     return null;
+  }
+
+  // Consent may independently reach a destination after the runtime lane has
+  // ended on a redirect notice. Only the verified, original runtime document
+  // can establish this capture limitation; consent/policy text cannot supply it.
+  const runtimeSnapshots = input.bundle.runtimeMetadataSnapshots ?? [];
+  const runtimeSnapshot = [...runtimeSnapshots].sort((a, b) => b.capturedAtMs - a.capturedAtMs)[0];
+  const runtimeVisit = assessRuntimeVisitSnapshot(input.bundle, runtimeSnapshots);
+  const runtimePageState = classifyRuntimeErrorPage(runtimeSnapshot?.textExcerpt);
+  if (input.sourceBundle?.verificationStatus === "verified" && /^[a-f0-9]{64}$/.test(input.sourceBundle.sha256 ?? "") &&
+      runtimeVisit.status === "unavailable" && runtimeVisit.reasonCode === "runtime_error_page" &&
+      (runtimePageState === "redirect_only_page" || runtimePageState === "captcha_or_challenge")) {
+    const evidenceRef = "CanonicalEvidenceBundle.json#runtimeMetadataSnapshots";
+    return {
+      matchedText: runtimeSnapshot!.textExcerpt!,
+      pageState: runtimePageState === "redirect_only_page" ? "blank_or_unusable" : "captcha_or_challenge",
+      primaryReasonCode: runtimePageState,
+      scanNoGoAssessment: {
+        status: "available", version: "scan-no-go-assessment-v1", decision: "no_go", scanNoGoConfidence: 0.97,
+        reasonCodes: [runtimePageState], corroboratorCodes: ["original_runtime_page_template"], contradictorCodes: [],
+        supportingSignals: { runtimeRedirectNoticeOnly: runtimePageState === "redirect_only_page",
+          runtimeChallengeShell: runtimePageState === "captcha_or_challenge", sourceHash: input.sourceBundle.sha256,
+          sourceLane: "runtime_evidence", documentToken: runtimeSnapshot!.documentIdentity!.token },
+        evidenceRefs: [evidenceRef],
+      },
+      visualAccessReview: null,
+    };
   }
 
   const textCandidates = collectLocalV2NoGoTextCandidates(input.bundle);
@@ -5647,6 +5684,7 @@ export function buildMaterializedLocalV2Detail(
     runtimeActivityObserved,
     lowRuntimeActivity,
     requestedUrl: requestedDocumentUrl,
+    sourceBundle: bundle.scanId === scanRecord.scan.id ? options.policyTextEvidenceContext?.sourceBundle : undefined,
   });
   const providedScanNoGoAssessment = bundle.scan_no_go_assessment ?? bundle.scanNoGoAssessment ?? null;
   const providedVisualAccessReview = bundle.visual_access_review ?? bundle.visualAccessReview ?? null;
@@ -5796,7 +5834,14 @@ export function buildMaterializedLocalV2Detail(
     ["california_notice","notice_at_collection"].includes(row.surface.surfaceType));
   const californiaPolicyProjection = buildPolicyTextEvidenceProjection(californiaPolicySurfaces,options.policyTextEvidenceContext);
   const positiveOptOutPolicyEvidence=buildPositiveOptOutPolicyEvidence(bundle,canonicalDocumentUrl,options.policyTextEvidenceContext);
-  const californiaPrivacyReview = runtimeEvidenceReportable && !consentControlAssessment.scan.noGo
+  // Inventory coverage and score availability are independent. A verified
+  // usable starting-page visit does not need a tracker/cookie observation to
+  // carry the existing v10 score basis through the canonical assessment.
+  const verifiedRuntimeScoreBasis = !preConsentRuntimeFailed && canonicalDocumentUrl &&
+    bundle.policySurfaceInspection?.californiaReviewPolicy === "california-privacy-review.v10"
+      ? projectCaliforniaObservedScoreBasis(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl)
+      : undefined;
+  const californiaPrivacyReview = !localV2NoGo && (runtimeEvidenceReportable || verifiedRuntimeScoreBasis) && !consentControlAssessment.scan.noGo
     ? projectCaliforniaPrivacyReview(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl, {
       projection:californiaPolicyProjection,
       texts:californiaPolicySurfaces.slice(0,8).flatMap(row => {

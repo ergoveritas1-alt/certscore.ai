@@ -31,14 +31,17 @@ export const HEAP_COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v4" as const
 export const PRIOR_COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v5" as const;
 export const VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v6" as const;
 export const C3_COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v7" as const;
-export const COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v8" as const;
+export const REVIEWED_COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v8" as const;
+export const X_COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v9" as const;
+export const GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v10" as const;
+export const COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v11" as const;
 export function retainedCookiePurposePolicy(codes: readonly string[] | undefined) {
   const markers = codes?.filter(code => code.startsWith("cookie_purpose_policy:")) ?? [];
   if (markers.length !== 1) return undefined;
-  return [COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, PREVIOUS_COOKIE_PURPOSE_POLICY, LEGACY_COOKIE_PURPOSE_POLICY, AXEPTIO_COOKIE_PURPOSE_POLICY].find(version => markers[0] === `cookie_purpose_policy:${version}`);
+  return [COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, PREVIOUS_COOKIE_PURPOSE_POLICY, LEGACY_COOKIE_PURPOSE_POLICY, AXEPTIO_COOKIE_PURPOSE_POLICY].find(version => markers[0] === `cookie_purpose_policy:${version}`);
 }
 export type CanonicalCookieContext = {
-  purposePolicyVersion?: typeof AXEPTIO_COOKIE_PURPOSE_POLICY | typeof LEGACY_COOKIE_PURPOSE_POLICY | typeof COOKIE_PURPOSE_POLICY | typeof C3_COOKIE_PURPOSE_POLICY | typeof VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY | typeof PRIOR_COOKIE_PURPOSE_POLICY | typeof PREVIOUS_COOKIE_PURPOSE_POLICY | typeof HEAP_COOKIE_PURPOSE_POLICY;
+  purposePolicyVersion?: typeof AXEPTIO_COOKIE_PURPOSE_POLICY | typeof LEGACY_COOKIE_PURPOSE_POLICY | typeof COOKIE_PURPOSE_POLICY | typeof GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY | typeof X_COOKIE_PURPOSE_POLICY | typeof REVIEWED_COOKIE_PURPOSE_POLICY | typeof C3_COOKIE_PURPOSE_POLICY | typeof VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY | typeof PRIOR_COOKIE_PURPOSE_POLICY | typeof PREVIOUS_COOKIE_PURPOSE_POLICY | typeof HEAP_COOKIE_PURPOSE_POLICY;
   cookieDomain?: string | null;
   hostname?: string | null;
   initiatorChain?: readonly string[] | null;
@@ -602,8 +605,8 @@ export function resolveCanonicalCookieKnowledge(
   cookieName: string | null | undefined,
   context: CanonicalCookieContext = {},
 ): CanonicalCookieKnowledge {
-  const name = [COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY].some(version => version === context.purposePolicyVersion) ? cookieName ?? "" : cookieName?.trim() ?? "";
-  if ([COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, PREVIOUS_COOKIE_PURPOSE_POLICY].some(version => version === context.purposePolicyVersion)) return resolveAuditedCookieKnowledge(name, context);
+  const name = [COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY].some(version => version === context.purposePolicyVersion) ? cookieName ?? "" : cookieName?.trim() ?? "";
+  if ([COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY, PREVIOUS_COOKIE_PURPOSE_POLICY].some(version => version === context.purposePolicyVersion)) return resolveAuditedCookieKnowledge(name, context);
   const contextHosts = canonicalCookieContextHosts(context);
   const axeptioRule = (context.purposePolicyVersion === AXEPTIO_COOKIE_PURPOSE_POLICY || context.purposePolicyVersion === LEGACY_COOKIE_PURPOSE_POLICY)
     ? COOKIE_PURPOSE_CANDIDATE_RULES.find(rule => rule.vendor === "Axeptio" && rule.pattern.test(name)) : undefined;
@@ -656,7 +659,33 @@ function resolveAuditedCookieKnowledge(name: string, context: CanonicalCookieCon
   const unresolved = (ruleId: string) => result(ruleId, { category: "unknown", essentiality: "unknown", vendor: null,
     documentedPurposes: [], dataTypes: [], description: "Cookie purpose is unresolved without verified service context." });
 
-  if (context.purposePolicyVersion === COOKIE_PURPOSE_POLICY) {
+  // The documented Analytics cookie is separate from FCCDCF's consent configuration.
+  // https://business.safety.google/static/assets/csv/adcookies.csv
+  if (context.purposePolicyVersion === COOKIE_PURPOSE_POLICY && name === "FCNEC") {
+    const domain = context.cookieDomain?.replace(/^\.+/, "").toLowerCase();
+    if (!domain || domain.length > 253 || !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/.test(domain))
+      return unresolved("google_fcnec_context_required");
+    return result("google_funding_choices_analytics.v1", { category: "analytics", essentiality: "non_essential", vendor: "Google Funding Choices",
+      documentedPurposes: ["analytics"], dataTypes: ["consent-service analytics state"],
+      description: "Google documents this exact partner-domain Funding Choices cookie for analytics. Presence does not establish a consent decision, a cookie write or sale/sharing activity.",
+    });
+  }
+
+  // Google's exact published table lists Security, including partner-domain writes.
+  // https://business.safety.google/static/assets/csv/adcookies.csv
+  if ([COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY].some(v => v === context.purposePolicyVersion) && name === "__eoi") {
+    const domain = context.cookieDomain?.replace(/^\.+/, "").toLowerCase();
+    // A cookie Domain is required; URLs, whitespace and malformed labels cannot
+    // supply the storage-scope join. No setter or ancestor URL fallback.
+    if (!domain || domain.length > 253 || !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/.test(domain))
+      return unresolved("google_eoi_context_required");
+    return result("google_eoi_security.v1", { category: "security", essentiality: "unknown", vendor: "Google",
+      documentedPurposes: ["security"], dataTypes: ["advertising-service security state"],
+      description: "Google documents this exact partner-domain cookie for security. Site-specific necessity, active use and the particular Google product are not established.",
+    });
+  }
+
+  if ([COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY].some(v => v === context.purposePolicyVersion)) {
     // Exact domain/name identities; a setter/ancestor URL cannot fill this join.
     const domain = context.cookieDomain?.replace(/^\.+/, "").toLowerCase();
     // Vendor loader names this cookie; BT documents its audience-profile use.
@@ -677,6 +706,19 @@ function resolveAuditedCookieKnowledge(name: string, context: CanonicalCookieCon
     }
   }
 
+  if ([COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY].some(v => v === context.purposePolicyVersion) && ["muc_ads", "personalization_id"].includes(name)) {
+    // X's exact cookie table: https://help.x.com/en/rules-and-policies/x-cookies
+    const domain = context.cookieDomain?.replace(/^\.+/, "").toLowerCase();
+    const valid = name === "muc_ads" ? /^(?:[a-z0-9-]+\.)*t\.co$/ : /^(?:[a-z0-9-]+\.)*(?:twitter|x)\.com$/;
+    if (!domain || !valid.test(domain)) return unresolved("x_exact_cookie_context_required");
+    const category = name === "muc_ads" ? "advertising" : "personalization";
+    return result(`x_${name}.v1`, { category, essentiality: "non_essential", vendor: "X/Twitter",
+      documentedPurposes: [category], dataTypes: [name === "muc_ads" ? "advertising cookie state" : "cross-site personalization state"],
+      description: name === "muc_ads" ? "X documents this exact t.co cookie for advertising." :
+        "X documents this exact cookie for personalization across on-platform and off-platform activity.",
+    });
+  }
+
   const coverage=cookieCoverageForPolicy(context.purposePolicyVersion).find(r=>r.pattern.test(name));
   if(coverage)return result(`vendor_coverage_${coverage.product.toLowerCase().replace(/[^a-z0-9]+/g,"_")}.v1`,{
     category:coverage.category,vendor:coverage.vendor,essentiality:["consent_management", "security"].includes(coverage.category)?"essential":"non_essential",
@@ -685,7 +727,7 @@ function resolveAuditedCookieKnowledge(name: string, context: CanonicalCookieCon
   });
   // Heap's current SDK persists userId in this exact app-scoped cookie.
   // https://developers.heap.io/docs/using-identify ; reviewed public v4 SDK.
-  if ([COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === context.purposePolicyVersion) && /^_hp2_id\.[0-9]{1,20}$/.test(name)) return result("heap_app_visitor_identity.v1", {
+  if ([COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY, PRIOR_COOKIE_PURPOSE_POLICY, HEAP_COOKIE_PURPOSE_POLICY].some(version => version === context.purposePolicyVersion) && /^_hp2_id\.[0-9]{1,20}$/.test(name)) return result("heap_app_visitor_identity.v1", {
     category: "analytics", essentiality: "non_essential", vendor: "Heap", documentedPurposes: ["analytics"],
     dataTypes: ["persistent visitor identifier", "analytics session metadata"],
     description: "Heap app-scoped visitor identity cookie used to associate analytics events across visits.",
@@ -693,7 +735,7 @@ function resolveAuditedCookieKnowledge(name: string, context: CanonicalCookieCon
   // RTB House's own Services Privacy Policy documents these exact cookies on
   // creativecdn.com. Generic c/ts names on other domains remain unknown.
   // https://www.rtbhouse.com/privacy-center (section 2)
-  if ([COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY,PRIOR_COOKIE_PURPOSE_POLICY].some(v=>v===context.purposePolicyVersion) && /^(?:u|ts)$/.test(name) &&
+  if ([COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY, REVIEWED_COOKIE_PURPOSE_POLICY, C3_COOKIE_PURPOSE_POLICY, VENDOR_COVERAGE_COOKIE_PURPOSE_POLICY,PRIOR_COOKIE_PURPOSE_POLICY].some(v=>v===context.purposePolicyVersion) && /^(?:u|ts)$/.test(name) &&
       inContext(/(?:^|\.)creativecdn\.com$/i)) return result("rtb_house_service_cookie.v1", {
     category: "advertising", essentiality: "non_essential", vendor: "RTB House", documentedPurposes: ["advertising"],
     dataTypes: [name === "u" ? "advertising browser identifier" : "advertising-cookie lifetime timestamp"],

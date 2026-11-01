@@ -24,6 +24,7 @@ test("runtime rejection reasons preserve evidence eligibility and do not mutate 
     ["runtime_content_unavailable", bundle => { bundle.domSnapshots[0]!.textExcerpt = ""; }],
     ["runtime_document_conflict", bundle => { bundle.domSnapshots.push({ ...bundle.domSnapshots[0]!, url: "https://other.test/" }); }],
     ["runtime_error_page", bundle => { bundle.domSnapshots[0]!.textExcerpt = brandedSoft404; }],
+    ["runtime_error_page", bundle => { bundle.domSnapshots[0]!.textExcerpt = "You will be automatically re-directed to our consumer site momentarily, or you may navigate to Example Company content at our new location by following this link: https://destination.example/"; }],
   ];
   const good = fixture();
   assert.equal(assessRuntimeVisitSnapshot(good, good.domSnapshots).status, "usable");

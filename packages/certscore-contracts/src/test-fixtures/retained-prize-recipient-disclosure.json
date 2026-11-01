@@ -1,0 +1,66 @@
+{
+  "site": "purexbox.com",
+  "scanId": "d2b3a279-a476-44ae-a15e-3c9d3c294a6b",
+  "source": {
+    "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/d2b3a279-a476-44ae-a15e-3c9d3c294a6b/CanonicalEvidenceBundle.json",
+    "sha256": "651594198b0a5e2c0face7295cfce0d50c5b99f2a627de3478caf2668abc2ff4",
+    "bytes": 1429467
+  },
+  "sourceUrl": "https://www.purexbox.com/privacy",
+  "ownership": {
+    "documentRole": "policy_document",
+    "targetRelationship": "target_controller",
+    "ownershipConfidence": 0.98,
+    "ownershipReasonCodes": [
+      "same_registrable_domain_as_scan_target"
+    ]
+  },
+  "documentTextCoverage": {
+    "status": "complete",
+    "sourceTextChars": 9045,
+    "retainedTextChars": 9045,
+    "limitationKeys": []
+  },
+  "contentCoverage": {
+    "status": "truncated",
+    "sourceTextChars": 9045,
+    "extractedSectionCount": 17,
+    "retainedSectionCount": 17,
+    "retainedTableRowCount": 4,
+    "limitationKeys": [
+      "policy_section_text_bounded"
+    ]
+  },
+  "section": {
+    "sourceUrl": "https://www.purexbox.com/privacy",
+    "heading": "Competition Entries",
+    "textExcerpt": "Winners may be requested to take part in post competition promotional activity and we reserve the right to use the username, names and location (country) of winners, their photographs and audio and/or visual recordings of them in any publicity unless you specify otherwise. Data relating to competition entrants will be retained for a reasonable period after the competition closes to assist us to operate competitions in a consistent manner and to deal with any queries. Data will then be removed from our systems and will not be used for marketing. On the occasion that a third party, such as the product supplier, advertising agency or PR company who sponsor that competition is to provide prize(s) directly, your contact details and, if applicable mailing address, will be passed to the third party for the sole reason of delivering the prize.",
+    "extractionMethod": "html_heading_hierarchy",
+    "sourceOffsetBasis": "sanitized_html",
+    "documentTextSha256": "a2a3e79083907865be53df45a97983afb91cb70c0a473e2c8773a2624015550b",
+    "evidenceTextSha256": "67a5f8ca519b4148d56fb148768a361e4e25e0a2a41bfb05a5787c52712b9ba0",
+    "sourceTextChars": 17593,
+    "extractionState": "complete",
+    "charStart": 15832,
+    "charEnd": 16755,
+    "quality": "strong"
+  },
+  "historicalSelectedWitness": {
+    "coverageArea": "recipients_or_vendor_categories",
+    "selectedPolicySectionHeading": "Poll & Survey Data",
+    "selectedPolicySectionExcerpt": "voluntary. Your responses will be stored in our secure database. Often our poll/survey results are published instantly but in an aggregated and anonymised form. Sometimes we share these aggregated and anonymised results (sometimes segmented/cross-referenced by other responses you have made) with third parties, however, your individual responses will not be given to any third party whatsoever.",
+    "selectedPolicySectionUrl": "https://www.purexbox.com/privacy",
+    "sectionExtractionMethod": "html_heading_hierarchy",
+    "sourceOffsetBasis": "sanitized_html",
+    "sourceDocumentTextSha256": "a2a3e79083907865be53df45a97983afb91cb70c0a473e2c8773a2624015550b",
+    "evidenceTextSha256": "c87ea0a9a0a85df204723de073275cebe51474894c66349a8e5338f1367db348",
+    "sourceCharStart": 15264,
+    "sourceCharEnd": 15832,
+    "sectionExtractionState": "complete",
+    "evidenceSource": "deterministic",
+    "selectedEvidenceStrength": "limited",
+    "signalObserved": "not_confirmed",
+    "extractionLimitation": "section_retained_without_row_specific_disclosure"
+  },
+  "clause": "On the occasion that a third party, such as the product supplier, advertising agency or PR company who sponsor that competition is to provide prize(s) directly, your contact details and, if applicable mailing address, will be passed to the third party for the sole reason of delivering the prize."
+}

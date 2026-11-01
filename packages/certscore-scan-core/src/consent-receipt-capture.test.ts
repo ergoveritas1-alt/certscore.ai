@@ -49,11 +49,11 @@ for(const mode of ['stable','navigation','cancel','wrong_frame','wrong_cookie_sc
  });
 }
 
-for(const action of ['accept','reject']as const)for(const mode of ['valid','unknown_category','missing','mixed','preexisting','terminal']as const){
+for(const action of ['accept','reject']as const)for(const mode of ['valid','unknown_category','missing','mixed','preexisting','terminal','oversized']as const){
  test(`${action}: owned ${mode} receipt capture preserves consent and completion`,{timeout:12000},async()=>{
   const expected=action==='accept'?'yes':'no';const receipt=(kind:string)=>`consentid:private-visitor-id,necessary:yes,analytics:${kind},advertisement:${kind}`;
   const before=mode==='preexisting'?receipt(expected):'';
-  const after=mode==='unknown_category'?receipt(expected)+',new_category:no':mode==='mixed'?'necessary:yes,analytics:yes,advertisement:no':receipt(expected);
+  const after=mode==='oversized'?receipt(expected).replace('private-visitor-id','private-visitor-id'+'x'.repeat(2300)):mode==='unknown_category'?receipt(expected)+',new_category:no':mode==='mixed'?'necessary:yes,analytics:yes,advertisement:no':receipt(expected);
   const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end(`<section class="cky-consent-container"><p>Choose optional analytics cookies</p><button class="cky-btn-${action}">${action==='accept'?'Accept all':'Reject all'}</button></section><script>
    ${before?`document.cookie=${JSON.stringify('cookieyes-consent='+before+';path=/')};`:''}
    document.querySelector('button').onclick=()=>{document.querySelector('section').hidden=true;${['missing','preexisting'].includes(mode)?'':`setTimeout(()=>document.cookie=${JSON.stringify('cookieyes-consent='+after+';path=/')},${mode==='terminal'?150:0});`}};</script>`);});
@@ -73,6 +73,12 @@ for(const action of ['accept','reject']as const)for(const mode of ['valid','unkn
     assert.ok(!JSON.stringify(capture).includes('private-visitor-id'));assert.ok(capture.observations.length>0);
     if(mode==='valid'||mode==='unknown_category'||mode==='mixed')assert.ok(capture.observations.some((r:{facts:unknown[]})=>r.facts.length>0));
     if(mode==='missing')assert.ok(capture.observations.every((r:{available:boolean})=>!r.available));
+    if(mode==='oversized'){
+     const available=capture.observations.filter((r:{available:boolean})=>r.available);
+     assert.ok(available.length>0,'already-read oversized input remains visibly available');
+     assert.ok(available.every((r:{factsLimited:boolean;valueSha256?:string;facts:unknown[]})=>r.factsLimited&&!r.valueSha256&&r.facts.length===0));
+     assert.equal(capture.observationsTruncated,true);
+    }
     if(mode==='valid'){
      const written=capture.observations.find((r:{source:string;identitySha256?:string})=>r.source==='write'&&r.identitySha256);
      assert.ok(written,'exact setter identity is retained');

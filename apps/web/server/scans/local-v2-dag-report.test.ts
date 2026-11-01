@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test, { before } from "node:test";
-import type { CanonicalEvidenceBundle } from "@certscore/contracts";
+import { consentControlAssessmentSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { CANONICAL_VENDOR_RESOLVER_VERSION } from "@certscore/vendor-resolver";
 import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
@@ -728,6 +728,74 @@ test("getLocalV2FinalDocumentUrl prefers retained final-page evidence after a cr
     hostname: "analytics.vendor.test",
     thirdParty: true,
   }, "https://www.final-brand.example/home"), true);
+});
+
+test("verified original runtime redirect notices produce an unscored capture limitation without borrowing consent evidence", async () => {
+  const { buildLocalV2ScanNoGoAssessment } = await loadLocalV2DagReport();
+  const notice = "You will be automatically re-directed to our consumer site momentarily, or you may navigate to Example Company content at our new location by following this link: https://destination.example/";
+  const url = "https://original.example/";
+  const snapshot = {artifactId:"runtime-dom",path:"/retained/runtime.txt",url,capturedAtMs:100,
+    documentIdentity:{source:"cdp_loader_id",token:"runtime-loader"},textExcerpt:notice};
+  const bundle = {scanId:"redirect-test",url,normalizedUrl:url,runtimeMetadataSnapshots:[snapshot],
+    domSnapshots:[{...snapshot,url:"https://destination.example/",textExcerpt:"Substantive destination content",documentIdentity:{source:"cdp_loader_id",token:"consent-loader"}}],
+    runtimeCoverage:{coverageStatus:"usable",silentEmpty:false},
+    scanLaneRuns:[{laneId:"runtime_evidence",executionOutcome:"success",accessOutcome:"representative_page",challengeDetected:false}],
+    modulesRun:[],screenshots:[],consentUiObservations:[],policySurfaceObservations:[]} as unknown as CanonicalEvidenceBundle;
+  const input = {bundle,consentSurfaceLikelyPresent:false,runtimeActivityObserved:true,lowRuntimeActivity:false,
+    requestedUrl:url,finalUrl:"https://destination.example/",sourceBundle:{verificationStatus:"verified",sha256:"a".repeat(64)}};
+  const before = JSON.stringify(bundle);
+  const result = buildLocalV2ScanNoGoAssessment(input);
+  assert.equal(result?.primaryReasonCode,"redirect_only_page");
+  assert.equal(result?.scanNoGoAssessment.decision,"no_go");
+  assert.equal(result?.visualAccessReview,null,"A text-bound runtime assessment must not claim visual review");
+  assert.equal(result?.scanNoGoAssessment.evidenceRefs[0],"CanonicalEvidenceBundle.json#runtimeMetadataSnapshots");
+  assert.equal(JSON.stringify(bundle),before);
+  for (const sourceBundle of [undefined,{verificationStatus:"unverified",sha256:"a".repeat(64)},{verificationStatus:"verified",sha256:"invalid"}])
+    assert.equal(buildLocalV2ScanNoGoAssessment({...input,sourceBundle}),null);
+  for (const change of [
+    (b: CanonicalEvidenceBundle)=>{b.runtimeMetadataSnapshots=[];},
+    (b: CanonicalEvidenceBundle)=>{b.runtimeMetadataSnapshots![0]!.documentIdentity=undefined;},
+    (b: CanonicalEvidenceBundle)=>{b.runtimeMetadataSnapshots![0]!.textExcerpt="Substantive runtime page";b.domSnapshots[0]!.textExcerpt=notice;},
+    (b: CanonicalEvidenceBundle)=>{b.runtimeMetadataSnapshots![0]!.textExcerpt="Article: "+notice;},
+    (b: CanonicalEvidenceBundle)=>{b.runtimeMetadataSnapshots!.push({...b.runtimeMetadataSnapshots![0]!,capturedAtMs:200,textExcerpt:"Destination loaded"});},
+  ]) {const changed=structuredClone(bundle);change(changed);assert.equal(buildLocalV2ScanNoGoAssessment({...input,bundle:changed}),null);}
+});
+
+test("a verified usable visit keeps its California score basis when a partial runtime inventory has no tracking signals", async () => {
+  const { buildMaterializedLocalV2Detail } = await loadLocalV2DagReport();
+  const { gpcRuntimeFixture } = require("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
+  const { withOriginalRuntimeForPublication } = require("./consent-canary-accuracy.fixture");
+  const { deriveCaliforniaRegulatoryScore } = require("../../lib/scans/california-regulatory-score");
+  const bundle = gpcRuntimeFixture({enabled:false}) as CanonicalEvidenceBundle;
+  bundle.domSnapshots=[{artifactId:"dom",path:"/retained/page.txt",url:bundle.normalizedUrl,capturedAtMs:100,
+    documentIdentity:{source:"cdp_loader_id",token:"consent"},textExcerpt:"Public information and useful services.",pagePhase:"network_idle",consentStateAtTime:"pre_consent"}];
+  withOriginalRuntimeForPublication(bundle);
+  bundle.runtimeCoverage!.coverageStatus="limited_partial";
+  bundle.runtimeCoverage!.observationCounts={networkEvents:1,thirdPartyRequests:0,cookieEvents:0,cookiesBeforeConsent:0,normalizedVendors:0,observedJourneys:0};
+  bundle.networkEvents=[];bundle.networkResponseEvents=[];bundle.cookieEvents=[];bundle.normalizedVendorObservations=[];
+  bundle.policySurfaceObservations=[];
+  const record=makeScanRecord();record.scan={...record.scan,id:bundle.scanId,domainHostname:"example.test",createdAt:bundle.startedAt,startedAt:bundle.startedAt,completedAt:bundle.completedAt};
+  const sourceBundle={verificationStatus:"verified" as const,sha256:"a".repeat(64),schemaVersion:bundle.schemaVersion,uri:"s3://fixture/original.json",sizeBytes:1};
+  const options={policyTextEvidenceContext:{sourceBundle,scanId:bundle.scanId,generatedAt:bundle.completedAt,localOutDir:null,artifactsById:new Map()}};
+  const californiaChild=(value:ScanDetailResponse)=>{
+    const parsed=consentControlAssessmentSchema.safeParse(value.runtimeArtifacts?.consentControlAssessment);
+    assert.ok(parsed.success);return parsed.data.californiaPrivacyReview;
+  };
+  const before=JSON.stringify(bundle);const materialized=buildMaterializedLocalV2Detail(record,bundle,options);
+  const child=californiaChild(materialized);
+  assert.ok(child && "observedScoreBasis" in child && child.observedScoreBasis,"Inventory completeness must not gate a verified visit's existing score basis");
+  const score=deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:[]});
+  assert.equal(score.score,100);assert.deepEqual(score.deductions,[]);assert.equal(score.coverage,"limited");
+  assert.equal(bundle.runtimeCoverage!.coverageStatus,"limited_partial");assert.equal(JSON.stringify(bundle),before);
+  for(const mutate of [
+    (b:CanonicalEvidenceBundle)=>{b.runtimeMetadataSnapshots=[];},
+    (b:CanonicalEvidenceBundle)=>{b.runtimeMetadataSnapshots![0]!.documentIdentity=undefined;},
+    (b:CanonicalEvidenceBundle)=>{b.scanLaneRuns[0]!.challengeDetected=true;},
+    (b:CanonicalEvidenceBundle)=>{b.runtimeCoverage!.coverageStatus="limited_none";},
+    (b:CanonicalEvidenceBundle)=>{b.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v9";},
+  ]){const changed=structuredClone(bundle);mutate(changed);const m=buildMaterializedLocalV2Detail(record,changed,options);assert.equal(californiaChild(m),undefined);}
+  const unverified=buildMaterializedLocalV2Detail(record,bundle,{policyTextEvidenceContext:{...options.policyTextEvidenceContext,sourceBundle:{...sourceBundle,verificationStatus:"unavailable" as const}}});
+  assert.equal(californiaChild(unverified),undefined);
 });
 
 test("summarizeFirstLayerConsentChoices fails closed when control geometry is missing", async () => {
@@ -5735,7 +5803,7 @@ test("materializeLocalV2DagScanDetail preserves a source-matched historical priv
   }
 });
 
-test("materializeLocalV2DagScanDetail verifies a checksum-matching local policy mirror", async () => {
+for (const malformedUtf8 of [false, true]) test(`materializeLocalV2DagScanDetail checks local policy mirror bytes and UTF-8 (${malformedUtf8 ? "malformed" : "valid"})`, async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
   const scanId = "94d8855d-0347-4d5d-9bb1-b60f1cccc8fd";
@@ -5750,8 +5818,9 @@ test("materializeLocalV2DagScanDetail verifies a checksum-matching local policy 
   ].join(" ").repeat(20).slice(0, 2_104);
   try {
     process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
-    await writeFile(policyArtifactPath, policyText, "utf8");
     const policyArtifactBody = Buffer.from(policyText, "utf8");
+    if (malformedUtf8) policyArtifactBody[policyArtifactBody.length - 1] = 0x80;
+    await writeFile(policyArtifactPath, policyArtifactBody);
     const bundleBody = Buffer.from(`${JSON.stringify({
       completedAt: "2026-06-25T02:16:00.000Z",
       consentUiObservations: [],
@@ -5893,10 +5962,17 @@ test("materializeLocalV2DagScanDetail verifies a checksum-matching local policy 
     const assessments = summary.article13CoverageAssessments as Array<Record<string, unknown>>;
     const retention = assessments.find((assessment) => assessment.topic === "data_retention");
 
-    assert.equal(projection.projectionStatus, "verified_complete");
-    assert.equal(documents[0]?.artifactVerificationStatus, "verified");
-    assert.equal(retention?.coverageStatus, "sufficient");
-    assert.equal(retention?.status, "not_observed_with_sufficient_coverage");
+    if (malformedUtf8) {
+      assert.equal(documents[0]?.artifactVerificationStatus, "verification_failed");
+      assert.notEqual(projection.projectionStatus, "verified_complete");
+      assert.notEqual(retention?.coverageStatus, "sufficient");
+      assert.notEqual(retention?.status, "not_observed_with_sufficient_coverage");
+    } else {
+      assert.equal(projection.projectionStatus, "verified_complete");
+      assert.equal(documents[0]?.artifactVerificationStatus, "verified");
+      assert.equal(retention?.coverageStatus, "sufficient");
+      assert.equal(retention?.status, "not_observed_with_sufficient_coverage");
+    }
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;
@@ -9482,7 +9558,7 @@ test("title-only guessed cookie routes are not projected as dedicated policies",
     targetRelationship:"target_controller", documentTextCoverage:{status:"complete",sourceTextChars:text.length,retainedTextChars:text.length,limitationKeys:[]},
     artifactRefs:[{artifactId:"policy_surface_text_hash",path:"/tmp/policy_surface_text_hash.txt",label:"policy_surface_text"}],
   }})) as never,"example.test",{...options,policyTextEvidenceContext:{
-    artifactsById:new Map([["policy_surface_text_hash",{artifactId:"policy_surface_text_hash",text,sha256:originalHash,verificationStatus:"verified"}]]),
+    artifactsById:new Map([["policy_surface_text_hash",{artifactId:"policy_surface_text_hash",fileName:"policy_surface_text_hash.txt",text,sha256:originalHash,verificationStatus:"verified"}]]),
     sourceBundle:{schemaVersion:"certscore.v2.canonical-evidence-bundle.v1",verificationStatus:"verified"},
   }} as never);
   assert.equal(normalizedVerified.legalFrameworkValidityMatches[0]?.outdatedTransferDisclosureAssessment?.sourceDocumentSha256,originalHash);

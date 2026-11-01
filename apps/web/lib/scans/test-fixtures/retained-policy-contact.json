@@ -1,0 +1,17 @@
+{
+  "sourceBundleSha256": "261777bc641a1ca55e4f95f866b34bc318a6306b6a150e26505f29702cc61fde",
+  "scanId": "328e3893-bdc0-4e1d-8cee-922af52f5425",
+  "sourceUrl": "https://www.dolby.com/about/legal/privacy/privacy-policy/",
+  "signal": {
+    "disclosureType": "controller_contact",
+    "status": "observed",
+    "evidenceText": "How to Contact Us If you have any questions about this Policy, or if you would like to exercise your rights, please feel free to send us an email, or write to Privacy@dolby.com , or to: Dolby Laboratories, Inc. Attn: Privacy - Legal 1275 Market Street San Francisco, CA 94103-1410 USA Residents of the European Union may write to: Dolby Europe Limited Attn: Legal EMEA 4-6 Soho Square London W1D 3PZ United Kingdom",
+    "confidence": 0.9,
+    "source": "deterministic",
+    "selectedPolicySectionHeading": "How to Contact Us",
+    "selectedPolicySectionExcerpt": "How to Contact Us If you have any questions about this Policy, or if you would like to exercise your rights, please feel free to send us an email, or write to Privacy@dolby.com , or to: Dolby Laboratories, Inc. Attn: Privacy - Legal 1275 Market Street San Francisco, CA 94103-1410 USA Residents of the European Union may write to: Dolby Europe Limited Attn: Legal EMEA 4-6 Soho Square London W1D 3PZ United Kingdom",
+    "selectedPolicySectionUrl": "https://www.dolby.com/about/legal/privacy/privacy-policy/",
+    "evidenceSource": "deterministic",
+    "selectedEvidenceStrength": "strong"
+  }
+}

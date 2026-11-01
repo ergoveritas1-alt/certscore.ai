@@ -1,3 +1,4 @@
+import { samePolicyDocumentUrl } from "./policy-surface-url-hygiene";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -21,4 +22,19 @@ test("isGenericBrowserCookieHelpUrl filters common browser vendor cookie help pa
 test("isGenericBrowserCookieHelpUrl keeps owned cookie policies eligible", () => {
   assert.equal(isGenericBrowserCookieHelpUrl("https://www.fandango.com/policies/cookie-policy"), false);
   assert.equal(isGenericBrowserCookieHelpUrl("https://privacy.microsoft.com/en-us/privacystatement"), false);
+});
+
+test("policy document identity preserves query, scheme, port and exact path while allowing section fragments", () => {
+  const source = "https://example.test/privacy?tenant=one&revision=2";
+  assert.equal(samePolicyDocumentUrl(source, source + "#retention"), true);
+  assert.equal(samePolicyDocumentUrl(source, "https://EXAMPLE.test:443/privacy?tenant=one&revision=2"), true);
+  for (const other of ["https://example.test/privacy?tenant=two&revision=2",
+    "https://example.test/privacy?revision=2&tenant=one", "https://example.test/privacy",
+    "http://example.test/privacy?tenant=one&revision=2", "https://example.test:8443/privacy?tenant=one&revision=2",
+    "https://www.example.test/privacy?tenant=one&revision=2", "https://example.test/privacy/?tenant=one&revision=2",
+    "https://example.test/Privacy?tenant=one&revision=2", "https://user:password@example.test/privacy?tenant=one&revision=2",
+    "/privacy?tenant=one&revision=2", "invalid", "file:///privacy"]) {
+    assert.equal(samePolicyDocumentUrl(source, other), false, other);
+  }
+  assert.equal(samePolicyDocumentUrl("/privacy", "/privacy"), false);
 });

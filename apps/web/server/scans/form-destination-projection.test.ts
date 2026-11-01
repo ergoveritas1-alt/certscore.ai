@@ -18,7 +18,7 @@ function bundle(trace = capture()) {
   return { scanId:"forms-test",startedAt:new Date(start).toISOString(),completedAt:new Date(start+1000).toISOString(),
     formDestinationTrace:trace,runtimeMetadataSnapshots:[{url:pageUrl,documentIdentity:{token}}],domSnapshots:[],
     networkEvents:trace.requests.map(r=>({requestId:r.networkRequestId,url:r.url,method:r.method,timestampMs:r.observedAtMs})),
-    networkResponseEvents:trace.requests.filter(r=>r.status==="response_observed").map(r=>({requestId:r.networkRequestId})),
+    networkResponseEvents:trace.requests.filter(r=>r.status==="response_observed").map(r=>({requestId:r.networkRequestId,responseUrl:r.url,timestampMs:r.observedAtMs+10})),
   } as unknown as CanonicalEvidenceBundle;
 }
 const verified = {verificationStatus:"verified",sha256:"a".repeat(64)};
@@ -54,4 +54,33 @@ test("bounded capture records limits and never turns query coincidence into a pa
   c.event({kind:"submit",time:start+100,pageUrl,formIndex:0,actionUrl:pageUrl,fields:[{name:"email",value:"person@example.test",type:"email",label:"",autocomplete:"email"}]},token,pageUrl);
   for(let i=0;i<105;i++) c.request(`req-${i}`,"https://unexpected.example/?email=person%40example.test","GET",200+i,null,token);
   const trace=c.finish(); assert.equal(trace.requests.length,100); assert.equal(trace.coverage.truncated,true); assert.ok(!JSON.stringify(trace).includes("person%40example.test"));
+});
+
+test("a shared recipient domain cannot substitute a different request endpoint",()=>{
+  const b=bundle();
+  b.networkEvents[0]!.url="https://unexpected.example/unrelated";
+  assert.equal(projectFormDestinations(b,verified),null);
+});
+
+test("ambiguous request IDs cannot supply request proof",()=>{
+  const b=bundle();
+  b.networkEvents.push({...b.networkEvents[0]!});
+  assert.equal(projectFormDestinations(b,verified),null);
+});
+
+test("response proof retains the endpoint, time window and stated document",()=>{
+  for (const patch of [{responseUrl:'https://unexpected.example/other'}, {timestampMs:199}, {timestampMs:1001},
+    {documentUrl:'https://forms.example/other'}, {responseUrl:'invalid'}]) {
+    const b=bundle();Object.assign(b.networkResponseEvents[0]!,patch);
+    assert.equal(projectFormDestinations(b,verified),null,JSON.stringify(patch));
+  }
+  for (const patch of [{requestUrl:'https://unexpected.example/other'}, {url:'http://unexpected.example/collect'},
+    {url:'https://other.unexpected.example/collect'}, {url:'https://unexpected.example:8443/collect'}, {documentUrl:pageUrl+'other'},
+    {isSubFrame:true}, {isMainFrame:false}, {frameContext:{isSubFrame:true}}]) {
+    const b=bundle();Object.assign(b.networkEvents[0]!,patch);
+    assert.equal(projectFormDestinations(b,verified),null,JSON.stringify(patch));
+  }
+  const b=bundle();b.networkEvents[0]!.url+='?private=REDACTED';
+  b.networkResponseEvents[0]!.responseUrl+='?private=REDACTED';
+  assert.ok(projectFormDestinations(b,verified),'sanitized query absence does not break the retained endpoint join');
 });

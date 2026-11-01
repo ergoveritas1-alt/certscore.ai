@@ -1,0 +1,2242 @@
+[
+  {
+    "caseId": "air-live-reference",
+    "scope": "Retained local passive diagnostic; not production cohort or fresh capture",
+    "sources": [
+      {
+        "file": "artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/DiagnosticEvidenceBundle.json",
+        "sha256": "5113b9201b0fc1b047c97cb7a1a0b9bb9dc02aa0415b5ad2787797d5f439a5e7",
+        "bytes": 47212
+      },
+      {
+        "file": "artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/ConsentControlGeometryEvidence.json",
+        "sha256": "9b79406406dbca4c8d1ccc85b2656d7a0acb98de20911e290a2aed55630f957c",
+        "bytes": 48248
+      },
+      {
+        "file": "artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/assessment-public.json",
+        "sha256": "d81630d662260ddfed05155bd27ea0cada05c529d9be5c45d17546b92c3d988c",
+        "bytes": 8528
+      }
+    ],
+    "geometry": {
+      "artifactVersion": "consent_control_geometry.v1",
+      "sourceScanner": "consent_control_geometry_diagnostic",
+      "pageUrl": "https://www.airandspaceforces.com/",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "44F9B424ADC6197E81C6BCB0A4CA4A48"
+      },
+      "capturedAt": "2026-10-31T03:56:14.000Z",
+      "captureTiming": {
+        "version": "consent_geometry_capture_timing.v1",
+        "mainFrameCompletedAt": "2026-10-31T03:56:14.000Z",
+        "completedAt": "2026-10-31T03:56:14.086Z"
+      },
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/screenshot-pre-consent-full-page.jpg",
+      "cmp": {
+        "detected": true,
+        "name": "Google Funding Choices",
+        "confidence": 0.95,
+        "reasonCodes": [
+          "host:fundingchoicesmessages.google.com",
+          "url:https://fundingchoicesmessages.google.com/i/21734370771",
+          "url:https://fundingchoicesmessages.google.com/f/AGSKWxXgnMYh5Hw_LfKH61cqreDck9RcdUg0AhGwNFdFCUm0k3oDi5fNPcHVKlqAtYLOEluO2BtQWNeybLPui4ISa2MsJvF2fadjJVIYKJlWgNKhUkSnHN0K_o4KElxGxlJV5bmrPDxcXA==",
+          "url:https://fundingchoicesmessages.google.com/f/AGSKWxUCxOADrTzbQMFlr2fy0yEh0BPgqEqhEZ9KZ-ij_l9lqQKOP7F1vhOavJP2euVJmBdftlkitXKmTf2I-SauqzaNw8Ex0VDJ9dhTXtJjD2zC9nPd0qSZp-AViK2GK6kzXppYXXcSBw==",
+          "url:https://fundingchoicesmessages.google.com/f/AGSKWxVpocqXNZIV4DiLWp4yxel0bvoBGqFxbM5lIta5Jl3VltZt1oDGZ7mlpNHPMDEmRerv-pwP2YitXttePnlEYMgPTTz3hw9lCSgsF6jPfpQ-qtgSlEiuZt_BaYhayJA3Eu39VU6MeA==",
+          "url:https://fundingchoicesmessages.google.com/f/AGSKWxWXzbSm4DO5i4YKc5zhGl7V6XDUEb6cU4EjRJ6NeH-8ixz-YtWlYnnR33aTCVuZyQp-Y-nh6nZ1cRVIlw6NX_ENFDhzT_-PE5JDj-nz6CInDR4WrR3fLzMriQNp_nbjyMKQXEFLew==",
+          "cookie:FCCDCF",
+          "cookie:FCNEC",
+          "global:googlefc"
+        ],
+        "matchedSignals": [
+          {
+            "source": "host",
+            "value": "fundingchoicesmessages.google.com"
+          },
+          {
+            "source": "url",
+            "value": "https://fundingchoicesmessages.google.com/i/21734370771"
+          },
+          {
+            "source": "url",
+            "value": "https://fundingchoicesmessages.google.com/f/AGSKWxXgnMYh5Hw_LfKH61cqreDck9RcdUg0AhGwNFdFCUm0k3oDi5fNPcHVKlqAtYLOEluO2BtQWNeybLPui4ISa2MsJvF2fadjJVIYKJlWgNKhUkSnHN0K_o4KElxGxlJV5bmrPDxcXA=="
+          },
+          {
+            "source": "url",
+            "value": "https://fundingchoicesmessages.google.com/f/AGSKWxUCxOADrTzbQMFlr2fy0yEh0BPgqEqhEZ9KZ-ij_l9lqQKOP7F1vhOavJP2euVJmBdftlkitXKmTf2I-SauqzaNw8Ex0VDJ9dhTXtJjD2zC9nPd0qSZp-AViK2GK6kzXppYXXcSBw=="
+          },
+          {
+            "source": "url",
+            "value": "https://fundingchoicesmessages.google.com/f/AGSKWxVpocqXNZIV4DiLWp4yxel0bvoBGqFxbM5lIta5Jl3VltZt1oDGZ7mlpNHPMDEmRerv-pwP2YitXttePnlEYMgPTTz3hw9lCSgsF6jPfpQ-qtgSlEiuZt_BaYhayJA3Eu39VU6MeA=="
+          },
+          {
+            "source": "url",
+            "value": "https://fundingchoicesmessages.google.com/f/AGSKWxWXzbSm4DO5i4YKc5zhGl7V6XDUEb6cU4EjRJ6NeH-8ixz-YtWlYnnR33aTCVuZyQp-Y-nh6nZ1cRVIlw6NX_ENFDhzT_-PE5JDj-nz6CInDR4WrR3fLzMriQNp_nbjyMKQXEFLew=="
+          },
+          {
+            "source": "cookie",
+            "value": "FCCDCF"
+          },
+          {
+            "source": "cookie",
+            "value": "FCNEC"
+          },
+          {
+            "source": "global",
+            "value": "googlefc"
+          }
+        ],
+        "detections": [
+          {
+            "canonicalName": "Google Funding Choices",
+            "confidence": 0.95,
+            "evidenceTreatment": "cmp_infrastructure",
+            "isCmpInfrastructure": true,
+            "matchedSignals": [
+              {
+                "source": "host",
+                "value": "fundingchoicesmessages.google.com"
+              },
+              {
+                "source": "url",
+                "value": "https://fundingchoicesmessages.google.com/i/21734370771"
+              },
+              {
+                "source": "url",
+                "value": "https://fundingchoicesmessages.google.com/f/AGSKWxXgnMYh5Hw_LfKH61cqreDck9RcdUg0AhGwNFdFCUm0k3oDi5fNPcHVKlqAtYLOEluO2BtQWNeybLPui4ISa2MsJvF2fadjJVIYKJlWgNKhUkSnHN0K_o4KElxGxlJV5bmrPDxcXA=="
+              },
+              {
+                "source": "url",
+                "value": "https://fundingchoicesmessages.google.com/f/AGSKWxUCxOADrTzbQMFlr2fy0yEh0BPgqEqhEZ9KZ-ij_l9lqQKOP7F1vhOavJP2euVJmBdftlkitXKmTf2I-SauqzaNw8Ex0VDJ9dhTXtJjD2zC9nPd0qSZp-AViK2GK6kzXppYXXcSBw=="
+              },
+              {
+                "source": "url",
+                "value": "https://fundingchoicesmessages.google.com/f/AGSKWxVpocqXNZIV4DiLWp4yxel0bvoBGqFxbM5lIta5Jl3VltZt1oDGZ7mlpNHPMDEmRerv-pwP2YitXttePnlEYMgPTTz3hw9lCSgsF6jPfpQ-qtgSlEiuZt_BaYhayJA3Eu39VU6MeA=="
+              },
+              {
+                "source": "url",
+                "value": "https://fundingchoicesmessages.google.com/f/AGSKWxWXzbSm4DO5i4YKc5zhGl7V6XDUEb6cU4EjRJ6NeH-8ixz-YtWlYnnR33aTCVuZyQp-Y-nh6nZ1cRVIlw6NX_ENFDhzT_-PE5JDj-nz6CInDR4WrR3fLzMriQNp_nbjyMKQXEFLew=="
+              },
+              {
+                "source": "cookie",
+                "value": "FCCDCF"
+              },
+              {
+                "source": "cookie",
+                "value": "FCNEC"
+              },
+              {
+                "source": "global",
+                "value": "googlefc"
+              }
+            ],
+            "standards": [
+              "tcf",
+              "google_consent_mode"
+            ]
+          },
+          {
+            "canonicalName": "Cookiebot",
+            "confidence": 0.95,
+            "evidenceTreatment": "cmp_infrastructure",
+            "isCmpInfrastructure": true,
+            "matchedSignals": [
+              {
+                "source": "host",
+                "value": "consent.cookiebot.com"
+              },
+              {
+                "source": "host",
+                "value": "consentcdn.cookiebot.com"
+              },
+              {
+                "source": "url",
+                "value": "https://consent.cookiebot.com/20d40a91-8b9b-4662-a73f-efcf5d611d98/cc.js"
+              },
+              {
+                "source": "url",
+                "value": "https://consentcdn.cookiebot.com/consentconfig/20d40a91-8b9b-4662-a73f-efcf5d611d98/airandspaceforces.com/configuration.js"
+              },
+              {
+                "source": "url",
+                "value": "https://consent.cookiebot.com/uc.js"
+              },
+              {
+                "source": "cookie",
+                "value": "CookieConsent"
+              },
+              {
+                "source": "global",
+                "value": "Cookiebot"
+              },
+              {
+                "source": "global",
+                "value": "CookieConsent"
+              },
+              {
+                "source": "dom",
+                "value": "#CybotCookiebotDialog"
+              }
+            ],
+            "standards": [
+              "tcf",
+              "gpp",
+              "google_consent_mode"
+            ]
+          }
+        ]
+      },
+      "containers": [
+        {
+          "containerId": "container_0",
+          "selectorHint": "#CybotCookiebotDialog",
+          "role": "region",
+          "id": "CybotCookiebotDialog",
+          "classes": "CybotCloseButtonEnabled CybotCookiebotDialogActive",
+          "layer": "first_layer",
+          "textExcerpt": "ConsentDetails[#IABV2SETTINGS#]AboutThis website uses cookiesWe use cookies to personalize content and ads, to provide social media features and to analyze our traffic. We also share information about your use of our site with our social media, advertising and analytics partners who may combine it with other information that you\u2019ve provided to them or that they\u2019ve collected from your use of their services.[#GPC_BANNER_ICON#][#GPC_TOAST_TEXT#]Consent SelectionNecessary Preferences Statistics Marketing Show detailsDetailsNecessary 14 Necessary cookies help make a website usable by enabling basic functions like page navigation and access to secure areas of the website. The website cannot function properly without these cookies.Cookiebot1Learn more about this providerCookieConsentStores the user's cookie consent state for the current domainMaximum Storage Duration: 1 monthType: HTTP CookieGoogle5Learn more about this providerSome of the data collected by this provider is for the purposes of personalization and measuring advertising effectiveness. The provider may use the IP Addresses for ads measurement and ads personalization.FCNEC [x2]Checks whether the cookie consent banner is activ",
+          "htmlExcerpt": "<div id=\"CybotCookiebotDialog\" name=\"CybotCookiebotDialog\" role=\"region\" aria-labelledby=\"CybotCookiebotDialogBodyContentTitle\" tabindex=\"-1\" lang=\"en\" dir=\"ltr\" data-nosnippet=\"\" ng-non-bindable=\"\" style=\"display: flex; font-size: 0.9375rem;\" class=\"CybotCloseButtonEnabled CybotCookiebotDialogActive\" data-template=\"popup\"><div class=\"CybotCookiebotDialogContentWrapper\"><div id=\"CybotCookiebotDialogHeader\"><div id=\"CybotCookiebotDialogHeaderLogosWrapper\"><div id=\"CybotCookiebotDialogPoweredbyLink\"></div><a href=\"https://www.cookiebot.com/en/what-is-behind-powered-by-cookiebot/\" rel=\"noopener nofollow\" target=\"_blank\" id=\"CybotCookiebotDialogPoweredbyCybot\" aria-label=\"Cookiebot by Usercentrics - opens in a new window\" tabindex=\"-1\"></a></div><button class=\"CybotCookiebotBannerCloseButton\" aria-label=\"Close banner\"></button></div><div id=\"CybotCookiebotDialogNav\" class=\"CybotCookiebotScrollAreaSide\"><div class=\"CybotCookiebotFader CybotCookiebotFaderLeft\"></div><div class=\"CybotCookiebotFader CybotCookiebotFaderRight\"></div><ul id=\"CybotCookiebotDialogNavList\" class=\"CybotCookiebotDialogNavItems\" role=\"tablist\"><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDeclaration\" class=\"CybotCookiebotDialogNavItemLink CybotCookiebotDialogActive\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogBody\" tabindex=\"0\" role=\"tab\" aria-selected=\"true\" aria-controls=\"CybotCookiebotDialogBody\" lang=\"en\">Consent</a></li><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDetails\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogTabContentDetails\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogTabContentDetails\" lang=\"en\">Details</a></li><li id=\"CybotCookiebotDialogNavItemAdSettings\" class=\"CybotCookiebotDialogNavItem CybotCookiebotDialogHide\" role=\"presentation\"><a id=\"CybotCookiebot",
+          "boundingBox": {
+            "x": 233,
+            "y": 240.56,
+            "width": 900,
+            "height": 418.88,
+            "top": 240.56,
+            "right": 1133,
+            "bottom": 659.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_1",
+          "selectorHint": "#CybotCookiebotDialog div.CybotCookiebotDialogContentWrapper",
+          "classes": "CybotCookiebotDialogContentWrapper",
+          "layer": "first_layer",
+          "textExcerpt": "ConsentDetails[#IABV2SETTINGS#]AboutThis website uses cookiesWe use cookies to personalize content and ads, to provide social media features and to analyze our traffic. We also share information about your use of our site with our social media, advertising and analytics partners who may combine it with other information that you\u2019ve provided to them or that they\u2019ve collected from your use of their services.[#GPC_BANNER_ICON#][#GPC_TOAST_TEXT#]Consent SelectionNecessary Preferences Statistics Marketing Show detailsDetailsNecessary 14 Necessary cookies help make a website usable by enabling basic functions like page navigation and access to secure areas of the website. The website cannot function properly without these cookies.Cookiebot1Learn more about this providerCookieConsentStores the user's cookie consent state for the current domainMaximum Storage Duration: 1 monthType: HTTP CookieGoogle5Learn more about this providerSome of the data collected by this provider is for the purposes of personalization and measuring advertising effectiveness. The provider may use the IP Addresses for ads measurement and ads personalization.FCNEC [x2]Checks whether the cookie consent banner is activ",
+          "htmlExcerpt": "<div class=\"CybotCookiebotDialogContentWrapper\"><div id=\"CybotCookiebotDialogHeader\"><div id=\"CybotCookiebotDialogHeaderLogosWrapper\"><div id=\"CybotCookiebotDialogPoweredbyLink\"></div><a href=\"https://www.cookiebot.com/en/what-is-behind-powered-by-cookiebot/\" rel=\"noopener nofollow\" target=\"_blank\" id=\"CybotCookiebotDialogPoweredbyCybot\" aria-label=\"Cookiebot by Usercentrics - opens in a new window\" tabindex=\"-1\"></a></div><button class=\"CybotCookiebotBannerCloseButton\" aria-label=\"Close banner\"></button></div><div id=\"CybotCookiebotDialogNav\" class=\"CybotCookiebotScrollAreaSide\"><div class=\"CybotCookiebotFader CybotCookiebotFaderLeft\"></div><div class=\"CybotCookiebotFader CybotCookiebotFaderRight\"></div><ul id=\"CybotCookiebotDialogNavList\" class=\"CybotCookiebotDialogNavItems\" role=\"tablist\"><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDeclaration\" class=\"CybotCookiebotDialogNavItemLink CybotCookiebotDialogActive\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogBody\" tabindex=\"0\" role=\"tab\" aria-selected=\"true\" aria-controls=\"CybotCookiebotDialogBody\" lang=\"en\">Consent</a></li><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDetails\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogTabContentDetails\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogTabContentDetails\" lang=\"en\">Details</a></li><li id=\"CybotCookiebotDialogNavItemAdSettings\" class=\"CybotCookiebotDialogNavItem CybotCookiebotDialogHide\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavAdSettings\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogDetailBodyContentTextIABv2\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogDetailBodyContentTextIABv2\" lang=\"en\">[#IABV2SETTINGS#]</a></li><li class=\"Cybo",
+          "boundingBox": {
+            "x": 233,
+            "y": 240.56,
+            "width": 900,
+            "height": 418.88,
+            "top": 240.56,
+            "right": 1133,
+            "bottom": 659.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_2",
+          "selectorHint": "#CybotCookiebotDialogHeader",
+          "id": "CybotCookiebotDialogHeader",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div id=\"CybotCookiebotDialogHeader\"><div id=\"CybotCookiebotDialogHeaderLogosWrapper\"><div id=\"CybotCookiebotDialogPoweredbyLink\"></div><a href=\"https://www.cookiebot.com/en/what-is-behind-powered-by-cookiebot/\" rel=\"noopener nofollow\" target=\"_blank\" id=\"CybotCookiebotDialogPoweredbyCybot\" aria-label=\"Cookiebot by Usercentrics - opens in a new window\" tabindex=\"-1\"></a></div><button class=\"CybotCookiebotBannerCloseButton\" aria-label=\"Close banner\"></button></div>",
+          "boundingBox": {
+            "x": 233,
+            "y": 240.56,
+            "width": 900,
+            "height": 77.88,
+            "top": 240.56,
+            "right": 1133,
+            "bottom": 318.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_3",
+          "selectorHint": "#CybotCookiebotDialogHeaderLogosWrapper",
+          "id": "CybotCookiebotDialogHeaderLogosWrapper",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div id=\"CybotCookiebotDialogHeaderLogosWrapper\"><div id=\"CybotCookiebotDialogPoweredbyLink\"></div><a href=\"https://www.cookiebot.com/en/what-is-behind-powered-by-cookiebot/\" rel=\"noopener nofollow\" target=\"_blank\" id=\"CybotCookiebotDialogPoweredbyCybot\" aria-label=\"Cookiebot by Usercentrics - opens in a new window\" tabindex=\"-1\"></a></div>",
+          "boundingBox": {
+            "x": 255.5,
+            "y": 263.06,
+            "width": 804,
+            "height": 31.88,
+            "top": 263.06,
+            "right": 1059.5,
+            "bottom": 294.94,
+            "left": 255.5
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_4",
+          "selectorHint": "#CybotCookiebotDialogPoweredbyLink",
+          "id": "CybotCookiebotDialogPoweredbyLink",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div id=\"CybotCookiebotDialogPoweredbyLink\"></div>",
+          "boundingBox": {
+            "x": 255.5,
+            "y": 263.06,
+            "width": 402,
+            "height": 31.88,
+            "top": 263.06,
+            "right": 657.5,
+            "bottom": 294.94,
+            "left": 255.5
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_5",
+          "selectorHint": "#CybotCookiebotDialogPoweredbyImage",
+          "id": "CybotCookiebotDialogPoweredbyImage",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<img id=\"CybotCookiebotDialogPoweredbyImage\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATEAAAExCAYAAAAUZZVoAAAACXBIWXMAAC4jAAAuIwF4pT92AAAGM2lUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgOS4wLWMwMDAgNzkuMTcxYzI3ZmFiLCAyMDIyLzA4LzE2LTIyOjM1OjQxICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIgeG1sbnM6cGhvdG9zaG9wPSJodHRwOi8vbnMuYWRvYmUuY29tL3Bob3Rvc2hvcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgMjQuMSAoTWFjaW50b3NoKSIgeG1wOkNyZWF0ZURhdGU9IjIwMjItMTItMTVUMTQ6MDMtMDU6MDAiIHhtcDpNb2RpZnlEYXRlPSIyMDIzLTAyLTIyVDE0OjMwOjMzLTA1OjAwIiB4bXA6TWV0YWRhdGFEYXRlPSIyMDIzLTAyLTIyVDE0OjMwOjMzLTA1OjAwIiBkYzpmb3JtYXQ9ImltYWdlL3BuZyIgcGhvdG9zaG9wOkNvbG9yTW9kZT0iMyIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDo5ZWUyNWIyMS0yOGI3LTRhNjUtODVjOC1kNGU1ZGUyMTUwOTkiIHhtcE1NOkRvY3VtZW50SUQ9ImFkb2JlOmRvY2lkOnBob3Rvc2hvcDowODk2NmVhZS05OGJkLWUwNDUtYjM5Zi0zMjllMjA4MzI4ZjQiIHhtcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD0ieG1wLmRpZDoxOTg3ZjVkNS04MjBhLTQ4OGQtYjQ4NC1hYWRiODA5ZmJjNTQiPiA8eG1wTU06SGlzdG9yeT4gPHJkZjpTZXE+IDxyZGY6bGkgc3RFdnQ6YWN0aW9uPSJjcmVhdGVkIiBzdEV2dDppbnN0YW5jZUlEPSJ4bXAuaWlkOjE5ODdmNWQ1LTgyMGEtNDg4ZC1iNDg0LWFhZGI4MDlmYmM1NCIgc3RFdnQ6d2hlbj0iMjAyMi0xMi0xNVQxNDowMy0wNTowMCIgc3RFdnQ6c29mdHdhcmVBZ2VudD0iQWRvYmUgUGhvdG9zaG9wIDI0LjEgKE1hY2ludG9zaCkiLz4gPHJkZjpsaSBzdEV2dDphY3Rpb249ImNvbnZlcnRlZCIgc3RFdnQ6cGFyYW1ldGVycz0iZnJvbSBhcHBsaWNhdGlvbi92bmQuYWRvYmUucGhvdG9zaG9wIHRvIGltYWdlL3BuZyIvPiA8cmRmOmxpIHN0RXZ0OmFjdGlvbj0ic2F2ZWQiIHN0RXZ0Omluc3RhbmNlSUQ9InhtcC5paWQ6OWVlMjViMjEtMjhiNy00YTY1LTg1YzgtZDRlNWRlMjE1MDk5IiBz",
+          "boundingBox": {
+            "x": 255.5,
+            "y": 263.06,
+            "width": 31.88,
+            "height": 31.88,
+            "top": 263.06,
+            "right": 287.38,
+            "bottom": 294.94,
+            "left": 255.5
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_6",
+          "selectorHint": "#CybotCookiebotDialogNav",
+          "id": "CybotCookiebotDialogNav",
+          "classes": "CybotCookiebotScrollAreaSide",
+          "layer": "first_layer",
+          "textExcerpt": "ConsentDetails[#IABV2SETTINGS#]About",
+          "htmlExcerpt": "<div id=\"CybotCookiebotDialogNav\" class=\"CybotCookiebotScrollAreaSide\"><div class=\"CybotCookiebotFader CybotCookiebotFaderLeft\"></div><div class=\"CybotCookiebotFader CybotCookiebotFaderRight\"></div><ul id=\"CybotCookiebotDialogNavList\" class=\"CybotCookiebotDialogNavItems\" role=\"tablist\"><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDeclaration\" class=\"CybotCookiebotDialogNavItemLink CybotCookiebotDialogActive\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogBody\" tabindex=\"0\" role=\"tab\" aria-selected=\"true\" aria-controls=\"CybotCookiebotDialogBody\" lang=\"en\">Consent</a></li><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDetails\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogTabContentDetails\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogTabContentDetails\" lang=\"en\">Details</a></li><li id=\"CybotCookiebotDialogNavItemAdSettings\" class=\"CybotCookiebotDialogNavItem CybotCookiebotDialogHide\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavAdSettings\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogDetailBodyContentTextIABv2\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogDetailBodyContentTextIABv2\" lang=\"en\">[#IABV2SETTINGS#]</a></li><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavAbout\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogDetailBodyContentTextAbout\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogDetailBodyContentTextAbout\" lang=\"en\">About</a></li></ul></div>",
+          "boundingBox": {
+            "x": 233,
+            "y": 318.44,
+            "width": 900,
+            "height": 62,
+            "top": 318.44,
+            "right": 1133,
+            "bottom": 380.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_7",
+          "selectorHint": "#CybotCookiebotDialogNav div.CybotCookiebotFader.CybotCookiebotFaderLeft",
+          "classes": "CybotCookiebotFader CybotCookiebotFaderLeft",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div class=\"CybotCookiebotFader CybotCookiebotFaderLeft\"></div>",
+          "boundingBox": {
+            "x": 233,
+            "y": 318.44,
+            "width": 52.5,
+            "height": 61,
+            "top": 318.44,
+            "right": 285.5,
+            "bottom": 379.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_8",
+          "selectorHint": "#CybotCookiebotDialogNav div.CybotCookiebotFader.CybotCookiebotFaderRight",
+          "classes": "CybotCookiebotFader CybotCookiebotFaderRight",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div class=\"CybotCookiebotFader CybotCookiebotFaderRight\"></div>",
+          "boundingBox": {
+            "x": 1080.5,
+            "y": 318.44,
+            "width": 52.5,
+            "height": 61,
+            "top": 318.44,
+            "right": 1133,
+            "bottom": 379.44,
+            "left": 1080.5
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_9",
+          "selectorHint": "#CybotCookiebotDialogNavList",
+          "role": "tablist",
+          "id": "CybotCookiebotDialogNavList",
+          "classes": "CybotCookiebotDialogNavItems",
+          "layer": "first_layer",
+          "textExcerpt": "ConsentDetails[#IABV2SETTINGS#]About",
+          "htmlExcerpt": "<ul id=\"CybotCookiebotDialogNavList\" class=\"CybotCookiebotDialogNavItems\" role=\"tablist\"><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDeclaration\" class=\"CybotCookiebotDialogNavItemLink CybotCookiebotDialogActive\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogBody\" tabindex=\"0\" role=\"tab\" aria-selected=\"true\" aria-controls=\"CybotCookiebotDialogBody\" lang=\"en\">Consent</a></li><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDetails\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogTabContentDetails\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogTabContentDetails\" lang=\"en\">Details</a></li><li id=\"CybotCookiebotDialogNavItemAdSettings\" class=\"CybotCookiebotDialogNavItem CybotCookiebotDialogHide\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavAdSettings\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogDetailBodyContentTextIABv2\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogDetailBodyContentTextIABv2\" lang=\"en\">[#IABV2SETTINGS#]</a></li><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavAbout\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogDetailBodyContentTextAbout\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogDetailBodyContentTextAbout\" lang=\"en\">About</a></li></ul>",
+          "boundingBox": {
+            "x": 233,
+            "y": 318.44,
+            "width": 900,
+            "height": 61,
+            "top": 318.44,
+            "right": 1133,
+            "bottom": 379.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_10",
+          "selectorHint": "div:nth-of-type(1) > div:nth-of-type(2) > ul:nth-of-type(1) > li:nth-of-type(1)",
+          "role": "presentation",
+          "classes": "CybotCookiebotDialogNavItem",
+          "layer": "first_layer",
+          "textExcerpt": "Consent",
+          "htmlExcerpt": "<li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDeclaration\" class=\"CybotCookiebotDialogNavItemLink CybotCookiebotDialogActive\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogBody\" tabindex=\"0\" role=\"tab\" aria-selected=\"true\" aria-controls=\"CybotCookiebotDialogBody\" lang=\"en\">Consent</a></li>",
+          "boundingBox": {
+            "x": 233,
+            "y": 318.44,
+            "width": 300,
+            "height": 61,
+            "top": 318.44,
+            "right": 533,
+            "bottom": 379.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_11",
+          "selectorHint": "div:nth-of-type(1) > div:nth-of-type(2) > ul:nth-of-type(1) > li:nth-of-type(2)",
+          "role": "presentation",
+          "classes": "CybotCookiebotDialogNavItem",
+          "layer": "first_layer",
+          "textExcerpt": "Details",
+          "htmlExcerpt": "<li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDetails\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogTabContentDetails\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogTabContentDetails\" lang=\"en\">Details</a></li>",
+          "boundingBox": {
+            "x": 533,
+            "y": 318.44,
+            "width": 300,
+            "height": 61,
+            "top": 318.44,
+            "right": 833,
+            "bottom": 379.44,
+            "left": 533
+          },
+          "intersectsViewport": true
+        }
+      ],
+      "candidates": [
+        {
+          "candidateId": "candidate_0",
+          "label": "Close banner",
+          "normalizedLabel": "close banner",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "button",
+          "semanticallyInteractive": true,
+          "ariaLabel": "Close banner",
+          "selectorHint": "#CybotCookiebotDialogHeader button",
+          "containerSelectorHint": "#CybotCookiebotDialogHeader",
+          "containerId": "container_2",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 1096.5,
+            "y": 272,
+            "width": 14,
+            "height": 14,
+            "top": 272,
+            "right": 1110.5,
+            "bottom": 286,
+            "left": 1096.5
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "privacy_opt_out_context"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_1",
+          "label": "Consent",
+          "normalizedLabel": "consent",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "role": "tab",
+          "selectorHint": "#CybotCookiebotDialogNavDeclaration",
+          "containerSelectorHint": "div:nth-of-type(1) > div:nth-of-type(2) > ul:nth-of-type(1) > li:nth-of-type(1)",
+          "containerId": "container_10",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 233,
+            "y": 318.44,
+            "width": 300,
+            "height": 61,
+            "top": 318.44,
+            "right": 533,
+            "bottom": 379.44,
+            "left": 233
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "non_decision_control_role"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "same_document",
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_2",
+          "label": "Details",
+          "normalizedLabel": "details",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "role": "tab",
+          "selectorHint": "#CybotCookiebotDialogNavDetails",
+          "containerSelectorHint": "div:nth-of-type(1) > div:nth-of-type(2) > ul:nth-of-type(1) > li:nth-of-type(2)",
+          "containerId": "container_11",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 533,
+            "y": 318.44,
+            "width": 300,
+            "height": 61,
+            "top": 318.44,
+            "right": 833,
+            "bottom": 379.44,
+            "left": 533
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "non_decision_control_role"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "same_document",
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_3",
+          "label": "About",
+          "normalizedLabel": "about",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "role": "tab",
+          "selectorHint": "#CybotCookiebotDialogNavAbout",
+          "containerSelectorHint": "#CybotCookiebotDialogNavList",
+          "containerId": "container_9",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 833,
+            "y": 318.44,
+            "width": 300,
+            "height": 61,
+            "top": 318.44,
+            "right": 1133,
+            "bottom": 379.44,
+            "left": 833
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "non_decision_control_role"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "same_document",
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_4",
+          "label": "OK",
+          "normalizedLabel": "ok",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "button",
+          "semanticallyInteractive": true,
+          "selectorHint": "#CybotCookiebotDialogBodyLevelButtonAccept",
+          "containerSelectorHint": "#CybotCookiebotDialog",
+          "containerId": "container_0",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 828.36,
+            "y": 584.94,
+            "width": 282.14,
+            "height": 51,
+            "top": 584.94,
+            "right": 1110.5,
+            "bottom": 635.94,
+            "left": 828.36
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "unproven_acknowledgment_consent"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_5",
+          "label": "[#IABV2SETTINGS#]",
+          "normalizedLabel": "[#iabv2settings#]",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "role": "tab",
+          "selectorHint": "#CybotCookiebotDialogNavAdSettings",
+          "containerSelectorHint": "#CybotCookiebotDialogNavList",
+          "containerId": "container_9",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": [
+              "#masthead div.header-container"
+            ]
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "non_decision_control_role"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "same_document",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_6",
+          "label": "Necessary",
+          "normalizedLabel": "necessary",
+          "actionType": "other",
+          "presentationType": "unknown",
+          "placementType": "unknown",
+          "tagName": "label",
+          "semanticallyInteractive": false,
+          "selectorHint": "#CybotCookiebotDialogBodyFieldsetInnerContainer label",
+          "containerSelectorHint": "#CybotCookiebotDialog",
+          "containerId": "container_0",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": [
+              "#masthead div.header-container"
+            ]
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "privacy_opt_out_context"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_7",
+          "label": "Cookiebot by Usercentrics - opens in a new window",
+          "normalizedLabel": "cookiebot by usercentrics - opens in a new window",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "ariaLabel": "Cookiebot by Usercentrics - opens in a new window",
+          "selectorHint": "#CybotCookiebotDialogPoweredbyCybot",
+          "containerSelectorHint": "#CybotCookiebotDialogHeaderLogosWrapper",
+          "containerId": "container_3",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 884.5,
+            "y": 279,
+            "width": 175,
+            "height": 0,
+            "top": 279,
+            "right": 1059.5,
+            "bottom": 279,
+            "left": 884.5
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "privacy_opt_out_context"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "other_document",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_8",
+          "label": "on",
+          "normalizedLabel": "on",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "input",
+          "semanticallyInteractive": true,
+          "value": "on",
+          "inputType": "checkbox",
+          "selectorHint": "#CybotCookiebotDialogBodyLevelButtonNecessary",
+          "containerSelectorHint": "#CybotCookiebotDialog",
+          "containerId": "container_0",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": false,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "0",
+            "pointerEvents": "none",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": [
+              "#masthead div.header-container"
+            ]
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/reference/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "privacy_opt_out_context"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "decisionStatus": "disabled",
+          "reasons": [
+            "control_disabled"
+          ]
+        }
+      ],
+      "controlInspection": {
+        "version": "control_specific_inspection.v3",
+        "retainedCandidateCount": 9,
+        "captureCoverage": {
+          "inventoryTruncated": false,
+          "documentReadyState": "complete",
+          "mainFrameAvailable": true,
+          "documentAndFramesStable": true,
+          "frameCount": 8,
+          "capturedFrameCount": 8
+        },
+        "structuralCoverage": "complete",
+        "reasonCodes": [],
+        "candidates": [
+          {
+            "candidateId": "candidate_0",
+            "role": "unknown",
+            "unresolvedIntents": [
+              "accept",
+              "reject",
+              "options",
+              "privacy_opt_out"
+            ]
+          },
+          {
+            "candidateId": "candidate_1",
+            "role": "unknown",
+            "unresolvedIntents": [
+              "accept",
+              "reject",
+              "options",
+              "privacy_opt_out"
+            ]
+          },
+          {
+            "candidateId": "candidate_2",
+            "role": "unknown",
+            "unresolvedIntents": [
+              "accept",
+              "reject",
+              "options",
+              "privacy_opt_out"
+            ]
+          },
+          {
+            "candidateId": "candidate_3",
+            "role": "unknown",
+            "unresolvedIntents": [
+              "accept",
+              "reject",
+              "options",
+              "privacy_opt_out"
+            ]
+          },
+          {
+            "candidateId": "candidate_4",
+            "role": "unknown",
+            "unresolvedIntents": [
+              "accept",
+              "reject",
+              "options",
+              "privacy_opt_out"
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "firstLayerAccept": false,
+        "firstLayerReject": false,
+        "firstLayerOptions": false,
+        "cmpDetected": true,
+        "cmpName": "Google Funding Choices",
+        "confidence": 0.65,
+        "limitations": [
+          "unresolved_visible_consent_decision",
+          "cmp_detected_without_visible_first_layer_controls"
+        ]
+      },
+      "access": {
+        "status": "loaded",
+        "reasonCodes": [],
+        "httpStatus": 200,
+        "title": "Home | Air & Space Forces Magazine",
+        "textExcerpt": "Home | Air & Space Forces Magazine Consent Details About This website uses cookies We use cookies to personalize content and ads, to provide social media features and to analyze our traffic. We also share information about your use of our site with our social media, advertising and analytics partners who may combine it with other information that you\u2019ve provided to them or that they\u2019ve collected from your use of their services. OK Skip to content Login Search NEWS DAILY REPORT MAGAZINE ABOUT US "
+      },
+      "egress": {
+        "label": "direct_no_proxy",
+        "proxyConfigured": false,
+        "requiredProxy": false
+      },
+      "refresh": {
+        "policyVersion": "final_consent_geometry_refresh.v1",
+        "accessSource": "previous_same_loader_geometry_access",
+        "domSource": "retained_same_loader_dom_inventory",
+        "domObservedAtMs": 19015,
+        "previousGeometryCapturedAt": "2026-10-31T03:56:05.180Z"
+      },
+      "artifactOnly": true,
+      "productionFindingIntegration": false
+    },
+    "context": "",
+    "contextTruncatedForOwnedFixture": false
+  },
+  {
+    "caseId": "air-live-candidate",
+    "scope": "Retained local passive diagnostic; not production cohort or fresh capture",
+    "sources": [
+      {
+        "file": "artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/DiagnosticEvidenceBundle.json",
+        "sha256": "604ceb5f2fd01f66658f77ccfc7c0d46a6aa9ec29bf995845809d019fb56b546",
+        "bytes": 58199
+      },
+      {
+        "file": "artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/ConsentControlGeometryEvidence.json",
+        "sha256": "ebdd203e77c23f1ace6a4d0e5faeb0e0ffc5074a0450dce765fc32693e950892",
+        "bytes": 48248
+      },
+      {
+        "file": "artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/assessment-public.json",
+        "sha256": "f14b489eccff32c794c1fd442a69cd59e9fc4c3e17413d4390c6d76155903ced",
+        "bytes": 8528
+      }
+    ],
+    "geometry": {
+      "artifactVersion": "consent_control_geometry.v1",
+      "sourceScanner": "consent_control_geometry_diagnostic",
+      "pageUrl": "https://www.airandspaceforces.com/",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "CA983320DC4BB06F77891106AC0F23C9"
+      },
+      "capturedAt": "2026-10-31T03:57:05.820Z",
+      "captureTiming": {
+        "version": "consent_geometry_capture_timing.v1",
+        "mainFrameCompletedAt": "2026-10-31T03:57:05.820Z",
+        "completedAt": "2026-10-31T03:57:05.837Z"
+      },
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/screenshot-pre-consent-full-page.jpg",
+      "cmp": {
+        "detected": true,
+        "name": "Google Funding Choices",
+        "confidence": 0.95,
+        "reasonCodes": [
+          "host:fundingchoicesmessages.google.com",
+          "url:https://fundingchoicesmessages.google.com/i/21734370771",
+          "url:https://fundingchoicesmessages.google.com/f/AGSKWxWp71yyMHxfrenvgsFzlOC5PWsYScXFaZphwbpb3wVCJpKU2l8yLImC0n65tYys7EBWAxo-WVUCmeFeKXIM8i84JnOZaD9kweENcpKjHdYHVGg_6COZrdfEC0S1ZMZ_lm64dB3Wcw==",
+          "url:https://fundingchoicesmessages.google.com/f/AGSKWxXLWOxZKv2fyHlMW5Cj_bm7aBaQHCOuieLIR9XB9UceZeDC8Q49FKc9BY39bkK4iD9rimELpHs6PR1BCvzdsQ6gOoEr6s7WYtqfYDS5G-JYOsELYPdq6wMJIrqtdlh8OMQYHJzeUw==",
+          "url:https://fundingchoicesmessages.google.com/f/AGSKWxXSUAdsKBGLLhZcMA8x-unv2sviw0zir9Fw58UFv2yAAQYXFAc0f4Qt1HRGRQbcTR2TCYA2EFKuREbZiTIXjFDRgm1JomGpOA6DMWYRhgs1Rr4mwYquWzigD4XD2K3qlnKYrrG1tA==",
+          "url:https://fundingchoicesmessages.google.com/f/AGSKWxUB33ua5qXmf4B8dRkAroyxgnOxXKyUy6qusgkn2xpR3kdtD73fksZBGR6LEEN_IN4_28xmGDFrW59aHfOvrNI6NrWXO55QTCda7Evk51JAas9RqJs92IWQBlEY3mIHqRbHhyXHTA==",
+          "cookie:FCCDCF",
+          "cookie:FCNEC",
+          "global:googlefc"
+        ],
+        "matchedSignals": [
+          {
+            "source": "host",
+            "value": "fundingchoicesmessages.google.com"
+          },
+          {
+            "source": "url",
+            "value": "https://fundingchoicesmessages.google.com/i/21734370771"
+          },
+          {
+            "source": "url",
+            "value": "https://fundingchoicesmessages.google.com/f/AGSKWxWp71yyMHxfrenvgsFzlOC5PWsYScXFaZphwbpb3wVCJpKU2l8yLImC0n65tYys7EBWAxo-WVUCmeFeKXIM8i84JnOZaD9kweENcpKjHdYHVGg_6COZrdfEC0S1ZMZ_lm64dB3Wcw=="
+          },
+          {
+            "source": "url",
+            "value": "https://fundingchoicesmessages.google.com/f/AGSKWxXLWOxZKv2fyHlMW5Cj_bm7aBaQHCOuieLIR9XB9UceZeDC8Q49FKc9BY39bkK4iD9rimELpHs6PR1BCvzdsQ6gOoEr6s7WYtqfYDS5G-JYOsELYPdq6wMJIrqtdlh8OMQYHJzeUw=="
+          },
+          {
+            "source": "url",
+            "value": "https://fundingchoicesmessages.google.com/f/AGSKWxXSUAdsKBGLLhZcMA8x-unv2sviw0zir9Fw58UFv2yAAQYXFAc0f4Qt1HRGRQbcTR2TCYA2EFKuREbZiTIXjFDRgm1JomGpOA6DMWYRhgs1Rr4mwYquWzigD4XD2K3qlnKYrrG1tA=="
+          },
+          {
+            "source": "url",
+            "value": "https://fundingchoicesmessages.google.com/f/AGSKWxUB33ua5qXmf4B8dRkAroyxgnOxXKyUy6qusgkn2xpR3kdtD73fksZBGR6LEEN_IN4_28xmGDFrW59aHfOvrNI6NrWXO55QTCda7Evk51JAas9RqJs92IWQBlEY3mIHqRbHhyXHTA=="
+          },
+          {
+            "source": "cookie",
+            "value": "FCCDCF"
+          },
+          {
+            "source": "cookie",
+            "value": "FCNEC"
+          },
+          {
+            "source": "global",
+            "value": "googlefc"
+          }
+        ],
+        "detections": [
+          {
+            "canonicalName": "Google Funding Choices",
+            "confidence": 0.95,
+            "evidenceTreatment": "cmp_infrastructure",
+            "isCmpInfrastructure": true,
+            "matchedSignals": [
+              {
+                "source": "host",
+                "value": "fundingchoicesmessages.google.com"
+              },
+              {
+                "source": "url",
+                "value": "https://fundingchoicesmessages.google.com/i/21734370771"
+              },
+              {
+                "source": "url",
+                "value": "https://fundingchoicesmessages.google.com/f/AGSKWxWp71yyMHxfrenvgsFzlOC5PWsYScXFaZphwbpb3wVCJpKU2l8yLImC0n65tYys7EBWAxo-WVUCmeFeKXIM8i84JnOZaD9kweENcpKjHdYHVGg_6COZrdfEC0S1ZMZ_lm64dB3Wcw=="
+              },
+              {
+                "source": "url",
+                "value": "https://fundingchoicesmessages.google.com/f/AGSKWxXLWOxZKv2fyHlMW5Cj_bm7aBaQHCOuieLIR9XB9UceZeDC8Q49FKc9BY39bkK4iD9rimELpHs6PR1BCvzdsQ6gOoEr6s7WYtqfYDS5G-JYOsELYPdq6wMJIrqtdlh8OMQYHJzeUw=="
+              },
+              {
+                "source": "url",
+                "value": "https://fundingchoicesmessages.google.com/f/AGSKWxXSUAdsKBGLLhZcMA8x-unv2sviw0zir9Fw58UFv2yAAQYXFAc0f4Qt1HRGRQbcTR2TCYA2EFKuREbZiTIXjFDRgm1JomGpOA6DMWYRhgs1Rr4mwYquWzigD4XD2K3qlnKYrrG1tA=="
+              },
+              {
+                "source": "url",
+                "value": "https://fundingchoicesmessages.google.com/f/AGSKWxUB33ua5qXmf4B8dRkAroyxgnOxXKyUy6qusgkn2xpR3kdtD73fksZBGR6LEEN_IN4_28xmGDFrW59aHfOvrNI6NrWXO55QTCda7Evk51JAas9RqJs92IWQBlEY3mIHqRbHhyXHTA=="
+              },
+              {
+                "source": "cookie",
+                "value": "FCCDCF"
+              },
+              {
+                "source": "cookie",
+                "value": "FCNEC"
+              },
+              {
+                "source": "global",
+                "value": "googlefc"
+              }
+            ],
+            "standards": [
+              "tcf",
+              "google_consent_mode"
+            ]
+          },
+          {
+            "canonicalName": "Cookiebot",
+            "confidence": 0.95,
+            "evidenceTreatment": "cmp_infrastructure",
+            "isCmpInfrastructure": true,
+            "matchedSignals": [
+              {
+                "source": "host",
+                "value": "consent.cookiebot.com"
+              },
+              {
+                "source": "host",
+                "value": "consentcdn.cookiebot.com"
+              },
+              {
+                "source": "url",
+                "value": "https://consent.cookiebot.com/20d40a91-8b9b-4662-a73f-efcf5d611d98/cc.js"
+              },
+              {
+                "source": "url",
+                "value": "https://consentcdn.cookiebot.com/consentconfig/20d40a91-8b9b-4662-a73f-efcf5d611d98/airandspaceforces.com/configuration.js"
+              },
+              {
+                "source": "url",
+                "value": "https://consent.cookiebot.com/uc.js"
+              },
+              {
+                "source": "cookie",
+                "value": "CookieConsent"
+              },
+              {
+                "source": "global",
+                "value": "Cookiebot"
+              },
+              {
+                "source": "global",
+                "value": "CookieConsent"
+              },
+              {
+                "source": "dom",
+                "value": "#CybotCookiebotDialog"
+              }
+            ],
+            "standards": [
+              "tcf",
+              "gpp",
+              "google_consent_mode"
+            ]
+          }
+        ]
+      },
+      "containers": [
+        {
+          "containerId": "container_0",
+          "selectorHint": "#CybotCookiebotDialog",
+          "role": "region",
+          "id": "CybotCookiebotDialog",
+          "classes": "CybotCloseButtonEnabled CybotCookiebotDialogActive",
+          "layer": "first_layer",
+          "textExcerpt": "ConsentDetails[#IABV2SETTINGS#]AboutThis website uses cookiesWe use cookies to personalize content and ads, to provide social media features and to analyze our traffic. We also share information about your use of our site with our social media, advertising and analytics partners who may combine it with other information that you\u2019ve provided to them or that they\u2019ve collected from your use of their services.[#GPC_BANNER_ICON#][#GPC_TOAST_TEXT#]Consent SelectionNecessary Preferences Statistics Marketing Show detailsDetailsNecessary 14 Necessary cookies help make a website usable by enabling basic functions like page navigation and access to secure areas of the website. The website cannot function properly without these cookies.Cookiebot1Learn more about this providerCookieConsentStores the user's cookie consent state for the current domainMaximum Storage Duration: 1 monthType: HTTP CookieGoogle5Learn more about this providerSome of the data collected by this provider is for the purposes of personalization and measuring advertising effectiveness. The provider may use the IP Addresses for ads measurement and ads personalization.FCNEC [x2]Checks whether the cookie consent banner is activ",
+          "htmlExcerpt": "<div id=\"CybotCookiebotDialog\" name=\"CybotCookiebotDialog\" role=\"region\" aria-labelledby=\"CybotCookiebotDialogBodyContentTitle\" tabindex=\"-1\" lang=\"en\" dir=\"ltr\" data-nosnippet=\"\" ng-non-bindable=\"\" style=\"display: flex; font-size: 0.9375rem;\" class=\"CybotCloseButtonEnabled CybotCookiebotDialogActive\" data-template=\"popup\"><div class=\"CybotCookiebotDialogContentWrapper\"><div id=\"CybotCookiebotDialogHeader\"><div id=\"CybotCookiebotDialogHeaderLogosWrapper\"><div id=\"CybotCookiebotDialogPoweredbyLink\"></div><a href=\"https://www.cookiebot.com/en/what-is-behind-powered-by-cookiebot/\" rel=\"noopener nofollow\" target=\"_blank\" id=\"CybotCookiebotDialogPoweredbyCybot\" aria-label=\"Cookiebot by Usercentrics - opens in a new window\" tabindex=\"-1\"></a></div><button class=\"CybotCookiebotBannerCloseButton\" aria-label=\"Close banner\"></button></div><div id=\"CybotCookiebotDialogNav\" class=\"CybotCookiebotScrollAreaSide\"><div class=\"CybotCookiebotFader CybotCookiebotFaderLeft\"></div><div class=\"CybotCookiebotFader CybotCookiebotFaderRight\"></div><ul id=\"CybotCookiebotDialogNavList\" class=\"CybotCookiebotDialogNavItems\" role=\"tablist\"><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDeclaration\" class=\"CybotCookiebotDialogNavItemLink CybotCookiebotDialogActive\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogBody\" tabindex=\"0\" role=\"tab\" aria-selected=\"true\" aria-controls=\"CybotCookiebotDialogBody\" lang=\"en\">Consent</a></li><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDetails\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogTabContentDetails\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogTabContentDetails\" lang=\"en\">Details</a></li><li id=\"CybotCookiebotDialogNavItemAdSettings\" class=\"CybotCookiebotDialogNavItem CybotCookiebotDialogHide\" role=\"presentation\"><a id=\"CybotCookiebot",
+          "boundingBox": {
+            "x": 233,
+            "y": 240.56,
+            "width": 900,
+            "height": 418.88,
+            "top": 240.56,
+            "right": 1133,
+            "bottom": 659.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_1",
+          "selectorHint": "#CybotCookiebotDialog div.CybotCookiebotDialogContentWrapper",
+          "classes": "CybotCookiebotDialogContentWrapper",
+          "layer": "first_layer",
+          "textExcerpt": "ConsentDetails[#IABV2SETTINGS#]AboutThis website uses cookiesWe use cookies to personalize content and ads, to provide social media features and to analyze our traffic. We also share information about your use of our site with our social media, advertising and analytics partners who may combine it with other information that you\u2019ve provided to them or that they\u2019ve collected from your use of their services.[#GPC_BANNER_ICON#][#GPC_TOAST_TEXT#]Consent SelectionNecessary Preferences Statistics Marketing Show detailsDetailsNecessary 14 Necessary cookies help make a website usable by enabling basic functions like page navigation and access to secure areas of the website. The website cannot function properly without these cookies.Cookiebot1Learn more about this providerCookieConsentStores the user's cookie consent state for the current domainMaximum Storage Duration: 1 monthType: HTTP CookieGoogle5Learn more about this providerSome of the data collected by this provider is for the purposes of personalization and measuring advertising effectiveness. The provider may use the IP Addresses for ads measurement and ads personalization.FCNEC [x2]Checks whether the cookie consent banner is activ",
+          "htmlExcerpt": "<div class=\"CybotCookiebotDialogContentWrapper\"><div id=\"CybotCookiebotDialogHeader\"><div id=\"CybotCookiebotDialogHeaderLogosWrapper\"><div id=\"CybotCookiebotDialogPoweredbyLink\"></div><a href=\"https://www.cookiebot.com/en/what-is-behind-powered-by-cookiebot/\" rel=\"noopener nofollow\" target=\"_blank\" id=\"CybotCookiebotDialogPoweredbyCybot\" aria-label=\"Cookiebot by Usercentrics - opens in a new window\" tabindex=\"-1\"></a></div><button class=\"CybotCookiebotBannerCloseButton\" aria-label=\"Close banner\"></button></div><div id=\"CybotCookiebotDialogNav\" class=\"CybotCookiebotScrollAreaSide\"><div class=\"CybotCookiebotFader CybotCookiebotFaderLeft\"></div><div class=\"CybotCookiebotFader CybotCookiebotFaderRight\"></div><ul id=\"CybotCookiebotDialogNavList\" class=\"CybotCookiebotDialogNavItems\" role=\"tablist\"><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDeclaration\" class=\"CybotCookiebotDialogNavItemLink CybotCookiebotDialogActive\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogBody\" tabindex=\"0\" role=\"tab\" aria-selected=\"true\" aria-controls=\"CybotCookiebotDialogBody\" lang=\"en\">Consent</a></li><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDetails\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogTabContentDetails\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogTabContentDetails\" lang=\"en\">Details</a></li><li id=\"CybotCookiebotDialogNavItemAdSettings\" class=\"CybotCookiebotDialogNavItem CybotCookiebotDialogHide\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavAdSettings\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogDetailBodyContentTextIABv2\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogDetailBodyContentTextIABv2\" lang=\"en\">[#IABV2SETTINGS#]</a></li><li class=\"Cybo",
+          "boundingBox": {
+            "x": 233,
+            "y": 240.56,
+            "width": 900,
+            "height": 418.88,
+            "top": 240.56,
+            "right": 1133,
+            "bottom": 659.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_2",
+          "selectorHint": "#CybotCookiebotDialogHeader",
+          "id": "CybotCookiebotDialogHeader",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div id=\"CybotCookiebotDialogHeader\"><div id=\"CybotCookiebotDialogHeaderLogosWrapper\"><div id=\"CybotCookiebotDialogPoweredbyLink\"></div><a href=\"https://www.cookiebot.com/en/what-is-behind-powered-by-cookiebot/\" rel=\"noopener nofollow\" target=\"_blank\" id=\"CybotCookiebotDialogPoweredbyCybot\" aria-label=\"Cookiebot by Usercentrics - opens in a new window\" tabindex=\"-1\"></a></div><button class=\"CybotCookiebotBannerCloseButton\" aria-label=\"Close banner\"></button></div>",
+          "boundingBox": {
+            "x": 233,
+            "y": 240.56,
+            "width": 900,
+            "height": 77.88,
+            "top": 240.56,
+            "right": 1133,
+            "bottom": 318.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_3",
+          "selectorHint": "#CybotCookiebotDialogHeaderLogosWrapper",
+          "id": "CybotCookiebotDialogHeaderLogosWrapper",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div id=\"CybotCookiebotDialogHeaderLogosWrapper\"><div id=\"CybotCookiebotDialogPoweredbyLink\"></div><a href=\"https://www.cookiebot.com/en/what-is-behind-powered-by-cookiebot/\" rel=\"noopener nofollow\" target=\"_blank\" id=\"CybotCookiebotDialogPoweredbyCybot\" aria-label=\"Cookiebot by Usercentrics - opens in a new window\" tabindex=\"-1\"></a></div>",
+          "boundingBox": {
+            "x": 255.5,
+            "y": 263.06,
+            "width": 804,
+            "height": 31.88,
+            "top": 263.06,
+            "right": 1059.5,
+            "bottom": 294.94,
+            "left": 255.5
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_4",
+          "selectorHint": "#CybotCookiebotDialogPoweredbyLink",
+          "id": "CybotCookiebotDialogPoweredbyLink",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div id=\"CybotCookiebotDialogPoweredbyLink\"></div>",
+          "boundingBox": {
+            "x": 255.5,
+            "y": 263.06,
+            "width": 402,
+            "height": 31.88,
+            "top": 263.06,
+            "right": 657.5,
+            "bottom": 294.94,
+            "left": 255.5
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_5",
+          "selectorHint": "#CybotCookiebotDialogPoweredbyImage",
+          "id": "CybotCookiebotDialogPoweredbyImage",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<img id=\"CybotCookiebotDialogPoweredbyImage\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATEAAAExCAYAAAAUZZVoAAAACXBIWXMAAC4jAAAuIwF4pT92AAAGM2lUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgOS4wLWMwMDAgNzkuMTcxYzI3ZmFiLCAyMDIyLzA4LzE2LTIyOjM1OjQxICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIgeG1sbnM6cGhvdG9zaG9wPSJodHRwOi8vbnMuYWRvYmUuY29tL3Bob3Rvc2hvcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgMjQuMSAoTWFjaW50b3NoKSIgeG1wOkNyZWF0ZURhdGU9IjIwMjItMTItMTVUMTQ6MDMtMDU6MDAiIHhtcDpNb2RpZnlEYXRlPSIyMDIzLTAyLTIyVDE0OjMwOjMzLTA1OjAwIiB4bXA6TWV0YWRhdGFEYXRlPSIyMDIzLTAyLTIyVDE0OjMwOjMzLTA1OjAwIiBkYzpmb3JtYXQ9ImltYWdlL3BuZyIgcGhvdG9zaG9wOkNvbG9yTW9kZT0iMyIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDo5ZWUyNWIyMS0yOGI3LTRhNjUtODVjOC1kNGU1ZGUyMTUwOTkiIHhtcE1NOkRvY3VtZW50SUQ9ImFkb2JlOmRvY2lkOnBob3Rvc2hvcDowODk2NmVhZS05OGJkLWUwNDUtYjM5Zi0zMjllMjA4MzI4ZjQiIHhtcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD0ieG1wLmRpZDoxOTg3ZjVkNS04MjBhLTQ4OGQtYjQ4NC1hYWRiODA5ZmJjNTQiPiA8eG1wTU06SGlzdG9yeT4gPHJkZjpTZXE+IDxyZGY6bGkgc3RFdnQ6YWN0aW9uPSJjcmVhdGVkIiBzdEV2dDppbnN0YW5jZUlEPSJ4bXAuaWlkOjE5ODdmNWQ1LTgyMGEtNDg4ZC1iNDg0LWFhZGI4MDlmYmM1NCIgc3RFdnQ6d2hlbj0iMjAyMi0xMi0xNVQxNDowMy0wNTowMCIgc3RFdnQ6c29mdHdhcmVBZ2VudD0iQWRvYmUgUGhvdG9zaG9wIDI0LjEgKE1hY2ludG9zaCkiLz4gPHJkZjpsaSBzdEV2dDphY3Rpb249ImNvbnZlcnRlZCIgc3RFdnQ6cGFyYW1ldGVycz0iZnJvbSBhcHBsaWNhdGlvbi92bmQuYWRvYmUucGhvdG9zaG9wIHRvIGltYWdlL3BuZyIvPiA8cmRmOmxpIHN0RXZ0OmFjdGlvbj0ic2F2ZWQiIHN0RXZ0Omluc3RhbmNlSUQ9InhtcC5paWQ6OWVlMjViMjEtMjhiNy00YTY1LTg1YzgtZDRlNWRlMjE1MDk5IiBz",
+          "boundingBox": {
+            "x": 255.5,
+            "y": 263.06,
+            "width": 31.88,
+            "height": 31.88,
+            "top": 263.06,
+            "right": 287.38,
+            "bottom": 294.94,
+            "left": 255.5
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_6",
+          "selectorHint": "#CybotCookiebotDialogNav",
+          "id": "CybotCookiebotDialogNav",
+          "classes": "CybotCookiebotScrollAreaSide",
+          "layer": "first_layer",
+          "textExcerpt": "ConsentDetails[#IABV2SETTINGS#]About",
+          "htmlExcerpt": "<div id=\"CybotCookiebotDialogNav\" class=\"CybotCookiebotScrollAreaSide\"><div class=\"CybotCookiebotFader CybotCookiebotFaderLeft\"></div><div class=\"CybotCookiebotFader CybotCookiebotFaderRight\"></div><ul id=\"CybotCookiebotDialogNavList\" class=\"CybotCookiebotDialogNavItems\" role=\"tablist\"><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDeclaration\" class=\"CybotCookiebotDialogNavItemLink CybotCookiebotDialogActive\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogBody\" tabindex=\"0\" role=\"tab\" aria-selected=\"true\" aria-controls=\"CybotCookiebotDialogBody\" lang=\"en\">Consent</a></li><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDetails\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogTabContentDetails\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogTabContentDetails\" lang=\"en\">Details</a></li><li id=\"CybotCookiebotDialogNavItemAdSettings\" class=\"CybotCookiebotDialogNavItem CybotCookiebotDialogHide\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavAdSettings\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogDetailBodyContentTextIABv2\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogDetailBodyContentTextIABv2\" lang=\"en\">[#IABV2SETTINGS#]</a></li><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavAbout\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogDetailBodyContentTextAbout\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogDetailBodyContentTextAbout\" lang=\"en\">About</a></li></ul></div>",
+          "boundingBox": {
+            "x": 233,
+            "y": 318.44,
+            "width": 900,
+            "height": 62,
+            "top": 318.44,
+            "right": 1133,
+            "bottom": 380.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_7",
+          "selectorHint": "#CybotCookiebotDialogNav div.CybotCookiebotFader.CybotCookiebotFaderLeft",
+          "classes": "CybotCookiebotFader CybotCookiebotFaderLeft",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div class=\"CybotCookiebotFader CybotCookiebotFaderLeft\"></div>",
+          "boundingBox": {
+            "x": 233,
+            "y": 318.44,
+            "width": 52.5,
+            "height": 61,
+            "top": 318.44,
+            "right": 285.5,
+            "bottom": 379.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_8",
+          "selectorHint": "#CybotCookiebotDialogNav div.CybotCookiebotFader.CybotCookiebotFaderRight",
+          "classes": "CybotCookiebotFader CybotCookiebotFaderRight",
+          "layer": "first_layer",
+          "textExcerpt": "",
+          "htmlExcerpt": "<div class=\"CybotCookiebotFader CybotCookiebotFaderRight\"></div>",
+          "boundingBox": {
+            "x": 1080.5,
+            "y": 318.44,
+            "width": 52.5,
+            "height": 61,
+            "top": 318.44,
+            "right": 1133,
+            "bottom": 379.44,
+            "left": 1080.5
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_9",
+          "selectorHint": "#CybotCookiebotDialogNavList",
+          "role": "tablist",
+          "id": "CybotCookiebotDialogNavList",
+          "classes": "CybotCookiebotDialogNavItems",
+          "layer": "first_layer",
+          "textExcerpt": "ConsentDetails[#IABV2SETTINGS#]About",
+          "htmlExcerpt": "<ul id=\"CybotCookiebotDialogNavList\" class=\"CybotCookiebotDialogNavItems\" role=\"tablist\"><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDeclaration\" class=\"CybotCookiebotDialogNavItemLink CybotCookiebotDialogActive\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogBody\" tabindex=\"0\" role=\"tab\" aria-selected=\"true\" aria-controls=\"CybotCookiebotDialogBody\" lang=\"en\">Consent</a></li><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDetails\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogTabContentDetails\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogTabContentDetails\" lang=\"en\">Details</a></li><li id=\"CybotCookiebotDialogNavItemAdSettings\" class=\"CybotCookiebotDialogNavItem CybotCookiebotDialogHide\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavAdSettings\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogDetailBodyContentTextIABv2\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogDetailBodyContentTextIABv2\" lang=\"en\">[#IABV2SETTINGS#]</a></li><li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavAbout\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogDetailBodyContentTextAbout\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogDetailBodyContentTextAbout\" lang=\"en\">About</a></li></ul>",
+          "boundingBox": {
+            "x": 233,
+            "y": 318.44,
+            "width": 900,
+            "height": 61,
+            "top": 318.44,
+            "right": 1133,
+            "bottom": 379.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_10",
+          "selectorHint": "div:nth-of-type(1) > div:nth-of-type(2) > ul:nth-of-type(1) > li:nth-of-type(1)",
+          "role": "presentation",
+          "classes": "CybotCookiebotDialogNavItem",
+          "layer": "first_layer",
+          "textExcerpt": "Consent",
+          "htmlExcerpt": "<li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDeclaration\" class=\"CybotCookiebotDialogNavItemLink CybotCookiebotDialogActive\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogBody\" tabindex=\"0\" role=\"tab\" aria-selected=\"true\" aria-controls=\"CybotCookiebotDialogBody\" lang=\"en\">Consent</a></li>",
+          "boundingBox": {
+            "x": 233,
+            "y": 318.44,
+            "width": 300,
+            "height": 61,
+            "top": 318.44,
+            "right": 533,
+            "bottom": 379.44,
+            "left": 233
+          },
+          "intersectsViewport": true
+        },
+        {
+          "containerId": "container_11",
+          "selectorHint": "div:nth-of-type(1) > div:nth-of-type(2) > ul:nth-of-type(1) > li:nth-of-type(2)",
+          "role": "presentation",
+          "classes": "CybotCookiebotDialogNavItem",
+          "layer": "first_layer",
+          "textExcerpt": "Details",
+          "htmlExcerpt": "<li class=\"CybotCookiebotDialogNavItem\" role=\"presentation\"><a id=\"CybotCookiebotDialogNavDetails\" class=\"CybotCookiebotDialogNavItemLink\" href=\"https://www.airandspaceforces.com/\" data-target=\"CybotCookiebotDialogTabContentDetails\" tabindex=\"-1\" role=\"tab\" aria-selected=\"false\" aria-controls=\"CybotCookiebotDialogTabContentDetails\" lang=\"en\">Details</a></li>",
+          "boundingBox": {
+            "x": 533,
+            "y": 318.44,
+            "width": 300,
+            "height": 61,
+            "top": 318.44,
+            "right": 833,
+            "bottom": 379.44,
+            "left": 533
+          },
+          "intersectsViewport": true
+        }
+      ],
+      "candidates": [
+        {
+          "candidateId": "candidate_0",
+          "label": "Close banner",
+          "normalizedLabel": "close banner",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "button",
+          "semanticallyInteractive": true,
+          "ariaLabel": "Close banner",
+          "selectorHint": "#CybotCookiebotDialogHeader button",
+          "containerSelectorHint": "#CybotCookiebotDialogHeader",
+          "containerId": "container_2",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 1096.5,
+            "y": 272,
+            "width": 14,
+            "height": 14,
+            "top": 272,
+            "right": 1110.5,
+            "bottom": 286,
+            "left": 1096.5
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "privacy_opt_out_context"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_1",
+          "label": "Consent",
+          "normalizedLabel": "consent",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "role": "tab",
+          "selectorHint": "#CybotCookiebotDialogNavDeclaration",
+          "containerSelectorHint": "div:nth-of-type(1) > div:nth-of-type(2) > ul:nth-of-type(1) > li:nth-of-type(1)",
+          "containerId": "container_10",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 233,
+            "y": 318.44,
+            "width": 300,
+            "height": 61,
+            "top": 318.44,
+            "right": 533,
+            "bottom": 379.44,
+            "left": 233
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "non_decision_control_role"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "same_document",
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_2",
+          "label": "Details",
+          "normalizedLabel": "details",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "role": "tab",
+          "selectorHint": "#CybotCookiebotDialogNavDetails",
+          "containerSelectorHint": "div:nth-of-type(1) > div:nth-of-type(2) > ul:nth-of-type(1) > li:nth-of-type(2)",
+          "containerId": "container_11",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 533,
+            "y": 318.44,
+            "width": 300,
+            "height": 61,
+            "top": 318.44,
+            "right": 833,
+            "bottom": 379.44,
+            "left": 533
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "non_decision_control_role"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "same_document",
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_3",
+          "label": "About",
+          "normalizedLabel": "about",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "role": "tab",
+          "selectorHint": "#CybotCookiebotDialogNavAbout",
+          "containerSelectorHint": "#CybotCookiebotDialogNavList",
+          "containerId": "container_9",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 833,
+            "y": 318.44,
+            "width": 300,
+            "height": 61,
+            "top": 318.44,
+            "right": 1133,
+            "bottom": 379.44,
+            "left": 833
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "non_decision_control_role"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "same_document",
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_4",
+          "label": "OK",
+          "normalizedLabel": "ok",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "button",
+          "semanticallyInteractive": true,
+          "selectorHint": "#CybotCookiebotDialogBodyLevelButtonAccept",
+          "containerSelectorHint": "#CybotCookiebotDialog",
+          "containerId": "container_0",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 828.36,
+            "y": 584.94,
+            "width": 282.14,
+            "height": 51,
+            "top": 584.94,
+            "right": 1110.5,
+            "bottom": 635.94,
+            "left": 828.36
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": true,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "unproven_acknowledgment_consent"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "decisionStatus": "ambiguous",
+          "reasons": [
+            "unclassified_control"
+          ]
+        },
+        {
+          "candidateId": "candidate_5",
+          "label": "[#IABV2SETTINGS#]",
+          "normalizedLabel": "[#iabv2settings#]",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "role": "tab",
+          "selectorHint": "#CybotCookiebotDialogNavAdSettings",
+          "containerSelectorHint": "#CybotCookiebotDialogNavList",
+          "containerId": "container_9",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": [
+              "#masthead div.header-container"
+            ]
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "non_decision_control_role"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "same_document",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_6",
+          "label": "Necessary",
+          "normalizedLabel": "necessary",
+          "actionType": "other",
+          "presentationType": "unknown",
+          "placementType": "unknown",
+          "tagName": "label",
+          "semanticallyInteractive": false,
+          "selectorHint": "#CybotCookiebotDialogBodyFieldsetInnerContainer label",
+          "containerSelectorHint": "#CybotCookiebotDialog",
+          "containerId": "container_0",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": [
+              "#masthead div.header-container"
+            ]
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "privacy_opt_out_context"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_7",
+          "label": "Cookiebot by Usercentrics - opens in a new window",
+          "normalizedLabel": "cookiebot by usercentrics - opens in a new window",
+          "actionType": "other",
+          "presentationType": "inline_link",
+          "placementType": "unknown",
+          "tagName": "a",
+          "semanticallyInteractive": true,
+          "ariaLabel": "Cookiebot by Usercentrics - opens in a new window",
+          "selectorHint": "#CybotCookiebotDialogPoweredbyCybot",
+          "containerSelectorHint": "#CybotCookiebotDialogHeaderLogosWrapper",
+          "containerId": "container_3",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": true,
+          "computedStyle": {
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointerEvents": "auto",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 884.5,
+            "y": 279,
+            "width": 175,
+            "height": 0,
+            "top": 279,
+            "right": 1059.5,
+            "bottom": 279,
+            "left": 884.5
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": true,
+            "topLeft": true,
+            "topRight": true,
+            "bottomLeft": true,
+            "bottomRight": true,
+            "checkedPoints": 5,
+            "hitSelectorHints": []
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "privacy_opt_out_context"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "linkDestination": "other_document",
+          "decisionStatus": "hidden",
+          "reasons": [
+            "hidden_or_zero_area"
+          ]
+        },
+        {
+          "candidateId": "candidate_8",
+          "label": "on",
+          "normalizedLabel": "on",
+          "actionType": "other",
+          "presentationType": "dedicated_button",
+          "placementType": "unknown",
+          "tagName": "input",
+          "semanticallyInteractive": true,
+          "value": "on",
+          "inputType": "checkbox",
+          "selectorHint": "#CybotCookiebotDialogBodyLevelButtonNecessary",
+          "containerSelectorHint": "#CybotCookiebotDialog",
+          "containerId": "container_0",
+          "layer": "first_layer",
+          "frameContext": {
+            "frameKind": "main_frame",
+            "frameUrl": "https://www.airandspaceforces.com/"
+          },
+          "enabled": false,
+          "computedStyle": {
+            "display": "block",
+            "visibility": "visible",
+            "opacity": "0",
+            "pointerEvents": "none",
+            "position": "static",
+            "zIndex": "auto"
+          },
+          "boundingBox": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "intersectsViewport": false,
+          "clippedByScrollableAncestor": false,
+          "occlusion": {
+            "center": false,
+            "topLeft": false,
+            "topRight": false,
+            "bottomLeft": false,
+            "bottomRight": false,
+            "checkedPoints": 2,
+            "hitSelectorHints": [
+              "#masthead div.header-container"
+            ]
+          },
+          "screenshotArtifactRef": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261031T034940Z-manual-live-geometry-pairs-12b40ea8/visits/airandspaceforces.com/candidate/screenshot-pre-consent-full-page.jpg",
+          "classifierRegistryVersion": "consent-control-label-registry.v26",
+          "classifierReasonCodes": [
+            "privacy_opt_out_context"
+          ],
+          "classifierConfidence": 0.2,
+          "consentContextConfirmed": true,
+          "decisionStatus": "disabled",
+          "reasons": [
+            "control_disabled"
+          ]
+        }
+      ],
+      "controlInspection": {
+        "version": "control_specific_inspection.v3",
+        "retainedCandidateCount": 9,
+        "captureCoverage": {
+          "inventoryTruncated": false,
+          "documentReadyState": "complete",
+          "mainFrameAvailable": true,
+          "documentAndFramesStable": true,
+          "frameCount": 9,
+          "capturedFrameCount": 9
+        },
+        "structuralCoverage": "complete",
+        "reasonCodes": [],
+        "candidates": [
+          {
+            "candidateId": "candidate_0",
+            "role": "unknown",
+            "unresolvedIntents": [
+              "accept",
+              "reject",
+              "options",
+              "privacy_opt_out"
+            ]
+          },
+          {
+            "candidateId": "candidate_1",
+            "role": "unknown",
+            "unresolvedIntents": [
+              "accept",
+              "reject",
+              "options",
+              "privacy_opt_out"
+            ]
+          },
+          {
+            "candidateId": "candidate_2",
+            "role": "unknown",
+            "unresolvedIntents": [
+              "accept",
+              "reject",
+              "options",
+              "privacy_opt_out"
+            ]
+          },
+          {
+            "candidateId": "candidate_3",
+            "role": "unknown",
+            "unresolvedIntents": [
+              "accept",
+              "reject",
+              "options",
+              "privacy_opt_out"
+            ]
+          },
+          {
+            "candidateId": "candidate_4",
+            "role": "unknown",
+            "unresolvedIntents": [
+              "accept",
+              "reject",
+              "options",
+              "privacy_opt_out"
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "firstLayerAccept": false,
+        "firstLayerReject": false,
+        "firstLayerOptions": false,
+        "cmpDetected": true,
+        "cmpName": "Google Funding Choices",
+        "confidence": 0.65,
+        "limitations": [
+          "unresolved_visible_consent_decision",
+          "cmp_detected_without_visible_first_layer_controls"
+        ]
+      },
+      "access": {
+        "status": "loaded",
+        "reasonCodes": [],
+        "httpStatus": 200,
+        "title": "Home | Air & Space Forces Magazine",
+        "textExcerpt": "Home | Air & Space Forces Magazine Consent Details About This website uses cookies We use cookies to personalize content and ads, to provide social media features and to analyze our traffic. We also share information about your use of our site with our social media, advertising and analytics partners who may combine it with other information that you\u2019ve provided to them or that they\u2019ve collected from your use of their services. OK Skip to content Login Search NEWS DAILY REPORT MAGAZINE ABOUT US "
+      },
+      "egress": {
+        "label": "direct_no_proxy",
+        "proxyConfigured": false,
+        "requiredProxy": false
+      },
+      "refresh": {
+        "policyVersion": "final_consent_geometry_refresh.v2",
+        "accessSource": "previous_same_loader_geometry_access",
+        "domSource": "retained_same_loader_dom_inventory",
+        "domObservedAtMs": 18796,
+        "previousGeometryCapturedAt": "2026-10-31T03:56:49.017Z"
+      },
+      "artifactOnly": true,
+      "productionFindingIntegration": false
+    },
+    "context": "",
+    "contextTruncatedForOwnedFixture": false
+  }
+]

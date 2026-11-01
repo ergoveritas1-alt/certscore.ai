@@ -1,4 +1,10 @@
 import { observedControlAssessment } from "../scans/test-fixtures/observed-control-assessment";
+import dollarGeneral from "../scans/test-fixtures/dollar-general-consent-assessment.json";
+import checklistOnlyConsent from "../scans/test-fixtures/retained-checklist-only-consent.json";
+import retainedTerminal from "../scans/test-fixtures/retained-terminal-confirmations.json";
+import ownedReceipts from "../../../../packages/certscore-contracts/src/test-fixtures/retained-owned-receipt-packets.json";
+import { postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema,
+  projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport } from "@certscore/contracts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -392,6 +398,201 @@ function pulseScanRecord(overrides: Record<string, unknown> = {}) {
     ...overrides
   } as never;
 }
+
+test("Pulse evidence preserves retained Dollar General absence independently of review verdicts", () => {
+  const pulse = buildPulseProjection({
+    detail: "evidence", format: "json", freshnessMode: "latest", pulseRequestId: "retained-dollar-general",
+    requestedUrl: "https://dollargeneral.com/", resolutionMode: "test", waitSeconds: 0,
+    scanRecord: pulseScanRecord({
+      scan: { id: dollarGeneral.provenance.scanId, status: "completed", pagesRequested: 1, pagesScanned: 1,
+        domainHostname: "dollargeneral.com", createdAt: "2026-10-29T11:25:42.000Z" },
+      snapshot: { consentControlAssessment: dollarGeneral.assessment, certscore_overall: 70 },
+      canonicalReportProjection: {
+        artifactVersion: "persisted-canonical-report-projection-v2",
+        checklistRows: dollarGeneral.checklistRows.map(row => ({ ...row,
+          evidenceState: row.status === "Observed" ? "observed" : "not_observed", tone: "neutral",
+          criticalEvidence: { retainedEvidence: row.retainedEvidence, projectedFindings: [],
+            missingOrIncompleteSourceSignals: [], statusBasis: row.note,
+            pipeline: { concernPolicyKey: "retained_fixture", projectionStage: "coverage_policy",
+              wc01NormalizedConcernKey: "retained_fixture", ws01EvidenceRole: "consent_control_inventory" },
+          },
+        })), collectionSurfaceAssessment: null,
+        derivedContext: {}, globalUnifiedFindings: [], normalizedConcerns: [],
+        ownerUnifiedFindings: [], topFindingIds: [],
+        legacyScoreAssessmentInput: { scanId: dollarGeneral.provenance.scanId },
+      },
+      // A legacy summary must not override the canonical, source-bound assessment.
+      runtimeArtifacts: { firstLayerConsentChoices: {
+        rejectControlObserved: null, controlInventoryComplete: false,
+        actionableControlInventoryRetained: true, layerInspected: "first_layer",
+        screenshotRefs: [{ id: "retained-screenshot" }],
+      } },
+    }),
+  }) as Record<string, any>;
+  pulseResponseSchema.parse(pulse);
+  const first = pulse.consentSurfaceEvidence.firstLayerConsentChoices;
+  assert.equal(first.rejectControlObserved, false);
+  assert.equal(first.controlInventoryComplete, true);
+  assert.equal(first.controlInspection.reject.status, "complete");
+  assert.equal(first.assessmentSourceHash, dollarGeneral.assessment.provenance.sourceHash);
+  assert.deepEqual(first.screenshotRefs, [{ id: "retained-screenshot" }]);
+  assert.equal(pulse.meta.projectionVersion, "pulse-public-v10");
+  const reject = pulse.gdprEprivacyChecklistRows.items.find((row: any) => row.id === "reject_all_path_availability");
+  assert.equal(reject.evidenceLabel, "Partial concern");
+  assert.equal(reject.status, "Review signal");
+});
+
+test("Pulse cannot fall back to positive legacy controls when the canonical assessment is invalid", () => {
+  const pulse = buildPulseProjection({
+    detail: "evidence", format: "json", freshnessMode: "latest", pulseRequestId: "invalid-canonical-consent",
+    requestedUrl: "https://dollargeneral.com/", resolutionMode: "test", waitSeconds: 0,
+    scanRecord: pulseScanRecord({
+      scan: { id: dollarGeneral.provenance.scanId, status: "completed", pagesRequested: 1, pagesScanned: 1,
+        domainHostname: "dollargeneral.com", createdAt: "2026-10-29T11:25:42.000Z" },
+      snapshot: { consentControlAssessment: {}, certscore_overall: 70 },
+      runtimeArtifacts: { firstLayerConsentChoices: {
+        acceptControlObserved: true, rejectControlObserved: true,
+        actionableControlInventoryRetained: true, layerInspected: "first_layer",
+      } },
+    }),
+  }) as Record<string, any>;
+  assert.deepEqual(pulse.consentSurfaceEvidence.firstLayerConsentChoices, {});
+});
+
+function checklistOnlyConsentRecord(c: typeof checklistOnlyConsent.cases[number], runtimeArtifacts: Record<string, unknown> = {}) {
+  return pulseScanRecord({
+    scan: { id: c.scanId, status: "completed", pagesRequested: 1, pagesScanned: 1,
+      domainHostname: c.site, createdAt: "2026-10-29T12:00:00.000Z" },
+    snapshot: { certscore_overall: 70 },
+    runtimeArtifacts: { consentSummary: c.consentSummary, ...runtimeArtifacts },
+    canonicalReportProjection: {
+      artifactVersion: "persisted-canonical-report-projection-v2",
+      checklistRows: [c.surfaceRow, ...c.controlRows].map(row => ({ ...row,
+        evidenceState: "not_confirmed", tone: "neutral",
+        criticalEvidence: { retainedEvidence: row.retainedEvidence, projectedFindings: [],
+          missingOrIncompleteSourceSignals: [], statusBasis: row.note,
+          pipeline: { concernPolicyKey: "retained_fixture", projectionStage: "coverage_policy",
+            wc01NormalizedConcernKey: "retained_fixture", ws01EvidenceRole: "consent_control_inventory" },
+        },
+      })),
+      collectionSurfaceAssessment: null, derivedContext: {}, globalUnifiedFindings: [],
+      normalizedConcerns: [], ownerUnifiedFindings: [], topFindingIds: [],
+      legacyScoreAssessmentInput: { scanId: c.scanId },
+    },
+  });
+}
+
+function checklistOnlyConsentPulse(c: typeof checklistOnlyConsent.cases[number], runtimeArtifacts: Record<string, unknown> = {}) {
+  return buildPulseProjection({
+    detail: "evidence", format: "json", freshnessMode: "latest", pulseRequestId: "retained-checklist-only",
+    requestedUrl: `https://${c.site}/`, resolutionMode: "test", waitSeconds: 0,
+    scanRecord: checklistOnlyConsentRecord(c, runtimeArtifacts),
+  }) as Record<string, any>;
+}
+
+for (const c of checklistOnlyConsent.cases) test(`${c.site}: checklist limitations cannot supply first-layer capture facts`, () => {
+  const pulse = checklistOnlyConsentPulse(c);
+  pulseResponseSchema.parse(JSON.parse(JSON.stringify(pulse)));
+  assert.deepEqual(pulse.consentSurfaceEvidence.firstLayerConsentChoices, {},
+    "Missing capture proof stays unavailable, including inventory, layer and capture timing.");
+  assert.deepEqual(pulse.consentSurfaceEvidence.consentSummary, c.consentSummary,
+    "A retained summary is separate from canonical assessment and first-layer control proof.");
+  for (const original of [c.surfaceRow, ...c.controlRows]) {
+    const row = pulse.gdprEprivacyChecklistRows.items.find((r: any) => r.id === original.id);
+    assert.ok(row);
+    for (const key of ["status", "evidenceLabel", "assessmentStatus", "assessmentDirection", "evidenceRefs"] as const)
+      assert.deepEqual(row[key], original[key], `${original.id}.${key}`);
+  }
+});
+
+test("even checked checklist verdicts and Visible choice notes cannot establish capture facts", () => {
+  for (const status of ["Observed", "Not observed", "Gap observed", "Review signal", "Not testable", "Not confirmed"]) {
+    const c = structuredClone(checklistOnlyConsent.cases[0]!);
+    for (const row of c.controlRows) {
+      row.status = status;
+      row.assessmentStatus = "checked";
+      row.evidenceRefs = ["Visible choice: Reject all", "Evidence: checklist reference"];
+    }
+    const pulse = checklistOnlyConsentPulse(c);
+    assert.deepEqual(pulse.consentSurfaceEvidence.firstLayerConsentChoices, {}, status);
+    assert.equal(pulse.gdprEprivacyChecklistRows.items.find((r: any) => r.id === c.controlRows[0]!.id).status, status);
+  }
+});
+
+test("retained producer control inventories survive without a canonical assessment", () => {
+  const retained = { acceptControlObserved: true, rejectControlObserved: null, managePreferencesControlObserved: false,
+    capturedBeforeInteraction: true, layerInspected: "first_layer", controlInventoryComplete: false,
+    actionableControlInventoryRetained: true, visibleChoiceLabels: ["Accept all"],
+    controls: [{ label: "Accept all", actionType: "accept_all", visible: true }], observedAtMs: 1200 };
+  for (const runtimeArtifacts of [{ firstLayerConsentChoices: retained },
+    { hybrid_runtime_evidence: { first_layer_consent_choices: retained } }]) {
+    const pulse = checklistOnlyConsentPulse(checklistOnlyConsent.cases[0]!, runtimeArtifacts);
+    assert.deepEqual(pulse.consentSurfaceEvidence.firstLayerConsentChoices, retained);
+    pulseResponseSchema.parse(pulse);
+  }
+});
+
+test("Pulse preserves oversized receipt availability without confirming either choice", () => {
+  const rows = ownedReceipts.filter(row => row.name.includes("oversized"));
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    const action = row.action as "accept" | "reject";
+    const projection = action === "accept"
+      ? projectPostAcceptEvidenceForReport({packet: postAcceptEvidencePacketSchema.parse(row.packet), packetSha256: row.sourceSha256})
+      : projectPostRefusalEvidenceForReport({packet: postRefusalEvidencePacketSchema.parse(row.packet), packetSha256: row.sourceSha256});
+    const pulse = buildPulseProjection({
+      detail: "evidence", format: "json", freshnessMode: "latest", pulseRequestId: "owned-receipt-availability",
+      requestedUrl: "https://example.com/", resolutionMode: "test", waitSeconds: 0,
+      scanRecord: pulseScanRecord({
+        scan: {id: observedControlAssessment.scan.scanId, status: "completed", pagesRequested: 1, pagesScanned: 1,
+          domainHostname: "example.com", createdAt: "2026-10-29T11:25:42.000Z"},
+        runtimeArtifacts: {consentControlAssessment: observedControlAssessment,
+          [action === "accept" ? "postAcceptEvidenceProjection" : "postRefusalEvidenceProjection"]: projection},
+      }),
+    });
+    const serialized = pulseResponseSchema.parse(pulse);
+    const observation = action === "accept" ? serialized.postAcceptObservation : serialized.postRefusalObservation;
+    assert.deepEqual(observation?.confirmation?.receiptAvailability, projection.receiptAvailability);
+    assert.deepEqual(observation?.confirmation?.readDiagnostics, {
+      policyVersion: "consent_confirmation_read_diagnostics.v1", diagnosticOnly: true,
+      source: "retained_confirmation_diagnostics", sourceDiagnosticsPolicyVersion: "consent_confirmation_diagnostics.v3",
+      passCountLimit: 10_000, initialPasses: 3, terminalPasses: 1, terminalRead: "unverified",
+    });
+    assert.equal(observation?.confirmation?.policyVersion, "choice_confirmation_summary.v2");
+    assert.equal(observation?.confirmation?.categoryDiagnostics?.aggregate.state, "unknown");
+    assert.equal(observation?.confirmation?.initialDecisionVerified, false);
+    assert.equal(observation?.execution?.consentConfirmed, false);
+  }
+});
+
+test("Pulse evidence retains initial and terminal confirmation as separate source-bound stages", () => {
+  for (const fixture of retainedTerminal) {
+    const action = fixture.action as "accept" | "reject";
+    const pulse = buildPulseProjection({
+      detail: "evidence", format: "json", freshnessMode: "latest", pulseRequestId: "retained-confirmation",
+      requestedUrl: "https://example.com/", resolutionMode: "test", waitSeconds: 0,
+      scanRecord: pulseScanRecord({
+        scan: { id: observedControlAssessment.scan.scanId, status: "completed", pagesRequested: 1, pagesScanned: 1,
+          domainHostname: "example.com", createdAt: "2026-10-29T11:25:42.000Z" },
+        runtimeArtifacts: { consentControlAssessment: observedControlAssessment,
+          [action === "accept" ? "postAcceptEvidenceProjection" : "postRefusalEvidenceProjection"]: fixture.projection },
+      }),
+    }) as Record<string, any>;
+    const serialized = pulseResponseSchema.parse(pulse);
+    const observation = action === "accept" ? serialized.postAcceptObservation : serialized.postRefusalObservation;
+    assert.equal(observation?.confirmation?.initialRegistrationStatus, "unconfirmed");
+    assert.equal(observation?.confirmation?.terminalDecisionVerified, true);
+    assert.equal(observation?.confirmation?.receiptAvailability, null);
+    assert.equal(observation?.confirmation?.readDiagnostics, null);
+    assert.deepEqual(observation?.confirmation?.executionStages, {
+      controlResolved: true, clickCompleted: true, observationCompleted: true,
+    });
+    assert.deepEqual(observation?.confirmation?.phaseDiagnostics, {
+      initialReasons: null, terminalReasons: null, reasonsTruncated: null,
+    });
+    assert.equal(observation?.productionProjectable, false);
+  }
+});
 
 test("Pulse reports a Reject Path barrier timeout without changing completed scan status", () => {
   const pulse = buildPulseProjection({

@@ -18,6 +18,18 @@ function fixture(id: string, topic = "policy") {
   return { report, group };
 }
 
+test("remediation distinguishes approximate selector hints and historical unknown precision",()=>{
+  const {report,group}=fixture('semantic_labeling_accessibility_issue','accessibility');
+  const node=report.accessibilityEvidence!.violations.find(r=>r.ruleId==='label')!.representativeNodes[0]!;
+  node.selectors=['input[data-kind]'];node.selectorRetention={version:'sanitized_selectors.v1',precision:'approximate'};
+  let plan=pdfGroupRemediation(report,group);
+  assert.match(plan.rules.flatMap(r=>r.selectors).join(' '),/Approximate selector hints/);
+  assert.match(plan.rules[0]!.verification,/Confirm the affected elements.*selector hints/);
+  delete node.selectorRetention;
+  plan=pdfGroupRemediation(report,group);
+  assert.match(plan.rules.flatMap(r=>r.selectors).join(' '),/exactness unverified/);
+});
+
 test("all current remediation families supply owner, source-level fixes and measurable completion criteria", () => {
   for (const id of ["initial-tracking", "refusal", "device-identification", "policy_behavior_conflict", "california_rights_disclosure_not_observed", "semantic_labeling_accessibility_issue", "text_alternative_accessibility_issue", "site_integrity_hidden_outbound_links"]) {
     const plan = webmasterRemediation(id)!;
@@ -49,8 +61,8 @@ test("accessibility fixes bind each rule and selector without recommending unrel
   const plan = pdfGroupRemediation(report, group);
   assert.deepEqual(plan.rules.map(rule => rule.id).sort(), ["button-name", "label"]);
   const text = pdfFrontmatter(report, "http://localhost:3000", { text: (text, options) => [{ text, ...options }], heading: text => ({ text }) }).map(line => line.text).join("\n");
-  assert.match(text, /label: #label/);
-  assert.match(text, /button-name: #button-name/);
+  assert.match(text, /label: Retained selector paths \(uniqueness unverified\): #label/);
+  assert.match(text, /button-name: Retained selector paths \(uniqueness unverified\): #button-name/);
   assert.match(text, /<label for="contact-email">/);
   assert.match(text, /aria-label="Open search"/);
   assert.match(text, /actual action, not this example/);
@@ -59,6 +71,24 @@ test("accessibility fixes bind each rule and selector without recommending unrel
   assert.equal(pdfGroupRemediation(report, group).rules.length, 0);
   assert.match(pdfGroupRemediation(report, group).locations.join(" "), /unavailable or not bound/);
 });
+
+for (const [id, rule] of [["visual_contrast_accessibility_issue", "color-contrast"], ["text_alternative_accessibility_issue", "image-alt"]]) {
+  test(`other findings retain source-bound ${rule} remediation without changing selection`, () => {
+    const {report, group}=fixture(id!, "accessibility");
+    report.projection.unifiedFindings[0]!.details={family:"accessibility",ruleExamples:[rule!]} as never;
+    const before=structuredClone(report);
+    const render=()=>pdfFrontmatter(report,"http://localhost:3000",{text:(text,options)=>[{text,...options}],heading:text=>({text})}).map(line=>line.text).join("\n");
+    const text=render();
+    assert.ok(text.indexOf("Other report findings") < text.indexOf(`${rule}: Retained selector paths (uniqueness unverified): #${rule}`));
+    assert.match(text,new RegExp(`Re-test:.*`,"s"));
+    assert.doesNotMatch(text,/STALE_GENERIC/);
+    assert.deepEqual(report,before,"Presentation must not alter canonical findings or ranking");
+    report.accessibilityEvidence!.scanId="wrong-scan";
+    const unbound=render();
+    assert.doesNotMatch(unbound,new RegExp(`${rule}: #${rule}`));
+    assert.match(unbound,/unavailable or not bound/);
+  });
+}
 
 test("policy mismatch includes the exact projected passage and linked runtime target", () => {
   const { report, group } = fixture("policy_behavior_conflict");

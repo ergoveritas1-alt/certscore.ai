@@ -1,7 +1,7 @@
 import { cmpAuditAssessmentSchema, type CmpAuditAssessment } from "./cmp-audit-evidence";
 import { californiaPrivacyReviewSchema } from "./california-privacy-review";
 import { saleSharingPresenceLinks, privacyChoicePresenceTitle } from "./privacy-choice-presence";
-import { CONTROL_INSPECTION_POLICY, LEGACY_CONTROL_INSPECTION_POLICY, consentControlInspectionSchema, initialConsentSelectionSchema, isControlInspectionComplete, type InitialConsentSelection, type ConsentControlInspection } from "./consent-control-inspection";
+import { CONTROL_INSPECTION_POLICY, CONTROL_INSPECTION_POLICIES, consentControlInspectionSchema, initialConsentSelectionSchema, isControlInspectionComplete, type InitialConsentSelection, type ConsentControlInspection } from "./consent-control-inspection";
 import { z } from "zod";
 import { consentControlVisualComparisonSchema, type ConsentControlVisualComparison } from "./consent-control-visual-comparison";
 import { CONSENT_CONTROL_LABEL_REGISTRY_VERSION } from "./consent-control-label-classifier";
@@ -45,7 +45,7 @@ const assessmentChannelSchema = z.enum([
 export const consentControlAssessmentControlResultSchema = z.object({
   state: consentControlAssessmentTriStateSchema,
   inspection: z.object({
-    policy: z.enum([LEGACY_CONTROL_INSPECTION_POLICY, "control_specific_inspection.v2", CONTROL_INSPECTION_POLICY]),
+    policy: z.enum(CONTROL_INSPECTION_POLICIES),
     status: z.enum(["complete", "limited"]),
     evidenceRefs: z.array(z.string().max(240)).max(24),
   }).optional(),

@@ -1,4 +1,4 @@
-import { accessibilityAuditObservationSchema, californiaPrivacyReviewSchema } from "@certscore/contracts";
+import { accessibilityAuditObservationSchema, accessibilitySelectorHint, californiaPrivacyReviewSchema } from "@certscore/contracts";
 import { accessibilityCorrectionGuidance, accessibilityRemediationVerification } from "../../lib/scans/accessibility-correction-guidance";
 import { webmasterRemediation, type WebmasterRemediation } from "../../lib/scans/webmaster-remediation";
 import { pdfNarrativeFindings } from "./report-pdf-evidence";
@@ -60,7 +60,7 @@ export function pdfGroupRemediation(report: CanonicalReportExport, group: PdfRev
   const ruleIds = unique(findings.flatMap(finding => strings(object(finding.details).ruleExamples)));
   const rules = group.topic === "accessibility" && audit.success && audit.data.scanId === report.scan.id
     ? audit.data.violations.filter(rule => ruleIds.includes(rule.ruleId)).map(rule => ({
-      id: rule.ruleId, selectors: rule.representativeNodes.flatMap(node => node.selectors.map(selector => Array.isArray(selector) ? selector.join(" >>> ") : selector)),
+      id: rule.ruleId, selectors: rule.representativeNodes.map(accessibilitySelectorHint),
       guidance: accessibilityCorrectionGuidance(rule.ruleId), verification: accessibilityRemediationVerification(rule.ruleId), reference: rule.helpUrl,
     })) : [];
   if (group.topic === "accessibility" && !rules.length) locations.push("Rule-specific node evidence is unavailable or not bound to this issue. Obtain the referenced rule ID, page and affected element before applying an attribute/template fix; do not assume an image or button failure.");

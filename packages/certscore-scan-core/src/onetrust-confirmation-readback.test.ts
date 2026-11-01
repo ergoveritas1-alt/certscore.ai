@@ -33,22 +33,53 @@ test("an unsupported OneTrust write does not cancel an independent complete regi
 });
 
 function fixture() {
+  let documentUrl = "https://example.test/";
+  let onConfigurationRead: (() => void) | undefined, onCookieRead: (() => void) | undefined;
   let cookieReads = 0, configurationReads = 0, writeReads = 0;
   let config: unknown = [{id: "C0001", status: "always active"}, {id: "C0002", status: "inactive"}];
   let cookies = [{name: "OptanonConsent", value: "groups=C0001:1,C0002:0&receipt=before", domain: "example.test", path: "/"}];
   let readback: typeof cookies | undefined;
   const after = "groups=C0001:1,C0002:1&receipt=after";
   let writes = [{storageType: "cookie", name: "OptanonConsent", value: after, observedAtEpochMs: 101, sequence: 1}];
-  const scope = {url: () => "https://example.test/", evaluate: async (fn: Function) => {
+  const scope = {url: () => documentUrl, evaluate: async (fn: Function) => {
     if (String(fn).includes("__certscoreReadPostAcceptWrites")) { writeReads++; return writes; }
-    configurationReads++; return config;
+    configurationReads++; onConfigurationRead?.(); return config;
   }} as unknown as Page;
-  const context = {cookies: async () => { cookieReads++; return cookieReads > 1 && readback ? readback : cookies; }} as unknown as BrowserContext;
+  const context = {cookies: async () => { cookieReads++; onCookieRead?.(); return cookieReads > 1 && readback ? readback : cookies; }} as unknown as BrowserContext;
   return {scope, context, after, cookie: () => cookies[0]!,
+    navigate: () => { documentUrl = "https://example.test/other"; },
+    onConfiguration: (hook: () => void) => { onConfigurationRead = hook; },
+    onCookie: (hook: () => void) => { onCookieRead = hook; },
     setCookies: (value: typeof cookies) => { cookies = value; }, setConfig: (value: unknown) => { config = value; },
     setReadback: (value: typeof cookies) => { readback = value; }, setWrites: (value: typeof writes) => { writes = value; },
     reset: () => { cookieReads = 0; configurationReads = 0; writeReads = 0; },
     counts: () => ({cookieReads, configurationReads, writeReads})};
+}
+
+for (const point of ["baseline_configuration", "baseline_cookie", "between_reads", "candidate_cookie", "confirmation_configuration", "confirmation_cookie"] as const) {
+  test(`OneTrust cannot join evidence across a URL change at ${point}`, async () => {
+    const f = fixture();
+    if (point === "baseline_configuration") f.onConfiguration(f.navigate);
+    if (point === "baseline_cookie") f.onCookie(f.navigate);
+    const baseline = await captureOneTrustBaseline(f.context, f.scope);
+    if (point.startsWith("baseline_")) {
+      assert.equal(baseline?.status, "invalid");
+      assert.equal(baseline?.diagnosticReason, "sdk_document_changed");
+      return;
+    }
+    assert.equal(baseline?.status, "verified");
+    if (baseline?.status !== "verified") throw Error("fixture baseline");
+    f.cookie().value = f.after; f.reset();
+    if (point === "between_reads") f.navigate();
+    if (point === "candidate_cookie") f.onCookie(f.navigate);
+    if (point === "confirmation_configuration") f.onConfiguration(f.navigate);
+    if (point === "confirmation_cookie") f.onCookie(() => { if (f.counts().cookieReads === 2) f.navigate(); });
+    const reasons: string[] = [];
+    assert.equal(await verifiedChangedOneTrustDecision({context:f.context,scope:f.scope,cookieName:"OptanonConsent",
+      actionAt:100,oneTrustBaseline:baseline,onDiagnostic:r=>reasons.push(r)}),undefined);
+    assert.ok(reasons.includes("sdk_document_changed"));
+    assert.ok(f.counts().cookieReads <= 2, "No extra read or retry is added");
+  });
 }
 
 test("OneTrust shares the changed candidate read and preserves independent receipt/configuration verification", async () => {

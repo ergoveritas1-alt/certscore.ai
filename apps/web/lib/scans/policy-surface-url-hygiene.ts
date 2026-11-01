@@ -9,6 +9,26 @@ function getHostname(value: string | null | undefined) {
   }
 }
 
+export const POLICY_DOCUMENT_IDENTITY_VERSION = "policy_document_identity.v1";
+
+/** A section fragment names the same fetched document. Query, scheme, port,
+ * hostname aliases and path spelling require independent redirect/source proof;
+ * this comparison cannot invent it. Invalid or relative identities fail closed. */
+export function samePolicyDocumentUrl(left: string, right: string): boolean {
+  const identity = (value: string) => {
+    try {
+      const url = new URL(value);
+      if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) return null;
+      url.hash = "";
+      return url.href;
+    } catch {
+      return null;
+    }
+  };
+  const source = identity(left);
+  return source !== null && source === identity(right);
+}
+
 export function isGenericBrowserCookieHelpUrl(value: string | null | undefined) {
   const hostname = getHostname(value);
   if (!hostname) {

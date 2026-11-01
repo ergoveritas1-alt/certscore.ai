@@ -1,3 +1,6 @@
+import { apiV2ConsentReceiptAvailabilitySchema } from "./receipt-availability.js";
+import { apiV2ConsentCategoryDiagnosticsSchema } from "./category-diagnostics.js";
+import { apiV2ConsentConfirmationReadDiagnosticsSchema } from "./confirmation-read-diagnostics.js";
 import { gpcBoundedObservationSchema, gpcPolicyCollectionEvidenceIds } from "./gpc-bounded-observation.js";
 import { gpcActivityComparisonSchema } from "./gpc-activity-comparison.js";
 import { z } from "zod";
@@ -29,7 +32,51 @@ export const apiV2AfterActionSummarySchema = z.object({
   storageSnapshotRetained: z.boolean(),
 }).strict();
 
+const choiceConfirmationSummarySchema = z.object({
+  policyVersion: z.enum(["choice_confirmation_summary.v1", "choice_confirmation_summary.v2"]),
+  sourcePacketSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  initialRegistrationStatus: z.enum(["confirmed", "unconfirmed", "not_attempted", "unsupported", "aborted"]),
+  initialDecisionVerified: z.boolean().nullable(),
+  terminalDecisionVerified: z.boolean().nullable(),
+  notificationAcknowledged: z.boolean().nullable(),
+  categoryCheck: z.enum(["supported", "no_optional_categories", "unsupported", "unknown"]),
+  categoryDiagnostics: apiV2ConsentCategoryDiagnosticsSchema.optional(),
+  readDiagnostics: apiV2ConsentConfirmationReadDiagnosticsSchema.nullable().optional(),
+  diagnosticReasons: z.array(z.string().max(160)).max(24),
+  executionStages: z.object({
+    controlResolved: z.boolean().nullable(),
+    clickCompleted: z.boolean().nullable(),
+    observationCompleted: z.boolean().nullable(),
+  }).strict().optional(),
+  receiptAvailability: apiV2ConsentReceiptAvailabilitySchema.nullable().optional(),
+  phaseDiagnostics: z.object({
+    initialReasons: z.array(z.string().max(160)).max(24).nullable(),
+    terminalReasons: z.array(z.string().max(160)).max(24).nullable(),
+    reasonsTruncated: z.boolean().nullable(),
+  }).strict().optional(),
+}).strict().superRefine((summary, context) => {
+  if (summary.policyVersion === "choice_confirmation_summary.v2"
+    ? !summary.categoryDiagnostics || summary.categoryDiagnostics.aggregate.state !== summary.categoryCheck
+    : summary.categoryDiagnostics !== undefined) {
+    context.addIssue({code: z.ZodIssueCode.custom, message: "V2 requires its matching category diagnostics; v1 retains its historical fields and meaning."});
+  }
+  if (summary.receiptAvailability && summary.receiptAvailability.sourcePacketSha256 !== summary.sourcePacketSha256) {
+    context.addIssue({code: z.ZodIssueCode.custom, message: "Receipt availability must bind to the same confirmation source packet."});
+  }
+  if (summary.policyVersion === "choice_confirmation_summary.v1" && summary.readDiagnostics !== undefined) {
+    context.addIssue({code: z.ZodIssueCode.custom, message: "Read diagnostics require the v2 confirmation summary; v1 remains historical."});
+  }
+  if (summary.initialDecisionVerified === true && summary.initialRegistrationStatus !== "confirmed") {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Initial verification requires confirmed initial registration; terminal verification is separate." });
+  }
+});
+
+/** Keep repeated API/MCP declaration types bounded as diagnostics grow. */
+export type ApiV2ChoiceConfirmationSummary = z.infer<typeof choiceConfirmationSummarySchema>;
+export const apiV2ChoiceConfirmationSummarySchema: z.ZodType<ApiV2ChoiceConfirmationSummary> = choiceConfirmationSummarySchema;
+
 export const apiV2PostRefusalObservationSchema = z.object({
+  confirmation: apiV2ChoiceConfirmationSummarySchema.optional(),
   execution: apiV2ChoicePathExecutionSchema.optional(),
   afterAction: apiV2AfterActionSummarySchema.optional(),
   status: z.enum(["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"]),
@@ -63,9 +110,11 @@ export const apiV2PostRefusalObservationSchema = z.object({
   coverageLimitations: z.array(z.string()).max(24),
   /** @deprecated Use coverageLimitations. Retained for API compatibility. */
   limitations: z.array(z.string()).max(24),
-}).strict();
+}).strict().refine(value => !value.confirmation?.receiptAvailability || value.confirmation.receiptAvailability.action === "reject",
+  "Receipt availability must describe this action.");
 
 export const apiV2PostAcceptObservationSchema = z.object({
+  confirmation: apiV2ChoiceConfirmationSummarySchema.optional(),
   execution: apiV2ChoicePathExecutionSchema.optional(),
   afterAction: apiV2AfterActionSummarySchema.optional(),
   status: z.enum(["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"]),
@@ -101,7 +150,8 @@ export const apiV2PostAcceptObservationSchema = z.object({
   coverageLimitations: z.array(z.string()).max(24),
   /** @deprecated Use coverageLimitations. Retained for API compatibility. */
   limitations: z.array(z.string()).max(24),
-}).strict();
+}).strict().refine(value => !value.confirmation?.receiptAvailability || value.confirmation.receiptAvailability.action === "accept",
+  "Receipt availability must describe this action.");
 
 export const apiV2GpcComparisonDeltaSchema = z.object({
   baselineCount: z.number().int().nonnegative(),

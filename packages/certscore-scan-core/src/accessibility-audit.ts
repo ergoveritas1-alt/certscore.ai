@@ -17,6 +17,17 @@ function safeText(value: string, max: number) {
     .replace(/\[([^\]=]+)\s*=\s*(["']).*?\2\]/g, "[$1]").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+function safeSelector(value: string) {
+  // Strip quoted and unquoted CSS attribute values before the ordinary privacy
+  // sanitizer. Quoted brackets and escapes must not terminate an attribute early.
+  const structural = value.replace(/\[((?:\\[\s\S]|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|[^\]"'\\])*)\]/g, (whole, body: string) => {
+    if (!body.includes("=")) return whole;
+    const name = /^\s*([a-z_][\w:-]*)\s*[~|^$*]?=/i.exec(body)?.[1];
+    return name ? `[${name}]` : "[attribute redacted]";
+  });
+  return safeText(structural, 400);
+}
+
 /** Retain tag/attribute structure, never page text or arbitrary attribute values. */
 function safeHtml(html: string) {
   return (html.match(/<[^>]*>/g) ?? []).map(tag => {
@@ -43,11 +54,22 @@ export function normalizeAccessibilityRule(rule: CountedRule): AccessibilityRule
       if (typeof data?.contrastRatio === "number" && Number.isFinite(data.contrastRatio)) colorContrast.contrastRatio = data.contrastRatio;
       const expected = Number.parseFloat(String(data?.expectedContrastRatio ?? ""));
       if (Number.isFinite(expected)) colorContrast.requiredContrastRatio = expected;
+      let approximate = node.target.length > ACCESSIBILITY_LIMITS.selectorsPerNode;
+      const retainSelector = (value: string) => {
+        const sanitized = safeSelector(value);
+        if (sanitized !== value) approximate = true;
+        return sanitized;
+      };
+      const selectors = node.target.slice(0, ACCESSIBILITY_LIMITS.selectorsPerNode).map(target => {
+        if (!Array.isArray(target)) return retainSelector(target);
+        if (target.length > 8) approximate = true;
+        return target.slice(0, 8).map(retainSelector);
+      });
       return {
         ...((node as IdentifiedNode).mainDocumentBound ? { mainDocumentBound: true as const } : {}),
         ...((node as IdentifiedNode).imageLinkIdentity ? { imageLinkIdentity: (node as IdentifiedNode).imageLinkIdentity } : {}),
-        selectors: node.target.slice(0, ACCESSIBILITY_LIMITS.selectorsPerNode).map(target => Array.isArray(target)
-          ? target.slice(0, 8).map(value => safeText(value, 400)) : safeText(target, 400)),
+        selectors,
+        selectorRetention: {version:"sanitized_selectors.v1" as const, precision:approximate ? "approximate" as const : "unchanged" as const},
         htmlSnippet: safeHtml(node.html),
         failureSummary: safeText(node.failureSummary ?? node.any[0]?.message ?? rule.help, 800),
         ...(Object.keys(colorContrast).length ? { colorContrast } : {}),

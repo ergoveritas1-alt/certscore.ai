@@ -1,0 +1,200 @@
+{
+  "scope": "Synthetic source-documented current-category fixtures; no original AB receipt values",
+  "source": {
+    "url": "https://plugins.svn.wordpress.org/cookie-law-info/tags/2.1.2/public/js/cookie-law-info-public.js",
+    "sha256": "6c52384c7b0641dd1ead85d079c22d39bcc6dc5f2537afb1e6396bb619771a3f",
+    "bytes": 34179
+  },
+  "sourceLines": {
+    "configurationAndWriter": [
+      796,
+      888
+    ],
+    "defaultCookieWrite": [
+      1,
+      40
+    ]
+  },
+  "currentCategoryProof": "All current .cli-user-preference-checkbox inputs must belong to the single existing #cliSettingsPopup; selected control must descend from the single #cookie-law-info-bar. Own Cli_Data.strictlyEnabled provides required categories; consentVersion is exact. No modal is opened. Necessary-only/unknown/incomplete universes remain unsupported.",
+  "cases": [
+    {
+      "name": "all_optional_selected",
+      "configuration": {
+        "cookieName": "CookieLawInfoConsent",
+        "flagName": "viewed_cookie_policy",
+        "consentVersion": 1,
+        "categories": [
+          "advertisement",
+          "analytics",
+          "functional",
+          "necessary"
+        ],
+        "requiredCategories": [
+          "necessary"
+        ]
+      },
+      "receipt": {
+        "ver": 1,
+        "necessary": true,
+        "advertisement": true,
+        "analytics": true,
+        "functional": true
+      },
+      "expectedDecision": "granted"
+    },
+    {
+      "name": "all_optional_rejected",
+      "configuration": {
+        "cookieName": "CookieLawInfoConsent",
+        "flagName": "viewed_cookie_policy",
+        "consentVersion": 1,
+        "categories": [
+          "advertisement",
+          "analytics",
+          "functional",
+          "necessary"
+        ],
+        "requiredCategories": [
+          "necessary"
+        ]
+      },
+      "receipt": {
+        "ver": 1,
+        "necessary": true,
+        "advertisement": false,
+        "analytics": false,
+        "functional": false
+      },
+      "expectedDecision": "denied"
+    },
+    {
+      "name": "mixed_optional",
+      "configuration": {
+        "cookieName": "CookieLawInfoConsent",
+        "flagName": "viewed_cookie_policy",
+        "consentVersion": 1,
+        "categories": [
+          "advertisement",
+          "analytics",
+          "functional",
+          "necessary"
+        ],
+        "requiredCategories": [
+          "necessary"
+        ]
+      },
+      "receipt": {
+        "ver": 1,
+        "necessary": true,
+        "advertisement": false,
+        "analytics": false,
+        "functional": true
+      },
+      "expectedDecision": "mixed"
+    },
+    {
+      "name": "retired_and_ccpa_fields_are_not_current_categories",
+      "configuration": {
+        "cookieName": "CookieLawInfoConsent",
+        "flagName": "viewed_cookie_policy",
+        "consentVersion": 1,
+        "categories": [
+          "advertisement",
+          "analytics",
+          "functional",
+          "necessary"
+        ],
+        "requiredCategories": [
+          "necessary"
+        ]
+      },
+      "receipt": {
+        "ver": 1,
+        "necessary": true,
+        "advertisement": true,
+        "analytics": true,
+        "functional": true,
+        "retired_custom_category": false,
+        "ccpaOptout": true
+      },
+      "expectedDecision": "granted"
+    },
+    {
+      "name": "configured_required_functional_is_not_optional",
+      "configuration": {
+        "cookieName": "CookieLawInfoConsent",
+        "flagName": "viewed_cookie_policy",
+        "consentVersion": 1,
+        "categories": [
+          "advertisement",
+          "analytics",
+          "functional",
+          "necessary"
+        ],
+        "requiredCategories": [
+          "functional",
+          "necessary"
+        ]
+      },
+      "receipt": {
+        "ver": 1,
+        "necessary": true,
+        "functional": true,
+        "advertisement": false,
+        "analytics": false
+      },
+      "expectedDecision": "denied"
+    },
+    {
+      "name": "missing_current_optional",
+      "configuration": {
+        "cookieName": "CookieLawInfoConsent",
+        "flagName": "viewed_cookie_policy",
+        "consentVersion": 1,
+        "categories": [
+          "advertisement",
+          "analytics",
+          "functional",
+          "necessary"
+        ],
+        "requiredCategories": [
+          "necessary"
+        ]
+      },
+      "receipt": {
+        "ver": 1,
+        "necessary": true,
+        "analytics": true,
+        "advertisement": true
+      },
+      "expectedDecision": null
+    },
+    {
+      "name": "wrong_consent_version",
+      "configuration": {
+        "cookieName": "CookieLawInfoConsent",
+        "flagName": "viewed_cookie_policy",
+        "consentVersion": 1,
+        "categories": [
+          "advertisement",
+          "analytics",
+          "functional",
+          "necessary"
+        ],
+        "requiredCategories": [
+          "necessary"
+        ]
+      },
+      "receipt": {
+        "ver": 2,
+        "necessary": true,
+        "functional": true,
+        "analytics": true,
+        "advertisement": true
+      },
+      "expectedDecision": null
+    }
+  ],
+  "writerExcerpt": "\tgenerateConsent: function () {\n\t\tvar preferenceCookie = CLI_Cookie.read(CLI_PREFERNCE_COOKIE);\n\t\tcliConsent = {};\n\t\tif (preferenceCookie !== null) {\n\t\t\tcliConsent = window.atob(preferenceCookie);\n\t\t\tcliConsent = JSON.parse(cliConsent);\n\t\t}\n\t\tcliConsent.ver = Cli_Data.consentVersion;\n\t\tcategories = [];\n\t\tjQuery('.cli-user-preference-checkbox').each(\n\t\t\tfunction () {\n\t\t\t\tcategoryVal = '';\n\t\t\t\tcli_chkbox_data_id = jQuery(this).attr('data-id');\n\t\t\t\tcli_chkbox_data_id = cli_chkbox_data_id.replace('checkbox-', '');\n\t\t\t\tif (jQuery(this).is(':checked')) {\n\t\t\t\t\tcategoryVal = true;\n\t\t\t\t} else {\n\t\t\t\t\tcategoryVal = false;\n\t\t\t\t}\n\t\t\t\tcliConsent[cli_chkbox_data_id] = categoryVal;\n\t\t\t}\n\t\t);\n\t\tcliConsent = JSON.stringify(cliConsent);\n\t\tcliConsent = window.btoa(cliConsent);\n\t\tCLI_Cookie.set(CLI_PREFERNCE_COOKIE, cliConsent, CLI_ACCEPT_COOKIE_EXPIRE);\n\t},\n",
+  "writerExcerptSha256": "543692db777de35e1166d615e06ee7aa7e38ed8cb13946284122e2da4e869a4a"
+}

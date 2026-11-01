@@ -17,4 +17,7 @@ export * from "./detailed-evidence.js";
 export * from "./report-evidence-links.js";
 export * from "./privacy-audit.js";
 
-export { apiV2ChoicePathExecutionSchema } from "./scan-observation-results.js";
+export { apiV2ChoicePathExecutionSchema, apiV2ChoiceConfirmationSummarySchema } from "./scan-observation-results.js";
+
+export { apiV2ConsentReceiptAvailabilitySchema, type ApiV2ConsentReceiptAvailability } from "./receipt-availability.js";
+export { apiV2ConsentCategoryDiagnosticsSchema, type ApiV2ConsentCategoryDiagnostics } from "./category-diagnostics.js";

@@ -22,6 +22,7 @@ import {
   classifyConsentControlLabel,
   classifyGdprSupplementLink,
   classifyGdprTransparencyTopics,
+  PERSONAL_CATEGORY_PURPOSE_RETENTION_PATTERN,
   type GdprTransparencyTopicMatch,
   classifyPrivacySurface,
   classifyLocalizedPolicyControllerScope,
@@ -10947,6 +10948,16 @@ function selectSectionExcerptForProfile(
   canonicalMatches: GdprTransparencyTopicMatch[],
 ): string {
   const text = normalizeWhitespace(section.textExcerpt);
+  if (profile.disclosureType === "data_retention" && section.extractionMethod === "canonical_topic_window" && /<p>/i.test(text)) {
+    // A retained CMS/markup window can contain neighboring choices and list
+    // fragments. Prefer the exact canonical criterion from this same source,
+    // within the existing compact-witness budget, without decoding the page.
+    const criterion = canonicalMatches.find(match => match.topic === "data_retention" &&
+      match.evidenceExcerpt.length <= 640 && text.includes(match.evidenceExcerpt) &&
+      PERSONAL_CATEGORY_PURPOSE_RETENTION_PATTERN.test(match.evidenceExcerpt) &&
+      isArticle13DisclosureEvidenceUsable(match.evidenceExcerpt, "data_retention"));
+    if (criterion) return criterion.evidenceExcerpt;
+  }
   // Preserve complete, bounded structural evidence before considering a short
   // classifier window. Headers keep table values attached to their meaning.
   const sourceHeading = section.extractionMethod === "html_heading_hierarchy" ||

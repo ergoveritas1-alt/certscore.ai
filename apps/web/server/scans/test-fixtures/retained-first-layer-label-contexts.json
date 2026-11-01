@@ -1,0 +1,136 @@
+[
+  {
+    "site": "rijksmuseum.nl",
+    "scanId": "130e1803-3083-49a9-8f0b-4ebd2fcb7d0f",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/130e1803-3083-49a9-8f0b-4ebd2fcb7d0f/ConsentControlGeometryEvidence.json",
+      "sha256": "4af0da4a8ca8a25905c0b9170008d906c45fe1dcb2350e7352610cc179d50e65",
+      "bytes": 16509
+    },
+    "context": "Cookiegebruik Het Rijksmuseum maakt gebruik van cookies. Een cookie is een klein tekstbestand dat een website op uw computer of mobiel toestel opslaat wanneer u onze site bezoekt. Meer weten? Lees ons cookiebeleid Accepteren Nee, liever niet",
+    "controls": [
+      {
+        "label": "Accepteren",
+        "ariaLabel": null,
+        "expectedIntent": "accept"
+      },
+      {
+        "label": "Nee, liever niet",
+        "ariaLabel": null,
+        "expectedIntent": "reject"
+      }
+    ],
+    "originalGeometry": {
+      "capturedAt": "2026-10-29T14:43:05.200Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "7C1E334373DF8D502BBEDBB3C5E02794"
+      },
+      "containerId": "container_1"
+    },
+    "fixtureScope": "Controlled local reconstruction of retained labels/context, not original HTML/layout or a public site scan"
+  },
+  {
+    "site": "dolby.com",
+    "scanId": "328e3893-bdc0-4e1d-8cee-922af52f5425",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/328e3893-bdc0-4e1d-8cee-922af52f5425/ConsentControlGeometryEvidence.json",
+      "sha256": "e54a8a9a900b887b9121b12d744028432d381549247f9238a174f0e31f344643",
+      "bytes": 59534
+    },
+    "context": "Do Not Sell or Share My Personal Information Reject Non-Necessary Accept Cookies",
+    "controls": [
+      {
+        "label": "Accept Cookies",
+        "ariaLabel": null,
+        "expectedIntent": "accept"
+      },
+      {
+        "label": "Reject Non-Necessary",
+        "ariaLabel": null,
+        "expectedIntent": "reject"
+      }
+    ],
+    "originalGeometry": {
+      "capturedAt": "2026-10-29T12:17:53.535Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "581121AAFF6A6A2087220A7F3C2BE951"
+      },
+      "containerId": "container_6"
+    },
+    "fixtureScope": "Controlled local reconstruction of retained labels/context, not original HTML/layout or a public site scan"
+  },
+  {
+    "site": "pigu.lt",
+    "scanId": "49bf8887-f17e-4f58-bf8a-0de59280937c",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/49bf8887-f17e-4f58-bf8a-0de59280937c/ConsentControlGeometryEvidence.json",
+      "sha256": "e2608398016c4681500515d589f193592eab52f85da7b0a9634386111b36bd10",
+      "bytes": 45811
+    },
+    "context": "Slapukų politika Šioje svetainėje/programėlėje renkame jūsų duomenis, kad užtikrintume tinkamą svetainės veikimą, galėtume suteikti Pigu.lt paslaugas ir funkcijas, analizuotume naršymo statistiką, individualizuotume Jūsų naršymo patirtį bei teiktume Jums aktualius (personalizuotus) rinkodaros pasiūlymus ir personalizuotas reklamas. Taip pat dalijamės informacija apie tai, kaip naudojatės mūsų svetaine su mūsų socialinės žiniasklaidos, reklamos ir analizės partneriais, kurie gali ją sujungti su kita informacija, kurią jiems pateikėte arba kurią jie surinko naudodamiesi jų paslaugomis. Jūs galite pasirinkti, kokius duomenis leidžiate mums rinkti spustelėdami mygtuką „Valdyti sutikimus“. Būtinieji (veiklos) slapukai yra naudojami tinkamam interneto svetainės ir mobiliosios aplikacijos veikimui bei saugumui užtikrinti. Jie yra įrašomi automatiškai Jums apsilankant interneto svetainėje ar mobiliojoje aplikacijoje ir jų naudojimui nėra būtinas Jūsų sutikimas. Leisdami visus slapukus, leisite mums užtikrinti geriausią naršymo ir apsipirkimo patirtį. Daugiau informacijos apie slapukų naudojimą slapukų politikoje . Leisti visus Valdyti sutikimus Tęsti be sutikimo Išsaugoti pasirinkimus Slap",
+    "controls": [
+      {
+        "label": "Leisti visus",
+        "ariaLabel": null,
+        "expectedIntent": "accept"
+      },
+      {
+        "label": "Valdyti sutikimus",
+        "ariaLabel": null,
+        "expectedIntent": "options"
+      },
+      {
+        "label": "Tęsti be sutikimo",
+        "ariaLabel": null,
+        "expectedIntent": "reject"
+      }
+    ],
+    "originalGeometry": {
+      "capturedAt": "2026-10-29T11:14:38.265Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "7B456496E065B005FDDA372D4CEF196B"
+      },
+      "containerId": "container_0"
+    },
+    "fixtureScope": "Controlled local reconstruction of retained labels and enclosing policy context, not original HTML/layout or a public site scan"
+  },
+  {
+    "site": "matas.dk",
+    "scanId": "86009375-9c41-4a07-ba73-6a0a58032af6",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/86009375-9c41-4a07-ba73-6a0a58032af6/ConsentControlGeometryEvidence.json",
+      "sha256": "605fd4585b2b1fb2ca36ab1cb540bfc5e7e911fb0b6f4fc7a154ffc4f928a621",
+      "bytes": 70666
+    },
+    "context": "Vi gør din oplevelse personlig! Kontrollér dine data Hos Matas bruger vi cookies til at give dig en god brugeroplevelse. Formålet er at sikre funktionalitet, statistik og at gøre markedsføring på matas.dk og sociale medier relevant for netop dig. Vi ser på din brug af vores hjemmeside, din IP-adresse, browser og operativsystem og deler dette med vores samarbejdspartnere indenfor sociale medier, analyse og annoncering. Hvis du er medlem af Club Matas og accepterer marketing cookies, gemmer vi også oplysninger om din brug af matas.dk på din Club Matas profil. Du kan læse mere om de enkelte formål under ”Tilpas”. Siger du ”Accepter alle” giver du samtykke til alle disse formål. Læs mere i vores \"persondatapolitik\" og i vores Cookiepolitik. Du kan altid tilbagekalde dit samtykke på ”småkagen” nederst i venstre hjørne. Funktionelle Statistiske Marketing Accepter valgte Nødvendige Tilpas Acceptér alle Tilpas dine cookie indstilinger Vælg alle Fravælg alle Nødvendige Nødvendige cookies hjælper med at gøre hjemmesiden brugbar ved at aktivere grundlæggende funktioner såsom side-navigation og adgang til sikre områder. Hjemmesiden kan ikke fungere ordentligt uden disse cookies. Læs mere om pl",
+    "controls": [
+      {
+        "label": "Acceptér alle",
+        "ariaLabel": "Acceptér alle",
+        "expectedIntent": "accept"
+      },
+      {
+        "label": "Nødvendige",
+        "ariaLabel": "Nødvendige",
+        "expectedIntent": "reject"
+      },
+      {
+        "label": "Tilpas",
+        "ariaLabel": "Tilpas",
+        "expectedIntent": "options"
+      }
+    ],
+    "originalGeometry": {
+      "capturedAt": "2026-10-30T03:12:42.582Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "33A02F41D9F3D975A919FFF3A6A78749"
+      },
+      "containerId": "container_1"
+    },
+    "fixtureScope": "Controlled local reconstruction of retained labels/context, not original HTML/layout or a public site scan"
+  }
+]

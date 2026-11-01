@@ -10,7 +10,7 @@ export function accessibilityAuditFixture(overrides: Partial<AccessibilityAuditO
     rulesEvaluated: ids, reviewItems: [], limitations: [],
     violations: ids.map(ruleId => ({ ruleId, impact: "serious", tags: ["wcag2a"],
       help: `Fix ${ruleId}`, description: `Observed ${ruleId}`, helpUrl: `https://dequeuniversity.com/rules/axe/4.11/${ruleId}`,
-      nodeCount: 1, representativeNodes: [{ selectors: [`#${ruleId}`], htmlSnippet: "<input id>", failureSummary: `Fix ${ruleId}`,
+      nodeCount: 1, representativeNodes: [{ selectors: [`#${ruleId}`], selectorRetention: {version:"sanitized_selectors.v1",precision:"unchanged"}, htmlSnippet: "<input id>", failureSummary: `Fix ${ruleId}`,
         ...(ruleId === "color-contrast" ? { colorContrast: { foregroundColor: "#aaaaaa", backgroundColor: "#ffffff", contrastRatio: 2.3, requiredContrastRatio: 4.5, fontSize: "16px", fontWeight: "normal" } } : {}),
       }],
     })), ...overrides,

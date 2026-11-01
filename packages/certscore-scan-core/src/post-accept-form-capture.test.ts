@@ -4,6 +4,52 @@ import { createServer } from 'node:http';
 import { chromium, type Page } from 'playwright';
 import { startPostAcceptFormCapture } from './post-accept-form-capture';
 
+test('confirmation restarts sampling when the initial timer missed its expired window', async () => {
+  const snapshot = {pageUrl:'https://renewed.test/', documentToken:'72d05164-c49e-491c-9a64-02076fd785ea', documentReadyState:'complete',
+    candidateScanTruncated:false, inspectedFieldCandidateCount:1, rows:[{groupKey:'0',structure:'native_form',elementType:'input',
+      inputType:'email',label:'Email',required:false,disabled:false,readOnly:false,domOrder:0}]};
+  let reads = 0;
+  const frame = {parentFrame:()=>null,isDetached:()=>false,evaluate:async()=>{reads++;return snapshot;}};
+  const page = {on:()=>{},off:()=>{},frames:()=>[frame],mainFrame:()=>frame,isClosed:()=>false,url:()=>snapshot.pageUrl} as unknown as Page;
+  const started = Date.now()-500;
+  const capture = startPostAcceptFormCapture({page,exactTargetUrl:snapshot.pageUrl,parentScanStartedAtMs:started,actionDispatchedAtMs:0,windowMs:100});
+  await new Promise(resolve=>setTimeout(resolve,80));
+  assert.equal(reads,0);
+  const confirmedAt = Date.now()-started;
+  capture.continueThrough(confirmedAt,300);
+  await new Promise(resolve=>setTimeout(resolve,350));
+  const result=capture.finish();
+  assert.equal(result.status,'captured',JSON.stringify(result));
+  assert.equal(result.window?.terminalSampleCompleted,true);
+  assert.ok(reads>0);
+  assert.ok(result.frames[0]!.capturedAtMs>=confirmedAt);
+});
+
+test('an in-flight pre-confirmation read cannot certify the confirmed terminal window', async () => {
+  let reads=0,release:(value:unknown)=>void=()=>{},entered:()=>void=()=>{};
+  const pending=new Promise<void>(resolve=>{entered=resolve;});
+  const snapshot={pageUrl:'https://pending-window.test/',documentToken:'72d05164-c49e-491c-9a64-02076fd785ea',documentReadyState:'complete',
+    candidateScanTruncated:false,inspectedFieldCandidateCount:0,rows:[]};
+  const frame={parentFrame:()=>null,isDetached:()=>false,evaluate:()=>{reads++;entered();return new Promise(resolve=>{release=resolve;});}};
+  const page={on:()=>{},off:()=>{},frames:()=>[frame],mainFrame:()=>frame,isClosed:()=>false,url:()=>snapshot.pageUrl} as unknown as Page;
+  const started=Date.now();
+  const capture=startPostAcceptFormCapture({page,exactTargetUrl:snapshot.pageUrl,parentScanStartedAtMs:started,actionDispatchedAtMs:0,windowMs:1000});
+  let timeout:ReturnType<typeof setTimeout>|undefined;
+  try {await Promise.race([pending,new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(new Error('sample did not begin')),1500);})]);}
+  finally {if(timeout)clearTimeout(timeout);}
+  await new Promise(resolve=>setTimeout(resolve,10));
+  capture.continueThrough(Date.now()-started,150);
+  assert.equal(reads,1,'continuation must not overlap pending evaluations');
+  release(snapshot);
+  for(let i=0;i<8;i++)await Promise.resolve();
+  const result=capture.finish();
+  assert.equal(result.window?.terminalSampleCompleted,false);
+  assert.ok(result.reasonCodes.includes('window_ended'));
+  await new Promise(resolve=>setTimeout(resolve,180));
+  assert.equal(reads,1,'finish cancels the rescheduled timer');
+  assert.equal(capture.finish(),result);
+});
+
 test('bounded Accept sample retains main and embedded forms, local disclosures, and no entered values', async () => {
   const server = createServer((request, response) => {
     response.setHeader('content-type','text/html');

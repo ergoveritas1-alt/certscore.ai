@@ -269,6 +269,20 @@ export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | nu
     /(^|\b)(_sp_su|_sp_v1_[a-z0-9_-]+|_sp_user_consent(?:_[a-z0-9_-]+)?|_sp_local_state|_sp_non_keyed_local_state|_sp_enable_dfp_personalized_ads)(\b|$)/.test(normalized);
 }
 
+/** New bound canonical purposes take precedence over frozen legacy name exclusions. */
+export function isFunctionalCookieEvidenceExcludedFromTracking(row: Pick<RuntimeCookieEvidenceRow,
+  "cookieName" | "domain" | "cookiePurposePolicyVersion" | "cookieClassification">) {
+  if (!isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)) return false;
+  // Preserve all historical policies and fail closed on missing/conflicting proof.
+  if (row.cookiePurposePolicyVersion !== "certscore.cookie-purpose.v11") return true;
+  const retained = readCookieClassification(row.cookieClassification, row.cookieName, row.domain);
+  if (retained?.version !== row.cookiePurposePolicyVersion || retained.essentiality !== "non_essential") return true;
+  const canonical = resolveCanonicalCookieKnowledge(row.cookieName, {
+    cookieDomain: row.domain, purposePolicyVersion: row.cookiePurposePolicyVersion,
+  });
+  return canonical.essentiality !== "non_essential" || canonical.category !== retained.category || canonical.ruleId !== retained.ruleId;
+}
+
 export function isNonEssentialCookieCategory(category: string | null | undefined) {
   const normalizedCategory = category?.trim().toLowerCase().replace(/[\s-]+/g, "_");
   return normalizedCategory === "analytics" ||
@@ -283,7 +297,7 @@ export function isNonEssentialCookieCategory(category: string | null | undefined
 export function isEligibleNonEssentialPreconsentStorageRow(row: RuntimeCookieEvidenceRow) {
   return row.timingEvidence === "before_consent_cookie_write" &&
     row.nonEssential === true &&
-    !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain);
+    !isFunctionalCookieEvidenceExcludedFromTracking(row);
 }
 
 /**
@@ -297,7 +311,7 @@ export function isEligibleNonEssentialPreconsentStorageMetricRow(row: RuntimeCoo
     (row.timingEvidence === "periodic_cookie_snapshot" && row.observedBeforeConsent === true);
   return retainedPreConsentObservation &&
     row.nonEssential === true &&
-    !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain);
+    !isFunctionalCookieEvidenceExcludedFromTracking(row);
 }
 
 export function countEligibleNonEssentialPreconsentStorageMetricRows(rows: RuntimeCookieEvidenceRow[]) {
@@ -1174,7 +1188,7 @@ export function buildPreConsentStorageAssessment(input: {
   const classifiedEssentialRows = preConsentRows.filter((row) => row.essentiality === "essential");
   const unclassifiedRows = preConsentRows.filter((row) => row.essentiality === "unknown");
   const excludedRows = preConsentRows.filter((row) =>
-    isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
+    isFunctionalCookieEvidenceExcludedFromTracking(row)
   );
   const snapshotRows = preConsentRows.filter((row) =>
     row.timingEvidence === "initial_cookie_snapshot" ||
@@ -1182,7 +1196,7 @@ export function buildPreConsentStorageAssessment(input: {
   );
   const snapshotNonEssentialCandidates = snapshotRows.filter((row) =>
     row.nonEssential === true &&
-    !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
+    !isFunctionalCookieEvidenceExcludedFromTracking(row)
   );
   const reconciliationStatus: PreConsentStorageReconciliationStatus =
     aggregateObservedCount === null
@@ -1213,7 +1227,7 @@ export function buildPreConsentStorageAssessment(input: {
     domain: row.domain,
     essentiality: row.essentiality ?? "unknown",
     essentialitySource: row.essentialitySource ?? "unknown",
-    exclusionReason: isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
+    exclusionReason: isFunctionalCookieEvidenceExcludedFromTracking(row)
       ? "functional_or_consent_storage"
       : null,
     firstObservedMs: normalizePreConsentStorageObservedMs(

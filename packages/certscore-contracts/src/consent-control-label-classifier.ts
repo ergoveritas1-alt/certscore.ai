@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v24";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v26";
 
 export type ConsentControlIntent =
   | "accept"
@@ -148,6 +148,23 @@ const nl = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ lo
 const pl = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "pl", ...term }));
 
 export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
+  // Retained Church of England preference control; observation only, no opening grant.
+  { locale: "en", phrase: "set cookie preferences", intent: "options", strength: "direct",
+    exactLabelOnly: true, requiresConsentContext: true, observationOnly: true },
+  // October 30 retained geometry: exact observation vocabulary only.
+  // Context, visibility and document verification remain producer requirements.
+  ...([
+    ["en", "reject non-necessary", "reject"],
+    ["nl", "nee, liever niet", "reject"],
+    ["lt", "tęsti be sutikimo", "reject"],
+    ["lt", "valdyti sutikimus", "options"],
+    ["da", "nødvendige", "reject"],
+    ["da", "tilpas", "options"],
+  ] as const).map(([locale, phrase, intent]): ConsentControlTerm => ({
+    locale, phrase, intent, strength: intent === "reject" ? "equivalent" : "direct",
+    ...(phrase === "nødvendige" ? { variant: "necessary_only" } : {}),
+    exactLabelOnly: true, requiresConsentContext: true, observationOnly: true,
+  })),
   // Retained German DOM inventory: consent approval, separate from paid ad-free subscription.
   // Observation vocabulary only; action recipes and semantic registration are unchanged.
   { locale: "de", phrase: "einwilligen und weiter", intent: "accept", strength: "direct",

@@ -18,13 +18,17 @@ export function startPostAcceptFormCapture(input: {
     actionDispatchedAtMs: input.actionDispatchedAtMs,
     status: "limited", reasonCodes: [], inspectedFrameCount: 0, candidateFrameCount: 0, frames: [],
   };
-  let frozen = false, done = false, mainChanged = input.documentChangedBeforeStart === true;
+  let frozen = false, mainChanged = input.documentChangedBeforeStart === true;
   let result: PostAcceptFormCapture | undefined;
   let sampledFrames: Frame[] = [];
   const epochs = new Map<Frame, number>();
   let mainDocumentBinding: PostAcceptFormCapture["frames"][number]["documentBinding"];
   const retained = new Map<string, { frame: Frame; epoch: number }>();
   const inspected = new Map<Frame, number>();
+  const inFlight = new Set<Frame>();
+  const nextSampleAt = new Map<Frame, number>();
+  const completed = new Map<Frame, {epoch: number; index: number; startedAtMs: number}>();
+  const frameReasons = new Map<Frame, {epoch: number; index: number; reasons: Set<PostAcceptFormCapture["reasonCodes"][number]>}>();
   const navigated = (frame: Frame) => {
     epochs.set(frame, (epochs.get(frame) ?? 0) + 1);
     if (frame === page.mainFrame()) mainChanged = true;
@@ -37,170 +41,195 @@ export function startPostAcceptFormCapture(input: {
     terminalSampleCompleted: false };
   const active = () => Date.now() < deadline && !frozen && !input.signal?.aborted && !page.isClosed() && !mainChanged && targetMatches();
   const hints = [...new Set(PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap(entry => [...entry.privacyPolicyLabels, ...entry.contextHints]).map(s => s.toLowerCase()))];
-  const collect = async () => {
-    if (!active()) return;
-    done = false;
-    const sampleStartedAtMs = Date.now();
-    // Preserve verified earlier samples while this sample is still pending.
-    // Resetting the count while retaining its frames made finalization invalid.
-    capture.window!.terminalSampleCompleted = false;
-    reasons.clear();
-    const frames = page.frames(); sampledFrames = frames; capture.candidateFrameCount = frames.length;
-    if (frames.length > 3) reasons.add("capture_limit");
-    // Evaluations overlap the existing action observation and each other.
-    await Promise.all(frames.slice(0, 3).map(async (frame, index) => {
-      const epoch = epochs.get(frame) ?? 0;
-      try {
-        if (frame.parentFrame()) {
-          const element = await frame.frameElement();
-          const shown = await element.evaluate(node => {
-            if (!(node instanceof Element)) return false;
-            const rect = node.getBoundingClientRect();
-            if (rect.width <= 0 || rect.height <= 0) return false;
-            let ancestor: Element | null = node;
-            for (let depth = 0; ancestor && depth < 32; depth++, ancestor = ancestor.parentElement) {
-              const style = getComputedStyle(ancestor);
-              if (ancestor.matches('[hidden], [inert], [aria-hidden="true"]') || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0) return false;
-            }
-            return !ancestor;
-          });
-          await element.dispose();
-          if (!shown) {
-            if (active() && !frame.isDetached() && epoch === (epochs.get(frame) ?? 0)) {
-              inspected.set(frame, epoch);
-              capture.frames = capture.frames.filter(row => retained.get(row.frameRef)?.frame !== frame);
-            }
-            return;
+  const sampleFrame = async (frame: Frame, index: number, epoch: number, sampleStartedAtMs: number,
+    sampleReasons: Set<PostAcceptFormCapture["reasonCodes"][number]>) => {
+    try {
+      if (frame.parentFrame()) {
+        const element = await frame.frameElement();
+        const shown = await element.evaluate(node => {
+          if (!(node instanceof Element)) return false;
+          const rect = node.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return false;
+          let ancestor: Element | null = node;
+          for (let depth = 0; ancestor && depth < 32; depth++, ancestor = ancestor.parentElement) {
+            const style = getComputedStyle(ancestor);
+            if (ancestor.matches('[hidden], [inert], [aria-hidden="true"]') || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0) return false;
           }
+          return !ancestor;
+        });
+        await element.dispose();
+        if (!shown) {
+          if (active() && !frame.isDetached() && epoch === (epochs.get(frame) ?? 0) && page.frames()[index] === frame) {
+            inspected.set(frame, epoch);
+            capture.frames = capture.frames.filter(row => retained.get(row.frameRef)?.frame !== frame);
+          }
+          return;
         }
-        if (!active()) return;
-        const snapshot = await frame.evaluate(({ hints, cmpSelectors }) => {
-          // tsx/esbuild name preservation otherwise references a helper outside the serialized callback.
-          const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
-          globalWithNameHelper.__name ??= function(target) { return target; };
-          const stopAt = performance.now() + 10;
-          const documentToken = crypto.randomUUID();
-          const safeUrl = (raw: string) => { if (!raw.trim()) return undefined; try { const url = new URL(raw, location.href); url.search = ""; url.hash = ""; url.username = ""; url.password = ""; return /^https?:$/.test(url.protocol) && url.href.length <= 500 ? url.href : undefined; } catch { return undefined; } };
-          const pageUrl = safeUrl(location.href);
-          if (!pageUrl) return null;
-          let visibilityLimited = false;
-          const visible = (node: Element) => {
-            if (node.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
-            const rect = node.getBoundingClientRect();
-            if (rect.width <= 0 || rect.height <= 0) return false;
-            let ancestor: Element | null = node;
-            for (let depth = 0; ancestor && depth < 64; depth++, ancestor = ancestor.parentElement) {
-              if (performance.now() >= stopAt) { visibilityLimited = true; return false; }
-              const style = getComputedStyle(ancestor);
-              if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0) return false;
-            }
-            if (ancestor) visibilityLimited = true;
-            return !ancestor;
-          };
-          const text = (node: Element) => {
-            const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-            const parts: string[] = []; let count = 0;
-            while (walker.nextNode() && count++ < 40 && performance.now() < stopAt) {
-              const parent = walker.currentNode.parentElement;
-              if (parent && !parent.closest('textarea, select, script, style, [contenteditable]') && visible(parent)) parts.push((walker.currentNode.textContent ?? '').slice(0, 600));
-            }
-            return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 500).replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi, '[email redacted]');
-          };
-          const groups = new Map<Element, number>();
-          const candidates = document.querySelectorAll('input, textarea, select');
-          let truncated = candidates.length > 40;
-          const rows: CollectionSurfaceCaptureRow[] = [];
-          for (let i = 0; i < Math.min(candidates.length, 40); i++) {
-            if (performance.now() >= stopAt) { truncated = true; break; }
-            const node = candidates[i] as HTMLInputElement;
-            if (['hidden', 'submit', 'button', 'reset', 'image'].includes(node.type) || !visible(node) || cmpSelectors.some(selector => node.closest(selector))) continue;
-            const group = node.form ?? node.closest('form, [role="form"]');
-            if (!group) { truncated = true; continue; }
-            if (!groups.has(group)) groups.set(group, groups.size);
-            const groupIndex = groups.get(group)!;
-            if (groupIndex >= 2 || rows.filter(row => row.groupKey === String(groupIndex)).length >= 12) { truncated = true; continue; }
-            const labelledBy = (node.getAttribute('aria-labelledby') ?? '').split(/\s+/).slice(0, 4)
-              .map(id => id ? document.getElementById(id) : null).filter((element): element is HTMLElement => element !== null).map(text).join(' ');
-            const label = (labelledBy || node.getAttribute('aria-label') || Array.from(node.labels ?? []).map(text).join(' ') || node.getAttribute('placeholder') || node.getAttribute('name') || '').slice(0, 120);
-            const notices: { text: string; association: "inside_form" | "adjacent_notice" | "described_by"; links: { label: string; url: string }[] }[] = [];
-            if (!rows.some(row => row.groupKey === String(groupIndex))) {
-              const blocks = Array.from(group.querySelectorAll('p, label, small, [role="note"]')).slice(0, 12).map(node => ({ node, association: 'inside_form' as 'inside_form' | 'adjacent_notice' | 'described_by' }));
-              for (const id of (group.getAttribute('aria-describedby') ?? '').split(/\s+/).slice(0, 2)) { const node = document.getElementById(id); if (node) blocks.push({node, association:'described_by'}); }
-              // Only direct neighbors of the form or its single exclusive wrapper.
-              const exclusive = (node: Element | null): node is Element => Boolean(node &&
-                !node.matches('body, main, header, footer, nav') && node.querySelectorAll('form, [role="form"]').length === 1);
-              const parent = group.parentElement;
-              const scopes: Element[] = [group];
-              if (exclusive(parent) && !parent.querySelector('header, footer, nav') && exclusive(parent.parentElement)) scopes.push(parent);
-              for (const scope of scopes) {
-                if (!exclusive(scope.parentElement)) continue;
-                for (const neighbor of [scope.previousElementSibling, scope.nextElementSibling]) {
-                  if (!neighbor || neighbor.matches('header, footer, nav, form, [role="form"]') ||
-                    neighbor.querySelector('form, [role="form"], input, textarea, select, header, footer, nav')) continue;
-                  const notices = neighbor.matches('p, small, [role="note"], a[href]') ? [neighbor] :
-                    neighbor.matches('div, span') ? Array.from(neighbor.querySelectorAll('p, small, [role="note"], a[href]')).slice(0, 8) : [];
-                  for (const node of notices) blocks.push({node, association:'adjacent_notice'});
-                }
-              }
-              for (const block of blocks) {
-                if (performance.now() >= stopAt) { truncated = true; break; }
-                if (!visible(block.node) || block.node.matches('header, footer, nav') || block.node.closest('nav, [contenteditable="true"]') ||
-                  (block.association === 'described_by' && block.node.closest('footer') && !group.contains(block.node)) ||
-                  (block.node.closest('form, [role="form"]') && block.node.closest('form, [role="form"]') !== group)) continue;
-                const value = text(block.node);
-                if (!hints.some(hint => value.toLowerCase().includes(hint))) continue;
-                const links = Array.from(block.node.querySelectorAll('a[href]')).slice(0, 2).flatMap(a => {
-                  const label = (a.textContent ?? '').trim().slice(0, 100), url = safeUrl(a.getAttribute('href') ?? '');
-                  return url && label && hints.some(hint => label.toLowerCase().includes(hint)) ? [{label,url}] : [];
-                });
-                notices.push({text:value, association:block.association, links}); break;
-              }
-            }
-            const kind = ['checkbox', 'radio'].includes(node.type) ? node.type as 'checkbox' | 'radio' : undefined;
-            let actionHostname: string | undefined;
-            try { if (group.tagName === 'FORM') actionHostname = new URL(group.getAttribute('action') || location.href, location.href).hostname || undefined; } catch {}
-            rows.push({ groupKey: String(groupIndex), structure: group.tagName === 'FORM' ? 'native_form' as const : 'role_form' as const,
-              title: (group.getAttribute('aria-label') ?? group.querySelector('legend, h1, h2, h3')?.textContent ?? '').trim().slice(0,120) || undefined,
-              method: group.getAttribute('method') ?? (group.tagName === 'FORM' ? 'get' : undefined), actionHostname,
-              elementType: node.tagName.toLowerCase() as 'input' | 'textarea' | 'select', inputType: node.type || node.tagName.toLowerCase(), label: label || undefined,
-              required: node.required, disabled: node.disabled, readOnly: node.readOnly === true, domOrder: i,
-              ...(kind ? {controlKind:kind, checkedState: node.checked ? 'checked' as const : 'unchecked' as const} : {}),
-              ...(notices.length ? {privacyDisclosure:{version:1 as const, excerpts:notices, truncated: true}} : {}),
-            });
+      }
+      if (!active()) return;
+      if (frame.isDetached() || epoch !== (epochs.get(frame) ?? 0) || page.frames()[index] !== frame) {
+        sampleReasons.add("frame_unavailable"); return;
+      }
+      const snapshot = await frame.evaluate(({ hints, cmpSelectors }) => {
+        // tsx/esbuild name preservation otherwise references a helper outside the serialized callback.
+        const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
+        globalWithNameHelper.__name ??= function(target) { return target; };
+        const stopAt = performance.now() + 10;
+        const documentToken = crypto.randomUUID();
+        const safeUrl = (raw: string) => { if (!raw.trim()) return undefined; try { const url = new URL(raw, location.href); url.search = ""; url.hash = ""; url.username = ""; url.password = ""; return /^https?:$/.test(url.protocol) && url.href.length <= 500 ? url.href : undefined; } catch { return undefined; } };
+        const pageUrl = safeUrl(location.href);
+        if (!pageUrl) return null;
+        let visibilityLimited = false;
+        const visible = (node: Element) => {
+          if (node.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+          const rect = node.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return false;
+          let ancestor: Element | null = node;
+          for (let depth = 0; ancestor && depth < 64; depth++, ancestor = ancestor.parentElement) {
+            if (performance.now() >= stopAt) { visibilityLimited = true; return false; }
+            const style = getComputedStyle(ancestor);
+            if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0) return false;
           }
-          return { pageUrl, documentToken, documentReadyState: document.readyState, rows, candidateScanTruncated: truncated || visibilityLimited, inspectedFieldCandidateCount: Math.min(candidates.length,40) };
-        }, { hints, cmpSelectors: KNOWN_CMP_REGISTRY.flatMap(cmp => cmp.formExclusionSelectors ?? cmp.domSelectors ?? []) });
-        if (!active()) return;
-        if (!snapshot || frame.isDetached() || epoch !== (epochs.get(frame) ?? 0)) { reasons.add("frame_unavailable"); return; }
-        const capturedAtMs = Date.now() - input.parentScanStartedAtMs;
-        const inventory = buildCollectionSurfaceInventory(snapshot, input.parentScanStartedAtMs);
-        inspected.set(frame, epoch);
-        if (inventory.coverage.status !== "complete") reasons.add(snapshot.documentReadyState === "loading" ? "document_loading" : "capture_limit");
-        const frameRef = `accept_frame_${index}`;
-        const forms = inventory.forms.map(form => ({...form,
-          formRef: `${frameRef}_${form.formRef}`,
-          evidenceRefs: [{refId:`${frameRef}_${form.formRef}`,artifactId:"post_accept_forms",eventType:"after_accept_form"}],
-          fields: form.fields.map(field => ({...field, evidenceRefs:[{refId:`${frameRef}_${field.fieldRef}`,artifactId:"post_accept_forms",eventType:"after_accept_field"}]})),
-        }));
-        const frameRow = {frameRef, documentToken:snapshot.documentToken, documentUrl:snapshot.pageUrl, capturedAtMs, forms,
-          ...(frame === page.mainFrame() && mainDocumentBinding &&
-            sampleStartedAtMs >= input.parentScanStartedAtMs + mainDocumentBinding.boundAtMs
-            ? {documentBinding:mainDocumentBinding} : {})};
-        const nextFrames = [...capture.frames.filter(row => row.frameRef !== frameRef && retained.get(row.frameRef)?.frame !== frame), frameRow];
-        if (Buffer.byteLength(JSON.stringify({...capture, frames:nextFrames})) > POST_ACCEPT_FORM_CAPTURE_MAX_BYTES - 200) { reasons.add("capture_limit"); return; }
-        capture.frames = nextFrames; retained.set(frameRef,{frame,epoch});
-      } catch { if (!frozen) reasons.add("frame_unavailable"); }
-    }));
-    if (!frozen) {
-      done = true;
-      if (active() && sampleStartedAtMs >= deadline - 300) capture.window!.terminalSampleCompleted = true;
-      if (active() && Date.now() < deadline - 150) schedule();
+          if (ancestor) visibilityLimited = true;
+          return !ancestor;
+        };
+        const text = (node: Element) => {
+          const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+          const parts: string[] = []; let count = 0;
+          while (walker.nextNode() && count++ < 40 && performance.now() < stopAt) {
+            const parent = walker.currentNode.parentElement;
+            if (parent && !parent.closest('textarea, select, script, style, [contenteditable]') && visible(parent)) parts.push((walker.currentNode.textContent ?? '').slice(0, 600));
+          }
+          return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 500).replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi, '[email redacted]');
+        };
+        const groups = new Map<Element, number>();
+        const candidates = document.querySelectorAll('input, textarea, select');
+        let truncated = candidates.length > 40;
+        const rows: CollectionSurfaceCaptureRow[] = [];
+        for (let i = 0; i < Math.min(candidates.length, 40); i++) {
+          if (performance.now() >= stopAt) { truncated = true; break; }
+          const node = candidates[i] as HTMLInputElement;
+          if (['hidden', 'submit', 'button', 'reset', 'image'].includes(node.type) || !visible(node) || cmpSelectors.some(selector => node.closest(selector))) continue;
+          const group = node.form ?? node.closest('form, [role="form"]');
+          if (!group) { truncated = true; continue; }
+          if (!groups.has(group)) groups.set(group, groups.size);
+          const groupIndex = groups.get(group)!;
+          if (groupIndex >= 2 || rows.filter(row => row.groupKey === String(groupIndex)).length >= 12) { truncated = true; continue; }
+          const labelledBy = (node.getAttribute('aria-labelledby') ?? '').split(/\s+/).slice(0, 4)
+            .map(id => id ? document.getElementById(id) : null).filter((element): element is HTMLElement => element !== null).map(text).join(' ');
+          const label = (labelledBy || node.getAttribute('aria-label') || Array.from(node.labels ?? []).map(text).join(' ') || node.getAttribute('placeholder') || node.getAttribute('name') || '').slice(0, 120);
+          const notices: { text: string; association: "inside_form" | "adjacent_notice" | "described_by"; links: { label: string; url: string }[] }[] = [];
+          if (!rows.some(row => row.groupKey === String(groupIndex))) {
+            const blocks = Array.from(group.querySelectorAll('p, label, small, [role="note"]')).slice(0, 12).map(node => ({ node, association: 'inside_form' as 'inside_form' | 'adjacent_notice' | 'described_by' }));
+            for (const id of (group.getAttribute('aria-describedby') ?? '').split(/\s+/).slice(0, 2)) { const node = document.getElementById(id); if (node) blocks.push({node, association:'described_by'}); }
+            // Only direct neighbors of the form or its single exclusive wrapper.
+            const exclusive = (node: Element | null): node is Element => Boolean(node &&
+              !node.matches('body, main, header, footer, nav') && node.querySelectorAll('form, [role="form"]').length === 1);
+            const parent = group.parentElement;
+            const scopes: Element[] = [group];
+            if (exclusive(parent) && !parent.querySelector('header, footer, nav') && exclusive(parent.parentElement)) scopes.push(parent);
+            for (const scope of scopes) {
+              if (!exclusive(scope.parentElement)) continue;
+              for (const neighbor of [scope.previousElementSibling, scope.nextElementSibling]) {
+                if (!neighbor || neighbor.matches('header, footer, nav, form, [role="form"]') ||
+                  neighbor.querySelector('form, [role="form"], input, textarea, select, header, footer, nav')) continue;
+                const notices = neighbor.matches('p, small, [role="note"], a[href]') ? [neighbor] :
+                  neighbor.matches('div, span') ? Array.from(neighbor.querySelectorAll('p, small, [role="note"], a[href]')).slice(0, 8) : [];
+                for (const node of notices) blocks.push({node, association:'adjacent_notice'});
+              }
+            }
+            for (const block of blocks) {
+              if (performance.now() >= stopAt) { truncated = true; break; }
+              if (!visible(block.node) || block.node.matches('header, footer, nav') || block.node.closest('nav, [contenteditable="true"]') ||
+                (block.association === 'described_by' && block.node.closest('footer') && !group.contains(block.node)) ||
+                (block.node.closest('form, [role="form"]') && block.node.closest('form, [role="form"]') !== group)) continue;
+              const value = text(block.node);
+              if (!hints.some(hint => value.toLowerCase().includes(hint))) continue;
+              const links = Array.from(block.node.querySelectorAll('a[href]')).slice(0, 2).flatMap(a => {
+                const label = (a.textContent ?? '').trim().slice(0, 100), url = safeUrl(a.getAttribute('href') ?? '');
+                return url && label && hints.some(hint => label.toLowerCase().includes(hint)) ? [{label,url}] : [];
+              });
+              notices.push({text:value, association:block.association, links}); break;
+            }
+          }
+          const kind = ['checkbox', 'radio'].includes(node.type) ? node.type as 'checkbox' | 'radio' : undefined;
+          let actionHostname: string | undefined;
+          try { if (group.tagName === 'FORM') actionHostname = new URL(group.getAttribute('action') || location.href, location.href).hostname || undefined; } catch {}
+          rows.push({ groupKey: String(groupIndex), structure: group.tagName === 'FORM' ? 'native_form' as const : 'role_form' as const,
+            title: (group.getAttribute('aria-label') ?? group.querySelector('legend, h1, h2, h3')?.textContent ?? '').trim().slice(0,120) || undefined,
+            method: group.getAttribute('method') ?? (group.tagName === 'FORM' ? 'get' : undefined), actionHostname,
+            elementType: node.tagName.toLowerCase() as 'input' | 'textarea' | 'select', inputType: node.type || node.tagName.toLowerCase(), label: label || undefined,
+            required: node.required, disabled: node.disabled, readOnly: node.readOnly === true, domOrder: i,
+            ...(kind ? {controlKind:kind, checkedState: node.checked ? 'checked' as const : 'unchecked' as const} : {}),
+            ...(notices.length ? {privacyDisclosure:{version:1 as const, excerpts:notices, truncated: true}} : {}),
+          });
+        }
+        return { pageUrl, documentToken, documentReadyState: document.readyState, rows, candidateScanTruncated: truncated || visibilityLimited, inspectedFieldCandidateCount: Math.min(candidates.length,40) };
+      }, { hints, cmpSelectors: KNOWN_CMP_REGISTRY.flatMap(cmp => cmp.formExclusionSelectors ?? cmp.domSelectors ?? []) });
+      if (!active()) return;
+      if (!snapshot || frame.isDetached() || epoch !== (epochs.get(frame) ?? 0) || page.frames()[index] !== frame) { sampleReasons.add("frame_unavailable"); return; }
+      const capturedAtMs = Date.now() - input.parentScanStartedAtMs;
+      const inventory = buildCollectionSurfaceInventory(snapshot, input.parentScanStartedAtMs);
+      inspected.set(frame, epoch);
+      if (inventory.coverage.status !== "complete") sampleReasons.add(snapshot.documentReadyState === "loading" ? "document_loading" : "capture_limit");
+      const frameRef = `accept_frame_${index}`;
+      const forms = inventory.forms.map(form => ({...form,
+        formRef: `${frameRef}_${form.formRef}`,
+        evidenceRefs: [{refId:`${frameRef}_${form.formRef}`,artifactId:"post_accept_forms",eventType:"after_accept_form"}],
+        fields: form.fields.map(field => ({...field, evidenceRefs:[{refId:`${frameRef}_${field.fieldRef}`,artifactId:"post_accept_forms",eventType:"after_accept_field"}]})),
+      }));
+      const frameRow = {frameRef, documentToken:snapshot.documentToken, documentUrl:snapshot.pageUrl, capturedAtMs, forms,
+        ...(frame === page.mainFrame() && mainDocumentBinding &&
+          sampleStartedAtMs >= input.parentScanStartedAtMs + mainDocumentBinding.boundAtMs
+          ? {documentBinding:mainDocumentBinding} : {})};
+      const nextFrames = [...capture.frames.filter(row => row.frameRef !== frameRef && retained.get(row.frameRef)?.frame !== frame), frameRow];
+      if (Buffer.byteLength(JSON.stringify({...capture, frames:nextFrames})) > POST_ACCEPT_FORM_CAPTURE_MAX_BYTES - 200) { sampleReasons.add("capture_limit"); return; }
+      capture.frames = nextFrames; retained.set(frameRef,{frame,epoch});
+    } catch { if (!frozen) sampleReasons.add("frame_unavailable"); }
+  };
+  const updateTerminalCoverage = (frames: Frame[]) => {
+    capture.window!.terminalSampleCompleted = !mainChanged && !input.signal?.aborted && !page.isClosed() && targetMatches() &&
+      inFlight.size === 0 && frames.length > 0 && frames.slice(0, 3).every((frame, index) => {
+        const sample = completed.get(frame);
+        return sample && sample.epoch === (epochs.get(frame) ?? 0) && sample.index === index &&
+          sample.startedAtMs >= input.parentScanStartedAtMs + capture.window!.startedAtMs &&
+          sample.startedAtMs >= deadline - 300;
+      });
+  };
+  const collect = () => {
+    if (!active()) return;
+    const frames = page.frames(); sampledFrames = frames; capture.candidateFrameCount = frames.length;
+    // Pending reads retain their slot even across navigation/replacement. Healthy
+    // siblings can progress, but no frame is retried and at most three reads run.
+    for (const [index, frame] of frames.slice(0, 3).entries()) {
+      if (inFlight.has(frame) || inFlight.size >= 3 ||
+        Date.now() < Math.min(nextSampleAt.get(frame) ?? 0, deadline - 150)) continue;
+      const epoch = epochs.get(frame) ?? 0, sampleStartedAtMs = Date.now();
+      const sampleReasons = new Set<PostAcceptFormCapture["reasonCodes"][number]>();
+      completed.delete(frame); frameReasons.set(frame, {epoch, index, reasons: sampleReasons});
+      inFlight.add(frame);
+      void sampleFrame(frame, index, epoch, sampleStartedAtMs, sampleReasons).finally(() => {
+        inFlight.delete(frame);
+        if (frozen) return;
+        nextSampleAt.set(frame, Date.now() + 500);
+        if (active() && !frame.isDetached() && epoch === (epochs.get(frame) ?? 0) && page.frames()[index] === frame)
+          completed.set(frame, {epoch, index, startedAtMs: sampleStartedAtMs});
+        updateTerminalCoverage(page.frames());
+        if (active() && Date.now() < deadline - 150) schedule();
+      });
     }
+    updateTerminalCoverage(frames);
   };
   let timer: ReturnType<typeof setTimeout>;
   const schedule = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => { void collect(); }, Math.max(0, Math.min(500, deadline - 150 - Date.now())));
+    if (!active() || inFlight.size >= 3) return;
+    const now = Date.now();
+    const due = page.frames().slice(0, 3).filter(frame => !inFlight.has(frame))
+      .map(frame => Math.min(nextSampleAt.get(frame) ?? now + 500, deadline - 150));
+    if (!due.length) return;
+    // A slow sibling cannot postpone an earlier healthy frame's next sample.
+    timer = setTimeout(() => { void collect(); }, Math.max(0, Math.min(...due) - now));
     timer.unref?.();
   };
   timer = setTimeout(() => { void collect(); }, Math.min(250, Math.max(0, input.windowMs / 2)));
@@ -218,7 +247,11 @@ export function startPostAcceptFormCapture(input: {
       if (frozen || mainChanged || input.signal?.aborted) return;
       deadline = input.parentScanStartedAtMs + confirmedAtMs + windowMs;
       capture.window = { startedAtMs: confirmedAtMs, endedAtMs: deadline - input.parentScanStartedAtMs, terminalSampleCompleted: false };
-      if (done) schedule();
+      // The initial timer may have fired after its deadline without starting a
+      // sample. Restart inside the existing confirmed window in that case too.
+      // Per-frame pending guards prevent overlap while healthy siblings restart
+      // in the confirmed window; prior reads cannot certify the new window.
+      schedule();
     },
     finish(): PostAcceptFormCapture {
     if (result) return result;
@@ -229,8 +262,15 @@ export function startPostAcceptFormCapture(input: {
     const currentFrames = page.frames();
     capture.frames = capture.frames.filter(row => { const binding = retained.get(row.frameRef)!; const valid = currentFrames.slice(0, 3).includes(binding.frame) && !binding.frame.isDetached() && binding.epoch === (epochs.get(binding.frame) ?? 0); if (!valid) reasons.add("document_changed"); return valid; });
     capture.candidateFrameCount = currentFrames.length;
+    if (currentFrames.length > 3) reasons.add("capture_limit");
+    currentFrames.slice(0, 3).forEach((frame, index) => {
+      const latest = frameReasons.get(frame);
+      if (latest?.epoch === (epochs.get(frame) ?? 0) && latest.index === index)
+        latest.reasons.forEach(reason => reasons.add(reason));
+    });
+    updateTerminalCoverage(currentFrames);
     capture.inspectedFrameCount = currentFrames.slice(0, 3).filter(frame => inspected.has(frame) && inspected.get(frame) === (epochs.get(frame) ?? 0) && !frame.isDetached()).length;
-    if (!done || !capture.window!.terminalSampleCompleted || capture.inspectedFrameCount < capture.candidateFrameCount && !reasons.size) reasons.add("window_ended");
+    if (!capture.window!.terminalSampleCompleted || capture.inspectedFrameCount < capture.candidateFrameCount && !reasons.size) reasons.add("window_ended");
     capture.frames.sort((a,b)=>a.frameRef.localeCompare(b.frameRef));
     capture.reasonCodes = [...reasons]; capture.status = reasons.size ? "limited" : "captured";
     const parsed = postAcceptFormCaptureSchema.safeParse(capture);

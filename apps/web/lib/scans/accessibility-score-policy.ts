@@ -83,12 +83,10 @@ export function buildAccessibilityScoreEffects(findingId: string, raw: Record<st
       linkIds.every(link => imageIds.some(image => image.imageOnlyLinkId === link.nodeId));
     overlap = shared ? "image_link" : "distinct";
   } else if (images.length && imageOnlyLinks.length && examples.every(row => ["image-alt", "link-name"].includes(row.ruleId))) {
-    const linkSelectors = imageOnlyLinks.flatMap(node => node.selectors).filter((value): value is string => typeof value === "string");
-    const exact = imageNodes.every(node => node.selectors.some(selector => typeof selector === "string" &&
-      linkSelectors.some(link => selector === `${link} > img`)));
-    // A bounded sample cannot prove every observed failure is the same barrier.
-    const allImageLinks = imageOnlyLinks.length === links.reduce((sum, row) => sum + row.nodeCount, 0);
-    overlap = exact && complete && allImageLinks ? "image_link" : "unresolved_image_link";
+    // Retained selectors are hints, including unchanged strings whose
+    // uniqueness is unverified. Only the opaque native IDs above prove overlap.
+    // Preserve the existing conservative treatment of unresolved image links.
+    overlap = "unresolved_image_link";
   }
   const rule = SCORING_RULE_BY_ID.get(id.data)!;
   return [{ appliesTo: "certscore_overall", framework: "accessibility", policyKey: `accessibility.${id.data}`,

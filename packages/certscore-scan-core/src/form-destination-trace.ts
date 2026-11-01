@@ -7,6 +7,8 @@ const personal = new Set(["email", "phone", "name", "address", "date_of_birth", 
 const safeUrl = (value: string) => { try { const u = new URL(value); if (!/^https?:$/.test(u.protocol) || u.username || u.password) return null; u.search = ""; u.hash = ""; return u.href.length <= 2048 ? u.href : null; } catch { return null; } };
 const domain = (url: string) => getRegistrableDomain(new URL(url).hostname) ?? new URL(url).hostname;
 type EventInput = { kind: "input" | "change" | "submit"; time: number; pageUrl: string; formIndex: number; actionUrl: string; fields: Array<{ name: string; value: string; type: string; label: string; autocomplete: string }> };
+const MAX_BODY_BYTES = 32768;
+const MAX_PAYLOAD_CANDIDATES = 100;
 /** Raw values/bodies remain only in bounded per-session memory and are discarded on finish. */
 export function createFormDestinationCollector(startedAt: number) {
   const secret = randomBytes(32);
@@ -31,8 +33,13 @@ export function createFormDestinationCollector(startedAt: number) {
       if (finished) return;
       if (pending.length >= 100) { if (events.length) { truncated = true; return; } pending.shift(); }
       if (!safeUrl(url)) return;
-      if ((body?.length ?? 0) > 32768 || url.length > 8192) { truncated = true; body = null; }
-      pending.push({ id, url: url.slice(0,8192), method, time, body, token, status: "request_observed" });
+      if (body && (body.length > MAX_BODY_BYTES || Buffer.byteLength(body,"utf8") > MAX_BODY_BYTES)) { truncated = true; body = null; }
+      if (url.length > 8192) {
+        // A partial query value is not an observed complete value. Preserve the
+        // safe endpoint and existing limit outcome, never match a sliced query.
+        truncated = true; body = null; url = safeUrl(url)!;
+      }
+      pending.push({ id, url, method, time, body, token, status: "request_observed" });
     },
     status(id: string, status: "response_observed" | "failed") { const request = pending.find(r => r.id === id); if (request && !finished) request.status = status; },
     finish(): FormDestinationTrace {
@@ -43,10 +50,28 @@ export function createFormDestinationCollector(startedAt: number) {
         const event = [...events].reverse().find(e => e.event.documentToken === r.token && e.event.observedAtMs <= r.time);
         if (!event) continue;
         if (r.body === undefined) unsupportedPayloads++;
-        const pairs: Array<{ key: string; value: string; location: "body" | "query" }> = [...new URL(r.url).searchParams].map(([key,value])=>({key,value,location:"query"}));
+        const pairs: Array<{ key: string; value: string; location: "body" | "query" }> = [];
+        let inspectedCandidates = 0;
+        const inspect = (key: string, value: unknown, location: "body" | "query") => {
+          if (inspectedCandidates >= MAX_PAYLOAD_CANDIDATES) { truncated = true; return false; }
+          inspectedCandidates++;
+          if (typeof value === "string") pairs.push({key,value,location});
+          return true;
+        };
+        for (const [key,value] of new URL(r.url).searchParams) if (!inspect(key,value,"query")) break;
         if (r.body) {
-          try { const json = JSON.parse(r.body); if (json && typeof json === "object" && !Array.isArray(json)) for (const [key,value] of Object.entries(json).slice(0,100)) if (typeof value === "string") pairs.push({key,value,location:"body"}); }
-          catch { if (r.body.includes("=") && !r.body.includes("\r\n")) for (const [key,value] of new URLSearchParams(r.body)) { if (pairs.length >= 100) { truncated = true; break; } pairs.push({key,value,location:"body"}); } else unsupportedPayloads++; }
+          try {
+            const json: unknown = JSON.parse(r.body);
+            if (json && typeof json === "object" && !Array.isArray(json)) {
+              for (const key in json) {
+                if (Object.hasOwn(json,key) && !inspect(key,(json as Record<string,unknown>)[key],"body")) break;
+              }
+            }
+          } catch {
+            if (r.body.includes("=") && !r.body.includes("\r\n")) {
+              for (const [key,value] of new URLSearchParams(r.body)) if (!inspect(key,value,"body")) break;
+            } else unsupportedPayloads++;
+          }
         }
         const matches = event.values.flatMap(f => { const pair = pairs.find(p => p.key === f.name && p.value === f.value); return pair ? [{ fieldRef:f.fieldRef, valueHmac:createHmac("sha256",secret).update(`${f.name}\0${f.value}`).digest("hex"), location:pair.location }] : []; });
         let url = safeUrl(r.url)!;

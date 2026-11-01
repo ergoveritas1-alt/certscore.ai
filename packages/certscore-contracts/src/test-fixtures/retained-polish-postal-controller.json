@@ -1,0 +1,96 @@
+{
+  "site": "ab.pl",
+  "scanId": "d67a293c-d1ec-42af-96bf-1a6d3bdf6d10",
+  "source": {
+    "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/d67a293c-d1ec-42af-96bf-1a6d3bdf6d10/CanonicalEvidenceBundle.json",
+    "sha256": "d00606737c7e6eaecfff9f82b03503b6372ea6743ba5a9b69ab17808677606f7",
+    "bytes": 1042241
+  },
+  "sourceUrl": "https://www.ab.pl/polityka-prywatnosci/",
+  "ownership": {
+    "documentRole": "policy_document",
+    "targetRelationship": "target_controller",
+    "ownershipConfidence": 0.98,
+    "ownershipReasonCodes": [
+      "same_registrable_domain_as_scan_target"
+    ]
+  },
+  "documentTextCoverage": {
+    "status": "complete",
+    "sourceTextChars": 23121,
+    "retainedTextChars": 23121,
+    "limitationKeys": []
+  },
+  "contentCoverage": {
+    "status": "truncated",
+    "sourceTextChars": 23121,
+    "extractedSectionCount": 30,
+    "retainedSectionCount": 24,
+    "retainedTableRowCount": 0,
+    "limitationKeys": [
+      "policy_section_inventory_bounded",
+      "policy_section_text_bounded"
+    ]
+  },
+  "section": {
+    "sourceUrl": "https://www.ab.pl/polityka-prywatnosci/",
+    "heading": "OCHRONA DANYCH OSOBOWYCH",
+    "textExcerpt": "Administrator danych osobowych Administratorem danych osobowych podanych przez U\u017cytkownika jest AB S.A. z siedzib\u0105 w Magnicach (55-040), ul. Europejska 4 Informacja o powo\u0142aniu administratora danych osobowych Administrator informuje, \u017ce powo\u0142a\u0142 inspektora ochrony danych osobowych, z kt\u00f3rym mo\u017cna skontaktowa\u0107 si\u0119 pod adresem rodo@ab.pl. Cele przetwarzania danych osobowych Dane osobowe s\u0105 przetwarzane zgodnie z postanowieniami Rozporz\u0105dzenia Parlamentu Europejskiego i Rady (UE) 2016/679 z dnia 27 kwietnia 2016 r. w sprawie ochrony os\u00f3b fizycznych w zwi\u0105zku z przetwarzaniem danych osobowych i w sprawie swobodnego przep\u0142ywu takich danych oraz uchylenia dyrektywy 95/46/WE (dalej: RODO) oraz innymi obowi\u0105zuj\u0105cymi przepisami. a) Zg\u0142oszenia dot. bezpiecze\u0144stwa produkt\u00f3w Jako producent oraz importer na Sp\u00f3\u0142ce spoczywaj\u0105 obowi\u0105zki wynikaj\u0105ce z rozporz\u0105dzenia o og\u00f3lnym bezpiecze\u0144stwie produkt\u00f3w (rozporz\u0105dzenie UE nr 988/2023, zwanym te\u017c GPSR. Wywi\u0105zanie si\u0119 z tych obowi\u0105zku wi\u0105\u017ce si\u0119 z przetwarzaniem danych osobowych os\u00f3b fizycznych zg\u0142aszaj\u0105cych incydenty zwi\u0105zane z bezpiecze\u0144stwem produkt\u00f3w.",
+    "extractionMethod": "html_heading_hierarchy",
+    "sourceOffsetBasis": "sanitized_html",
+    "documentTextSha256": "1b459f76d041b22d7ddb990889fada0f5dcfdd96ff61ddb62f4d36a803315c43",
+    "evidenceTextSha256": "2ad65783b17091c06293986e5743e60887095d026b58537a1447642d8545ba56",
+    "sourceTextChars": 55776,
+    "extractionState": "truncated",
+    "charStart": 6596,
+    "charEnd": 55776,
+    "quality": "strong"
+  },
+  "historicalSelectedWitness": {
+    "coverageArea": "controller_contact",
+    "selectedPolicySectionHeading": "OCHRONA DANYCH OSOBOWYCH",
+    "selectedPolicySectionExcerpt": "Administrator danych osobowych Administratorem danych osobowych podanych przez U\u017cytkownika jest AB S.A. z siedzib\u0105 w Magnicach (55-040), ul.",
+    "selectedPolicySectionUrl": "https://www.ab.pl/polityka-prywatnosci/",
+    "sectionExtractionMethod": "html_heading_hierarchy",
+    "sourceOffsetBasis": "sanitized_html",
+    "sourceDocumentTextSha256": "1b459f76d041b22d7ddb990889fada0f5dcfdd96ff61ddb62f4d36a803315c43",
+    "evidenceTextSha256": "9c5e02cfb74f4b448fabfaf96f9b35876b535b203ecb450ca6fcd97241d80ab5",
+    "sourceCharStart": 6596,
+    "sourceCharEnd": 55776,
+    "sectionExtractionState": "truncated",
+    "evidenceSource": "deterministic",
+    "selectedEvidenceStrength": "strong",
+    "signalObserved": "observed",
+    "extractionLimitation": "selected_policy_section_truncated_by_retention_limit"
+  },
+  "historicalCandidate": {
+    "topic": "controller_contact",
+    "status": "diagnostic_only",
+    "evidenceText": "g) Sygnali\u015bci AB S.A. jest Administratorem danych osobowych Sygnalisty, osoby powi\u0105zanej z Sygnalist\u0105, osoby kt\u00f3rej dotyczy Zg\u0142oszenie oraz wszelkich innych os\u00f3b wskazanych w Zg\u0142oszeniu lub powi\u0105zanych ze Zg\u0142oszeniem.",
+    "confidence": 0.9,
+    "classifierProvenance": "gdpr_transparency_topic_classifier.v1",
+    "matchedLocale": "pl",
+    "matchedTerm": "administratorem danych osobowych",
+    "matchStrength": "direct",
+    "classifierReasonCodes": [
+      "matched_controller_contact",
+      "match_strength_direct"
+    ],
+    "productionCredit": false
+  },
+  "clause": "Administratorem danych osobowych podanych przez U\u017cytkownika jest AB S.A. z siedzib\u0105 w Magnicach (55-040), ul. Europejska 4",
+  "topicWindow": {
+    "sourceUrl": "https://www.ab.pl/polityka-prywatnosci/",
+    "heading": "administratorem danych osobowych",
+    "textExcerpt": "OCHRONA DANYCH OSOBOWYCH Administrator danych osobowych Administratorem danych osobowych podanych przez U\u017cytkownika jest AB S.A. z siedzib\u0105 w Magnicach (55-040), ul. Europejska 4 Informacja o powo\u0142aniu administratora danych osobowych Administrator informuje, \u017ce powo\u0142a\u0142 inspektora ochrony danych osobowych, z kt\u00f3rym mo\u017cna skontaktowa\u0107 si\u0119 pod adresem rodo@ab.pl. Cele przetwarzania danych osobowych Dane osobowe s\u0105 przetwarzane zgodnie z postanowieniami Rozporz\u0105dzenia Parlamentu Europejskiego i Rady (UE) 2016/679 z dnia 27 kwietnia 2016 r. w sprawie ochrony os\u00f3b fizycznych w zwi\u0105zku z przetwarzaniem danych osobowych i w sprawie swobodnego przep\u0142ywu takich danych oraz uchylenia dyrektywy 95/46/WE (dalej: RODO) oraz innymi obowi\u0105zuj\u0105cymi przepisami. a) Zg\u0142oszenia dot. bezpiecze\u0144stwa produkt\u00f3w Jako producent oraz importer na Sp\u00f3\u0142ce spoczywaj\u0105 obowi\u0105zki wynikaj\u0105ce z rozporz\u0105dzenia o og\u00f3lnym bezpiecze\u0144stwie produkt\u00f3w (rozporz\u0105dzenie UE nr 988/2023, zwanym te\u017c GPSR.",
+    "extractionMethod": "canonical_topic_window",
+    "sourceOffsetBasis": "normalized_visible_text",
+    "documentTextSha256": "4d505ea00b00f03f2860d84b67821ef7c04acbcf93578243681df4dcf2a84b32",
+    "evidenceTextSha256": "7eeb1ee64f7d2166280d58e0a1e121b47174c3aef50418f31670346f713b5076",
+    "sourceTextChars": 23121,
+    "extractionState": "complete",
+    "charStart": 1242,
+    "charEnd": 2212,
+    "quality": "strong"
+  }
+}

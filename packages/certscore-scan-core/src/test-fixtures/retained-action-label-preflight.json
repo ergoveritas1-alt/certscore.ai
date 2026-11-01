@@ -1,0 +1,109 @@
+{
+  "scope": "Retained bounded diagnostic labels only, not dispatch/registration proof. Original SHA-bound trace remains in audit run.",
+  "cases": [
+    {
+      "scanId": "92fbc099-7fcd-4189-9c07-b0af7ad06a72",
+      "site": "moevideo.net",
+      "action": "accept",
+      "label": "Принять",
+      "bundleSha256": "302fb4246ff053c0dfbd9c94bc7c735eb8ac640d191f7f2cad75f47167d42903",
+      "expectedGenericEligible": false
+    },
+    {
+      "scanId": "596f85d2-9529-4b18-ab0b-91b2ece72a09",
+      "site": "uoi.gr",
+      "action": "accept",
+      "label": "Αποδοχή",
+      "bundleSha256": "5b71565f3bad4897de569f7a4ae4fca7b31981ce97df68fb324852c35e09bc29",
+      "expectedGenericEligible": false
+    },
+    {
+      "scanId": "5481e658-77fb-4cf8-85da-ddd99b7a72a5",
+      "site": "aysima.net",
+      "action": "accept",
+      "label": "Kabul Et",
+      "bundleSha256": "3af1648bdfe2f65afb32cc09b8cdca185c96038529278f3b57d8dd05625d1c86",
+      "expectedGenericEligible": false
+    },
+    {
+      "scanId": "5481e658-77fb-4cf8-85da-ddd99b7a72a5",
+      "site": "aysima.net",
+      "action": "reject",
+      "label": "Reddet",
+      "bundleSha256": "3af1648bdfe2f65afb32cc09b8cdca185c96038529278f3b57d8dd05625d1c86",
+      "expectedGenericEligible": false
+    },
+    {
+      "scanId": "8eb3e8eb-1fe1-47ca-a941-79ddcf7bc863",
+      "site": "nporadio1.nl",
+      "action": "accept",
+      "label": "Accepteer alles",
+      "bundleSha256": "06558b548e11b183c1ac8b27467b06d4484f8d92bc28c09e30e10e76548f4e6e",
+      "expectedGenericEligible": false
+    },
+    {
+      "scanId": "afd89083-cdf3-4c22-bb16-ad876e5abcd4",
+      "site": "dolap.com",
+      "action": "accept",
+      "label": "Kabul Et",
+      "bundleSha256": "57d2bddec1dfece5f661b14ba65810cd9450a196a384a1fbe2d35ebffe353f20",
+      "expectedGenericEligible": false
+    },
+    {
+      "scanId": "fc2ed2ee-44b7-4aa7-9797-b23487346e3f",
+      "site": "unu.edu",
+      "action": "reject",
+      "label": "NO, THANKS",
+      "bundleSha256": "2d49bf4114c14771a38d799cbb90db8f4662e4b501571605b6a12205d6cb3157",
+      "expectedGenericEligible": false
+    },
+    {
+      "scanId": "ed48164c-2d21-46d7-84c8-251715cf81c2",
+      "site": "mountsinai.org",
+      "action": "accept",
+      "label": "Agree to all",
+      "bundleSha256": "a144d5bf4c4507fc3095f01aab6dbc6c5551d8b766c7ef4681109e2f9241ca3c",
+      "expectedGenericEligible": false
+    },
+    {
+      "scanId": "eae5bc3f-da0c-4347-8d70-2a1a647330c5",
+      "site": "mgen.fr",
+      "action": "accept",
+      "label": "Accept proposed privacy settings",
+      "bundleSha256": "94f5d83b1359c74e3b4bf783d8f8f2aacbedd7604ab9120455e21f15a3d075f3",
+      "expectedGenericEligible": false
+    },
+    {
+      "scanId": "d52fa7bb-255f-4984-87ae-0e37d949a7cc",
+      "site": "ifsc.edu.br",
+      "action": "reject",
+      "label": "Recusar",
+      "bundleSha256": "b8e99e82aa4a507c0674e2d02a618d1ec30da306aa2dffad750244020d7e451b",
+      "expectedGenericEligible": false
+    },
+    {
+      "scanId": "dce4ef1b-5d28-4730-b095-e614ef1e8da5",
+      "site": "autismspeaks.org",
+      "action": "accept",
+      "label": "dismiss cookie message",
+      "bundleSha256": "4894b299f5875f28e9fea3642c126ffb508b62ae19fe6ce410d1ab4ba9adc6a9",
+      "expectedGenericEligible": false
+    },
+    {
+      "scanId": "6a7bd132-09d5-4e9e-91eb-4504ff05dde9",
+      "site": "milvus.com.br",
+      "action": "reject",
+      "label": "Recusar",
+      "bundleSha256": "bdbcef1c654683d28785e16adf89378da9a2d574fe419a5f034f0a3b03ed68a1",
+      "expectedGenericEligible": false
+    },
+    {
+      "scanId": "74316816-fab8-4479-85c1-048f44a4dc4b",
+      "site": "hartford.edu",
+      "action": "accept",
+      "label": "Allow",
+      "bundleSha256": "4cbda20d23d7fba2ef33cc2414ad7c5a12f739afcbe1abc17915c33404ce036f",
+      "expectedGenericEligible": false
+    }
+  ]
+}

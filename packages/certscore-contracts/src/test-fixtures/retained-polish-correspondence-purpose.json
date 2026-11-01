@@ -1,0 +1,50 @@
+{
+  "site": "niedziela.pl",
+  "scanId": "26b9041f-7efa-4525-b754-1ec2179b8a9f",
+  "source": {
+    "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261030T181700Z-manual-consent-originals-c676dae6/originals/26b9041f-7efa-4525-b754-1ec2179b8a9f/CanonicalEvidenceBundle.json",
+    "sha256": "2789206282f98b5a4c80d79efb917b369912cdfa74fb561b7d8f286cffa5f947",
+    "bytes": 1730953
+  },
+  "sourceUrl": "https://www.niedziela.pl/polityka_prywatnosci",
+  "ownership": {
+    "documentRole": "policy_document",
+    "targetRelationship": "target_controller",
+    "ownershipConfidence": 0.98,
+    "ownershipReasonCodes": [
+      "same_registrable_domain_as_scan_target"
+    ]
+  },
+  "section": {
+    "sourceUrl": "https://www.niedziela.pl/polityka_prywatnosci",
+    "heading": "V. CELE ORAZ PODSTAWY PRAWNE PRZETWARZANIA DANYCH OSOBOWYCH",
+    "textExcerpt": "KORESPONDENCJA TRADYCYJNA I E-MAILOWA 1. W przypadku kierowania do Administratora za pośrednictwem: tradycyjnej korespondencji lub poczty e-mail niezwiązanej z usługami świadczonymi na rzecz nadawcy lub inną zawartą z nim umową, Dane Osobowe zawarte w tej korespondencji są przetwarzane wyłącznie w celu komunikacji i rozwiązania sprawy, której dotyczy korespondencja. 2. Podstawą prawną przetwarzania jest uzasadniony interes Administratora (art. 6 ust. 1 lit. f RODO) polegający na obsłudze korespondencji kierowanej do niego w związku z jego działalnością. 3. Administrator przetwarza jedynie Dane Osobowe istotne dla sprawy, której dotyczy korespondencja. Całość korespondencji jest przechowywana w sposób zapewniający bezpieczeństwo zawartych w niej Danych Osobowych (oraz innych informacji) i ujawniana jedynie osobom upoważnionym.",
+    "extractionMethod": "html_heading_hierarchy",
+    "sourceOffsetBasis": "sanitized_html",
+    "documentTextSha256": "8ae69e8b5dd0712d19b1e21d4eba725c562b92c3bfbc44e39e616221f48577f2",
+    "evidenceTextSha256": "38fecc6a8d054f0ec97f18a5771fe652402ee61ad9182bdc85bff72bcfa0ce1c",
+    "sourceTextChars": 93933,
+    "extractionState": "complete",
+    "charStart": 11831,
+    "charEnd": 12812,
+    "quality": "strong"
+  },
+  "clause": "W przypadku kierowania do Administratora za pośrednictwem: tradycyjnej korespondencji lub poczty e-mail niezwiązanej z usługami świadczonymi na rzecz nadawcy lub inną zawartą z nim umową, Dane Osobowe zawarte w tej korespondencji są przetwarzane wyłącznie w celu komunikacji i rozwiązania sprawy, której dotyczy korespondencja.",
+  "historicalSelectedWitness": {
+    "coverageArea": "processing_purposes",
+    "selectedPolicySectionHeading": "cele oraz podstawy prawne przetwarzania danych",
+    "selectedPolicySectionExcerpt": "CELE ORAZ PODSTAWY PRAWNE PRZETWARZANIA DANYCH OSOBOWYCH KORESPONDENCJA TRADYCYJNA I E-MAILOWA 1.",
+    "selectedPolicySectionUrl": "https://www.niedziela.pl/polityka_prywatnosci",
+    "sectionExtractionMethod": "canonical_topic_window",
+    "sourceOffsetBasis": "normalized_visible_text",
+    "sourceDocumentTextSha256": "94f1980b33f95910d50ec078cc30e8669b2ac55ce73fb52379f1c382549c47df",
+    "evidenceTextSha256": "5295dd5a208fa3f184d0f4450597a1de9b33bd7dfe00bd727edea8db00222ea7",
+    "sourceCharStart": 3915,
+    "sourceCharEnd": 4833,
+    "sectionExtractionState": "complete",
+    "evidenceSource": "deterministic",
+    "selectedEvidenceStrength": "strong",
+    "signalObserved": "observed"
+  },
+  "legalBasisClause": "Podstawą prawną przetwarzania jest uzasadniony interes Administratora (art. 6 ust. 1 lit. f RODO) polegający na obsłudze korespondencji kierowanej do niego w związku z jego działalnością."
+}

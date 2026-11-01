@@ -9,6 +9,9 @@ const fields=new Set([...identifiers,"pid","fmt","time","event_id","conversion_i
 export type CaliforniaRequestInput={url:string;method:string;requestId:string;startedAtMs:number;httpStatus?:number;hasBody:boolean;
  qualificationContext?:Parameters<typeof inspectGpcRequestQualification>[1];
  headerPolicy?:"required"|"supplemental";
+ /** Ephemeral size of a body discarded at the read-time byte cap. Supplies
+  * limit/framing diagnostics only, never payload, identity or purpose proof. */
+ observedBodyByteLength?:number;
  body?:string|null;headers?:Record<string,string>};
 export function californiaProofRecipient(url:string) {
  if(url.length>16384 || !isCanonicalAdvertisingCollectionCandidate(url))return null;
@@ -34,10 +37,13 @@ export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
  if(v2)proof.bodyDiagnostic=bodyDiagnostic;
  const reason=(r:typeof proof.reasons[number])=>{if(!proof.reasons.includes(r))proof.reasons.push(r);};
  const bodyFields=new URLSearchParams(),endpointBodyFields=canonicalCollectionBodyFields(url);
+ const discardedBodyByteLength=input.body===undefined && Number.isSafeInteger(input.observedBodyByteLength) &&
+  input.observedBodyByteLength!>32768?input.observedBodyByteLength:undefined;
+ const bodyByteLength=typeof input.body==="string"?Buffer.byteLength(input.body):discardedBodyByteLength;
  let structured=false,googleBrowserDecoded=false;
  if(v2 && input.hasBody) {
-  if(input.body===undefined || input.body===null)reason("body_unavailable");
-  else if(input.body.length>32768 || Buffer.byteLength(input.body)>32768){proof.bodyStatus="limited";bodyDiagnostic.inputKind="uninspected";bodyDiagnostic.stage="input_limit";bodyDiagnostic.limitReason="bytes";reason("body_limit");}
+  if((bodyByteLength??0)>32768){proof.bodyStatus="limited";bodyDiagnostic.inputKind="uninspected";bodyDiagnostic.stage="input_limit";bodyDiagnostic.limitReason="bytes";reason("body_limit");}
+  else if(input.body===undefined || input.body===null)reason("body_unavailable");
   else {
    proof.bodySha256=sha(input.body);
    try {
@@ -118,8 +124,8 @@ export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
     const key=name.toLowerCase();
     // Nonstandard privacy headers require an explicit supported mapping.
     if(/gpp|privacy|consent|processing|opt.?out|do.?not.?sell/i.test(key)){proof.headersStatus="limited";reason("unsupported_privacy_header");}
-    if((key==="content-length" && value!=="0" && (input.body===undefined || input.body===null || !/^[0-9]+$/.test(value) || Number(value)!==Buffer.byteLength(input.body))) ||
-      key==="transfer-encoding" && value!=="identity" && (input.body===undefined || input.body===null)){
+    if((key==="content-length" && value!=="0" && (bodyByteLength===undefined || !/^[0-9]+$/.test(value) || Number(value)!==bodyByteLength)) ||
+      key==="transfer-encoding" && value!=="identity" && bodyByteLength===undefined){
      proof.bodyStatus="unavailable";proof.bodyFormat="unknown";bodyDiagnostic.stage="header_body_framing";reason("body_unavailable");
     }
     if(key==="content-encoding" && value!=="identity"){proof.bodyStatus="unsupported";bodyDiagnostic.stage="content_encoding";reason("unsupported_body");}

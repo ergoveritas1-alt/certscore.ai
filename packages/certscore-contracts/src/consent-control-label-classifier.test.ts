@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import retainedControls from "./fixtures/consent-controls-2026-10-30.json";
 import {
   CONSENT_CONTROL_LABEL_REGISTRY_VERSION,
   classifyConsentLanguage,
@@ -11,6 +12,30 @@ import {
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
+
+test("retained Dolby, Rijksmuseum, Pigu and Matas labels use exact contextual observation terms", () => {
+  for (const fixture of retainedControls) {
+    const c = fixture.candidate;
+    assert.equal(c.consentContextConfirmed, true);
+    assert.equal(c.enabled, true);
+    assert.equal(c.intersectsViewport, true);
+    assert.ok(c.boundingBox.width > 0 && c.boundingBox.height > 0);
+    const input = { label: c.label, ariaLabel: c.ariaLabel, usage: "observation" as const, hasConsentContext: true };
+    const result = classifyConsentControlLabel(input);
+    assert.equal(result.intent, fixture.expectedIntent, fixture.site + ": " + c.label);
+    assert.equal(result.matchedLocale, fixture.expectedLocale);
+    assert.ok(result.reasonCodes.includes("observation_only_label"));
+    assert.equal(classifyConsentControlLabel({ label: c.label, usage: "observation", hasConsentContext: false }).intent, "unknown", c.label);
+    assert.equal(classifyConsentControlLabel({ label: c.label, usage: "action", hasConsentContext: true }).intent, "unknown", c.label);
+    for (const label of [`Do not ${c.label}`, `Why ${c.label}?`]) {
+      assert.equal(classifyConsentControlLabel({ label, usage: "observation", hasConsentContext: true }).intent, "unknown", label);
+    }
+    for (const altered of [{ ...input, label: `${c.label} and accept all cookies`, ariaLabel: undefined },
+      { ...input, ariaLabel: "Accept all cookies" }]) {
+      assert.notEqual(classifyConsentControlLabel(altered).intent, fixture.expectedIntent, c.label);
+    }
+  }
+});
 
 test("category qualifier not essential cookies preserves the explicit consent verb", () => {
   for (const [label, intent] of [
@@ -45,6 +70,23 @@ test("category qualifier does not mask independent negation, conflict or informa
 test("plural Cookies Settings is an observation-only Options label", () => {
   assert.equal(classifyConsentControlLabel({ label: "Cookies Settings", hasConsentContext: true, usage: "observation" }).intent, "options");
   assert.equal(classifyConsentControlLabel({ label: "Cookies Settings", hasConsentContext: true, usage: "action" }).intent, "unknown");
+});
+
+test("Set cookie preferences is exact, contextual and observation-only", () => {
+  for (const label of ["Set cookie preferences.", "Set cookie preferences"]) {
+    const result = classifyConsentControlLabel({label, ariaLabel: label, hasConsentContext: true, usage: "observation"});
+    assert.equal(result.intent, "options");
+    assert.equal(result.matchedLocale, "en");
+    assert.ok(result.reasonCodes.includes("observation_only_label"));
+    assert.equal(classifyConsentControlLabel({label, hasConsentContext: false, usage: "observation"}).intent, "unknown");
+    assert.equal(classifyConsentControlLabel({label, hasConsentContext: true, usage: "action"}).intent, "unknown");
+  }
+  for (const label of ["Why set cookie preferences?", "Do not set cookie preferences", "Reset cookie preferences"]) {
+    assert.equal(classifyConsentControlLabel({label, hasConsentContext: true, usage: "observation"}).intent, "unknown", label);
+  }
+  assert.notEqual(classifyConsentControlLabel({label: "Set cookie preferences and accept all", hasConsentContext: true, usage: "observation"}).intent, "options",
+    "The new exact Options term cannot match a composite label; existing independent Accept classification is unchanged.");
+  assert.equal(classifyConsentControlLabel({label: "Set cookie preferences.", ariaLabel: "Accept all cookies", hasConsentContext: true, usage: "observation"}).intent, "unknown");
 });
 
 test("quoted statutory privacy label is an exact, context-bound observation only", () => {

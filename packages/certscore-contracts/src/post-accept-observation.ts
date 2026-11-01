@@ -1,3 +1,5 @@
+import { validateCookieYesLegacyReceiptEnvelope, validateCookieYesLegacyProjectionProof } from "./cookieyes-legacy-consent-state";
+import {consentReceiptAvailabilitySchema,summarizeConsentReceiptAvailability} from "./consent-receipt-availability";
 import {consentReceiptCaptureSchema,validateConsentReceiptCapture} from './consent-receipt-capture';
 import { validateComplianzReceiptEnvelope } from "./complianz-consent-state";
 import { cmpPassiveDiagnosticsSchema } from "./cmp-passive-diagnostics";
@@ -298,6 +300,12 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
   for (const evidence of [packet.decisionEvidence, packet.terminalDecisionEvidence?.evidence]) {
     validateComplianzReceiptEnvelope(evidence?.complianzReceiptEvidence, {
+      startedAt:packet.startedAt, completedAt:packet.completedAt, dispatchedAtMs:packet.acceptanceRegistration.actionDispatchedAtMs,
+      observedAtMs:evidence?.observedAtMs,
+      cmpId:packet.actionControlProof?.cmpId,
+      frameIdentitySha256:packet.actionControlProof && "frameIdentitySha256" in packet.actionControlProof ? packet.actionControlProof.frameIdentitySha256 : undefined,
+    }, context);
+    validateCookieYesLegacyReceiptEnvelope(evidence?.cookieYesLegacyReceiptEvidence, {
       startedAt:packet.startedAt, completedAt:packet.completedAt, dispatchedAtMs:packet.acceptanceRegistration.actionDispatchedAtMs,
       observedAtMs:evidence?.observedAtMs,
       cmpId:packet.actionControlProof?.cmpId,
@@ -640,6 +648,7 @@ const postAcceptReportActivityRowSchema = z.object({
 });
 
 export const postAcceptReportProjectionSchema = z.object({
+  receiptAvailability: consentReceiptAvailabilitySchema.optional(),
   confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
   passiveCmpDiagnostics: cmpPassiveDiagnosticsSchema.optional(),
   notificationAcknowledgment: notificationAcknowledgmentSchema.optional(),
@@ -683,6 +692,10 @@ export const postAcceptReportProjectionSchema = z.object({
     "aborted",
   ]),
 }).superRefine((projection, context) => {
+  if (projection.receiptAvailability && (projection.receiptAvailability.action !== "accept" ||
+    projection.receiptAvailability.sourcePacketSha256 !== projection.packetSha256)) {
+    context.addIssue({code: z.ZodIssueCode.custom, path: ["receiptAvailability"], message: "Receipt availability must bind to this action and source packet."});
+  }
   const images = projection.formSnapshotCapture;
   if (images) {
     const afterClick = images.contractVersion === "certscore.post_accept_form_snapshots.v7";
@@ -733,6 +746,9 @@ export const postAcceptReportProjectionSchema = z.object({
     action: "accept", proof: projection.actionControlProof,
     requests: projection.afterActionRequests, storage: projection.afterActionStorage,
   });
+  for (const evidence of [projection.decisionEvidence, projection.terminalDecisionEvidence?.evidence]) {
+    validateCookieYesLegacyProjectionProof(evidence?.cookieYesLegacyReceiptEvidence, projection, context);
+  }
   const evidence = projection.decisionEvidence;
   const coverage = projection.captureCoverage;
   if (!evidence && !coverage) return; // Unchanged legacy projections stay readable.
@@ -816,7 +832,9 @@ export function projectPostAcceptEvidenceForReport(input: {
       actionDispatchedAtMs: packet.acceptanceRegistration.actionDispatchedAtMs,
       observationEndedAtMs: packet.timing.observationEndedAtMs, requests: packet.network.requests });
 
+  const receiptAvailability = summarizeConsentReceiptAvailability(packet.consentReceiptCapture, input.packetSha256);
   const projection = postAcceptReportProjectionSchema.parse({
+    ...(receiptAvailability ? {receiptAvailability} : {}),
     ...(packet.confirmationDiagnostics?.policyVersion === "consent_confirmation_diagnostics.v3" ? {confirmationDiagnostics:packet.confirmationDiagnostics} : {}),
     ...(packet.passiveCmpDiagnostics ? {passiveCmpDiagnostics:packet.passiveCmpDiagnostics} : {}),
     ...(input.packetSha256 && packet.notificationAcknowledgment ? {notificationAcknowledgment:packet.notificationAcknowledgment} : {}),

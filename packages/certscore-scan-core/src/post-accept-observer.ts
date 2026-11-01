@@ -1,3 +1,4 @@
+import type { CookieYesLegacyBaseline } from "./cookieyes-legacy-consent-state.js";
 import {installConsentReceiptCapture,receiptCaptureToken,retainReceiptCookies} from './consent-receipt-capture.js';
 import { isComplianzControl } from "./complianz-consent-state.js";
 import { CMP_PASSIVE_EVENT_INIT_SCRIPT, installCmpPassiveDiagnostics } from "./cmp-passive-diagnostics.js";
@@ -5,6 +6,7 @@ import { retainNotificationAcknowledgment, type ExistingApiRead } from "./notifi
 import { installOneTrustSdkSourceCapture } from "./onetrust-sdk-source.js";
 import { confirmationDiagnostics } from "./consent-confirmation-diagnostics.js";
 import { firstVerifiedConsentRead } from "./consent-confirmation-read.js";
+import { createConsentCookieReadGate } from "./consent-cookie-read-gate.js";
 import { installBorlabsDeferredDialogReveal } from "./borlabs-passive-dialog-reveal.js";
 import { waitForConsentDocumentOrNamedControl, isRegisteredLoadingConsentRecipe } from "./consent-document-readiness.js";
 import { appendResolverDiagnostic, canonicalResolverDiagnostic } from "./consent-action-resolver-diagnostics.js";
@@ -16,6 +18,7 @@ import { LATE_FORM_CAPTURE_EXTENSION_MS, startAfterAcceptClickFormSnapshots, sta
 import type { FormSnapshotReviewer } from "./collection-surface-snapshots.js";
 import { startPostAcceptFormCapture } from "./post-accept-form-capture.js";
 import { readConsentActionLabelFields } from "./consent-action-label-fields.js";
+import { genericConsentActionLabelSupported } from "./consent-action-label-eligibility.js";
 import { terminalConsentDecisionRead } from "./terminal-consent-decision.js";
 import { inspectCustomAcceptControl, isCustomAcceptControlCandidate, sameCustomAcceptControlBinding } from "./custom-accept-control.js";
 import { CONSENT_ACTION_RECIPE_CANDIDATE_MAX, prioritizeConsentActionRecipes, consentActionBindingDeadline, liveConsentActionCmp } from "./consent-action-recipe-priority.js";
@@ -82,7 +85,7 @@ import {
 import { readCmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
 import { evaluateCmpApiConfirmation } from "./cmp-api-confirmation.js";
 import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery, waitForTransparentConsentControl } from "./cmp-action-control-proof.js";
-import { matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, verifiedChangedOneTrustDecision, type SemanticState } from "./consent-action-semantic-state.js";
+import { captureCookieYesConfirmationBaseline, matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, verifiedChangedOneTrustDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import {
   captureConsentControlGeometry,
   type ConsentControlCandidateEvidence,
@@ -260,7 +263,7 @@ type ConfirmationBaseline =
       pageUrl: string;
     }
   | { kind: "local_storage_equals"; lastSequence: number }
-  | { kind: "cmp_cookie_changed"; cookieStateHash?: string }
+  | { kind: "cmp_cookie_changed"; cookieStateHash?: string; cookieYesLegacyBaseline?: CookieYesLegacyBaseline }
   | { kind: "cmp_cookie_names_changed"; cookieStateHashes: Record<string, string | undefined> }
   | {
       kind: "cmp_api_consent_state_changed";
@@ -285,6 +288,7 @@ type ConfirmationBaseline =
 
 type ConfirmationState = {
   oneTrustGroupEvidence?: SemanticState["oneTrustGroupEvidence"];
+  cookieYesLegacyReceiptEvidence?: SemanticState["cookieYesLegacyReceiptEvidence"];
   complianzReceiptEvidence?: SemanticState["complianzReceiptEvidence"];
   tcfApiSource?: "addEventListener" | "getTCData";
   tcfPurposeEvidence?: ActionTcfData["purposeEvidence"];
@@ -858,6 +862,20 @@ export async function runPostAcceptObserver(
       });
     }
     selectedRecipe = resolution.recipe;
+    // A generated generic recipe retains its selected geometry label. Reject
+    // observation-only semantics before baseline/proof work, using the same
+    // final failure as live proof. Do not turn it into a missing-control retry.
+    if (selectedRecipe.recipeId.startsWith("canonical-control:accept:") &&
+      selectedRecipe.controlExpectedNormalizedLabel !== undefined &&
+      (!authorizedExactTargetUrl || normalizeTargetUrl(page.url()) === normalizeTargetUrl(authorizedExactTargetUrl)) &&
+      !genericConsentActionLabelSupported(selectedRecipe.controlExpectedNormalizedLabel, "accept")) {
+      recordResolverSnapshot({source:"canonical_geometry",state:"label_mismatch",selectorMatchCount:1,visibleCount:1,enabledCount:1,
+        labelMatchCount:0,actionableCount:0,controlLabels:[selectedRecipe.controlExpectedNormalizedLabel],cmpIds:selectedRecipe.cmpId?[selectedRecipe.cmpId]:[]});
+      limitations.push("label_unverifiable", "resolved_control_label_not_classified");
+      return await finalize({resolverFound:false,resolverReason:"label_unverifiable",
+        registration:unconfirmedRegistration("not_attempted","resolved_control_label_not_classified"),
+        requests:classifyRequests(retainedRequests(),parentScanStartedAtMs)});
+    }
     let control = resolution.control;
     let confirmationScope = resolution.scope;
     const preActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, undefined, (d) => { storageCollectionDiagnostics.preAction = d; });
@@ -1158,6 +1176,7 @@ export async function runPostAcceptObserver(
       effectiveSignal,
       (state) => { decisionEvidence = { policyVersion: "semantic_consent_registration.v2",
         decision: state.decision, basis: "verified_state", observedStateSha256: state.stateHash,
+        ...(state.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:state.cookieYesLegacyReceiptEvidence} : {}),
         ...(state.complianzReceiptEvidence ? {complianzReceiptEvidence:state.complianzReceiptEvidence} : {}),
         ...(state.oneTrustGroupEvidence ? { oneTrustGroupEvidence: state.oneTrustGroupEvidence } : {}),
         observedAtMs: elapsed(parentScanStartedAtMs, state.observedAtEpochMs ?? Date.now()),
@@ -1266,6 +1285,7 @@ export async function runPostAcceptObserver(
     decisionEvidence = { policyVersion: "semantic_consent_registration.v2", decision: "granted", basis: "verified_state",
       ...(confirmedState.tcfPurposeEvidence ? { tcfPurposeEvidence: confirmedState.tcfPurposeEvidence } : {}),
       ...(confirmedState.tcfApiSource ? { tcfApiSource: confirmedState.tcfApiSource } : {}),
+      ...(confirmedState.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:confirmedState.cookieYesLegacyReceiptEvidence} : {}),
       ...(confirmedState.complianzReceiptEvidence ? {complianzReceiptEvidence:confirmedState.complianzReceiptEvidence} : {}),
       ...(confirmedState.oneTrustGroupEvidence ? { oneTrustGroupEvidence: confirmedState.oneTrustGroupEvidence } : {}),
       observedStateSha256: confirmedState.stateHash,
@@ -2162,10 +2182,12 @@ async function captureConfirmationBaseline(
     };
   }
   if (confirmation.kind === "cmp_cookie_changed") {
-    return {
-      kind: confirmation.kind,
-      cookieStateHash: await cookieState(context, confirmation.cookieName),
-    };
+    const cookies = context.cookies();
+    const [cookieStateHash, cookieYesLegacyBaseline] = await Promise.all([
+      cookieState(context, confirmation.cookieName, cookies),
+      confirmation.cookieName === "cookieyes-consent" ? captureCookieYesConfirmationBaseline(confirmationScope, control, cookies) : undefined,
+    ]);
+    return {kind: confirmation.kind, cookieStateHash, cookieYesLegacyBaseline};
   }
   if (confirmation.kind === "cmp_cookie_names_changed") {
     const cookieNames = confirmation.cookieNames.slice(0, 8);
@@ -2241,6 +2263,7 @@ async function waitForAcceptanceConfirmation(
       if (state?.decision === "granted" &&
         normalizeTargetUrl(page.url()) === normalizeTargetUrl(baseline.pageUrl)) {
         return { stateHash: state.stateHash, key: state.key, observedAtEpochMs: state.observedAtEpochMs,
+          ...(state.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:state.cookieYesLegacyReceiptEvidence} : {}),
           ...(state.complianzReceiptEvidence ? {complianzReceiptEvidence:state.complianzReceiptEvidence} : {}),
           witnessType: "canonical_acceptance_state",
           expectedState: "canonical_granted_consent_decision_written_after_action" };
@@ -2251,6 +2274,10 @@ async function waitForAcceptanceConfirmation(
     return undefined;
   }
   const deadlineAtMs = Date.now() + timeoutMs;
+  const readCookieBranch=createConsentCookieReadGate<ConfirmationState>(
+    'cookieName' in confirmation?confirmation.cookieName:undefined,
+    'oneTrustBaseline' in baseline?baseline.oneTrustBaseline:undefined,
+    ()=>receiptCaptureToken(confirmationScope)?.capture.markObservationsTruncated());
   let firstRead=true;
   while (firstRead || Date.now() <= deadlineAtMs) {
     firstRead=false;diagnostics?.pass();
@@ -2301,16 +2328,18 @@ async function waitForAcceptanceConfirmation(
         };
       }
     } else if (confirmation.kind === "cmp_cookie_changed" && baseline.kind === confirmation.kind) {
-      const currentCookieState = await cookieState(context, confirmation.cookieName);
-      if (!currentCookieState) diagnostics?.reason("receipt_missing");
-      else if (currentCookieState === baseline.cookieStateHash) diagnostics?.reason("no_fresh_decision");
-      if (currentCookieState && currentCookieState !== baseline.cookieStateHash) {
+      const currentCookieState = baseline.cookieYesLegacyBaseline ? undefined : await cookieState(context, confirmation.cookieName);
+      if (!currentCookieState && !baseline.cookieYesLegacyBaseline) diagnostics?.reason("receipt_missing");
+      else if (!baseline.cookieYesLegacyBaseline && currentCookieState === baseline.cookieStateHash) diagnostics?.reason("no_fresh_decision");
+      if (baseline.cookieYesLegacyBaseline || (currentCookieState && currentCookieState !== baseline.cookieStateHash)) {
         const semantic = await verifiedCookieDecision({ context, scope: confirmationScope,
-            cookieName: confirmation.cookieName, actionAt: actionDispatchedAtEpochMs, onDiagnostic: diagnostics?.reason });
+            cookieName: confirmation.cookieName, cookieYesLegacyBaseline: baseline.cookieYesLegacyBaseline,
+            actionAt: actionDispatchedAtEpochMs, onDiagnostic: diagnostics?.reason });
           if (semantic) onDecisionObserved?.(semantic);
           if (semantic && semantic.decision !== "granted") diagnostics?.reason("opposite_or_mixed_decision");
           if (semantic?.decision === "granted") return {
             stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
+            ...(semantic.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:semantic.cookieYesLegacyReceiptEvidence} : {}),
             ...(semantic.complianzReceiptEvidence ? {complianzReceiptEvidence:semantic.complianzReceiptEvidence} : {}),
             ...(semantic.oneTrustGroupEvidence ? { oneTrustGroupEvidence: semantic.oneTrustGroupEvidence } : {}),
             witnessType: "cmp_cookie_state", expectedState: "canonical_cmp_granted_decision_after_action",
@@ -2328,6 +2357,7 @@ async function waitForAcceptanceConfirmation(
           if (semantic && semantic.decision !== "granted") diagnostics?.reason("opposite_or_mixed_decision");
           if (semantic?.decision === "granted") return {
             stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
+            ...(semantic.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:semantic.cookieYesLegacyReceiptEvidence} : {}),
             ...(semantic.complianzReceiptEvidence ? {complianzReceiptEvidence:semantic.complianzReceiptEvidence} : {}),
             ...(semantic.oneTrustGroupEvidence ? { oneTrustGroupEvidence: semantic.oneTrustGroupEvidence } : {}),
             witnessType: "cmp_cookie_state", expectedState: "canonical_cmp_granted_decision_after_action",
@@ -2362,7 +2392,7 @@ async function waitForAcceptanceConfirmation(
           witnessType: "tcf_user_action_complete", tcfApiSource: snapshot!.apiSource,
           tcfPurposeEvidence: snapshot!.purposeEvidence, expectedState: "configured_purposes_granted_after_accept"};
       });
-      const cookieRead = async (): Promise<ConfirmationState | undefined> => {
+      const cookieRead = (): Promise<ConfirmationState | undefined> => readCookieBranch(async () => {
         if (confirmation.cookieName === "OptanonConsent" && baseline.oneTrustBaseline?.status === "verified") {
           decoded = await verifiedChangedOneTrustDecision({context, scope: confirmationScope,
             cookieName: confirmation.cookieName, actionAt: actionDispatchedAtEpochMs,
@@ -2378,10 +2408,11 @@ async function waitForAcceptanceConfirmation(
         }
         if (decoded?.decision !== "granted") {if(decoded)diagnostics?.reason("opposite_or_mixed_decision");return undefined;}
         return {stateHash:decoded.stateHash,key:decoded.key,observedAtEpochMs:decoded.observedAtEpochMs,
+          ...(decoded.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:decoded.cookieYesLegacyReceiptEvidence} : {}),
           ...(decoded.complianzReceiptEvidence ? {complianzReceiptEvidence:decoded.complianzReceiptEvidence} : {}),
           ...(decoded.oneTrustGroupEvidence ? {oneTrustGroupEvidence:decoded.oneTrustGroupEvidence}:{}),
           witnessType:"cmp_cookie_state",expectedState:"canonical_cmp_granted_decision_after_action"};
-      };
+      });
       const result = await firstVerifiedConsentRead([tcfRead,cookieRead()]);
       if(decoded&&(!result||result.witnessType==="cmp_cookie_state"))onDecisionObserved?.(decoded);
       if(result)return result;
@@ -2406,6 +2437,7 @@ async function waitForAcceptanceConfirmation(
           decoded=await verifiedCanonicalStateWrite({context,scope:confirmationScope,actionAt:actionDispatchedAtEpochMs,registeredKeys:confirmation.keys,onDiagnostic:diagnostics?.reason});
           if(decoded?.decision!=="granted"||decoded.key!==key){if(decoded)diagnostics?.reason("opposite_or_mixed_decision");continue;}
           return {stateHash:decoded.stateHash,key:decoded.key,observedAtEpochMs:decoded.observedAtEpochMs,
+            ...(decoded.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:decoded.cookieYesLegacyReceiptEvidence} : {}),
             ...(decoded.complianzReceiptEvidence ? {complianzReceiptEvidence:decoded.complianzReceiptEvidence} : {}),
             ...(decoded.oneTrustGroupEvidence?{oneTrustGroupEvidence:decoded.oneTrustGroupEvidence}:{}),
             witnessType:"cmp_storage_state",expectedState:"canonical_cmp_granted_decision_after_action"};
@@ -2978,9 +3010,9 @@ function cookieKey(input: { name: string; path: string }) {
   return `${input.name}:${input.path}`;
 }
 
-async function cookieState(context: BrowserContext, cookieName: string) {
+async function cookieState(context: BrowserContext, cookieName: string, existingCookies?: ReturnType<BrowserContext["cookies"]>) {
   const token=receiptCaptureToken(context);
-  const cookies=await context.cookies();
+  const cookies=await (existingCookies ?? context.cookies());
   retainReceiptCookies(token,cookies,cookieName);
   const states = cookies.filter((cookie) =>
     matchesCanonicalCmpCookieName(cookie.name, cookieName)

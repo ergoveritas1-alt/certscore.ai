@@ -1,11 +1,137 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import retainedPrizeRecipients from "../../../../packages/certscore-contracts/src/test-fixtures/retained-prize-recipient-disclosure.json";
+import retainedCompetition from "../../../../packages/certscore-contracts/src/test-fixtures/retained-competition-retention.json";
+import retainedPostalController from "../../../../packages/certscore-contracts/src/test-fixtures/retained-polish-postal-controller.json";
+import retainedCategoryRetention from "../../../../packages/certscore-contracts/src/test-fixtures/retained-personal-category-retention.json";
 import { extractPolicySections, retainedPolicySectionsForObservation, gdprTransparencyTopicCandidatesFromRetainedPolicySections } from "../../../../packages/certscore-scan-core/src/scanners/policy-surface-scanner";
 import { adaptGdprTransparencyTopicCandidatesForProduction } from "./gdpr-transparency-topic-evidence-adapter";
 import { GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE } from "./gdpr-transparency-production-profile";
 import { buildNormalizedConcerns } from "./normalized-concerns";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
+
+test("prize-delivery recipient disclosure follows canonical gates without establishing advertising activity", () => {
+  const f = retainedPrizeRecipients;
+  const section = {...f.section, extractionState: "complete" as const, quality: "strong" as const,
+    extractionMethod: "html_heading_hierarchy" as const, sourceOffsetBasis: "sanitized_html" as const};
+  const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([section]).filter(c => c.topic === "recipients_or_vendor_categories");
+  assert.equal(candidates[0]?.evidenceText, f.clause);
+  const surface = {surfaceType: "privacy_policy" as const, status: "fetched" as const,
+    url: f.sourceUrl, normalizedUrl: f.sourceUrl, ...f.ownership, gdprTransparencyTopicCandidates: candidates,
+    contentCoverage: {...f.contentCoverage, status: "truncated" as const},
+    documentTextCoverage: {...f.documentTextCoverage, status: "complete" as const}};
+  const input = {surface, policyTextQuality: {usable: true}, profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE};
+  for (const invalid of [
+    {...input, isTargetRelevantPrivacyPolicy: false},
+    {...input, isTargetRelevantPrivacyPolicy: true, policyTextQuality: {usable: false}},
+    {...input, isTargetRelevantPrivacyPolicy: true, surface: {...surface, status: "failed" as const}},
+  ]) assert.deepEqual(adaptGdprTransparencyTopicCandidatesForProduction(invalid).acceptedProductionSignals, []);
+  const adaptation = adaptGdprTransparencyTopicCandidatesForProduction({...input, isTargetRelevantPrivacyPolicy: true});
+  assert.equal(adaptation.acceptedProductionSignals.find(s => s.disclosureType === "recipients_or_vendor_categories")?.evidenceText, f.clause);
+  assert.equal(surface.contentCoverage.status, "truncated");
+  const runtimeArtifacts = {policyDisclosureSummary: {article13DisclosureSignals: adaptation.acceptedProductionSignals,
+    gdprTransparencyEvidenceProfile: adaptation.profile, gdprTransparencyProductionEvidenceEnabled: adaptation.productionEvidenceEnabled}};
+  const normalizedConcerns = buildNormalizedConcerns({runtimeArtifacts, reviewFindingCandidates: [], validationFindings: []});
+  assert.ok(normalizedConcerns.some(c => c.originKey === "gdpr_transparency.article13.recipients_or_vendor_categories"));
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({coverageLimited: true, events: [], normalizedConcerns,
+    runtimeArtifacts, scanCompleted: true, snapshot: {}});
+  const rows = deriveGdprEprivacyCoverageChecklist({coverageLimited: true, coverageOutcomes,
+    projectedFindings: [], unifiedFindings: [], scanCompleted: true});
+  assert.equal(rows.find(r => r.id === "recipients_vendor_categories_disclosure")?.evidenceState, "observed");
+});
+
+test("retained category/purpose retention quote follows canonical gates while broader policy coverage stays limited", () => {
+  const f = retainedCategoryRetention;
+  const section = {...f.section, extractionState: "complete" as const, quality: "strong" as const,
+    extractionMethod: "canonical_topic_window" as const, sourceOffsetBasis: "normalized_visible_text" as const};
+  const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([section]).filter(c => c.topic === "data_retention");
+  assert.equal(candidates[0]?.evidenceText, f.clause);
+  const surface = {surfaceType: "privacy_policy" as const, status: "fetched" as const,
+    url: f.sourceUrl, normalizedUrl: f.sourceUrl, ...f.ownership, gdprTransparencyTopicCandidates: candidates,
+    contentCoverage: {...f.contentCoverage, status: "truncated" as const},
+    documentTextCoverage: {...f.documentTextCoverage, status: "complete" as const}};
+  const input = {surface, policyTextQuality: {usable: true}, profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE};
+  for (const invalid of [
+    {...input, isTargetRelevantPrivacyPolicy: false},
+    {...input, isTargetRelevantPrivacyPolicy: true, policyTextQuality: {usable: false}},
+    {...input, isTargetRelevantPrivacyPolicy: true, surface: {...surface, status: "failed" as const}},
+  ]) assert.deepEqual(adaptGdprTransparencyTopicCandidatesForProduction(invalid).acceptedProductionSignals, []);
+  const adaptation = adaptGdprTransparencyTopicCandidatesForProduction({...input, isTargetRelevantPrivacyPolicy: true});
+  assert.equal(adaptation.acceptedProductionSignals.find(s => s.disclosureType === "data_retention")?.evidenceText, f.clause);
+  assert.equal(surface.contentCoverage.status, "truncated");
+  const runtimeArtifacts = {policyDisclosureSummary: {article13DisclosureSignals: adaptation.acceptedProductionSignals,
+    gdprTransparencyEvidenceProfile: adaptation.profile, gdprTransparencyProductionEvidenceEnabled: adaptation.productionEvidenceEnabled}};
+  const normalizedConcerns = buildNormalizedConcerns({runtimeArtifacts, reviewFindingCandidates: [], validationFindings: []});
+  assert.ok(normalizedConcerns.some(c => c.originKey === "gdpr_transparency.article13.data_retention"));
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({coverageLimited: true, events: [], normalizedConcerns,
+    runtimeArtifacts, scanCompleted: true, snapshot: {}});
+  const rows = deriveGdprEprivacyCoverageChecklist({coverageLimited: true, coverageOutcomes,
+    projectedFindings: [], unifiedFindings: [], scanCompleted: true});
+  assert.equal(rows.find(r => r.id === "retention_disclosure_observed")?.evidenceState, "observed");
+});
+
+test("complete retained postal quote reaches controller evidence without inventing DPO contact or completeness", () => {
+  const f = retainedPostalController;
+  const section = {...f.section, extractionState: "truncated" as const, quality: "strong" as const,
+    extractionMethod: "html_heading_hierarchy" as const, sourceOffsetBasis: "sanitized_html" as const};
+  const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([section]).filter(c => c.topic === "controller_contact");
+  assert.equal(candidates[0]?.evidenceText, f.clause);
+  const surface = {surfaceType: "privacy_policy" as const, status: "fetched" as const,
+    url: f.sourceUrl, normalizedUrl: f.sourceUrl, ...f.ownership, gdprTransparencyTopicCandidates: candidates,
+    contentCoverage: {...f.contentCoverage, status: "truncated" as const},
+    documentTextCoverage: {...f.documentTextCoverage, status: "complete" as const}};
+  const input = {surface, policyTextQuality: {usable: true}, profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE};
+  assert.deepEqual(adaptGdprTransparencyTopicCandidatesForProduction({...input, isTargetRelevantPrivacyPolicy: false}).acceptedProductionSignals, []);
+  assert.deepEqual(adaptGdprTransparencyTopicCandidatesForProduction({...input, isTargetRelevantPrivacyPolicy: true,
+    surface: {...surface, status: "failed" as const}}).acceptedProductionSignals, []);
+  const adaptation = adaptGdprTransparencyTopicCandidatesForProduction({...input, isTargetRelevantPrivacyPolicy: true});
+  assert.equal(adaptation.acceptedProductionSignals.find(s => s.disclosureType === "controller_contact")?.evidenceText, f.clause);
+  assert.ok(!adaptation.acceptedProductionSignals.some(s => s.disclosureType === "dpo_contact"));
+  assert.equal(surface.contentCoverage.status, "truncated");
+  const runtimeArtifacts = {policyDisclosureSummary: {article13DisclosureSignals: adaptation.acceptedProductionSignals,
+    gdprTransparencyEvidenceProfile: adaptation.profile, gdprTransparencyProductionEvidenceEnabled: adaptation.productionEvidenceEnabled}};
+  const normalizedConcerns = buildNormalizedConcerns({runtimeArtifacts, reviewFindingCandidates: [], validationFindings: []});
+  assert.ok(normalizedConcerns.some(c => c.originKey === "gdpr_transparency.article13.controller_contact"));
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({coverageLimited: true, events: [], normalizedConcerns,
+    runtimeArtifacts, scanCompleted: true, snapshot: {}});
+  const rows = deriveGdprEprivacyCoverageChecklist({coverageLimited: true, coverageOutcomes,
+    projectedFindings: [], unifiedFindings: [], scanCompleted: true});
+  assert.equal(rows.find(r => r.id === "controller_contact_disclosure")?.evidenceState, "observed");
+  assert.notEqual(rows.find(r => r.id === "dpo_contact_point_disclosure")?.evidenceState, "observed");
+});
+
+test("retained entrant retention reaches the canonical checklist with ownership and quality gates intact", () => {
+  const f = retainedCompetition;
+  const section = {...f.section, extractionState: "complete" as const, quality: "strong" as const,
+    extractionMethod: "html_heading_hierarchy" as const, sourceOffsetBasis: "sanitized_html" as const};
+  const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([section]);
+  const surface = {surfaceType: "privacy_policy" as const, status: "fetched" as const,
+    url: f.sourceUrl, normalizedUrl: f.sourceUrl, ...f.ownership,
+    contentCoverage: {...f.contentCoverage, status: "truncated" as const},
+    documentTextCoverage: {...f.documentTextCoverage, status: "complete" as const},
+    gdprTransparencyTopicCandidates: candidates};
+  const input = {surface, policyTextQuality: {usable: true}, profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE};
+  for (const invalid of [
+    {...input, isTargetRelevantPrivacyPolicy: false},
+    {...input, isTargetRelevantPrivacyPolicy: true, policyTextQuality: {usable: false}},
+    {...input, isTargetRelevantPrivacyPolicy: true, surface: {...surface, status: "failed" as const}},
+  ]) assert.deepEqual(adaptGdprTransparencyTopicCandidatesForProduction(invalid).acceptedProductionSignals, []);
+  const adaptation = adaptGdprTransparencyTopicCandidatesForProduction({...input, isTargetRelevantPrivacyPolicy: true});
+  const retention = adaptation.acceptedProductionSignals.find(s => s.disclosureType === "data_retention");
+  assert.ok(retention, JSON.stringify(adaptation.dispositions));
+  assert.equal(retention.evidenceText, f.clause);
+  assert.equal(surface.contentCoverage.status, "truncated");
+  const runtimeArtifacts = {policyDisclosureSummary: {article13DisclosureSignals: adaptation.acceptedProductionSignals,
+    gdprTransparencyEvidenceProfile: adaptation.profile, gdprTransparencyProductionEvidenceEnabled: adaptation.productionEvidenceEnabled}};
+  const normalizedConcerns = buildNormalizedConcerns({runtimeArtifacts, reviewFindingCandidates: [], validationFindings: []});
+  assert.ok(normalizedConcerns.some(c => c.originKey === "gdpr_transparency.article13.data_retention"));
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({coverageLimited: true, events: [], normalizedConcerns,
+    runtimeArtifacts, scanCompleted: true, snapshot: {}});
+  const rows = deriveGdprEprivacyCoverageChecklist({coverageLimited: true, coverageOutcomes,
+    projectedFindings: [], unifiedFindings: [], scanCompleted: true});
+  assert.equal(rows.find(r => r.id === "retention_disclosure_observed")?.evidenceState, "observed");
+});
 
 test("section disclosures reach the canonical observed-only checklist with ownership gating", () => {
   const sourceUrl = "https://example.test/privacy";

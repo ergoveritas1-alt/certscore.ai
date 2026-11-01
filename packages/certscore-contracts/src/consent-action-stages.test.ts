@@ -63,3 +63,21 @@ test("attempted and completed actions do not substitute for initial decision pro
  assert.equal(assessConsentActionStages(confirmed).evidenceStages.initialChoiceRegistrationSupported,true);
  assert.equal(assessConsentActionStages({...confirmed,decisionEvidence:undefined}).evidenceStages.initialChoiceRegistrationSupported,false);
 });
+
+test("opt-in read diagnostics cannot promote an operational verified read to a semantic decision", () => {
+  const p = {...projection(), registrationStatus: "unconfirmed", confirmationDiagnostics: {
+    policyVersion: "consent_confirmation_diagnostics.v1", diagnosticOnly: true,
+    initialPasses: 0, terminalPasses: 1, terminalRead: "verified", reasons: [],
+  }} as unknown as Projection;
+  const legacy = assessConsentActionStages(p);
+  assert.equal("readDiagnostics" in legacy, false);
+  const {readDiagnostics, categoryDiagnostics, ...current} = assessConsentActionStages(p, "consent_action_stages.v2");
+  assert.equal(readDiagnostics?.terminalRead, "verified");
+  assert.equal(readDiagnostics?.initialPasses, 0);
+  assert.equal(current.evidenceStages.initialChoiceRegistrationSupported, false);
+  assert.equal(current.evidenceStages.terminalChoiceStateVerified, null);
+  assert.equal(current.measures.decisionVerified, false);
+  assert.deepEqual({...current, policyVersion: "consent_action_stages.v1"}, legacy);
+  assert.equal(assessConsentActionStages({...p, confirmationDiagnostics: undefined}, "consent_action_stages.v2").readDiagnostics, null);
+  assert.equal(assessConsentActionStages({...p, packetSha256: undefined}, "consent_action_stages.v2").readDiagnostics ?? null, null);
+});

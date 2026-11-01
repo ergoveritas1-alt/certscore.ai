@@ -3,7 +3,7 @@ import type { PopulatedSignalRecord, ReportSignalSource } from "@website-signal-
 import { consentControlAssessmentSchema } from "@certscore/contracts";
 import {
   buildRuntimeCookieInventory,
-  isFunctionalCookieExcludedFromTrackingEvidence
+  isFunctionalCookieEvidenceExcludedFromTracking
 } from "./runtime-cookie-evidence";
 import {
   CONSENT_CONTROL_LIFECYCLE_SUBTYPE,
@@ -654,7 +654,11 @@ function getPreconsentCookieEvidenceRows(
     setAtMs: row.setAtMs,
     setMethod: row.setMethod,
     sourceRequestUrl: row.sourceRequestUrl,
-    timingEvidence: row.timingEvidence
+    timingEvidence: row.timingEvidence,
+    ...(row.cookiePurposePolicyVersion === "certscore.cookie-purpose.v11" ? {
+      cookiePurposePolicyVersion: row.cookiePurposePolicyVersion,
+      cookieClassification: row.cookieClassification,
+    } : {}),
   }));
 }
 
@@ -917,7 +921,7 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
       row.timingEvidence === "before_consent_cookie_write" &&
       row.party === "third_party" &&
       row.nonEssential &&
-      !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
+      !isFunctionalCookieEvidenceExcludedFromTracking(row)
   );
   const firstTrackingCookieSetMs = Math.min(
     ...preconsentTrackingCookieRows
@@ -1530,7 +1534,7 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
         getNumber(getRecord(hybrid.vendorSummary)?.preConsentVendorCount) ?? getPreconsentTrackerVendors(hybrid).length;
       const preConsentEvidenceUrlCount = getPreconsentRequestUrls(hybrid).length;
       const preConsentTrackingCookieCount = getPreconsentCookieEvidenceRows(hybrid, runtimeArtifacts).filter(
-        (row) => row.nonEssential && !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
+        (row) => row.nonEssential && !isFunctionalCookieEvidenceExcludedFromTracking(row)
       ).length;
 
       return preConsentThirdPartyRequestCount > 0 || preConsentVendorCount > 0 || preConsentEvidenceUrlCount > 0 || preConsentTrackingCookieCount > 0;
@@ -1726,11 +1730,11 @@ export function getHybridSignalFallbackEvidence(input: {
       const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
       const allPreconsentCookieEvidence = getPreconsentCookieEvidenceRows(hybrid, input.runtimeArtifacts);
       const functionalPreconsentCookieEvidence = allPreconsentCookieEvidence.filter((row) =>
-        isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
+        isFunctionalCookieEvidenceExcludedFromTracking(row)
       );
       const preconsentCookieEvidence = allPreconsentCookieEvidence.filter(
         (row) =>
-          !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain) &&
+          !isFunctionalCookieEvidenceExcludedFromTracking(row) &&
           (row.nonEssential || (row.party === "third_party" && row.category !== "necessary"))
       );
       const preconsentNonEssentialCookies = uniqueStrings(

@@ -21,7 +21,7 @@ import { fitPdfText, pdfTextWidth, wrapPdfText } from "./report-pdf-fonts";
 import { gpcReaderSummary } from "../../lib/scans/gpc-reader-summary";
 import {hasNoQualifiedGpcActivity} from "../../lib/scans/gpc-response-projection";
 import { describeGpcObservedFacts } from "../../lib/scans/gpc-observed-facts";
-import { describeGpcActivityComparison,californiaCoverageFamilyLabel } from "@certscore/contracts";
+import { accessibilitySelectorHint, describeGpcActivityComparison,californiaCoverageFamilyLabel } from "@certscore/contracts";
 import { projectConsentControlReport, consentControlReportLabels } from "../../lib/scans/consent-control-report";
 import type { CanonicalReportExport } from "./report-export";
 import { deflateSync, inflateSync } from "node:zlib";
@@ -294,6 +294,11 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
   const consentControls: PdfLine[] = [];
   const reportContext: PdfLine[] = [];
   let lines = reportContext;
+  if (report.resultDisposition === "no_go" && report.noGo) {
+    lines.push(sectionHeading(report.noGo.title));
+    lines.push(...wrappedLines(report.noGo.explanation, { gapAfter: 5 }));
+    lines.push(...wrappedLines(report.noGo.recommendedNextAction, { gapAfter: 7 }));
+  }
   lines.push(...wrappedLines(`Scan ID: ${report.scan.id}. Completed: ${report.scan.completedAt ?? "Unavailable"}. Generated: ${report.generatedAt}. Duration: ${formatDuration(report.scan.durationMs)}.`, { size: 8, gapAfter: 5 }));
   lines.push(...wrappedLines(`${report.reviewFocusLabel} focus. ${report.reviewScope}`, { size: 9, gapAfter: 5 }));
   lines.push(
@@ -612,7 +617,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
         for (const [index, node] of rule.representativeNodes.entries()) {
           const contrast = node.colorContrast;
           lines.push(...pdfEvidenceTable(`accessibility-${rule.ruleId}-${index}`, ["Affected element", "Retained technical evidence"], [
-            ["Selector", join(node.selectors)], ["Failure / required review", node.failureSummary], ["Sanitized element", node.htmlSnippet],
+            ["Selector hints", accessibilitySelectorHint(node)], ["Failure / required review", node.failureSummary], ["Sanitized element", node.htmlSnippet],
             ...(node.captureState ? [["Capture state", `${node.captureState}; main-document bound: ${node.mainDocumentBound ?? "Not retained"}`]] : []),
             ...(contrast ? [["Color contrast", `Foreground ${contrast.foregroundColor ?? "Not retained"}; background ${contrast.backgroundColor ?? "Not retained"}; measured ${contrast.contrastRatio === undefined ? "Not retained" : `${contrast.contrastRatio}:1`}; required ${contrast.requiredContrastRatio === undefined ? "Not retained" : `${contrast.requiredContrastRatio}:1`}; font ${contrast.fontSize ?? "Not retained"} ${contrast.fontWeight ?? ""}`]] : []),
           ], [130, 382]));
@@ -956,6 +961,14 @@ function executivePage(report: CanonicalReportExport, hasLogo: boolean, headerTh
     lines(metric.note, x + 10, metricTop - 49, tileWidth - 20, 7.5, 2, false, hot ? orange : muted);
   });
   let y = metricTop - metricHeight - 24;
+  if (report.resultDisposition === "no_go" && report.noGo) {
+    text(report.noGo.title, 50, y, 12, true);
+    y -= 17;
+    y -= lines(report.noGo.explanation, 50, y, 512, 9, 4);
+    y -= 5;
+    y -= lines(report.noGo.recommendedNextAction, 50, y, 512, 8.5, 3);
+    y -= 16;
+  }
   text("Report findings", 50, y, 13, true);
   text(`${model.priorityCount} selected ${model.priorityCount === 1 ? "priority" : "priorities"}; ${model.findings.length} findings`, 335, y, 8, false, muted, 227);
   y -= 12;

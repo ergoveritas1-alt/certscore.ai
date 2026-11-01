@@ -1487,7 +1487,18 @@ function collectConsentGeometryInPage(input: {
       return box.width > 0 || box.height > 0 || index < Math.min(4, list.length);
     })
     .sort((a, b) => Number(potentiallyVisibleFirstLayer(b)) - Number(potentiallyVisibleFirstLayer(a)));
-  const containers = allContainerElements.slice(0, input.containerLimit)
+  // Spend the same slots on independent visible regions before redundant
+  // nested wrappers. The omitted-region/control checks below remain intact;
+  // this never completes a genuinely truncated inventory.
+  const independentRegions: Element[] = [];
+  const remainingContainers: Element[] = [];
+  for (const element of allContainerElements) {
+    if (independentRegions.length < input.containerLimit && potentiallyVisibleFirstLayer(element) &&
+      !independentRegions.some(parent => parent.contains(element))) independentRegions.push(element);
+    else remainingContainers.push(element);
+  }
+  const prioritizedContainerElements = [...independentRegions, ...remainingContainers];
+  const containers = prioritizedContainerElements.slice(0, input.containerLimit)
     // Only retained containers need selector identities and sanitized clones.
     .map(containerFor);
 
@@ -1577,7 +1588,7 @@ function collectConsentGeometryInPage(input: {
         candidate.computedStyle.display !== "none" && candidate.computedStyle.visibility !== "hidden") ||
       // Nested vendor wrappers are covered by their retained ancestor's
       // inventory. Actual control/candidate overflow remains independently limited.
-      allContainerElements.slice(input.containerLimit).some(element => potentiallyVisibleFirstLayer(element) &&
+      prioritizedContainerElements.slice(input.containerLimit).some(element => potentiallyVisibleFirstLayer(element) &&
         !containers.some(container => container.element.contains(element))) ||
       documentControls.length >= 800 || containerControlInventories.some(controls => controls.slice(80).some(potentiallyVisibleFirstLayer)),
     documentReadyState: document.readyState,

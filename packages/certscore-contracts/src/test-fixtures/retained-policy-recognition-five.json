@@ -1,0 +1,132 @@
+[
+  {
+    "id": "ovoenergy.com-international_transfers",
+    "site": "ovoenergy.com",
+    "scanId": "e4634e4d-4d80-4878-a579-bfa558f578df",
+    "topic": "international_transfers",
+    "locale": "en",
+    "url": "https://www.ovoenergy.com/privacy-policy",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261024T141007Z-scheduled-14227d98/scans/e4634e4d-4d80-4878-a579-bfa558f578df/support/policy_surface_text_f42053e9_b8f0b95b.txt",
+      "sha256": "2f39b383da433c77fcbce3db9896e61418d7af7b8d78610692d0df8949a2729c",
+      "role": "verified_policy_text",
+      "bytes": 51923,
+      "validUtf8": true,
+      "nulFree": true
+    },
+    "sourceBundle": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261024T141007Z-scheduled-14227d98/scans/e4634e4d-4d80-4878-a579-bfa558f578df/evidence/0/CanonicalEvidenceBundle.json",
+      "sha256": "4cc29590e128116a84d9418f83db10c8a6e8d96cd415e48dc7b2d25168c06a97",
+      "role": "scanArtifactUri"
+    },
+    "context": "been deemed “adequate” by the Information Commission's Office (ICO” in accordance with the UK GDPR. Include standard data protection clauses (approved by the ICO for transferring personal data outside the UK and EEA) in our contracts with those third parties – these are the clauses approved under Article 46.2 of the UK GDPR. 10. How long we keep your personal data We keep your personal data for no longe",
+    "expectedExcerpt": "Include standard data protection clauses (approved by the ICO for transferring personal data outside the UK and EEA) in our contracts with those third parties – these are the clauses approved under Article 46.2 of the UK GDPR.",
+    "sourceCharStart": 46188,
+    "sourceCharEnd": 46414,
+    "excerptSha256": "0effe69bc0f0fa152c2c00ba47412cfa7c168566113b483b7998c635cbcd9638"
+  },
+  {
+    "id": "myoddballs.com-data_subject_rights",
+    "site": "myoddballs.com",
+    "scanId": "bfb07201-d4ad-41a4-b551-8fd807538f6a",
+    "topic": "data_subject_rights",
+    "locale": "en",
+    "url": "https://www.myoddballs.com/policies/privacy-policy",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261024T141007Z-scheduled-14227d98/scans/bfb07201-d4ad-41a4-b551-8fd807538f6a/support/policy_surface_text_68df2331_364dbfd7.txt",
+      "sha256": "9f471bba7f16bf830f5516ba003697ae7006671f029f9cebdfab47b45e1c2d91",
+      "role": "verified_policy_text",
+      "bytes": 20662,
+      "validUtf8": true,
+      "nulFree": true
+    },
+    "sourceBundle": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261024T141007Z-scheduled-14227d98/scans/bfb07201-d4ad-41a4-b551-8fd807538f6a/evidence/0/CanonicalEvidenceBundle.json",
+      "sha256": "089e24b1547c0dacc533cc8d012f5993db3250effd392637937449cd4ab1ae26",
+      "role": "scanArtifactUri"
+    },
+    "context": "ation Backups OddBalls have a backup policy in place. We retain backups indeﬁnitely. Upon receiving a request to remove data of a personal nature, this will be completed by removing all reference and data from the production environment. Requests for your information You have rights to access, correct, delete, restrict, or object to data use. Email lookafter@myoddballs.com to exercise your rights. We will respond to requests for the information we hold on you within the requi",
+    "expectedExcerpt": "You have rights to access, correct, delete, restrict, or object to data use.",
+    "sourceCharStart": 11900,
+    "sourceCharEnd": 11976,
+    "excerptSha256": "4e44d604a197f30a844e50cb9d5f9131e70aa9835342bde3b2bd61f05c0e1cd0"
+  },
+  {
+    "id": "resonate.com-data_retention",
+    "site": "resonate.com",
+    "scanId": "c58103d3-35fb-493e-b37f-b799b8c8a69f",
+    "topic": "data_retention",
+    "locale": "en",
+    "url": "https://www.resonate.com/privacy-policy/",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261025T145911Z-scheduled-a72e3026/scans/c58103d3-35fb-493e-b37f-b799b8c8a69f/support/policy_surface_text_a5ad6c75_7b95ecac.txt",
+      "sha256": "02bb8e4f477f2e128b033e5175b99557b749990f7dec89fcfe8544f8fdee64c8",
+      "role": "verified_policy_text",
+      "bytes": 33948,
+      "validUtf8": true,
+      "nulFree": true
+    },
+    "sourceBundle": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261025T145911Z-scheduled-a72e3026/scans/c58103d3-35fb-493e-b37f-b799b8c8a69f/evidence/0/CanonicalEvidenceBundle.json",
+      "sha256": "34a51f81d8a32b1e93ec24eb7c4845112c27338b61d6704f06cb82791efc30ad",
+      "role": "scanArtifactUri"
+    },
+    "context": "our data Resonate retains data for the least amount of time required to perform our functions. As a data controller, to operate the services for our clients, Resonate retains detailed data collected for 120 days and in an aggregate, anonymized fashion for up to two years. After that time, the data is automatically deleted. As data processor, where clients are providing data to Resonate for analysis, that data is retained for up to two years at which time it is automatically deleted. Special or Sensitive Categories of Personal Data : Resonate does not knowingly ",
+    "expectedExcerpt": "As a data controller, to operate the services for our clients, Resonate retains detailed data collected for 120 days and in an aggregate, anonymized fashion for up to two years.",
+    "sourceCharStart": 20310,
+    "sourceCharEnd": 20487,
+    "excerptSha256": "918c3e58f19f5a31c570505bf13fd324f056caa731ae03c0b648dc1384be1e45"
+  },
+  {
+    "id": "museum-digital.org-legal_basis",
+    "site": "museum-digital.org",
+    "scanId": "a8740f3d-788a-46bf-9451-ff94841dfe2a",
+    "topic": "legal_basis",
+    "locale": "de",
+    "url": "https://de.about.museum-digital.org/privacy/",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261027T120505Z-scheduled-9d6edc90/scans/a8740f3d-788a-46bf-9451-ff94841dfe2a/support/policy_surface_text_fe578ba4_6350cadf.txt",
+      "sha256": "c41cb30218242e58e5d6e50b903462a92137c6fa8e6f9c6bde3e87c9149624c3",
+      "role": "verified_policy_text",
+      "bytes": 4997,
+      "validUtf8": true,
+      "nulFree": true
+    },
+    "sourceBundle": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261027T120505Z-scheduled-9d6edc90/scans/a8740f3d-788a-46bf-9451-ff94841dfe2a/evidence/0/CanonicalEvidenceBundle.json",
+      "sha256": "327f5184e80940c30efeb4e236de86fd86cfde3289c29d9730d712a84beb417c",
+      "role": "scanArtifactUri"
+    },
+    "context": "edem Abruf Folgendes gespeichert: Speichern des Opt-Outs aus Matomo (siehe unten) Tracking (Matomo) Auf dieser Website werden unter Einsatz der Webanalysedienst-Software Matomo (www.matomo.org), einem Dienst des Anbieters InnoCraft Ltd., 150 Willis St, 6011 Wellington, Neuseeland, („Mataomo“) auf Basis unseres berechtigten Interesses an der statistischen Analyse des Nutzerverhaltens zu Optimierungs- und Marketingzwecken gemäß Art. 6 Abs. 1 lit. f DSGVO Daten gesammelt und gespeichert. Aus diesen Daten können zum selben Zweck pseudonymisierte Nutzungsprofile erste",
+    "expectedExcerpt": "auf Basis unseres berechtigten Interesses an der statistischen Analyse des Nutzerverhaltens zu Optimierungs- und Marketingzwecken gemäß Art. 6 Abs. 1 lit. f DSGVO Daten gesammelt und gespeichert.",
+    "sourceCharStart": 3637,
+    "sourceCharEnd": 3832,
+    "excerptSha256": "b5aae967f2bee42de7093b02be47cb99146cf16b4afa0d58838ccdbd7abc6fbb"
+  },
+  {
+    "id": "nexgoglobal.com-international_transfers",
+    "site": "nexgoglobal.com",
+    "scanId": "df6c6061-a12e-45ae-a7e6-ea59142d3379",
+    "topic": "international_transfers",
+    "locale": "en",
+    "url": "https://nexgoglobal.com/privacy",
+    "source": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261027T120505Z-scheduled-9d6edc90/scans/df6c6061-a12e-45ae-a7e6-ea59142d3379/support/policy_surface_text_58e1fd89_5c713a70.txt",
+      "sha256": "10f8338ecaccdac835b3bd3048991812ad1bb80c69928a2ddbf8fd86378a4104",
+      "role": "verified_policy_text",
+      "bytes": 40859,
+      "validUtf8": true,
+      "nulFree": true
+    },
+    "sourceBundle": {
+      "file": "/Users/benmasek/WC01/artifacts/daily-scan-audit/runs/20261027T120505Z-scheduled-9d6edc90/scans/df6c6061-a12e-45ae-a7e6-ea59142d3379/evidence/0/CanonicalEvidenceBundle.json",
+      "sha256": "a09e74715d45d717a9ca9cbd0f5fedd7d8f45a4c8a5d80b012c829e543dc8098",
+      "role": "scanArtifactUri"
+    },
+    "context": "operating offices and in any other places where the parties involved in the processing are located. It means that this information may be transferred to [Singapore] and maintained on [Singapore’s] database, where located outside of Your state, province, country or other governmental jurisdiction where the data protection laws may differ than those from Your jurisdiction. Your consent to this Privacy Policy followed by Your submission of such informa",
+    "expectedExcerpt": "It means that this information may be transferred to [Singapore] and maintained on [Singapore’s] database, where located outside of Your state, province, country or other governmental jurisdiction where the data protection laws may differ than those from Your jurisdiction.",
+    "sourceCharStart": 11697,
+    "sourceCharEnd": 11970,
+    "excerptSha256": "401e4ddb1fafbe44e20682845a3361dd4fa463f4da397858876bb62d357e7006"
+  }
+]

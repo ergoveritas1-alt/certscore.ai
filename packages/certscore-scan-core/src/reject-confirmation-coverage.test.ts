@@ -62,7 +62,10 @@ for (const provider of ["finsweet", "cookiescript", "cookie_information", "osano
             ${mode === "no_event" ? '' : `dispatchEvent(new Event('CookieScriptReject'));`} };`
         : provider === "cookie_information" ? `
           window.state=true;window.CookieInformation={getConsentGivenFor:key=>window.state};
+          window.cicl=['cookie_cat_necessary','cookie_cat_functional','cookie_cat_statistic','cookie_cat_marketing'];
+          window.cicc=Object.fromEntries(window.cicl.map(key=>[key,true]));
           window.save=()=>{window.state=${mode === "partial" ? 'undefined' : mode === "opposite" ? 'true' : 'false'};
+            window.cicc={cookie_cat_necessary:true,...(window.state===undefined?{}:Object.fromEntries(window.cicl.filter(key=>key!=='cookie_cat_necessary').map(key=>[key,window.state])))};
             document.cookie='CookieInformationConsent=opaque-receipt-after;path=/';
             ${mode === "no_event" ? '' : `dispatchEvent(new Event('CookieInformationConsentGiven'));`} };`
         : `window.handlers=[];window.state=undefined;window.Osano={cm:{getConsent:()=>window.state,
@@ -110,6 +113,8 @@ test("unregistered documented API baselines remain unknown until a complete save
       const scope = provider === "cookie_information" ? 'id="coiOverlay"' : provider === "cookiescript" ? 'id="cookiescript_injected"' : 'fs-consent-element="banner"';
       await page.setContent(`<section ${scope}></section><script>window.state=undefined;
         window.CookieInformation={getConsentGivenFor:()=>window.state};
+        window.cicl=['cookie_cat_necessary','cookie_cat_functional','cookie_cat_statistic','cookie_cat_marketing'];
+        window.cicc={cookie_cat_necessary:true};
         window.CookieScript={instance:{categories:()=>['performance'],currentState:()=>window.state}};
         window.FinsweetConsentPro={consents:{get:()=>window.state}};</script>`);
       // setContent retains window properties; discard only our previous fixture tracker.
@@ -119,6 +124,7 @@ test("unregistered documented API baselines remain unknown until a complete save
       await page.evaluate(provider=>{
         (window as any).state=provider==="cookie_information" ? false : provider==="cookiescript"
           ? {action:"reject",categories:["strict"]} : {essential:true,analytics:false,marketing:false,personalization:false};
+        if(provider==="cookie_information")(window as any).cicc={cookie_cat_necessary:true,cookie_cat_functional:false,cookie_cat_statistic:false,cookie_cat_marketing:false};
         if(provider==="finsweet")document.documentElement.dispatchEvent(new Event("consentpro:consent-updated"));
         else dispatchEvent(new Event(provider==="cookiescript" ? "CookieScriptReject" : "CookieInformationConsentGiven"));
       },provider);

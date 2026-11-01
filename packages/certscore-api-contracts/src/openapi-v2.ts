@@ -1,4 +1,7 @@
 import { postureScoresOpenApi } from "./posture-scores-openapi.js";
+import { receiptAvailabilityOpenApi } from "./receipt-availability.js";
+import { categoryDiagnosticsOpenApi } from "./category-diagnostics.js";
+import { confirmationReadDiagnosticsOpenApi } from "./confirmation-read-diagnostics.js";
 import { scanReportSummaryOpenApi } from "./scan-report-summary-openapi.js";
 import { accessibilityAuditEvidenceOpenApiProperties } from "./accessibility-audit.js";
 import { reportEvidencePageOpenApi } from "./report-page-openapi.js";
@@ -34,6 +37,45 @@ const afterActionSummaryOpenApi = {
     storageWriteCount: { type: "integer", minimum: 0 },
     storageSnapshotRetained: { type: "boolean" },
   },
+} as const;
+
+const choiceConfirmationSummaryOpenApi = {
+  type: "object", additionalProperties: false,
+  description: "Source-bound confirmation stages. Initial registration stays separate from later terminal verification. Null means unavailable; a click or notification alone does not verify a consent decision.",
+  required: ["policyVersion", "sourcePacketSha256", "initialRegistrationStatus", "initialDecisionVerified", "terminalDecisionVerified", "notificationAcknowledged", "categoryCheck", "diagnosticReasons"],
+  properties: {
+    policyVersion: { type: "string", enum: ["choice_confirmation_summary.v1", "choice_confirmation_summary.v2"] },
+    sourcePacketSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+    initialRegistrationStatus: { type: "string", enum: ["confirmed", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
+    initialDecisionVerified: { type: ["boolean", "null"] },
+    terminalDecisionVerified: { type: ["boolean", "null"] },
+    notificationAcknowledged: { type: ["boolean", "null"] },
+    categoryCheck: { type: "string", enum: ["supported", "no_optional_categories", "unsupported", "unknown"] },
+    categoryDiagnostics: categoryDiagnosticsOpenApi,
+    readDiagnostics: confirmationReadDiagnosticsOpenApi,
+    receiptAvailability: receiptAvailabilityOpenApi,
+    diagnosticReasons: { type: "array", maxItems: 24, items: { type: "string", maxLength: 160 } },
+    executionStages: {
+      type: "object", additionalProperties: false,
+      required: ["controlResolved", "clickCompleted", "observationCompleted"],
+      properties: {
+        controlResolved: { type: ["boolean", "null"] },
+        clickCompleted: { type: ["boolean", "null"] },
+        observationCompleted: { type: ["boolean", "null"] },
+      },
+    },
+    phaseDiagnostics: {
+      type: "object", additionalProperties: false,
+      required: ["initialReasons", "terminalReasons", "reasonsTruncated"],
+      properties: {
+        initialReasons: { type: ["array", "null"], maxItems: 24, items: { type: "string", maxLength: 160 } },
+        terminalReasons: { type: ["array", "null"], maxItems: 24, items: { type: "string", maxLength: 160 } },
+        reasonsTruncated: { type: ["boolean", "null"] },
+      },
+    },
+  },
+  allOf: [{if: {properties: {policyVersion: {const: "choice_confirmation_summary.v2"}}, required: ["policyVersion"]},
+    then: {required: ["categoryDiagnostics"]}, else: {not: {anyOf: [{required: ["categoryDiagnostics"]}, {required: ["readDiagnostics"]}]}}}],
 } as const;
 
 
@@ -847,6 +889,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
           properties: {
             execution: choicePathExecutionOpenApi,
             afterAction: afterActionSummaryOpenApi,
+            confirmation: choiceConfirmationSummaryOpenApi,
             status: { type: "string", description: "confirmed_observation and confirmed_clean are results. Every other value is limited coverage and must not be interpreted as a pass.", enum: ["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
             refusalExercised: { type: "boolean" },
             observationCount: { type: "integer", minimum: 0 },
@@ -902,6 +945,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
           properties: {
             execution: choicePathExecutionOpenApi,
             afterAction: afterActionSummaryOpenApi,
+            confirmation: choiceConfirmationSummaryOpenApi,
             status: { type: "string", description: "confirmed_observation and confirmed_clean are results. Every other value is limited coverage and must not be interpreted as a pass.", enum: ["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
             acceptanceExercised: { type: "boolean" },
             observationCount: { type: "integer", minimum: 0 },

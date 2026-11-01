@@ -44,5 +44,5 @@ export function accessibilityRemediationVerification(ruleId: string) {
     : ruleId === "button-name" ? "Tab to the button, confirm its announced name describes its action, and test Enter/Space activation in staging without triggering a live transaction."
       : ruleId === "image-alt" ? "Check the image's accessible name/text alternative in context; decorative images should be ignored, while informative and functional images convey the equivalent information or action."
         : "Check the affected component manually against the retained rule guidance, including keyboard and assistive-technology behavior where applicable.";
-  return `After publishing the source change and clearing relevant caches, rerun ${ruleId} on every listed selector and other instances of the same component. ${manual} Retain the new automated result and manual check; a passing rule is not a complete accessibility audit.`;
+  return `Confirm the affected elements in context using the selector hints; redacted or truncated hints may match other elements or require reconstruction. After publishing the source change and clearing relevant caches, rerun ${ruleId} on those verified elements and other instances of the same component. ${manual} Retain the new automated result and manual check; a passing rule is not a complete accessibility audit.`;
 }

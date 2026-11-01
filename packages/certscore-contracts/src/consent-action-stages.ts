@@ -1,3 +1,6 @@
+import type { ConsentReceiptAvailability } from "./consent-receipt-availability";
+import {assessConsentCategoryDiagnostics, type ConsentCategoryDiagnostics} from "./consent-category-diagnostics";
+import {summarizeConsentConfirmationReads, type ConsentConfirmationReadDiagnostics} from "./consent-confirmation-diagnostics";
 import type { PostAcceptReportProjection } from "./post-accept-observation";
 import type { PostRefusalReportProjection } from "./post-refusal-observation";
 import { consentActionOutcome } from "./notification-acknowledgment";
@@ -12,10 +15,13 @@ export type ConsentActionEvidenceStages = Record<typeof CONSENT_ACTION_EVIDENCE_
   terminalDiagnosticReasons: string[] | null;
 };
 export type ConsentActionStages = {
-  policyVersion:"consent_action_stages.v1"; provider:string|null; outcome:ReturnType<typeof consentActionOutcome>;
+  policyVersion:"consent_action_stages.v1"|"consent_action_stages.v2"; provider:string|null; outcome:ReturnType<typeof consentActionOutcome>;
   measures:Record<ConsentActionStageKey,boolean|null>; diagnosticReasons:string[];
   categoryCheck:"supported"|"no_optional_categories"|"unsupported"|"unknown";
   evidenceStages: ConsentActionEvidenceStages;
+  receiptAvailability?: ConsentReceiptAvailability;
+  categoryDiagnostics?: ConsentCategoryDiagnostics;
+  readDiagnostics?: ConsentConfirmationReadDiagnostics | null;
   passiveSignals?:{documentMatchesAction:boolean|null;eventRead:boolean;groupsUpdated:number;consentApplied:number;receiptRequests:number;responses2xx:number;responsesMissing:number;truncated:boolean};
 };
 
@@ -64,15 +70,20 @@ function evidenceStages(p: PostAcceptReportProjection | PostRefusalReportProject
 /** Diagnostic/benchmark projection only, from a validated source-hash projection.
  * A missing provider is unverified, never proof that a site has no CMP.
  * Unknowns stay in the total and have their own count; no denominator exclusions. */
-export function assessConsentActionStages(p:PostAcceptReportProjection|PostRefusalReportProjection):ConsentActionStages {
+export function assessConsentActionStages(p:PostAcceptReportProjection|PostRefusalReportProjection,
+  policyVersion: "consent_action_stages.v1"|"consent_action_stages.v2" = "consent_action_stages.v1"):ConsentActionStages {
   const source=/^[a-f0-9]{64}$/.test(p.packetSha256??"");
-  const unknown:ConsentActionStages={policyVersion:"consent_action_stages.v1",provider:null,outcome:"unknown",measures:{providerAttributed:null,controlResolved:null,clickCompleted:null,observationCompleted:null,categoryScopeVerified:null,decisionVerified:null},diagnosticReasons:[],categoryCheck:"unknown",evidenceStages:evidenceStages(p,false)};
+  const unknown:ConsentActionStages={policyVersion,provider:null,outcome:"unknown",measures:{providerAttributed:null,controlResolved:null,clickCompleted:null,observationCompleted:null,categoryScopeVerified:null,decisionVerified:null},diagnosticReasons:[],categoryCheck:"unknown",evidenceStages:evidenceStages(p,false)};
   if(!source)return unknown;
   const provider=p.actionControlProof?.cmpId??null;
   const reasons=p.confirmationDiagnostics?.reasons??[];
   const group=p.decisionEvidence?.oneTrustGroupEvidence??p.terminalDecisionEvidence?.evidence.oneTrustGroupEvidence;
-  return {policyVersion:"consent_action_stages.v1",provider,outcome:consentActionOutcome(p),
+  const categoryDiagnostics = policyVersion === "consent_action_stages.v2" ? assessConsentCategoryDiagnostics(p.confirmationDiagnostics) : undefined;
+  return {policyVersion,provider,outcome:consentActionOutcome(p),
+    ...(policyVersion === "consent_action_stages.v2" ? {readDiagnostics: summarizeConsentConfirmationReads(p.confirmationDiagnostics)} : {}),
+    ...(categoryDiagnostics ? {categoryDiagnostics} : {}),
     evidenceStages:evidenceStages(p,true),
+    ...(p.receiptAvailability ? {receiptAvailability:p.receiptAvailability} : {}),
     measures:{providerAttributed:provider?true:null,controlResolved:p.actionControlProof?true:p.resolver?.found??null,
       clickCompleted:p.execution?.clickCompleted??null,observationCompleted:p.execution?.observationCompleted??null,
       categoryScopeVerified:group?true:null,decisionVerified:p.execution?.consentConfirmed??null},
@@ -83,5 +94,5 @@ export function assessConsentActionStages(p:PostAcceptReportProjection|PostRefus
       receiptRequests:p.passiveCmpDiagnostics.network.length,responses2xx:p.passiveCmpDiagnostics.network.filter(n=>n.status!==undefined&&n.status>=200&&n.status<300).length,
       responsesMissing:p.passiveCmpDiagnostics.network.filter(n=>n.status===undefined).length,truncated:p.passiveCmpDiagnostics.eventsTruncated||p.passiveCmpDiagnostics.networkTruncated}}:{}),
     diagnosticReasons:[...reasons],
-    categoryCheck:reasons.includes("category_no_optional")?"no_optional_categories":(reasons.includes("category_applicability_verified")||reasons.includes("category_exclusion_unneeded"))?"supported":reasons.some(r=>r.startsWith("category_"))?"unsupported":"unknown"};
+    categoryCheck:categoryDiagnostics?.aggregate.state ?? (reasons.includes("category_no_optional")?"no_optional_categories":(reasons.includes("category_applicability_verified")||reasons.includes("category_exclusion_unneeded"))?"supported":reasons.some(r=>r.startsWith("category_"))?"unsupported":"unknown")};
 }

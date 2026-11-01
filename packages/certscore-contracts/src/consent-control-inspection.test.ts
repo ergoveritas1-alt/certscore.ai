@@ -1,10 +1,51 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyConsentInspectionRole, isControlInspectionComplete, isInitialNecessaryOnlySelection, isInitialSelectionSubmit, verifyConsentControlInspection, CONTROL_INSPECTION_POLICY, LEGACY_CONTROL_INSPECTION_POLICY, isRelevantConsentInspectionCandidate } from "./consent-control-inspection";
+import airTabs from "./test-fixtures/retained-air-tab-inspection.json";
+
+test("retained Cookiebot tabs are information navigation only in the new inspection policy; OK stays unresolved", () => {
+  for (const source of airTabs) {
+    assert.ok(verifyConsentControlInspection(source.geometry.controlInspection, source.geometry.candidates));
+    const tabs = source.geometry.candidates.filter(c => c.role === "tab" && c.decisionStatus === "ambiguous");
+    assert.equal(tabs.length, 3);
+    for (const tab of tabs) {
+      assert.deepEqual(classifyConsentInspectionRole(tab), {role: "information", unresolvedIntents: ["options"]}, tab.label);
+      assert.equal(classifyConsentInspectionRole(tab, "control_specific_inspection.v3").role, "unknown");
+    }
+    for (const label of ["OK", "Close banner"]) {
+      const c = source.geometry.candidates.find(c => c.label === label)!;
+      assert.deepEqual(classifyConsentInspectionRole(c), {role: "unknown", unresolvedIntents: ["accept", "reject", "options", "privacy_opt_out"]}, label);
+    }
+    const old = source.geometry.controlInspection;
+    const proof = {...old, version: CONTROL_INSPECTION_POLICY, candidates: old.candidates.map(row => ({candidateId: row.candidateId,
+      ...classifyConsentInspectionRole(source.geometry.candidates.find(c => c.candidateId === row.candidateId)!)}))};
+    assert.equal(verifyConsentControlInspection({...old, version: CONTROL_INSPECTION_POLICY}, source.geometry.candidates), null,
+      "Retagging historical proof without rechecking its roles is invalid.");
+    const verified = verifyConsentControlInspection(proof, source.geometry.candidates);
+    assert.ok(verified);
+    assert.equal(old.candidates.filter(c => c.role === "unknown").length, 5);
+    assert.equal(verified.candidates.filter(c => c.role === "unknown").length, 2);
+    for (const intent of ["accept", "reject", "options", "privacy_opt_out"] as const)
+      assert.equal(isControlInspectionComplete(verified, intent), false, "The unresolved OK and Close still block negative observations.");
+  }
+});
+
+test("tab information requires exact retained identity, label, structural role and canonical non-decision evidence", () => {
+  const tab = airTabs[0]!.geometry.candidates.find(c => c.label === "Details")!;
+  for (const patch of [{role: "button"}, {role: undefined}, {tagName: "button"}, {selectorHint: "#unregistered"},
+    {label: "Reject all"}, {ariaLabel: "Reject all"}, {linkDestination: "unknown"}, {classifierReasonCodes: []}, {consentContextConfirmed: false},
+    {classifierReasonCodes: ["non_decision_control_role", "conflicting_consent_decisions"]},
+    {classifierReasonCodes: ["non_decision_control_role", "visible_accessible_intent_conflict"]}]) {
+    assert.notEqual(classifyConsentInspectionRole({...tab, ...patch}).role, "information", JSON.stringify(patch));
+  }
+  for (const policy of [LEGACY_CONTROL_INSPECTION_POLICY, "control_specific_inspection.v2", "control_specific_inspection.v3"] as const)
+    assert.equal(classifyConsentInspectionRole(tab, policy).role, "unknown");
+});
 
 test("Didomi counted partner links have a versioned non-decision role without upgrading old inspections", () => {
   const c = {tagName: "a", consentContextConfirmed: true, selectorHint: "div.didomi-popup-notice-text a", label: "our 26 partners"};
   assert.deepEqual(classifyConsentInspectionRole(c), {role: "vendor_list", unresolvedIntents: []});
+  assert.deepEqual(classifyConsentInspectionRole(c, "control_specific_inspection.v3"), {role: "vendor_list", unresolvedIntents: []});
   assert.equal(classifyConsentInspectionRole(c, "control_specific_inspection.v2").role, "unknown");
   for (const patch of [{selectorHint: "a"}, {tagName: "button"}, {label: "Accept our 26 partners"}, {consentContextConfirmed: false}])
     assert.notEqual(classifyConsentInspectionRole({...c, ...patch}).role, "vendor_list");

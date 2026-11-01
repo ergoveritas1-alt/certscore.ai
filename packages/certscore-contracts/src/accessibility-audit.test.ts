@@ -1,7 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { accessibilityAuditObservationSchema, isAccessibilityAuditLimited } from "./accessibility-audit.js";
+import { accessibilityAuditObservationSchema, accessibilitySelectorHint, isAccessibilityAuditLimited } from "./accessibility-audit.js";
 import { accessibilityAuditFixture, accessibilityProjectionFixture } from "./accessibility-audit.fixture.js";
+
+test("selector retention is bounded and versioned; historical exactness remains unknown",()=>{
+  const audit=accessibilityAuditFixture(),node=audit.violations[0]!.representativeNodes[0]!;
+  assert.match(accessibilitySelectorHint(node),/uniqueness unverified/);
+  node.selectorRetention={version:'sanitized_selectors.v1',precision:'approximate'};
+  assert.match(accessibilitySelectorHint(node),/Approximate.*redacted or truncated/);
+  assert.equal(accessibilityAuditObservationSchema.safeParse(audit).success,true);
+  for(const value of [{version:'unknown',precision:'unchanged'},{version:'sanitized_selectors.v1',precision:'exact'},
+    {version:'sanitized_selectors.v1',precision:'unchanged',rawSelector:'private'}]) {
+    assert.equal(accessibilityAuditObservationSchema.safeParse({...audit,violations:[{...audit.violations[0]!,representativeNodes:[{...node,selectorRetention:value}]}]}).success,false);
+  }
+  delete node.selectorRetention;
+  assert.equal(accessibilityAuditObservationSchema.safeParse(audit).success,true);
+  assert.match(accessibilitySelectorHint(node),/exactness unverified/);
+  assert.equal(node.selectorRetention,undefined,'reading historical evidence must not fill provenance');
+});
 
 test("completion requires evaluated rules, bound identity and no unresolved review", () => {
   assert.equal(accessibilityAuditObservationSchema.safeParse(accessibilityAuditFixture()).success, true);

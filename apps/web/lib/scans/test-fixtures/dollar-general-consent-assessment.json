@@ -1,0 +1,2118 @@
+{
+  "provenance": {
+    "sourceFile": "existing-records.json",
+    "sourceSha256": "58200b0902bc9233c99af540394408ad8f0f0a619d920b92eabb9b6c8787e2fe",
+    "scanId": "b9650d52-1a77-4079-b596-c6f4a524bfa0",
+    "retainedAt": "2026-10-30"
+  },
+  "assessment": {
+    "scan": {
+      "noGo": false,
+      "scanId": "b9650d52-1a77-4079-b596-c6f4a524bfa0",
+      "finalUrl": "https://www.dollargeneral.com/",
+      "scanStatus": "completed",
+      "requestedUrl": "https://dollargeneral.com/"
+    },
+    "surface": {
+      "status": "observed_actionable",
+      "evidenceRefs": [],
+      "lastObservedAtMs": 12562,
+      "firstObservedAtMs": 12562
+    },
+    "cmpAudit": {
+      "rows": [
+        {
+          "id": "categories",
+          "detail": "Evidence was not retained for this check.",
+          "status": "not_assessed",
+          "evidenceRefs": []
+        },
+        {
+          "id": "services",
+          "detail": "Evidence was not retained for this check.",
+          "status": "not_assessed",
+          "evidenceRefs": []
+        },
+        {
+          "id": "privacy_access",
+          "detail": "Evidence was not retained for this check.",
+          "status": "not_assessed",
+          "evidenceRefs": []
+        },
+        {
+          "id": "consent_record",
+          "detail": "No post-choice consent record was captured; the choice checks did not complete.",
+          "status": "incomplete",
+          "limitation": {
+            "code": "accept_deterministic_accept_control_not_found",
+            "group": "actions"
+          },
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "duration",
+          "detail": "No CMP cookie expiry was captured; the choice checks did not complete.",
+          "status": "incomplete",
+          "limitation": {
+            "code": "accept_deterministic_accept_control_not_found",
+            "group": "actions"
+          },
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "declared_not_found",
+          "detail": "Evidence was not retained for this check.",
+          "status": "not_assessed",
+          "evidenceRefs": []
+        },
+        {
+          "id": "found_not_declared",
+          "detail": "Evidence was not retained for this check.",
+          "status": "not_assessed",
+          "evidenceRefs": []
+        },
+        {
+          "id": "cookie_information",
+          "detail": "Evidence was not retained for this check.",
+          "status": "not_assessed",
+          "evidenceRefs": []
+        },
+        {
+          "id": "implementation",
+          "detail": "Accept: a usable control was not found. Reject: a usable control was not found.",
+          "status": "incomplete",
+          "limitation": {
+            "code": "accept_deterministic_accept_control_not_found",
+            "group": "actions"
+          },
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "prominence",
+          "detail": "Evidence was not retained for this check.",
+          "status": "not_assessed",
+          "evidenceRefs": []
+        }
+      ],
+      "scanId": "b9650d52-1a77-4079-b596-c6f4a524bfa0",
+      "support": {
+        "state": "partial",
+        "reason": "independent_core_facts",
+        "provider": null,
+        "recipeVersion": null
+      },
+      "version": "cmp_audit_assessment.v6",
+      "sourceSha256": "412b11e7bad786ba1d4ca2eba528332d1d09a9e29a3dedd569edf964544b4ec2"
+    },
+    "controls": {
+      "accept": {
+        "layer": "first_layer",
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v3",
+          "status": "complete",
+          "evidenceRefs": [
+            "ConsentControlGeometryEvidence.json"
+          ]
+        },
+        "reasonCodes": [
+          "control_specific_inventory_complete",
+          "same_document_first_layer_control_observed",
+          "potential_security_challenge",
+          "scan_no_go_corroborated",
+          "pre_consent_runtime_partial",
+          "consent_ui_capture_timed_out",
+          "scan_no_go_diagnostics",
+          "consent_surface_inspection_runtime_partial",
+          "consent_surface_inspection_observation_incomplete",
+          "consent-control-capture.v4",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:allow cookies",
+          "CanonicalEvidenceBundle.json"
+        ],
+        "lastObservedAtMs": 12562,
+        "firstObservedAtMs": 12562
+      },
+      "reject": {
+        "layer": "first_layer",
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v3",
+          "status": "complete",
+          "evidenceRefs": [
+            "ConsentControlGeometryEvidence.json"
+          ]
+        },
+        "reasonCodes": [
+          "control_specific_inventory_complete",
+          "complete_first_layer_inventory_without_control",
+          "potential_security_challenge",
+          "scan_no_go_corroborated",
+          "pre_consent_runtime_partial",
+          "consent_ui_capture_timed_out",
+          "scan_no_go_diagnostics",
+          "consent_surface_inspection_runtime_partial",
+          "consent_surface_inspection_observation_incomplete",
+          "consent-control-capture.v4",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "lastObservedAtMs": null,
+        "firstObservedAtMs": null
+      },
+      "options": {
+        "layer": "first_layer",
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v3",
+          "status": "complete",
+          "evidenceRefs": [
+            "ConsentControlGeometryEvidence.json"
+          ]
+        },
+        "reasonCodes": [
+          "control_specific_inventory_complete",
+          "complete_first_layer_inventory_without_control",
+          "potential_security_challenge",
+          "scan_no_go_corroborated",
+          "pre_consent_runtime_partial",
+          "consent_ui_capture_timed_out",
+          "scan_no_go_diagnostics",
+          "consent_surface_inspection_runtime_partial",
+          "consent_surface_inspection_observation_incomplete",
+          "consent-control-capture.v4",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "lastObservedAtMs": null,
+        "firstObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "layer": "first_layer",
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v3",
+          "status": "complete",
+          "evidenceRefs": [
+            "ConsentControlGeometryEvidence.json"
+          ]
+        },
+        "reasonCodes": [
+          "control_specific_inventory_complete",
+          "complete_first_layer_inventory_without_control",
+          "potential_security_challenge",
+          "scan_no_go_corroborated",
+          "pre_consent_runtime_partial",
+          "consent_ui_capture_timed_out",
+          "scan_no_go_diagnostics",
+          "consent_surface_inspection_runtime_partial",
+          "consent_surface_inspection_observation_incomplete",
+          "consent-control-capture.v4",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "lastObservedAtMs": null,
+        "firstObservedAtMs": null
+      }
+    },
+    "coverage": {
+      "status": "limited",
+      "reasonCodes": [
+        "potential_security_challenge",
+        "scan_no_go_corroborated",
+        "pre_consent_runtime_partial",
+        "consent_ui_capture_timed_out",
+        "scan_no_go_diagnostics",
+        "consent_surface_inspection_runtime_partial",
+        "consent_surface_inspection_observation_incomplete",
+        "consent-control-capture.v4",
+        "canonical_consent_coverage_incomplete"
+      ],
+      "requiredChannels": [
+        "dom_inventory",
+        "geometry"
+      ],
+      "completedChannels": [
+        "dom_inventory",
+        "geometry",
+        "network_cmp",
+        "dom_snapshot"
+      ],
+      "incompleteChannels": []
+    },
+    "document": {
+      "reasonCodes": [],
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.dollargeneral.com/",
+      "observedDocumentIds": [
+        "https://www.dollargeneral.com/"
+      ],
+      "canonicalDocumentToken": "C6CD7373DEFC7EC422D42E0EE6E53EA2",
+      "observedDocumentTokens": [
+        "C6CD7373DEFC7EC422D42E0EE6E53EA2"
+      ]
+    },
+    "evidence": [
+      {
+        "label": "allow cookies",
+        "layer": "first_layer",
+        "intent": "accept",
+        "locale": "en",
+        "visible": true,
+        "channels": [
+          "dom_inventory",
+          "geometry"
+        ],
+        "actionable": true,
+        "classifier": {
+          "matchedTerm": "allow cookies",
+          "reasonCodes": [
+            "matched_accept",
+            "match_strength_direct",
+            "context_satisfied"
+          ],
+          "matchStrength": "direct",
+          "registryVersion": "consent-control-label-registry.v22"
+        },
+        "documentId": "https://www.dollargeneral.com/",
+        "evidenceId": "consent_ui_pre_consent:allow cookies",
+        "artifactRefs": [
+          "CanonicalEvidenceBundle.json"
+        ],
+        "observedAtMs": 12562,
+        "documentToken": "C6CD7373DEFC7EC422D42E0EE6E53EA2",
+        "placementType": "unknown",
+        "controlVariant": null,
+        "presentationType": "unknown"
+      }
+    ],
+    "provenance": {
+      "computedAt": "2026-10-29T11:26:10.273Z",
+      "sourceHash": "fnv1a-4bcfbe5b",
+      "projectorId": "wc01.consent-control-assessment",
+      "contractVersion": "2.2",
+      "projectorVersion": "2.2.4",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1"
+    },
+    "limitations": [
+      {
+        "code": "typed_inventory_incomplete",
+        "detail": "The retained first-layer inventory did not complete: partial.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "artifactType": "consent_control_assessment",
+    "contradictions": [],
+    "evidencePolicy": "structured_control_evidence.v1",
+    "visualEvidence": {
+      "status": "available",
+      "reasonCodes": [],
+      "artifactRefs": [
+        "screenshot_pre_consent_settled"
+      ]
+    },
+    "artifactVersion": "2.2",
+    "assessmentStatus": "limited",
+    "californiaPrivacyReview": {
+      "scanId": "b9650d52-1a77-4079-b596-c6f4a524bfa0",
+      "controls": [],
+      "capturedAt": "2026-10-29T11:26:10.273Z",
+      "inspection": {
+        "scope": "rendered_named_links_and_buttons",
+        "coverage": "limited",
+        "capturedAt": "2026-10-29T11:25:57.459Z",
+        "frameCount": 4,
+        "sourceHash": "669bd5993bf451742a050e9ad2fd64c9a44f06b060adaffd010c4645bfa6b140",
+        "diagnostics": {
+          "frames": [
+            {
+              "first": {
+                "depth": 0,
+                "reason": "visibility_hidden",
+                "locatorHash": "eebdc92080d6daa922a3beced60f744bcd70b34f6e3c54f5e602b298c8adec3d",
+                "locatorLimited": false,
+                "frameDocumentHash": null
+              },
+              "second": null
+            },
+            {
+              "first": {
+                "depth": 2,
+                "reason": "display_none",
+                "locatorHash": "8cf77fc237701fc0eaa74ede056fa905eecd38e7ae052c17318536bc47f5c6b2",
+                "locatorLimited": false,
+                "frameDocumentHash": null
+              },
+              "second": null
+            },
+            {
+              "first": {
+                "depth": 0,
+                "reason": "opacity_zero",
+                "locatorHash": "7a1362ba519e945d401b3d88c9dcc4517546c5488736c4e06e8d0f8e5c2ced8b",
+                "locatorLimited": false,
+                "frameDocumentHash": "595da2d0377bb1ea1870168b398e259527b0d3cf7a2635f1679d3aae7f45043b"
+              },
+              "second": null
+            },
+            {
+              "first": {
+                "depth": 3,
+                "reason": "visible",
+                "locatorHash": "e6618248787472b8087249d768d358da05a707e28a00095627deb2fa73989838",
+                "locatorLimited": false,
+                "frameDocumentHash": null
+              },
+              "second": null
+            }
+          ],
+          "status": "limited",
+          "version": "privacy_choice_diagnostics.v1",
+          "limitations": [
+            "second_checkpoint_unavailable",
+            "frame_set_changed"
+          ],
+          "identityBasis": "document_and_structural_locator_only",
+          "unnamedControls": [
+            {
+              "tag": "button",
+              "role": "none",
+              "scope": "main",
+              "nameStates": [
+                0,
+                0,
+                1,
+                1,
+                0,
+                0
+              ],
+              "locatorHash": "5128431e7ad9f6b837fd86892ab558a99ba611e808a611127b3c6886c825f813",
+              "locatorLimited": false,
+              "labelledByTruncated": false
+            }
+          ],
+          "firstDocumentHash": "9930bbb62e3692ed5a2617789be9a3f5c520a14e801ccb52ae6279a4a9b8486f",
+          "secondDocumentHash": null,
+          "inspectionSourceHash": "669bd5993bf451742a050e9ad2fd64c9a44f06b060adaffd010c4645bfa6b140"
+        },
+        "documentUrl": "https://www.dollargeneral.com/",
+        "rightsMethods": [],
+        "documentStable": false,
+        "limitationKeys": [
+          "document_binding_unverified",
+          "unnamed_controls",
+          "frame_inventory_incomplete"
+        ],
+        "contractVersion": "certscore.privacy-choice-inspection.v5",
+        "readinessPolicy": "document_bound_dom_inventory.v1",
+        "frameProofWorkMs": 0,
+        "unreadyFrameCount": 0,
+        "documentReadyState": "interactive",
+        "unnamedControlCount": 1,
+        "homepageAccessPolicy": "representative_homepage.v1",
+        "frameInspectionWorkMs": 1,
+        "uninspectedFrameCount": 4,
+        "inaccessibleFrameCount": 1,
+        "representativeDocument": true,
+        "frameBudgetLimitedCount": 0,
+        "unprojectableFrameCount": 0,
+        "hiddenUnnamedControlCount": 0,
+        "namedChoiceCandidateCount": 2,
+        "supportedDocumentLanguage": true,
+        "uninspectedShadowRootCount": 0,
+        "hiddenUninspectedFrameCount": 3,
+        "candidateEnumerationTruncated": false,
+        "inspectedSameOriginFrameCount": 0,
+        "namedFrameChoiceCandidateCount": 0
+      },
+      "sourceHash": "42ce52f0af6e8500162629c5f1a87e85b6cd9137bb1331d07ce3ac595a713dfd",
+      "documentUrl": "https://www.dollargeneral.com/",
+      "scoreEffect": "none",
+      "noticeTopics": [
+        "sale_sharing"
+      ],
+      "applicability": "not_determined",
+      "choiceSurface": "unknown",
+      "policyVersion": "california-privacy-review.v10",
+      "noticeAdequacy": "not_assessed",
+      "reviewCoverage": {
+        "topics": [
+          {
+            "topic": "categories",
+            "excerpt": "lowing additional details regarding the categories of Personal Information about California, Colorado, Connecticut, Delaware, Indiana, Iowa, Kentucky, Maryland, Minnesota, Montana, Nebraska, New Hampshire, New Jersey, Oregon, Rhode Island, Tennessee, Texas, Utah, and Virginia residents that we collect, use, and disclose.",
+            "evidenceRef": "policy-text:policy_surface_ef72aead"
+          },
+          {
+            "topic": "purposes",
+            "excerpt": "formation that we \u201csell\u201d or \u201cshare\u201d for purposes of cross-context behavioral advertising (as defined by the CCPA) or targeted advertising, including within the preceding 12 months since this Privacy Policy was last updated.</p>\\r\\n\"}}\" id=\"notice-at-collection\" class=\"cmp-text \"> Notice at Collection Collection, Disclosure, Processing, Sale, and Sharing of Personal Information The chart below provides the categories of Personal Information we collect, disclose, and process, a",
+            "evidenceRef": "policy-text:policy_surface_ef72aead"
+          },
+          {
+            "topic": "retention",
+            "excerpt": "epage of the Websites.</b></p>\\r\\n<p><u>Retention Period</u></p>\\r\\n<p>We retain each category of Personal Information, including Sensitive Personal Information, for as long as needed or permitted in light of the purpose(s) for which it was collected.&nbsp; The criteria used to determine our retention periods include:&nbsp;</p>\\r\\n<ul>\\r\\n<li>The length of time we provide services to you or have an ongoing relationship with you, and the length of time thereafter during which",
+            "evidenceRef": "policy-text:policy_surface_ef72aead"
+          },
+          {
+            "topic": "right_to_know",
+            "excerpt": "are a California resident, you may also request that we disclose to you the following information:</p>\\r\\n<ul>\\r\\n<li>The categories of Personal Information we collected about you and the categories of sources from which we collected such Personal Information;</li>\\r\\n<li>The business or commercial purpose for collecting, selling, or \u201csharing\u201d Personal Information about you;&nbsp;</li>\\r\\n<li>The categories of Personal Information about you that we sold or \u201cshared\u201d and the ca",
+            "evidenceRef": "policy-text:policy_surface_ef72aead"
+          },
+          {
+            "topic": "right_to_delete",
+            "excerpt": "Request to Delete: You may request that we delete your Personal Information. 3.",
+            "evidenceRef": "policy-text:policy_surface_ef72aead"
+          },
+          {
+            "topic": "right_to_correct",
+            "excerpt": "Request to Correct: You may request that we correct inaccuracies in your Personal Information. 4.",
+            "evidenceRef": "policy-text:policy_surface_ef72aead"
+          },
+          {
+            "topic": "request_method",
+            "excerpt": "<p>If you have any questions about this Privacy Policy, please contact us at <a href=\\\"mailto:privacypolicy@dollargeneral.com\\\">privacypolicy@dollargeneral.com</a>, or:</p>\\r\\n<p>Dollar General Corporation<br>\\r\\nATTN: Legal Department&nbsp;<br>\\r\\n100 Mission Ridge&nbsp;<br>\\r\\nGoodlettsville, TN 37072</p>\\r\\n<p>Depending on your email service and other related factors to how you send email, email is not an appropriate channel for communicating sensitive personal information",
+            "evidenceRef": "policy-text:policy_surface_ef72aead"
+          }
+        ],
+        "families": [
+          {
+            "id": "privacy_notice",
+            "reason": "Verified policy text inspected for categories, purposes and retention; presence does not establish adequacy.",
+            "status": "observed",
+            "followUp": "none",
+            "evidenceRefs": [
+              "policy-text:policy_surface_ef72aead"
+            ],
+            "assessmentState": "completed"
+          },
+          {
+            "id": "california_rights",
+            "reason": "Clause inspection: right to know, right to delete, right to correct wording retained. California adequacy remains separate.",
+            "status": "review",
+            "followUp": "interpretation",
+            "evidenceRefs": [
+              "policy-text:policy_surface_ef72aead"
+            ],
+            "assessmentState": "partial"
+          },
+          {
+            "id": "request_methods",
+            "reason": "Retained request instructions or a visible named route establish discoverability; submission functionality is untested.",
+            "status": "observed",
+            "followUp": "none",
+            "evidenceRefs": [
+              "policy-text:policy_surface_ef72aead"
+            ],
+            "assessmentState": "completed"
+          },
+          {
+            "id": "collection_notice",
+            "reason": "0 of 3 collection points have category wording; 0 have relevant purpose wording. Product-name lookups are separate technical context.",
+            "status": "review",
+            "followUp": "capture",
+            "evidenceRefs": [
+              "policy-text:policy_surface_ef72aead"
+            ],
+            "assessmentState": "limited"
+          },
+          {
+            "id": "sale_sharing",
+            "reason": "Sale: qualified; cross-context sharing: review; operational disclosures: qualified; analytics: described. Policy claims are separate from verified practices.",
+            "status": "review",
+            "followUp": "interpretation",
+            "evidenceRefs": [
+              "policy-text:policy_surface_ef72aead"
+            ],
+            "assessmentState": "partial"
+          },
+          {
+            "id": "privacy_choices",
+            "reason": "Named choice and policy claims retained separately; verified execution and applicable opt-out requirements remain distinct checks.",
+            "status": "unknown",
+            "followUp": "capture",
+            "evidenceRefs": [
+              "policy-text:policy_surface_ef72aead"
+            ],
+            "assessmentState": "limited"
+          }
+        ],
+        "scoreReady": false,
+        "postureBasis": "assuming_ccpa_applies",
+        "captureCoverage": {
+          "policyTextComplete": true,
+          "choiceInventoryComplete": false,
+          "collectionInventoryComplete": false
+        },
+        "contractVersion": "certscore.california-review-coverage.v4",
+        "policyStatement": "not_identified",
+        "runtimeCoverage": "complete",
+        "sourceDocuments": [
+          {
+            "url": "https://www.dollargeneral.com/privacy-policy",
+            "sha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+            "complete": true,
+            "evidenceRef": "policy-text:policy_surface_ef72aead"
+          }
+        ]
+      },
+      "contractVersion": "certscore.california-privacy-review.v10",
+      "rightsAssessment": {
+        "topics": [
+          {
+            "topic": "right_to_know",
+            "reason": "Consumer-rights wording retained; scope, exceptions and California adequacy remain separate checks.",
+            "status": "disclosed",
+            "context": "california_wording",
+            "passages": [
+              {
+                "end": 78338,
+                "start": 77858,
+                "excerpt": "Request to Know : You may request to know whether we process your Personal Information, and to access such Personal Information, including to receive a portable copy of your Personal Information If you are a California resident, you may also request that we disclose to you the following information: The categories of Personal Information we collected about you and the categories of sources from which we collected such Personal Information; The business or commercial purpose f",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              },
+              {
+                "end": 72774,
+                "start": 72294,
+                "excerpt": "&nbsp;<i>Request to Know</i>: You may request to know whether we process your Personal Information, and to access such Personal Information, including to receive a portable copy of your Personal Information</p>\\r\\n<p>If you are a California resident, you may also request that we disclose to you the following information:</p>\\r\\n<ul>\\r\\n<li>The categories of Personal Information we collected about you and the categories of sources from which we collected such Personal Informat",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              }
+            ],
+            "excludedPassages": [],
+            "excludedClauseCount": 0,
+            "candidateClauseCount": 66,
+            "unresolvedClauseCount": 64
+          },
+          {
+            "topic": "right_to_delete",
+            "reason": "Consumer-rights wording retained; scope, exceptions and California adequacy remain separate checks.",
+            "status": "disclosed",
+            "context": "california_wording",
+            "passages": [
+              {
+                "end": 73851,
+                "start": 73775,
+                "excerpt": "Request to Delete: You may request that we delete your Personal Information.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              },
+              {
+                "end": 79234,
+                "start": 79158,
+                "excerpt": "Request to Delete: You may request that we delete your Personal Information.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              }
+            ],
+            "excludedPassages": [],
+            "excludedClauseCount": 0,
+            "candidateClauseCount": 22,
+            "unresolvedClauseCount": 20
+          },
+          {
+            "topic": "right_to_correct",
+            "reason": "Consumer-rights wording retained; scope, exceptions and California adequacy remain separate checks.",
+            "status": "disclosed",
+            "context": "california_wording",
+            "passages": [
+              {
+                "end": 73959,
+                "start": 73865,
+                "excerpt": "Request to Correct: You may request that we correct inaccuracies in your Personal Information.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              },
+              {
+                "end": 79332,
+                "start": 79238,
+                "excerpt": "Request to Correct: You may request that we correct inaccuracies in your Personal Information.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              }
+            ],
+            "excludedPassages": [],
+            "excludedClauseCount": 0,
+            "candidateClauseCount": 22,
+            "unresolvedClauseCount": 20
+          },
+          {
+            "topic": "non_discrimination",
+            "reason": "Candidate wording requires interpretation; no missing-right conclusion is inferred.",
+            "status": "review",
+            "context": "unresolved",
+            "passages": [
+              {
+                "end": 5360,
+                "start": 5059,
+                "excerpt": "State Residents Notice at Collection Notice of Financial Incentives / Loyalty Programs California Do Not Track Policy California Privacy Rights \u2013 Shine the Light California Privacy Rights \u2013 Rights for Minors Nevada Privacy Rights Sensitive Information Contacting Us <b>What this Privacy Policy Covers.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              },
+              {
+                "end": 74528,
+                "start": 74390,
+                "excerpt": "</p>\\r\\n<p>You have the right to be free from unlawful retaliation for exercising your rights under applicable state consumer privacy law.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              }
+            ],
+            "excludedPassages": [],
+            "excludedClauseCount": 0,
+            "candidateClauseCount": 5,
+            "unresolvedClauseCount": 5
+          }
+        ],
+        "contractVersion": "certscore.california-rights-clauses.v1",
+        "sourceBundleSha256": "42ce52f0af6e8500162629c5f1a87e85b6cd9137bb1331d07ce3ac595a713dfd",
+        "assessmentPolicyVersion": "rights_section_context.v2"
+      },
+      "controlsTruncated": false,
+      "failedNoticeLinks": [],
+      "noticeEvidenceRefs": [
+        "policy-surface:policy_surface_ef72aead"
+      ],
+      "observedScoreBasis": {
+        "scanId": "b9650d52-1a77-4079-b596-c6f4a524bfa0",
+        "sourceHash": "42ce52f0af6e8500162629c5f1a87e85b6cd9137bb1331d07ce3ac595a713dfd",
+        "sourceLane": "runtime_evidence",
+        "documentUrl": "https://www.dollargeneral.com/",
+        "evidenceRef": "CanonicalEvidenceBundle.json#runtimeMetadataSnapshots",
+        "accessOutcome": "representative_page",
+        "documentToken": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+        "domArtifactId": "dom_text_pre_consent",
+        "policyVersion": "usable_starting_page_score.v1"
+      },
+      "verificationStatus": "verified",
+      "optOutEffectiveness": "not_assessed",
+      "disclosureInspection": {
+        "method": "complete_english_policy_concept_inventory.v1",
+        "topics": [
+          {
+            "topic": "right_to_know",
+            "status": "candidate_present",
+            "candidateCount": 93
+          },
+          {
+            "topic": "right_to_delete",
+            "status": "candidate_present",
+            "candidateCount": 30
+          },
+          {
+            "topic": "right_to_correct",
+            "status": "candidate_present",
+            "candidateCount": 24
+          },
+          {
+            "topic": "non_discrimination",
+            "status": "candidate_present",
+            "candidateCount": 8
+          }
+        ],
+        "documents": [
+          {
+            "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+            "evidenceRef": "policy-text:policy_surface_ef72aead",
+            "inspectedChars": 111728
+          }
+        ],
+        "contractVersion": "certscore.california-disclosure-inspection.v1",
+        "sourceBundleSha256": "42ce52f0af6e8500162629c5f1a87e85b6cd9137bb1331d07ce3ac595a713dfd"
+      },
+      "optOutPresenceSignal": {
+        "basis": "visible_dom_opt_out_label",
+        "label": "Your Privacy Choices",
+        "scope": "observed_page",
+        "state": "observed",
+        "scanId": "b9650d52-1a77-4079-b596-c6f4a524bfa0",
+        "passage": {
+          "end": 2442,
+          "start": 2422,
+          "excerpt": "Your Privacy Choices",
+          "textSha256": "05cb7a72a9b9b4f3f09f833bc94892b998787b1ba3d4fec824e3941cff729934",
+          "evidenceRef": "dom-text:dom_text_pre_consent"
+        },
+        "version": "sale_sharing_opt_out_signal.v7",
+        "confidence": "signal",
+        "scopeLabel": "Observed page only",
+        "sourceHash": "42ce52f0af6e8500162629c5f1a87e85b6cd9137bb1331d07ce3ac595a713dfd",
+        "documentUrl": "https://www.dollargeneral.com/",
+        "effectiveness": "not_verified",
+        "sourceBinding": {
+          "kind": "dom_snapshot",
+          "artifactId": "dom_text_pre_consent",
+          "observedAt": "2026-10-29T11:25:57.655Z",
+          "capturedAtMs": 14251,
+          "documentToken": "C6CD7373DEFC7EC422D42E0EE6E53EA2"
+        },
+        "sourceDocumentUrl": "https://www.dollargeneral.com/"
+      },
+      "broadOptOutAssessment": {
+        "basis": "specific_signal",
+        "state": "observed",
+        "scanId": "b9650d52-1a77-4079-b596-c6f4a524bfa0",
+        "version": "sale_sharing_opt_out_assessment.v3",
+        "sourceHash": "42ce52f0af6e8500162629c5f1a87e85b6cd9137bb1331d07ce3ac595a713dfd",
+        "documentUrl": "https://www.dollargeneral.com/",
+        "evidenceRefs": [
+          "dom-text:dom_text_pre_consent"
+        ]
+      },
+      "saleSharingAssessment": {
+        "topics": [
+          {
+            "topic": "sale",
+            "reason": "Qualified wording was retained; exceptions or scope prevent a categorical conclusion.",
+            "status": "qualified",
+            "passages": [
+              {
+                "end": 480,
+                "start": 0,
+                "excerpt": "Privacy Policy & Data Protection Rights | Dollar General Categories On Sale $1 Every Day Food & Beverage Halloween Fall Household Essentials Home Kitchen & Dining Personal Care Beauty Health Party & Occasions Electronics Toys Office & School Supplies Pet Apparel Auto & Hardware Baby DG Brands Gift Cards Coupons & Cash Back Weekly Ads $1 Every Day myDG\u00ae Wallet Careers Menu Unverified Email Verify Sign in Create account Shopping List Saved deals Track my order Gift card balance",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              },
+              {
+                "end": 44251,
+                "start": 43821,
+                "excerpt": "at Collection</i></u></p>\\r\\n<p><u>Collection, Disclosure, Processing, Sale, and Sharing of Personal Information</u></p>\\r\\n<p>The chart below provides the categories of Personal Information we collect, disclose, and process, as well as which categories of Personal Information we have collected, disclosed, and processed for our operational business purposes in the preceding 12 months since this Privacy Policy was last updated.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              },
+              {
+                "end": 44527,
+                "start": 44252,
+                "excerpt": "The chart also details the categories of Personal Information that we \u201csell\u201d or \u201cshare\u201d for purposes of cross-context behavioral advertising (as defined by the CCPA) or targeted advertising, including within the preceding 12 months since this Privacy Policy was last updated.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              }
+            ],
+            "candidateClauseCount": 32
+          },
+          {
+            "topic": "cross_context_sharing",
+            "reason": "Candidate wording was retained but does not establish a clear business claim.",
+            "status": "review",
+            "passages": [
+              {
+                "end": 44527,
+                "start": 44279,
+                "excerpt": "categories of Personal Information that we \u201csell\u201d or \u201cshare\u201d for purposes of cross-context behavioral advertising (as defined by the CCPA) or targeted advertising, including within the preceding 12 months since this Privacy Policy was last updated.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              },
+              {
+                "end": 45263,
+                "start": 45015,
+                "excerpt": "categories of Personal Information that we \u201csell\u201d or \u201cshare\u201d for purposes of cross-context behavioral advertising (as defined by the CCPA) or targeted advertising, including within the preceding 12 months since this Privacy Policy was last updated.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              },
+              {
+                "end": 46084,
+                "start": 45604,
+                "excerpt": "with Which Categories of Third Parties for Cross-Context Behavioral or Targeted Advertising</th>\\r\\n<th style=\\\"text-align: left;\\\">Processing Purposes<br>\\r\\n(See the chart below for a detailed description of each Processing Purpose)</th>\\r\\n</tr><tr><td style=\\\"text-align: left;\\\">Identifiers, such as name, contact information, online identifiers and other government-issued ID numbers</td>\\r\\n<td style=\\\"text-align: left;\\\">Selected product vendors; service providers and co",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              }
+            ],
+            "candidateClauseCount": 16
+          },
+          {
+            "topic": "operational_disclosures",
+            "reason": "Qualified wording was retained; exceptions or scope prevent a categorical conclusion.",
+            "status": "qualified",
+            "passages": [
+              {
+                "end": 12225,
+                "start": 11976,
+                "excerpt": "you submit any information relating to other people to us or to our service providers in connection with the Services, you represent that you have the authority to do so and to permit us to use the information in accordance with this Privacy Policy.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              },
+              {
+                "end": 14105,
+                "start": 13853,
+                "excerpt": "If you submit any information relating to other people to us or to our service providers in connection with the Services, you represent that you have the authority to do so and to permit us to use the information in accordance with this Privacy Policy.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              },
+              {
+                "end": 14629,
+                "start": 14149,
+                "excerpt": "</b></p>\\r\\n<p>We and/or our service providers may collect information that you provide to us, including when you:</p>\\r\\n<ul>\\r\\n<li>Make an online or in-store purchase;</li>\\r\\n<li>Return, exchange or request information about products;</li>\\r\\n<li>Create a Dollar General account or sign up for eReceipts or to receive e-mails or mobile text messages regarding special offers;</li>\\r\\n<li>Participate in a contest, promotion or sweepstakes;</li>\\r\\n<li>Opt in for geo-targeted ",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              }
+            ],
+            "candidateClauseCount": 27
+          },
+          {
+            "topic": "analytics",
+            "reason": "Analytics wording was retained; analytics alone does not establish sale or cross-context sharing.",
+            "status": "described",
+            "passages": [
+              {
+                "end": 17881,
+                "start": 17694,
+                "excerpt": "</li>\\r\\n<li>Through Google Analytics and/or Adobe Analytics, which use cookies and other, similar technologies to collect information about use of the Services and report website trends.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              },
+              {
+                "end": 20839,
+                "start": 20665,
+                "excerpt": "Through Google Analytics and/or Adobe Analytics, which use cookies and other, similar technologies to collect information about use of the Services and report website trends.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              },
+              {
+                "end": 63622,
+                "start": 63220,
+                "excerpt": "monitoring and analyzing usage of our products and services and using data analytics to improve the efficiency of our products and services; consider ways for enhancing, improving, repairing, maintaining, or modifying our products and services; identify usage trends, for example, understanding which parts of our services are of most interest to users; undertake quality and safety assurance measures.",
+                "textSha256": "0c359354842c5efb7addf9d74dd2b2ba5bae6dd87bc76a7491e613aaabdd10d4",
+                "evidenceRef": "policy-text:policy_surface_ef72aead"
+              }
+            ],
+            "candidateClauseCount": 6
+          }
+        ],
+        "choiceBasis": "unresolved",
+        "contractVersion": "certscore.california-sale-sharing-clauses.v1",
+        "sourceBundleSha256": "42ce52f0af6e8500162629c5f1a87e85b6cd9137bb1331d07ce3ac595a713dfd"
+      },
+      "frictionlessGpcException": {
+        "basis": "insufficient_evidence",
+        "scope": "retained_website_evidence",
+        "scanId": "b9650d52-1a77-4079-b596-c6f4a524bfa0",
+        "status": "unresolved",
+        "version": "frictionless_gpc_exception.v1",
+        "sourceHash": "42ce52f0af6e8500162629c5f1a87e85b6cd9137bb1331d07ce3ac595a713dfd",
+        "disclosures": [
+          {
+            "id": "opt_out_right",
+            "status": "not_established"
+          },
+          {
+            "id": "frictionless_processing",
+            "status": "not_established"
+          },
+          {
+            "id": "signal_setup",
+            "status": "not_established"
+          },
+          {
+            "id": "other_request_methods",
+            "status": "not_established"
+          }
+        ],
+        "documentUrl": "https://www.dollargeneral.com/",
+        "unverifiedRequirements": [
+          "signal_processing",
+          "no_fee_or_consideration",
+          "equivalent_experience",
+          "no_signal_triggered_interstitial",
+          "full_sale_sharing_scope"
+        ]
+      },
+      "collectionNoticeAssessment": {
+        "points": [
+          {
+            "id": "collection_form_0",
+            "kind": "form",
+            "label": "generic form form",
+            "scope": "form_fields",
+            "reason": "Complete retained policy and collection-point inspection are required for this comparison.",
+            "status": "limited",
+            "passages": [],
+            "categories": [
+              "unknown"
+            ],
+            "association": "not_verified",
+            "evidenceRefs": [
+              "ref_collection_surface_form_0"
+            ],
+            "purposeBasis": "unresolved",
+            "purposeMatch": "unresolved",
+            "categoryMatch": "unresolved",
+            "recipientMatch": "not_assessed",
+            "technicalMatch": "not_assessed",
+            "assessmentScope": "category_purpose"
+          },
+          {
+            "id": "baseline-cookies",
+            "kind": "cookies",
+            "label": "Observed cookies",
+            "scope": "cookie_identifiers",
+            "reason": "The bounded cookie-purpose inventory is incomplete; no full-purpose disclosure conclusion is supported.",
+            "status": "limited",
+            "passages": [],
+            "categories": [
+              "cookie_identifiers"
+            ],
+            "association": "page_policy_link",
+            "evidenceRefs": [
+              "cookie_257",
+              "cookie_258",
+              "cookie_259",
+              "cookie_260",
+              "cookie_261",
+              "cookie_262",
+              "cookie_263",
+              "cookie_264"
+            ],
+            "purposeBasis": "unresolved",
+            "purposeMatch": "unresolved",
+            "categoryMatch": "unresolved",
+            "recipientMatch": "not_assessed",
+            "technicalMatch": "not_retained",
+            "assessmentScope": "category_purpose"
+          },
+          {
+            "id": "baseline-browser_storage",
+            "kind": "browser_storage",
+            "label": "Observed browser storage",
+            "scope": "storage_keys",
+            "reason": "3_KV8wp0m7znrSSvF9IWFx6vgwMm_tW8M8CQIRDehn8-B3sywmrt6k-Edb22pDteiA_gig: purpose unresolved; ld:696aa86c85757f09fa4161c0:$diagnostics: purpose unresolved; 5718FABB002E: purpose unresolved; ed73f20edbf2b73: purpose unresolved; KGN: purpose unresolved; logInModalShown: purpose unresolved; lastExternalReferrerTime: purpose unresolved; sponsoredCarousel",
+            "status": "limited",
+            "passages": [],
+            "categories": [
+              "browser_storage_keys"
+            ],
+            "association": "page_policy_link",
+            "evidenceRefs": [
+              "storage_snapshot_pre_consent"
+            ],
+            "purposeBasis": "unresolved",
+            "purposeMatch": "unresolved",
+            "categoryMatch": "unresolved",
+            "recipientMatch": "not_assessed",
+            "technicalMatch": "not_assessed",
+            "assessmentScope": "category_purpose"
+          },
+          {
+            "id": "recipient-svc_e2b6db8813da",
+            "kind": "third_party_resources",
+            "label": "Adobe Dynamic Media / Scene7 resources",
+            "scope": "resource_contact_only",
+            "reason": "Exact product wording not retained. This technical lookup is not a missing-notice finding or a requirement to name every product.",
+            "status": "not_matched",
+            "passages": [],
+            "categories": [
+              "infrastructure"
+            ],
+            "association": "page_policy_link",
+            "evidenceRefs": [
+              "net_40",
+              "net_42",
+              "net_44",
+              "net_46",
+              "net_48",
+              "net_50",
+              "net_52",
+              "net_54"
+            ],
+            "purposeBasis": "not_assessed",
+            "purposeMatch": "not_assessed",
+            "categoryMatch": "not_assessed",
+            "recipientMatch": "unresolved",
+            "technicalMatch": "not_retained",
+            "assessmentScope": "technical_context"
+          },
+          {
+            "id": "recipient-svc_0f284eec28d6",
+            "kind": "third_party_resources",
+            "label": "LaunchDarkly Client SDK resources",
+            "scope": "resource_contact_only",
+            "reason": "Exact product wording not retained. This technical lookup is not a missing-notice finding or a requirement to name every product.",
+            "status": "not_matched",
+            "passages": [],
+            "categories": [
+              "analytics"
+            ],
+            "association": "page_policy_link",
+            "evidenceRefs": [
+              "net_111",
+              "net_115",
+              "net_157",
+              "net_330",
+              "net_333",
+              "net_337",
+              "net_339"
+            ],
+            "purposeBasis": "not_assessed",
+            "purposeMatch": "not_assessed",
+            "categoryMatch": "not_assessed",
+            "recipientMatch": "unresolved",
+            "technicalMatch": "not_retained",
+            "assessmentScope": "technical_context"
+          },
+          {
+            "id": "recipient-svc_eb4b02b9df00",
+            "kind": "third_party_resources",
+            "label": "Adobe Experience Platform Launch resources",
+            "scope": "resource_contact_only",
+            "reason": "Exact product wording not retained. This technical lookup is not a missing-notice finding or a requirement to name every product.",
+            "status": "not_matched",
+            "passages": [],
+            "categories": [
+              "tag_management"
+            ],
+            "association": "page_policy_link",
+            "evidenceRefs": [
+              "net_146"
+            ],
+            "purposeBasis": "not_assessed",
+            "purposeMatch": "not_assessed",
+            "categoryMatch": "not_assessed",
+            "recipientMatch": "unresolved",
+            "technicalMatch": "not_retained",
+            "assessmentScope": "technical_context"
+          },
+          {
+            "id": "recipient-svc_57692cc931af",
+            "kind": "third_party_resources",
+            "label": "LiveRamp resources",
+            "scope": "resource_contact_only",
+            "reason": "Exact product wording not retained. This technical lookup is not a missing-notice finding or a requirement to name every product.",
+            "status": "not_matched",
+            "passages": [],
+            "categories": [
+              "advertising"
+            ],
+            "association": "page_policy_link",
+            "evidenceRefs": [
+              "net_391",
+              "net_577"
+            ],
+            "purposeBasis": "not_assessed",
+            "purposeMatch": "not_assessed",
+            "categoryMatch": "not_assessed",
+            "recipientMatch": "unresolved",
+            "technicalMatch": "not_retained",
+            "assessmentScope": "technical_context"
+          },
+          {
+            "id": "recipient-svc_42a99d1912db",
+            "kind": "third_party_resources",
+            "label": "Criteo resources",
+            "scope": "resource_contact_only",
+            "reason": "Exact product wording not retained. This technical lookup is not a missing-notice finding or a requirement to name every product.",
+            "status": "not_matched",
+            "passages": [],
+            "categories": [
+              "advertising"
+            ],
+            "association": "page_policy_link",
+            "evidenceRefs": [
+              "net_677",
+              "net_679",
+              "net_681",
+              "net_683",
+              "net_691"
+            ],
+            "purposeBasis": "not_assessed",
+            "purposeMatch": "not_assessed",
+            "categoryMatch": "not_assessed",
+            "recipientMatch": "unresolved",
+            "technicalMatch": "not_retained",
+            "assessmentScope": "technical_context"
+          },
+          {
+            "id": "unattributed-third-party-resources",
+            "kind": "third_party_resources",
+            "label": "Other third-party resources",
+            "scope": "resource_contact_only",
+            "reason": "Product attribution remains unresolved. Retained resource contact alone establishes no data-category, purpose or notice conclusion.",
+            "status": "limited",
+            "passages": [],
+            "categories": [
+              "third_party_resource_activity"
+            ],
+            "association": "not_verified",
+            "evidenceRefs": [
+              "net_22",
+              "net_24",
+              "net_26",
+              "net_28",
+              "net_30",
+              "net_117",
+              "net_120",
+              "net_123"
+            ],
+            "purposeBasis": "not_assessed",
+            "purposeMatch": "not_assessed",
+            "categoryMatch": "not_assessed",
+            "recipientMatch": "unresolved",
+            "technicalMatch": "not_assessed",
+            "assessmentScope": "technical_context"
+          }
+        ],
+        "limitationKeys": [
+          "starting_page_only",
+          "notice_adequacy_not_assessed",
+          "no_form_submission"
+        ],
+        "contractVersion": "certscore.california-collection-notice-matching.v5",
+        "inventoryComplete": false,
+        "sourceBundleSha256": "42ce52f0af6e8500162629c5f1a87e85b6cd9137bb1331d07ce3ac595a713dfd",
+        "runtimePurposeAssessment": {
+          "items": [
+            {
+              "kind": "cookie",
+              "name": "TDCPM",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "fbee22c7df6ef58dd12d097d61bbbd94"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "TDID",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "49f1875535807708127f130bf1b4c7e3"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "TS0114647f",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_527"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "_aduid",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "77d2378ff11a41aea51c632fd074c5c7"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "_s",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "51b5168f9512ca903e0f4607a016f72b"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "affinity",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_266"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "authType",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_260"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "azk",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_632"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "azk-ss",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_633"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "c",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "1ae60615b570f5dd08789c19281f98fa"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "dtCookie",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_526"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "gid",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "ca644ee18f5ead8ac6fffd7f64030b2f"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "gmid",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_489"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "hasGmid",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_491"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "kndctr_B2811C8B533097DC0A490D4D_AdobeOrg_cluster",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_397"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "kndctr_B2811C8B533097DC0A490D4D_AdobeOrg_identity",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_396"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "mbox",
+              "basis": "canonical_registry",
+              "reason": "Purpose identified by the canonical cookie registry.",
+              "purpose": "personalization",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_569"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "mboxEdgeCluster",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_570"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "omniSession",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_259"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "optOut",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_257"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "tuuid",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "ce5000fc5a5e922962f7ea62407bf46e"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "tuuid_lu",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "db49cf3b6466fad4202fd93fffe13b25"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "ucid",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_490"
+              ]
+            },
+            {
+              "kind": "cookie",
+              "name": "uniqueDeviceId",
+              "basis": "runtime_only",
+              "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity.",
+              "purpose": "unknown",
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "cookie_258"
+              ]
+            },
+            {
+              "kind": "localStorage",
+              "name": "3_KV8wp0m7znrSSvF9IWFx6vgwMm_tW8M8CQIRDehn8-B3sywmrt6k-Edb22pDteiA_gig",
+              "basis": "runtime_only",
+              "reason": "Key presence is observed; stored data and business purpose are unresolved.",
+              "purpose": "unknown",
+              "readUse": {
+                "reads": [],
+                "reason": "The bounded read trace is incomplete or unavailable; no absence-of-use conclusion is supported.",
+                "status": "limited",
+                "coverageLimited": true
+              },
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "storage_snapshot_pre_consent"
+              ]
+            },
+            {
+              "kind": "localStorage",
+              "name": "5718FABB002E",
+              "basis": "runtime_only",
+              "reason": "Key presence is observed; stored data and business purpose are unresolved.",
+              "purpose": "unknown",
+              "readUse": {
+                "reads": [],
+                "reason": "The bounded read trace is incomplete or unavailable; no absence-of-use conclusion is supported.",
+                "status": "limited",
+                "coverageLimited": true
+              },
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "storage_snapshot_pre_consent"
+              ]
+            },
+            {
+              "kind": "localStorage",
+              "name": "KGN",
+              "basis": "runtime_only",
+              "reason": "Key presence is observed; stored data and business purpose are unresolved.",
+              "purpose": "unknown",
+              "readUse": {
+                "reads": [],
+                "reason": "The bounded read trace is incomplete or unavailable; no absence-of-use conclusion is supported.",
+                "status": "limited",
+                "coverageLimited": true
+              },
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "storage_snapshot_pre_consent"
+              ]
+            },
+            {
+              "kind": "localStorage",
+              "name": "ed73f20edbf2b73",
+              "basis": "runtime_only",
+              "reason": "Key presence is observed; stored data and business purpose are unresolved.",
+              "purpose": "unknown",
+              "readUse": {
+                "reads": [],
+                "reason": "The bounded read trace is incomplete or unavailable; no absence-of-use conclusion is supported.",
+                "status": "limited",
+                "coverageLimited": true
+              },
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "storage_snapshot_pre_consent"
+              ]
+            },
+            {
+              "kind": "localStorage",
+              "name": "lastExternalReferrerTime",
+              "basis": "runtime_only",
+              "reason": "Key presence is observed; stored data and business purpose are unresolved.",
+              "purpose": "unknown",
+              "readUse": {
+                "reads": [],
+                "reason": "The bounded read trace is incomplete or unavailable; no absence-of-use conclusion is supported.",
+                "status": "limited",
+                "coverageLimited": true
+              },
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "storage_snapshot_pre_consent"
+              ]
+            },
+            {
+              "kind": "localStorage",
+              "name": "ld:696aa86c85757f09fa4161c0:$diagnostics",
+              "basis": "runtime_only",
+              "reason": "Key presence is observed; stored data and business purpose are unresolved.",
+              "purpose": "unknown",
+              "readUse": {
+                "reads": [],
+                "reason": "The bounded read trace is incomplete or unavailable; no absence-of-use conclusion is supported.",
+                "status": "limited",
+                "coverageLimited": true
+              },
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "storage_snapshot_pre_consent"
+              ]
+            },
+            {
+              "kind": "localStorage",
+              "name": "logInModalShown",
+              "basis": "runtime_only",
+              "reason": "Key presence is observed; stored data and business purpose are unresolved.",
+              "purpose": "unknown",
+              "readUse": {
+                "reads": [],
+                "reason": "The bounded read trace is incomplete or unavailable; no absence-of-use conclusion is supported.",
+                "status": "limited",
+                "coverageLimited": true
+              },
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "storage_snapshot_pre_consent"
+              ]
+            },
+            {
+              "kind": "localStorage",
+              "name": "sponsoredCarouselPageType",
+              "basis": "runtime_only",
+              "reason": "Key presence is observed; stored data and business purpose are unresolved.",
+              "purpose": "unknown",
+              "readUse": {
+                "reads": [],
+                "reason": "The bounded read trace is incomplete or unavailable; no absence-of-use conclusion is supported.",
+                "status": "limited",
+                "coverageLimited": true
+              },
+              "dataOrigin": "unknown",
+              "evidenceRefs": [
+                "storage_snapshot_pre_consent"
+              ]
+            }
+          ],
+          "contractVersion": "certscore.runtime-storage-purpose.v2",
+          "retainedSources": [],
+          "inventoryLimited": true,
+          "retainedReadTrace": {
+            "scanId": "b9650d52-1a77-4079-b596-c6f4a524bfa0",
+            "scenario": "pre_consent",
+            "captureId": "b9650d52-1a77-4079-b596-c6f4a524bfa0:runtime_evidence",
+            "limitReached": true,
+            "observations": [
+              {
+                "id": "storage-read-1",
+                "line": 1,
+                "name": "countryCode",
+                "count": 1,
+                "column": 30825,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://cdn.clarip.com/dg/cookieconsent/assets/js/clarip-cookie-manager.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-2",
+                "line": 1,
+                "name": "regionCode",
+                "count": 1,
+                "column": 30863,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://cdn.clarip.com/dg/cookieconsent/assets/js/clarip-cookie-manager.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-3",
+                "line": 1,
+                "name": "_ClaripLSCD",
+                "count": 1,
+                "column": 43485,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://cdn.clarip.com/dg/cookieconsent/assets/js/clarip-cookie-manager.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-4",
+                "line": 52,
+                "name": "_gig_localStorage_test",
+                "count": 1,
+                "column": 104696,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://mylogin.dollargeneral.com/js/gigya.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "nonempty",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-5",
+                "line": 52,
+                "name": "_gig_localStorage_test",
+                "count": 1,
+                "column": 104696,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://mylogin.dollargeneral.com/js/gigya.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "nonempty",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "sessionStorage"
+              },
+              {
+                "id": "storage-read-6",
+                "line": 53,
+                "name": "_gig_localStorage_test",
+                "count": 1,
+                "column": 9217,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://mylogin.dollargeneral.com/js/gigya.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "nonempty",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-7",
+                "line": 53,
+                "name": "_gig_localStorage_test",
+                "count": 1,
+                "column": 9217,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://mylogin.dollargeneral.com/js/gigya.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "nonempty",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "sessionStorage"
+              },
+              {
+                "id": "storage-read-8",
+                "line": 56,
+                "name": "_gig_localStorage_test",
+                "count": 1,
+                "column": 164694,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://mylogin.dollargeneral.com/js/gigya.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "nonempty",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-9",
+                "line": 56,
+                "name": "_gig_localStorage_test",
+                "count": 1,
+                "column": 164694,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://mylogin.dollargeneral.com/js/gigya.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "nonempty",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "sessionStorage"
+              },
+              {
+                "id": "storage-read-10",
+                "line": 1,
+                "name": "_ClaripLSCD",
+                "count": 1,
+                "column": 18038,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://cdn.clarip.com/dg/cookieconsent/assets/js/clarip-cookie-manager.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-11",
+                "line": 2,
+                "name": "branch_session_first",
+                "count": 2,
+                "column": 10591,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://cdn.branch.io/branch-latest.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-12",
+                "line": 2,
+                "name": "branch_session",
+                "count": 1,
+                "column": 10607,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://cdn.branch.io/branch-latest.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "sessionStorage"
+              },
+              {
+                "id": "storage-read-13",
+                "line": 2,
+                "name": "BRANCH_WEBSDK_KEYbranch_view_enabled",
+                "count": 1,
+                "column": 10607,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://cdn.branch.io/branch-latest.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "sessionStorage"
+              },
+              {
+                "id": "storage-read-14",
+                "line": 2,
+                "name": "BRANCH_WEBSDK_KEYuse_jsonp",
+                "count": 2,
+                "column": 10607,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://cdn.branch.io/branch-latest.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "sessionStorage"
+              },
+              {
+                "id": "storage-read-15",
+                "line": 2,
+                "name": "debug",
+                "count": 1,
+                "column": 95345,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-site.lc-3cd6279a0e1679c71d2244b3ef2baac3-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-16",
+                "line": 2,
+                "name": "preferredStoreData",
+                "count": 1,
+                "column": 1166738,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-site.lc-3cd6279a0e1679c71d2244b3ef2baac3-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-17",
+                "line": 34035,
+                "name": "order-type",
+                "count": 1,
+                "column": 69,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-base.lc-d13a5a790b480f140f86829b8d34b287-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-18",
+                "line": 34068,
+                "name": "preferredStoreData",
+                "count": 1,
+                "column": 121,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-base.lc-d13a5a790b480f140f86829b8d34b287-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-19",
+                "line": 56142,
+                "name": "preferredStoreData",
+                "count": 3,
+                "column": 142,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-base.lc-d13a5a790b480f140f86829b8d34b287-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-20",
+                "line": 56142,
+                "name": "order-type",
+                "count": 5,
+                "column": 515,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-base.lc-d13a5a790b480f140f86829b8d34b287-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-21",
+                "line": 35159,
+                "name": "preferredStoreData",
+                "count": 9,
+                "column": 465,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-base.lc-d13a5a790b480f140f86829b8d34b287-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-22",
+                "line": 61147,
+                "name": "preferredStoreData",
+                "count": 4,
+                "column": 37,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-base.lc-d13a5a790b480f140f86829b8d34b287-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-23",
+                "line": 865,
+                "name": "preferredStoreData",
+                "count": 2,
+                "column": 39,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-24",
+                "line": 2,
+                "name": "preferredStoreData",
+                "count": 2,
+                "column": 1226001,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-site.lc-3cd6279a0e1679c71d2244b3ef2baac3-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-25",
+                "line": 63051,
+                "name": "preferredStoreData",
+                "count": 1,
+                "column": 1374,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-base.lc-d13a5a790b480f140f86829b8d34b287-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-26",
+                "line": 62975,
+                "name": "preferredStoreData",
+                "count": 1,
+                "column": 237,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-base.lc-d13a5a790b480f140f86829b8d34b287-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-27",
+                "line": 891,
+                "name": "preferredStoreData",
+                "count": 1,
+                "column": 27,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "absent",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-28",
+                "line": 865,
+                "name": "preferredStoreData",
+                "count": 1,
+                "column": 39,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "nonempty",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-29",
+                "line": 2,
+                "name": "preferredStoreData",
+                "count": 1,
+                "column": 1226001,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-site.lc-3cd6279a0e1679c71d2244b3ef2baac3-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "nonempty",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-30",
+                "line": 56143,
+                "name": "preferredStoreData",
+                "count": 1,
+                "column": 865,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-base.lc-d13a5a790b480f140f86829b8d34b287-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "nonempty",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-31",
+                "line": 56142,
+                "name": "preferredStoreData",
+                "count": 2,
+                "column": 142,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-base.lc-d13a5a790b480f140f86829b8d34b287-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "nonempty",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              },
+              {
+                "id": "storage-read-32",
+                "line": 35159,
+                "name": "preferredStoreData",
+                "count": 6,
+                "column": 465,
+                "frameId": "97495735B2F86E181DB107A6B5C4E7B7",
+                "outcome": "returned",
+                "callerUrl": "https://www.dollargeneral.com/etc.clientlibs/dollargeneral/clientlibs/clientlib-base.lc-d13a5a790b480f140f86829b8d34b287-lc.min.js",
+                "documentId": "8CFB1860D97B0EA6B11B9B2CCFE6C97C",
+                "valueState": "nonempty",
+                "documentUrl": "https://www.dollargeneral.com/",
+                "storageType": "localStorage"
+              }
+            ],
+            "contractVersion": "certscore.storage-read-trace.v1"
+          },
+          "sourceBundleSha256": "42ce52f0af6e8500162629c5f1a87e85b6cd9137bb1331d07ce3ac595a713dfd"
+        }
+      },
+      "disclosureChoiceAssessment": {
+        "scanId": "b9650d52-1a77-4079-b596-c6f4a524bfa0",
+        "sourceHash": "42ce52f0af6e8500162629c5f1a87e85b6cd9137bb1331d07ce3ac595a713dfd",
+        "documentUrl": "https://www.dollargeneral.com/",
+        "policyVersion": "california.disclosure-choice.v4-combined"
+      }
+    }
+  },
+  "checklistRows": [
+    {
+      "id": "consent_surface_observed",
+      "label": "Consent mechanism",
+      "status": "Observed",
+      "evidenceLabel": "Observed",
+      "assessmentDirection": "positive_signal",
+      "assessmentStatus": "checked",
+      "explanation": "An actionable cookie/consent banner or preference surface was observed in the tested context. This confirms CMP availability; consent-enforcement timing is assessed separately.",
+      "note": "Observed in scan evidence; A verified first-layer consent surface with actionable controls was retained in the tested context.",
+      "evidenceRefs": [],
+      "retainedEvidence": {
+        "policyEvidenceProvenance": null
+      }
+    },
+    {
+      "id": "reject_all_path_availability",
+      "label": "Decline consent control",
+      "status": "Review signal",
+      "evidenceLabel": "Partial concern",
+      "assessmentDirection": "review_signal",
+      "assessmentStatus": "review_signal",
+      "explanation": "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
+      "note": "A first-layer consent surface had an accept option and non-essential cookie/purpose text, but no same-layer refusal option was retained. This describes first-layer availability only; CertScore.ai did not run a consent flow.",
+      "evidenceRefs": [
+        "consent_ui_pre_consent:allow cookies",
+        "CanonicalEvidenceBundle.json",
+        "scan_runtime_artifacts.consent_control_assessment",
+        "Evidence: policy-gated normalized consent-control inventory",
+        "Visible choice: allow cookies",
+        "Layer inspected: first_layer"
+      ],
+      "retainedEvidence": {
+        "policyEvidenceProvenance": null
+      }
+    },
+    {
+      "id": "accept_consent_control",
+      "label": "Accept consent control",
+      "status": "Observed",
+      "evidenceLabel": "Observed",
+      "assessmentDirection": "positive_signal",
+      "assessmentStatus": "checked",
+      "explanation": "An accept, accept-all, or allow-all control was observed from structured first-layer consent-surface evidence. This confirms availability, not the result of clicking it.",
+      "note": "An accept consent control was observed from structured consent-control evidence. This confirms availability, not post-click behavior.",
+      "evidenceRefs": [
+        "consent_ui_pre_consent:allow cookies",
+        "CanonicalEvidenceBundle.json",
+        "scan_runtime_artifacts.consent_control_assessment"
+      ],
+      "retainedEvidence": {
+        "policyEvidenceProvenance": null
+      }
+    },
+    {
+      "id": "options_settings_preferences_control",
+      "label": "Options / settings / preferences control",
+      "status": "Not observed",
+      "evidenceLabel": "Not observed",
+      "assessmentDirection": "neutral_signal",
+      "assessmentStatus": "checked",
+      "explanation": "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+      "note": "No separate options/settings control was observed alongside the retained Accept control. Because no reject or equivalent refusal control was retained either, this is supporting context for the refusal-path review rather than a standalone options-control gap.",
+      "evidenceRefs": [
+        "scan_runtime_artifacts.consent_control_assessment"
+      ],
+      "retainedEvidence": {
+        "policyEvidenceProvenance": null
+      }
+    }
+  ]
+}
