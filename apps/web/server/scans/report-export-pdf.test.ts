@@ -430,7 +430,9 @@ test("renders a multi-section canonical report as a valid bounded PDF", async ()
   assert.doesNotMatch(summaryStream, /Appendix A:/);
   assert.match(summaryStream, /0 selected priorities/);
   assert.match(richText.slice(richText.indexOf("Appendix G: ADA/WCAG")), /Automated rule evidence: image-alt/);
-  assert.match(richText, /\(#image-alt\)/);
+  const accessibilityText = visiblePdfText(richText.slice(richText.indexOf("Appendix G: ADA/WCAG"))).replace(/\s+/g, " ");
+  assert.match(accessibilityText, /selector paths \(uniqueness unverified\): #image-alt/,
+    "Retain the selector together with its source precision qualifier in visible PDF text");
   assert.match(richText, /https:\/\/dequeuniversity.com/);
   assert.doesNotMatch(richText, /deduction|scoring withheld|point penalty/i);
   for (const [index, topic] of PDF_REPORT_TOPICS.entries()) {
