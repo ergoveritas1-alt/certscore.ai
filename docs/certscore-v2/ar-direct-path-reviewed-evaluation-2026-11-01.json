@@ -6125,5 +6125,16 @@
       "observedWindowMs": 8008,
       "clickOutcome": "completed"
     }
-  ]
+  ],
+  "productionDeployment": {
+    "sourceCommit": "5bd886b79f79d6e629b7fe96311509ca2b491cb2",
+    "digest": "sha256:354955aeb94a05890423e55126c44acb2b149aa4fd2c04d0002b0b974b493a67",
+    "functionsVerified": 6,
+    "flag": "1",
+    "regionParity": "passed",
+    "standardWebBotAuthRegions": 3,
+    "budgetsUnchanged": true,
+    "deploymentWallTime": "9m 45s",
+    "receipt": "/tmp/certscore-ar-production-release.json"
+  }
 }

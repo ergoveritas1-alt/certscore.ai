@@ -1,10 +1,12 @@
 # CertScore.ai direct Accept/Reject reliability
 
-Local implementation and verification, November 1, 2026. Scoped deployment and
-activation were authorized at 18:26 UTC, subject to passing release checks.
+Local implementation, verification and deployment, November 1, 2026.
+Production scanner deployment and activation completed; final readback passed
+at 19:13 UTC. Deployed source: `5bd886b79f79d6e629b7fe96311509ca2b491cb2`.
 
 Frozen reviewed runtime: `7042ba6fd33bd881b5df5cc5859b11575c1fd531`.
-Later commits only repair the evaluation harness or record evidence. The
+Later commits repair the evaluation harness, wire authorized activation and
+record evidence; the observer runtime is unchanged. The
 120-action tables below are historical measurements of `1314f95e`; final
 three-arm results are recorded below and in the reviewed evaluation JSON.
 
@@ -22,8 +24,9 @@ parity. The single public candidate scan was slower; timing is broken down below
   15:21:47 UTC. Consumers and all eight GitHub workflows had already passed.
 - Worktree: `/tmp/certscore-ar-path-reliability-20261101`;
   branch: `codex/ar-path-reliability-20261101`.
-- Main was left clean on the deployed baseline. No source edits, stash/reset,
-  branch switch, push, PR, deployment or production flag activation in main.
+- The main checkout stayed clean on the baseline; no stash/reset or branch
+  switch was performed. The isolated source branch was pushed for the targeted
+  scanner release. No PR was opened or approved.
 
 ## Changes
 
@@ -62,7 +65,8 @@ expansion is included.
 `boundControlDispatch: true`, or the local process environment variable
 `CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED=1`, enables full element/document
 binding and selected-frame Reject storage reads together. It is off by default.
-No production environment value changed. Geometry-fallback node retention,
+Production now sets this flag to `1` on all six existing scanner functions.
+Unconfigured/local callers retain the default-off behavior. Geometry-fallback node retention,
 timing/cancellation corrections and the limited-artifact clock repair are ordinary
 bug fixes. Geometry handle cleanup is asynchronous and cannot delay the action
 result; the stalled-cleanup regression passes.
@@ -351,13 +355,28 @@ are retained in `ar-direct-path-reviewed-evaluation-2026-11-01.json` and
 are not treated as speed improvements. Complete captures retain their entire
 configured 3-second Accept / 8-second Reject observation windows.
 
-## Rollout and limitations
+## Deployment and limitations
 
-No deployment, production flag activation, new scan lanes or infrastructure was
-performed. Required contact-audit metadata was written through the canonical
-existing helper; no score, account, security or scan configuration changed.
+The authorized scanner-only release completed in **9m 45s** through the existing
+canonical helper. Source `5bd886b79` resolves in all three regions to
+`sha256:354955aeb94a05890423e55126c44acb2b149aa4fd2c04d0002b0b974b493a67`.
+All six existing primary/inventory functions are Active/Successful with the A/R
+flag at `1`, matching retained image provenance. Regional parity and all three
+standard Web Bot Auth HTTP200 checks passed. Memory, timeouts, architecture and
+ephemeral storage match the pre-release state. The exact existing runtime base
+was reused; no new scan lanes, functions, workers or capacity were introduced.
+
+The mandatory full gate passed on the exact clean deployed source, followed by
+all four additional change-aware commands and the 30 activation/deployment
+contract tests. The initial full attempt failed on a transient read-only live
+version fetch; the unchanged topology recheck and complete full retry passed.
+No TLS/security check was relaxed. Required contact-audit metadata was written
+through the existing canonical helper; no scoring, account or security setting
+changed. The web remains on its prior `5894539f` revision; no web, validation,
+MCP or database deployment was performed.
 Full native/document binding, selected-frame storage and closed-shadow validation
-remain default-off. Disable the gate to roll those features back; reverting the
+are enabled by the production flag and remain default-off without it. Disable
+the gate to roll those features back; reverting the
 reviewed source is necessary to roll back ordinary bug fixes. Historical reports
 are not rewritten.
 
@@ -370,12 +389,12 @@ reviewer classified a hypothetical commit-callback-induced abort as conditional,
 not a confirmed reachable production defect. No blanket atomic-input guarantee
 is claimed.
 
-Independent source review is closed. Production rollout still requires owner
-authorization and a separate operational latency decision.
+Independent source review is closed, and owner-authorized deployment/activation
+is complete. No population-wide production latency guarantee is established.
 The controlled failures, public timing limitation, unconfirmed Accept canary and
 unsupported Options/category/Save paths must remain visible in that decision.
 
-## Authorized release preparation
+## Authorized release execution
 
 The owner explicitly authorized deployment and activation at 18:26 UTC after
 clarifying the earlier preparation request. This supersedes the earlier rollout
@@ -409,3 +428,18 @@ back to its prior value using revision-guarded configuration preservation; a
 complete behavior rollback promotes the retained immutable baseline image through
 the existing image/provenance helper and restores prior gate state. Keep all
 other configuration intact. No rollback has been executed.
+
+Final release receipt: `/tmp/certscore-ar-production-release.json`. The redacted
+pre-release configuration and retained baseline image are available for rollback;
+no rollback was needed. Both main checkout and release worktree were clean at
+readback. The source branch was pushed; main was not switched or modified.
+A later documentation-only receipt commit does not change the deployed source.
+
+Packaging qualification: the isolated checkout initially lacked ignored IP
+lookup files during the public canary measurement. Fallback availability/impact
+was not independently measured, so that public pair is not a strict full-scanner
+performance benchmark. For production packaging, identical verified existing
+files from the main checkout were reused, with no download/upgrade. Hashes and
+freshness verification are retained in
+`/tmp/certscore-ar-packaging-prerequisites.json`. Controlled A/R fixture results
+and their complete source-pinned denominator remain unchanged.
