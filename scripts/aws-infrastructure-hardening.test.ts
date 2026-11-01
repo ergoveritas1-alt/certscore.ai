@@ -318,6 +318,17 @@ test("checked-in AWS deployment paths keep the all-eligible Accept worker enable
   assert.match(parityCheck, /postAcceptWorkerEnabled !== "1"/);
 });
 
+test("authorized A/R activation uses existing scanner configuration and parity checks", async () => {
+  const [terraform, deploy, parity] = await Promise.all([
+    readFile(scannerTerraformPath, "utf8"),
+    readFile("scripts/deploy-fast.ts", "utf8"),
+    readFile("scripts/check-regional-scanner-parity.ts", "utf8"),
+  ]);
+  assert.match(terraform, /CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED\s+=\s+"1"/);
+  assert.match(deploy, /CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED:\s*"1"/);
+  assert.match(parity, /\["Bound Accept\/Reject dispatch", env\.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED, "1"\]/);
+});
+
 test("checked-in AWS deployment paths enable the sale/sharing observer on web and every regional scanner", async () => {
   const [scannerTerraform, webTerraform, webWorkflow, deployFast, parityCheck] = await Promise.all([
     readFile(scannerTerraformPath, "utf8"),

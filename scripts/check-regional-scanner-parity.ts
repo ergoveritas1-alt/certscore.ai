@@ -142,6 +142,7 @@ const observed = REGIONS.map((region) => {
   }
   const context = EXPECTED_CONTEXT[region];
   const required = [
+    ["Bound Accept/Reject dispatch", env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED, "1"],
     ["Read-only preferences worker", env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED, "1"],
     ["Preference coverage budget", env.CERTSCORE_CMP_PREFERENCE_COVERAGE_BUDGET_POLICY, "coverage_25_gb_seconds.v1"],
     ["Navigation-menu accessibility inspection", env.CERTSCORE_ACCESSIBILITY_MENU_INSPECTION_ENABLED, "1"],

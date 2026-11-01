@@ -1,0 +1,6129 @@
+{
+  "product": "CertScore.ai",
+  "generatedAt": "2026-11-01T18:30:24.358995+00:00",
+  "baselineCommit": "5894539fbb27acb3130d4afdf55bc196974a50c6",
+  "reviewedRuntimeCommit": "7042ba6fd33bd881b5df5cc5859b11575c1fd531",
+  "harnessCommit": "b89141a47664e332c0b9f92cb1f9f72a69703c5f",
+  "sourcePinsVerified": true,
+  "sourceManifestSha256": "99a344876f6929a0b6f574992be1591af9250e98a5707939c028e440f936a036",
+  "browser": "Chromium 145.0.7632.6",
+  "runtime": "local macOS Chromium; no AWS scan workers",
+  "design": "12 fixture classes x Accept/Reject x 3 repetitions x 3 sequential arms; order rotated",
+  "flags": {
+    "baseline": "explicit false; deployed source has no new gate",
+    "candidate_default_off": "input omitted and environment removed",
+    "candidate": "input true and environment 1"
+  },
+  "allActions": {
+    "baseline": {
+      "denominator": 72,
+      "intendedClicks": 60,
+      "wrongClicks": 6,
+      "correctConfirmations": 42,
+      "falseConfirmations": 3,
+      "completeObservations": 63,
+      "packetErrors": 3,
+      "medianMs": 3443,
+      "p95Ms": 8319
+    },
+    "candidate_default_off": {
+      "denominator": 72,
+      "intendedClicks": 60,
+      "wrongClicks": 6,
+      "correctConfirmations": 45,
+      "falseConfirmations": 3,
+      "completeObservations": 66,
+      "packetErrors": 0,
+      "medianMs": 3334,
+      "p95Ms": 8326
+    },
+    "candidate": {
+      "denominator": 72,
+      "intendedClicks": 60,
+      "wrongClicks": 0,
+      "correctConfirmations": 48,
+      "falseConfirmations": 0,
+      "completeObservations": 54,
+      "packetErrors": 0,
+      "medianMs": 3157,
+      "p95Ms": 8318
+    }
+  },
+  "ordinaryComparable": {
+    "baseline": {
+      "denominator": 48,
+      "intendedClicks": 48,
+      "wrongClicks": 0,
+      "correctConfirmations": 39,
+      "falseConfirmations": 0,
+      "completeObservations": 48,
+      "packetErrors": 0,
+      "medianMs": 3487,
+      "p95Ms": 8491
+    },
+    "candidate_default_off": {
+      "denominator": 48,
+      "intendedClicks": 48,
+      "wrongClicks": 0,
+      "correctConfirmations": 39,
+      "falseConfirmations": 0,
+      "completeObservations": 48,
+      "packetErrors": 0,
+      "medianMs": 3447,
+      "p95Ms": 8481
+    },
+    "candidate": {
+      "denominator": 48,
+      "intendedClicks": 48,
+      "wrongClicks": 0,
+      "correctConfirmations": 42,
+      "falseConfirmations": 0,
+      "completeObservations": 48,
+      "packetErrors": 0,
+      "medianMs": 3431,
+      "p95Ms": 8524
+    }
+  },
+  "perFixture": {
+    "ambiguous": {
+      "baseline": {
+        "denominator": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0,
+        "medianMs": 89,
+        "p95Ms": 1538
+      },
+      "candidate_default_off": {
+        "denominator": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0,
+        "medianMs": 101,
+        "p95Ms": 1540
+      },
+      "candidate": {
+        "denominator": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0,
+        "medianMs": 82,
+        "p95Ms": 1537
+      }
+    },
+    "closed_shadow": {
+      "baseline": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3119,
+        "p95Ms": 8180
+      },
+      "candidate_default_off": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3120,
+        "p95Ms": 8181
+      },
+      "candidate": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3119,
+        "p95Ms": 8181
+      }
+    },
+    "direct": {
+      "baseline": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3487,
+        "p95Ms": 8319
+      },
+      "candidate_default_off": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3334,
+        "p95Ms": 8326
+      },
+      "candidate": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3366,
+        "p95Ms": 8318
+      }
+    },
+    "fragment": {
+      "baseline": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 3,
+        "falseConfirmations": 0,
+        "completeObservations": 3,
+        "packetErrors": 3,
+        "medianMs": 3158,
+        "p95Ms": 8244
+      },
+      "candidate_default_off": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3158,
+        "p95Ms": 8230
+      },
+      "candidate": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3157,
+        "p95Ms": 8261
+      }
+    },
+    "frame": {
+      "baseline": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 3,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3177,
+        "p95Ms": 8231
+      },
+      "candidate_default_off": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 3,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3187,
+        "p95Ms": 8229
+      },
+      "candidate": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3189,
+        "p95Ms": 8253
+      }
+    },
+    "localized": {
+      "baseline": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3147,
+        "p95Ms": 8233
+      },
+      "candidate_default_off": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3157,
+        "p95Ms": 8246
+      },
+      "candidate": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3151,
+        "p95Ms": 8229
+      }
+    },
+    "opaque": {
+      "baseline": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3105,
+        "p95Ms": 8220
+      },
+      "candidate_default_off": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3114,
+        "p95Ms": 8217
+      },
+      "candidate": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3107,
+        "p95Ms": 8218
+      }
+    },
+    "ready": {
+      "baseline": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3455,
+        "p95Ms": 8533
+      },
+      "candidate_default_off": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3447,
+        "p95Ms": 8545
+      },
+      "candidate": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3431,
+        "p95Ms": 8536
+      }
+    },
+    "reload": {
+      "baseline": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 3,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3197,
+        "p95Ms": 8227
+      },
+      "candidate_default_off": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 3,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3195,
+        "p95Ms": 8229
+      },
+      "candidate": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0,
+        "medianMs": 189,
+        "p95Ms": 245
+      }
+    },
+    "replacement": {
+      "baseline": {
+        "denominator": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 6,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3131,
+        "p95Ms": 8217
+      },
+      "candidate_default_off": {
+        "denominator": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 6,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3132,
+        "p95Ms": 8217
+      },
+      "candidate": {
+        "denominator": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0,
+        "medianMs": 1743,
+        "p95Ms": 2172
+      }
+    },
+    "scoped": {
+      "baseline": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3153,
+        "p95Ms": 8247
+      },
+      "candidate_default_off": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3150,
+        "p95Ms": 8247
+      },
+      "candidate": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3151,
+        "p95Ms": 8232
+      }
+    },
+    "shadow": {
+      "baseline": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3152,
+        "p95Ms": 8230
+      },
+      "candidate_default_off": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3153,
+        "p95Ms": 8244
+      },
+      "candidate": {
+        "denominator": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0,
+        "medianMs": 3148,
+        "p95Ms": 8245
+      }
+    }
+  },
+  "fullWindows": {
+    "baseline": true,
+    "candidate_default_off": true,
+    "candidate": true
+  },
+  "publicCanary": [
+    {
+      "arm": "baseline",
+      "repeat": 0,
+      "id": "ar-report-baseline-0",
+      "scannerExitCode": 0,
+      "sourceRoot": "/Users/benmasek/WC01",
+      "runtime": "local-sharded-handler",
+      "awsIo": "filesystem-doubles",
+      "databaseIo": "repository-publication-double",
+      "publicScanReused": true,
+      "originalScannerSummary": "/tmp/certscore-ar-approved-report-wire-fixed/ar-report-baseline-0.scanner.json",
+      "fullReportLatencyIncludesRecovery": true,
+      "targetKind": "existing-owned-canary",
+      "scannerMs": 6507,
+      "publicationAndHttpMs": 670,
+      "publicationReplayWallMs": 698,
+      "localReportReadyMs": 7177,
+      "result": "ready",
+      "postAccept": {
+        "acceptanceExercised": false,
+        "laneOutcome": {
+          "contractVersion": "certscore.post_accept_lane_outcome.v1",
+          "completedAt": "2026-11-01T18:03:10.731Z",
+          "evidenceJoined": true,
+          "maxTailWaitMs": 6000,
+          "status": "joined"
+        },
+        "observationCount": 0,
+        "observationTypes": [],
+        "productionProjectable": false,
+        "registrationStatus": "unconfirmed"
+      },
+      "postRefusal": {
+        "laneOutcome": {
+          "contractVersion": "certscore.post_refusal_lane_outcome.v1",
+          "completedAt": "2026-11-01T18:03:08.143Z",
+          "evidenceJoined": true,
+          "maxTailWaitMs": 8000,
+          "status": "joined"
+        },
+        "observationCount": 6,
+        "observationTypes": [
+          "post_refusal_non_essential_activity",
+          "post_refusal_non_essential_activity",
+          "post_refusal_non_essential_activity",
+          "post_refusal_non_essential_activity",
+          "post_refusal_non_essential_activity",
+          "post_refusal_non_essential_activity"
+        ],
+        "productionProjectable": true,
+        "refusalExercised": true,
+        "registrationStatus": "confirmed"
+      },
+      "actualClickCounters": "unavailable-on-public-target"
+    },
+    {
+      "arm": "candidate",
+      "repeat": 0,
+      "id": "ar-report-candidate-0",
+      "scannerExitCode": 0,
+      "sourceRoot": "/private/tmp/certscore-ar-path-reliability-20261101",
+      "runtime": "local-sharded-handler",
+      "awsIo": "filesystem-doubles",
+      "databaseIo": "repository-publication-double",
+      "publicScanReused": false,
+      "targetKind": "existing-owned-canary",
+      "scannerMs": 7733,
+      "publicationAndHttpMs": 513,
+      "fullLocalReportWallMs": 9076,
+      "localReportReadyMs": 8246,
+      "result": "ready",
+      "postAccept": {
+        "acceptanceExercised": false,
+        "laneOutcome": {
+          "contractVersion": "certscore.post_accept_lane_outcome.v1",
+          "completedAt": "2026-11-01T18:07:46.037Z",
+          "evidenceJoined": true,
+          "maxTailWaitMs": 6000,
+          "status": "joined"
+        },
+        "observationCount": 0,
+        "observationTypes": [],
+        "productionProjectable": false,
+        "registrationStatus": "unconfirmed"
+      },
+      "postRefusal": {
+        "laneOutcome": {
+          "contractVersion": "certscore.post_refusal_lane_outcome.v1",
+          "completedAt": "2026-11-01T18:07:43.632Z",
+          "evidenceJoined": true,
+          "maxTailWaitMs": 8000,
+          "status": "joined"
+        },
+        "observationCount": 6,
+        "observationTypes": [
+          "post_refusal_non_essential_activity",
+          "post_refusal_non_essential_activity",
+          "post_refusal_non_essential_activity",
+          "post_refusal_non_essential_activity",
+          "post_refusal_non_essential_activity",
+          "post_refusal_non_essential_activity"
+        ],
+        "productionProjectable": true,
+        "refusalExercised": true,
+        "registrationStatus": "confirmed"
+      },
+      "actualClickCounters": "unavailable-on-public-target"
+    }
+  ],
+  "publicSourcePinsVerified": {
+    "verified": true,
+    "rows": 2,
+    "publisherSourceRoot": "/private/tmp/certscore-ar-path-reliability-20261101",
+    "productionDatabaseAndQueueMeasured": false
+  },
+  "contactAudit": {
+    "persisted": 2,
+    "runKey": "ar-direct-path-20261101-reviewed-7042ba6",
+    "log": "/tmp/certscore-ar-approved-contact-persist.log"
+  },
+  "interpretation": "Controlled safety/confirmation evidence, not population-wide CMP coverage or best-in-class ranking. All failures retained. Public baseline publication recovery prevents paired uninterrupted end-to-end latency claim.",
+  "rawEvidence": "/tmp/certscore-ar-reviewed-three-arm-evaluation",
+  "rows": [
+    {
+      "id": "baseline-0-direct-accept",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "direct",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3487,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556719993
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3025,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-direct-reject",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "direct",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8309,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556723321
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8024,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-localized-accept",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "localized",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3144,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556731471
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3025,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-localized-reject",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "localized",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8229,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556734704
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8028,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-shadow-accept",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "shadow",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3145,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556742854
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3025,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-shadow-reject",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "shadow",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8217,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556746071
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-scoped-accept",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "scoped",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3153,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556754221
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3029,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-scoped-reject",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "scoped",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8247,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556757471
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8031,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-closed_shadow-accept",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "closed_shadow",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3119,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556765587
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3016,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-closed_shadow-reject",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "closed_shadow",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8180,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556768773
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8012,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-frame-accept",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "frame",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3175,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556776938
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3048,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-frame-reject",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "frame",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8231,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556780204
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8009,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-ready-accept",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "ready",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3455,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556788637
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3029,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-ready-reject",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "ready",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8531,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556792171
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8036,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-ambiguous-accept",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "ambiguous",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 89,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "baseline-0-ambiguous-reject",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "ambiguous",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 1535,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "baseline-0-opaque-accept",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "opaque",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3096,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556801920
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-opaque-reject",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "opaque",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8202,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556805120
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8007,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-replacement-accept",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "replacement",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3112,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556813240
+        }
+      ],
+      "intendedClick": false,
+      "wrongClick": true,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3005,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-replacement-reject",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "replacement",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8217,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556816457
+        }
+      ],
+      "intendedClick": false,
+      "wrongClick": true,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-fragment-accept",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "fragment",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3158,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556824587
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": false,
+      "observationComplete": false,
+      "error": "[\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"formCapture\"\n    ],\n    \"message\": \"Form capture requires the same completed authorized action and bounded timestamps\"\n  }\n]"
+    },
+    {
+      "id": "baseline-0-fragment-reject",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "fragment",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8230,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556827819
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-reload-accept",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "reload",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3186,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556835987
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3064,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-0-reload-reject",
+      "arm": "baseline",
+      "repeat": 0,
+      "fixture": "reload",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8195,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556839237
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8007,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-direct-accept",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "direct",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3331,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556848536
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3012,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-direct-reject",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "direct",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8312,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556851869
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-localized-accept",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "localized",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3157,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556860036
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3025,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-localized-reject",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "localized",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8246,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556863286
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8038,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-shadow-accept",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "shadow",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3153,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556871436
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3025,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-shadow-reject",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "shadow",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8244,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556874686
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-scoped-accept",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "scoped",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3150,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556882836
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3030,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-scoped-reject",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "scoped",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8247,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556886085
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8030,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-closed_shadow-accept",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "closed_shadow",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3105,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556894185
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3004,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-closed_shadow-reject",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "closed_shadow",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8175,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556897368
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8007,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-frame-accept",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "frame",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3177,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556905536
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3049,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-frame-reject",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "frame",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8210,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556908786
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8008,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-ready-accept",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "ready",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3440,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556917203
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3032,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-ready-reject",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "ready",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8481,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556920685
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8027,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-ambiguous-accept",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "ambiguous",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 78,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "candidate_default_off-0-ambiguous-reject",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "ambiguous",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 1535,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "candidate_default_off-0-opaque-accept",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "opaque",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3097,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556930418
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-opaque-reject",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "opaque",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8201,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556933618
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8008,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-replacement-accept",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "replacement",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3113,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556941742
+        }
+      ],
+      "intendedClick": false,
+      "wrongClick": true,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-replacement-reject",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "replacement",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8199,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556944938
+        }
+      ],
+      "intendedClick": false,
+      "wrongClick": true,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-fragment-accept",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "fragment",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3140,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556953051
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3027,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-fragment-reject",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "fragment",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8230,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556956285
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-reload-accept",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "reload",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3192,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556964452
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3060,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-0-reload-reject",
+      "arm": "candidate_default_off",
+      "repeat": 0,
+      "fixture": "reload",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8229,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556967735
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8007,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-direct-accept",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "direct",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3341,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556977167
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3016,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-direct-reject",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "direct",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8304,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556980501
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-localized-accept",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "localized",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3140,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793556988651
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3030,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-localized-reject",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "localized",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8221,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793556991869
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8039,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-shadow-accept",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "shadow",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3144,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557000017
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3024,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-shadow-reject",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "shadow",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8219,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557003234
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8030,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-scoped-accept",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "scoped",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3147,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557011383
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3031,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-scoped-reject",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "scoped",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8196,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557014584
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8033,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-closed_shadow-accept",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "closed_shadow",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3119,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557022700
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3004,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-closed_shadow-reject",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "closed_shadow",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8175,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557025884
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-frame-accept",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "frame",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3176,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557034051
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3050,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-frame-reject",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "frame",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8236,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557037301
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8038,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-ready-accept",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "ready",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3421,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557045734
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3035,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-ready-reject",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "ready",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8524,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557049251
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8039,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-ambiguous-accept",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "ambiguous",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 78,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "candidate-0-ambiguous-reject",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "ambiguous",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 1536,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "candidate-0-opaque-accept",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "opaque",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3107,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557058999
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-opaque-reject",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "opaque",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8202,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557062200
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-replacement-accept",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "replacement",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 2172,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 2051,
+      "clickOutcome": "failed_after_dispatch"
+    },
+    {
+      "id": "candidate-0-replacement-reject",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "replacement",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 1743,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 1544,
+      "clickOutcome": "failed_after_dispatch"
+    },
+    {
+      "id": "candidate-0-fragment-accept",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "fragment",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3157,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557074250
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3029,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-fragment-reject",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "fragment",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8261,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557077516
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8029,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-reload-accept",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "reload",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 172,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557085683
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 50,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-0-reload-reject",
+      "arm": "candidate",
+      "repeat": 0,
+      "fixture": "reload",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 244,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557085917
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 60,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-direct-accept",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "direct",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3331,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557087316
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3010,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-direct-reject",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "direct",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8326,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557090668
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8024,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-localized-accept",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "localized",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3155,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557098832
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3024,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-localized-reject",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "localized",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8215,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557102049
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8024,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-shadow-accept",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "shadow",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3138,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557110182
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-shadow-reject",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "shadow",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8229,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557113415
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8025,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-scoped-accept",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "scoped",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3149,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557121565
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3028,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-scoped-reject",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "scoped",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8233,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557124797
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8030,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-closed_shadow-accept",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "closed_shadow",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3120,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557132916
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3005,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-closed_shadow-reject",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "closed_shadow",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8181,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557136099
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8009,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-frame-accept",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "frame",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3187,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557144283
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3043,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-frame-reject",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "frame",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8229,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557147550
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-ready-accept",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "ready",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3446,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557155967
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3036,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-ready-reject",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "ready",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8545,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557159517
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8034,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-ambiguous-accept",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "ambiguous",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 101,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "candidate_default_off-1-ambiguous-reject",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "ambiguous",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 1540,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "candidate_default_off-1-opaque-accept",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "opaque",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3105,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557169282
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3007,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-opaque-reject",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "opaque",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8214,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557172499
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8005,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-replacement-accept",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "replacement",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3132,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557180636
+        }
+      ],
+      "intendedClick": false,
+      "wrongClick": true,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3007,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-replacement-reject",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "replacement",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8217,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557183852
+        }
+      ],
+      "intendedClick": false,
+      "wrongClick": true,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8005,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-fragment-accept",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "fragment",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3148,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557191982
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-fragment-reject",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "fragment",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8221,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557195199
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8025,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-reload-accept",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "reload",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3193,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557203366
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3063,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-1-reload-reject",
+      "arm": "candidate_default_off",
+      "repeat": 1,
+      "fixture": "reload",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8224,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557206650
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-direct-accept",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "direct",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3366,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557216048
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3020,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-direct-reject",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "direct",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8314,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557219398
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8019,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-localized-accept",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "localized",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3139,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557227531
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3029,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-localized-reject",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "localized",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8227,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557230765
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-shadow-accept",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "shadow",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3148,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557238915
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-shadow-reject",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "shadow",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8221,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557242132
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8029,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-scoped-accept",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "scoped",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3151,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557250281
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3031,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-scoped-reject",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "scoped",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8232,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557253515
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8034,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-closed_shadow-accept",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "closed_shadow",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3117,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557261631
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3003,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-closed_shadow-reject",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "closed_shadow",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8181,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557264814
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8007,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-frame-accept",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "frame",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3189,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557272999
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3046,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-frame-reject",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "frame",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8224,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557276232
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8042,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-ready-accept",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "ready",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3431,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557284665
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3039,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-ready-reject",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "ready",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8530,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557288198
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8040,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-ambiguous-accept",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "ambiguous",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 82,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "candidate-1-ambiguous-reject",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "ambiguous",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 1537,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "candidate-1-opaque-accept",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "opaque",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3105,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557297947
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-opaque-reject",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "opaque",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8218,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557301164
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8007,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-replacement-accept",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "replacement",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 2155,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 2032,
+      "clickOutcome": "failed_after_dispatch"
+    },
+    {
+      "id": "candidate-1-replacement-reject",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "replacement",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 1742,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 1542,
+      "clickOutcome": "failed_after_dispatch"
+    },
+    {
+      "id": "candidate-1-fragment-accept",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "fragment",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3143,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557313180
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3030,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-fragment-reject",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "fragment",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8228,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557316414
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8029,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-reload-accept",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "reload",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 189,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557324598
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 49,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-1-reload-reject",
+      "arm": "candidate",
+      "repeat": 1,
+      "fixture": "reload",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 228,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557324815
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 60,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-direct-accept",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "direct",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3366,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557326363
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-direct-reject",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "direct",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8319,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557329713
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8019,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-localized-accept",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "localized",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3141,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557337863
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3023,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-localized-reject",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "localized",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8233,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557341097
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8025,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-shadow-accept",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "shadow",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3152,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557349247
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3027,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-shadow-reject",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "shadow",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8230,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557352480
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8027,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-scoped-accept",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "scoped",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3148,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557360630
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3027,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-scoped-reject",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "scoped",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8214,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557363846
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8029,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-closed_shadow-accept",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "closed_shadow",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3104,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557371946
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3021,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-closed_shadow-reject",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "closed_shadow",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8180,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557375129
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8021,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-frame-accept",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "frame",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3177,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557383297
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3046,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-frame-reject",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "frame",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8214,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557386549
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8008,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-ready-accept",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "ready",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3447,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557394972
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3033,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-ready-reject",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "ready",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8533,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557398507
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8036,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-ambiguous-accept",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "ambiguous",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 89,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "baseline-1-ambiguous-reject",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "ambiguous",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 1538,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "baseline-1-opaque-accept",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "opaque",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3098,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557408259
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3004,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-opaque-reject",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "opaque",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8205,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557411460
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8007,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-replacement-accept",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "replacement",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3131,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557419599
+        }
+      ],
+      "intendedClick": false,
+      "wrongClick": true,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-replacement-reject",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "replacement",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8215,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557422815
+        }
+      ],
+      "intendedClick": false,
+      "wrongClick": true,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8005,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-fragment-accept",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "fragment",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3143,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557430929
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": false,
+      "observationComplete": false,
+      "error": "[\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"formCapture\"\n    ],\n    \"message\": \"Form capture requires the same completed authorized action and bounded timestamps\"\n  }\n]"
+    },
+    {
+      "id": "baseline-1-fragment-reject",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "fragment",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8244,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557434180
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8041,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-reload-accept",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "reload",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3197,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557442347
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3063,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-1-reload-reject",
+      "arm": "baseline",
+      "repeat": 1,
+      "fixture": "reload",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8227,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557445631
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8007,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-direct-accept",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "direct",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3349,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557455013
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3013,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-direct-reject",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "direct",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8318,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557458363
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8018,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-localized-accept",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "localized",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3151,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557466515
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3030,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-localized-reject",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "localized",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8229,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557469746
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8027,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-shadow-accept",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "shadow",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3134,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557477879
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3027,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-shadow-reject",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "shadow",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8245,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557481129
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-scoped-accept",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "scoped",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3150,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557489279
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3030,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-scoped-reject",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "scoped",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8215,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557492496
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8033,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-closed_shadow-accept",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "closed_shadow",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3101,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557500596
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3002,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-closed_shadow-reject",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "closed_shadow",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8181,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557503780
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-frame-accept",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "frame",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3181,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557511947
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3051,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-frame-reject",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "frame",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8253,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557515214
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8036,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-ready-accept",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "ready",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3431,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557523646
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3035,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-ready-reject",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "ready",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8536,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557527181
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8042,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-ambiguous-accept",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "ambiguous",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 81,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "candidate-2-ambiguous-reject",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "ambiguous",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 1537,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "candidate-2-opaque-accept",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "opaque",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3101,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557536929
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3005,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-opaque-reject",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "opaque",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8202,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557540129
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8007,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-replacement-accept",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "replacement",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 2153,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 2046,
+      "clickOutcome": "failed_after_dispatch"
+    },
+    {
+      "id": "candidate-2-replacement-reject",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "replacement",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 1736,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 1531,
+      "clickOutcome": "failed_after_dispatch"
+    },
+    {
+      "id": "candidate-2-fragment-accept",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "fragment",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3149,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557552145
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3029,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-fragment-reject",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "fragment",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8229,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557555378
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8028,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-reload-accept",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "reload",
+      "action": "accept",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 175,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557563546
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 49,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate-2-reload-reject",
+      "arm": "candidate",
+      "repeat": 2,
+      "fixture": "reload",
+      "action": "reject",
+      "bindingMode": "explicit-enabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 245,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557563780
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 61,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-direct-accept",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "direct",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3331,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557565195
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3015,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-direct-reject",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "direct",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8288,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557568511
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8012,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-localized-accept",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "localized",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3147,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557576662
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3025,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-localized-reject",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "localized",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8229,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557579895
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8025,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-shadow-accept",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "shadow",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3149,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557588045
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3023,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-shadow-reject",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "shadow",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8230,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557591278
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8024,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-scoped-accept",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "scoped",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3139,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557599412
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3030,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-scoped-reject",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "scoped",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8214,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557602628
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8031,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-closed_shadow-accept",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "closed_shadow",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3118,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557610744
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3022,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-closed_shadow-reject",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "closed_shadow",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8178,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557613928
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8018,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-frame-accept",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "frame",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3161,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557622080
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3044,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-frame-reject",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "frame",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8177,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557625296
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8007,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-ready-accept",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "ready",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3443,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557633712
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3035,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-ready-reject",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "ready",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8491,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557637211
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8023,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-ambiguous-accept",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "ambiguous",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 72,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "baseline-2-ambiguous-reject",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "ambiguous",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 1537,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "baseline-2-opaque-accept",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "opaque",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3105,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557646944
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-opaque-reject",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "opaque",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8220,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557650160
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-replacement-accept",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "replacement",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3129,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557658301
+        }
+      ],
+      "intendedClick": false,
+      "wrongClick": true,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3005,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-replacement-reject",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "replacement",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8210,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557661515
+        }
+      ],
+      "intendedClick": false,
+      "wrongClick": true,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8004,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-fragment-accept",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "fragment",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3142,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557669627
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": false,
+      "observationComplete": false,
+      "error": "[\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"formCapture\"\n    ],\n    \"message\": \"Form capture requires the same completed authorized action and bounded timestamps\"\n  }\n]"
+    },
+    {
+      "id": "baseline-2-fragment-reject",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "fragment",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8231,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557672861
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8024,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-reload-accept",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "reload",
+      "action": "accept",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3193,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557681028
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3063,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "baseline-2-reload-reject",
+      "arm": "baseline",
+      "repeat": 2,
+      "fixture": "reload",
+      "action": "reject",
+      "bindingMode": "baseline-disabled",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8226,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557684312
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-direct-accept",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "direct",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3334,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557693677
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3014,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-direct-reject",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "direct",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8313,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557697010
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8024,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-localized-accept",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "localized",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3145,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557705160
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3025,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-localized-reject",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "localized",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8233,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557708394
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-shadow-accept",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "shadow",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3148,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557716544
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3024,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-shadow-reject",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "shadow",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8230,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557719777
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-scoped-accept",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "scoped",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3147,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557727927
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3029,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-scoped-reject",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "scoped",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8210,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557731143
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8029,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-closed_shadow-accept",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "closed_shadow",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3089,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557739226
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3003,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-closed_shadow-reject",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "closed_shadow",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8181,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557742410
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-frame-accept",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "frame",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3176,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557750580
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3050,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-frame-reject",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "frame",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8224,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557753844
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-ready-accept",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "ready",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3447,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557762260
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3033,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-ready-reject",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "ready",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8497,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557765760
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8026,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-ambiguous-accept",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "ambiguous",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 90,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "candidate_default_off-2-ambiguous-reject",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "ambiguous",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 1539,
+      "clicks": [],
+      "intendedClick": false,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": false,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 0,
+      "clickOutcome": "not_attempted"
+    },
+    {
+      "id": "candidate_default_off-2-opaque-accept",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "opaque",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3114,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557775526
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-opaque-reject",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "opaque",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8217,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557778743
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8006,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-replacement-accept",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "replacement",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3129,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557786885
+        }
+      ],
+      "intendedClick": false,
+      "wrongClick": true,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3005,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-replacement-reject",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "replacement",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8198,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557790080
+        }
+      ],
+      "intendedClick": false,
+      "wrongClick": true,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8005,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-fragment-accept",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "fragment",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3158,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557798211
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3028,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-fragment-reject",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "fragment",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8229,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557801443
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": true,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8025,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-reload-accept",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "reload",
+      "action": "accept",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 3195,
+      "clicks": [
+        {
+          "action": "accept",
+          "atEpochMs": 1793557809610
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": true,
+      "observationComplete": true,
+      "requestedWindowMs": 3000,
+      "observedWindowMs": 3061,
+      "clickOutcome": "completed"
+    },
+    {
+      "id": "candidate_default_off-2-reload-reject",
+      "arm": "candidate_default_off",
+      "repeat": 2,
+      "fixture": "reload",
+      "action": "reject",
+      "bindingMode": "input-and-environment-unset",
+      "browser": "145.0.7632.6",
+      "runtime": "local-macos-chromium",
+      "region": "local-no-aws",
+      "totalMs": 8226,
+      "clicks": [
+        {
+          "action": "reject",
+          "atEpochMs": 1793557812894
+        }
+      ],
+      "intendedClick": true,
+      "wrongClick": false,
+      "expectedConfirmation": false,
+      "confirmed": false,
+      "observationComplete": true,
+      "requestedWindowMs": 8000,
+      "observedWindowMs": 8008,
+      "clickOutcome": "completed"
+    }
+  ]
+}

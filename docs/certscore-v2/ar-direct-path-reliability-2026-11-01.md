@@ -1,15 +1,18 @@
 # CertScore.ai direct Accept/Reject reliability
 
-Local implementation and verification, November 1, 2026. Production rollout is on hold.
+Local implementation and verification, November 1, 2026. Scoped deployment and
+activation were authorized at 18:26 UTC, subject to passing release checks.
 
-Review follow-up: runtime source has changed after implementation `1314f95e`.
-The 120-action tables below are historical evidence for that commit; they are
-not final measurements of the reviewed source. A new unset/default-off/enabled
-cohort and the two explicitly approved public-canary scans remain to complete.
+Frozen reviewed runtime: `7042ba6fd33bd881b5df5cc5859b11575c1fd531`.
+Later commits only repair the evaluation harness or record evidence. The
+120-action tables below are historical measurements of `1314f95e`; final
+three-arm results are recorded below and in the reviewed evaluation JSON.
 
-The candidate repairs reproduced wrong-click and false-confirmation defects. It
-does not establish a population-wide success-rate improvement or a best-in-class
-benchmark result. Full scanner-to-report latency verification remains blocked.
+The candidate repairs reproduced wrong-click and false-confirmation defects.
+Both explicitly approved public canaries produced ready canonical reports from
+actual local baseline/candidate scanner code. This does not establish a
+population-wide improvement, a best-in-class ranking, or production latency
+parity. The single public candidate scan was slower; timing is broken down below.
 
 ## Baseline and isolation
 
@@ -69,10 +72,12 @@ result; the stalled-cleanup regression passes.
 | Exact native node across geometry fallback inspection and its one click | On | On |
 | Input-command timing, synchronous cancellation guard and closed-shadow timing callback | On | On |
 | Limited Accept form-artifact clock correction | On | On |
-| Nonblocking geometry-handle cleanup | On | On |
+| Nonblocking geometry/proof/CDP cleanup | On | On |
+| Preparation-versus-committed production checkpoint distinction | On | On |
 | Exact native element across full proof and ordinary dispatch | Off | On |
 | Selected-document reload/detach invalidation and bounded fragment identity read | Off | On |
 | Selected-frame Reject storage baseline/write/value/hash scope correction | Off | On |
+| Closed-shadow current hit/ancestry validation and bounded CDP reads | Off | On |
 
 The 120-action comparison explicitly enabled `boundControlDispatch: true` and
 the environment value `1` for the candidate; it explicitly used `false` and `0`
@@ -126,24 +131,20 @@ ranking against those projects or broader CMP coverage than their rule sets.
 
 ## Completed verification
 
-- Candidate-enabled A/R plus publication-safeguard gate: **106 passed, zero failed**;
-  final cleanup/deadline follow-up: **9 passed, zero failed**. Actual intended
-  clicks and semantic decisions are asserted separately. The 9-test follow-up includes the new nonblocking
-  geometry-cleanup regression. Coverage includes
-  cancellation, replacements/rerenders, semantic/stale/opposite decisions,
-  multilingual labels, ambiguity, frames, shadow scope, document reloads,
-  same-document fragments, deadlines and form-artifact clocks.
-- Final minified/Lambda checks: **8 passed, zero failed**, including the new
-  serialized document-identity callback, native runtime probes, startup imports
-  and existing action-tail limits. The new browser probe also passed from the
-  Lambda package's normal working directory after its path fix.
-- Scanner, Lambda and web type checks passed; scanner build and minified Lambda
-  bundle passed. All 14 workspace package builds passed, followed by the final
-  scanner rebuild. `git diff --check` passed. There is no separate scanner lint
-  script.
-- Adversarial review reproduced and repaired new-document false confirmations
-  and the same-document fragment compatibility issue. Independent reviewer
-  sign-off remains required before rollout.
+- Frozen reviewed source: **158 passed, zero failed** in the full localhost
+  gate. Flags are unset globally; fixtures explicitly exercise enabled,
+  disabled and unset behavior. Actual intended clicks and semantic decisions
+  are asserted separately. Tests cover replacements/reordering, cancellation,
+  deadlines/stalled cleanup, frames, local/session storage, cross-origin frame
+  contexts, closed/open shadow controls, document reloads/fragments and clocks.
+- Minified/Lambda checks: **8 passed, zero failed**. Scanner, Lambda and web
+  type checks passed; scanner build and minified Lambda bundle passed.
+  `git diff --check` passed. There is no separate scanner lint script.
+- Independent reviewer-confirmed scoped-accessible binding bypass, blocking
+  failed-proof cleanup and stale geometry budget were reproduced and repaired.
+  Closed-shadow replacement and pre-validation bookkeeping were also repaired.
+  The parent-supplied reviewer closed source review with no confirmed blockers;
+  no local reviewer was spawned.
 
 The first frozen cohort retained 48 actions per arm (eight fixtures, both
 actions, three repetitions), on Chromium `145.0.7632.6`, local macOS, no AWS
@@ -234,8 +235,9 @@ Legacy preparation callbacks remain available for compatibility; production
 checkpoints now use a separate notification after actual dispatch commitment.
 No user callback runs between final validation and the internal input commit.
 
-Final code/evidence sign-off remains pending the frozen follow-up diff and
-verification. The initial 120-action cohort is not evidence for these repairs.
+The parent-supplied independent source reviewer closed review of `7042ba6fd`
+with no remaining confirmed source blockers. The initial 120-action cohort is
+not evidence for these repairs; the final three-arm cohort is recorded below.
 No reviewer was spawned locally and no permissions changed.
 
 ## Local core-to-publication integration
@@ -257,31 +259,153 @@ receipt are retained in `/tmp/certscore-ar-local-publication-evidence`; failed
 setup/publication attempts remain separately retained. Production network and
 publication guards were not relaxed.
 
-## Unresolved full-report check
+## Approved public scanner-to-report checks
 
-The existing local sharded-handler harness rejected loopback before scanning:
-`public_network_guard_failure.v1 / disallowed_hostname`. Both baseline and
-candidate guard failures remain logged at `/tmp/certscore-ar-report-trial`.
-The guard was not disabled or bypassed. These are not completed scan results.
+Ben approved exactly two scans of the existing owned canary
+`https://ergoveritas.com/testar2.html` at 17:16 UTC. The earlier automatic-review
+rejection was confirmed unexecuted. Fresh central contact history, canonical
+selection and the explicit ordinary-cooldown waiver preceded both actual visits;
+blocked/do-not-calibrate states were preserved. Both contacts were persisted
+idempotently under `ar-direct-path-20261101-reviewed-7042ba6`; the repository
+contact-only ledger records the resulting cooldown. There were no further visits.
 
-A SELECT-only export through the existing contact-ledger helper completed at
-16:02:39 UTC. The canonical selector chose the existing owned canary
-`https://ergoveritas.com/testar2.html` under the owner's explicit cooldown waiver;
-blocked/do-not-calibrate states were not waived. No production data or
-configuration was changed by that read-only export.
+Both runs use the real local sharded handler, the original existing scan lanes
+and standard settings, then checksum-verified artifacts through the real
+canonical publisher/API/export code with repository AWS/DB I/O doubles. Source
+pins verified unchanged. This measures local macOS Chromium, not production
+Lambda cold starts, queue latency, database locks or UI rendering.
 
-Automatic approval review then rejected the proposed sequential baseline and
-candidate local scans of that public canary, before execution, because public
-website scans/consent actions exceeded its interpretation of the explicit
-localhost scope. No external canary scan occurred, no indirect workaround was
-attempted, and there is no full-report latency acceptance result. The prepared
-`scripts/evaluate-ar-local-report.ts` uses actual local scanner code and the
-repository's AWS/DB I/O doubles; it must not be presented as production queue,
-database-lock or browser-rendering performance.
+| Measurement | Deployed baseline | Enabled candidate |
+|---|---:|---:|
+| Scanner harness elapsed | 6,507 ms | 7,733 ms |
+| Existing worker invocation phase | 6,358 ms | 4,596 ms |
+| First worker invocation through scanner summary | 6,388 ms | 4,619 ms |
+| Elapsed outside that measured span | 119 ms | 3,114 ms |
+| Accept/reject additional tail wait | 0 / 0 ms | 0 / 0 ms |
+| Publication replay/API/HTTP | 670 ms | 513 ms |
+| Canonical report | Ready | Ready |
+| Semantic Accept / Reject | Unconfirmed / Confirmed | Unconfirmed / Confirmed |
 
-Ben explicitly approved the two public scans of `https://ergoveritas.com/testar2.html`
-on November 1 at 17:16 UTC. The previous rejected operation is confirmed
-unexecuted. A fresh central-history/eligibility check and the frozen reviewed
-source must precede the permitted retry. The scans have not yet started. Keep production rollout off meanwhile. A broader binding rollback
-is the default-off option; ordinary bug-fix rollback would require reverting
-the reviewed source commit. Historical reports are not rewritten.
+The candidate scanner total is **1,226 ms (18.8%) slower** in this one pair.
+The retained phases place the difference outside the worker-invocation span;
+the A/R lanes add no tail wait. Startup/setup, local source execution and site
+variance are not independently isolated, so this is not evidence of a production
+A/R latency regression or a claim that latency parity has passed. The final
+controlled cohort evaluates observer cost separately, including closed-shadow
+preparation. No fixed sleeps, deadlines or observation windows were changed.
+
+The baseline scan completed at 18:03:12 UTC. Its first local publication attempt
+correctly failed because retained files were outside the publisher's permitted
+artifact root. Exact hash/size-verified retained bytes were copied into the
+existing permitted root and replayed, without another scan or weakened guard.
+Thus its 7,177 ms scanner-plus-publication sum is **not an uninterrupted
+end-to-end wall time**. Candidate completed the full uninterrupted local path
+in **9,076 ms**, including process setup and HTTP200. A precise paired full-report
+latency comparison remains unestablished because baseline required recovery.
+
+Both observations match the owned fixture's registered expectation: Accept
+remains unconfirmed, Reject is confirmed with six post-refusal activity
+observations. This public canary is publication/regression evidence, not proof
+of improved Accept success. Actual click counters are unavailable on the public
+target; controlled fixtures independently count page/server clicks.
+
+A preliminary malformed wire-configuration attempt failed validation before
+browser/network execution; it is not counted as a visit. Harness fixes now
+validate Accept-v6 / Reject-v23 wire enums before scanning, distinguish registry
+recipe versions, and preserve every failed attempt. Source pins and reports are
+at `/tmp/certscore-ar-approved-report-recovered`; the retained baseline scan is
+at `/tmp/certscore-ar-approved-report-wire-fixed`.
+
+
+## Final reviewed three-arm evaluation
+
+All **216 actions** completed: **72 per arm**, twelve fixture classes, both
+actions, three repetitions, with rotated arm order. Source pins matched before
+and after all attempts. Chromium `145.0.7632.6`, local macOS, no AWS scan workers.
+The runtime is frozen at `7042ba6fd`; all failures remain in the denominator.
+
+| Measurement | Baseline | Candidate gate unset | Candidate enabled |
+|---|---:|---:|---:|
+| Intended actual clicks | 60 | 60 | 60 |
+| Wrong actual clicks | 6 | 6 | 0 |
+| Correct semantic confirmations | 42 | 45 | 48 |
+| False confirmations | 3 | 3 | 0 |
+| Complete observation captures | 63 | 66 | 54 |
+| Packet errors | 3 | 0 | 0 |
+| Median observer time (ms) | 3443 | 3334 | 3157 |
+| p95 observer time (ms) | 8319 | 8326 | 8318 |
+
+The matched ordinary set contains **48 actions per arm** (direct, localized,
+open shadow, scoped accessible, closed shadow, frame, readiness and opaque state).
+
+| Measurement | Baseline | Candidate gate unset | Candidate enabled |
+|---|---:|---:|---:|
+| Intended actual clicks | 48 | 48 | 48 |
+| Correct confirmations | 39 | 39 | 42 |
+| Complete observations | 48 | 48 | 48 |
+| p95 observer time (ms) | 8491 | 8481 | 8524 |
+
+Per-fixture counts, closed-shadow preparation cost, raw rows and source hashes
+are retained in `ar-direct-path-reviewed-evaluation-2026-11-01.json` and
+`/tmp/certscore-ar-reviewed-three-arm-evaluation`. Shortened failed/limited paths
+are not treated as speed improvements. Complete captures retain their entire
+configured 3-second Accept / 8-second Reject observation windows.
+
+## Rollout and limitations
+
+No deployment, production flag activation, new scan lanes or infrastructure was
+performed. Required contact-audit metadata was written through the canonical
+existing helper; no score, account, security or scan configuration changed.
+Full native/document binding, selected-frame storage and closed-shadow validation
+remain default-off. Disable the gate to roll those features back; reverting the
+reviewed source is necessary to roll back ordinary bug fixes. Historical reports
+are not rewritten.
+
+Closed-shadow coordinate input is best effort. A DOM change can still race the
+press, and timeout after press may leave a partial-input/uncertain result; no
+second consent attempt is made. Command-attempt timestamps do not prove physical
+hardware delivery. The synchronous internal commit callback is bookkeeping-only;
+extensible preparation callbacks execute before final validation. The parent
+reviewer classified a hypothetical commit-callback-induced abort as conditional,
+not a confirmed reachable production defect. No blanket atomic-input guarantee
+is claimed.
+
+Independent source review is closed. Production rollout still requires owner
+authorization and a separate operational latency decision.
+The controlled failures, public timing limitation, unconfirmed Accept canary and
+unsupported Options/category/Save paths must remain visible in that decision.
+
+## Authorized release preparation
+
+The owner explicitly authorized deployment and activation at 18:26 UTC after
+clarifying the earlier preparation request. This supersedes the earlier rollout
+hold for this scoped release. Remote main and the live AWS web revision were
+refreshed at 18:27 UTC and both remained the verified `5894539f` baseline.
+
+The only activation additions are the existing
+`CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED=1` environment setting in canonical
+scanner deployment/Terraform configuration and a regional parity requirement,
+plus a focused deployment-contract test. These do not alter observer source,
+packet contracts, worker topology or budgets. No Terraform apply is required.
+The runtime option remains default-off for callers/environments without the flag.
+
+Release through `pnpm deploy:scanners -- --base <live-sha> --plan`, then the
+established targeted scanner procedure after exact-source release checks and a
+clean committed/pushed branch. Reuse the runtime base, build once, replicate the
+same immutable image to existing primary/inventory functions in eu-central-1,
+eu-west-1 and us-west-1. No web, MCP, validation or DB release is required: the
+changed A/R observers execute in scanners, and the new web file is a test only.
+Existing validation imports use unaffected network/full-site helpers.
+
+Verify image/provenance digest, Active/Successful state, the A/R flag on all six
+functions, regional parity, unchanged memory/timeouts/budgets and standard
+Web Bot Auth HTTP200 health checks. No further public consent scans are included
+in this authorization. Report the exact deployed SHA/digest and measured stage
+times; do not claim the web version changed for a scanner-only release.
+
+Rollback readiness: retain the verified baseline image digest above and the
+pre-release configuration state. A gate-only rollback sets the existing A/R flag
+back to its prior value using revision-guarded configuration preservation; a
+complete behavior rollback promotes the retained immutable baseline image through
+the existing image/provenance helper and restores prior gate state. Keep all
+other configuration intact. No rollback has been executed.
