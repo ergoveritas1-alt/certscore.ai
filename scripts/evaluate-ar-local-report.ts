@@ -7,7 +7,7 @@ import {createServer} from "node:http";
 import {spawn} from "node:child_process";
 import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
-import {mkdir, readFile, readdir, writeFile} from "node:fs/promises";
+import {cp, mkdir, readFile, readdir, writeFile} from "node:fs/promises";
 import path from "node:path";
 import {redirectPublicationHarness} from "../apps/web/server/scans/redirect-publication.fixture";
 import {postAcceptLambdaDispatchConfigSchema, postRefusalLambdaDispatchConfigSchema} from "@certscore/contracts";
@@ -43,6 +43,11 @@ async function main() {
     return Object.fromEntries(await Promise.all([...new Set(files)].sort().map(async file => [file, createHash("sha256").update(await readFile(path.join(directory, file))).digest("hex")])));
   };
   const sourcePins = {baseline: await pin(baseline), candidate: await pin(root)};
+  const reusedBaselinePath = process.argv.includes("--reuse-baseline-summary") ? path.resolve(arg("--reuse-baseline-summary")) : undefined;
+  if (reusedBaselinePath) {
+    const previousPins = JSON.parse(await readFile(path.join(path.dirname(reusedBaselinePath), "source-pins.json"), "utf8"));
+    assert.deepEqual(previousPins.baseline, sourcePins.baseline, "retained baseline source must still match the original scan");
+  }
   await writeFile(path.join(out, "source-pins.json"), JSON.stringify(sourcePins, null, 2));
   const clicks = new Map<string, number>();
   const server = createServer(async (req, res) => {
@@ -76,7 +81,8 @@ async function main() {
       const cwd = arm === "baseline" ? baseline : root, id = `ar-report-${arm}-${repeat}`, target = publicTarget ?? `http://localhost:3000/site/${id}`;
       const runStartedAtMs = Date.now();
       const artifacts = path.join(out, `${id}-artifacts`), summaryPath = path.join(out, `${id}.scanner.json`);
-      const code = await new Promise<number | null>((resolve, reject) => {
+      const reuseBaseline = arm === "baseline" && reusedBaselinePath !== undefined;
+      const code = reuseBaseline ? 0 : await new Promise<number | null>((resolve, reject) => {
         const child = spawn(process.execPath, ["--import", "tsx", path.join(cwd, "scripts/run-local-v2-dag-lambda-parity.ts"),
           "--target-url", target, "--profile", "standard", "--no-debug-overrides", "--artifact-dir", artifacts, "--out", summaryPath,
           "--scan-id", id, "--post-accept-config", JSON.stringify(config("accept")), "--post-refusal-config", JSON.stringify(config("reject"))],
@@ -86,9 +92,16 @@ async function main() {
       const row: any = {arm, repeat, id, scannerExitCode: code, sourceRoot: cwd, runtime: "local-sharded-handler", awsIo: "filesystem-doubles", databaseIo: "repository-publication-double"};
       try {
         assert.equal(code, 0);
-        const summary = JSON.parse(await readFile(summaryPath, "utf8"));
+        const summary = JSON.parse(await readFile(reuseBaseline ? reusedBaselinePath! : summaryPath, "utf8"));
         assert.equal(summary.resultStatus, "completed");
+        assert.equal(summary.targetUrl, target);
+        row.publicScanReused = reuseBaseline;
+        if (reuseBaseline) {row.originalScannerSummary = reusedBaselinePath;row.fullReportLatencyIncludesRecovery = true;}
         const bundle = JSON.parse(await readFile(path.join(summary.artifactRoot, "CanonicalEvidenceBundle.json"), "utf8"));
+        // The real local publisher intentionally permits only its existing
+        // artifacts/local-v2-dag-scans root. Copy retained bytes into the
+        // repository harness's approved directory; do not weaken its guard.
+        await cp(summary.artifactRoot, h.directory, {recursive: true});
         const message = summary.sqsMessages.find((m: any) => m.artifactPointers?.scanArtifactUri);
         assert.ok(message?.artifactMetadata, "real scanner result must supply verified artifact metadata");
         h.state.objects.clear();h.state.writes.length = 0;
@@ -105,7 +118,7 @@ async function main() {
         const hostname = new URL(target).hostname;
         const record = {scan: {id, domainHostname: hostname, status: "completed", scanType: "full", scanFromValue: "california",
           createdAt: bundle.startedAt, startedAt: bundle.startedAt, completedAt: bundle.completedAt, pagesRequested: 1, pagesScanned: 1,
-          scanConfigJson: {processor, hostname, normalizedUrl: target, execution: {v2DagParallel: {localOnly: true, artifactOnly: true, profile: "standard"}, localV2Dag: {outDir: summary.artifactRoot}}}},
+          scanConfigJson: {processor, hostname, normalizedUrl: target, execution: {v2DagParallel: {localOnly: true, artifactOnly: true, profile: "standard"}, localV2Dag: {outDir: h.directory}}}},
           signalEnrichmentWorkflow: {findingsReady: true, mergedSignalsReady: true},
           events: [{id: `${id}-result`, eventType: "v2_lambda_result.received", createdAt: bundle.completedAt, metadataJson: {...message, processor}}],
           pageEvidence: [], policyEnrichment: [], policyReviewQueue: [], preconsentViolations: [], primaryPolicyEnrichment: null,
@@ -123,7 +136,7 @@ async function main() {
         await writeFile(path.join(out, `${id}.report.json`), JSON.stringify({api, report}, null, 2));
         assert.equal((await fetch(`http://localhost:3000/report/${id}`)).status, 200);
         Object.assign(row, {targetKind: publicTarget ? "existing-owned-canary" : "loopback-fixture", scannerMs: summary.elapsedMs, publicationAndHttpMs: Date.now() - publicationStarted,
-          fullLocalReportWallMs: Date.now() - runStartedAtMs, localReportReadyMs: summary.elapsedMs + Date.now() - publicationStarted,
+          ...(reuseBaseline ? {publicationReplayWallMs: Date.now() - runStartedAtMs} : {fullLocalReportWallMs: Date.now() - runStartedAtMs}), localReportReadyMs: summary.elapsedMs + Date.now() - publicationStarted,
           result: "ready", postAccept: summary.postAccept, postRefusal: summary.postRefusal,
           ...(publicTarget ? {actualClickCounters: "unavailable-on-public-target"} : {
             intendedAcceptClicks: clicks.get(`/clicked/${id}/accept`) ?? 0, intendedRejectClicks: clicks.get(`/clicked/${id}/reject`) ?? 0})});
