@@ -70,5 +70,241 @@
     "reject": 8000
   },
   "allFailuresRetained": true,
-  "independentReviewComplete": false
+  "independentReviewComplete": false,
+  "denominatorDefinition": {
+    "totalActions": 120,
+    "actionsPerArm": 60,
+    "fixtureClasses": 10,
+    "actionsPerFixture": [
+      "accept",
+      "reject"
+    ],
+    "repetitions": 3
+  },
+  "cohortGateSettings": {
+    "baseline": {
+      "inputBoundControlDispatch": false,
+      "environmentValue": "0",
+      "newImplementationPresent": false
+    },
+    "candidate": {
+      "inputBoundControlDispatch": true,
+      "environmentValue": "1",
+      "newImplementationPresent": true
+    },
+    "candidateDefaultOffCohortMeasured": false
+  },
+  "byFixture": [
+    {
+      "fixture": "direct",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "localized",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "shadow",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "frame",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 3,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "ready",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "ambiguous",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "opaque",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "replacement",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 6,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "fragment",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 3,
+        "falseConfirmations": 0,
+        "completeObservations": 3,
+        "packetErrors": 3
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "reload",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 3,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0
+      }
+    }
+  ],
+  "independentReviewStatus": "blocked_no_attached_reviewer_human_delegation_authorization_required"
 }

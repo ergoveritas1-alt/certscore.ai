@@ -59,6 +59,25 @@ timing/cancellation corrections and the limited-artifact clock repair are ordina
 bug fixes. Geometry handle cleanup is asynchronous and cannot delay the action
 result; the stalled-cleanup regression passes.
 
+| Change | Candidate with gate unset/off | Candidate with gate enabled |
+|---|---|---|
+| Exact native node across geometry fallback inspection and its one click | On | On |
+| Input-command timing, synchronous cancellation guard and closed-shadow timing callback | On | On |
+| Limited Accept form-artifact clock correction | On | On |
+| Nonblocking geometry-handle cleanup | On | On |
+| Exact native element across full proof and ordinary dispatch | Off | On |
+| Selected-document reload/detach invalidation and bounded fragment identity read | Off | On |
+| Selected-frame Reject storage baseline/write/value/hash scope correction | Off | On |
+
+The 120-action comparison explicitly enabled `boundControlDispatch: true` and
+the environment value `1` for the candidate; it explicitly used `false` and `0`
+for baseline. The input Boolean takes precedence over the environment fallback.
+The deployed baseline does not contain this new gate. **This comparison does not
+measure the candidate with its new gate off.** Its wrong-click and replaced-
+document improvements must not be attributed to default behavior. Unit tests
+exercise enabled/disabled paths, but do not substitute for a paired default-off
+cohort or real-site validation. All candidate code remains undeployed.
+
 No new Lambda lane, function, worker, parallel scan execution, browser visit,
 model call, fixed sleep, action deadline or observation-window increase was
 added. Existing 3-second Accept and 8-second Reject windows are used in the
@@ -126,7 +145,7 @@ that small difference is not a speedup claim. Raw failures and packets remain at
 The final frozen-source cohort at
 `/tmp/certscore-ar-final-source-paired-evaluation` completed all **120 actions**
 (60 per arm; ten fixture classes, both actions, three repetitions). Source
-manifests matched before/after every arm. Chromium was `145.0.7632.6`, macOS,
+manifests matched before/after the complete cohort. Chromium was `145.0.7632.6`, macOS,
 local execution without AWS. This includes the final gate-coherence and
 nonblocking-disposal repairs.
 
@@ -156,6 +175,54 @@ The prior 120-action iteration remains preserved at
 The machine-readable final summary is
 `docs/certscore-v2/ar-direct-path-evaluation-2026-11-01.json`. Raw packets, every
 attempt and before/after source manifests remain in the final evidence directory.
+
+The denominator is **120 total = 60 actions in each arm**: ten fixture classes
+times Accept/Reject times three repetitions. Each row below has six attempts
+per arm. “Complete” is observation-window completion, not choice confirmation.
+
+| Fixture | Baseline: intended / correct confirmed / complete / packet errors | Enabled candidate: intended / correct confirmed / complete / packet errors |
+|---|---|---|
+| Direct | 6 / 6 / 6 / 0 | 6 / 6 / 6 / 0 |
+| German labels | 6 / 6 / 6 / 0 | 6 / 6 / 6 / 0 |
+| Open shadow | 6 / 6 / 6 / 0 | 6 / 6 / 6 / 0 |
+| Frame | 6 / 3 / 6 / 0 | 6 / 6 / 6 / 0 |
+| Disabled until handler ready | 6 / 6 / 6 / 0 | 6 / 6 / 6 / 0 |
+| Ambiguous | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| Opaque state | 6 / 0 / 6 / 0 | 6 / 0 / 6 / 0 |
+| Opposite replacement | 0 / 0 / 6 / 0 | 0 / 0 / 0 / 0 |
+| Same-document fragment | 6 / 3 / 3 / 3 | 6 / 6 / 6 / 0 |
+| Selected-frame reload | 6 / 0 / 6 / 0 | 6 / 0 / 0 / 0 |
+
+Unsafe/incomplete cases are separate from ordinary-path throughput:
+
+- Opposite replacement: baseline made six wrong actual clicks; enabled candidate
+  made none and retained six failed/limited paths without retry.
+- Reload: both arms made six intended clicks. Baseline incorrectly confirmed
+  three decisions from the new document and retained six complete captures;
+  enabled candidate confirms none and retains six cancelled/limited paths.
+- Ambiguity: both safely make no click in all six attempts.
+- Opaque state: both click the intended control and observe the whole window,
+  but all six decisions remain unconfirmed. This is not verified A/R success.
+- Fragment: three baseline Accept packet errors recover; candidate confirms and
+  completes all six same-document cases.
+
+Thus baseline has nine incomplete attempts (six ambiguous, three fragment
+errors); enabled candidate has eighteen (six ambiguous, six replacements, six
+reloads). No ordinary comparable path lost an intended click, confirmation or
+full window in this cohort; frame confirmation improves. These are fixture
+results, not proof that no real-world path can regress.
+
+## Independent review status
+
+Independent code/evidence review is **not complete**. On the follow-up review
+request, the live collaboration inventory contained only the implementing root
+agent; no separate reviewer was attached and no Codex CLI was available on PATH.
+The environment requires explicit human authorization to spawn a sub-agent.
+The parent's orchestration instruction alone does not supply that human grant.
+No reviewer was started or simulated. A separate reviewer must inspect commit
+`1314f95e56e9e8c4ec87cd30447eb928c817756e` against the deployed base and the
+retained evidence, then report findings. Implementation self-review and passing
+tests must not be described as independent sign-off.
 
 ## Local core-to-publication integration
 
