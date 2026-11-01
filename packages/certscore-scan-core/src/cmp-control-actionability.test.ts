@@ -10,6 +10,30 @@ import {
   waitForLocatorVerifiedGeometry,
 } from "./cmp-control-actionability.js";
 
+test("geometry dispatch never substitutes a rerendered opposite choice after its final proof", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<button id="choice">Reject all</button><script>
+      window.choices=[];document.querySelector('button').onclick=()=>window.choices.push('reject');
+    </script>`);
+    let mutation: Promise<void> | undefined;
+    // Queue a real browser rerender at the final synchronous dispatch boundary.
+    // The replacement keeps the selector and geometry but reverses its meaning.
+    // It must never inherit the original element's verified authorization.
+    await dispatchLocatorClickWithVerifiedGeometry(page.locator("#choice"), 500, () => {
+      mutation = page.evaluate(() => {
+        const replacement = document.createElement("button");
+        replacement.id = "choice"; replacement.textContent = "Accept all";
+        replacement.onclick = () => (window as unknown as {choices: string[]}).choices.push("accept");
+        document.querySelector("#choice")!.replaceWith(replacement);
+      });
+    }).catch(() => undefined);
+    await mutation;
+    assert.deepEqual(await page.evaluate(() => (window as unknown as {choices: string[]}).choices), []);
+  } finally { await browser.close(); }
+});
+
 test("a control removed after visibility inspection cannot start an unbounded locator wait", async () => {
   const browser = await chromium.launch({ headless: true });
   try {

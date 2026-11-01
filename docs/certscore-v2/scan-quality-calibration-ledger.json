@@ -2979,10 +2979,20 @@
       "note": "Owner-authorized passive reference/candidate diagnostic 20261031T034940Z-manual-live-geometry-pairs-12b40ea8; cooldown waived for these two visits only; no-go/holds retained. Not rotating inventory or baseline.",
       "state": "cooldown",
       "url": "https://ae.com/"
+    },
+    "https://ergoveritas.com/testar2.html": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-29T18:07:46.068Z",
+      "lastContactAt": "2026-11-01T18:07:46.068Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ergoveritas.com/testar2.html"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-31T04:02:43.966Z",
+  "updatedAt": "2026-11-01T18:14:26.958Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -3156,6 +3166,7 @@
     "https://jobvite.com/",
     "https://ae.com/",
     "https://airandspaceforces.com/",
-    "https://routenote.com/"
+    "https://routenote.com/",
+    "https://ergoveritas.com/testar2.html"
   ]
 }

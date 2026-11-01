@@ -1,4 +1,5 @@
 import type { Frame, Locator, Page } from "playwright";
+import type { ConsentActionControl } from "./cmp-control-actionability.js";
 
 /** Confirmation may inspect a boxless consent scope only through its unique,
  * visible control. Composed ancestry includes open-shadow hosts. This proves
@@ -33,14 +34,14 @@ export async function canonicalConsentSurfacePresent(
  * Verify that the exact scope permits interaction; callers must still prove
  * the control's own visibility, uniqueness, label and viewport hit target.
  */
-export async function consentScopePermitsInteraction(scope: Locator): Promise<boolean> {
+export async function consentScopePermitsInteraction(scope: ConsentActionControl): Promise<boolean> {
   return await consentScopeInteractionState(scope) === "interactive";
 }
 
 /** Opacity-only animation is distinct from hidden, inert or unavailable DOM.
  * This is a settling aid, never action authorization or proof of visibility. */
-export async function consentScopeInteractionState(scope: Locator, timeoutMs?: number): Promise<"interactive" | "transparent" | "unavailable"> {
-  return scope.evaluate((element) => {
+export async function consentScopeInteractionState(scope: ConsentActionControl, timeoutMs?: number): Promise<"interactive" | "transparent" | "unavailable"> {
+  const read = (element: HTMLElement | SVGElement) => {
     if (!element.isConnected) return "unavailable" as const;
     let transparent = false;
     let current: Element | null = element;
@@ -54,7 +55,10 @@ export async function consentScopeInteractionState(scope: Locator, timeoutMs?: n
       current = current.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
     }
     return current !== null ? "unavailable" as const : transparent ? "transparent" as const : "interactive" as const;
-  }, undefined, timeoutMs === undefined ? undefined : {timeout: timeoutMs}).catch(() => "unavailable" as const);
+  };
+  return ("elementHandle" in scope
+    ? scope.evaluate(read, undefined, timeoutMs === undefined ? undefined : {timeout: timeoutMs})
+    : scope.evaluate(read)).catch(() => "unavailable" as const);
 }
 
 /** Observation text/headings/tabs must not compete with actionable choices. */

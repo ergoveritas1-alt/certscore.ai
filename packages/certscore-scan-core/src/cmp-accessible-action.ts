@@ -1,7 +1,8 @@
 import { classifyConsentControlLabel } from "@certscore/contracts";
-import type { Frame, Locator, Page } from "playwright";
+import type { CDPSession, Frame, Locator, Page } from "playwright";
 import { consentScopePermitsInteraction } from "./cmp-action-target.js";
 import type { ConsentProofReadGuard } from "./cmp-action-control-proof.js";
+import type { ConsentControlReadOptions } from "./cmp-control-actionability.js";
 
 export type CmpAccessibleActionResolution = {
   kind: "scoped_accessible_control" | "closed_shadow_accessible_control";
@@ -15,6 +16,41 @@ type ClosedShadowTarget = {
   x: number;
   y: number;
 };
+
+function closedShadowDispatchReadGuard(page: Page, deadlineAtMs: number, signal?: AbortSignal): ConsentProofReadGuard {
+  let stopped = false;
+  const checkpoint = () => {
+    if (stopped || signal?.aborted || Date.now() >= deadlineAtMs) throw new Error("closed_shadow_target_read_aborted_or_expired");
+  };
+  return {scope: page.mainFrame(), checkpoint, track: pending => pending,
+    async read(start) {
+      checkpoint();let timer: NodeJS.Timeout | undefined, abort: (() => void) | undefined;
+      try {
+        const pending = start();
+        const stop = new Promise<never>((_resolve,reject) => {
+          abort = () => {stopped = true;reject(new Error("closed_shadow_target_read_aborted_or_expired"));};
+          signal?.addEventListener("abort",abort,{once:true});
+          timer = setTimeout(abort,Math.max(0,deadlineAtMs-Date.now()));
+          if (signal?.aborted) abort();
+        });
+        const result = await Promise.race([pending,stop]);checkpoint();return result;
+      } finally {if (timer) clearTimeout(timer);if (abort) signal?.removeEventListener("abort",abort);}
+    }};
+}
+
+async function consentCdpSession(page: Page, guard?: ConsentProofReadGuard): Promise<CDPSession> {
+  guard?.checkpoint();
+  let acquired: CDPSession | undefined, cleanupStarted = false;
+  const cleanup = () => {
+    if (!acquired || cleanupStarted) return;cleanupStarted = true;
+    const session = acquired, work = Promise.resolve().then(() => session.detach()).catch(() => undefined);
+    if (guard) void guard.track(work);
+  };
+  const pending = page.context().newCDPSession(page);
+  void pending.then(session => {acquired = session;try {guard?.checkpoint();} catch {cleanup();}}, () => undefined);
+  try {return await (guard ? guard.read(() => pending) : pending);}
+  catch (error) {cleanup();throw error;}
+}
 
 function eligibleIntent(label: string, intent: "accept" | "reject") {
   const classification = classifyConsentControlLabel({
@@ -92,36 +128,66 @@ export async function dispatchClosedShadowAccessibleControl(
   page: Page,
   resolution: CmpAccessibleActionResolution,
   assertDispatchAllowed?: () => void,
+  onDispatch?: () => void,
+  options?: ConsentControlReadOptions,
+  onDispatchCommitted?: () => void,
 ) {
   if (resolution.kind !== "closed_shadow_accessible_control") {
     throw new Error("Closed-shadow dispatch requires a closed-shadow action recipe.");
   }
-  const target = await resolveClosedShadowTarget(page, resolution);
+  const dispatchDeadlineAtMs = Math.min(Date.now() + 2_000, options?.deadlineAtMs ?? Infinity);
+  const dispatchGuard = options?.bindClosedShadowTarget ? closedShadowDispatchReadGuard(page, dispatchDeadlineAtMs, options.signal) : undefined;
+  const target = await resolveClosedShadowTarget(page, resolution, dispatchGuard);
   if (!target) throw new Error("Closed-shadow CMP action target was not uniquely actionable.");
-  const session = await page.context().newCDPSession(page);
+  const session = await consentCdpSession(page, dispatchGuard);
+  const read = <T>(start: () => Promise<T>) => dispatchGuard ? dispatchGuard.read(start) : start();
   try {
-    await session.send("Input.dispatchMouseEvent", {
+    await read(() => session.send("Input.dispatchMouseEvent", {
       type: "mouseMoved",
       x: target.x,
       y: target.y,
-    });
+    }));
     assertDispatchAllowed?.();
-    await session.send("Input.dispatchMouseEvent", {
+    onDispatch?.();
+    assertDispatchAllowed?.();
+    if (options?.bindClosedShadowTarget) {
+        const [hit, described] = await read(() => Promise.all([
+          session.send("DOM.getNodeForLocation", {x: Math.round(target.x), y: Math.round(target.y), includeUserAgentShadowDOM: true}),
+          session.send("DOM.describeNode", {backendNodeId: target.backendNodeId, depth: 4, pierce: true}),
+        ]));
+        const pendingNodes = [described.node], currentIds = new Set<number>();
+        let complete = described.node.backendNodeId === target.backendNodeId;
+        while (pendingNodes.length && complete) {
+          const node = pendingNodes.pop()!;
+          if (currentIds.size >= 64 || (node.childNodeCount ?? 0) > (node.children?.length ?? 0)) {complete = false;break;}
+          currentIds.add(node.backendNodeId);
+          pendingNodes.push(...(node.children ?? []), ...(node.shadowRoots ?? []));
+        }
+        // A retained descendant ID alone is insufficient: the page may have
+        // moved it into another button. Require fresh complete ancestry.
+        if (!complete || !currentIds.has(hit.backendNodeId)) {
+          throw new Error("closed_shadow_bound_target_changed");
+        }
+        assertDispatchAllowed?.();
+        dispatchGuard!.checkpoint();
+    }
+    onDispatchCommitted?.();
+    await read(() => session.send("Input.dispatchMouseEvent", {
       type: "mousePressed",
       button: "left",
       clickCount: 1,
       x: target.x,
       y: target.y,
-    });
-    await session.send("Input.dispatchMouseEvent", {
+    }));
+    await read(() => session.send("Input.dispatchMouseEvent", {
       type: "mouseReleased",
       button: "left",
       clickCount: 1,
       x: target.x,
       y: target.y,
-    });
+    }));
   } finally {
-    await session.detach().catch(() => undefined);
+    void Promise.resolve().then(() => session.detach()).catch(() => undefined);
   }
 }
 
@@ -130,9 +196,7 @@ async function resolveClosedShadowTarget(
   resolution: CmpAccessibleActionResolution,
   proofGuard?: ConsentProofReadGuard,
 ): Promise<ClosedShadowTarget | undefined> {
-  proofGuard?.checkpoint();
-  const pendingSession = page.context().newCDPSession(page);
-  const session = await (proofGuard?.track(pendingSession) ?? pendingSession);
+  const session = await consentCdpSession(page, proofGuard);
   const read = <T>(start: () => Promise<T>): Promise<T> => proofGuard ? proofGuard.read(start) : start();
   try {
     await read(() => session.send("DOM.enable"));
@@ -208,7 +272,7 @@ async function resolveClosedShadowTarget(
     }
     return candidates.length === 1 ? candidates[0] : undefined;
   } finally {
-    const cleanup = session.detach().catch(() => undefined);
-    await (proofGuard?.track(cleanup) ?? cleanup);
+    const cleanup = Promise.resolve().then(() => session.detach()).catch(() => undefined);
+    if (proofGuard) void proofGuard.track(cleanup);
   }
 }

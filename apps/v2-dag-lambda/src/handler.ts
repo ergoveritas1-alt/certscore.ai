@@ -2278,7 +2278,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
     const { runPostRefusalObserver } = await import("@certscore/scan-core/post-refusal-observer");
     return runPostRefusalObserver({
       runtimeGraph: payload.runtimeGraph,
-      onLifecycleEvent: () => { void checkpoint("action_dispatched"); },
+      onActionDispatchCommitted: () => { void checkpoint("action_dispatched"); },
       allowCanonicalRejectDiscovery: config.resolver.kind === "canonical_cmp_registry",
       actionSearchTimeoutMs: config.actionSearchTimeoutMs,
       confirmationTimeoutMs: config.confirmationTimeoutMs,
@@ -2387,7 +2387,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
     return runPostAcceptObserver({
       formSnapshotReviewer: createFormSnapshotSafetyClassifier(),
       runtimeGraph: payload.runtimeGraph,
-      onLifecycleEvent: () => { void checkpoint("action_dispatched"); },
+      onActionDispatchCommitted: () => { void checkpoint("action_dispatched"); },
       onLateFormDetected: () => {
         const body = JSON.stringify({ contractVersion: "certscore.post_accept_late_form_progress.v1",
           scanId: payload.scanId, parentDispatchSha256: payload.parentDispatchSha256,

@@ -9,8 +9,8 @@ import {
 } from "@certscore/contracts";
 import { getKnownCmpDefinitionByName } from "@website-signal-risk-scanner/shared";
 import { createHash } from "node:crypto";
-import { inspectLocatorActionability, locatorActionabilitySupportsVerifiedDispatch } from "./cmp-control-actionability.js";
-import type { Frame, Locator, Page } from "playwright";
+import { inspectLocatorActionability, locatorActionabilitySupportsVerifiedDispatch, type ConsentActionControl } from "./cmp-control-actionability.js";
+import type { ElementHandle, Frame, Locator, Page } from "playwright";
 import { readConsentActionLabelFields, type ConsentActionLabelFields } from "./consent-action-label-fields.js";
 import { consentScopePermitsInteraction } from "./cmp-action-target.js";
 import { readConsentActionSettlingSnapshot } from "./consent-action-settling-snapshot.js";
@@ -24,7 +24,7 @@ import {
 type ControlLabelFields = ConsentActionLabelFields;
 
 export type ConsentActionControlProofResolution =
-  | { status: "verified"; proof: ConsentActionControlProof }
+  | { status: "verified"; proof: ConsentActionControlProof; boundElement?: ElementHandle<HTMLElement | SVGElement> }
   | { status: "label_mismatch" | "label_unverifiable"; reason: string };
 
 /** Proof-only hooks: no new browser commands and no late result reuse. */
@@ -150,8 +150,11 @@ export async function waitForTransparentConsentControl(input: {
 }
 
 /** Synchronous last-mile check, including after geometry/CDP awaits. */
-export function assertConsentActionDispatchAllowed(page: Page, signal?: AbortSignal, authorizedTargetSha256?: string) {
+export function assertConsentActionDispatchAllowed(page: Page, signal?: AbortSignal, authorizedTargetSha256?: string, deadlineAtMs?: number) {
   if (signal?.aborted) throw new Error("abort_requested_before_action");
+  if (deadlineAtMs !== undefined && (!Number.isFinite(deadlineAtMs) || Date.now() >= deadlineAtMs)) {
+    throw new Error("consent_action_dispatch_budget_exhausted");
+  }
   if (authorizedTargetSha256 && sha256(normalizedTarget(page.url())) !== authorizedTargetSha256) {
     throw new Error("redirect_target_not_authorized");
   }
@@ -160,7 +163,7 @@ export function assertConsentActionDispatchAllowed(page: Page, signal?: AbortSig
 /** Revalidate the reviewed necessary-only scope at the final dispatch boundary,
  * after any resolver, baseline, geometry or caller awaits. Never clicks. */
 export async function assertReviewedRejectDispatchAllowed(input: {
-  page: Page; control: Locator; proof?: ConsentActionControlProof; controlFrameUrl?: string; signal?: AbortSignal; deadlineAtMs?: number;
+  page: Page; control: ConsentActionControl; proof?: ConsentActionControlProof; controlFrameUrl?: string; signal?: AbortSignal; deadlineAtMs?: number;
 }) {
   const proof = input.proof;
   if (!proof || (!proof.labelBoundNecessaryOnly &&
@@ -186,6 +189,8 @@ export async function assertReviewedRejectDispatchAllowed(input: {
 }
 
 export type ConsentActionControlProofInput = {
+  /** Retain the exact native element through proof and the one input command. */
+  bindElement?: boolean;
   signal?: AbortSignal;
   deadlineAtMs?: number;
   onLabelInspection?: (snapshot: Omit<NonNullable<PostRefusalInteractionDiagnostics["resolver"]>["snapshots"][number], "attempt" | "elapsedMs">) => void;
@@ -193,7 +198,7 @@ export type ConsentActionControlProofInput = {
   authorizedTargetSha256?: string;
   canonicalNecessaryOnly?: { expectedNormalizedLabel: string };
   cmpId?: string;
-  control: Locator;
+  control: ConsentActionControl;
   controlFrameUrl?: string;
   expectedAccessibleControl?: CmpAccessibleActionResolution;
   expectedCustomControlBinding?: CustomAcceptControlBinding;
@@ -204,7 +209,29 @@ export type ConsentActionControlProofInput = {
 };
 
 export async function buildConsentActionControlProof(input: ConsentActionControlProofInput): Promise<ConsentActionControlProofResolution> {
-  try { return await boundedControlProof(input, guard => buildConsentActionControlProofWithinBoundary(input, guard)); }
+  try { return await boundedControlProof(input, async guard => {
+    if (!input.bindElement || input.expectedAccessibleControl?.kind === "closed_shadow_accessible_control" || !("elementHandle" in input.control)) {
+      return buildConsentActionControlProofWithinBoundary(input, guard);
+    }
+    let element: ElementHandle<HTMLElement | SVGElement> | null = null;
+    let retained = false;
+    try {
+      await guard.read(() => (input.control as Locator).elementHandle({timeout: Math.max(1,
+        Math.min(100, (input.deadlineAtMs ?? Date.now() + 100) - Date.now()))}).then(value => {element = value;}));
+      if (!element) return {status: "label_unverifiable", reason: "resolved_control_detached"};
+      const result = await buildConsentActionControlProofWithinBoundary({...input, control: element}, guard);
+      guard.checkpoint();
+      if (result.status !== "verified") return result;
+      retained = true;
+      return {...result, boundElement: element};
+    } finally {
+      if (element && !retained) {
+        const rejectedElement = element as ElementHandle;
+        // Preserve read backpressure without withholding the known proof result.
+        void guard.track(Promise.resolve().then(() => rejectedElement.dispose()).catch(() => undefined));
+      }
+    }
+  }); }
   catch (error) {
     if (error instanceof ControlProofStopped) return {status: "label_unverifiable", reason: error.message};
     throw error;
@@ -447,10 +474,10 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
 
 /** Read only visible instructions in the registered first-layer banner. A
  * category heading, hidden copy, another dialog or a form cannot authorize it. */
-async function readLabelBoundNecessaryOnlyContext(control: Locator, recipe: {
+async function readLabelBoundNecessaryOnlyContext(control: ConsentActionControl, recipe: {
   bannerSelector: string; controlSelector: string;
 }): Promise<string | undefined> {
-  return control.evaluate((element, selectors) => {
+  const read = (element: HTMLElement | SVGElement, selectors: {bannerSelector: string; controlSelector: string}) => {
     const root = element.getRootNode() as Document | ShadowRoot;
     const banner = element.closest(selectors.bannerSelector);
     if (!banner || root.querySelectorAll(selectors.bannerSelector).length !== 1 ||
@@ -480,14 +507,15 @@ async function readLabelBoundNecessaryOnlyContext(control: Locator, recipe: {
       if (text.length > 4096) return undefined;
     }
     return text.replace(/\s+/g, " ").trim();
-  }, recipe).catch(() => undefined);
+  };
+  return ("elementHandle" in control ? control.evaluate(read, recipe) : control.evaluate(read, recipe)).catch(() => undefined);
 }
 
 /** Contextual approval is not a blanket license to click “OK”. Verify the
  * reviewed vendor-owned scope, a native non-transactional control, and harmless
  * fragment links (the published plugin nests a link inside its button). */
-async function verifyContextualApprovalScope(control: Locator, bannerSelector: string, allowUnassociatedDefaultButton = false) {
-  return control.evaluate((element, input) => {
+async function verifyContextualApprovalScope(control: ConsentActionControl, bannerSelector: string, allowUnassociatedDefaultButton = false) {
+  const read = (element: HTMLElement | SVGElement, input: {bannerSelector: string; allowUnassociatedDefaultButton: boolean}) => {
     const selector = input.bannerSelector;
     const root = element.getRootNode() as Document | ShadowRoot;
     const banners = root.querySelectorAll(selector);
@@ -503,11 +531,13 @@ async function verifyContextualApprovalScope(control: Locator, bannerSelector: s
     const links = [element, ...element.querySelectorAll("a[href]")].filter((node) => node instanceof HTMLAnchorElement);
     return links.every((link) => (link.getAttribute("href") ?? "") === "#" &&
       !link.hasAttribute("download") && !link.getAttribute("target"));
-  }, {bannerSelector,allowUnassociatedDefaultButton}).catch(() => false);
+  };
+  const args = {bannerSelector,allowUnassociatedDefaultButton};
+  return ("elementHandle" in control ? control.evaluate(read, args) : control.evaluate(read, args)).catch(() => false);
 }
 
-async function readControlLabelFields(control: Locator, timeoutMs?: number): Promise<ControlLabelFields> {
-  return control.evaluate(readConsentActionLabelFields, undefined, timeoutMs === undefined ? undefined : {timeout: timeoutMs}).catch(() => ({}));
+async function readControlLabelFields(control: ConsentActionControl): Promise<ControlLabelFields> {
+  return ("elementHandle" in control ? control.evaluate(readConsentActionLabelFields) : control.evaluate(readConsentActionLabelFields)).catch(() => ({}));
 }
 
 function boundFields(fields: ControlLabelFields): ControlLabelFields {

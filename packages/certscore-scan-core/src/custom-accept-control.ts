@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import type { Locator } from "playwright";
 import type { CustomAcceptControlBinding } from "@certscore/contracts";
 import type { ConsentProofReadGuard } from "./cmp-action-control-proof.js";
+import type { ConsentActionControl } from "./cmp-control-actionability.js";
 
 /** Candidate eligibility only. A plain tag, label or pointer cursor never
  * authorizes dispatch. Named CMPs continue to require registered recipes. */
@@ -13,7 +13,7 @@ export function isCustomAcceptControlCandidate(candidate: { tagName: string; rol
  * editable/form controls, composite controls and non-unique scopes fail closed.
  * The bounded function text exists only in memory to compute a retained hash. */
 export async function inspectCustomAcceptControl(
-  control: Locator, bannerSelector: string, deadlineAtMs: number, expectedNormalizedLabel?: string,
+  control: ConsentActionControl, bannerSelector: string, deadlineAtMs: number, expectedNormalizedLabel?: string,
   proofGuard?: ConsentProofReadGuard,
 ): Promise<CustomAcceptControlBinding | undefined> {
   const remaining = Math.min(100, deadlineAtMs - Date.now());
@@ -21,7 +21,7 @@ export async function inspectCustomAcceptControl(
   let timer: NodeJS.Timeout | undefined;
   try {
     proofGuard?.checkpoint();
-    const read = control.evaluate((element, { selector, expectedLabel }) => {
+    const inspect = (element: HTMLElement | SVGElement, { selector, expectedLabel }: {selector: string; expectedLabel?: string}) => {
         const tagName = element.tagName.toLowerCase();
         if (!(element instanceof HTMLElement) || !element.isConnected || element.getAttribute("role") ||
           !(tagName === "span" || tagName === "div" || tagName.includes("-")) ||
@@ -46,7 +46,9 @@ export async function inspectCustomAcceptControl(
         const source = Function.prototype.toString.call(element.onclick);
         if (!source || source.length > 16_384 || source.includes("[native code]")) return null;
         return { tagName, source };
-      }, { selector: bannerSelector, expectedLabel: expectedNormalizedLabel }).catch(() => null);
+      };
+    const args = { selector: bannerSelector, expectedLabel: expectedNormalizedLabel };
+    const read = ("elementHandle" in control ? control.evaluate(inspect, args) : control.evaluate(inspect, args)).catch(() => null);
     proofGuard?.track(read);
     const result = await Promise.race([
       read,

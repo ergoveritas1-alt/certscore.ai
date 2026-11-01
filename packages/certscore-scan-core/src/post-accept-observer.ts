@@ -1,3 +1,4 @@
+import { createConsentActionFrameBinding } from "./consent-action-frame-binding.js";
 import type { CookieYesLegacyBaseline } from "./cookieyes-legacy-consent-state.js";
 import {installConsentReceiptCapture,receiptCaptureToken,retainReceiptCookies} from './consent-receipt-capture.js';
 import { isComplianzControl } from "./complianz-consent-state.js";
@@ -206,6 +207,8 @@ export interface PostAcceptObserverInput {
    * confirms acceptance.
    */
   allowCanonicalAcceptDiscovery?: boolean;
+  /** Default-off exact-element proof/dispatch hardening for paired calibration. */
+  boundControlDispatch?: boolean;
   scanStartedAtMs?: number;
   dispatchDelayMs?: number;
   observationWindowMs?: number;
@@ -216,7 +219,10 @@ export interface PostAcceptObserverInput {
   resultBudgetMs?: number;
   browser?: Browser;
   signal?: AbortSignal;
+  /** Legacy preparation notification; it does not establish input dispatch. */
   onLifecycleEvent?: (event: { type: "action_dispatched"; atMs: number }) => void;
+  /** Input attempt committed; notification runs after the dispatch call settles. */
+  onActionDispatchCommitted?: (event: { type: "action_dispatched"; atMs: number }) => void;
   onLateFormDetected?: () => void;
   outDir?: string;
   interactionAuthorization: PostRefusalInteractionAuthorization;
@@ -357,11 +363,13 @@ export async function runPostAcceptObserver(
     }
     return resultBudgetDeadlineAtMs;
   };
-  const effectiveSignal = resultBudgetDeadlineAtMs === undefined
+  const sourceFrameBinding = createConsentActionFrameBinding();
+  const baseSignal = resultBudgetDeadlineAtMs === undefined
     ? input.signal
     : input.signal
       ? AbortSignal.any([input.signal, resultBudgetAbortController.signal])
       : resultBudgetAbortController.signal;
+  const effectiveSignal = AbortSignal.any([sourceFrameBinding.signal, ...(baseSignal ? [baseSignal] : [])]);
   const dispatchDelayMs = boundedMs(input.dispatchDelayMs, 0, 0, 10_000);
   const observationWindowMs = boundedMs(
     input.observationWindowMs,
@@ -416,6 +424,8 @@ export async function runPostAcceptObserver(
   let acceptanceRegisteredAtEpochMs: number | undefined;
   let activeRequestIdsAtAcceptanceRegistration: string[] = [];
   let actionDispatched = false;
+  const boundControlDispatch = input.boundControlDispatch ?? process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED === "1";
+  let boundControlElement: import("playwright").ElementHandle<HTMLElement | SVGElement> | undefined;
   let cancellationObservedAtMs: number | undefined;
   let observationCoverageSufficient = false;
   let selectedRecipe: PostAcceptActionRecipe | undefined;
@@ -878,6 +888,7 @@ export async function runPostAcceptObserver(
     }
     let control = resolution.control;
     let confirmationScope = resolution.scope;
+    if (boundControlDispatch) sourceFrameBinding.bind(page, confirmationScope);
     const preActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, undefined, (d) => { storageCollectionDiagnostics.preAction = d; });
     const preActionCapturedAtMs = elapsed(parentScanStartedAtMs);
     if (cancellation()) {
@@ -936,6 +947,7 @@ export async function runPostAcceptObserver(
         selectedRecipe = resolution.recipe;
         control = resolution.control;
         confirmationScope = resolution.scope;
+        if (boundControlDispatch) sourceFrameBinding.bind(page, confirmationScope);
         diagnostics.click.reResolvedBeforeDispatch = true;
         try {
           if (selectedRecipe.accessibleControl?.kind === "closed_shadow_accessible_control") {
@@ -1011,6 +1023,7 @@ export async function runPostAcceptObserver(
       if (reason) limitations.push(reason);
     }
     let proofResolution = await buildConsentActionControlProof({
+      bindElement: boundControlDispatch,
       deadlineAtMs: resultBudgetDeadlineAtMs,
       onLabelInspection: recordResolverSnapshot,
       signal: effectiveSignal,
@@ -1088,6 +1101,7 @@ export async function runPostAcceptObserver(
           selectedRecipe = lateResolution.recipe;
           control = lateResolution.control;
           confirmationScope = lateResolution.scope;
+          if (boundControlDispatch) sourceFrameBinding.bind(page, confirmationScope);
           useVerifiedGeometryDispatch = false;
           diagnostics.click.reResolvedBeforeDispatch = true;
           confirmationBaseline = await captureConfirmationBaseline(
@@ -1098,6 +1112,7 @@ export async function runPostAcceptObserver(
             control,
           );
           proofResolution = await buildConsentActionControlProof({
+            bindElement: boundControlDispatch,
             deadlineAtMs: resultBudgetDeadlineAtMs,
             onLabelInspection: recordResolverSnapshot,
             signal: effectiveSignal,
@@ -1135,12 +1150,10 @@ export async function runPostAcceptObserver(
       });
     }
     actionControlProof = proofResolution.proof;
-    const actionDispatchedAtEpochMs = Date.now();
-    receiptCapture?.dispatch(actionDispatchedAtEpochMs);
-    const actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
-    actionDispatched = true;
-    try { input.onLifecycleEvent?.({ type: "action_dispatched", atMs: actionDispatchedAtMs }); }
-    catch { limitations.push("lifecycle_listener_failed"); }
+    boundControlElement = proofResolution.boundElement;
+    sourceFrameBinding.setElement(boundControlElement, resultBudgetDeadlineAtMs);
+    let actionDispatchedAtEpochMs = Date.now();
+    let actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
     let clickError: unknown;
     let actionDocumentChanged = false;
     const watchActionDocument = (frame: import("playwright").Frame) => { if (frame === page!.mainFrame()) actionDocumentChanged = true; };
@@ -1151,13 +1164,40 @@ export async function runPostAcceptObserver(
         control,
         selectedRecipe,
         useVerifiedGeometryDispatch,
-        () => assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256),
-        { deadlineAtMs: resultBudgetDeadlineAtMs, signal: effectiveSignal, scope: confirmationScope },
+        () => { sourceFrameBinding.assertCurrent(); assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs); },
+        { deadlineAtMs: resultBudgetDeadlineAtMs, signal: effectiveSignal, scope: confirmationScope, boundElement: boundControlElement, bindClosedShadowTarget: boundControlDispatch },
+        () => {
+          sourceFrameBinding.assertCurrent();
+          assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs);
+          actionDispatchedAtEpochMs = Date.now();
+          actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
+          receiptCapture?.dispatch(actionDispatchedAtEpochMs);
+          actionDispatched = true;
+          graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
+        },
+        () => {
+          try { input.onLifecycleEvent?.({type: "action_dispatched", atMs: elapsed(parentScanStartedAtMs)}); }
+          catch { limitations.push("lifecycle_listener_failed"); }
+          sourceFrameBinding.assertCurrent();
+          assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs);
+        },
       );
     } catch (error) {
       clickError = error;
     } finally {
       page.off("framenavigated", watchActionDocument);
+    }
+    if (actionDispatched) {
+      try { input.onActionDispatchCommitted?.({type: "action_dispatched", atMs: actionDispatchedAtMs}); }
+      catch { limitations.push("lifecycle_listener_failed"); }
+    }
+    if (!actionDispatched) {
+      const cancelledBeforeInput = cancellation();
+      limitations.push("accept_dispatch_guard_failed");
+      return await finalize({resolverFound: true, resolverReason: "dispatch_guard_failed_before_action",
+        registration: unconfirmedRegistration(cancelledBeforeInput ? "aborted" : "not_attempted",
+          cancelledBeforeInput ? "abort_requested_before_action" : "dispatch_guard_failed_before_action"),
+        requests: classifyRequests(retainedRequests(), parentScanStartedAtMs)});
     }
     if (!clickError && observationWindowMs > 0) {
       formCaptureHandle = startPostAcceptFormCapture({ page,
@@ -1165,16 +1205,16 @@ export async function runPostAcceptObserver(
         parentScanStartedAtMs, actionDispatchedAtMs, windowMs: remainingResultBudgetMs(observationWindowMs), signal: effectiveSignal, documentChangedBeforeStart: actionDocumentChanged });
     }
     const confirmationStartedAtMs = Date.now();
-    const confirmedState = await waitForAcceptanceConfirmation(
-      context,
-      page,
+    const confirmedState = await sourceFrameBinding.read(remainingResultBudgetMs(confirmationTimeoutMs), confirmationBudgetMs => waitForAcceptanceConfirmation(
+      context!,
+      page!,
       confirmationScope,
-      selectedRecipe.confirmation,
+      selectedRecipe!.confirmation,
       confirmationBaseline,
       actionDispatchedAtEpochMs,
-      remainingResultBudgetMs(confirmationTimeoutMs),
+      confirmationBudgetMs,
       effectiveSignal,
-      (state) => { decisionEvidence = { policyVersion: "semantic_consent_registration.v2",
+      (state) => { if (!sourceFrameBinding.current) return; decisionEvidence = { policyVersion: "semantic_consent_registration.v2",
         decision: state.decision, basis: "verified_state", observedStateSha256: state.stateHash,
         ...(state.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:state.cookieYesLegacyReceiptEvidence} : {}),
         ...(state.complianzReceiptEvidence ? {complianzReceiptEvidence:state.complianzReceiptEvidence} : {}),
@@ -1182,7 +1222,7 @@ export async function runPostAcceptObserver(
         observedAtMs: elapsed(parentScanStartedAtMs, state.observedAtEpochMs ?? Date.now()),
         timestampBasis: state.observedAtEpochMs === undefined ? "verified_state_observed" : "instrumented_state_write" }; },
       { pass: () => confirmationDiagnostic.pass(false), reason: confirmationDiagnostic.reason, apiSnapshot:recordHubSpotRead },
-    );
+    ));
     if (confirmedState) confirmationDiagnostic.reason("verified_decision");
     timing.confirmationMs = Math.max(0, Date.now() - confirmationStartedAtMs);
     if (clickError) {
@@ -1215,8 +1255,7 @@ export async function runPostAcceptObserver(
         onOutcome: confirmationDiagnostic.terminal,
         action: "accept", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256,
         parentScanStartedAtMs, dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
-        signal: effectiveSignal, targetStillAuthorized, read: () => waitForAcceptanceConfirmation(context!, page!, confirmationScope, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined, { pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason, apiSnapshot:recordHubSpotRead }),
-      });
+        signal: effectiveSignal, targetStillAuthorized, read: () => sourceFrameBinding.read(0, () => waitForAcceptanceConfirmation(context!, page!, confirmationScope, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined, { pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason, apiSnapshot:recordHubSpotRead })) });
       const stopReason = await finishAfterActionWindow({
         onFinalWindow: terminalRead.start,
         dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
@@ -1467,6 +1506,7 @@ export async function runPostAcceptObserver(
       observations,
     });
   } finally {
+    sourceFrameBinding.dispose();
     // Finalization already froze the optional sample. Cleanup must run even if
     // a capture-side failure interrupted packet construction.
     try { await formSnapshotHandle?.finish(); } catch { /* Optional image work is bounded and cannot block cleanup. */ }
@@ -1474,6 +1514,7 @@ export async function runPostAcceptObserver(
     if (resultBudgetTimer) clearTimeout(resultBudgetTimer);
     finishOptionalRuntimeGraph(graphCapture, "post_accept", "action_capture_closed");
     originDomStorageCapture?.finish();
+    void boundControlElement?.dispose().catch(() => undefined);
     actionDiscovery?.dispose();
     passiveCmpCapture?.finish();
     receiptCapture?.finish();
@@ -2102,24 +2143,30 @@ async function dispatchAcceptControl(
   useVerifiedGeometryDispatch = false,
   assertDispatchAllowed?: () => void,
   readOptions?: ConsentControlReadOptions,
+  onDispatch?: () => void,
+  onBeforeDispatch?: () => void,
 ) {
   assertDispatchAllowed?.();
+  const boundControl = readOptions?.boundElement ?? control;
   if (recipe.customControlBinding) {
-    const binding = await inspectCustomAcceptControl(control, recipe.customControlBinding.bannerSelector, Date.now() + 100, recipe.controlExpectedNormalizedLabel);
+    const binding = await inspectCustomAcceptControl(boundControl, recipe.customControlBinding.bannerSelector, Date.now() + 100, recipe.controlExpectedNormalizedLabel);
     if (!sameCustomAcceptControlBinding(binding, recipe.customControlBinding)) {
       throw new Error("Custom Accept control binding changed before dispatch.");
     }
     assertDispatchAllowed?.();
   }
   if (recipe.accessibleControl?.kind === "closed_shadow_accessible_control") {
-    await dispatchClosedShadowAccessibleControl(page, recipe.accessibleControl, assertDispatchAllowed);
+    await dispatchClosedShadowAccessibleControl(page, recipe.accessibleControl, assertDispatchAllowed, onBeforeDispatch, readOptions, onDispatch);
     return;
   }
   if (useVerifiedGeometryDispatch) {
-    await dispatchLocatorClickWithVerifiedGeometry(control, 2_000, assertDispatchAllowed, readOptions);
+    await dispatchLocatorClickWithVerifiedGeometry(control, 2_000, assertDispatchAllowed, {...readOptions, onDispatch: onBeforeDispatch, onDispatchCommitted: onDispatch});
     return;
   }
-  await control.click({ timeout: 2_000 });
+  onBeforeDispatch?.();
+  assertDispatchAllowed?.();
+  onDispatch?.();
+  await boundControl.click({ timeout: 2_000 });
 }
 
 function selectorScope(page: Page, childFrameUrl?: string): Page | Frame | undefined {

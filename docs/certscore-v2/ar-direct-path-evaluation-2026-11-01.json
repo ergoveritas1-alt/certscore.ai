@@ -1,0 +1,312 @@
+{
+  "provenance": {
+    "baseline": "/Users/benmasek/WC01",
+    "candidate": "/private/tmp/certscore-ar-path-reliability-20261101",
+    "sourcePinsVerified": true,
+    "baselineCommit": "5894539fbb27acb3130d4afdf55bc196974a50c6",
+    "fixtureOnly": true,
+    "noPublicTargets": true,
+    "noAws": true,
+    "repetitions": 3,
+    "sourceSha256": "eda63b415615e86800b77722d4ca615d033c3ac8438b25a3640fc678e44acb4b"
+  },
+  "summary": {
+    "baseline": {
+      "denominator": 60,
+      "intendedClicks": 48,
+      "wrongClicks": 6,
+      "confirmations": 33,
+      "correctConfirmations": 30,
+      "falseConfirmations": 3,
+      "completeObservations": 51,
+      "errors": 3,
+      "medianMs": 3367,
+      "p95Ms": 8316
+    },
+    "candidate": {
+      "denominator": 60,
+      "intendedClicks": 48,
+      "wrongClicks": 0,
+      "confirmations": 36,
+      "correctConfirmations": 36,
+      "falseConfirmations": 0,
+      "completeObservations": 42,
+      "errors": 0,
+      "medianMs": 3151,
+      "p95Ms": 8317
+    }
+  },
+  "ordinaryComparableCases": [
+    "direct",
+    "localized",
+    "shadow",
+    "frame",
+    "ready",
+    "opaque"
+  ],
+  "ordinaryComparableLatency": {
+    "baseline": {
+      "denominator": 36,
+      "p95Ms": 8531,
+      "medianMs": 3445,
+      "complete": 36,
+      "fullWindow": true
+    },
+    "candidate": {
+      "denominator": 36,
+      "p95Ms": 8529,
+      "medianMs": 3438,
+      "complete": 36,
+      "fullWindow": true
+    }
+  },
+  "rawEvidence": "/tmp/certscore-ar-final-source-paired-evaluation",
+  "fullReportLatencyVerified": false,
+  "sourceManifestSha256": "e00926e96d77e80fe565d011c7257dd2dcb7d5eafeaf29b5198fd30b2f63a1d3",
+  "browser": "145.0.7632.6",
+  "runtime": "local macOS Chromium, no AWS",
+  "observationWindowsMs": {
+    "accept": 3000,
+    "reject": 8000
+  },
+  "allFailuresRetained": true,
+  "independentReviewComplete": false,
+  "denominatorDefinition": {
+    "totalActions": 120,
+    "actionsPerArm": 60,
+    "fixtureClasses": 10,
+    "actionsPerFixture": [
+      "accept",
+      "reject"
+    ],
+    "repetitions": 3
+  },
+  "cohortGateSettings": {
+    "baseline": {
+      "inputBoundControlDispatch": false,
+      "environmentValue": "0",
+      "newImplementationPresent": false
+    },
+    "candidate": {
+      "inputBoundControlDispatch": true,
+      "environmentValue": "1",
+      "newImplementationPresent": true
+    },
+    "candidateDefaultOffCohortMeasured": false
+  },
+  "byFixture": [
+    {
+      "fixture": "direct",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "localized",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "shadow",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "frame",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 3,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "ready",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "ambiguous",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "opaque",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "replacement",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 6,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 0,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "fragment",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 3,
+        "falseConfirmations": 0,
+        "completeObservations": 3,
+        "packetErrors": 3
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 6,
+        "falseConfirmations": 0,
+        "completeObservations": 6,
+        "packetErrors": 0
+      }
+    },
+    {
+      "fixture": "reload",
+      "baseline": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 3,
+        "completeObservations": 6,
+        "packetErrors": 0
+      },
+      "candidate": {
+        "attempts": 6,
+        "intendedClicks": 6,
+        "wrongClicks": 0,
+        "correctConfirmations": 0,
+        "falseConfirmations": 0,
+        "completeObservations": 0,
+        "packetErrors": 0
+      }
+    }
+  ],
+  "independentReviewStatus": "blocked_no_attached_reviewer_human_delegation_authorization_required",
+  "historicalImplementationCommit": "1314f95e56e9e8c4ec87cd30447eb928c817756e",
+  "supersededByReviewRepairs": true
+}
