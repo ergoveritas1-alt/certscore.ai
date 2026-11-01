@@ -10,9 +10,29 @@ test("retained Dollar General complete control inspection survives limited overa
   assert.equal(p.acceptControlObserved, true);
   assert.equal(p.rejectControlObserved, false);
   assert.equal(p.managePreferencesControlObserved, false);
+  assert.equal(p.privacyOptOutControlObserved, false);
+  assert.equal(p.privacyOptOutControlInventoryComplete, true);
   assert.equal(p.controlInventoryComplete, true);
   assert.equal(p.assessmentSourceHash, a.provenance.sourceHash);
   assert.equal(p.controlInspection.reject?.status, "complete");
+});
+
+test("opt-out presence and absence use their own first-layer inspection without changing A/R/O completeness", () => {
+  for (const state of ["observed", "unknown"] as const) {
+    const a = structuredClone(fixture.assessment);
+    a.controls.privacyOptOut.state = state;
+    a.controls.privacyOptOut.inspection.status = "limited";
+    a.controls.privacyOptOut.inspection.evidenceRefs = [];
+    const p = projectPublicFirstLayerConsentEvidence(a, fixture.provenance.scanId)!;
+    assert.equal(p.privacyOptOutControlObserved, state === "observed" ? true : null);
+    assert.equal(p.privacyOptOutControlInventoryComplete, false);
+    assert.equal(p.controlInventoryComplete, true, "opt-out coverage cannot alter A/R/O completeness");
+    assert.equal(p.controlInspection.privacyOptOut?.status, "limited");
+  }
+  const deeper: any = structuredClone(fixture.assessment);
+  deeper.controls.privacyOptOut.state = "observed";
+  deeper.controls.privacyOptOut.layer = "deeper_layer";
+  assert.equal(projectPublicFirstLayerConsentEvidence(deeper, fixture.provenance.scanId)?.privacyOptOutControlObserved, null);
 });
 
 test("incomplete and unknown controls stay unknown independently of other controls", () => {

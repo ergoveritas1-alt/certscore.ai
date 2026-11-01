@@ -14,6 +14,8 @@ type TaskDescription = {
 type RunProdDbSqlInput = {
   marker: string;
   readOnly?: boolean;
+  /** One-time large exports can pace stdout to avoid CloudWatch buffer loss. */
+  logChunkThrottle?: boolean;
   sql: string;
   receiptDir: string;
 };
@@ -45,7 +47,7 @@ export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
     },
   };
   const command = [
-    `set -eu; test "\${PGSSLMODE:-}" = require; printf %s "$QUERY_B64" | base64 -d | gzip -dc > /tmp/query.sql; echo __${marker}_START__; psql -X --no-password -v ON_ERROR_STOP=1 -P pager=off -P footer=off -t -A "$DATABASE_URL" -f /tmp/query.sql > /tmp/audit-output.txt; gzip -c /tmp/audit-output.txt > /tmp/audit-output.gz; sha256sum /tmp/audit-output.gz; base64 /tmp/audit-output.gz | tr -d '\\n' | fold -w 8192 | awk '{printf "__CHUNK_%08d__%s\\n", NR, $0}'; echo __${marker}_END__`,
+    `set -eu; test "\${PGSSLMODE:-}" = require; printf %s "$QUERY_B64" | base64 -d | gzip -dc > /tmp/query.sql; echo __${marker}_START__; psql -X --no-password -v ON_ERROR_STOP=1 -P pager=off -P footer=off -t -A "$DATABASE_URL" -f /tmp/query.sql > /tmp/audit-output.txt; gzip -c /tmp/audit-output.txt > /tmp/audit-output.gz; sha256sum /tmp/audit-output.gz; base64 /tmp/audit-output.gz | tr -d '\\n' | fold -w 8192 | awk '{printf "__CHUNK_%08d__%s\\n", NR, $0;${input.logChunkThrottle ? ' if (NR % 64 == 0) system("sleep 0.5");' : ''}}'; echo __${marker}_END__`,
   ];
   const overrides = {
     containerOverrides: [{

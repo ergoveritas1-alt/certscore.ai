@@ -1,6 +1,6 @@
 # CertScore.ai Mac mini audit progress
 
-Procedure version: 2026-10-28.v6. Module: `certscore.mac-mini-daily-progress.v5`. Acquisition: `certscore.mac-mini-direct-delta.v1`.
+Procedure version: 2026-11-01.v8. Module: `certscore.mac-mini-daily-progress.v5`. Acquisition: `certscore.mac-mini-direct-delta.v1`.
 
 This audit-only supplement is owner-authorized for the existing daily audit. It
 uses the preceding calendar month, grouped by America/Los_Angeles date. Partial
@@ -401,3 +401,109 @@ local reuse, no full archive enumeration. Schedule/model/reasoning/project/cost
 limits and unique invocation accounting are unchanged. This local correction and
 validation add $0 recurring cloud cost; the approved daily ID-query estimate
 remains $0.62 per 31 days within the existing $5 envelope.
+
+## Opt-out export coverage — November 1
+
+The Controls group places `control.privacyOptOut` (public export) beside
+`sealed.control.privacyOptOut` (retained assessment). Older public v4/v5/v10
+exports display **Not exported** when every eligible value is unavailable;
+the underlying states, denominators and CSVs remain unchanged. Missing modern
+evidence and measured zero retain their own meanings. The retained assessment
+is never a public fallback.
+
+The locally reviewed `pulse-public-v11/scan-report-projection-v27` pair adds
+canonical `privacyOptOutControlObserved` and opt-out-specific
+`privacyOptOutControlInventoryComplete` under firstLayerConsentChoices. Consume
+only captured pre-interaction first-layer facts. True supports observed; false
+requires its independent complete inspection; null/incomplete facts stay unknown;
+missing stays unavailable. Legacy exports keep their historical interpretation.
+No raw-label classification, policy-instruction promotion or action-success
+inference is added. Control presence, broader routes/instructions and execution
+outcomes are separate measures. Deployment remains separate from this local
+implementation and retained-only dashboard refresh.
+
+Preserve prior activation pins and record the reviewed changed pins explicitly.
+Reuse the saved cache, acquisition cutoff and original sealed audit inputs;
+validate data, file-only browser behavior and CSV parity before publishing a
+fresh local snapshot. Do not acquire new data or rewrite historical reports.
+See `opt-out-export-audit-coverage-2026-11-01.md` for source and cost review.
+
+
+## Historical opt-out recovery and forward collection — November 1
+
+The owner requested filling the historical opt-out coverage gap and keeping new
+results visible. One bounded SELECT-only AWS task may retrieve the small existing
+canonical control projection for the frozen preceding-month cohort. It must use
+original creator credentials, the canonical bot-key registry, canary/test
+exclusions, a maximum 32-day window, 5,000 rows and a 45-second statement limit.
+No source site visit, raw bundle download, report regeneration, historical report
+rewrite or production mutation is authorized. Recover started task output rather
+than submitting it again.
+
+The immutable `certscore.audit-opt-out-extract.v1` contains only canonical
+assessment identity, version, scan/document binding, control results, coverage,
+provenance and persisted report generation metadata. It is a small returned
+projection, not a full retained evidence packet or a new assessment. Verify the
+transport hash/size, canonical field schema, original scan identity/timestamp,
+original creator, usable document, report readiness, and exact public-export
+projection version/source hash. Unknown remains unknown. Malformed, no-go,
+changed-generation and unavailable records stay unavailable. No labels, policy
+text, cookies or requests supply a control result.
+
+The extract may supplement only `sealed.control.privacyOptOut`. Its comparison
+source is `persisted_control_extract/<projector>/<projection>/certscore.audit-opt-out-extract.v1`;
+existing original sealed results retain their source. Never overwrite a public
+state, finding, score, origin-proof eligibility or completed-action measure.
+Authenticated database projection transport is distinct from full source-bundle
+verification and must not be labeled as the latter.
+
+Future acquisition keeps ONE existing daily ECS query, adding the same bounded
+`control_assessment` projection to its original ID metadata. No extra cloud task
+is needed. After the current query succeeds, run:
+
+```sh
+node --import tsx scripts/prepare-audit-opt-out-inputs.ts PRIOR_DASHBOARD_JSON RUN/delta-inventory.json RUN/opt-out-inputs.json
+```
+
+The manifest carries prior `optOutExtracts` receipts and the current query into
+the new rolling-month dashboard. Pass its path as the seventh positional argument
+to `audit-progress-month.ts`. The build must reject a missing manifest; validation
+rechecks immutable source receipts and exact-generation control joins. Preserve
+all sources still needed for the month, rather than reducing coverage to the
+48-hour query overlap. Include the preparation/helper/export code and tests in
+reviewed source pins and focused audit checks.
+
+Every daily summary must state opt-out assessment availability and unresolved
+coverage for new reportable scans. Material new missing coverage is actionable;
+it must not be silently shown as a measured zero. No promise of a positive
+control or successful opt-out is made. The local public-export v11 fix remains
+separate; direct retained projection collection keeps this dashboard current
+without requiring that product deployment.
+
+Conservative costs are $0.03 for the one-time recovery and $0.03/daily query,
+$0.93 per 31 days. The $0.31/month increment is below the $1 approval threshold
+and inside the existing $5 allowance. Record the one-time cost once and preserve
+scheduled invocation counts, schedule, model/reasoning, project, checkpoint,
+issue/release ledgers and model-transition history.
+
+
+## Latest-version daily headline — November 1 owner direction
+
+For a day with multiple comparable public-export versions, show the actual
+latest-version sample as the cell headline, with its numerator, denominator and
+share of the day's eligible sample. Select versions numerically, never by sample
+size or best result. Keep unknown/unavailable values inside that version's
+population; do not fall back to an older positive value. Preserve all older
+versions under source details, original CSVs and separate chart series. Mixed
+aggregate rates and cross-version deltas remain null. Different engine/action
+qualifiers or incomparable source families cannot be selected by a version guess.
+This is the owner's requested latest-version view, with no extrapolation and no
+change to observed records, findings, scores or paid acquisition.
+
+### November 1 owner-requested week recovery
+
+Carry the complete `retainedReports` receipt objects, including optional `artifacts` receipt references, into every subsequent build. Do not strip nested original-artifact ancestry when preparing opt-out inputs. The importer verifies result-event bundle/manifest hashes, exact manifest auxiliary objects and policy text before using source-bound counts. Recovered original-byte states use the same canonical sealed assessment source/version as the independently acquired earlier audit, while full persisted reports without original bytes remain a separate source. See `dashboard-week-recovery-2026-11-01.md`. No recurring full-report or original-S3 acquisition is enabled by this one-time recovery.
+
+Forms after Accept uses definition `certscore.audit.forms-after-retained.v2`: only `retained` contributes to its headline. `limited` and `unavailable` remain distinct. Old published files are immutable. Zero eligible records display “No eligible data”; all unavailable measurements display “Unavailable” or “Not exported”; unassessed CMP checks and profile-omitted workers are explicitly labeled. Zero inventory hours means no complete attempt inventory, so the header says “Attempt inventory incomplete”. It does not mean no scans occurred.
+
+The recovered month JSON may exceed the former 80 MB local-file cap. The preparer and publisher permit at most 160 MB for `dashboard.json`; original artifact/object, query, archive-export and other output limits remain unchanged. This changes only bounded local-file handling, with no recurring infrastructure increment.

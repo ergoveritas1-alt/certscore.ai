@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,writeFileSync,readFileSync,realpathSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+const script=path.resolve('scripts/prepare-audit-opt-out-inputs.ts');
+test('daily refresh carries historical controls and appends the current one-query inventory',()=>{
+ const dir=mkdtempSync(path.join(tmpdir(),'opt-out-forward-'));
+ const write=(name:string,value:any)=>{const file=path.join(dir,name);writeFileSync(file,JSON.stringify(value));return file;};
+ const history=write('history.json',{version:'certscore.audit-opt-out-extract.v1',readOnly:true,start:'2026-10-01T00:00:00Z',end:'2026-11-01T00:00:00Z',rows:[]});
+ const b=readFileSync(history),rec={file:history,bytes:b.length,sha256:createHash('sha256').update(b).digest('hex')};
+ const prior=write('dashboard.json',{optOutExtracts:[rec],retainedReports:[{...rec,artifacts:rec}],windows:[{runId:'mac-mini-local-archive',start:'2026-10-03T00:00:00Z'}]});
+ const current=write('delta.json',{version:'certscore.mac-mini-direct-id-inventory.v1',readOnly:true,start:'2026-10-30T00:00:00Z',end:'2026-11-02T00:00:00Z',rows:[]});
+ const out=path.join(dir,'inputs.json');
+ execFileSync(process.execPath,['--import','tsx',script,prior,current,out]);
+ const manifest=JSON.parse(readFileSync(out,'utf8'));assert.equal(manifest.sources.length,2);assert.deepEqual(manifest.reportProjections,[{...rec,artifacts:rec}]);assert.deepEqual(manifest.sources[0],rec);assert.equal(manifest.sources[1].file,realpathSync(current));
+ writeFileSync(history,'tampered');
+ assert.throws(()=>execFileSync(process.execPath,['--import','tsx',script,prior,current,path.join(dir,'bad.json')],{stdio:'pipe'}));
+ const missing=write('old-query.json',{version:'certscore.mac-mini-direct-id-inventory.v1',readOnly:true,start:'2026-10-30T00:00:00Z',end:'2026-11-02T00:00:00Z',rows:[{status:'completed'}]});
+ assert.throws(()=>execFileSync(process.execPath,['--import','tsx',script,prior,missing,path.join(dir,'missing.json')],{stdio:'pipe'}));
+});

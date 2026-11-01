@@ -436,7 +436,7 @@ test("Pulse evidence preserves retained Dollar General absence independently of 
   assert.equal(first.controlInspection.reject.status, "complete");
   assert.equal(first.assessmentSourceHash, dollarGeneral.assessment.provenance.sourceHash);
   assert.deepEqual(first.screenshotRefs, [{ id: "retained-screenshot" }]);
-  assert.equal(pulse.meta.projectionVersion, "pulse-public-v10");
+  assert.equal(pulse.meta.projectionVersion, "pulse-public-v11");
   const reject = pulse.gdprEprivacyChecklistRows.items.find((row: any) => row.id === "reject_all_path_availability");
   assert.equal(reject.evidenceLabel, "Partial concern");
   assert.equal(reject.status, "Review signal");
@@ -457,6 +457,44 @@ test("Pulse cannot fall back to positive legacy controls when the canonical asse
     }),
   }) as Record<string, any>;
   assert.deepEqual(pulse.consentSurfaceEvidence.firstLayerConsentChoices, {});
+});
+
+test("Pulse v11 exports canonical opt-out facts through the audit reader without legacy or action fallbacks", async () => {
+  const { extractExportRow } = await import("../../../../scripts/lib/audit-progress-export");
+  const ref = {file:"/fixture/export.json",sha256:"a".repeat(64),role:"fixture"};
+  for (const state of ["observed", "not_observed", "unknown"] as const) {
+    const assessment = structuredClone(dollarGeneral.assessment);
+    assessment.controls.privacyOptOut.state = state;
+    if (state === "unknown") {
+      assessment.controls.privacyOptOut.inspection.status = "limited";
+      assessment.controls.privacyOptOut.inspection.evidenceRefs = [];
+    }
+    const pulse = buildPulseProjection({
+      detail:"evidence",format:"json",freshnessMode:"latest",pulseRequestId:"opt-out-export",
+      requestedUrl:"https://dollargeneral.com/",resolutionMode:"test",waitSeconds:0,
+      scanRecord:pulseScanRecord({
+        scan:{id:assessment.scan.scanId,status:"completed",createdAt:"2026-10-29T11:25:42.000Z"},
+        snapshot:{consentControlAssessment:assessment,certscore_overall:70,report_projection_version:"scan-report-projection-v27"},
+      }),
+    }) as Record<string, any>;
+    pulseResponseSchema.parse(pulse);
+    assert.equal(pulse.meta.projectionVersion,"pulse-public-v11");
+    const first=pulse.consentSurfaceEvidence.firstLayerConsentChoices;
+    assert.equal(first.privacyOptOutControlObserved,state==="observed"?true:state==="not_observed"?false:null);
+    assert.equal(first.assessmentSourceHash,assessment.provenance.sourceHash);
+    assert.equal(extractExportRow(pulse,ref).states["control.privacyOptOut"],state);
+  }
+  for (const assessment of [undefined, {}]) {
+    const pulse=buildPulseProjection({
+      detail:"evidence",format:"json",freshnessMode:"latest",pulseRequestId:"legacy-opt-out",
+      requestedUrl:"https://example.com/",resolutionMode:"test",waitSeconds:0,
+      scanRecord:pulseScanRecord({snapshot:{consentControlAssessment:assessment,certscore_overall:70},
+        runtimeArtifacts:{firstLayerConsentChoices:{capturedBeforeInteraction:true,layerInspected:"first_layer",
+          actionableControlInventoryRetained:true,privacyOptOutControlObserved:true,privacyOptOutControlInventoryComplete:true,
+          controls:[{label:"Do Not Sell",actionType:"do_not_sell_share"}]}}}),
+    }) as Record<string, any>;
+    assert.equal(pulse.consentSurfaceEvidence.firstLayerConsentChoices.privacyOptOutControlObserved,undefined);
+  }
 });
 
 function checklistOnlyConsentRecord(c: typeof checklistOnlyConsent.cases[number], runtimeArtifacts: Record<string, unknown> = {}) {

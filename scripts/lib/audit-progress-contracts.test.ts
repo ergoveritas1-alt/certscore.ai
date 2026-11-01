@@ -3,7 +3,7 @@ import {extractExportRow,exportedState} from './audit-progress-export';
 import {progressEngine} from './audit-progress-engine';
 import {makeContracts,publicSource,namespaceSealed,monthMetricRegistry,PUBLIC_SOURCE_PAIRS} from './audit-progress-contracts';
 import {METRICS,mergeVerifiedProgress} from './audit-progress';
-import {QUANTITIES,evidenceMetricRegistry} from './audit-progress-evidence';
+import {QUANTITIES,evidenceMetricRegistry,retainedEvidenceMetricRegistry} from './audit-progress-evidence';
 const ref={file:'/retained/export.json',sha256:'a'.repeat(64),role:'fixture'};
 const base:any={scanId:'11111111-1111-4111-8111-111111111111',domain:'example.com',scanStatus:'completed',timestamps:{createdAt:'2026-10-26T12:00:00Z'},meta:{projectionVersion:'pulse-public-v4',reportProjectionVersion:'scan-report-projection-v27'},consentSurfaceEvidence:{firstLayerConsentChoices:{rejectControlObserved:false,capturedBeforeInteraction:true,layerInspected:'first_layer',controlInventoryComplete:true}}};
 const row=(extra:any={})=>extractExportRow({...base,...extra},ref);
@@ -67,16 +67,16 @@ test('CSV uses the same per-source denominators, state deltas and null values as
  const d=aggregate([row()]);const csv=progressEngine().stateCsv(d,[metric]);assert.match(csv,/source,state,count,denominator,percent,deltaPp/);assert.ok(csv.includes('"not_observed","1","1","100",""'));
 });
 
-test('sealed-only historical checklist measures survive without duplicating public-source measures',()=>{
+test('public and retained checklist sources remain separately addressable',()=>{
  const m={id:'checklist.retained_internal_only',label:'Internal',group:'Checks',denominator:'reportable',success:[]};
  assert.ok(monthMetricRegistry([metric],[metric,m]).some(x=>x.id==='sealed.'+m.id));
- assert.ok(!monthMetricRegistry([m],[m]).some(x=>x.id==='sealed.'+m.id));
+ assert.deepEqual(monthMetricRegistry([m],[m]).map(x=>x.id),[m.id,'sealed.'+m.id]);
  const r=row({consentSurfaceEvidence:{}});assert.equal(aggregate([r])[0].metrics[metric.id].rate,null);assert.equal(aggregate([r])[0].metrics[metric.id].denominator,1);
 });
 
 test('v10 adoption is exact-pair scoped and future/intermediate schemas still fail closed',()=>{
  assert.equal(publicSource({meta:v10meta}),'public_export/pulse-public-v10/scan-report-projection-v27');
- for(const meta of [{...v10meta,reportProjectionVersion:'scan-report-projection-v26'},{projectionVersion:'pulse-public-v10'},...['v6','v7','v8','v9','v11'].map(v=>({...v10meta,projectionVersion:'pulse-public-'+v}))])assert.throws(()=>publicSource({meta}),/Unreviewed/);
+ for(const meta of [{...v10meta,reportProjectionVersion:'scan-report-projection-v26'},{projectionVersion:'pulse-public-v10'},...['v6','v7','v8','v9','v12'].map(v=>({...v10meta,projectionVersion:'pulse-public-'+v}))])assert.throws(()=>publicSource({meta}),/Unreviewed/);
  const contract=makeContracts([metric],[]).metrics[0]!;assert.deepEqual(contract.supportedVersions,PUBLIC_SOURCE_PAIRS);assert.ok(!contract.supportedVersions.includes('pulse-public-v10/scan-report-projection-v26'));
 });
 
@@ -100,4 +100,44 @@ test('v10 and v5 remain separate series with no pooled rate, median or cross-ver
  const q=QUANTITIES.find(q=>q.id==='forms.observed')!,d=aggregate([a,b],[metric],[q])[0];
  assert.equal(d.metrics[metric.id].denominator,2);assert.equal(d.metrics[metric.id].rate,null);assert.equal(Object.keys(d.metrics[metric.id].series).length,2);assert.equal(d.quantities[q.id].median,null);
  const next={...a,createdAt:'2026-10-27T12:00:00Z'};assert.equal(aggregate([b,next])[1].metrics[metric.id].deltaPp,null);
+});
+
+test('v11 opt-out presence is exact-pair scoped and uses independent negative coverage',()=>{
+ const meta={...v10meta,projectionVersion:'pulse-public-v11'};
+ assert.equal(publicSource({meta}),'public_export/pulse-public-v11/scan-report-projection-v27');
+ for(const bad of [{projectionVersion:meta.projectionVersion},{...meta,reportProjectionVersion:'scan-report-projection-v26'}])assert.throws(()=>publicSource({meta:bad}),/Unreviewed/);
+ const capture={capturedBeforeInteraction:true,layerInspected:'first_layer',controlInventoryComplete:true};
+ const extract=(first:any,extra:any={})=>row({...extra,meta,consentSurfaceEvidence:{firstLayerConsentChoices:first}}).states['control.privacyOptOut'];
+ assert.equal(extract({...capture,privacyOptOutControlObserved:true}),'observed');
+ assert.equal(extract({...capture,privacyOptOutControlObserved:false,privacyOptOutControlInventoryComplete:true}),'not_observed');
+ for(const first of [{...capture,privacyOptOutControlObserved:false}, {...capture,privacyOptOutControlObserved:null},
+  {...capture,privacyOptOutControlObserved:true,capturedBeforeInteraction:false},
+  {...capture,privacyOptOutControlObserved:true,layerInspected:'deeper_layer'}])assert.equal(extract(first),'unknown');
+ assert.equal(extract({...capture,controls:[{actionType:'do_not_sell_share',label:'Do Not Sell'}]}),'unavailable');
+ assert.equal(extract({...capture,privacyOptOutControlObserved:true},{resultDisposition:'no_go'}),undefined);
+ for(const version of ['pulse-public-v4','pulse-public-v5','pulse-public-v10'])assert.equal(row({meta:{...meta,projectionVersion:version},consentSurfaceEvidence:{firstLayerConsentChoices:{...capture,privacyOptOutControlObserved:true}}}).states['control.privacyOptOut'],'unavailable');
+ const metric=METRICS.find(m=>m.id==='control.privacyOptOut')!;
+ const publicRow=row({meta,consentSurfaceEvidence:{firstLayerConsentChoices:{...capture,privacyOptOutControlObserved:true}}});
+ const historical=row({scanId:'22222222-2222-4222-8222-222222222222'});
+ assert.equal(aggregate([publicRow,historical],[metric])[0].metrics[metric.id].rate,null);
+ const retained=monthMetricRegistry(METRICS,METRICS).find(m=>m.id==='sealed.control.privacyOptOut')!;
+ assert.equal(retained.label,'Opt-out control presence · retained assessment');assert.equal(retained.group,'Controls');
+ const merged=mergeVerifiedProgress(historical,{...historical,states:{evidence:'generation_matched','control.privacyOptOut':'observed'}});
+ assert.equal(merged.states['control.privacyOptOut'],'unavailable');assert.equal(merged.states['sealed.control.privacyOptOut'],'observed');
+});
+
+test('an unavailable public checklist cannot suppress a valid retained canonical result',()=>{
+ const m={id:'checklist.consent_choice_quality',label:'Choice quality',group:'Consent',denominator:'reportable',success:[]};
+ const r=row();r.states[m.id]='unavailable';r.states['sealed.'+m.id]='observed';r.metricSources!['sealed.'+m.id]='sealed_assessment/2.2.4/scan-report-projection-v27/persisted_projection';
+ const registry=monthMetricRegistry([m],[m]);const d=aggregate([r],registry);
+ assert.equal(d[0].metrics[m.id].counts.unavailable,1);assert.equal(d[0].metrics['sealed.'+m.id].counts.observed,1);
+ assert.equal(new Set(registry.map(x=>x.id)).size,registry.length);
+});
+
+test('new canonical-only checklist IDs register without relying on older audit inventories',()=>{
+ const r=row();r.retainedMetricLabels={'checklist.new_canonical_check':'Canonical check','verdict.new_canonical_check':'Canonical verdict'};
+ r.states['sealed.checklist.new_canonical_check']='observed';
+ const registry=monthMetricRegistry([],retainedEvidenceMetricRegistry([r]));
+ assert.ok(registry.some(m=>m.id==='sealed.checklist.new_canonical_check'));assert.ok(registry.some(m=>m.id==='sealed.verdict.new_canonical_check'));
+ assert.equal(r.metricLabels?.['checklist.new_canonical_check'],undefined);
 });

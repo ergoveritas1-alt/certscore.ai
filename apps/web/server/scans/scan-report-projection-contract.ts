@@ -136,7 +136,7 @@ function canonicalizeRuntimeArtifactAliases(runtimeArtifacts: Record<string, unk
   return canonical;
 }
 
-function normalizeProjectionJson(value: unknown) {
+export function normalizeProjectionJson(value: unknown) {
   const transported = JSON.stringify(sanitizeJsonbValue(value));
   if (transported === undefined) {
     throw new Error("Scan report projection is not JSON serializable.");

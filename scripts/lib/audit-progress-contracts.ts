@@ -1,12 +1,13 @@
 /** Versioned audit semantics. This module never changes product assessments. */
 import type { Metric, ProgressRow } from './audit-progress';
 export const METRIC_CONTRACT_VERSION = 'certscore.audit-metrics.v1';
-export const PUBLIC_VERSIONS = ['pulse-public-v4', 'pulse-public-v5', 'pulse-public-v10'];
+export const PUBLIC_VERSIONS = ['pulse-public-v4', 'pulse-public-v5', 'pulse-public-v10', 'pulse-public-v11'];
 export const PROJECTION_VERSIONS = ['scan-report-projection-v26', 'scan-report-projection-v27'];
-// Reviewed pairs only: v10 was retained/reviewed with v27, never v26.
+// Reviewed pairs only: v10/v11 use v27, never v26.
 export const PUBLIC_SOURCE_PAIRS = [
   ...['pulse-public-v4', 'pulse-public-v5'].flatMap(a=>PROJECTION_VERSIONS.map(b=>`${a}/${b}`)),
   'pulse-public-v10/scan-report-projection-v27',
+  'pulse-public-v11/scan-report-projection-v27',
 ];
 export function returnedState(value: unknown, present = value !== undefined): string {
   if (!present) return 'unavailable';
@@ -24,7 +25,7 @@ export function checklistEvidence(row: any): string {
 export function publicSource(report: any): string {
   const a=report.meta?.projectionVersion, b=report.meta?.reportProjectionVersion;
   if (a && !PUBLIC_VERSIONS.includes(a) || b && !PROJECTION_VERSIONS.includes(b)) throw Error(`Unreviewed public schema: ${a}/${b}`);
-  if (a === 'pulse-public-v10' && !PUBLIC_SOURCE_PAIRS.includes(`${a}/${b}`)) throw Error(`Unreviewed public schema: ${a}/${b}`);
+  if ((a === 'pulse-public-v10' || a === 'pulse-public-v11') && !PUBLIC_SOURCE_PAIRS.includes(`${a}/${b}`)) throw Error(`Unreviewed public schema: ${a}/${b}`);
   return `public_export/${a??'historical_unversioned'}/${b??'historical_unversioned'}`;
 }
 export function sealedSource(row: ProgressRow): string {
@@ -44,7 +45,7 @@ export function namespaceSealed(row: ProgressRow): ProgressRow {
   return {...row,states,metricSources:sources,measurements,metricLabels:{}};
 }
 export function monthMetricRegistry(base:Metric[], recent:Metric[]):Metric[] {
-  const list=[...base,...recent.filter(m=>isSealedMetric(m.id)&&(!/^(checklist|verdict)\./.test(m.id)||!base.some(b=>b.id===m.id))).map(m=>({...m,success:m.id==="evidence"?["generation_matched"]:m.success,id:`sealed.${m.id}`,label:m.id==="evidence"?"Export generation joined to sealed evidence":m.id.startsWith("control.")?`${m.id.slice(8)} persisted control state`:`${m.label} · sealed assessment`,group:`Sealed · ${m.group}`,denominator:/^(registration|terminal)\./.test(m.id)?"Completed sealed clicks; unavailable witnesses remain in the denominator":m.id==="gpc_path"||m.id==="gpc_delivery"?"Explicitly enabled sealed GPC attempts; enablement is not inferred from public objects":"Retained sealed eligibility plus reportable rows with unavailable sealed evidence"}))];
+  const list=[...base,...recent.filter(m=>isSealedMetric(m.id)).map(m=>({...m,success:m.id==="evidence"?["generation_matched"]:m.success,id:`sealed.${m.id}`,label:m.id==="control.privacyOptOut"?"Opt-out control presence · retained assessment":m.id==="evidence"?"Export generation joined to sealed evidence":m.id==="gpc_finding"?"Canonical GPC finding · retained assessment":m.id.startsWith("control.")?`${m.id.slice(8)} persisted control state`:`${m.label} · retained assessment`,group:m.id==="control.privacyOptOut"?"Controls":`Retained · ${m.group}`,denominator:/^(registration|terminal)\./.test(m.id)?"Completed sealed clicks; unavailable witnesses remain in the denominator":m.id==="gpc_path"||m.id==="gpc_delivery"?"Explicitly enabled sealed GPC attempts; enablement is not inferred from public objects":"Retained sealed eligibility plus reportable rows with unavailable sealed evidence"}))];
   return [...new Map(list.map(m=>[m.id,m])).values()];
 }
 export function metricContract(m:any,kind='state') {
@@ -54,6 +55,8 @@ export function metricContract(m:any,kind='state') {
   let mapping='Preserve the named returned state; missing field = unavailable, explicit null = unknown. No evidence/verdict substitution.';
   let field=key;
   if(key.startsWith('control.')){meaning=sealed?'Persisted control assessment state':'Pre-interaction first-layer control presence';field=sealed?'consentControlAssessment.controls.<control>.state':'consentSurfaceEvidence.firstLayerConsentChoices.<control>ControlObserved';mapping=sealed?'Persisted observed / not_observed / unknown, otherwise unavailable':'true with first-layer pre-interaction capture = observed; false plus complete inventory and capture = not_observed; incomplete or null = unknown; missing = unavailable';}
+  if(key==='control.privacyOptOut'&&sealed){source='Original sealed assessment or authenticated generation-matched persisted control extract; no public fallback';field='consentControlAssessment.controls.privacyOptOut.state; persisted_control_extract retains schema, original creator and exact report-generation binding';mapping='Preserve persisted observed / not_observed / unknown. Binary extract states need matched first-layer identity; explicit canonical unknown stays unknown when document/layer coverage is unresolved. Missing, malformed or changed-generation extracts remain unavailable. Never infer route presence or action success.';}
+  if(key==='control.privacyOptOut'&&!sealed){field='consentSurfaceEvidence.firstLayerConsentChoices.privacyOptOutControlObserved + privacyOptOutControlInventoryComplete';mapping='v11/v27 only: true with captured pre-interaction first layer = observed; false with opt-out-specific complete inspection and capture = not_observed; explicit null or incomplete facts = unknown; missing = unavailable. v4/v5/v10 do not export this field and display Not exported. No raw label, route/instruction or execution fallback.';}
   if(key.startsWith('checklist.')||key.startsWith('topic.')||key==='privacy_policy'){field=sealed?'canonicalReportProjection.checklistRows[id].evidenceState (never status)':'gdprEprivacyChecklistRows.items[id].evidenceState OR evidenceLabel (never status)';meaning='Returned checklist evidence state; concern/gap are assessed states, not underlying control presence';}
   if(key.startsWith('verdict.')){field=sealed?'canonicalReportProjection.checklistRows[id].status':'gdprEprivacyChecklistRows.items[id].status';meaning='Returned checklist verdict, separately retained from evidence state';}
   if(key.startsWith('execution.')){field='postAccept/RefusalObservation.execution';mapping='Validate choice_path_execution.v1; retain status; missing = unavailable; invalid = unsupported_schema';}
@@ -76,7 +79,7 @@ export function metricContract(m:any,kind='state') {
   if(key.startsWith('accessibility')){eligible='Readable reportable scans except explicit required=false; missing required or counts remain unavailable';mapping+=' Engine, engine version and scope are separate comparison series.';}
   if(quantity){field=m.path;mapping='Only nonnegative safe integers; missing/null/invalid values excluded from median, counted as missing within the eligible population. Zero remains measured.';}
   if(/^(site|technology|graph|form)\./.test(key)&&quantity){source='Source-bound sealed projection only';mapping+=' Deferred graph references and inline graph counts use separate series.';}
-  return {id,kind,version:METRIC_CONTRACT_VERSION,meaning,eligiblePopulation:eligible,numerator:quantity?'Sum and median of valid measured values':m.success?.length?m.success:'No primary success rate; state-specific counts only',denominator:quantity?'measured for median; all eligible plus missing shown':eligible,source,field,stateMapping:mapping,supportedVersions:sealed?['retained typed schema validation; each assessment/projection version separated']:PUBLIC_SOURCE_PAIRS,comparison:'Same metric, source, schema, policy/engine scope and population only. Mixed-source aggregate rate and delta are null; per-source series remain visible. No interpolation across missing days.',direction:'Descriptive prevalence/coverage only; not accuracy, improvement or compliance'};
+  return {id,kind,version:METRIC_CONTRACT_VERSION,...(key==='detail.forms.after'?{definitionVersion:'certscore.audit.forms-after-retained.v2'}:{}),meaning,eligiblePopulation:eligible,numerator:quantity?'Sum and median of valid measured values':m.success?.length?m.success:'No primary success rate; state-specific counts only',denominator:quantity?'measured for median; all eligible plus missing shown':eligible,source,field,stateMapping:mapping,supportedVersions:sealed?['retained typed schema validation; each assessment/projection version separated']:PUBLIC_SOURCE_PAIRS,comparison:'Same metric, source, schema, policy/engine scope and population only. Mixed-source aggregate rate and delta are null; per-source series remain visible. No interpolation across missing days.',direction:'Descriptive prevalence/coverage only; not accuracy, improvement or compliance'};
 }
 export function makeContracts(metrics:any[],quantities:any[]) {
   return {version:METRIC_CONTRACT_VERSION,metrics:metrics.map(m=>metricContract(m)),quantities:quantities.map(m=>metricContract(m,'quantity')),findings:{version:METRIC_CONTRACT_VERSION,meaning:'Returned canonical finding prevalence, without reclassification or rescoring',numerator:'Reports containing the exact returned canonical ID within a complete valid inventory',denominator:'Complete returned inventories of the same source/schema; incomplete/unavailable inventories and their positive findings remain separately counted',source:'Public projectedFindings.items and cap only; never internal finding-ID fallback',stateMapping:'Positive returned IDs retained even in truncated inventories; absent ID is not zero unless inventory completeness is explicit and coherent; top selection unknown when unavailable',supportedVersions:PUBLIC_VERSIONS,comparison:'Separate public schema/projection/resolver/policy series; no mixed-series delta'},missing:'Unavailable fields/files are distinct from explicit unknown, not_confirmed, not_testable and genuinely not_checked. ID-selection proof never implies detailed evidence verification.'};

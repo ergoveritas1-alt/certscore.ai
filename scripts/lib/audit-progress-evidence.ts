@@ -18,7 +18,7 @@ export const EVIDENCE_METRICS:Metric[]=[
     {id:`detail.${action}.stop`,label:`${action} after-click stop reason`,group:"A/R verdicts",denominator,success:[]},
   ]),
   ...["response","semantic_probe","acknowledgment","sale","sharing","activity_comparison"].map(id=>({id:`detail.gpc.${id}`,label:`GPC ${id.replaceAll("_"," ")}`,group:"GPC details",denominator,success:[]})),
-  ...["count","before","after"].map(id=>({id:`detail.forms.${id}`,label:`Forms ${id==="count"?"count coverage":id==="before"?"before consent capture":"after Accept capture"}`,group:"Forms",denominator,success:id==="count"?["captured"]:["complete"]})),
+  ...["count","before","after"].map(id=>({id:`detail.forms.${id}`,label:`Forms ${id==="count"?"count coverage":id==="before"?"before consent capture":"after Accept capture retained"}`,group:"Forms",denominator,success:id==="count"?["captured"]:id==="after"?["retained"]:["complete"]})),
   {id:"detail.storage.classification",label:"Pre-consent storage classification",group:"Storage classification",denominator,success:[]},
   ...["cookies","vendors","requests","findings","policy"].map(id=>({id:`detail.inventory.${id}`,label:`${id} returned inventory cap`,group:"Inventory coverage",denominator,success:["not_truncated"]})),
   {id:"detail.navigation.host",label:"Navigation landed on different host",group:"Navigation",denominator,success:["different_host"]},
@@ -153,3 +153,8 @@ export const COVERAGE_MAP=[
   {box:"Coverage, navigation and publication",before:"Partial",now:"Existing outcomes/publication plus final-host change and missing/truncated evidence inventories",gap:"Historical attempts missing from the archive remain unknown; navigation status alone does not override no-go."},
   {box:"Relationship graphs / request ancestry",before:"Not tabulated",now:"Recent verified projection/reference availability and node/edge reference counts",gap:"Deferred counts describe retained reference metadata. Full graph bytes and causal ancestry are not verified here; older exports lack the projection. No protected graph endpoint is requested."},
 ];
+
+/** Register every verified canonical checklist ID even when an older audit/export omitted it. */
+export function retainedEvidenceMetricRegistry(rows:ProgressRow[]):Metric[]{
+ return evidenceMetricRegistry(rows.map(row=>({...row,metricLabels:row.retainedMetricLabels??{}}))).filter(m=>/^(checklist|verdict)\./.test(m.id));
+}

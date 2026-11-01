@@ -9,7 +9,7 @@ export function projectPublicFirstLayerConsentEvidence(value: unknown, expectedS
   if (!expectedScanId || a.scan.scanId !== expectedScanId || a.scan.noGo ||
       a.document.identityStatus !== "matched") return null;
   const keys = ["accept", "reject", "options"] as const;
-  const state = (key: typeof keys[number]) => a.controls[key].layer !== "first_layer" ? null :
+  const state = (key: typeof keys[number] | "privacyOptOut") => a.controls[key].layer !== "first_layer" ? null :
     a.controls[key].state === "observed" ? true :
     hasVerifiedConsentControlAbsence(a, key) ? false : null;
   const controls = a.evidence.filter(e => e.layer === "first_layer" && e.visible && e.actionable && e.label &&
@@ -27,6 +27,12 @@ export function projectPublicFirstLayerConsentEvidence(value: unknown, expectedS
     acceptControlObserved: state("accept"),
     rejectControlObserved: state("reject"),
     managePreferencesControlObserved: state("options"),
+    privacyOptOutControlObserved: state("privacyOptOut"),
+    privacyOptOutControlInventoryComplete: state("privacyOptOut") !== null && (
+      a.artifactVersion === "2.2" ? a.controls.privacyOptOut.inspection?.status === "complete" &&
+        Boolean(a.controls.privacyOptOut.inspection?.evidenceRefs.length) :
+        a.assessmentStatus === "complete" && a.coverage.status === "complete"
+    ),
     capturedBeforeInteraction: true,
     layerInspected: "first_layer",
     actionableControlInventoryRetained: controls.length > 0,
@@ -35,7 +41,7 @@ export function projectPublicFirstLayerConsentEvidence(value: unknown, expectedS
         Boolean(a.controls[key].inspection?.evidenceRefs.length) :
         a.assessmentStatus === "complete" && a.coverage.status === "complete"
     )),
-    controlInspection: Object.fromEntries(keys.map(key => [key, {
+    controlInspection: Object.fromEntries([...keys, "privacyOptOut" as const].map(key => [key, {
       state: state(key) === null ? "unknown" : state(key) ? "observed" : "not_observed",
       status: a.controls[key].inspection?.status ?? "unavailable",
       reasonCodes: a.controls[key].reasonCodes.slice(0, 16),

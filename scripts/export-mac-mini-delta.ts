@@ -2,6 +2,7 @@ import {readFileSync,writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {botOriginWindowSql,botOriginSql} from './lib/audit-bot-origin';
 import {runProdDbSqlOneoff} from './lib/audit-prod-db-bounded';
+import {OPT_OUT_EXTRACT_SQL,OPT_OUT_ASSESSMENT_JOIN_SQL} from './lib/audit-progress-opt-out';
 const root:string=process.argv[2]??"";
 if(!root)throw Error('Supply a fresh audit run containing begin.json');
 const b=JSON.parse(readFileSync(root+'/begin.json','utf8'));
@@ -21,10 +22,13 @@ select row_to_json(r) from (
  s.scan_config_json->>'scanFrom' as scan_from,
  p.report_projection_source_hash as projection_source_hash,
  p.report_projection_payload_sha256 as projection_payload_sha256,
+ p.report_projection_version as projection_version,p.report_projection_status as projection_status,
+ ${OPT_OUT_EXTRACT_SQL} as control_assessment,
  count(*) over() as cohort_total
  from origins o join public.scans s on s.id=o."scanId"
  left join public.domains d on d.id=s.domain_id
  left join public.scan_snapshots p on p.scan_id=s.id
+ ${OPT_OUT_ASSESSMENT_JOIN_SQL}
  where o."isMacMini" is true
  order by s.created_at,s.id limit 5001
 ) r;`;

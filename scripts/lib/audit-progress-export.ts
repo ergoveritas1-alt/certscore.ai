@@ -32,6 +32,14 @@ export function extractExportRow(report:Obj,ref:ProgressRow["refs"][number]):Pro
     states[`control.${name}`]=first[field]===true&&captured?"observed":first[field]===false&&first.controlInventoryComplete===true&&captured?"not_observed":field in first?"unknown":"unavailable";
   }
   if(!reportable)delete states["control.privacyOptOut"];
+  // v11 exports canonical opt-out presence with independent inspection coverage.
+  // Legacy exports keep their original unavailable state, including raw label rows.
+  if(reportable && report.meta?.projectionVersion === "pulse-public-v11"){
+    const captured=first.capturedBeforeInteraction===true&&first.layerInspected==="first_layer";
+    states["control.privacyOptOut"]=first.privacyOptOutControlObserved===true&&captured?"observed":
+      first.privacyOptOutControlObserved===false&&first.privacyOptOutControlInventoryComplete===true&&captured?"not_observed":
+      "privacyOptOutControlObserved" in first?"unknown":"unavailable";
+  }
   for(const [id,key] of Object.entries(TOPIC_ROWS))if(reportable)states[key]=exportedState(checklist.find(r=>r.id===id));else delete states[key];
   for(const name of ["accept","reject"]){
     const observation=obj(report[name==="accept"?"postAcceptObservation":"postRefusalObservation"]),execution=choicePathExecutionSchema.safeParse(observation.execution);
@@ -69,5 +77,5 @@ export function extractExportRow(report:Obj,ref:ProgressRow["refs"][number]):Pro
   for(const {id:q} of QUANTITIES)metricSources[q]=source+(q.startsWith('accessibility.')?'/'+String(report.accessibilityAudit?.engine??'unknown')+'/'+String(report.accessibilityAudit?.engineVersion??'unknown')+'/'+String(report.accessibilityAudit?.scope??'unknown'):'');
   for(const key of Object.keys(metricSources))if(metricSources[key]===source)delete metricSources[key];
   metricSources.findings=source+'/'+String(meta.canonicalResolverVersion??'unknown');
-  return {scanId:id,site:String(report.domain??"unknown"),createdAt,region:String(context.scanFrom??"unknown"),producer:"not retained in public export",profile:"not retained in public export",assessmentVersion:String(meta.projectionVersion??"unknown"),projectionVersion:String(meta.reportProjectionVersion??"unknown"),originRequestId:"archive folder provenance; original credential not independently verified",states,defaultSource:source,metricSources,measurements:supplement.measurements,metricLabels:supplement.metricLabels,findings,findingInventory,topInventory:false,reportable,refs:[ref]};
+  return {scanId:id,site:String(report.domain??"unknown"),createdAt,region:String(context.scanFrom??"unknown"),producer:"not retained in public export",profile:"not retained in public export",assessmentVersion:String(meta.projectionVersion??"unknown"),projectionVersion:String(meta.reportProjectionVersion??"unknown"),originRequestId:"archive folder provenance; original credential not independently verified",states,defaultSource:source,publicProjectionSourceHash:typeof meta.reportProjectionSourceHash==="string"?meta.reportProjectionSourceHash:undefined,metricSources,measurements:supplement.measurements,metricLabels:supplement.metricLabels,findings,findingInventory,topInventory:false,reportable,refs:[ref]};
 }

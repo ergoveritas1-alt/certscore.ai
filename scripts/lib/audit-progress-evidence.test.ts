@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evidenceProgress, sealedEvidenceProgress, evidenceMetricRegistry, summarizeQuantities, QUANTITIES, quantityCsv } from "./audit-progress-evidence";
+import { EVIDENCE_METRICS, evidenceProgress, sealedEvidenceProgress, evidenceMetricRegistry, summarizeQuantities, QUANTITIES, quantityCsv } from "./audit-progress-evidence";
 import {siteIntegrityProjectionFixture} from "../../packages/certscore-contracts/src/site-integrity.fixture";
 import { PRIMARY_CHECKLIST_IDS, METRICS, summarizeDays, type ProgressRow } from "./audit-progress";
 import { extractExportRow } from "./audit-progress-export";
@@ -66,4 +66,10 @@ test("viewer preserves absent versus unknown fields without inventing observatio
   const html=renderProgressDashboard({metrics:[{id:"first"},{id:"second"},{id:"third"}],rows:[{scanId:"fixture",states:{first:"unknown",third:"observed"}}]});
   const embedded=JSON.parse(html.match(/<script id="dashboard-data" type="application\/json">(.*?)<\/script>/s)![1]!);
   assert.deepEqual(Object.fromEntries(Object.entries(embedded.rows[0].stateCodes).map(([k,i])=>[k,embedded.stateValues[i as number]])),{first:"unknown",third:"observed"});
+});
+
+test('after Accept capture uses the returned retained vocabulary, without treating limited as retained',()=>{
+ const metric=EVIDENCE_METRICS.find(m=>m.id==='detail.forms.after')!;
+ assert.deepEqual(metric.success,['retained']);
+ for(const value of ['retained','limited','unavailable'])assert.equal(evidenceProgress({formsSummary:{afterAcceptCapture:value}},[],new Set()).states['detail.forms.after'],value);
 });

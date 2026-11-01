@@ -2049,7 +2049,12 @@ function buildEvidenceArtifact(input: {
     requestEvidenceInventory: capArray(sanitizedRequestEvidenceRows, 50),
     unclassifiedExternalRequests: capArray(buildUnclassifiedExternalRequestRows(hybrid), 20),
     consentSurfaceEvidence: {
-      firstLayerConsentChoices: safeRecordSubset(firstLayerConsentChoices, [
+      firstLayerConsentChoices: safeRecordSubset(firstLayerConsentChoices && {
+        ...firstLayerConsentChoices,
+        // Only the verified canonical assessment may supply the new v11 facts.
+        privacyOptOutControlObserved: canonicalChoices?.privacyOptOutControlObserved,
+        privacyOptOutControlInventoryComplete: canonicalChoices?.privacyOptOutControlInventoryComplete,
+      }, [
         "evidenceSource",
         "assessmentVersion",
         "assessmentSourceHash",
@@ -2064,6 +2069,8 @@ function buildEvidenceArtifact(input: {
         "defaultTogglePurposeLabels",
         "layerInspected",
         "managePreferencesControlObserved",
+        "privacyOptOutControlObserved",
+        "privacyOptOutControlInventoryComplete",
         "nonEssentialDefaultsOff",
         "observedAtMs",
         "policyLinks",
