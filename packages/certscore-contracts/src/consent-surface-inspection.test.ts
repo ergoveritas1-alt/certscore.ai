@@ -886,3 +886,46 @@ test("runtime scoping does not suppress other runtime inventory failures", () =>
   assert.equal(outcome.coverageStatus, "limited");
   assert.ok(outcome.limitationKeys.includes("runtime_page_inventory_unavailable"));
 });
+
+
+test("latest stale geometry cannot certify a complete empty consent inspection", () => {
+  const input=baseInput(), observation=input.consentUiObservations![0]!;
+  Object.assign(observation,{layerInspected:"first_layer",captureStatus:"no_evidence",inventoryOutcome:"partial",
+    basis:[...observation.basis,"geometry:checkpoint_precedes_latest_inventory"],
+    captureDiagnostics:{completedChannels:["dom_inventory","accessibility_tree"],failedChannels:[],timedOutChannels:[]}});
+  const result=deriveConsentSurfaceInspectionOutcome(input);
+  assert.equal(result.inspectionCompleted,false);
+  assert.equal(result.coverageStatus,"limited");
+  assert.equal(result.outcome,"indeterminate_limited_coverage");
+  assert.ok(result.limitationKeys.includes("geometry:checkpoint_precedes_latest_inventory"));
+});
+
+test("stale geometry limits coverage without erasing retained positive consent controls", () => {
+  const input=baseInput(), observation=input.consentUiObservations![0]!;
+  Object.assign(observation,{layerInspected:"first_layer",likelyPresent:true,acceptControlObserved:true,captureStatus:"observed",inventoryOutcome:"partial",
+    basis:[...observation.basis,"geometry:checkpoint_precedes_latest_inventory"],
+    captureDiagnostics:{completedChannels:["dom_inventory"],failedChannels:[],timedOutChannels:[]}});
+  const result=deriveConsentSurfaceInspectionOutcome(input);
+  assert.equal(result.coverageStatus,"limited");
+  assert.equal(result.consentSurfaceObserved,true);
+  assert.equal(result.actionableControlObserved,true);
+  assert.equal(result.outcome,"actionable_surface_observed");
+});
+
+test("a later complete inventory is not poisoned by an earlier stale geometry packet", () => {
+  const input=baseInput(), fresh=structuredClone(input.consentUiObservations![0]!);
+  const stale={...structuredClone(fresh),observedAtMs:fresh.observedAtMs-1,inventoryOutcome:"partial" as const,
+    basis:[...fresh.basis,"geometry:checkpoint_precedes_latest_inventory"],
+    captureDiagnostics:{completedChannels:["dom_inventory" as const],failedChannels:[],timedOutChannels:[]}};
+  input.consentUiObservations=[stale,fresh];
+  assert.equal(deriveConsentSurfaceInspectionOutcome(input).coverageStatus,"complete");
+});
+
+test("fresh completed geometry supersedes its retained historical limitation marker", () => {
+  const input=baseInput(), observation=input.consentUiObservations![0]!;
+  Object.assign(observation,{inventoryOutcome:"complete_empty",basis:[...observation.basis,"geometry:checkpoint_precedes_latest_inventory"],
+    captureDiagnostics:{completedChannels:["dom_inventory","geometry"],failedChannels:[],timedOutChannels:[]}});
+  const result=deriveConsentSurfaceInspectionOutcome(input);
+  assert.equal(result.coverageStatus,"complete");
+  assert.equal(result.limitationKeys.includes("geometry:checkpoint_precedes_latest_inventory"),false);
+});

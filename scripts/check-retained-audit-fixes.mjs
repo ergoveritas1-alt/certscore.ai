@@ -73,6 +73,7 @@ const tests = [
   "packages/certscore-api-contracts/src/choice-confirmation-summary.test.ts",
   "packages/certscore-contracts/src/consent-control-label-classifier.test.ts",
   "packages/certscore-contracts/src/consent-control-assessment.test.ts",
+  "packages/certscore-contracts/src/consent-surface-inspection.test.ts",
   "packages/certscore-contracts/src/consent-control-inspection.test.ts",
   "packages/certscore-contracts/src/consent-action-stages.test.ts",
   "packages/certscore-contracts/src/consent-category-diagnostics.test.ts",

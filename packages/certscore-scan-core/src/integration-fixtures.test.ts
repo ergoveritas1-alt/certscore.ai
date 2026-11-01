@@ -2941,10 +2941,11 @@ test("pre-consent runtime scanner does not treat off-viewport footer settings as
   try {
     const url = server.urlFor("consent-cmp-script-offscreen-footer-settings");
     const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const scanStartedAtMs = Date.now();
     const result = await preConsentRuntimeScanner({
       url,
       normalizedUrl: url,
-      scanStartedAtMs: Date.now(),
+      scanStartedAtMs,
       internalBudgetMs: getScanProfile("quick").internalBudgetMs,
       artifactWriter,
       routeFulfillers,
@@ -3001,11 +3002,21 @@ test("pre-consent runtime scanner does not treat off-viewport footer settings as
     );
     assert.equal(observation?.captureStatus, "no_evidence");
     assert.equal(observation?.likelyPresent, false);
+    const geometry = JSON.parse(await readFile(
+      path.join(tempRoot, "out", "ConsentControlGeometryEvidence.json"),
+      "utf8",
+    )) as ConsentControlGeometryArtifact;
+    const geometryCurrent = Date.parse(geometry.capturedAt) - scanStartedAtMs >= observation!.observedAtMs;
     assert.equal(
       observation?.captureDiagnostics?.completedChannels.includes("geometry"),
-      true,
-      "the settled negative packet should retain same-session geometry",
+      geometryCurrent,
+      "only geometry at or after the latest inventory can complete its channel",
     );
+    if (!geometryCurrent) {
+      assert.equal(observation?.inventoryOutcome, "partial");
+      assert.ok(observation?.basis.includes("geometry:checkpoint_precedes_latest_inventory"));
+      assert.ok(consentSurfaceInspection.limitationKeys.includes("geometry:checkpoint_precedes_latest_inventory"));
+    }
     assert.equal(
       result.moduleRun.timingBreakdown?.some((entry) =>
         entry.label === "paired settled-frame consent geometry"
@@ -3013,10 +3024,6 @@ test("pre-consent runtime scanner does not treat off-viewport footer settings as
       true,
       "geometry should run beside the protected settled screenshot instead of depending on late spare budget",
     );
-    const geometry = JSON.parse(await readFile(
-      path.join(tempRoot, "out", "ConsentControlGeometryEvidence.json"),
-      "utf8",
-    )) as ConsentControlGeometryArtifact;
     const settledScreenshot = result.screenshots.find((screenshot) =>
       screenshot.artifactId === "screenshot_pre_consent_settled"
     );
@@ -3032,9 +3039,9 @@ test("pre-consent runtime scanner does not treat off-viewport footer settings as
     assert.equal(geometry.summary.firstLayerOptions, false);
     assert.equal(retainedDocumentTokens.every((token) => typeof token === "string" && token.length > 0), true);
     assert.equal(new Set(retainedDocumentTokens).size, 1, "A/R/O inventory, geometry, screenshot, and DOM must share one browser document token");
-    assert.equal(consentSurfaceInspection.inspectionCompleted, true);
-    assert.equal(consentSurfaceInspection.coverageStatus, "complete");
-    assert.equal(consentSurfaceInspection.outcome, "no_surface_observed_complete_coverage");
+    assert.equal(consentSurfaceInspection.inspectionCompleted, geometryCurrent);
+    assert.equal(consentSurfaceInspection.coverageStatus, geometryCurrent ? "complete" : "limited");
+    assert.equal(consentSurfaceInspection.outcome, geometryCurrent ? "no_surface_observed_complete_coverage" : "indeterminate_limited_coverage");
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });

@@ -3329,6 +3329,12 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
     (input.screenshots ?? []).some((artifact) => artifact.consentStateAtTime === "pre_consent") ||
     (input.domSnapshots ?? []).some((artifact) => artifact.consentStateAtTime === "pre_consent");
   const inspectionLimitationKeys = [
+    // The final producer may retain its earlier positive facts while removing
+    // stale geometry from completion. A settled-inventory marker cannot restore
+    // complete negative coverage after that explicit freshness correction.
+    ...(latestObservation?.basis.includes("geometry:checkpoint_precedes_latest_inventory") &&
+      !latestObservation.captureDiagnostics?.completedChannels.includes("geometry")
+      ? ["geometry:checkpoint_precedes_latest_inventory"] : []),
     ...(latestObservation?.basis?.includes(UNRESOLVED_CONSENT_DECISION) ? [UNRESOLVED_CONSENT_DECISION] : []),
     ...(latestObservation?.controls?.some((control) => control.tagName === "ax-node" &&
       (control.visibilityEvidence !== "box_model_verified" || control.consentContextEvidence !== "local_surface"))
