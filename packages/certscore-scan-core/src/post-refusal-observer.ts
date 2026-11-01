@@ -1,3 +1,4 @@
+import { createConsentActionFrameBinding } from "./consent-action-frame-binding.js";
 import type { CookieYesLegacyBaseline } from "./cookieyes-legacy-consent-state.js";
 import {installConsentReceiptCapture,receiptCaptureToken,retainReceiptCookies} from './consent-receipt-capture.js';
 import { isComplianzControl } from "./complianz-consent-state.js";
@@ -229,6 +230,8 @@ export interface PostRefusalObserverInput {
    * confirms refusal.
    */
   allowCanonicalRejectDiscovery?: boolean;
+  /** Default-off exact-element proof/dispatch hardening for paired calibration. */
+  boundControlDispatch?: boolean;
   scanStartedAtMs?: number;
   dispatchDelayMs?: number;
   observationWindowMs?: number;
@@ -399,8 +402,10 @@ export async function runPostRefusalObserver(
   const resultBudgetMs = boundedMs(input.resultBudgetMs, 0, 0, 30_000);
   const resultBudgetDeadlineAtMs = resultBudgetMs > 0 ? branchStartedAtMs + resultBudgetMs : undefined;
   const budgetController = new AbortController();
-  const effectiveSignal = resultBudgetDeadlineAtMs === undefined ? input.signal
+  const sourceFrameBinding = createConsentActionFrameBinding();
+  const baseSignal = resultBudgetDeadlineAtMs === undefined ? input.signal
     : input.signal ? AbortSignal.any([input.signal, budgetController.signal]) : budgetController.signal;
+  const effectiveSignal = AbortSignal.any([sourceFrameBinding.signal, ...(baseSignal ? [baseSignal] : [])]);
   const remainingResultBudgetMs = (requested: number) => resultBudgetDeadlineAtMs === undefined ? requested
     : Math.max(0, Math.min(requested, resultBudgetDeadlineAtMs - Date.now()));
   const budgetTimer = resultBudgetDeadlineAtMs === undefined ? undefined : setTimeout(() => {
@@ -461,6 +466,8 @@ export async function runPostRefusalObserver(
   let actionDiscovery: ConsentActionDiscovery | undefined;
   let cancellationObservedAtMs: number | undefined;
   let actionDispatched = false;
+  const boundControlDispatch = input.boundControlDispatch ?? process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED === "1";
+  let boundControlElement: import("playwright").ElementHandle<HTMLElement | SVGElement> | undefined;
   let refusalRegisteredAtEpochMs: number | undefined;
   let selectedRecipe: PostRefusalActionRecipe | undefined;
   let actionControlProof: ConsentActionControlProof | undefined;
@@ -1192,6 +1199,7 @@ export async function runPostRefusalObserver(
       });
     }
     const preActionScope = exactSelectorScope(page, selectedRecipe.controlFrameUrl);
+    if (boundControlDispatch && preActionScope.status === "found") sourceFrameBinding.bind(page, preActionScope.scope);
     if (
       preActionScope.status !== "found" ||
       !await preActionRequirementSatisfied(preActionScope.scope, selectedRecipe)
@@ -1308,12 +1316,17 @@ export async function runPostRefusalObserver(
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
       });
     }
+    if (boundControlDispatch) {
+      const scope = exactSelectorScope(page, selectedRecipe.controlFrameUrl);
+      if (scope.status === "found") sourceFrameBinding.bind(page, scope.scope);
+    }
     let confirmationBaseline = await captureRefusalConfirmationBaseline(
       context,
       page,
       selectedRecipe.confirmation,
       control,
       selectedRecipe.controlFrameUrl,
+      boundControlDispatch,
     ).catch(() => undefined);
     if (confirmationBaseline && "oneTrustBaseline" in confirmationBaseline) {
       for (const reason of confirmationBaseline.oneTrustBaseline?.diagnosticReasons ?? []) confirmationDiagnostic.reason(reason);
@@ -1357,6 +1370,7 @@ export async function runPostRefusalObserver(
       }
     }
     let proofResolution = await buildConsentActionControlProof({
+      bindElement: boundControlDispatch,
       deadlineAtMs: resultBudgetDeadlineAtMs,
       onLabelInspection: recordResolverSnapshot,
       signal: effectiveSignal,
@@ -1466,14 +1480,20 @@ export async function runPostRefusalObserver(
               throw new Error("necessary_only_pre_action_requirement_not_satisfied");
             }
           }
+          if (boundControlDispatch) {
+            const scope = exactSelectorScope(page, selectedRecipe.controlFrameUrl);
+            if (scope.status === "found") sourceFrameBinding.bind(page, scope.scope);
+          }
           confirmationBaseline = await captureRefusalConfirmationBaseline(
             context,
             page,
             selectedRecipe.confirmation,
             control,
             selectedRecipe.controlFrameUrl,
+            boundControlDispatch,
           );
           proofResolution = await buildConsentActionControlProof({
+            bindElement: boundControlDispatch,
             deadlineAtMs: resultBudgetDeadlineAtMs,
             onLabelInspection: recordResolverSnapshot,
             signal: effectiveSignal,
@@ -1514,6 +1534,8 @@ export async function runPostRefusalObserver(
       });
     }
     actionControlProof = proofResolution.proof;
+    boundControlElement = proofResolution.boundElement;
+    sourceFrameBinding.setElement(boundControlElement, resultBudgetDeadlineAtMs);
     if (originDomStorageCapture && !originDomStorageCapture.bindAuthorizedTarget(observationTargetUrl))
       limitations.push("origin_storage_authorized_target_binding_limited");
     let actionDispatchedAtEpochMs = Date.now();
@@ -1525,39 +1547,43 @@ export async function runPostRefusalObserver(
         control,
         selectedRecipe,
         useVerifiedGeometryDispatch,
-        () => assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256),
+        () => { sourceFrameBinding.assertCurrent(); assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256); },
         actionControlProof,
         effectiveSignal,
         () => {
           actionDispatchedAtEpochMs = Date.now();
-          receiptCapture?.dispatch(actionDispatchedAtEpochMs);
           actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
-          actionDispatched = true;
-          graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
           try {input.onLifecycleEvent?.({type: "action_dispatched", atMs: actionDispatchedAtMs});}
           catch {limitations.push("lifecycle_listener_failed");}
+          sourceFrameBinding.assertCurrent();
+          assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256);
+          receiptCapture?.dispatch(actionDispatchedAtEpochMs);
+          actionDispatched = true;
+          graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
         },
-        { ...actionabilityReadOptions(), deadlineAtMs: resultBudgetDeadlineAtMs },
+        { ...actionabilityReadOptions(), deadlineAtMs: resultBudgetDeadlineAtMs, boundElement: boundControlElement },
       );
     } catch (error) {
       clickError = error;
     }
     if (!actionDispatched) {
+      const cancelledBeforeInput = cancellation();
       limitations.push("reviewed_reject_dispatch_guard_failed");
       return await finalize({resolverFound: true, resolverReason: "dispatch_guard_failed_before_action",
-        registration: unconfirmedRegistration("not_attempted", "dispatch_guard_failed_before_action"),
+        registration: unconfirmedRegistration(cancelledBeforeInput ? "aborted" : "not_attempted",
+          cancelledBeforeInput ? "abort_requested_before_action" : "dispatch_guard_failed_before_action"),
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs)});
     }
     const confirmationStartedAtMs = Date.now();
-    const confirmedState = await waitForRefusalConfirmation(
-      context,
-      page,
-      selectedRecipe.confirmation,
+    const confirmedState = await sourceFrameBinding.read(confirmationTimeoutMs, confirmationBudgetMs => waitForRefusalConfirmation(
+      context!,
+      page!,
+      selectedRecipe!.confirmation,
       confirmationBaseline,
       actionDispatchedAtEpochMs,
-      confirmationTimeoutMs,
+      confirmationBudgetMs,
       effectiveSignal,
-      (state) => { decisionEvidence = { policyVersion: "semantic_consent_registration.v2",
+      (state) => { if (!sourceFrameBinding.current) return; decisionEvidence = { policyVersion: "semantic_consent_registration.v2",
         decision: state.decision, basis: "verified_state", observedStateSha256: state.stateHash,
         ...(state.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:state.cookieYesLegacyReceiptEvidence} : {}),
         ...(state.complianzReceiptEvidence ? {complianzReceiptEvidence:state.complianzReceiptEvidence} : {}),
@@ -1565,8 +1591,9 @@ export async function runPostRefusalObserver(
         observedAtMs: elapsed(parentScanStartedAtMs, state.observedAtEpochMs ?? Date.now()),
         timestampBasis: state.observedAtEpochMs === undefined ? "verified_state_observed" : "instrumented_state_write" }; },
       { pass: () => confirmationDiagnostic.pass(false), reason: confirmationDiagnostic.reason },
-      selectedRecipe.controlFrameUrl,
-    ).catch(() => undefined);
+      selectedRecipe!.controlFrameUrl,
+      boundControlDispatch,
+    )).catch(() => undefined);
     if (confirmedState) confirmationDiagnostic.reason("verified_decision");
     timing.confirmationMs = Math.max(0, Date.now() - confirmationStartedAtMs);
     if (clickError) {
@@ -1595,9 +1622,8 @@ export async function runPostRefusalObserver(
         onOutcome: confirmationDiagnostic.terminal,
         action: "reject", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256,
         parentScanStartedAtMs, dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
-        signal: effectiveSignal, targetStillAuthorized, read: () => waitForRefusalConfirmation(context!, page!, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined,
-          {pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason}, selectedRecipe!.controlFrameUrl),
-      });
+        signal: effectiveSignal, targetStillAuthorized, read: () => sourceFrameBinding.read(0, () => waitForRefusalConfirmation(context!, page!, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined,
+          {pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason}, selectedRecipe!.controlFrameUrl, boundControlDispatch)) });
       const stopReason = await finishAfterActionWindow({
         onFinalWindow: terminalRead.start,
         dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
@@ -1919,11 +1945,13 @@ export async function runPostRefusalObserver(
       observations,
     });
   } finally {
+    sourceFrameBinding.dispose();
     if (budgetTimer) clearTimeout(budgetTimer);
     budgetController.signal.removeEventListener("abort", closeBudgetExpiredContext);
     await budgetContextClose;
     finishOptionalRuntimeGraph(graphCapture, "post_reject", "action_capture_closed");
     originDomStorageCapture?.finish();
+    void boundControlElement?.dispose().catch(() => undefined);
     actionDiscovery?.dispose();
     passiveCmpCapture?.finish();
     receiptCapture?.finish();
@@ -2644,20 +2672,20 @@ async function dispatchRejectControl(
   readOptions?: ConsentControlReadOptions,
 ) {
   assertDispatchAllowed?.();
-  await assertReviewedRejectDispatchAllowed({page,control,proof,signal,controlFrameUrl:recipe.controlFrameUrl,deadlineAtMs:readOptions?.deadlineAtMs});
-  assertDispatchAllowed?.();
-  onDispatch?.();
-  // Lifecycle listeners may cancel synchronously after final preparation.
+  const boundControl = readOptions?.boundElement ?? control;
+  await assertReviewedRejectDispatchAllowed({page,control:boundControl,proof,signal,controlFrameUrl:recipe.controlFrameUrl,deadlineAtMs:readOptions?.deadlineAtMs});
   assertDispatchAllowed?.();
   if (recipe.accessibleControl?.kind === "closed_shadow_accessible_control") {
-    await dispatchClosedShadowAccessibleControl(page, recipe.accessibleControl, assertDispatchAllowed);
+    await dispatchClosedShadowAccessibleControl(page, recipe.accessibleControl, assertDispatchAllowed, onDispatch);
     return;
   }
   if (useVerifiedGeometryDispatch) {
-    await dispatchLocatorClickWithVerifiedGeometry(control, 2_000, assertDispatchAllowed, readOptions);
+    await dispatchLocatorClickWithVerifiedGeometry(control, 2_000, assertDispatchAllowed, {...readOptions, onDispatch});
     return;
   }
-  await control.click({ timeout: 2_000 });
+  onDispatch?.();
+  assertDispatchAllowed?.();
+  await boundControl.click({ timeout: 2_000 });
 }
 
 async function captureRecipeRuntimeUrls(
@@ -3504,10 +3532,12 @@ async function waitForRefusalConfirmation(
   onDecisionObserved?: (state: SemanticState) => void,
   diagnostics?: { pass: () => void; reason: (reason: ConsentConfirmationReason) => void },
   controlFrameUrl?: string,
+  boundStorageScope = false,
 ): Promise<RefusalConfirmationState | undefined> {
   const boundScope = exactSelectorScope(page, controlFrameUrl);
   if (boundScope.status !== "found") return undefined;
   const semanticScope = boundScope.scope;
+  const storageScope = boundStorageScope ? semanticScope : page;
   if (confirmation.kind === "canonical_reject_transition") {
     if (baseline.kind !== "canonical_reject_transition" || !baseline.controlVisible || !baseline.surfacePresent) return undefined;
     const scope = exactSelectorScope(page, confirmation.controlFrameUrl);
@@ -3660,7 +3690,7 @@ async function waitForRefusalConfirmation(
 
   if (confirmation.kind === "local_storage_equals") {
     const value = await waitForLocalStorageValue(
-      page,
+      storageScope,
       confirmation.key,
       confirmation.expectedValue,
       baseline.kind === "local_storage_equals" ? baseline.lastSequence : 0,
@@ -3672,7 +3702,7 @@ async function waitForRefusalConfirmation(
       ? undefined
       : {
           stateHash: hashValue(value),
-          observedAtEpochMs: matchingStateWriteTime(await readActionStateWrites(page), confirmation.key, value, actionDispatchedAtEpochMs, "local_storage"),
+          observedAtEpochMs: matchingStateWriteTime(await readActionStateWrites(storageScope), confirmation.key, value, actionDispatchedAtEpochMs, "local_storage"),
           witnessType: "cmp_storage_state",
           key: confirmation.key,
           expectedState: confirmation.expectedValue,
@@ -3740,7 +3770,7 @@ async function waitForRefusalConfirmation(
       confirmation.kind === "tcf_purposes_denied_or_cmp_storage_changed" &&
       baseline.kind === "tcf_purposes_denied_or_cmp_storage_changed"
     ) {
-      const writes = await readStorageWrites(page);
+      const writes = await readStorageWrites(storageScope);
       const freshCanonicalWrite = writes.some((write) =>
         write.sequence > baseline.lastSequence &&
         write.observedAtEpochMs >= actionDispatchedAtEpochMs &&
@@ -3749,7 +3779,7 @@ async function waitForRefusalConfirmation(
       );
       if (freshCanonicalWrite) {
         const currentStorageStateHash = await cmpStorageStateHash(
-          page,
+          storageScope,
           confirmation.storageType,
           confirmation.key,
         );
@@ -3775,7 +3805,7 @@ async function waitForRefusalConfirmation(
       baseline.kind === "tcf_purposes_denied_or_cmp_storage_keys_changed"
     ) {
       const canonicalKeys = confirmation.keys.slice(0, 8);
-      const writes = await readStorageWrites(page);
+      const writes = await readStorageWrites(storageScope);
       const freshlyWrittenKeys = new Set(writes.flatMap((write) =>
         write.sequence > baseline.lastSequence &&
           write.observedAtEpochMs >= actionDispatchedAtEpochMs &&
@@ -3787,7 +3817,7 @@ async function waitForRefusalConfirmation(
       for (const key of canonicalKeys) {
         if (!freshlyWrittenKeys.has(key)) continue;
         const currentStorageStateHash = await cmpStorageStateHash(
-          page,
+          storageScope,
           confirmation.storageType,
           key,
         );
@@ -3820,10 +3850,12 @@ async function captureRefusalConfirmationBaseline(
   confirmation: PostRefusalActionRecipe["confirmation"],
   control: Locator,
   controlFrameUrl?: string,
+  boundStorageScope = false,
 ): Promise<RefusalConfirmationBaseline> {
   const boundScope = exactSelectorScope(page, controlFrameUrl);
   if (boundScope.status !== "found") throw new Error("confirmation_control_frame_unavailable");
   const semanticScope = boundScope.scope;
+  const storageScope = boundStorageScope ? semanticScope : page;
   if (confirmation.kind === "canonical_reject_transition") {
     const resolvedScope = exactSelectorScope(page, confirmation.controlFrameUrl);
     const scope = resolvedScope.status === "found" ? resolvedScope.scope : page;
@@ -3885,7 +3917,7 @@ async function captureRefusalConfirmationBaseline(
   if (confirmation.kind === "local_storage_equals") {
     return {
       kind: "local_storage_equals",
-      lastSequence: (await readStorageWrites(page)).at(-1)?.sequence ?? 0,
+      lastSequence: (await readStorageWrites(storageScope)).at(-1)?.sequence ?? 0,
     };
   }
   if (confirmation.kind === "tcf_purposes_denied_or_cmp_cookie_changed") {
@@ -3906,8 +3938,8 @@ async function captureRefusalConfirmationBaseline(
   if (confirmation.kind === "tcf_purposes_denied_or_cmp_storage_changed") {
     const [snapshot, storageStateHash, writes] = await Promise.all([
       readTcfData(semanticScope).catch(() => undefined),
-      cmpStorageStateHash(page, confirmation.storageType, confirmation.key),
-      readStorageWrites(page),
+      cmpStorageStateHash(storageScope, confirmation.storageType, confirmation.key),
+      readStorageWrites(storageScope),
     ]);
     return {
       kind: "tcf_purposes_denied_or_cmp_storage_changed",
@@ -3922,9 +3954,9 @@ async function captureRefusalConfirmationBaseline(
       readTcfData(semanticScope).catch(() => undefined),
       Promise.all(canonicalKeys.map(async (key) => [
         key,
-        await cmpStorageStateHash(page, confirmation.storageType, key),
+        await cmpStorageStateHash(storageScope, confirmation.storageType, key),
       ] as const)),
-      readStorageWrites(page),
+      readStorageWrites(storageScope),
     ]);
     return {
       kind: "tcf_purposes_denied_or_cmp_storage_keys_changed",
@@ -4070,7 +4102,7 @@ async function canonicalConsentStorageStateHashes(page: Page | Frame) {
 
 
 async function cmpStorageStateHash(
-  page: Page,
+  page: Page | Frame,
   storageType: "local_storage" | "session_storage",
   key: string,
 ): Promise<string | undefined> {
@@ -4299,7 +4331,7 @@ async function pollWithinObservationDeadline<T>(
 }
 
 async function waitForLocalStorageValue(
-  page: Page,
+  page: Page | Frame,
   key: string,
   expectedValue: string,
   baselineLastSequence: number,

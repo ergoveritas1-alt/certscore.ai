@@ -23,6 +23,7 @@ const geometry = {
 function fixture(input: { geometryRead?: Promise<typeof geometry>; cleanup?: Promise<void>; enabled?: boolean } = {}) {
   let reads = 0, clicks = 0, disposals = 0;
   const handle = {
+    click: async () => { clicks++; },
     isVisible: async () => true,
     isEnabled: async () => input.enabled ?? true,
     evaluate: async () => { reads++; return input.geometryRead ?? geometry; },
@@ -126,4 +127,16 @@ test("synchronous cleanup failure releases the scope without inventing failed ge
   assert.equal((await inspectLocatorConsentReadiness(first.control, {deadlineAtMs: Date.now() + 100, scope})).scopeInteractive, true);
   assert.equal((await inspectLocatorConsentReadiness(second.control, {deadlineAtMs: Date.now() + 100, scope})).scopeInteractive, true);
   assert.equal(second.reads(), 1);
+});
+
+test("geometry dispatch cleanup cannot delay its result or repeat input", async () => {
+  const cleanup = deferred<void>(), f = fixture({cleanup: cleanup.promise});
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const result = await Promise.race([dispatchLocatorClickWithVerifiedGeometry(f.control, 100),
+      new Promise<undefined>(resolve => {timer = setTimeout(() => resolve(undefined), 200);})]);
+    assert.ok(result);
+    assert.equal(f.clicks(), 1);
+    assert.equal(f.disposals(), 1);
+  } finally {if (timer) clearTimeout(timer);cleanup.resolve();}
 });

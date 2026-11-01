@@ -1,5 +1,7 @@
 import type { ElementHandle, Frame, Locator, Page } from "playwright";
 
+export type ConsentActionControl = Locator | ElementHandle<HTMLElement | SVGElement>;
+
 export type ConsentControlReadOptions = {
   deadlineAtMs?: number;
   signal?: AbortSignal;
@@ -7,6 +9,10 @@ export type ConsentControlReadOptions = {
   scope?: Page | Frame;
   /** Lets an enclosing proof keep its own slot through the real browser read. */
   trackActualRead?: (pending: Promise<unknown>) => void;
+  /** An already-bound element keeps inspection and dispatch on the same node. */
+  boundElement?: ElementHandle<HTMLElement | SVGElement>;
+  /** Called after final preparation, immediately before the one input command. */
+  onDispatch?: () => void;
 };
 
 // A caller timeout does not cancel the underlying browser command. Keep the
@@ -58,7 +64,7 @@ export type LocatorActionability = {
  * a continuously animated but visible CMP control can be a valid hit target
  * even though Playwright never observes a long enough stability interval.
  */
-export async function inspectLocatorActionability(control: Locator, options?: ConsentControlReadOptions): Promise<LocatorActionability> {
+export async function inspectLocatorActionability(control: ConsentActionControl, options?: ConsentControlReadOptions): Promise<LocatorActionability> {
   return (await inspectLocatorReadiness(control, false, options)).actionability;
 }
 
@@ -71,7 +77,7 @@ export async function inspectLocatorConsentReadiness(control: Locator, options?:
   return inspectLocatorReadiness(control, true, options);
 }
 
-async function inspectLocatorReadiness(control: Locator, inspectScope: boolean, options: ConsentControlReadOptions = {}): Promise<{
+async function inspectLocatorReadiness(control: ConsentActionControl, inspectScope: boolean, options: ConsentControlReadOptions = {}): Promise<{
   actionability: LocatorActionability; scopeInteractive: boolean;
 }> {
   const unavailable = () => ({actionability: unavailableLocatorActionability(), scopeInteractive: false});
@@ -84,8 +90,10 @@ async function inspectLocatorReadiness(control: Locator, inspectScope: boolean, 
   const read = (async () => {
     let handle: ElementHandle<HTMLElement | SVGElement> | null | undefined;
     try {
-      handle = await control.elementHandle({ timeout: options.deadlineAtMs === undefined
-        ? 100 : Math.max(1, Math.min(100, options.deadlineAtMs - Date.now())) }).catch(() => undefined);
+      handle = options.boundElement ?? ("elementHandle" in control
+        ? await control.elementHandle({ timeout: options.deadlineAtMs === undefined
+          ? 100 : Math.max(1, Math.min(100, options.deadlineAtMs - Date.now())) }).catch(() => undefined)
+        : control);
       if (!handle || expired()) return unavailable();
       const [controlVisible, controlEnabled, geometry] = await Promise.all([
         handle.isVisible().catch(() => false),
@@ -150,7 +158,7 @@ async function inspectLocatorReadiness(control: Locator, inspectScope: boolean, 
       // Keep the scope occupied through actual cleanup, but race the whole
       // operation against the original deadline below. Normal successive reads
       // can reuse the scope; stalled disposal cannot extend the caller's wait.
-      try { if (handle) await handle.dispose(); }
+      try { if (handle && !options.boundElement && "elementHandle" in control) await handle.dispose(); }
       catch { /* Cleanup failure cannot make a control actionable. */ }
       finally { pendingReadinessReads.delete(scope); }
     }
@@ -227,15 +235,30 @@ export async function dispatchLocatorClickWithVerifiedGeometry(
   options: ConsentControlReadOptions = {},
 ): Promise<LocatorActionability> {
   const deadlineAtMs = Math.min(Date.now() + Math.max(0, timeoutMs), options.deadlineAtMs ?? Infinity);
-  const actionability = await inspectLocatorActionability(control, {...options, deadlineAtMs});
-  if (!locatorActionabilitySupportsVerifiedDispatch(actionability)) {
-    throw new Error("Verified-geometry consent control is no longer safely actionable.");
-  }
-  assertDispatchAllowed?.();
   const remainingMs = deadlineAtMs - Date.now();
   if (options.signal?.aborted || !Number.isFinite(remainingMs) || remainingMs <= 0) {
     throw new Error("Verified-geometry consent control dispatch budget exhausted.");
   }
-  await control.click({ force: true, timeout: Math.max(1, remainingMs) });
-  return actionability;
+  const element = options.boundElement ?? await control.elementHandle({timeout: Math.max(1, Math.min(100, remainingMs))});
+  if (!element) throw new Error("Verified-geometry consent control is no longer safely actionable.");
+  try {
+    const actionability = await inspectLocatorActionability(control, {...options, deadlineAtMs, boundElement: element});
+    if (!locatorActionabilitySupportsVerifiedDispatch(actionability)) {
+      throw new Error("Verified-geometry consent control is no longer safely actionable.");
+    }
+    assertDispatchAllowed?.();
+    const clickRemainingMs = deadlineAtMs - Date.now();
+    if (options.signal?.aborted || !Number.isFinite(clickRemainingMs) || clickRemainingMs <= 0) {
+      throw new Error("Verified-geometry consent control dispatch budget exhausted.");
+    }
+    options.onDispatch?.();
+    assertDispatchAllowed?.();
+    // A Locator can resolve a replacement node after the proof above. A handle
+    // fails closed on detach instead of transferring consent authorization.
+    await element.click({ force: true, timeout: Math.max(1, clickRemainingMs) });
+    return actionability;
+  } finally {
+    // Cleanup cannot hold the action result or extend its original deadline.
+    if (!options.boundElement) void Promise.resolve().then(() => element.dispose()).catch(() => undefined);
+  }
 }

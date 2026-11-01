@@ -92,6 +92,7 @@ export async function dispatchClosedShadowAccessibleControl(
   page: Page,
   resolution: CmpAccessibleActionResolution,
   assertDispatchAllowed?: () => void,
+  onDispatch?: () => void,
 ) {
   if (resolution.kind !== "closed_shadow_accessible_control") {
     throw new Error("Closed-shadow dispatch requires a closed-shadow action recipe.");
@@ -105,6 +106,8 @@ export async function dispatchClosedShadowAccessibleControl(
       x: target.x,
       y: target.y,
     });
+    assertDispatchAllowed?.();
+    onDispatch?.();
     assertDispatchAllowed?.();
     await session.send("Input.dispatchMouseEvent", {
       type: "mousePressed",

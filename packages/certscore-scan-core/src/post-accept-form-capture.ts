@@ -244,9 +244,13 @@ export function startPostAcceptFormCapture(input: {
       capture.version = "post_accept_form_capture.v3";
     },
     continueThrough(confirmedAtMs: number, windowMs: number) {
-      if (frozen || mainChanged || input.signal?.aborted) return;
+      if (frozen || input.signal?.aborted) return;
       deadline = input.parentScanStartedAtMs + confirmedAtMs + windowMs;
       capture.window = { startedAtMs: confirmedAtMs, endedAtMs: deadline - input.parentScanStartedAtMs, terminalSampleCompleted: false };
+      // Preserve a limited artifact under the confirmed action's clock even
+      // when navigation already stopped sampling. This cannot resume capture
+      // or certify any frame from the prior window/document.
+      if (mainChanged) return;
       // The initial timer may have fired after its deadline without starting a
       // sample. Restart inside the existing confirmed window in that case too.
       // Per-frame pending guards prevent overlap while healthy siblings restart
