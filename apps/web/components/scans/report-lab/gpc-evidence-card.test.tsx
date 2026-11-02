@@ -102,3 +102,36 @@ test("GPC vendor evidence distinguishes identified activity and other retained r
  assert.match(html,/1 identified advertising, audience or synchronization request with GPC enabled/);
  assert.doesNotMatch(html,/deduction|penalt|points/i);
 });
+
+test("paired CMP table is neutral, independently timed, expandable and absent for EU focus",async()=>{
+  const {gpcProductFixture}=await import("../../../lib/scans/test-fixtures/gpc-product");
+  const {buildUnifiedFindingDisplayPackets}=await import("../../../lib/scans/unified-findings");
+  const {buildGpcResponseReportProjection}=await import("./gpc-report-projection");
+  const f=gpcProductFixture({contradiction:true});
+  const findings=buildUnifiedFindingDisplayPackets({runtimeArtifacts:{gpcResponseAssessment:f.assessment,gpcCmpStateComparison:f.cmpStateComparison},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+  const result=buildGpcResponseReportProjection(findings)!;
+  const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={result} california />);
+  assert.match(html,/<caption[^>]*>Site-recorded opt-out settings/);
+  assert.match(html,/Without GPC/);assert.match(html,/With GPC/);assert.match(html,/Sale opt-out/);assert.match(html,/Sharing opt-out/);
+  assert.match(html,/site-recorded GPC receipt/);assert.match(html,/What to check/);assert.match(html,/Snapshot evidence and timing/);
+  assert.match(html,/each visit&#x27;s own document commit/);
+  assert.doesNotMatch(html,/saved-choice persistence was|unchanged|deduction|applied.*points|install GPP|compliance tick/);
+  assert.equal(renderToStaticMarkup(<GpcEvidenceIndexCard projection={result} />),'');
+});
+
+test("GPC product customer projection and JSON evidence never expose producer document bindings",async()=>{
+  const {gpcProductFixture}=await import("../../../lib/scans/test-fixtures/gpc-product");
+  const {buildUnifiedFindingDisplayPackets}=await import("../../../lib/scans/unified-findings");
+  const {buildGpcResponseReportProjection}=await import("./gpc-report-projection");
+  const fixture=gpcProductFixture({contradiction:true});
+  const findings=buildUnifiedFindingDisplayPackets({runtimeArtifacts:{gpcResponseAssessment:fixture.assessment,gpcCmpStateComparison:fixture.cmpStateComparison},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+  const before=JSON.stringify(findings);
+  assert.match(before,/fixture-loader/,'internal proof must still retain its original binding');
+  const projected=buildGpcResponseReportProjection(findings)!;
+  const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={projected} california />);
+  const {JsonEvidence}=await import("../report-finding-row");
+  const legacyJson=renderToStaticMarkup(<JsonEvidence value={{assessment:fixture.assessment}} />);
+  assert.doesNotMatch(legacyJson,/fixture-loader|independent-baseline-loader|prototypeCaptureBinding|documentToken/);
+  for(const exposed of [JSON.stringify(projected),html])assert.doesNotMatch(exposed,/fixture-loader|independent-baseline-loader|prototypeCaptureBinding|documentToken/);
+  assert.equal(JSON.stringify(findings),before,'customer redaction cannot mutate original canonical findings');
+});

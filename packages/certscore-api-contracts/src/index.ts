@@ -21,3 +21,6 @@ export { apiV2ChoicePathExecutionSchema, apiV2ChoiceConfirmationSummarySchema } 
 
 export { apiV2ConsentReceiptAvailabilitySchema, type ApiV2ConsentReceiptAvailability } from "./receipt-availability.js";
 export { apiV2ConsentCategoryDiagnosticsSchema, type ApiV2ConsentCategoryDiagnostics } from "./category-diagnostics.js";
+
+export * from "./gpc-cmp-state-comparison.js";
+export * from "./gpc-guidance.js";

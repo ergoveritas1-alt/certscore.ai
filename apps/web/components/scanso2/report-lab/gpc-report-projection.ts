@@ -13,6 +13,9 @@ export function buildGpcResponseReportProjection(
 
   return {
     assessment,
+    cmpStateComparison: projection.cmpStateComparison,
+    guidance: projection.guidance,
+    activityComparison: projection.activityComparison,
     californiaDeductionPoints: projection.californiaDeductionPoints,
     evidenceRefs: [
       assessment.comparison.baselineArtifact?.uri ?? "",

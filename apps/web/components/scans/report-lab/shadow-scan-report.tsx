@@ -1,3 +1,4 @@
+import { GpcProductEvidence } from "../gpc-product-evidence";
 import { GdprEprivacyCoverageSummary, GdprEprivacyReview } from "../gdpr-eprivacy-review";
 import { GPC_CUSTOMER_RESULTS_ENABLED } from "../../../lib/scans/gpc-customer-policy";
 import { EVIDENCE_SECTION_TITLES } from "../../../lib/scans/detailed-evidence-presentation";
@@ -1479,6 +1480,7 @@ export function GpcEvidenceIndexCard({ projection, california = false }: { proje
         </div> : null}
         {projection.observedFacts.length ? <dl className="space-y-2">{projection.observedFacts.filter(row => row.label !== "Activity with GPC").map(row => <div key={row.label}><dt className="font-semibold text-zinc-800">{row.label}</dt><dd>{row.value}</dd></div>)}</dl> : null}
         <GpcActivityComparison comparison={projection.activityComparison} />
+        <GpcProductEvidence comparison={projection.cmpStateComparison} guidance={projection.guidance} />
         {hasComparison ? <DetailedEvidenceFinding title="Comparison with GPC disabled" summary={gpcCardResponse(projection)}
           evidenceJson={evidenceJson} evidenceRefs={projection.evidenceRefs} correctionSteps={[]}>
           <div className="space-y-3 text-xs leading-5 text-zinc-600">

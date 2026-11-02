@@ -94,7 +94,7 @@ jobs:
           TARBALL="artifacts/certscore-mcp-homebrew/certscore-mcp-v${VERSION}.tar.gz"
           SHA256SUMS="artifacts/certscore-mcp-homebrew/SHA256SUMS"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "$TAG" --notes "CertScore MCP $VERSION Linux-built Homebrew artifact."
+            gh release create "$TAG" --title "$TAG" --notes "CertScore.ai MCP $VERSION Linux-built Homebrew artifact."
           fi
           gh release upload "$TAG" "$TARBALL" "$SHA256SUMS" --clobber
 
@@ -112,7 +112,7 @@ jobs:
           title: "Bump certscore-mcp Homebrew metadata to ${{ steps.release.outputs.version }}"
           commit-message: "Bump certscore-mcp Homebrew metadata to ${{ steps.release.outputs.version }}"
           body: |
-            Linux-built CertScore MCP release artifact is available for `${{ steps.release.outputs.tag }}`.
+            Linux-built CertScore.ai MCP release artifact is available for `${{ steps.release.outputs.tag }}`.
 
             This PR updates the Homebrew cask/formula to the CI-built tarball and sha256.
           labels: release, certscore-mcp

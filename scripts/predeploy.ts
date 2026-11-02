@@ -39,6 +39,12 @@ const REPORT_PRESENTATION_CHECK: Check = {
   command: ["pnpm", "test:report-presentation"],
 };
 
+const MCP_RELEASE_ASSET_CHECK: Check = {
+  key: "mcp-release-asset-contract",
+  label: "metadata-only MCP release asset verification",
+  command: ["node", "--import", "tsx", "--test", "scripts/mcp-release-asset.test.ts"],
+};
+
 const MCP_RELEASE_GUARD_CHECK: Check = {
   key: "mcp-release-drift",
   label: "canonical MCP manifest, runtime tools and public documentation agree",
@@ -159,6 +165,7 @@ const RUNTIME_GRAPH_CAPTURE_CHECK: Check = {
   key: "runtime-graph-capture",
   label: "runtime graph browser, correlation, retention and deadline regressions",
   command: ["pnpm", "exec", "tsx", "--tsconfig", "tsconfig.base.json", "--test", "--test-concurrency=1",
+    "packages/certscore-scan-core/src/bounded-initiator-url.test.ts",
     "packages/certscore-contracts/src/runtime-evidence-graph.test.ts",
     "packages/certscore-scan-core/src/runtime-evidence-graph.test.ts",
     "packages/certscore-scan-core/src/runtime-evidence-graph-browser.test.ts",
@@ -179,6 +186,10 @@ const GPC_OBSERVATION_RELEASE_CHECK: Check = {
   label: "GPC retained delivery, blocked requests, canonical projection and public contracts",
   command: ["pnpm", "exec", "tsx", "--tsconfig", "tsconfig.base.json", "--test", "--test-concurrency=1",
     "packages/certscore-contracts/src/gpc-impact.test.ts",
+    "packages/certscore-scan-core/src/gpc-cmp-state-comparison.test.ts",
+    "packages/certscore-api-contracts/src/gpc-cmp-state-comparison.test.ts",
+    "apps/web/lib/scans/gpc-guidance.test.ts",
+    "apps/web/lib/scans/gpc-public-evidence.test.ts",
     "packages/certscore-scan-core/src/gpc-impact-assessment.test.ts",
     "packages/certscore-scan-core/src/gpc-impact-browser.test.ts",
     "packages/certscore-scan-core/src/gpc-impact-cohort.test.ts",
@@ -198,6 +209,16 @@ const GPC_OBSERVATION_RELEASE_CHECK: Check = {
     "apps/web/lib/scans/gpc-production-observation.test.ts",
     "apps/web/components/scans/report-lab/shadow-scan-report.test.ts",
     "packages/certscore-mcp/src/tools.test.ts"],
+};
+
+const GPC_PRODUCT_PRESENTATION_CHECK: Check = {
+  key: "gpc-product-presentation",
+  label: "GPC optional packets, persisted handoff and evidence expanders",
+  command: ["pnpm", "exec", "tsx", "--tsconfig", "apps/web/tsconfig.test.json", "--test", "--test-concurrency=1",
+    "--test-name-pattern=GPC product|paired CMP",
+    "apps/web/server/scans/report-export.test.ts",
+    "apps/web/components/scans/report-lab/gpc-evidence-card.test.tsx",
+    "apps/v2-dag-lambda/src/handler.test.ts"],
 };
 
 const CONSENT_ACTION_SEMANTICS_CHECK: Check = {
@@ -313,6 +334,7 @@ const ROOT_FULL_CHECKS: Check[] = [
     label: "bootstrap workspace package exports for clean-checkout tests and typechecks",
     command: ["pnpm", "turbo", "run", "build", "--filter=./packages/*"]
   },
+  MCP_RELEASE_ASSET_CHECK,
   MCP_RELEASE_GUARD_CHECK,
   {
     key: "deploy-latency-contracts",
@@ -400,11 +422,14 @@ const TARGETS: Target[] = [
   {
     key: "mcp-http", label: "MCP public contracts and HTTP transport",
     matches: file => file.startsWith("apps/mcp/") || file.startsWith("packages/certscore-mcp/") ||
-      file.startsWith("packages/certscore-api-contracts/") || file.startsWith("packages/certscore-sdk/"),
+      file.startsWith("packages/certscore-api-contracts/") || file.startsWith("packages/certscore-sdk/") ||
+      ["scripts/lib/mcp-release-asset.ts", "scripts/mcp-release-asset.test.ts", "scripts/verify-certscore-mcp-release-guards.ts",
+        ".github/workflows/certscore-mcp-release-guards.yml"].includes(file),
     checks: [
       CANONICAL_PROJECTION_CHECK,
       { key: "mcp-http-typecheck", label: "MCP dependency build and HTTP typecheck", command: ["pnpm", "--filter", "@certscore/mcp-http", "typecheck"] },
       { key: "mcp-http-tests", label: "MCP HTTP integration and telemetry", command: ["pnpm", "--filter", "@certscore/mcp-http", "test"] },
+      MCP_RELEASE_ASSET_CHECK,
       MCP_RELEASE_GUARD_CHECK,
     ],
   },
@@ -420,7 +445,7 @@ const TARGETS: Target[] = [
   {
     key: "gpc-observation", label: "GPC bounded observation",
     matches: file => file.includes("/gpc-") || file === "scripts/run-gpc-observation-local.ts" || file === "scripts/sync-gpc-observation-contract.ts" || file === "apps/v2-dag-lambda/src/handler.ts" || file === "packages/certscore-scan-core/src/index.ts",
-    checks: [GPC_OBSERVATION_RELEASE_CHECK],
+    checks: [GPC_OBSERVATION_RELEASE_CHECK, GPC_PRODUCT_PRESENTATION_CHECK],
   },
   {
     key: "runtime-graph-operations",

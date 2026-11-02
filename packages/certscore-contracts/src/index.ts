@@ -1,3 +1,4 @@
+export * from "./gpc-guidance";
 import {domOptOutSearchSchema} from "./scoped-opt-out-search";
 export * from "./scoped-opt-out-search";
 export * from "./broad-opt-out-assessment";
@@ -47,6 +48,9 @@ import { gpcObservationSessionSchema, type GpcObservationSession, gpcPrototypeSe
 import { gpcImpactCaptureSchema } from "./gpc-impact";
 import { gpcActivityComparisonSchema, type GpcActivityComparison } from "./gpc-activity-comparison";
 export * from "./gpc-activity-comparison";
+import { gpcCmpStateComparisonSchema, type GpcCmpStateComparison } from "./gpc-cmp-state-comparison";
+export * from "./gpc-cmp-state-comparison";
+const canonicalGpcCmpStateComparisonSchema: z.ZodType<GpcCmpStateComparison> = gpcCmpStateComparisonSchema;
 const canonicalGpcActivityComparisonSchema: z.ZodType<GpcActivityComparison> = gpcActivityComparisonSchema;
 import { gpcOptOutObservationSchema } from "./gpc-opt-out-prototype";
 export { terminalLaneEvidenceSchema, runtimeVisitEligibilityDiagnosticSchema, type TerminalLaneEvidence, type RuntimeVisitEligibilityDiagnostic } from "./terminal-lane-evidence";
@@ -3544,6 +3548,7 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   postRefusalLaneOutcome: canonicalPostRefusalLaneSchema.optional(),
   gpcResponseAssessment: canonicalBundleGpcResponseAssessmentSchema.optional(),
   gpcActivityComparison: canonicalGpcActivityComparisonSchema.optional(),
+  gpcCmpStateComparison: canonicalGpcCmpStateComparisonSchema.optional(),
   gpcSignalObservation: canonicalBundleGpcSignalObservationSchema.optional(),
   gpcPrototypeSessionBinding: gpcPrototypeSessionBindingSchema.optional(),
   gpcObservationSession: canonicalGpcSessionSchema.optional(),

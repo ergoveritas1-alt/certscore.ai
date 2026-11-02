@@ -1,3 +1,4 @@
+import { describeGpcCmpStateComparison, describeGpcGuidance } from "@certscore/api-contracts";
 import { pulseResponseSchema, privacyAuditEvidenceSchema, privacyAuditSummarySchema, apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema, scanFormsSummarySchema, scanScoreExplanationSchema, apiAccessibilityAuditSummarySchema, describeGpcActivityComparison } from "@certscore/api-contracts";
 
 import { bundleReviewNavigation } from "./review-navigation.js";
@@ -11,6 +12,11 @@ const { MCP_FREE_AUTHENTICATION_MESSAGE, MCP_FREE_AUTHENTICATION_INTRO_MESSAGE, 
 import { withResponseCapture, transferResponseCapture } from "./response-capture.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { getCertScoreErrorContext, CertScoreError, type FindingList, type JobStatus, type PreConsentCookiesTrackers, type PulseDetail, type PulseFormat, type PulseResult, type ScanResource, type TopFinding } from "@certscore/sdk";
+
+function canonicalGpcProductGuidance(value: unknown, scanId: unknown): string[] {
+  const p = apiV2GpcResponseSchema.safeParse(value);
+  return p.success && typeof scanId === "string" && p.data.observation?.scanId === scanId ? [...(p.data.cmpStateComparison ? [describeGpcCmpStateComparison(p.data.cmpStateComparison)] : []), ...(p.data.guidance ? describeGpcGuidance(p.data.guidance) : [])] : [];
+}
 
 function canonicalGpcActivitySummary(value: unknown): string | null {
   const parsed = apiV2GpcResponseSchema.safeParse(value);
@@ -39,7 +45,7 @@ const LEGAL_REVIEW_DISCLAIMER = "CertScore results are automated public-web obse
 const SCAN_PROVENANCE_GROUNDING = "retrievalMode describes how the current tool response obtained the scan; creationDecision describes whether the original scan request created or reused a scan only when that decision is retained. Never infer an unknown creationDecision from scan_id_lookup. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps. Never infer its original scan region from the current request, the user's location, or a default execution region. If persisted region or timestamps are unavailable, report them as unavailable.";
 const INTERPRETATION_STATEMENT = "The CertScore score covers observable public-web scan signals only. Do not infer technologies that are not listed in the returned evidence or any legal compliance status.";
 const CHOICE_PATH_INTERPRETATION_STATEMENT = "Count execution.status succeeded and succeeded_with_confirmation as successful paths, with confirmation as a separate subset. A click alone is insufficient; registered paths may omit afterAction. Missing legacy execution remains unavailable. Report returned afterAction facts as after-click observations even when registration is unconfirmed. ";
-const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore evidence and persisted CertScore classifications. Lead with returned GPC observation facts and activityComparison request counts with their matched duration, even when the paired comparison is indeterminate. For the paired gpcResponse.status, use GPC response, No observable GPC response, or indeterminate; do not call the result a GPC violation or claim GPC was honored or not honored. Observation completion does not mean GPC was honored. Keep its jurisdiction-neutral comparison separate from any explicitly returned California scoring policy. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do. Omit after-action discussion when no corresponding control or verified action evidence was returned. When postAcceptObservation or postRefusalObservation is confirmed and termination.kind is evidence_satisfied, state the returned observation directly and explain that observation stopped intentionally after qualifying evidence was retained. That stop does not make the observation uncertain; mention unmeasured longer-term persistence only when relevant. Treat post-Accept activity as a score-neutral behavior baseline unless a separately projected finding says otherwise. Do not infer extra cookies, fingerprinting or tracking from an embed, vendor or request alone. Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings.";
+const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore.ai evidence and persisted CertScore.ai classifications. Treat CMP state comparison as independent fresh-visit snapshots, never a GPC-caused transition, saved-choice persistence or legal outcome. Use returned guidance without strengthening it. Lead with returned GPC observation facts and activityComparison request counts with their matched duration, even when the paired comparison is indeterminate. For the paired gpcResponse.status, use GPC response, No observable GPC response, or indeterminate; do not call the result a GPC violation or claim GPC was honored or not honored. Observation completion does not mean GPC was honored. Keep its jurisdiction-neutral comparison separate from any explicitly returned California scoring policy. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do. Omit after-action discussion when no corresponding control or verified action evidence was returned. When postAcceptObservation or postRefusalObservation is confirmed and termination.kind is evidence_satisfied, state the returned observation directly and explain that observation stopped intentionally after qualifying evidence was retained. That stop does not make the observation uncertain; mention unmeasured longer-term persistence only when relevant. Treat post-Accept activity as a score-neutral behavior baseline unless a separately projected finding says otherwise. Do not infer extra cookies, fingerprinting or tracking from an embed, vendor or request alone. Treat returned priority or severity as a CertScore.ai classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore.ai finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings.";
 const COMPACT_SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Use only returned CertScore observations and classifications. Do not infer unobserved technologies, post-consent behavior, legal compliance, or violations. Treat priority and severity as CertScore metadata.";
 const OBSERVATION_ONLY_DISCLAIMER = `${LEGAL_REVIEW_DISCLAIMER} No-go, not-observed, and limited-coverage results are not proof of compliance.`;
 const COMPACT_OBSERVATION_ONLY_DISCLAIMER = "Automated public-web observation, not legal advice or a compliance determination; missing or limited evidence is not proof of compliance.";
@@ -1291,6 +1297,7 @@ function terminalLaneResultTextLines(value: Record<string, any>) {
     ? value.gpcResponse as Record<string, any>
     : null;
   if (gpcResponse) {
+    lines.push(...canonicalGpcProductGuidance(gpcResponse, value.scanId));
     const observationSummary = canonicalGpcObservationSummary(gpcResponse);
     if (observationSummary) lines.push(`GPC observation: ${observationSummary}`);
     const activitySummary = canonicalGpcActivitySummary(gpcResponse);
@@ -1607,6 +1614,7 @@ export function scanBundleText(bundle: Record<string, any>, options: { toolProfi
     ? bundle.gpcResponse as Record<string, any>
     : null;
   if (gpcResponse) {
+    for (const text of canonicalGpcProductGuidance(gpcResponse, bundle.scanId)) append(text);
     const observationSummary = canonicalGpcObservationSummary(gpcResponse);
     if (observationSummary) append(`GPC observation: ${observationSummary}`);
     const activitySummary = canonicalGpcActivitySummary(gpcResponse);

@@ -1,3 +1,4 @@
+import { buildGpcCmpStateComparison } from "@certscore/scan-core/gpc-cmp-state-comparison";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
 import { assertPrivacyCaptureProfile, PRESENCE_ONLY_CAPTURE_PROFILE } from "@certscore/contracts";
 import { describeCaptureFailure } from "@certscore/contracts";
@@ -2960,6 +2961,15 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       runtimeEvidenceGraphDiagnostics: [...(bundle.runtimeEvidenceGraphDiagnostics ?? []), ...gpcGraphs.diagnostics],
       gpcActivityComparison: buildGpcActivityComparison({
         scanId: payload.scanId,
+        baseline: verifiedGpcWorkerBytes.has(runtimeEvidenceBundle) ? {
+          bytes: verifiedGpcWorkerBytes.get(runtimeEvidenceBundle)!, pointer: verifiedWorkerArtifact(baselineResult, "runtime_evidence"),
+        } : undefined,
+        gpc: verifiedGpc && gpcResult && verifiedGpcWorkerBytes.has(verifiedGpc) ? {
+          bytes: verifiedGpcWorkerBytes.get(verifiedGpc)!, pointer: verifiedWorkerArtifact(gpcResult, "gpc_observation"),
+        } : undefined,
+      }),
+      gpcCmpStateComparison: buildGpcCmpStateComparison({
+        scanId: payload.scanId, targetUrl: payload.targetUrl,
         baseline: verifiedGpcWorkerBytes.has(runtimeEvidenceBundle) ? {
           bytes: verifiedGpcWorkerBytes.get(runtimeEvidenceBundle)!, pointer: verifiedWorkerArtifact(baselineResult, "runtime_evidence"),
         } : undefined,

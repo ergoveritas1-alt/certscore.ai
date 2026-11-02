@@ -1,5 +1,10 @@
 # certscore-mcp
 
+## 0.2.32
+
+- Present canonical GPC investigation/retest guidance and independently verified fresh-visit CMP opt-out snapshots.
+- Preserve matched request counts, canonical finding interpretation and bounded response budgets; do not describe snapshots as a GPC-caused transition or legal result.
+
 ## 0.2.31
 
 - Add bounded contextual report links over returned finding identities, with matching GDPR focus and preserved access parameters. Focused evidence reads return available deep links without extra origin work.

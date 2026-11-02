@@ -1,3 +1,4 @@
+export { buildGpcCmpStateComparison } from "./gpc-cmp-state-comparison.js";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage} from "@certscore/contracts";
 import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
 import { collectionRecipientPriorities } from "./collection-recipient-retention.js";

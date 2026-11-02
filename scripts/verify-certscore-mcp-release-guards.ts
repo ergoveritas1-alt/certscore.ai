@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { assertPublishedMcpReleaseAsset } from "./lib/mcp-release-asset.js";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -67,63 +67,6 @@ function parseCertScoreMcpCask() {
   assert.ok(url, `${caskPath} should declare url`);
   assert.ok(sha256, `${caskPath} should declare sha256`);
   return { sha256, url, version };
-}
-
-function tokenForReleaseLookup() {
-  return process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
-}
-
-function ghReleaseAssetExists(version: string, assetName: string) {
-  const token = tokenForReleaseLookup();
-  if (!token) {
-    return null;
-  }
-  const result = spawnSync("gh", [
-    "release",
-    "view",
-    `certscore-mcp-v${version}`,
-    "--repo",
-    "ergoveritas1-alt/certscore.ai",
-    "--json",
-    "assets",
-  ], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      GH_TOKEN: token,
-    },
-  });
-  if (result.status !== 0) {
-    return false;
-  }
-  const payload = JSON.parse(result.stdout) as { assets?: Array<{ name?: string }> };
-  return (payload.assets ?? []).some((asset) => asset.name === assetName);
-}
-
-async function httpReleaseAssetExists(url: string) {
-  const response = await fetch(url, {
-    method: "GET",
-    headers: { "Range": "bytes=0-0" },
-    redirect: "follow"
-  });
-  await response.body?.cancel();
-  return response.ok || response.status === 206;
-}
-
-async function assertReleaseAssetExists(cask: { url: string; version: string }) {
-  const assetName = `certscore-mcp-v${cask.version}.tar.gz`;
-  const ghResult = ghReleaseAssetExists(cask.version, assetName);
-  if (ghResult === true) {
-    return;
-  }
-  if (ghResult === false) {
-    assert.fail(`mcp.releaseAsset drift: GitHub release certscore-mcp-v${cask.version} is missing asset ${assetName}`);
-  }
-  assert.ok(
-    await httpReleaseAssetExists(cask.url),
-    `mcp.releaseAsset drift: ${cask.url} must exist before Casks/certscore-mcp.rb or the AI discovery manifest advertises ${cask.version}`
-  );
 }
 
 async function listRuntimeTools() {
@@ -212,7 +155,7 @@ async function main() {
     new RegExp(`/certscore-mcp-v${cask.version.replaceAll(".", "\\.")}/certscore-mcp-v${cask.version.replaceAll(".", "\\.")}\\.tar\\.gz$`),
     `mcp.caskUrl drift: ${caskPath} URL must point at the declared cask version`
   );
-  await assertReleaseAssetExists(cask);
+  await assertPublishedMcpReleaseAsset(cask, { token: process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN });
 
   for (const [path, marker] of [
     ["apps/web/app/developers/developer-pages.tsx", "export const mcpTools ="],

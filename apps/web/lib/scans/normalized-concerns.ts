@@ -1,3 +1,4 @@
+import { readBoundGpcCmpStateComparison } from "@certscore/contracts";
 import { CALIFORNIA_AGENT_REGISTRATION_ID } from "@certscore/contracts";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
 import { GDPR_NARROW_RULES, gdprNarrowFindingId, GDPR_NARROW_SIGNAL, isActiveGdprNarrowKind } from "@certscore/contracts";
@@ -3894,6 +3895,7 @@ function buildGpcResponseConcerns(
     rawEvidence: {
       gpcResponseAssessment: assessment,
       gpcActivityComparison: readGpcActivityComparison(runtimeArtifacts?.gpcActivityComparison, assessment),
+      gpcCmpStateComparison: readBoundGpcCmpStateComparison(runtimeArtifacts?.gpcCmpStateComparison, assessment),
       gpcResponseAssessmentContractVersion: assessment.contractVersion,
       gpcResponseStatus: assessment.status,
       gpcComparisonComparable: assessment.comparison.comparable,

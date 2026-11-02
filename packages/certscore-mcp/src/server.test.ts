@@ -1437,11 +1437,11 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
       assert.match(text, /CertScore score=72/);
       assert.match(text, /automated public-web observations for human and agentic review/i);
       assert.match(text, /not legal advice, certification, or a compliance determination/i);
-      assert.match(text, /Report only observed CertScore evidence and persisted CertScore classifications/i);
+      assert.match(text, /Report only observed CertScore\.ai evidence and persisted CertScore\.ai classifications/i);
       assert.match(text, /Omit after-action discussion when no corresponding control or verified action evidence was returned/i);
       assert.match(text, /Do not infer extra cookies, fingerprinting or tracking from an embed, vendor or request alone/i);
       assert.match(text, /not regulatory criticality or legal exposure/i);
-      assert.match(text, /observed privacy risk signal.*CertScore finding/i);
+      assert.match(text, /observed privacy risk signal.*CertScore\.ai finding/i);
       assert.match(text, /legal violation from scores or findings/i);
       assert.doesNotMatch(text, /compliance score|compliant baseline|criticality=/i);
       assert.ok(text.length <= 8_000);

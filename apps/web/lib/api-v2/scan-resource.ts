@@ -981,6 +981,8 @@ export function deriveApiV2GpcResponse(scanRecord: ScanDetailResponse): ApiV2Sca
     contractVersion: assessment.contractVersion,
     ...(assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? { observation: assessment.observation } : {}),
     ...(projection.activityComparison?.scanId === scanRecord.scan.id ? { activityComparison: projection.activityComparison } : {}),
+    ...(projection.cmpStateComparison?.scanId === scanRecord.scan.id ? { cmpStateComparison: projection.cmpStateComparison } : {}),
+    ...(projection.guidance ? {guidance: projection.guidance} : {}),
     status: assessment.status,
     findingTitle: assessment.findingTitle,
     summary: projection.summary,

@@ -95,6 +95,8 @@ export function buildGpcResponseReportProjection(
 
   return {
     assessment,
+    cmpStateComparison: projection.cmpStateComparison,
+    guidance: projection.guidance,
     vendorFindings: projection.vendorFindings,
     californiaDeductionPoints: projection.californiaDeductionPoints,
     comparisonHeadline: projection.comparisonHeadline,

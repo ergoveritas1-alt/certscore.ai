@@ -1,3 +1,4 @@
+import { readBoundGpcCmpStateComparison } from "@certscore/contracts";
 import { CALIFORNIA_AGENT_REGISTRATION_ID, californiaAgentRegistrationProjectionSchema, type CaliforniaAgentRegistrationProjection } from "@certscore/contracts";
 import {supportsCombinedOptOutRisk} from "./california-combined-opt-out-policy";
 import {BROAD_OPT_OUT_FINDING_ID,broadOptOutAssessmentSchema,type BroadOptOutAssessment} from "@certscore/contracts";
@@ -185,6 +186,7 @@ export type UnifiedFindingDetails =
       kind: "gpc_response" | "gpp_propagation_inconsistency";
       vendorFindings?: ReturnType<typeof gpcVendorFindings>;
       activityComparison?: import("@certscore/contracts").GpcActivityComparison;
+      cmpStateComparison?: import("@certscore/contracts").GpcCmpStateComparison;
       assessment: GpcResponseAssessment;
     }
   | {
@@ -1980,6 +1982,7 @@ function buildUnifiedFindingDetails(input: {
       assessment: parsedAssessment.data,
       ...(input.findingId === "gpc_response" ? {vendorFindings: gpcVendorFindings(parsedAssessment.data)} : {}),
       activityComparison: readGpcActivityComparison(input.fallbackEvidence?.gpcActivityComparison, parsedAssessment.data),
+      cmpStateComparison: readBoundGpcCmpStateComparison(input.fallbackEvidence?.gpcCmpStateComparison, parsedAssessment.data),
     } satisfies UnifiedFindingDetails;
   }
 

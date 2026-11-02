@@ -1,3 +1,4 @@
+import { redactGpcProducerBindings } from "../../lib/scans/gpc-public-evidence";
 import { buildReportAppendixEvidence } from "./report-export-evidence";
 import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
 import { projectScanReportNoGo, resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
@@ -365,7 +366,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
       `California starting-page score: ${californiaScore.score}/100.`,
   ];
 
-  return {
+  return redactGpcProducerBindings({
     ...(noGo ?? {}),
     ...(fullSite ? { fullSite } : {}),
     artifactType: "certscore_canonical_report_export",
@@ -444,7 +445,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
       gdprTransparency: buildGdprTransparencyAppendix(canonical.checklistPresentation),
     },
     notice: "CertScore.ai reports observed risk signals and retained evidence. It is not a legal certification, a determination of compliance, or legal advice.",
-  };
+  });
 }
 
 export type CanonicalReportExport = NonNullable<ReturnType<typeof buildCanonicalReportExport>>;

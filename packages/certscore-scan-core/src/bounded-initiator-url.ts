@@ -59,8 +59,9 @@ export function withBoundedCookieInitiatorMetadata<
   T extends { initiatorChain?: string[]; setterScriptUrl?: string },
 >(event: T): T {
   const initiatorChain = boundedInitiatorChain(event.initiatorChain ?? []);
-  const setterScriptUrl = boundedInitiatorUrl(event.setterScriptUrl) ??
-    initiatorChain.find((value) => /^https?:\/\//i.test(value));
+  // Request initiator context does not prove who wrote a cookie. Preserve an
+  // intentionally absent setter; this boundary only bounds supplied metadata.
+  const setterScriptUrl = boundedInitiatorUrl(event.setterScriptUrl);
   return {
     ...event,
     initiatorChain,

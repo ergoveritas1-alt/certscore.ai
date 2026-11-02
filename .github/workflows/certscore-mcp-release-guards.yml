@@ -19,6 +19,8 @@ on:
       - "scripts/smoke-mcp.sh"
       - "scripts/verify-llms-discovery-docs.ts"
       - "scripts/verify-certscore-mcp-release-guards.ts"
+      - "scripts/lib/mcp-release-asset.ts"
+      - "scripts/mcp-release-asset.test.ts"
   push:
     branches:
       - main
@@ -41,6 +43,8 @@ on:
       - "scripts/smoke-mcp.sh"
       - "scripts/verify-llms-discovery-docs.ts"
       - "scripts/verify-certscore-mcp-release-guards.ts"
+      - "scripts/lib/mcp-release-asset.ts"
+      - "scripts/mcp-release-asset.test.ts"
 
 jobs:
   release-guards:
@@ -72,7 +76,12 @@ jobs:
           pnpm --filter @certscore/mcp test
           pnpm --filter @certscore/mcp build
 
+      - name: Test metadata-only release verification
+        run: node --import tsx --test scripts/mcp-release-asset.test.ts
+
       - name: Verify release drift guards
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: node --import tsx scripts/verify-certscore-mcp-release-guards.ts
 
       - name: Verify LLM discovery docs

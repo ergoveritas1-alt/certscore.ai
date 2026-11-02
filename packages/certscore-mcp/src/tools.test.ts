@@ -1254,7 +1254,7 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
   } as any);
   const text = scanBundleText(bundle);
   assert.match(text.split("\n")[0] ?? "", /^CertScore scan bundle/);
-  assert.match(text, /Report only observed CertScore evidence and persisted CertScore classifications/);
+  assert.match(text, /Report only observed CertScore\.ai evidence and persisted CertScore\.ai classifications/);
   assert.match(text, /not regulatory criticality or legal exposure/i);
   assert.match(text, /Without corresponding captured post-action evidence, do not infer/i);
   assert.match(text, /Do not infer extra cookies, fingerprinting or tracking from an embed, vendor or request alone/i);
@@ -1269,12 +1269,12 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
   assert.match(text, /public_report_projection\/pre_consent\/third_party/);
   assert.match(text, /automated public-web observations for human and agentic review/i);
   assert.match(text, /not legal advice, certification, or a compliance determination/i);
-  assert.match(text, /Report only observed CertScore evidence and persisted CertScore classifications/i);
+  assert.match(text, /Report only observed CertScore\.ai evidence and persisted CertScore\.ai classifications/i);
   assert.match(text, /Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do/i);
   assert.match(text, /Omit after-action discussion when no corresponding control or verified action evidence was returned/i);
   assert.match(text, /Do not infer extra cookies, fingerprinting or tracking from an embed, vendor or request alone/i);
-  assert.match(text, /Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure/i);
-  assert.match(text, /prefer ‘observed privacy risk signal’ or ‘CertScore finding’/i);
+  assert.match(text, /Treat returned priority or severity as a CertScore\.ai classification, not regulatory criticality or legal exposure/i);
+  assert.match(text, /prefer ‘observed privacy risk signal’ or ‘CertScore\.ai finding’/i);
   assert.match(text, /Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings/i);
   assert.match(text, /CertScore priority=high/i);
   assert.doesNotMatch(text, /compliance score|compliant baseline|criticality=/i);
@@ -2343,4 +2343,24 @@ test("terminal publication failure removes stale preview, scores and polling ins
 
 test("rate-limited MCP responses preserve the upstream retry delay", () => {
   assert.equal(withMcpAgentGuidance({ status: "rate_limited", retryAfterSeconds: 60 }).retryAfterSeconds, 60);
+});
+
+test("CMP snapshots and canonical guidance retain independent-visit wording in MCP text",async()=>{
+  const {gpcProductFixture}=await import("../../../apps/web/lib/scans/test-fixtures/gpc-product");
+  const {buildUnifiedFindingDisplayPackets}=await import("../../../apps/web/lib/scans/unified-findings");
+  const {buildCanonicalGpcResponseProjection}=await import("../../../apps/web/lib/scans/gpc-response-projection");
+  const f=gpcProductFixture({contradiction:true}),a=f.assessment;
+  const packets=buildUnifiedFindingDisplayPackets({runtimeArtifacts:{gpcResponseAssessment:a,gpcCmpStateComparison:f.cmpStateComparison},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+  const projection=buildCanonicalGpcResponseProjection(packets)!;
+  const {evidenceRefs,...comparison}=a.comparison;
+  const publicResponse={contractVersion:a.contractVersion,status:a.status,findingTitle:a.findingTitle,summary:projection.summary,
+    observation:a.observation,cmpStateComparison:projection.cmpStateComparison,guidance:projection.guidance,
+    scoreEffect:'none',legalInterpretation:'not_assessed',comparison:{...comparison,delivery:{status:comparison.delivery.status},
+      baselineArtifact:{lane:'runtime_evidence',sha256:comparison.baselineArtifact!.sha256,sizeBytes:comparison.baselineArtifact!.sizeBytes},
+      gpcArtifact:{lane:'gpc_observation',sha256:comparison.gpcArtifact!.sha256,sizeBytes:comparison.gpcArtifact!.sizeBytes}},
+    californiaPolicy:{applied:false,deductionPoints:0},evidenceUrl:'https://certscore.ai/scan/gpc-fixture#gpc-evidence'};
+  const text=scanBundleText({scanId:a.observation.scanId,status:'completed',gpcResponse:publicResponse});
+  assert.match(text,/Site-recorded opt-out settings/);assert.match(text,/Independent current-state snapshots from fresh visits/);
+  assert.match(text,/A difference does not establish that GPC caused it/);assert.match(text,/site-recorded GPC receipt/);
+  assert.match(text,/What to check/);assert.doesNotMatch(text,/fixture-loader|Opt-out changed because|gpc honored/i);
 });

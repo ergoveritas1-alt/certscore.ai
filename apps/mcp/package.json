@@ -1,8 +1,8 @@
 {
   "name": "@certscore/mcp-http",
-  "version": "0.2.31",
+  "version": "0.2.32",
   "private": true,
-  "description": "Remote Streamable HTTP MCP service for CertScore.",
+  "description": "Remote Streamable HTTP MCP service for CertScore.ai.",
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {

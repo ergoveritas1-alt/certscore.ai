@@ -1,3 +1,4 @@
+import { describeGpcCmpStateComparison, describeGpcGuidance, readBoundGpcCmpStateComparison } from "@certscore/contracts";
 import { reportExecutiveSummary } from "./report-executive-summary";
 import { REPORT_EXPORT_DISCLAIMER } from "./report-export-footer";
 import { reportRequestInventory } from "./report-request-inventory";
@@ -344,6 +345,9 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
     const facts = describeGpcObservedFacts(gpc.observation);
     for (const fact of facts) lines.push(...wrappedLines(`${fact.label}: ${fact.value}`));
     if (gpc.activityComparison) lines.push(...wrappedLines(describeGpcActivityComparison(gpc.activityComparison)));
+    const cmpStateComparison = readBoundGpcCmpStateComparison(gpc.cmpStateComparison, gpc, report.scan.id);
+    if (cmpStateComparison) lines.push(...wrappedLines(describeGpcCmpStateComparison(cmpStateComparison), {gapBefore: 6, gapAfter: 5}));
+    if (gpc.guidance) for (const text of describeGpcGuidance(gpc.guidance)) lines.push(...wrappedLines(text, {gapBefore: 5, gapAfter: 5}));
     if (gpc.comparison.comparable && gpc.status !== "indeterminate") {
       lines.push(...wrappedLines(hasNoQualifiedGpcActivity(gpc)
         ? "GPC comparison: No qualifying tracking activity observed in either completed matched visit."

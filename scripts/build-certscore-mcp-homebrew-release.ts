@@ -118,9 +118,9 @@ writeFileSync(
 writeFileSync(
   join(releaseDir, "README.md"),
   [
-    "# CertScore MCP",
+    "# CertScore.ai MCP",
     "",
-    "Homebrew-installable CertScore MCP stdio server.",
+    "Homebrew-installable CertScore.ai MCP stdio server.",
     "",
     "Configuration:",
     "",
@@ -152,7 +152,7 @@ writeFileSync(
     "",
     "The doctor command checks binary startup, runtime compatibility, API v2 health, and API key presence without printing secrets.",
     "",
-    "CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination.",
+    "CertScore.ai outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination.",
     ""
   ].join("\n")
 );
@@ -196,7 +196,7 @@ writeFileSync(
   formulaPath,
   [
     "class CertscoreMcp < Formula",
-    '  desc "CertScore MCP stdio server for public website risk-signal workflows"',
+    '  desc "CertScore.ai MCP stdio server for public website risk-signal workflows"',
     '  homepage "https://certscore.ai/developers/mcp"',
     `  url "${releaseUrl}"`,
     `  sha256 "${checksum}"`,
@@ -229,8 +229,8 @@ writeFileSync(
     `  sha256 "${checksum}"`,
     "",
     `  url "${releaseUrl}"`,
-    '  name "CertScore MCP"',
-    '  desc "CertScore MCP stdio server for public website risk-signal workflows"',
+    '  name "CertScore.ai MCP"',
+    '  desc "CertScore.ai MCP stdio server for public website risk-signal workflows"',
     '  homepage "https://certscore.ai/developers/mcp"',
     "",
     '  depends_on formula: "node@22"',

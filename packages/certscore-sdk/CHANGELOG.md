@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## 0.2.23
+
+- Type and export optional, independently versioned GPC guidance and paired CMP sale/sharing state snapshots.
+- Preserve historical omission, response statuses and client behavior; snapshots do not establish causation, persistence or a legal result.
+
 ## 0.2.22
 
 - Align the standalone GPC observation declarations with the deployed canonical API contract; client requests and runtime behavior are unchanged.

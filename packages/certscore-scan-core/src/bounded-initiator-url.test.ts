@@ -74,3 +74,22 @@ test("schema-boundary defense repairs optional oversized cookie attribution", ()
   assert.ok(repaired.initiatorChain.every((value) => value.length <= MAX_INITIATOR_URL_CHARS));
   assert.doesNotMatch(JSON.stringify(repaired), /secret|value/);
 });
+
+test("cookie metadata normalization preserves absent setter proof despite request initiator context", () => {
+  for (const operation of ["set_cookie_header", "browser_snapshot"]) {
+    const event = {
+      operation,
+      initiatorChain: ["https://cdn.example/request.js?token=private-fixture"],
+      setterScriptUrl: undefined,
+      setByThirdPartyScript: false,
+      sourceRequestId: "retained-request",
+    };
+    const original = structuredClone(event);
+    const bounded = withBoundedCookieInitiatorMetadata(event);
+    assert.equal(bounded.setterScriptUrl, undefined, operation);
+    assert.equal(bounded.setByThirdPartyScript, false);
+    assert.equal(bounded.sourceRequestId, "retained-request");
+    assert.deepEqual(bounded.initiatorChain, ["https://cdn.example/request.js"]);
+    assert.deepEqual(event, original, "normalization must not mutate the original evidence");
+  }
+});

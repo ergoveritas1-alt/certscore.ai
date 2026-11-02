@@ -2301,7 +2301,7 @@ async function runCoordinatorFixture(input: {
       policyVersion: "bounded_cmp_preferences.v1", enabled: true,
       scanId: input.scanId, exactTargetUrl: "https://example.com/",
     } } : {}),
-    ...(input.gpcPair ? { gpcObservation: { contractVersion: "certscore.gpc-observation-dispatch.v1", enabled: true, pairWithLane: "runtime_evidence", protocol: "passive_baseline_with_sec_gpc" } } : {}),
+    ...(input.gpcPair ? { targetUrl: input.gpcPair.baseline.url, hostname: new URL(input.gpcPair.baseline.url).hostname, gpcObservation: { contractVersion: "certscore.gpc-observation-dispatch.v1", enabled: true, pairWithLane: "runtime_evidence", protocol: "passive_baseline_with_sec_gpc" } } : {}),
     ...(actionLane === "accept"
       ? { postAcceptObservation: coordinatorPostAcceptConfig(input.dispatchDelayMs) }
       : { postRefusalObservation: coordinatorPostRefusalConfig(input.dispatchDelayMs) }),
@@ -5704,5 +5704,31 @@ test("presence-only coordinator invokes at most the six core workers with both o
   } finally {
     keys.forEach((key,index)=>{if(previous[index]===undefined)delete process.env[key];else process.env[key]=previous[index];});
     if(artifactRoot)await rm(artifactRoot,{recursive:true,force:true});
+  }
+});
+
+test("GPC product coordinator derives one packet from existing original-byte reads without extra workers or publications",async()=>{
+  const {cmpStatePairFixture}=await import("../../../packages/certscore-scan-core/src/test-fixtures/gpc-cmp-state-pair.cases");
+  const scanId="gpc-product-coordinator", pair=cmpStatePairFixture({scanId}), reads:string[]=[];
+  pair.baseline.domSnapshots=[{...runtimeSnapshotFixture(),url:pair.baseline.url}];
+  const priorBucket=process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET="test-bucket";
+  let root:string|undefined;
+  try {
+    const out=await runCoordinatorFixture({scanId,action:"none",dispatchDelayMs:1000,
+      consentBundle:coordinatorConsentBundle(scanId,{inspectionCompleted:true,acceptControlObserved:false}),gpcPair:pair,onRead:key=>reads.push(key)});
+    root=out.artifactRoot;
+    const p=out.bundle.gpcCmpStateComparison;
+    assert.ok(p);assert.equal(p.scanId,scanId);
+    assert.equal(p.sourceHashes.baseline,createHash("sha256").update(JSON.stringify(pair.baseline)).digest("hex"));
+    assert.equal(p.sourceHashes.gpc,out.bundle.gpcResponseAssessment.comparison.gpcArtifact.sha256);
+    assert.equal(p.baseline.sale,"not_opted_out");assert.equal(p.gpc.sale,"opted_out");
+    assert.deepEqual(out.workerCalls.sort(),["consent_proof","gpc_observation","policy_evidence","runtime_evidence"]);
+    assert.equal(out.actionCalls.length,0);
+    assert.equal(reads.length,4);assert.equal(new Set(reads).size,4,"one existing read per original passive artifact");
+    assert.equal(out.uploads.filter(key=>key.endsWith('/CanonicalEvidenceBundle.json')&&!key.includes('/workers/')).length,1,"one canonical result upload");
+  } finally {
+    if(priorBucket===undefined)delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET=priorBucket;
+    if(root)await rm(root,{recursive:true,force:true});
   }
 });

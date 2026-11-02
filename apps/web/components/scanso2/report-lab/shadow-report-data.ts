@@ -131,6 +131,9 @@ export type ChoicePathComparison = {
 };
 
 export type GpcResponseReportProjection = {
+  activityComparison?: import("@certscore/contracts").GpcActivityComparison;
+  cmpStateComparison?: import("@certscore/contracts").GpcCmpStateComparison;
+  guidance?: import("@certscore/contracts").GpcGuidance;
   assessment: GpcResponseAssessment;
   californiaDeductionPoints: 0 | 15 | 25 | 32 | 37 | 40 | 43 | 45 | 47;
   evidenceRefs: string[];

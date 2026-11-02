@@ -1,3 +1,4 @@
+import { isPrivateGpcProducerField } from "./gpc-public-evidence";
 import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
 import { AFTER_REJECT_SCORING_POLICY, readAfterRejectScoringAssessment } from "./after-reject-scoring-contract";
 
@@ -24,6 +25,6 @@ export function factualCustomerEvidence(value: unknown): unknown {
   if (!object) return value;
   const rejectAssessment=typeof object.policyVersion==="string" && object.policyVersion.startsWith("after_reject_");
   return Object.fromEntries(Object.entries(object).filter(([key]) =>
-    !(rejectAssessment && key==="tier") && !["deductionPoints", "policyDeductionPoints", "scoreEffect", "scoreEffects", "totalPolicyDeductionPoints"].includes(key))
+    !isPrivateGpcProducerField(object,key) && !(rejectAssessment && key==="tier") && !["deductionPoints", "policyDeductionPoints", "scoreEffect", "scoreEffects", "totalPolicyDeductionPoints"].includes(key))
     .map(([key, item]) => [key, factualCustomerEvidence(item)]));
 }

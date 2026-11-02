@@ -1,3 +1,4 @@
+import { readBoundGpcCmpStateComparison } from "@certscore/contracts";
 import {reviewedOptOutPolicyOwner,reviewedOptOutPolicyRedirect} from "@certscore/contracts";
 import {assessGpcPotentialRisk, type CaliforniaPotentialRiskAssessment} from "../../lib/scans/california-potential-risk-policy";
 import {withPropertySaleSharingSource} from "../../lib/scans/property-sale-sharing-source";
@@ -6783,21 +6784,25 @@ export function buildMaterializedLocalV2Detail(
 }
 
 export function buildGpcResponseRuntimeProjection(
-  bundle: Pick<CanonicalEvidenceBundle, "gpcResponseAssessment" | "gpcActivityComparison"> & Partial<Pick<CanonicalEvidenceBundle, "scanId">>,
+  bundle: Pick<CanonicalEvidenceBundle, "gpcResponseAssessment" | "gpcActivityComparison" | "gpcCmpStateComparison"> & Partial<Pick<CanonicalEvidenceBundle, "scanId">>,
 ): {
   gpcResponseAssessment?: CanonicalEvidenceBundle["gpcResponseAssessment"];
   gpc_response_assessment?: CanonicalEvidenceBundle["gpcResponseAssessment"];
   californiaGpcPotentialRiskAssessment?: CaliforniaPotentialRiskAssessment | null;
   gpcActivityComparison?: CanonicalEvidenceBundle["gpcActivityComparison"];
+  gpcCmpStateComparison?: CanonicalEvidenceBundle["gpcCmpStateComparison"];
 } {
   const activityComparison = bundle.gpcResponseAssessment && bundle.scanId
     ? readGpcActivityComparison(bundle.gpcActivityComparison, bundle.gpcResponseAssessment, bundle.scanId) : undefined;
+  const cmpStateComparison = bundle.gpcResponseAssessment && bundle.scanId
+    ? readBoundGpcCmpStateComparison(bundle.gpcCmpStateComparison, bundle.gpcResponseAssessment, bundle.scanId) : undefined;
   const potentialRisk = assessGpcPotentialRisk(bundle.gpcResponseAssessment);
   return bundle.gpcResponseAssessment
     ? {
         gpcResponseAssessment: bundle.gpcResponseAssessment,
         gpc_response_assessment: bundle.gpcResponseAssessment,
         ...(potentialRisk ? {californiaGpcPotentialRiskAssessment:potentialRisk} : {}),
+        ...(cmpStateComparison ? {gpcCmpStateComparison: cmpStateComparison} : {}),
         ...(activityComparison ? { gpcActivityComparison: activityComparison } : {}),
       }
     : {};
@@ -6807,7 +6812,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v42";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v43";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

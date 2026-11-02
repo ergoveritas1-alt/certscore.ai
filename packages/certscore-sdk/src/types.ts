@@ -252,6 +252,8 @@ export interface GpcComparisonDelta {
 }
 
 export interface GpcResponse {
+  cmpStateComparison?: import("./gpc-cmp-state-comparison.js").GpcCmpStateComparison;
+  guidance?: import("./gpc-guidance.js").GpcGuidance;
   observation?: import("./gpc-bounded-observation.js").GpcBoundedObservation;
   activityComparison?: import("./gpc-activity-comparison.js").GpcActivityComparison;
   contractVersion?: "certscore.gpc-response-assessment.v1" | "certscore.gpc-response-assessment.v2" | "certscore.gpc-response-assessment.v3";

@@ -1,3 +1,4 @@
+import { describeGpcCmpStateComparison, describeGpcGuidance } from "@certscore/api-contracts";
 import { PULSE_PURPOSE_STATEMENT, PULSE_STANDARD_DISCLAIMER } from "./constants";
 import { apiV2PostureScoresSchema, apiV2GpcResponseSchema, scanFormsSummarySchema, scanScoreExplanationSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
 import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
@@ -136,6 +137,8 @@ function compactConsentLaneResults(pulse: PulseMarkdownInput) {
   if (gpc && typeof gpc === "object") {
     const activity = apiV2GpcResponseSchema.safeParse(gpc);
     if (activity.success && activity.data.activityComparison) results.push(`- ${describeGpcActivityComparison(activity.data.activityComparison)}`);
+    if (activity.success && activity.data.cmpStateComparison && activity.data.cmpStateComparison.scanId === pulse.scanId) results.push(`- ${describeGpcCmpStateComparison(activity.data.cmpStateComparison)}`);
+    if (activity.success && activity.data.observation?.scanId === pulse.scanId && activity.data.guidance) results.push(...describeGpcGuidance(activity.data.guidance).map(text => `- ${line(text)}`));
     const proofCount = gpc.comparison?.enabledProof?.requestsWithSecGpc;
     const summary = `${line(gpc.findingTitle)}; status: ${formatLabel(gpc.status)}` +
       (typeof proofCount === "number" ? `; Sec-GPC: 1 proof retained on ${proofCount} request(s)` : "");

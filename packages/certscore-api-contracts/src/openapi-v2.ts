@@ -1,3 +1,5 @@
+import { gpcCmpStateComparisonOpenApi } from "./gpc-cmp-state-comparison-openapi.js";
+import { gpcGuidanceOpenApi } from "./gpc-guidance-openapi.js";
 import { postureScoresOpenApi } from "./posture-scores-openapi.js";
 import { receiptAvailabilityOpenApi } from "./receipt-availability.js";
 import { categoryDiagnosticsOpenApi } from "./category-diagnostics.js";
@@ -987,6 +989,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
           properties: {
             observation: gpcBoundedObservationOpenApi,
             activityComparison: gpcActivityComparisonOpenApi,
+            cmpStateComparison: gpcCmpStateComparisonOpenApi,
+            guidance: gpcGuidanceOpenApi,
             contractVersion: { type: "string", enum: ["certscore.gpc-response-assessment.v1", "certscore.gpc-response-assessment.v2", "certscore.gpc-response-assessment.v3"], description: "V3 additionally retains independent bounded observation, CMP-recorded sale/sharing state and direct request facts. Completion does not mean GPC was honored. Historical records retain their original versions." },
             status: { type: "string", enum: ["responsive", "no_observable_response", "indeterminate"] },
             findingTitle: { type: "string", enum: ["GPC response", "No observable GPC response"] },

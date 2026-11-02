@@ -1,3 +1,5 @@
+import { GpcProductEvidence } from "../../scans/gpc-product-evidence";
+import { GpcActivityComparison } from "../../scans/gpc-activity-comparison";
 import { ReportPdfAccessProvider } from "../../scans/report-lab/shadow-report-actions";
 import { GPC_CUSTOMER_RESULTS_ENABLED } from "../../../lib/scans/gpc-customer-policy";
 import {scopeReportPresentation,reportSectionInFocus,reportPresentationFocus} from "../../../lib/scans/report-framework-scope";
@@ -530,11 +532,6 @@ function SignalSnapshot({ report, siteOverview = false }: { report: ShadowReport
                     ? `Observation ${report.gpcResponse.assessment.observation.status} · ${getGpcStatusPresentation(report.gpcResponse.assessment.status).label}`
                     : getGpcSnapshotLabel(report.gpcResponse.assessment.status)}
                 </span>
-                {report.gpcResponse.californiaDeductionPoints > 0 ? (
-                  <span className={`${monoClass} text-[0.68rem] font-semibold text-rose-700`}>
-                    CA −{report.gpcResponse.californiaDeductionPoints}
-                  </span>
-                ) : null}
                 <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" />
               </span>
             </summary>
@@ -547,12 +544,9 @@ function SignalSnapshot({ report, siteOverview = false }: { report: ShadowReport
                 <p className="text-xs leading-5 text-zinc-600">Signal delivery: {report.gpcResponse.assessment.comparison.delivery.status}. Comparison coverage: {report.gpcResponse.assessment.comparison.coverage.status}.</p>
               ) : null}
               <GpcComparisonGrid projection={report.gpcResponse} />
+              <GpcActivityComparison comparison={report.gpcResponse.activityComparison} />
+              <GpcProductEvidence comparison={report.gpcResponse.cmpStateComparison} guidance={report.gpcResponse.guidance} />
               <div className="flex flex-wrap items-center justify-between gap-2 text-[0.68rem] leading-4 text-zinc-500">
-                <span>
-                  {report.gpcResponse.californiaDeductionPoints > 0
-                    ? `California policy applied −${report.gpcResponse.californiaDeductionPoints} points to the overall score.`
-                    : "Jurisdiction-neutral comparison; no score effect was attached here."}
-                </span>
                 <a className="font-semibold text-sky-700 hover:text-sky-900" href="#gpc-evidence">Evidence index ↓</a>
               </div>
             </div>
@@ -1472,10 +1466,7 @@ function GpcEvidenceIndexCard({ projection, homepage = false }: { projection: Gp
   const proof = projection.assessment.comparison.enabledProof;
   const evidenceJson: Record<string, unknown> = {
     assessment: projection.assessment,
-    californiaPolicy: {
-      deductionPoints: projection.californiaDeductionPoints,
-      framework: "california",
-    },
+
     evidenceRefs: projection.evidenceRefs,
   };
 
@@ -1492,6 +1483,8 @@ function GpcEvidenceIndexCard({ projection, homepage = false }: { projection: Gp
       </summary>
       <div className="mt-5 space-y-5">
         <p className="max-w-3xl text-sm leading-6 text-zinc-600">{projection.summary}</p>
+        <GpcActivityComparison comparison={projection.activityComparison} />
+        <GpcProductEvidence comparison={projection.cmpStateComparison} guidance={projection.guidance} />
         {projection.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? (
           <div className="grid gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs leading-5 text-zinc-700 sm:grid-cols-2">
             <p><strong>Bounded observation:</strong> {projection.assessment.observation.status}. {projection.assessment.observation.requests.count} retained request attempts; {projection.assessment.observation.requests.blockedBeforeTransmissionCount} blocked before transmission. Scope: main document and retained HTTP requests.</p>
@@ -1503,9 +1496,7 @@ function GpcEvidenceIndexCard({ projection, homepage = false }: { projection: Gp
           <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1">Main-document navigator.globalPrivacyControl: {proof.navigatorGlobalPrivacyControl === null ? "unverified" : String(proof.navigatorGlobalPrivacyControl)}</span>
           {projection.assessment.contractVersion !== "certscore.gpc-response-assessment.v1" ? <span className="rounded-md border border-zinc-200 px-2 py-1">Delivery: {projection.assessment.comparison.delivery.status} · Coverage: {projection.assessment.comparison.coverage.status}</span> : null}
           <span className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1">{proof.requestsWithSecGpc} retained request proof{proof.requestsWithSecGpc === 1 ? "" : "s"}</span>
-          {projection.californiaDeductionPoints > 0 ? (
-            <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-rose-800">CA policy · −{projection.californiaDeductionPoints} points</span>
-          ) : null}
+
         </div>
         {projection.assessment.comparison.comparable ? <div className="overflow-x-auto border border-zinc-200">
           <table className="w-full min-w-[44rem] border-collapse text-left text-xs">

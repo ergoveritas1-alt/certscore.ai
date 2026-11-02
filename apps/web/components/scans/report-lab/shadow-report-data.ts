@@ -134,6 +134,8 @@ export type ChoicePathComparison = {
 };
 
 export type GpcResponseReportProjection = {
+  cmpStateComparison?: import("@certscore/contracts").GpcCmpStateComparison;
+  guidance?: import("@certscore/contracts").GpcGuidance;
   vendorFindings?: ReturnType<typeof import("../../../lib/scans/choice-vendor-findings").gpcVendorFindings>;
   activityComparison?: import("@certscore/contracts").GpcActivityComparison;
   observedFacts: Array<{ label: string; value: string }>;

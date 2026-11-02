@@ -1,6 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { gpcBoundedObservationSchema } from "../packages/certscore-contracts/src/gpc-bounded-observation";
 import { gpcActivityComparisonSchema } from "../packages/certscore-contracts/src/gpc-activity-comparison";
+import { gpcCmpStateComparisonSchema } from "../packages/certscore-contracts/src/gpc-cmp-state-comparison";
+import { gpcGuidanceSchema } from "../packages/certscore-contracts/src/gpc-guidance";
 import { z } from "zod";
 import { reportEvidencePageSchema } from "../packages/certscore-api-contracts/src/report-page";
 import { privacyAuditEvidenceSchema } from "../packages/certscore-api-contracts/src/privacy-audit";
@@ -12,6 +14,7 @@ function project(schema: z.ZodTypeAny): { ts: string; json: any } {
   if (schema instanceof z.ZodUnknown) return { ts: "unknown", json: {} };
   if (schema instanceof z.ZodOptional) return project(schema.unwrap());
   if (schema instanceof z.ZodEffects) return project(schema.innerType());
+  if (schema instanceof z.ZodDiscriminatedUnion) { const options = schema.options.map((v: z.ZodTypeAny) => project(v)); return { ts: options.map((v: { ts: string }) => v.ts).join(" | "), json: { oneOf: options.map((v: { json: unknown }) => v.json) } }; }
   if (schema instanceof z.ZodUnion) { const options = schema.options.map((v: z.ZodTypeAny) => project(v)); return { ts: options.map((v: { ts: string }) => v.ts).join(" | "), json: { anyOf: options.map((v: { json: unknown }) => v.json) } }; }
   if (schema instanceof z.ZodNullable) { const p = project(schema.unwrap()); return { ts: `${p.ts} | null`, json: { anyOf: [p.json, { type: "null" }] } }; }
   if (schema instanceof z.ZodLiteral) return { ts: JSON.stringify(schema.value), json: { const: schema.value, type: typeof schema.value } };
@@ -29,7 +32,16 @@ function project(schema: z.ZodTypeAny): { ts: string; json: any } {
 const projected = project(gpcBoundedObservationSchema);
 const activitySource = await readFile("packages/certscore-contracts/src/gpc-activity-comparison.ts", "utf8");
 const activityProjected = project(gpcActivityComparisonSchema);
+const extraFiles = Object.fromEntries(await Promise.all([
+  ["gpc-cmp-state-comparison", "GpcCmpStateComparison", "gpcCmpStateComparisonOpenApi", gpcCmpStateComparisonSchema],
+  ["gpc-guidance", "GpcGuidance", "gpcGuidanceOpenApi", gpcGuidanceSchema],
+].map(async ([file, type, openapi, schema]) => [
+  [`packages/certscore-api-contracts/src/${file}.ts`, banner + await readFile(`packages/certscore-contracts/src/${file}.ts`, "utf8")],
+  [`packages/certscore-api-contracts/src/${file}-openapi.ts`, banner + `export const ${openapi} = ${JSON.stringify(project(schema as z.ZodTypeAny).json, null, 2)} as const;\n`],
+  [`packages/certscore-sdk/src/${file}.ts`, banner + `export type ${type} = ${project(schema as z.ZodTypeAny).ts};\n`],
+])).then(rows => rows.flat()));
 const files = {
+  ...extraFiles,
   "packages/certscore-api-contracts/src/property-sale-sharing.ts": banner + await readFile("packages/certscore-contracts/src/property-sale-sharing.ts", "utf8"),
   "packages/certscore-api-contracts/src/report-page-openapi.ts": banner + `export const reportEvidencePageOpenApi = ${JSON.stringify(project(reportEvidencePageSchema).json, null, 2)} as const;\n`,
   "packages/certscore-sdk/src/privacy-audit.ts": banner + `export type PrivacyAuditEvidence = ${project(privacyAuditEvidenceSchema).ts};\n`,

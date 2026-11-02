@@ -1,3 +1,6 @@
+import { redactGpcProducerBindings } from "./gpc-public-evidence";
+import { readBoundGpcCmpStateComparison } from "@certscore/contracts";
+import { buildGpcGuidance } from "./gpc-guidance";
 import { gpcReaderSummary } from "./gpc-reader-summary";
 import {deriveCaliforniaGpcResponsePolicy} from "./california-gpc-response-policy";
 import { GPC_CUSTOMER_RESULTS_ENABLED, hasVerifiedCustomerGpcEvidence } from "./gpc-customer-policy";
@@ -15,6 +18,8 @@ export type CanonicalGpcResponseProjection = {
   headline: string;
   summary: string;
   observedFacts: ReturnType<typeof describeGpcObservedFacts>;
+  guidance?: import("@certscore/contracts").GpcGuidance;
+  cmpStateComparison?: import("@certscore/contracts").GpcCmpStateComparison;
   activityComparison?: import("@certscore/contracts").GpcActivityComparison;
 };
 
@@ -144,7 +149,7 @@ export function buildCanonicalGpcResponseProjection(
   }
 
   return {
-    assessment: parsedAssessment.data,
+    assessment: redactGpcProducerBindings(parsedAssessment.data),
     vendorFindings: finding.details.vendorFindings,
     californiaDeductionPoints: deduction,
     coverageSummary: measured?.summary ?? presentation.coverageSummary,
@@ -152,6 +157,8 @@ export function buildCanonicalGpcResponseProjection(
     headline: presentation.headline,
     summary: gpcReaderSummary(finding.summary),
     observedFacts,
+    guidance: buildGpcGuidance(parsedAssessment.data, findings),
+    cmpStateComparison: readBoundGpcCmpStateComparison(finding.details.cmpStateComparison, parsedAssessment.data),
     activityComparison,
   };
 }
