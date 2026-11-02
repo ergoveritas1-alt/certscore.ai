@@ -216,7 +216,7 @@ const GPC_PRODUCT_PRESENTATION_CHECK: Check = {
   label: "GPC optional packets, persisted handoff and evidence expanders",
   command: ["pnpm", "exec", "tsx", "--tsconfig", "apps/web/tsconfig.test.json", "--test", "--test-concurrency=1",
     "--test-name-pattern=GPC product|paired CMP",
-    "apps/web/server/scans/report-export.test.ts",
+    "scripts/gpc-product-handoff.test.ts",
     "apps/web/components/scans/report-lab/gpc-evidence-card.test.tsx",
     "apps/v2-dag-lambda/src/handler.test.ts"],
 };
@@ -345,6 +345,7 @@ const ROOT_FULL_CHECKS: Check[] = [
   ACCESSIBILITY_AUDIT_CHECK,
   ACCESSIBILITY_SCORING_CHECK,
   GPC_OBSERVATION_RELEASE_CHECK,
+  GPC_PRODUCT_PRESENTATION_CHECK,
   SCAN_NO_GO_RELEASE_CHECK,
   REPORT_PUBLICATION_CHECK,
   EVIDENCE_RECOVERY_CHECK,
