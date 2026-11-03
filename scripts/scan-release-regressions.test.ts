@@ -8,6 +8,14 @@ import test from "node:test";
 import { getPredeployPlan } from "./predeploy.js";
 import { commandWords, RELEASE_REGRESSION_MATRIX, reviewReleaseRegressions, type ReleaseRegressionMatrix } from "./lib/scan-release-regressions.js";
 
+test("scanner configuration scope guard remains in fast and full deployment coverage", () => {
+  for (const changed of ["scripts/deploy-fast.ts", "scripts/lib/scanner-configuration-scope.ts", "scripts/lib/scanner-configuration-scope.test.ts"]) {
+    for (const full of [false, true]) {
+      assert.ok(getPredeployPlan([changed], { full }).checks.some(c => c.command.includes("scripts/lib/scanner-configuration-scope.test.ts")));
+    }
+  }
+});
+
 test("GPC release checks include real worker-to-report proof and strict CLI consumer types", () => {
   for (const changed of ["apps/v2-dag-lambda/src/handler.ts", "apps/v2-dag-lambda/src/gpc-release-pipeline.test.ts",
     "scripts/tsconfig.gpc-release-tools.json", "packages/certscore-contracts/src/canonical-evidence-artifact.ts"]) {

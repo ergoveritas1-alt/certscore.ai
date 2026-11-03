@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { deployConsumersBeforeProducer } from "./lib/deployment-consumer-barrier";
+import { assertScannerConfigurationScope } from "./lib/scanner-configuration-scope";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -20,6 +21,7 @@ type Args = {
   noPush: boolean;
   plan: boolean;
   pushScannerRuntimeBase: boolean;
+  preserveScannerConfiguration: boolean;
   ref: string | null;
   forceDb: boolean;
   forceValidation: boolean;
@@ -86,6 +88,7 @@ const DB_WORKFLOW = "prod-db-migrate.yml";
 async function main() {
   const startedAt = Date.now();
   const args = parseArgs(process.argv.slice(2));
+  assertScannerConfigurationScope(args);
   const sourceRef = args.ref ?? await git(["rev-parse", "--abbrev-ref", "HEAD"]);
   const sha = await git(["rev-parse", sourceRef]);
   const workflowRef = await resolveWorkflowDispatchRef(sourceRef, sha);
@@ -222,11 +225,12 @@ function parseArgs(argv: string[]): Args {
     noPush: false,
     plan: false,
     pushScannerRuntimeBase: false,
+    preserveScannerConfiguration: false,
     ref: null
   };
 
   for (let index = 0; index < rest.length; index += 1) {
-    const arg = rest[index];
+    const arg = rest[index]!;
     if (arg === "--") {
       continue;
     }
@@ -271,6 +275,10 @@ function parseArgs(argv: string[]): Args {
     }
     if (arg === "--dry-run") {
       args.dryRun = true;
+      continue;
+    }
+    if (arg === "--preserve-scanner-configuration") {
+      args.preserveScannerConfiguration = true;
       continue;
     }
     if (arg === "--plan") {
@@ -321,7 +329,7 @@ async function classifyChanges(baseRef: string): Promise<ChangedTargets> {
     scanners: changedFiles.some(isScannerDeployInput),
     validation: changedFiles.some(isValidationDeployInput),
     validationRuntimeBase: await runtimeBaseInputsChanged("validation", changedFiles,
-      file => git(["show", `${baseRef}:${file}`]), file => readFile(file, "utf8")),
+      (file: string) => git(["show", `${baseRef}:${file}`]), (file: string) => readFile(file, "utf8")),
     web: changedFiles.some(isWebDeployInput)
   };
 }
@@ -837,6 +845,9 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
   console.log(`  ref: ${sha}`);
   console.log(`  preflight: ${args.noPredeploy ? "skip" : args.mode === "all" ? "pnpm preflight:all" : "pnpm preflight:fast"}`);
   console.log(`  git push: ${args.noPush || args.ref ? "skip" : "push current branch to origin"}`);
+  if (args.preserveScannerConfiguration && (args.mode === "all" || args.mode === "scanners")) {
+    console.log("  blocked: scanner promotion requires configuration/provenance writes; this plan authorizes no remote action");
+  }
   if (args.mode === "all") console.log("  order: finish web and affected validation consumers before scanner promotion");
   for (const lane of lanes) {
     console.log(`  - ${lane}`);
@@ -940,7 +951,7 @@ function run(command: string[], options: { env?: Record<string, string>; quiet?:
 }
 
 function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 function formatDuration(ms: number) {

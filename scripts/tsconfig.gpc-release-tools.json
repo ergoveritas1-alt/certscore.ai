@@ -52,6 +52,8 @@
     "../packages/certscore-contracts/src/canonical-evidence-artifact.test.ts",
     "../packages/certscore-scan-core/src/gpc-cookie-read-binding.test.ts",
     "../scripts/gpc-product-handoff.test.ts",
+    "../scripts/lib/scanner-configuration-scope.test.ts",
+    "../scripts/deploy-fast.ts",
     "../scripts/run-local-v2-dag-lambda-parity.test.ts",
     "../apps/v2-dag-lambda/src/gpc-release-pipeline.test.ts"
   ]

@@ -80,6 +80,7 @@ const RUNTIME_GRAPH_RELEASE_CHECK: Check = {
     "apps/web/lib/public-integration-versions.test.ts",
     "apps/web/server/pulse/retrieval-quota.test.ts",
     "scripts/runtime-graph-rollout.test.ts",
+    "scripts/lib/scanner-configuration-scope.test.ts",
     "scripts/lib/scanner-image-provenance.test.ts",
     "apps/v2-dag-lambda/src/dev-scripts.test.ts",
     "apps/validation-worker/src/validation/local-v2-dag-lambda-dispatch.test.ts",
@@ -495,7 +496,7 @@ const TARGETS: Target[] = [
   {
     key: "runtime-graph-operations",
     label: "runtime graph rollout controls",
-    matches: file => file === "scripts/runtime-graph-rollout.ts" || file === "scripts/runtime-graph-rollout.test.ts" || file.startsWith("scripts/lib/scanner-image-provenance") || file === "scripts/repair-scanner-image-provenance.ts" || file === "scripts/deploy-fast.ts" || file === "scripts/check-regional-scanner-parity.ts",
+    matches: file => file === "scripts/runtime-graph-rollout.ts" || file === "scripts/runtime-graph-rollout.test.ts" || file.startsWith("scripts/lib/scanner-image-provenance") || file.startsWith("scripts/lib/scanner-configuration-scope") || file === "scripts/repair-scanner-image-provenance.ts" || file === "scripts/deploy-fast.ts" || file === "scripts/check-regional-scanner-parity.ts",
     checks: [RUNTIME_GRAPH_RELEASE_CHECK],
   },
   {
