@@ -42,7 +42,7 @@ const REPORT_PRESENTATION_CHECK: Check = {
 const MCP_RELEASE_ASSET_CHECK: Check = {
   key: "mcp-release-asset-contract",
   label: "metadata-only MCP release asset verification",
-  command: ["node", "--import", "tsx", "--test", "scripts/mcp-release-asset.test.ts"],
+  command: ["node", "--import", "tsx", "--test", "scripts/mcp-release-asset.test.ts", "scripts/npm-release-runtime.test.ts"],
 };
 
 const MCP_RELEASE_GUARD_CHECK: Check = {
@@ -469,7 +469,7 @@ const TARGETS: Target[] = [
     key: "mcp-http", label: "MCP public contracts and HTTP transport",
     matches: file => file.startsWith("apps/mcp/") || file.startsWith("packages/certscore-mcp/") ||
       file.startsWith("packages/certscore-api-contracts/") || file.startsWith("packages/certscore-sdk/") ||
-      ["scripts/lib/mcp-release-asset.ts", "scripts/mcp-release-asset.test.ts", "scripts/verify-certscore-mcp-release-guards.ts",
+      ["scripts/lib/mcp-release-asset.ts", "scripts/mcp-release-asset.test.ts", "scripts/npm-release-runtime.test.ts", ".github/workflows/certscore-sdk-release.yml", ".github/workflows/certscore-mcp-npm-release.yml", "scripts/verify-certscore-mcp-release-guards.ts",
         ".github/workflows/certscore-mcp-release-guards.yml"].includes(file),
     checks: [
       CANONICAL_PROJECTION_CHECK,

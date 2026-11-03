@@ -1,5 +1,10 @@
 # certscore-mcp
 
+## 0.2.34
+
+- Publish the retained GPC comparison and availability improvements through an OIDC-capable pinned npm CLI while retaining source provenance and existing credential fallback.
+- Preserve the same bounded evidence, finding interpretation and historical omission as 0.2.33.
+
 ## 0.2.33
 
 - Present retained GPC collection comparisons and structured observation-availability explanations through CertScore.ai’s shared projections.

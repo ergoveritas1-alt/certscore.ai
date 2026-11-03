@@ -10,7 +10,7 @@ CertScore.ai MCP Light is live in the [GitHub MCP Registry](https://github.com/m
 | Transport | Streamable HTTP |
 | Authentication | None |
 | Tools | `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, `certscore_get_report_evidence_page` |
-| Package version | `0.2.33` |
+| Package version | `0.2.34` |
 
 [Start with MCP Light](https://certscore.ai/mcp/light?utm_source=github&utm_medium=mcp_registry&utm_campaign=github_mcp_registry_launch) · [Install in Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D) · [Read the installation reference](../../docs/mcp-light-install.md)
 
@@ -508,7 +508,7 @@ The download uses the existing report read quota and creates no new scan or stor
 export artifact. Actual host download support must be tested separately; a returned
 URL is not proof that Cursor or Claude can retrieve it.
 
-### Privacy and tracking workpapers (0.2.24)
+### Privacy and tracking workpapers (0.2.25)
 
 `certscore_get_scan_bundle` includes `privacyAuditSummary` when verified retained
 evidence is available: observed privacy-choice controls, notice topics, source

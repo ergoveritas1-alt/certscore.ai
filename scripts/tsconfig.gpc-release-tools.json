@@ -54,6 +54,7 @@
     "../scripts/gpc-product-handoff.test.ts",
     "../scripts/lib/scanner-configuration-scope.test.ts",
     "../scripts/deploy-fast.ts",
+    "../scripts/npm-release-runtime.test.ts",
     "../scripts/run-local-v2-dag-lambda-parity.test.ts",
     "../apps/v2-dag-lambda/src/gpc-release-pipeline.test.ts"
   ]

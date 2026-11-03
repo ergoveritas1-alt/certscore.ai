@@ -56,7 +56,7 @@ Use these canonical discovery resources:
 
 These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, Google/Gemini, Microsoft Copilot/Bing, DeepSeek, Kimi, Qwen, Grok/xAI, Mistral, Meta, and future agents. They are vendor-neutral and should not be treated as limited to one AI platform.
 
-The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.33`, and the publisher and legal owner is CertScore.ai, LLC.
+The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.34`, and the publisher and legal owner is CertScore.ai, LLC.
 
 ## Agent quick path
 
@@ -247,7 +247,7 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 ## TypeScript SDK
 
-Status: published. Install `@certscore/sdk@0.2.24` or newer for typed EU and California posture scores on API v2 scan and report-evidence resources, including GPC collection-review and vendor qualification, GPP consistency/propagation, property-bound sale/sharing evidence, post-Reject entity/timing evidence, California posture coverage, and CMP inventory details.
+Status: published. Install `@certscore/sdk@0.2.25` or newer for typed EU and California posture scores on API v2 scan and report-evidence resources, including GPC collection-review and vendor qualification, GPP consistency/propagation, property-bound sale/sharing evidence, post-Reject entity/timing evidence, California posture coverage, and CMP inventory details.
 
 Choice-path interpretation:
 
