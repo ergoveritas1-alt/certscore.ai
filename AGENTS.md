@@ -1056,6 +1056,19 @@ Do not remove or downsample evidence artifacts, screenshots, browser traces, con
 
 When a GDPR/ePrivacy signal is missing, prefer one of these fixes in order: upstream WS01 observed evidence capture, the WC01 typed evidence contract/fixture, WC01 normalized concern construction, WC01 concern policy, then unified finding/checklist projection. Do not create display-only fallbacks for missing evidence.
 
+### Standing authorization for canonical AWS deployment canaries — November 3, 2026
+
+An owner-authorized WC01 AWS scanner release includes permission to run the existing `scripts/check-regional-web-bot-auth.ts` post-promotion check without another routine approval:
+
+- At most one `tiny` / `runtime_evidence` Lambda invocation in each of `eu-central-1`, `eu-west-1` and `us-west-1`, solely against `https://crawltest.com/cdn-cgi/web-bot-auth`; maximum three invocations per authorized release.
+- Retrieve only the canonical artifacts newly produced by those exact invocations for the HTTP/signature check. Keep their bytes private; do not retrieve unrelated or historical artifacts or publish them as customer report evidence.
+- Preserve `resultPurpose=synthetic_verification`, `productionFindingIntegration=false`, existing worker sizes, flags, timeouts and capture budgets. No choice actions, accounts, model calls, additional lanes or scheduled runs are authorized.
+- Set the verification caller's `AWS_MAX_ATTEMPTS=1` to prevent automatic invocation retries. Additional canary invocations, retries, targets or regions require separate authorization.
+
+These exact fixed transport canaries are exempt from the central contact-history export, rotating public-target selection and calibration-ledger prerequisites above. Record the release SHA, regions, time and outcomes in a sanitized internal release receipt. They are deployment transport checks, not a calibration acceptance sample or proof of GPC/CMP behavior, legal results or population coverage. Broader live calibration retains all existing registry, history, cooldown and ledger requirements.
+
+This standing grant adds no infrastructure, recurring schedule or capacity allowance. The existing cost-change approval rule remains in force; the current conservative estimate is at most $0.05 for one three-canary batch. A local-only task does not authorize these checks, and explicit task-specific prohibitions still take precedence.
+
 ### Scan timing triage
 
 When asked why a scan was slow, inspect retained timing artifacts before guessing. For local v2 DAG Lambda scans, start with the scan artifact directory and read:
