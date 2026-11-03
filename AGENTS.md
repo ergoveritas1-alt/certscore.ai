@@ -1064,6 +1064,7 @@ An owner-authorized WC01 AWS scanner release includes permission to run the exis
 - Retrieve only the canonical artifacts newly produced by those exact invocations for the HTTP/signature check. Keep their bytes private; do not retrieve unrelated or historical artifacts or publish them as customer report evidence.
 - Preserve `resultPurpose=synthetic_verification`, `productionFindingIntegration=false`, existing worker sizes, flags, timeouts and capture budgets. No choice actions, accounts, model calls, additional lanes or scheduled runs are authorized.
 - Set the verification caller's `AWS_MAX_ATTEMPTS=1` to prevent automatic invocation retries. Additional canary invocations, retries, targets or regions require separate authorization.
+- Run from the repository root with `TSX_TSCONFIG_PATH` pointing to its `tsconfig.base.json` when using `node --import tsx`; verify dependency imports locally before starting the canary checker.
 
 These exact fixed transport canaries are exempt from the central contact-history export, rotating public-target selection and calibration-ledger prerequisites above. Record the release SHA, regions, time and outcomes in a sanitized internal release receipt. They are deployment transport checks, not a calibration acceptance sample or proof of GPC/CMP behavior, legal results or population coverage. Broader live calibration retains all existing registry, history, cooldown and ledger requirements.
 
