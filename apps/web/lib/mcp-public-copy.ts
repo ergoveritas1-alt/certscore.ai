@@ -5,3 +5,9 @@ export const MCP_OAUTH_RECONNECT = "Use your existing connector to reconnect whe
 export const MCP_HOSTED_ENDPOINT = "https://mcp.certscore.ai/mcp";
 export const MCP_LIGHT_ENDPOINT = "https://mcp.certscore.ai/mcp/light";
 export const MCP_HOSTED_SETUP = "/developers/mcp#hosted-oauth-start";
+
+/** Shared first-review wording for Claude and the public Light setup pages. */
+export const MCP_LIGHT_REPORT_REVIEW_PROMPT =
+  "Retrieve the completed CertScore.ai report and check returned versus total findings and truncation. Recover missing findings with supported bounded retained-report reads for the same scanId, following returned byte-budget guidance and cursors within access limits; use at most five evidence pages and stop on completion, unavailable data or errors. Never start a new scan to fill report gaps. State any findings still unavailable. Group overlapping findings and give three distinct evidence-linked next actions when supported, or fewer if evidence is insufficient. Keep network-request timing, cookie snapshots, new cookie-write timing, completed consent clicks and confirmed consent decisions separate. Include fresh versus reused provenance (or unknown), original scan time, target, region, scope, material coverage limits and the report link. Results are observations, not legal conclusions.";
+export const MCP_LIGHT_FIRST_REVIEW_PROMPT =
+  `Ask me for the public website URL I want to review, and wait for my reply. Then use CertScore.ai to scan only that URL within existing access limits, allowing an eligible recent result to be reused. Request a fresh scan only if I explicitly ask. ${MCP_LIGHT_REPORT_REVIEW_PROMPT}`;

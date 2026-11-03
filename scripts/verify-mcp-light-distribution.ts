@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { PUBLIC_CERTSCORE_MCP_VERSION } from "../apps/web/lib/public-integration-versions";
 
 const repoRoot = process.cwd();
+const packageJson = json("packages/certscore-mcp/package.json");
 const EXPECTED = {
-  claudeVersion: "0.2.25",
+  claudeVersion: "0.2.26",
   cursorVersion: "1.0.5",
   endpoint: "https://mcp.certscore.ai/mcp/light",
   openAiVersion: "2.0.1",
   owner: "CertScore.ai, LLC",
   registryName: "ai.certscore/mcp-light",
-  serverVersion: "0.2.26",
+  serverVersion: packageJson.version as string,
 } as const;
 const CURSOR_DISCOVERY_KEYWORDS = [
   "cookie",
@@ -40,7 +42,7 @@ function pngDimensions(path: string) {
 }
 
 const server = json("packages/certscore-mcp/server-light.json");
-const packageJson = json("packages/certscore-mcp/package.json");
+const fullServer = json("packages/certscore-mcp/server.json");
 const claudeCatalog = json(".claude-plugin/marketplace.json");
 const claudePlugin = json("integrations/claude-code/certscore-mcp-light/.claude-plugin/plugin.json");
 const cursorCatalog = json(".cursor-plugin/marketplace.json");
@@ -61,7 +63,10 @@ const docs = [
 assert.equal(server.name, EXPECTED.registryName);
 assert.equal(server.version, EXPECTED.serverVersion);
 assert.equal(server.remotes?.[0]?.url, EXPECTED.endpoint);
-assert.equal(packageJson.version, EXPECTED.serverVersion);
+assert.match(EXPECTED.serverVersion, /^\d+\.\d+\.\d+$/);
+assert.equal(fullServer.version, EXPECTED.serverVersion);
+assert.equal(fullServer.packages?.[0]?.version, EXPECTED.serverVersion);
+assert.equal(PUBLIC_CERTSCORE_MCP_VERSION, EXPECTED.serverVersion);
 
 assert.equal(claudeCatalog.owner?.name, EXPECTED.owner);
 assert.equal(claudePlugin.author?.name, EXPECTED.owner);
@@ -91,7 +96,13 @@ assert.deepEqual(clineEntry.install?.args, ["certscore-light", "--transport", "s
 for (const { path, source } of docs) {
   assert.doesNotMatch(source, /ErgoVeritas, LLC/, `${path} contains the retired publisher name.`);
   assert.match(source, new RegExp(EXPECTED.registryName.replace("/", "\\/")), `${path} omits the registry name.`);
-  assert.match(source, new RegExp(EXPECTED.serverVersion.replaceAll(".", "\\.")), `${path} omits the hosted version.`);
+  // Historical publication receipts keep their original versions. Current setup
+  // copy must identify the repository version explicitly, not match an old receipt.
+  if (["docs/mcp-light-install.md", "docs/mcp-light-marketplace-assets.md", "llms-install.md"].includes(path)) {
+    assert.ok(source.includes(`Repository MCP version${path.endsWith("mcp-light-install.md") ? " |" : ":"} \`${EXPECTED.serverVersion}\``), `${path} has a stale repository version.`);
+  } else {
+    assert.ok(source.includes("packages/certscore-mcp/server-light.json"), `${path} must reference the release manifest separately from dated publication records.`);
+  }
 }
 
 const submissionPacket = read("docs/mcp-light-submission-packets.md");
@@ -107,7 +118,7 @@ assert.match(JSON.stringify(openAiPlugin), /Reject/i);
 assert.doesNotMatch(submissionPacket, /cannot accept consent/i);
 assert.match(read("integrations/kilo-code/certscore-mcp-light/MCP.yaml"), /^author: CertScore\.ai, LLC$/m);
 assert.match(read("apps/web/public/llms.txt"), /Official MCP Registry name: ai\.certscore\/mcp-light/);
-assert.match(read("apps/web/public/llms-full.txt"), /current hosted MCP version is `0\.2\.26`/);
+assert.ok(read("apps/web/public/llms-full.txt").includes(`current hosted MCP version is \`${EXPECTED.serverVersion}\``));
 
 assert.deepEqual(pngDimensions("apps/web/public/certscore-mark-dark.png"), { width: 512, height: 512 });
 assert.deepEqual(pngDimensions("apps/web/public/certscore-mark-light.png"), { width: 512, height: 512 });

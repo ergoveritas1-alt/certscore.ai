@@ -6,7 +6,7 @@ These platform-neutral assets are the source copy for Cursor, Claude Code, Cline
 
 - Product: CertScore.ai MCP Light
 - Registry name: `ai.certscore/mcp-light`
-- Hosted MCP version: `0.2.26`
+- Repository MCP version: `0.2.34` (from `packages/certscore-mcp/server-light.json`; verify the serving runtime and publication separately)
 - Publisher and legal owner: CertScore.ai, LLC
 - Remote endpoint: `https://mcp.certscore.ai/mcp/light`
 - Transport: Streamable HTTP

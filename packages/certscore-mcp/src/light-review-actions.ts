@@ -1,4 +1,4 @@
-/** Optional navigation over a completed canonical bundle. No reads, scans or findings. */
+/** Guidance over a completed canonical bundle. No reads, scans or findings are created here. */
 import { apiV2PostureScoresSchema, REPORT_EVIDENCE_LINK_TARGETS } from '@certscore/api-contracts';
 
 const record = (value: unknown): Record<string, unknown> =>
@@ -9,7 +9,7 @@ type FollowUp = {
   label: string;
   context: 'more_findings' | 'returned_findings' | 'tracking_inventory' | 'limited_coverage' | 'future_change';
   createsScan: boolean;
-  requiresUserRequest: true;
+  requiresUserRequest: boolean;
   tool?: 'certscore_get_report_evidence_page';
   prompt?: 'certscore_remediation_checklist';
   arguments?: { scanId: string; workpaper?: 'tracking' };
@@ -83,11 +83,13 @@ export function lightReviewActions(bundle: Record<string, unknown>) {
   const findingMetadata = record(bundle.findingsMetadata);
   const inventory = record(bundle.preConsentCookiesTrackers);
   const links = reportUrl ? evidenceLinks(reportUrl, findings, typeof inventory.total === 'number' && inventory.total > 0) : [];
-  const moreFindings = findingMetadata.truncated === true || record(bundle.mcpMetadata).canonicalFindingsComplete === false;
+  const moreFindings = (typeof findingMetadata.returned === 'number' && typeof findingMetadata.total === 'number'
+    && findingMetadata.returned < findingMetadata.total) || findingMetadata.truncated === true || record(bundle.mcpMetadata).canonicalFindingsComplete === false;
   let followUp: FollowUp;
   if (moreFindings) {
+    // Completing the requested review needs no separate follow-up request; clients still honor read limits.
     followUp = { type: 'tool', label: 'See the rest of this scan’s findings and evidence', context: 'more_findings',
-      tool: 'certscore_get_report_evidence_page', arguments: { scanId }, createsScan: false, requiresUserRequest: true };
+      tool: 'certscore_get_report_evidence_page', arguments: { scanId }, createsScan: false, requiresUserRequest: false };
   } else if (findings.some(finding => typeof record(finding).id === 'string' && String(record(finding).id).trim())) {
     followUp = { type: 'prompt', label: 'Turn these findings into a developer checklist', context: 'returned_findings',
       prompt: 'certscore_remediation_checklist', arguments: { scanId }, createsScan: false, requiresUserRequest: true };

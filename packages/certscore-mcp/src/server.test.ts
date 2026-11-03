@@ -540,7 +540,7 @@ test("Claude Code Light plugin preserves the remote scan workflow", () => {
 
   assert.equal(plugin.name, "certscore-mcp-light");
   // The installable plugin and hosted MCP runtime have independent releases.
-  assert.equal(plugin.version, "0.2.25");
+  assert.equal(plugin.version, "0.2.26");
   assert.deepEqual(mcp.mcpServers, {
     certscore: { type: "http", url: "https://mcp.certscore.ai/mcp/light" }
   });
@@ -1526,7 +1526,8 @@ test("Light compact review actions survive tight bundle budgets over the MCP pro
           assert.equal(url.searchParams.get('reviewFocus'), view.reviewFocus);
         }
         assert.equal(guidance.reviewActions.followUp.arguments.scanId, scanId);
-        assert.equal(guidance.reviewActions.followUp.requiresUserRequest, true);
+        assert.equal(guidance.reviewActions.followUp.requiresUserRequest,
+          (bundle.mcpMetadata as any).canonicalFindingsComplete, 'only missing findings are part of completing the requested review');
         assert.equal(guidance.reviewActions.followUp.createsScan, false);
         assert.ok(raw.content.some(item => item.type === "text" && item.text.includes('"reviewActions"')));
         assert.equal(mock.calls.length, 4, "navigation adds no origin read or scan creation");

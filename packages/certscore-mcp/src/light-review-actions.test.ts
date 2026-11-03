@@ -72,6 +72,7 @@ test('focus navigation never fills missing or invalid posture scores from the ov
 
 test('selects context from returned canonical delivery and retains the original scan', () => {
   const cases = [
+    { payload: { findingsMetadata: { returned: 3, total: 5 } }, context: 'more_findings' },
     { payload: { findingsMetadata: { truncated: true } }, context: 'more_findings' },
     { payload: { mcpMetadata: { canonicalFindingsComplete: false } }, context: 'more_findings' },
     { payload: { findings: [], preConsentCookiesTrackers: { total: 3 } }, context: 'tracking_inventory' },
@@ -83,9 +84,16 @@ test('selects context from returned canonical delivery and retains the original 
     assert.equal(action.tool, 'certscore_get_report_evidence_page');
     assert.equal(action.arguments?.scanId, scanId);
     assert.equal(action.createsScan, false);
-    assert.equal(action.requiresUserRequest, true);
+    assert.equal(action.requiresUserRequest, context !== 'more_findings');
     assert.equal(action.arguments?.workpaper, context === 'tracking_inventory' ? 'tracking' : undefined);
   }
+});
+
+test('complete findings with omitted envelope detail do not trigger completeness recovery', () => {
+  const actions = lightReviewActions({ ...bundle, findingsMetadata: { returned: 1, total: 1, truncated: false },
+    mcpMetadata: { canonicalFindingsComplete: true, truncated: true, omittedSections: ['fullReport'] } })!;
+  assert.equal(actions.followUp.context, 'returned_findings');
+  assert.equal(actions.followUp.requiresUserRequest, true);
 });
 
 test('future rechecks are offers with no executable scan call or invented fix claim', () => {

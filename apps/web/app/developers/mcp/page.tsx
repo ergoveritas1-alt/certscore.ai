@@ -1,3 +1,4 @@
+import { MCP_LIGHT_FIRST_REVIEW_PROMPT } from "../../../lib/mcp-public-copy";
 import { MCP_LIGHT_QUOTA_SUMMARY } from "../../../lib/mcp-light-quota-copy";
 import { MCP_FREE_AUTHENTICATION, MCP_FREE_AUTHENTICATION_ALLOWANCE } from "@website-signal-risk-scanner/shared";
 import { PUBLIC_CERTSCORE_MCP_VERSION } from "../../../lib/public-integration-versions";
@@ -14,7 +15,7 @@ const description =
 const lightEndpoint = "https://mcp.certscore.ai/mcp/light";
 const openAiMcpDemoPath = "/videos/openai-mcp-certscore-demo.mp4";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
-const firstRunPrompt = "Review https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html for website privacy risks. Explain the main findings, supporting evidence, coverage limits, and what to inspect next.";
+const firstRunPrompt = MCP_LIGHT_FIRST_REVIEW_PROMPT;
 const verificationPrompt = "List the available CertScore tools. Read certscore://example-report if resources are supported; otherwise call certscore_get_scan_bundle with scanId=9ba99a8c-b1ad-44c1-985f-92cef760ab40. Report the retained example’s original date and coverage. If unavailable, report that; do not create a new scan to test the connection.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
@@ -223,11 +224,10 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
         <Section eyebrow="First run" title="Paste one prompt">
           <CodeBlock>{firstRunPrompt}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            ErgoVeritas provides stable, owned canary pages suited to demonstrating the complete scan, status, and bundle flow. The
-            canary intentionally contains test signals, so its findings are useful for exercising the API rather than evaluating a production site.
+            Supply the public URL you want to review. Check finding completeness before the first answer, using bounded reads of the same retained report when needed.
           </p>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">{agentDisclaimer}</p>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">Light supplies the scan workflow in its tool descriptions and optional <code>certscore://project-instructions</code> resource. The completed bundle offers an evidence index and relevant follow-ups. Summarize whether the result was new or reused. Ask for a remediation checklist, tracking export, another user-selected site, or a later fresh recheck using the retained baseline scan ID.</p>
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">Light supplies the scan workflow in its tool descriptions and optional <code>certscore://project-instructions</code> resource. The completed bundle offers an evidence index and relevant follow-ups. Summarize whether the result was new or reused. The first review includes evidence-linked next actions. Ask for a deeper remediation checklist, tracking export, another user-selected site, or a later fresh recheck using the retained baseline scan ID.</p>
         </Section>
 
         <Section eyebrow="Choose a tool" title="Match each request to the retained result">
