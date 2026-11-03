@@ -1,3 +1,4 @@
+import { MCP_LIGHT_FIRST_REVIEW_PROMPT } from "../../../lib/mcp-public-copy";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Badge } from "@website-signal-risk-scanner/ui";
@@ -14,7 +15,7 @@ import { createBreadcrumbSchema, createFaqPageSchema, createPageMetadata, create
 const endpoint = "https://mcp.certscore.ai/mcp/light";
 const openAiMcpDemoPath = "/videos/openai-mcp-certscore-demo.mp4";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
-const firstRunPrompt = "Review https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html for website privacy risks. Explain the main findings, supporting evidence, coverage limits, and what to inspect next.";
+const firstRunPrompt = MCP_LIGHT_FIRST_REVIEW_PROMPT;
 const verificationPrompt = "List the available CertScore tools. Read certscore://example-report if resources are supported; otherwise call certscore_get_scan_bundle with scanId=9ba99a8c-b1ad-44c1-985f-92cef760ab40. Report the retained example’s original date and coverage. If unavailable, report that; do not create a new scan to test the connection.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 const registryUrl = "https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light";
@@ -194,7 +195,7 @@ export default function McpLightPage() {
           <CodeBlock>{firstRunPrompt}</CodeBlock>
           <p className="mt-4 text-sm leading-7 text-slate-600">For follow-ups, ask for a proposed remediation checklist, the tracking inventory as JSON/CSV, or the same review for another site you choose. Focused evidence reads can select consent, GPC, policy, tracking, transport, or forms from the existing report. Keep the scan ID, date and execution region as a baseline for a later fresh recheck. A missing later finding does not verify a fix.</p>
           <p className="mt-3 text-sm leading-7 text-slate-600">Light also provides optional <code>certscore_launch_review</code>, <code>certscore_compare_scans</code> and <code>certscore_remediation_checklist</code> prompts, plus <code>certscore://project-instructions</code> for hosts that support them. Tool-only hosts can use the same workflow through the four tools.</p>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">The ErgoVeritas canary page is a controlled, stable test site for demonstrating the complete scan, status, and bundle flow. Substitute your own public URL at any time.</p>
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">Supply the public URL you want to review. Connection checks can use the retained example below without creating a scan.</p>
           <p className="mt-4 max-w-4xl text-sm leading-7 text-slate-600">{agentDisclaimer}</p>
         </section>
 

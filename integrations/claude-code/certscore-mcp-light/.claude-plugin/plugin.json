@@ -1,6 +1,6 @@
 {
   "name": "certscore-mcp-light",
-  "version": "0.2.25",
+  "version": "0.2.26",
   "description": "Free website privacy scanner to detect pre-consent cookies and trackers, CMP and consent controls, privacy policy, GDPR/ePrivacy and CCPA, and HTTPS/TLS signals.",
   "author": {
     "name": "CertScore.ai, LLC",
@@ -9,5 +9,9 @@
   },
   "homepage": "https://certscore.ai/mcp/light",
   "repository": "https://github.com/ergoveritas1-alt/certscore.ai",
-  "license": "LicenseRef-CertScore-Developer-Preview"
+  "license": "LicenseRef-CertScore-Developer-Preview",
+  "icon": "./assets/icon.png",
+  "documentationUrl": "https://certscore.ai/developers/mcp",
+  "supportUrl": "https://certscore.ai/contact",
+  "privacyPolicyUrl": "https://certscore.ai/privacy"
 }

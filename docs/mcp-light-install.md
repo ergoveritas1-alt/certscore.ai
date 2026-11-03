@@ -9,7 +9,9 @@ CertScore.ai MCP Light is the no-account, low-friction remote MCP for evidence-b
 | Endpoint | `https://mcp.certscore.ai/mcp/light` |
 | Transport | Streamable HTTP |
 | Authentication | None; do not send an API key, bearer token, or OAuth configuration |
-| Version | `0.2.26` |
+| Repository MCP version | `0.2.34` |
+
+The repository version comes from `packages/certscore-mcp/server-light.json`; it does not verify the currently serving runtime or a directory publication.
 
 Configure an MCP client as a remote HTTP server with the endpoint above. Product configuration formats differ, so use the client's current remote-MCP UI or documentation rather than adapting a local stdio example.
 
@@ -45,9 +47,15 @@ The bundle can include observations about pre-consent cookies and browser storag
 3. If `preConsentPreview` is present, treat it only as a partial preview of checkpoint observations. Its counts are partial, not the full scan tally. It contains no canonical findings or score, is not completion, and must not be reported as final totals.
 4. If the status is `queued`, `running`, or `finalizing`, poll `certscore_get_scan_status` with that ID only.
 5. Stop at `completed`, `completed_limited`, `failed`, `expired`, or `rate_limited`.
-6. For `completed` or `completed_limited`, call `certscore_get_scan_bundle` before reporting full scan results. Use the bundle for the completed scan's final returned tally, canonical findings, evidence, and limitations.
+6. For `completed` or `completed_limited`, call `certscore_get_scan_bundle` with `detail=findings` before reporting full scan results. Complete the retained-report check below before the first answer.
 
 If a retryable error is returned without a `scanId`, wait for `retryAfterSeconds` and retry `certscore_scan_site`; there is no scan to poll yet. A `completed_limited` result is usable but explicitly limited. Do not request a bundle after `failed`, `expired`, or `rate_limited` unless a later tool response directs otherwise.
+
+## Complete the first review
+
+Before the first completed review, compare findingsMetadata.returned with findingsMetadata.total and check findingsMetadata.truncated, mcpMetadata.canonicalFindingsComplete, mcpMetadata.truncated and mcpMetadata.omittedSections. Envelope omissions alone do not mean findings are missing. If findings or evidence needed for the answer are missing, use the same scanId for retained reads: retry the bundle at most once using a larger returned nextRecommendedMaxBytes only within responseCeilingBytes and the advertised schema. If still needed, call certscore_get_report_evidence_page with scanId and no section or workpaper filter to recover canonical findings. Continue only with pagination.nextCursor, keeping one snapshot and any selected reviewFocus; use no invented page-size or offset arguments. Read at most five evidence pages for this review, stopping earlier when the missing findings and needed evidence are recovered, pagination.complete is true, a cursor repeats or is missing, the snapshot changes, or a read fails or is rate-limited. Honor returned retry guidance without looping. Reconstruct entries using their JSON Pointer paths and stringPart/stringParts when present; deduplicate canonical findings by ID. Page entry totals are not finding counts. State how many canonical findings were recovered out of the reported total and identify anything still unavailable. Never start a new scan to recover missing report information.
+
+Group overlapping canonical findings without dropping their distinct evidence or IDs. Provide three distinct, useful next actions when the retained evidence supports them; give fewer and explain the limitation rather than inventing actions. Link each action to its returned finding/evidence reference or report URL, and separate proposed remediation and manual verification from observed facts. Keep network requests and their timing, cookie snapshot presence, newly observed cookie writes and their timing, completed consent clicks, and confirmed consent decisions separate. Request timing does not establish cookie-write timing; snapshots do not prove new writes, and a click does not prove registration. State fresh versus reused using the creation response or retained creationDecision; scan_id_lookup alone does not prove reuse. If unknown, say so. Include the original scan time, target, execution region, scope, material coverage limitations and report link. Be concise without dropping evidence or limitations to meet a word target. Report factual findings and resulting scores without deduction explanations or legal conclusions.
 
 ## Quota and reuse
 
@@ -61,9 +69,9 @@ The webpage and anonymous REST API use a separate 20-new-scans-per-requester-IP-
 
 ## Known-good first prompt
 
-> Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. Retain the scanId, poll status only while the scan is active, then retrieve the scan bundle with detail=findings and maxBytes=8000. Report whether the scan was new or reused, summarize the highest-value findings and evidence references, include coverage limitations and the report URL, and distinguish CertScore observations from legal conclusions.
+> Review this public URL with CertScore.ai, allowing eligible recent-result reuse; request fresh observations only if I explicitly ask. Retain the scanId and poll only while active. Retrieve the completed findings bundle, check returned versus total findings and truncation, and recover missing findings through bounded reads of the same retained report. Never rescan to fill gaps. Group overlapping findings, give three distinct evidence-linked next actions when supported (fewer if not), and state remaining gaps, original scan time, region, scope, fresh/reused provenance and report URL. Keep request timing, cookie snapshots, new writes and confirmed consent decisions separate; do not infer legal conclusions.
 
-The ErgoVeritas page is an owned test canary with intentional signals. Replace it with the public URL under review for normal use.
+Supply the public URL under review. For a connection check, list tools and read `certscore://example-report`; preserve its original date and coverage and do not create a replacement scan if unavailable. Claude account, plan and organization requirements are separate from account-free CertScore.ai Light access.
 
 ## Example agent uses
 
