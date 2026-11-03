@@ -1,4 +1,5 @@
 import { validateCookieYesLegacyReceiptEnvelope, validateCookieYesLegacyProjectionProof } from "./cookieyes-legacy-consent-state";
+import { consentScopeExclusionSchema } from "./consent-scope-exclusion";
 import {consentReceiptAvailabilitySchema,summarizeConsentReceiptAvailability} from "./consent-receipt-availability";
 import {consentReceiptCaptureSchema,validateConsentReceiptCapture} from './consent-receipt-capture';
 import { validateComplianzReceiptEnvelope } from "./complianz-consent-state";
@@ -20,7 +21,7 @@ import { actionStoragePhaseDiagnosticsSchema } from "./action-storage-collection
 import { actionOriginDomStorageObservationSchema, validateOriginDomStorageObservation } from "./action-origin-dom-storage-observation";
 import { actionStorageNameSchema, validateActionStorageName, validateLegacyActionStorageNames } from "./action-storage-name";
 import { actionMainDocumentWriteCoverageSchema, afterActionCaptureSchema, validateAfterActionCapture, validateAfterActionProjection } from "./after-action-capture";
-import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT, actionCaptureCoverageSchema, consentDecisionEvidenceSchema, hasSemanticConsentWitness } from "./consent-action-evidence-policy";
+import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT, validateActionRetentionBudget, actionCaptureCoverageSchema, consentDecisionEvidenceSchema, hasSemanticConsentWitness } from "./consent-action-evidence-policy";
 import { runtimeEvidenceGraphSchema, runtimeGraphVerificationDiagnosticSchema, withRuntimeGraphCompatibility, type RuntimeEvidenceGraph } from "./runtime-evidence-graph";
 const packetRuntimeGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenceGraphSchema;
 import { consentActionControlProofSchema } from "./consent-action-control-proof";
@@ -361,6 +362,7 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
       enabledCount: z.number().int().nonnegative().max(64),
       labelMatchCount: z.number().int().nonnegative().max(64),
       actionableCount: z.number().int().nonnegative().max(64),
+      scopeExclusion: consentScopeExclusionSchema.optional(),
       cmpIds: z.array(z.string().min(1).max(120)).max(8).default([]),
       controlLabels: z.array(z.string().min(1).max(120)).max(4).default([]),
       binding: z.object({
@@ -368,7 +370,8 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
         frameIdentitySha256: z.string().regex(/^[a-f0-9]{64}$/),
         labelSources: z.array(z.enum(["aria_label", "visible_text", "value", "title"])).max(4),
       }).optional(),
-    })).max(12),
+    }).refine(row => !row.scopeExclusion || row.state === "scope_not_interactive" && row.actionableCount === 0,
+      "A scope exclusion cannot authorize an action.")).max(12),
     truncated: z.boolean(),
   }).optional(),
   navigation: z.object({
@@ -571,6 +574,7 @@ const postRefusalEvidencePacketBaseSchema = z.object({
   }),
   limitations: z.array(z.string().max(240)).max(24).default([]),
 }).superRefine((packet, context) => {
+  validateActionRetentionBudget({action:"reject",coverage:packet.captureCoverage,requestCount:packet.network.requests.length,capture:packet.afterActionCapture},context);
   if (packet.timing.observationEndedAtMs !== undefined && (
     packet.timing.observationEndedAtMs > packet.timing.readyAtMs ||
     packet.timing.observationEndedAtMs < (packet.refusalRegistration.refusalRegisteredAtMs ?? packet.refusalRegistration.actionDispatchedAtMs ?? 0)
@@ -1311,6 +1315,7 @@ export const postRefusalReportProjectionSchema = z.object({
     "aborted",
   ]),
 }).superRefine((projection, context) => {
+  validateActionRetentionBudget({action:"reject",coverage:projection.captureCoverage,requestCount:projection.afterActionRequests?.length ?? 0,capture:projection.afterActionCapture},context);
   if (projection.receiptAvailability && (projection.receiptAvailability.action !== "reject" ||
     projection.receiptAvailability.sourcePacketSha256 !== projection.packetSha256)) {
     context.addIssue({code: z.ZodIssueCode.custom, path: ["receiptAvailability"], message: "Receipt availability must bind to this action and source packet."});

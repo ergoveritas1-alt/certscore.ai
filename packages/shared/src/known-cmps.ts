@@ -486,6 +486,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["OneTrust", "Optanon", "OptanonWrapper"],
     passiveConfigurationApi: "OneTrust.GetDomainData",
+    passivePrivacyLinkInspection: "same_origin_after_visual.v1",
     passiveInitializationRequests: {
       version: "onetrust_initialization_requests.v1",
       endpoints: [

@@ -1630,6 +1630,21 @@ test("a browser error document never establishes a complete no-control inventory
   assert.ok(result.coverage.reasonCodes.includes("consent_session_access_limited"));
 });
 
+test("an unusable consent visit retains its distinct assessment reason through the public CMP projection",async()=>{
+  const {projectCmpAudit}=await import("../../lib/scans/cmp-audit-projection");
+  for(const reason of ["blank_or_unusable_page","loading_or_stalled"] as const){
+    const {b,g}=independentConsentLaneFixture();
+    const result=deriveMaterializedConsentControlAssessment({bundle:b,consentControlGeometryEvidence:{...g,access:{status:"timeout",httpStatus:200}},
+      consentSurfaceInspection:completeInspection("indeterminate_limited_coverage",false),noGo:false,noGoReasonCodes:[reason]});
+    const audit=projectCmpAudit({scanId:result.scan.scanId,consentControlAssessment:result,consentVendor:"OneTrust"});
+    assert.equal(audit.experience?.mode,"capture_limited");
+    assert.ok(audit.experience?.availability?.reasonCodes.includes(reason));
+    assert.ok(audit.experience?.availability?.reasonCodes.includes("consent_session_access_limited"));
+    assert.equal(audit.experience?.availability?.sourceAssessmentHash,result.provenance.sourceHash);
+    assert.ok(audit.rows.every(row=>row.status==="Not assessed"));
+  }
+});
+
 
 test("AX navigation uncertainty survives materialization without suppressing independent positive controls", () => {
   const source = bundle([{ actionType: "accept_all", label: "Accept all", visible: true, layer: "first_layer" }]);
@@ -1785,4 +1800,41 @@ test("a degraded representative positive consent capture preserves its verified 
     const negative=deriveMaterializedConsentControlAssessment({bundle:b,consentControlGeometryEvidence:raw,noGo:false,finalUrl:"https://example.test/unbound-recovery"});
     assert.notEqual(negative.scan.finalUrl,g.pageUrl,JSON.stringify({mode,document:negative.document,scan:negative.scan}));assert.equal(negative.controls.reject.state,"unknown",mode);
   }
+});
+
+test("retained committed status repairs a partial consent handoff only with its own complete document proof", async () => {
+  const { consentVisualFixture, visualFixtureStartMs } = await import("../../../../packages/certscore-scan-core/src/test-fixtures/consent-visual-comparison");
+  const { retainCommittedConsentHttpStatus } = await import("../../../../packages/certscore-scan-core/src/consent-committed-response");
+  const { projectCmpAudit } = await import("../../lib/scans/cmp-audit-projection");
+  const { geometry: g } = await consentVisualFixture("equal");
+  const b = bundle([], { url: g.pageUrl });
+  b.startedAt = new Date(visualFixtureStartMs).toISOString();
+  Object.assign(b.domSnapshots[0]!, { url: g.pageUrl, documentIdentity: g.documentIdentity });
+  Object.assign(b.consentUiObservations[0]!, { documentUrl: g.pageUrl, documentIdentity: g.documentIdentity,
+    likelyPresent: true, captureStatus: "observed" });
+  b.scanLaneRuns = [{ laneId: "consent_proof", executionOutcome: "degraded", accessOutcome: "representative_page", challengeDetected: false }] as CanonicalEvidenceBundle["scanLaneRuns"];
+  b.scanEvidenceLaneAssessment = { lanes: { consent: "limited" } } as CanonicalEvidenceBundle["scanEvidenceLaneAssessment"];
+  const binding = { url: g.pageUrl, documentIdentity: g.documentIdentity };
+  const sourceAccess = { status: "loaded" as const, reasonCodes: [] };
+  const materialize = (access: Parameters<typeof retainCommittedConsentHttpStatus>[0]) =>
+    deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: { ...g, access },
+      noGo: false, finalUrl: "https://example.test/unbound-recovery" });
+  assert.notEqual(materialize(sourceAccess).scan.finalUrl, g.pageUrl);
+  const access = retainCommittedConsentHttpStatus(sourceAccess, { ...binding, httpStatus: 200 }, binding, binding);
+  const result = consentControlAssessmentSchema.parse(JSON.parse(JSON.stringify(materialize(access))));
+  assert.equal(result.scan.finalUrl, g.pageUrl);
+  assert.equal(result.document.identityStatus, "matched");
+  const audit = projectCmpAudit({ scanId: b.scanId, consentControlAssessment: result });
+  assert.equal(audit.assessmentSourceHash, result.provenance.sourceHash);
+  assert.equal(audit.rows.find(row => row.id === "banner")?.status, "Observed");
+  const replacement = { ...binding, documentIdentity: { source: "cdp_loader_id" as const, token: "replacement-document" } };
+  assert.notEqual(materialize(retainCommittedConsentHttpStatus(sourceAccess,
+    { ...binding, httpStatus: 200 }, binding, replacement)).scan.finalUrl, g.pageUrl);
+  const saved = structuredClone(b);
+  b.scanLaneRuns[0]!.accessOutcome = "blank_or_unusable";
+  b.scanLaneRuns[0]!.executionOutcome = "failed";
+  const failed = materialize(access);
+  assert.notEqual(failed.scan.finalUrl, g.pageUrl);
+  assert.equal(failed.controls.reject.state, "unknown");
+  b.scanLaneRuns = saved.scanLaneRuns;
 });

@@ -2203,6 +2203,7 @@ test("MCP counts both execution successes including registered paths without aft
       };
       const observation = {
         execution, status: confirmed ? "confirmed_clean" : "unconfirmed",
+        ...(!confirmed && action === "accept" ? {afterAction: {policyVersion:"bounded_after_action_capture.v1",action:"accept",activationStatus:"completed",stopReason:"window_elapsed",requestsDropped:0,requestCount:300,storageWriteCount:0,storageSnapshotRetained:true}} : {}),
         [action === "accept" ? "acceptanceExercised" : "refusalExercised"]: confirmed,
         observationCount: 0, productionProjectable: false,
         evidenceDisposition: confirmed ? "confirmed" : "indeterminate",
@@ -2220,7 +2221,8 @@ test("MCP counts both execution successes including registered paths without aft
       } as any);
       const result = action === "accept" ? bundle.postAcceptObservation : bundle.postRefusalObservation;
       assert.deepEqual(result?.execution, execution);
-      assert.equal(result?.afterAction, undefined);
+      if (!confirmed && action === "accept") assert.equal(result?.afterAction?.requestCount,300);
+      else assert.equal(result?.afterAction, undefined);
       assert.match(scanBundleText(bundle), new RegExp(`execution=${execution.status}; click completed=true; observation completed=true; consent confirmed=${confirmed}`));
       for (const guidance of [scanBundleText(bundle), bundle.interpretationGuidance.statement]) {
         assert.match(guidance, /succeeded and succeeded_with_confirmation as successful paths/);

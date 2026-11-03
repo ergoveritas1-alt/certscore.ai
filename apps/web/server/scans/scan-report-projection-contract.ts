@@ -172,6 +172,25 @@ function serializeProjection(value: unknown) {
   return JSON.stringify(normalizeProjectionJson(value));
 }
 
+/** Optional contextual samples cannot displace existing report evidence at the
+ * unchanged persistence bound. Only the new packet is eligible for omission. */
+function omitOptionalCollectionSamples(value: unknown): boolean {
+  let omitted = false;
+  if (Array.isArray(value)) {
+    for (const item of value) omitted = omitOptionalCollectionSamples(item) || omitted;
+  } else if (isRecord(value)) {
+    for (const [key, item] of Object.entries(value)) {
+      if ((key === "gpcActivityComparison" || key === "activityComparison") && isRecord(item) &&
+        item.contractVersion === "certscore.gpc-activity-comparison.v1" && isRecord(item.collectionComparison) &&
+        item.collectionComparison.contractVersion === "certscore.gpc-collection-comparison.v1") {
+        delete item.collectionComparison; omitted = true;
+      }
+      omitted = omitOptionalCollectionSamples(item) || omitted;
+    }
+  }
+  return omitted;
+}
+
 export function buildPersistedScanReportProjection(
   scanRecord: ScanDetailResponse,
   options: { canonicalReportProjection?: PersistedCanonicalReportProjection } = {},
@@ -198,8 +217,12 @@ export function buildPersistedScanReportProjection(
     snapshot
   } satisfies ScanDetailResponse;
   const normalizedPayload = normalizeProjectionJson(payload) as ScanDetailResponse;
-  const serialized = JSON.stringify(normalizedPayload);
-  const sizeBytes = Buffer.byteLength(serialized);
+  let serialized = JSON.stringify(normalizedPayload);
+  let sizeBytes = Buffer.byteLength(serialized);
+  if (sizeBytes > MAX_SCAN_REPORT_PROJECTION_BYTES && omitOptionalCollectionSamples(normalizedPayload)) {
+    serialized = JSON.stringify(normalizedPayload);
+    sizeBytes = Buffer.byteLength(serialized);
+  }
   if (sizeBytes > MAX_SCAN_REPORT_PROJECTION_BYTES) {
     throw new ScanReportProjectionTooLargeError({
       maxBytes: MAX_SCAN_REPORT_PROJECTION_BYTES,

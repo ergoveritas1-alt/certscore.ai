@@ -16,12 +16,20 @@ test("loader and wrapper recognition reserve the single passive read until the e
   const input = { controlsObserved: false, lateInspectionComplete: false, runtimeObservations: [observation] };
   assert.equal(isCmpBasicCaptureReady(input), false, "A loader plus a wrapper is not the loaded configuration API");
   assert.equal(isCmpBasicCaptureReady({ ...input, lateInspectionComplete: true }), true, "Use the original read once the existing late inspection completes");
-  assert.equal(isCmpBasicCaptureReady({ ...input, controlsObserved: true }), true);
+  assert.equal(isCmpBasicCaptureReady({ ...input, controlsObserved: true }), false, "A separate terms dialog plus a loader/wrapper must not consume the single read");
+  assert.equal(isCmpBasicCaptureReady({ ...input, controlsObserved: true, runtimeObservations: [] }), false);
+  assert.equal(isCmpBasicCaptureReady({ ...input, controlsObserved: true, choicePairObserved: true, runtimeObservations: [] }), true, "A typed first-layer choice pair retains early DOM-only CMP capture");
+  assert.equal(isCmpBasicCaptureReady({ ...input, choicePairObserved: true, runtimeObservations: [] }), false);
   const domOnly = { ...observation, signals: [{ ...observation.signals[0]!, signalType: "dom_selector" as const }] };
   assert.equal(isCmpBasicCaptureReady({ ...input, runtimeObservations: [domOnly] }), false, "Installed markup is not a ready SDK");
   assert.equal(isCmpBasicCaptureReady({ ...input, runtimeObservations: [domOnly], lateInspectionComplete: true }), true);
+  const registeredDom = { ...domOnly, signals: [{ ...domOnly.signals[0]!, matchedValueRedacted: "#onetrust-banner-sdk" }] };
+  assert.equal(isCmpBasicCaptureReady({ ...input, controlsObserved: true, runtimeObservations: [registeredDom] }), false,"OneTrust markup plus an unrelated control does not establish its registered method");
+  assert.equal(isCmpBasicCaptureReady({ ...input, controlsObserved: true, runtimeObservations: [domOnly] }), false, "Unregistered DOM text is not a registered scope");
   const api = { ...observation, signals: [{ ...observation.signals[1]!, matchedValueRedacted: "OneTrust" }] };
-  assert.equal(isCmpBasicCaptureReady({ ...input, runtimeObservations: [api] }), true, "Registered API root can schedule; capture still validates the actual API");
+  assert.equal(isCmpBasicCaptureReady({ ...input, runtimeObservations: [api] }), false, "A registered root can still be a stub");
+  assert.equal(isCmpBasicCaptureReady({ ...input, runtimeObservations: [api],configurationApis:["OneTrust.GetDomainData"] }), true);
+  assert.equal(isCmpBasicCaptureReady({ ...input, configurationApis:["OneTrust.Unknown"] }), false);
   assert.equal(isCmpBasicCaptureReady({ ...input, lateInspectionComplete: true, runtimeObservations: [{ ...api, directVsInferred: "inferred" }] }), false);
   assert.equal(isCmpBasicCaptureReady({ ...input, lateInspectionComplete: true, runtimeObservations: [{ ...api, confidence: 0.4 }] }), false);
   assert.equal(isCmpBasicCaptureReady({ ...input, lateInspectionComplete: true, runtimeObservations: [] }), false);
@@ -149,6 +157,46 @@ test("required consent lane retains passive basics when the CMP appears after it
     assert.deepEqual(result.cmpBasicEvidence.declarations.map(row=>row.name),["_ga"]);
     assert.equal(result.moduleRun.timingBreakdown?.filter(row=>row.label==='passive CMP basics').length,1);
   } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
+});
+
+test("a terms dialog does not spend the one passive CMP read before the later registered SDK", {timeout:25000}, async () => {
+  const {createServer}=await import("node:http");
+  const {mkdtemp,rm}=await import("node:fs/promises");
+  const {tmpdir}=await import("node:os");
+  const {createArtifactWriter}=await import("./artifact-writer.js");
+  const {preConsentRuntimeScanner}=await import("./scanners/pre-consent-runtime-scanner.js");
+  const server=createServer((_req,res)=>{res.setHeader("content-type","text/html");res.end(`<!doctype html><main>Publisher fixture homepage.</main>
+    <section role="dialog"><h2>Legal Terms and Privacy</h2><p>By clicking Agree, you agree to collection by cookies and similar technologies.</p><button>Agree</button></section>
+    <script>window.OptanonWrapper=function(){};window.OneTrust={};setTimeout(()=>{
+      window.OneTrust={GetDomainData:()=>{window.__fixtureSdkRead();return {Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',FirstPartyCookies:[{Name:'_ga',Description:'Analytics',Lifespan:'2 years'}]}]}}};
+      document.body.insertAdjacentHTML('beforeend','<div id="onetrust-consent-sdk"></div>');
+    },1600);</script>`);});
+  await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
+  const address=server.address();assert.ok(address&&typeof address!=="string");
+  const url=`http://127.0.0.1:${address.port}/`,root=await mkdtemp(`${tmpdir()}/cmp-terms-lane-`);
+  const browser=await chromium.launch({headless:true});
+  const newContext=browser.newContext.bind(browser);let sdkReads=0,navigations=0;const unexpected:string[]=[];
+  browser.newContext=async options=>{
+    const context=await newContext({...options,serviceWorkers:"block"});
+    await context.exposeFunction("__fixtureSdkRead",()=>{sdkReads++;});
+    await context.route("**/*",route=>{
+      if(new URL(route.request().url()).origin===new URL(url).origin)return route.continue();
+      unexpected.push("unexpected_external_request");return route.abort();
+    });
+    context.on("page",page=>page.on("request",request=>{if(request.isNavigationRequest()&&request.frame()===page.mainFrame())navigations++;}));
+    return context;
+  };
+  try {
+    const result=await preConsentRuntimeScanner({url,normalizedUrl:url,scanStartedAtMs:Date.now(),internalBudgetMs:10000,
+      cmpBasicScanId:"terms-before-sdk",artifactWriter:await createArtifactWriter(root),captureScope:"consent_proof",screenshotMode:"always",browser});
+    assert.ok(result.cmpBasicEvidence,JSON.stringify(result.moduleRun.timingBreakdown?.filter(row=>row.label==='passive CMP basics')));
+    assert.equal(result.cmpBasicEvidence.provider,"OneTrust");
+    assert.deepEqual(result.cmpBasicEvidence.declarations.map(row=>row.name),["_ga"]);
+    assert.equal(sdkReads,1,"Only the already-authorized configuration read runs");
+    assert.equal(navigations,1);assert.deepEqual(unexpected,[]);
+    assert.equal(result.moduleRun.timingBreakdown?.filter(row=>row.label==='passive CMP basics').length,1);
+    assert.ok(result.domSnapshots.some(row=>row.documentIdentity?.token===result.cmpBasicEvidence?.documentToken));
+  } finally {await browser.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
 });
 
 test("passive Drupal identity uses the existing scope read and rejects getters and loader drift", async () => {
@@ -306,6 +354,28 @@ test("a recognized CMP with an inactive banner retains loaded facts without clai
     assert.deepEqual(result.cmpBasicEvidence.declarations.map(row=>row.name),['_ga']);
     assert.equal(result.moduleRun.timingBreakdown?.filter(row=>row.label==='passive CMP basics').length,1);
   } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
+});
+
+test("deferred OneTrust public policy access preserves the original slice without requiring visible CMP markup",async()=>{
+ const browser=await chromium.launch({headless:true});const context=await browser.newContext({serviceWorkers:"block"});const page=await context.newPage();
+ const unexpected:string[]=[];await context.route("**/*",route=>route.request().url()==="https://example.test/"?route.fulfill({contentType:"text/html",body:`<main>${Array.from({length:350},()=>'<a href="/article">News</a>').join("")}<a style="position:fixed;top:10px;left:10px;z-index:10" href="/privacy">Privacy Policy</a><a href="https://foreign.test/privacy">Privacy Policy</a></main><script>window.reads=0;window.actions=0;document.addEventListener('click',()=>window.actions++);window.OneTrust={GetDomainData:()=>{window.reads++;return {Groups:[]}}};</script>`}):(unexpected.push("unexpected_request"),route.abort()));
+ try {
+  await page.goto("https://example.test/");
+  const input={page,scanId:"public-link",targetUrl:page.url(),scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token:"loader"}),isCurrent:()=>true,deferPublicPrivacyLinks:true};
+  const basic=await captureCmpBasicEvidence(input);assert.ok(basic);assert.equal(basic.captureProgress?.privacyLinksAtMs,undefined);
+  const packet=await finishPassiveCmpPrivacyLinks({...input,packet:basic});assert.ok(packet);
+  assert.equal(packet.privacyLinks.length,1);assert.equal(packet.privacyLinks[0]!.hitTargetBeforeAction,true);
+  assert.equal(packet.privacyLinkInspection?.scope,"same_origin_page");assert.ok(packet.captureProgress?.privacyLinksAtMs!==undefined);
+  assert.deepEqual(packet.controls,[]);assert.equal(await page.evaluate(()=>(window as any).reads),1);
+  assert.equal(await page.evaluate(()=>(window as any).actions),0);assert.deepEqual(unexpected,[]);
+  await page.locator('a[href="/privacy"]').evaluate(node=>{const s=(node as HTMLElement).style;s.position="static";s.display="block";s.marginTop="1600px";});
+  const scrolled=await finishPassiveCmpPrivacyLinks({...input,packet:basic});assert.equal(scrolled?.privacyLinks[0]?.hitTargetBeforeAction,true);
+  assert.equal(scrolled?.privacyLinks[0]?.access?.scroll?.restored,true);assert.equal(await page.evaluate(()=>scrollY),0);
+  await page.locator('a[href="/privacy"]').evaluate(node=>(node as HTMLElement).style.display="none");
+  const hidden=await finishPassiveCmpPrivacyLinks({...input,packet:basic});assert.equal(hidden?.privacyLinks[0]?.access?.outcome,"not_rendered");
+  assert.equal(await finishPassiveCmpPrivacyLinks({...input,packet:basic,isCurrent:()=>false}),undefined);
+  let binds=0;assert.equal(await captureCmpBasicEvidence({...input,readBinding:()=>({url:page.url(),token:++binds===1?"loader":"replacement"})}),undefined);
+ }finally{await browser.close();}
 });
 
 test('registered loaded OneTrust data survives an absent banner without fabricating visible controls',async()=>{

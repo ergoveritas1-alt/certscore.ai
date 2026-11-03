@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 /** Local sharded scanner -> canonical publication -> HTTP report evaluation.
  * Real scanner/publisher code; repository-provided filesystem AWS and DB I/O doubles.
  * This does not measure production AWS queues, database locks or browser rendering.
@@ -12,7 +13,11 @@ import path from "node:path";
 import {redirectPublicationHarness} from "../apps/web/server/scans/redirect-publication.fixture";
 import {postAcceptLambdaDispatchConfigSchema, postRefusalLambdaDispatchConfigSchema} from "@certscore/contracts";
 
-const arg = (key: string) => process.argv[process.argv.indexOf(key) + 1];
+const arg = (key: string) => {
+  const index=process.argv.indexOf(key), value=index>=0?process.argv[index+1]:undefined;
+  if(!value || value.startsWith("--")) throw new Error(`Missing value for ${key}.`);
+  return value;
+};
 
 async function main() {
   const root = process.cwd(), baseline = path.resolve(arg("--baseline")), out = path.resolve(arg("--out"));
@@ -97,7 +102,7 @@ async function main() {
         assert.equal(summary.targetUrl, target);
         row.publicScanReused = reuseBaseline;
         if (reuseBaseline) {row.originalScannerSummary = reusedBaselinePath;row.fullReportLatencyIncludesRecovery = true;}
-        const bundle = JSON.parse(await readFile(path.join(summary.artifactRoot, "CanonicalEvidenceBundle.json"), "utf8"));
+        const bundle = parseCanonicalEvidenceArtifact(await readFile(path.join(summary.artifactRoot, "CanonicalEvidenceBundle.json"), "utf8")) as any;
         // The real local publisher intentionally permits only its existing
         // artifacts/local-v2-dag-scans root. Copy retained bytes into the
         // repository harness's approved directory; do not weaken its guard.

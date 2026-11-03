@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 /** Read only exact retained objects, with result-event -> manifest -> byte ancestry. */
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -21,7 +22,7 @@ export function retainedArtifactContext(payload:any,scanId:string,ref?:OptOutRec
  };
  const bundleRef=load('scanArtifactUri',event.artifactMetadata?.scanArtifactUri,event.artifactPointers?.scanArtifactUri);
  const manifestRef=load('manifestUri',event.artifactMetadata?.manifestUri,event.artifactPointers?.manifestUri);
- const bundle=JSON.parse(bundleRef.bytes.toString()),manifest=JSON.parse(manifestRef.bytes.toString());
+ const bundle=parseCanonicalEvidenceArtifact(bundleRef.bytes) as any,manifest=JSON.parse(manifestRef.bytes.toString());
  if(bundle.scanId!==scanId||manifest.scanId!==scanId)throw Error('Artifact scan identity mismatch');
  const aux=manifest.auxiliaryArtifacts??[],policyReceipts:any[]=[];let support={};
  for(const r of receipts.filter((r:any)=>!['scanArtifactUri','manifestUri'].includes(r.kind))){

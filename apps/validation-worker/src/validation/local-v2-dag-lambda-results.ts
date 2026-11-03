@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import {
   GetObjectCommand,
   S3Client,
@@ -1667,7 +1668,7 @@ export async function verifyProductionArtifactChain(
   let scanArtifactJson: Record<string, unknown>;
   try {
     manifestJson = asRecord(JSON.parse(manifest.body.toString("utf8")));
-    scanArtifactJson = asRecord(JSON.parse(scanArtifact.body.toString("utf8")));
+    scanArtifactJson = asRecord(parseCanonicalEvidenceArtifact(scanArtifact.body));
   } catch {
     throw new Error("Production retained artifacts are not valid JSON.");
   }

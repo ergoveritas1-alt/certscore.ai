@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -357,7 +358,7 @@ async function summarizeTarget(
   status: CohortRow["status"],
 ): Promise<CohortRow> {
   const bundlePath = path.join(artifactDir, "CanonicalEvidenceBundle.json");
-  const bundle = existsSync(bundlePath) ? asRecord(JSON.parse(await readFile(bundlePath, "utf8")) as unknown) : null;
+  const bundle = existsSync(bundlePath) ? asRecord(parseCanonicalEvidenceArtifact(await readFile(bundlePath, "utf8")) as unknown) : null;
   if (!bundle) {
     return {
       key: target.key,
@@ -1058,7 +1059,7 @@ function timestampForPath(date: Date) {
 
 async function readOptionalJson(filePath: string): Promise<unknown> {
   try {
-    return JSON.parse(await readFile(filePath, "utf8")) as unknown;
+    return parseCanonicalEvidenceArtifact(await readFile(filePath, "utf8")) as unknown;
   } catch {
     return null;
   }

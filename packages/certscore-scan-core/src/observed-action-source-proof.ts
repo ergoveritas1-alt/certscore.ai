@@ -1,5 +1,5 @@
 import type { ActionMainDocumentWriteCoverage, ObservedActionSourceProof } from "@certscore/contracts";
-import { OBSERVED_ACTION_EXCLUDED_CHANNELS } from "@certscore/contracts";
+import { OBSERVED_ACTION_EXCLUDED_CHANNELS, ACCEPT_REQUEST_RETENTION_POLICY } from "@certscore/contracts";
 
 /** Uses existing frozen handler inventories; never performs capture or widens observation. */
 export function buildObservedActionSourceProof(input: {
@@ -8,12 +8,13 @@ export function buildObservedActionSourceProof(input: {
   actionDocumentStable: boolean; requestListenerInstalledBeforeAction: boolean;
   requestWindowStartedAtMs: number; configuredWindowMs: number; cancelled: boolean;
   semanticDecisionConfirmed: boolean;
-  retention: { requestsObserved: number; requestsRetained: number };
+  retention: { policyVersion?: string; requestsObserved: number; requestsRetained: number };
   pendingCount: number; retainedRequestIds: string[];
   rows: Array<{ hostname?: string; purpose?: string }>;
 }): ObservedActionSourceProof {
   const w = input.writeCoverage;
   return { authorization: input.authorization, policyVersion: "bounded_observed_action_sources.v1",
+    ...(input.retention.policyVersion === ACCEPT_REQUEST_RETENTION_POLICY ? {requestRetentionPolicy: ACCEPT_REQUEST_RETENTION_POLICY} : {}),
     scope: "primary_page_request_listener_and_main_document_setter_hooks",
     scanClockOriginAtMs: input.scanClockOriginAtMs, excludedChannels: [...OBSERVED_ACTION_EXCLUDED_CHANNELS], targetUrlSha256: w.targetUrlSha256,
     documentTimeOriginMs: w.documentTimeOriginMs, hookInstalledAtMs: Number.isFinite(input.hookInstalledAtMs) ? input.hookInstalledAtMs! : null,

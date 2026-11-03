@@ -254,7 +254,17 @@ function applyActionLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
     const registration = "acceptanceRegistration" in packet ? packet.acceptanceRegistration : packet.refusalRegistration;
     if (registration.status === "unsupported") continue;
     const reason = registration.reason ?? "";
-    const detail = reason === "transparent_consent_scope_not_ready" ? "the banner did not become ready for interaction"
+    const scopeExclusion = click.outcome === "not_attempted" ? packet.interactionDiagnostics?.resolver?.snapshots
+      .filter(row => row.state === "scope_not_interactive" && row.scopeExclusion).at(-1)?.scopeExclusion : undefined;
+    const scopeDetails = {
+      aria_hidden: "a checked control scope was marked aria-hidden; the scan did not click it",
+      inert: "a checked control scope was marked inert; the scan did not click it",
+      hidden: "a checked control scope was hidden; the scan did not click it",
+      transparent: "a checked control scope was transparent; the scan did not click it",
+      unavailable: "a checked control scope could not be verified; the scan did not click it",
+    };
+    const detail = scopeExclusion ? scopeDetails[scopeExclusion.reason]
+      : reason === "transparent_consent_scope_not_ready" ? "the banner did not become ready for interaction"
       : click.failureClass === "intercepted" ? "another element blocked the control"
       : click.failureClass === "actionability_timeout" ? "the control did not become actionable before the deadline"
       : reason.includes("multiple_deterministic") ? "more than one matching control was found"
@@ -384,7 +394,6 @@ function privacyLinkAccessDetail(links: NonNullable<CanonicalEvidenceBundle["cmp
   if (!links.length) return "No privacy-policy link was captured in this inspection.";
   const outcomes = [...new Set(links.map(link => link.access?.outcome))];
   if (outcomes.includes(undefined)) return "Privacy policy found; pre-consent link accessibility was not verified. This saved scan did not record why.";
-  if (outcomes.length > 1) return "Privacy-policy links were found, but none was verified as reachable before consent. Individual inspection reasons are retained in the supporting evidence.";
   const reasons = {
     outside_viewport: "Its link was outside the captured viewport, so pre-consent click access was not verified.",
     not_rendered: "Its link was not rendered in the captured view.",
@@ -396,7 +405,11 @@ function privacyLinkAccessDetail(links: NonNullable<CanonicalEvidenceBundle["cmp
     inspection_incomplete: "Link accessibility inspection did not complete.",
     reachable: "Pre-consent link accessibility was verified.",
   };
-  return `Privacy policy found. ${reasons[outcomes[0]!]}`;
+  const details = [...new Set(links.map(link => link.access?.exclusion?.reason === "aria_hidden"
+    ? "A policy link or its ancestor was marked aria-hidden; pre-consent access was excluded by the safety check."
+    : reasons[link.access!.outcome]))];
+  if (details.length > 1) return `Privacy-policy links were found, but none was verified as reachable before consent. ${details.slice(0,3).join(" ")}`;
+  return `Privacy policy found. ${details[0]}`;
 }
 
 function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: InventoryFacts,
@@ -576,6 +589,12 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
 /** Basic first-layer facts have their own typed producer contract and loader
  * binding. They may fill missing checks, never overwrite a deeper assessment or
  * manufacture completeness from an optional worker outcome. */
+function missingCmpAuditDetail(id: string): string {
+  return id === "privacy_access"
+    ? "No completed, document-bound pre-consent privacy-link accessibility inspection was retained."
+    : "Evidence was not retained for this check.";
+}
+
 export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geometry?: Record<string, unknown> | null): CmpAuditAssessment | undefined {
   try {
     return deriveVerifiedCmpAuditAssessment(bundle, geometry);
@@ -588,7 +607,7 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
       sourceSha256: createHash("sha256").update(JSON.stringify({ policy: "cmp_optional_projection_isolation.v1", bundle, geometry, issues })).digest("hex"),
       support: { state: "unknown", provider: null, recipeVersion: null, reason: "cmp_audit_projection_invalid" },
-      rows: [...cmpAuditCriterionSchema.options, "implementation", "prominence"].map(id => ({ id, status: "not_assessed", detail: "Evidence was not retained for this check.", evidenceRefs: [] })),
+      rows: [...cmpAuditCriterionSchema.options, "implementation", "prominence"].map(id => ({ id, status: "not_assessed", detail: missingCmpAuditDetail(id), evidenceRefs: [] })),
     });
   }
 }
@@ -596,7 +615,7 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
 /** Core facts do not depend on an optional preference packet or lane outcome. */
 function deriveIndependentAuditAssessment(bundle: CanonicalEvidenceBundle, geometry: Record<string, unknown> | null | undefined, captures: ReturnType<typeof retainedChoiceCaptures>): CmpAuditAssessment | undefined {
   const rows: CmpAuditAssessment["rows"] = ([...cmpAuditCriterionSchema.options, "implementation", "prominence"] as const)
-    .map(id => ({ id, status: "not_assessed", detail: "Evidence was not retained for this check.", evidenceRefs: [] }));
+    .map(id => ({ id, status: "not_assessed", detail: missingCmpAuditDetail(id), evidenceRefs: [] }));
   const set: AuditSet = (id, status, detail, evidenceRefs = []) => Object.assign(rows.find(row => row.id === id)!, { status, detail: detail.slice(0, 500), evidenceRefs });
   const expiries = applyClientFacts(bundle, set, rows, captures.filter(capture => capture.storageCompleted));
   if (expiries.length) rows.find(row => row.id === "duration")!.inventory = { expiries };
@@ -643,7 +662,7 @@ function deriveVerifiedCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geome
   const assessment: CmpAuditAssessment = original ?? {
     version: "cmp_audit_assessment.v6" as const, scanId: bundle.scanId, sourceSha256: "0".repeat(64),
     support: { state: "partial" as const, provider: basic.provider, recipeVersion: basic.contractVersion, reason: "passive_first_layer_only" },
-    rows: ([...cmpAuditCriterionSchema.options, "implementation", "prominence"] as const).map(id => ({ id, status: "not_assessed" as const, detail: "Evidence was not retained for this check.", evidenceRefs: [] as string[] })),
+    rows: ([...cmpAuditCriterionSchema.options, "implementation", "prominence"] as const).map(id => ({ id, status: "not_assessed" as const, detail: missingCmpAuditDetail(id), evidenceRefs: [] as string[] })),
   };
   if (!assessment.support.provider) assessment.support = { ...assessment.support, state: "partial", provider: basic.provider, recipeVersion: basic.contractVersion };
   const candidates: CmpAuditAssessment["rows"] = assessment.rows.map(row => ({ id: row.id, status: "not_assessed", detail: "", evidenceRefs: [] }));
@@ -673,11 +692,12 @@ function deriveVerifiedCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geome
     row.inventory = { ...row.inventory, services };
   }
   for (const row of candidates) {
-    // A completed typed public-link inspection can explain an unresolved check.
+    // A completed typed link inspection can explain an unresolved check,
+    // including a registered CMP-scoped read without the public-page marker.
     // It cannot turn a hit-test miss into absence, a gap or a score effect, and
     // must not replace another lane's already-retained inspection diagnostic.
     const passiveLinkDiagnostic=row.id==="privacy_access" && row.status==="not_assessed" && basicPrivacyUsable &&
-      basic.privacyLinkInspection?.version==="passive_public_privacy_links.v1" && basic.privacyLinks.length>0 &&
+      basic.captureProgress?.privacyLinksAtMs!==undefined &&
       basic.privacyLinks.every(link=>link.access!==undefined);
     if (["not_assessed", "incomplete"].includes(row.status) && !passiveLinkDiagnostic) continue;
     const previous = assessment.rows.find(item => item.id === row.id)!;
@@ -690,6 +710,6 @@ function deriveVerifiedCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geome
     if (expiries.length) assessment.rows.find(row => row.id === "duration")!.inventory = { expiries };
     applyChoiceActivity(bundle, assign, assessment.rows, observations.filter(capture => capture.networkCompleted)); applyActionLimitations(bundle, assessment.rows); applyVisualLimitations(bundle, assessment.rows, geometry);
   }
-  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_basic_facts.v11", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
+  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_basic_facts.v12-privacy-diagnostics", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
   return cmpAuditAssessmentSchema.parse(assessment);
 }

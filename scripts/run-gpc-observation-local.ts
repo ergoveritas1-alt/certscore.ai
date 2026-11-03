@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -16,7 +17,7 @@ export function localGpcSource(bytes: Uint8Array, uri: string) { return { bytes,
  * unknown outcomes. Validate actual disk bytes rather than an in-memory result. */
 export async function retainLocalGpcCanonicalSource(outDir: string, scanId: string) {
   const bytes = await readFile(path.join(outDir, "CanonicalEvidenceBundle.json"));
-  const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(bytes.toString()));
+  const bundle = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(bytes.toString(), { schemaValidation: "caller" }));
   if (bundle.scanId !== scanId) throw Error("Canonical artifact scan identity mismatch");
   const source = localGpcSource(bytes, path.join(outDir, "CanonicalEvidenceBundle.json"));
   await writeFile(path.join(outDir, "CanonicalEvidenceBundle.pointer.json"), JSON.stringify(source.pointer, null, 2), { flag: "wx" });

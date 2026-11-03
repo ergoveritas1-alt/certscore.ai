@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -398,7 +399,7 @@ export function loadRetainedCohort(cohortRoot: string): CohortLoad {
       if (!fs.existsSync(bundlePath)) { missingBundles++; continue; }
       let bundle: CanonicalEvidenceBundle;
       try {
-        const parsed = canonicalEvidenceBundleSchema.safeParse(JSON.parse(fs.readFileSync(bundlePath, "utf8")));
+        const parsed = canonicalEvidenceBundleSchema.safeParse(parseCanonicalEvidenceArtifact(fs.readFileSync(bundlePath, "utf8"), { schemaValidation: "caller" }));
         if (!parsed.success) { invalidBundles++; continue; }
         bundle = parsed.data;
       } catch { invalidBundles++; continue; }

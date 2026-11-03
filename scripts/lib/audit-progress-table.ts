@@ -22,6 +22,7 @@ export function controlPresenceUnavailableLabel(id:string,value:{denominator:num
   return sources.length&&sources.every(s=>/^public_export\/pulse-public-v(?:4|5|10)\//.test(s))?"Not exported":null;
 }
 export function quantityMeasureGroup(id:string):string{
+  if(id.startsWith("gpc.paired.")||id.startsWith("gpc.session."))return "GPC details";
   if(/^(accept|reject)\./.test(id))return "A/R verdicts";
   if(id.startsWith("storage.")||id==="inventory.cookies")return "Storage classification";
   if(id.startsWith("accessibility."))return "Accessibility";

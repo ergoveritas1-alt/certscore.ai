@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -172,7 +173,7 @@ async function compareRow(
   ]);
   const proofScreenshotSha256 = await sha256File(proofScreenshot);
   try {
-    const bundle = parseConsentCalibrationBundle(JSON.parse(await readFile(bundlePath, "utf8")));
+    const bundle = parseConsentCalibrationBundle(parseCanonicalEvidenceArtifact(await readFile(bundlePath, "utf8")));
     const geometry = JSON.parse(await readFile(geometryPath, "utf8")) as Record<string, unknown>;
     const assessment = deriveMaterializedConsentControlAssessment({
       bundle,

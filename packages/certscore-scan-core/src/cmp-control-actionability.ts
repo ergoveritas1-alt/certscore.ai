@@ -108,7 +108,7 @@ async function inspectLocatorReadiness(control: ConsentActionControl, inspectSco
             let current: Element | null = element;
             for (let depth = 0; current && depth < 64; depth++) {
               const style = getComputedStyle(current);
-              if (!current.isConnected || current.matches('[hidden], [inert], [aria-hidden="true" i]') ||
+              if (!current.isConnected || current.matches('[hidden], [inert]') ||
                 style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" ||
                 style.opacity === "0") { scopeInteractive = false; break; }
               const root = current.getRootNode();

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { WriteStream } from "node:tty";
@@ -182,7 +183,7 @@ async function readInternalArtifact<T>(
   if (!ref?.path) {
     return undefined;
   }
-  return schema.parse(JSON.parse(await readFile(ref.path, "utf8")));
+  return schema.parse(parseCanonicalEvidenceArtifact(await readFile(ref.path, "utf8")));
 }
 
 async function resolveTargets(args: Args): Promise<ShadowTarget[]> {
@@ -215,7 +216,7 @@ function parseTargetLine(line: string): ShadowTarget | undefined {
     return { url: line };
   }
   try {
-    const parsed = JSON.parse(line) as { url?: unknown; privacyControlUrls?: unknown };
+    const parsed = parseCanonicalEvidenceArtifact(line) as { url?: unknown; privacyControlUrls?: unknown };
     if (typeof parsed.url !== "string" || parsed.url.length === 0) {
       return undefined;
     }
@@ -296,7 +297,7 @@ function parseArgs(argv: string[]): Args {
 async function readBundleIfExists(outDir: string): Promise<CanonicalEvidenceBundle | undefined> {
   try {
     const bundleJson = await readFile(path.join(outDir, "CanonicalEvidenceBundle.json"), "utf8");
-    return canonicalEvidenceBundleSchema.parse(JSON.parse(bundleJson));
+    return canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(bundleJson, { schemaValidation: "caller" }));
   } catch {
     return undefined;
   }

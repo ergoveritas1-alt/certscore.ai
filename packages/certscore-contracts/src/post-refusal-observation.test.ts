@@ -936,3 +936,8 @@ test("SDK applicability Refusal proof survives canonical packet projection with 
   }
   assert.equal(postRefusalEvidencePacketSchema.safeParse({...raw,completedAt:new Date(Date.parse(base.startedAt)+click).toISOString()}).success,false);
 });
+
+test('Reject cannot borrow the expanded Accept policy even for an empty inventory',()=>{
+ const packet={...basePacket(),captureCoverage:{requestsDroppedBeforeAction:0,requestsDroppedAfterAction:0,postActionRetention:{policyVersion:'priority_bounded_action_requests.v3-accept384',requestsObserved:0,requestsRetained:0,replacements:0,priorityEvaluations:0,omitted:{delivery_asset:0,known_other:0,unknown:0,tracking:0,consent:0,document:0,unclassified:0}}}};
+ assert.equal(postRefusalEvidencePacketSchema.safeParse(packet).success,false);
+});

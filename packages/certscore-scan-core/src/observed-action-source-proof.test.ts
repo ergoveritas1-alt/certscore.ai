@@ -80,3 +80,11 @@ test("literal unknown purpose is unresolved even when nonEssential is false", ()
   const forged = { ...proof, requests: { ...proof.requests, unresolvedClassificationCount: 0 } };
   assert.equal(z.unknown().superRefine((_, ctx) => validateObservedActionSourceProof(forged, ctx, source)).safeParse({}).success, false);
 });
+
+test('expanded scoped sources retain the new policy and legacy proofs keep their cap',async()=>{
+ const {ACCEPT_REQUEST_RETENTION_POLICY:policy}=await import('@certscore/contracts');
+ const ids=Array.from({length:300},(_,i)=>`request-${i}`);
+ const proof=buildObservedActionSourceProof({...input,retention:{policyVersion:policy,requestsObserved:300,requestsRetained:300},retainedRequestIds:ids,rows:ids.map(()=>({hostname:'example.com',purpose:'infrastructure'}))});
+ assert.equal(proof.requestRetentionPolicy,policy);assert.equal(observedActionSourceProofSchema.safeParse(proof).success,true);
+ const legacy=structuredClone(proof);delete legacy.requestRetentionPolicy;assert.equal(observedActionSourceProofSchema.safeParse(legacy).success,false);
+});

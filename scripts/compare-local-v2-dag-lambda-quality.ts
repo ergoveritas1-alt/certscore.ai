@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { canonicalEvidenceBundleSchema, reviewResultSchema } from "../packages/certscore-contracts/src/index.js";
@@ -212,8 +213,8 @@ async function compareSite(input: {
   };
   const lambdaModuleStatuses = moduleStatuses(lambdaArtifacts.bundle.modulesRun);
   const localModuleStatuses = moduleStatuses(localArtifacts.bundle.modulesRun);
-  const lambdaCoverageStatus = lambdaArtifacts.bundle.runtimeCoverage.coverageStatus;
-  const localCoverageStatus = localArtifacts.bundle.runtimeCoverage.coverageStatus;
+  const lambdaCoverageStatus = lambdaArtifacts.bundle.runtimeCoverage?.coverageStatus ?? null;
+  const localCoverageStatus = localArtifacts.bundle.runtimeCoverage?.coverageStatus ?? null;
   const explicitConsentLimitation = hasExplicitConsentLimitation({
     bundle: lambdaArtifacts.bundle,
     projectionCoverageLimitations: lambdaArtifacts.projection.coverageLimitations,
@@ -301,7 +302,7 @@ async function loadArtifacts(result: BenchmarkResult, args: Args) {
     throw new Error(`${result.domain} ${result.mode} did not include an artifact directory.`);
   }
   const bundlePath = path.join(result.outDir, "CanonicalEvidenceBundle.json");
-  const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(await readFile(bundlePath, "utf8")));
+  const bundle = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(await readFile(bundlePath, "utf8"), { schemaValidation: "caller" }));
   const reviewPath = path.join(result.outDir, "ReviewResult.json");
   const projectionPath = path.join(result.outDir, "V2ReportProjectionDraft.json");
   if (await exists(reviewPath) && await exists(projectionPath)) {
@@ -458,7 +459,7 @@ async function loadScenarioDiagnosticLimitationKeys(outDir: string): Promise<str
     if (!entry.isFile() || !entry.name.includes("consent-runtime-diagnostics-") || !entry.name.endsWith(".json")) {
       continue;
     }
-    const diagnostic = asRecord(JSON.parse(await readFile(path.join(outDir, entry.name), "utf8")));
+    const diagnostic = asRecord(parseCanonicalEvidenceArtifact(await readFile(path.join(outDir, entry.name), "utf8")));
     const limitationKeys = Array.isArray(diagnostic.limitationKeys) ? diagnostic.limitationKeys : [];
     for (const key of limitationKeys) {
       if (typeof key === "string" && key.trim()) {
@@ -626,19 +627,19 @@ async function writeQualityScoreArtifact(site: SiteComparison) {
 }
 
 function hasExplicitConsentLimitation(input: {
-  bundle: { runtimeCoverage: { limitationKeys: string[] } };
+  bundle: { runtimeCoverage?: { limitationKeys: string[] } };
   moduleStatuses: Record<string, string>;
   projectionCoverageLimitations: unknown[];
 }) {
   return input.projectionCoverageLimitations.length > 0 ||
-    input.bundle.runtimeCoverage.limitationKeys.length > 0 ||
+    (input.bundle.runtimeCoverage?.limitationKeys.length ?? 0) > 0 ||
     ["preConsentRuntimeScanner", "consentFlowRuntimeScanner"].some((moduleName) =>
       ["failed", "partial", "skipped_budget", "not_testable"].includes(input.moduleStatuses[moduleName] ?? "")
     );
 }
 
 function moduleFailureIsStronglyLimited(input: {
-  bundleCoverageStatus: string;
+  bundleCoverageStatus: string | null;
   moduleStatuses: Record<string, string>;
   projectionRowsByStatus: RowStatusCounts;
 }) {
@@ -646,6 +647,7 @@ function moduleFailureIsStronglyLimited(input: {
   if (!failedModule) {
     return true;
   }
+  if (input.bundleCoverageStatus === null) return false;
   return input.bundleCoverageStatus !== "usable" || usefulRows(input.projectionRowsByStatus) === 0;
 }
 

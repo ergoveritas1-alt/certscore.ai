@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { existsSync, readFileSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -641,7 +642,7 @@ export function parseV2ScanLabArtifact(
   validateRawTextGuardrails(raw, artifactPath);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = parseCanonicalEvidenceArtifact(raw);
   } catch {
     throw scanLabError("invalid_json", "Artifact is not valid JSON.", artifactPath);
   }
@@ -758,7 +759,7 @@ async function discoverArtifactMatches(input: {
 
 function tryParseJsonObject(raw: string) {
   try {
-    const parsed: unknown = JSON.parse(raw);
+    const parsed: unknown = parseCanonicalEvidenceArtifact(raw);
     return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
@@ -916,7 +917,7 @@ function parseCanonicalEvidenceBundlePreview(
 ): { bundle?: CanonicalEvidenceBundle; preview: Record<string, unknown> } {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = parseCanonicalEvidenceArtifact(raw);
   } catch {
     throw scanLabError("invalid_json", "Canonical evidence bundle is not valid JSON.", artifactPath);
   }
@@ -1917,7 +1918,7 @@ function inferV2BenchmarkLabel(domain: string) {
 
 function readJsonObjectIfPresent(filePath: string) {
   try {
-    const parsed: unknown = JSON.parse(readFileSync(filePath, "utf8"));
+    const parsed: unknown = parseCanonicalEvidenceArtifact(readFileSync(filePath, "utf8"));
     return isRecord(parsed) ? parsed : null;
   } catch {
     return null;

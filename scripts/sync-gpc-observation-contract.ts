@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { gpcBoundedObservationSchema } from "../packages/certscore-contracts/src/gpc-bounded-observation";
 import { gpcActivityComparisonSchema } from "../packages/certscore-contracts/src/gpc-activity-comparison";
+import { gpcCollectionComparisonSchema } from "../packages/certscore-contracts/src/gpc-collection-comparison";
 import { gpcCmpStateComparisonSchema } from "../packages/certscore-contracts/src/gpc-cmp-state-comparison";
 import { gpcGuidanceSchema } from "../packages/certscore-contracts/src/gpc-guidance";
 import { z } from "zod";
@@ -33,6 +34,7 @@ const projected = project(gpcBoundedObservationSchema);
 const activitySource = await readFile("packages/certscore-contracts/src/gpc-activity-comparison.ts", "utf8");
 const activityProjected = project(gpcActivityComparisonSchema);
 const extraFiles = Object.fromEntries(await Promise.all([
+  ["gpc-collection-comparison", "GpcCollectionComparison", "gpcCollectionComparisonOpenApi", gpcCollectionComparisonSchema],
   ["gpc-cmp-state-comparison", "GpcCmpStateComparison", "gpcCmpStateComparisonOpenApi", gpcCmpStateComparisonSchema],
   ["gpc-guidance", "GpcGuidance", "gpcGuidanceOpenApi", gpcGuidanceSchema],
 ].map(async ([file, type, openapi, schema]) => [

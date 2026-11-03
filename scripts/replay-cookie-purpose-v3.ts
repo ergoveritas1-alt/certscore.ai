@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 /** Read-only local replay. No scans, persistence, model calls or production writes. */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -28,7 +29,7 @@ async function main() {
   for (const baseline of baselines) {
     const file = path.join(inputDir, `${baseline.site}.json`);
     const bytes = readFileSync(file);
-    const bundle = JSON.parse(bytes.toString());
+    const bundle = parseCanonicalEvidenceArtifact(bytes) as any;
     const hash = createHash("sha256").update(bytes).digest("hex");
     const candidate = structuredClone(bundle);
     const changes = [];
@@ -91,7 +92,7 @@ async function main() {
     assert.equal(rejectAfter.deduction, rejectBefore.deduction, "Unexpected action-purpose impact needs independent scoring review");
     const publishedStorage = baseline.deductions.find((item: {family: string}) => item.family === "pre_consent_storage")?.points ?? 0;
     assert.equal(before.deduction, publishedStorage, `${baseline.site}: retained replay must reproduce published storage deduction`);
-    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), bundle, "Source bundle mutated");
+    assert.deepEqual(parseCanonicalEvidenceArtifact(readFileSync(file, "utf8")), bundle, "Source bundle mutated");
     const result = { site: baseline.site, scanId: bundle.scanId, sourceHash: hash, replayPolicy: COOKIE_PURPOSE_POLICY,
       publishedScore: baseline.score.value, oldStorageDeduction: before.deduction, newStorageDeduction: after.deduction,
       replayScore: baseline.score.value + before.deduction - after.deduction,

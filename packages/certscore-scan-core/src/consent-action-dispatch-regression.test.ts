@@ -22,7 +22,7 @@ for (const action of ["accept", "reject"] as const) {
         }
         const textScope = ["text_scope", "text_scope_distinct", "label_only", "article_scope", "hidden_scope", "text_frame"].includes(variant);
         const wrapper = variant === "article_scope" ? "article" : "section";
-        response.end(`<!doctype html><html><body><${wrapper} ${textScope ? `class="message-component message-row" ${variant === "hidden_scope" ? 'aria-hidden="true"' : ''}` : 'class="cookie-banner" role="dialog" aria-label="Cookie consent"'}>
+        response.end(`<!doctype html><html><body><${wrapper} ${textScope ? `class="message-component message-row" ${variant === "hidden_scope" ? 'style="display:none"' : ''}` : 'class="cookie-banner" role="dialog" aria-label="Cookie consent"'}>
           ${variant === "heading_tab" ? `<h1>${label}</h1><button role="tab">Consent</button>` : ""}
           ${variant === "label_only" ? "" : "<p>We use optional cookies and similar technologies to personalize advertising. Choose your cookie preferences.</p>"}
           <div><div><button id="choice" class="action">${label}</button>${["distinct", "text_scope_distinct"].includes(variant) ? `<button id="other">${label}</button>` : ""}</div></div>

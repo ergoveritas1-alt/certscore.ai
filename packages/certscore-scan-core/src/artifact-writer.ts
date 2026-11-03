@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 
 export interface ArtifactWriter {
   baseDir: string;
@@ -22,7 +23,9 @@ export async function createArtifactWriter(baseDir: string): Promise<ArtifactWri
     },
     async writeJsonArtifact(filename: string, content: unknown): Promise<string> {
       const artifactPath = path.join(baseDir, filename);
-      await writeFile(artifactPath, `${JSON.stringify(content, null, 2)}\n`);
+      const json = filename === "CanonicalEvidenceBundle.json"
+        ? serializeCanonicalEvidenceArtifact(content, 2) : JSON.stringify(content, null, 2);
+      await writeFile(artifactPath, `${json}\n`);
       return artifactPath;
     },
   };

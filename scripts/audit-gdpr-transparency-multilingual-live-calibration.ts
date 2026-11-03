@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -46,7 +47,7 @@ async function main() {
 async function summarizeTarget(target: Target, expectedTopics: GdprTransparencyTopic[], artifactRoot: string) {
   const artifactDir = path.resolve(artifactRoot, target.artifactDir ?? target.key);
   try {
-    const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(await readFile(path.join(artifactDir, "CanonicalEvidenceBundle.json"), "utf8")));
+    const bundle = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(await readFile(path.join(artifactDir, "CanonicalEvidenceBundle.json"), "utf8"), { schemaValidation: "caller" }));
     const surfaces = bundle.policySurfaceObservations.filter((surface) =>
       surface.surfaceType === "privacy_policy" && surface.status === "fetched"
     );

@@ -1,6 +1,6 @@
 # CertScore.ai Mac mini audit progress
 
-Procedure version: 2026-11-01.v8. Module: `certscore.mac-mini-daily-progress.v5`. Acquisition: `certscore.mac-mini-direct-delta.v1`.
+Procedure version: 2026-11-02.v9. Module: `certscore.mac-mini-daily-progress.v5`. Acquisition: `certscore.mac-mini-direct-delta.v1`.
 
 This audit-only supplement is owner-authorized for the existing daily audit. It
 uses the preceding calendar month, grouped by America/Los_Angeles date. Partial
@@ -507,3 +507,31 @@ Carry the complete `retainedReports` receipt objects, including optional `artifa
 Forms after Accept uses definition `certscore.audit.forms-after-retained.v2`: only `retained` contributes to its headline. `limited` and `unavailable` remain distinct. Old published files are immutable. Zero eligible records display “No eligible data”; all unavailable measurements display “Unavailable” or “Not exported”; unassessed CMP checks and profile-omitted workers are explicitly labeled. Zero inventory hours means no complete attempt inventory, so the header says “Attempt inventory incomplete”. It does not mean no scans occurred.
 
 The recovered month JSON may exceed the former 80 MB local-file cap. The preparer and publisher permit at most 160 MB for `dashboard.json`; original artifact/object, query, archive-export and other output limits remain unchanged. This changes only bounded local-file handling, with no recurring infrastructure increment.
+
+
+## Paired GPC evidence statistics — November 2
+
+Owner-approved additive definition `certscore.audit.gpc-paired.v1` consumes only
+already-returned, hash-verified public exports. Validate the activity schema,
+scan ID and both original source references. Count independently bound CMP-state
+packet availability without requiring CMP readiness for behavioral facts. Add behavioral-pair availability, verified
+window-duration buckets, classified advertising/analytics request counts on
+both sides, and optional retained successful-collection/identifier samples,
+identifier scope and cap state. Validate the optional collection packet against
+the original pair and authoritative bounded GPC rows. A bad optional collection
+packet must not erase an independently valid request comparison.
+
+Missing legacy packets stay unavailable. Preserve unknown/unbound records in
+denominators; never fetch raw worker bundles or reconstruct historical packets.
+Request quantities use separate policy/window series. Collection quantities are
+bounded samples, never complete collection inventories; zero is not absence.
+Independently record full-visit GPC advertising collection, classified requests,
+request coverage and the retained horizon relative to its own document commit.
+These facts survive a missing pair; early-window zero must not hide later
+positive collection. Keep qualification/coverage series separate. CMP readability
+is supporting context and does not gate behavioral statistics.
+Different independent visits do not establish causation, honoring or legal
+compliance. The same query, schedule, model, project, budget and audit window
+remain unchanged. Run the new audit-progress-gpc tests with existing audit tests,
+review source pins, and activate the reviewed candidate only after local checks.
+No audit checkpoint, latest snapshot or historical output is rewritten here.

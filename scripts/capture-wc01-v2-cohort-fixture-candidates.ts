@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -378,7 +379,7 @@ function parsePositiveInteger(value: string, flag: string) {
 }
 
 async function readJson<T>(filePath: string): Promise<T> {
-  return JSON.parse(await readFile(filePath, "utf8")) as T;
+  return parseCanonicalEvidenceArtifact(await readFile(filePath, "utf8")) as T;
 }
 
 function safeSlug(value: string) {

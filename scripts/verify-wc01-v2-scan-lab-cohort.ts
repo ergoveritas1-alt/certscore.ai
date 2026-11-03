@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -534,7 +535,7 @@ function inferNoGoCandidateReasons(result: CohortResult) {
   const domText = readOptionalText(artifactDir ? path.join(artifactDir, "dom-text-pre-consent.txt") : undefined);
   const normalizedDomText = domText.replace(/\s+/g, " ").trim();
   const lowerDomText = normalizedDomText.toLowerCase();
-  const blockTextMatches = [
+  const blockTextMatches = ([
     ["access_temporarily_restricted", "access is temporarily restricted"],
     ["automated_activity", "automated (bot) activity"],
     ["security_service_block", "this website is using a security service"],
@@ -543,7 +544,7 @@ function inferNoGoCandidateReasons(result: CohortResult) {
     ["human_verification", "verify you are human"],
     ["connection_security_review", "checking if the site connection is secure"],
     ["connection_security_review", "needs to review the security of your connection"],
-  ].filter(([, needle]) => lowerDomText.includes(needle));
+  ] as const).filter(([, needle]) => lowerDomText.includes(needle));
 
   for (const [reason] of blockTextMatches) {
     reasons.add(`block_page_text:${reason}`);
@@ -820,14 +821,14 @@ function parseNonNegativeInteger(value: string, flag: string) {
 }
 
 async function readJson<T>(filePath: string): Promise<T> {
-  return JSON.parse(await readFile(filePath, "utf8")) as T;
+  return parseCanonicalEvidenceArtifact(await readFile(filePath, "utf8")) as T;
 }
 
 function readOptionalJson<T>(filePath: string | undefined): T | null {
   if (!filePath || !existsSync(filePath)) {
     return null;
   }
-  return JSON.parse(readFileSync(filePath, "utf8")) as T;
+  return parseCanonicalEvidenceArtifact(readFileSync(filePath, "utf8")) as T;
 }
 
 function readOptionalText(filePath: string | undefined) {

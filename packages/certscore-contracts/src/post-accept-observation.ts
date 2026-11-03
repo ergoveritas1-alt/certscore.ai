@@ -17,7 +17,7 @@ import { actionStoragePhaseDiagnosticsSchema } from "./action-storage-collection
 import { actionOriginDomStorageObservationSchema, validateOriginDomStorageObservation } from "./action-origin-dom-storage-observation";
 import { validateActionStorageName, validateLegacyActionStorageNames } from "./action-storage-name";
 import { actionMainDocumentWriteCoverageSchema, afterActionCaptureSchema, validateAfterActionCapture, validateAfterActionProjection } from "./after-action-capture";
-import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT, actionCaptureCoverageSchema, consentDecisionEvidenceSchema, hasSemanticConsentWitness } from "./consent-action-evidence-policy";
+import { CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT, validateActionRetentionBudget, actionCaptureCoverageSchema, consentDecisionEvidenceSchema, hasSemanticConsentWitness } from "./consent-action-evidence-policy";
 import { runtimeEvidenceGraphSchema, runtimeGraphVerificationDiagnosticSchema, withRuntimeGraphCompatibility, type RuntimeEvidenceGraph } from "./runtime-evidence-graph";
 const packetRuntimeGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenceGraphSchema;
 import {
@@ -214,7 +214,7 @@ const postAcceptEvidencePacketBaseSchema = z.object({
     readyAtMs: z.number().int().nonnegative(),
   }),
   network: z.object({
-    requests: z.array(postAcceptNetworkRequestSchema).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT),
+    requests: z.array(postAcceptNetworkRequestSchema).max(CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT),
     postAcceptNonEssentialRequests: z.array(postAcceptNetworkRequestSchema).max(24),
     activeRequestIdsAtAcceptanceRegistration: z.array(z.string().max(120)).max(48),
   }),
@@ -241,6 +241,7 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   }),
   limitations: z.array(z.string().max(240)).max(24).default([]),
 }).superRefine((packet, context) => {
+  validateActionRetentionBudget({action:"accept",coverage:packet.captureCoverage,requestCount:packet.network.requests.length,fullInventory:true,capture:packet.afterActionCapture},context);
   if (packet.timing.observationEndedAtMs !== undefined && (
     packet.timing.observationEndedAtMs > packet.timing.readyAtMs ||
     packet.timing.observationEndedAtMs < (packet.acceptanceRegistration.acceptanceRegisteredAtMs ?? packet.acceptanceRegistration.actionDispatchedAtMs ?? 0)
@@ -662,7 +663,7 @@ export const postAcceptReportProjectionSchema = z.object({
   interactionDiagnostics: postRefusalInteractionDiagnosticsSchema.optional(),
   formCapture: postAcceptFormCaptureSchema.optional(),
   afterActionCapture: afterActionCaptureSchema.optional(),
-  afterActionRequests: z.array(postRefusalNetworkRequestSchema.omit({ inFlightAtRefusalRegistration: true, msOffsetFromRefusal: true })).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT).optional(),
+  afterActionRequests: z.array(postRefusalNetworkRequestSchema.omit({ inFlightAtRefusalRegistration: true, msOffsetFromRefusal: true })).max(CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT).optional(),
   afterActionStorage: z.array(postRefusalStorageItemSchema).max(96).optional(),
   terminalDecisionEvidence: terminalConsentDecisionSchema.optional(),
   decisionEvidence: consentDecisionEvidenceSchema.optional(),
@@ -692,6 +693,7 @@ export const postAcceptReportProjectionSchema = z.object({
     "aborted",
   ]),
 }).superRefine((projection, context) => {
+  validateActionRetentionBudget({action:"accept",coverage:projection.captureCoverage,requestCount:projection.afterActionRequests?.length ?? 0,capture:projection.afterActionCapture},context);
   if (projection.receiptAvailability && (projection.receiptAvailability.action !== "accept" ||
     projection.receiptAvailability.sourcePacketSha256 !== projection.packetSha256)) {
     context.addIssue({code: z.ZodIssueCode.custom, path: ["receiptAvailability"], message: "Receipt availability must bind to this action and source packet."});

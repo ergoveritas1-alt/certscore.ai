@@ -28,6 +28,7 @@ import { captureCollectionSurfaceSnapshots, FORM_SNAPSHOT_BUDGET_MS, type FormSn
 import { createGpcSignalCapture, installGpcNavigatorSignal } from "../gpc-signal-capture.js";
 import { startGpcObservationSession } from "../gpc-observation-session.js";
 import { createGpcImpactCapture } from "../gpc-impact-capture.js";
+import { buildGpcCookieReadBinding } from "../gpc-cookie-read-binding.js";
 import { installGpcSemanticMonitor } from "../gpc-semantic-monitor.js";
 import { recoveryNavigationTimeout, resetForNavigationRecovery, passiveReadinessTimeout } from "../access-reliability.js";
 import { captureGpcOptOutObservation } from "../gpc-opt-out-capture.js";
@@ -100,6 +101,7 @@ import { bindConsentGeometryScreenshot, preferredPreConsentScreenshotRef } from 
 import { bindAccessibilityNodesToDom } from "../consent-accessibility-dom-binding.js";
 import { createConsentVisualComparisonCollector, preCaptureConsentPairObserved } from "../consent-control-visual-comparison.js";
 import { captureDocumentBoundValue, sameDocumentCaptureBinding, type DocumentBoundCapture } from "../document-bound-capture.js";
+import { retainCommittedConsentHttpStatus, type CommittedConsentResponse } from "../consent-committed-response.js";
 import { connectTlsThroughConfiguredProxy, proxyFetch } from "../proxy-fetch.js";
 import {
   captureConsentControlGeometry,
@@ -164,7 +166,7 @@ export const PRE_CONSENT_RUNTIME_PREVIEW_CHECKPOINT_MS = 6_000;
 export const RUNTIME_PAGE_INVENTORY_LOADING = "Runtime page inventory captured while the document was loading; later DOM content may be missing.";
 export const RUNTIME_PAGE_INVENTORY_UNSETTLED = "Runtime page inventory captured without a completed loading-document settle window; later DOM content may be missing.";
 export const RUNTIME_PAGE_INVENTORY_UNAVAILABLE = "Runtime page inventory unavailable after bounded capture; empty fallback rows do not establish absence.";
-type BrowserDocumentIdentityState = { current?: BrowserDocumentIdentity };
+type BrowserDocumentIdentityState = { current?: BrowserDocumentIdentity; mainDocumentRevision?: number };
 const browserDocumentIdentityByPage = new WeakMap<Page, BrowserDocumentIdentity>();
 
 function currentBrowserDocumentIdentity(page: Page): BrowserDocumentIdentity | undefined {
@@ -702,7 +704,7 @@ export async function preConsentRuntimeScanner(
     responseFor: request => request.response(), requestOf: response => response.request(), capture: captureResponse,
   });
   const cdpInitiatorsByUrl = new Map<string, string[][]>();
-  const browserDocumentIdentityState: BrowserDocumentIdentityState = {};
+  const browserDocumentIdentityState: BrowserDocumentIdentityState = { mainDocumentRevision: 0 };
   let networkMetadataSession: CDPSession | null = null;
   let termlyNetworkInventory:ReturnType<typeof installPassiveTermlyInventoryCapture>|undefined;
   let visualCapture: VisualCaptureSummary = {
@@ -795,6 +797,7 @@ export async function preConsentRuntimeScanner(
   let retainedImpactSemanticObservation: GpcOptOutObservation | undefined;
   const gpcObservationSession = prototypeBinding ? await startGpcObservationSession({
     page, scanId: input.gpcOptOutPrototype!.scanId, captureId: prototypeBinding.captureId, scanStartedAtMs: input.scanStartedAtMs,
+    impactCapture: input.globalPrivacyControlEnabled === true ? impactCapture : undefined,
   }).catch(() => undefined) : undefined;
   let gpcMonitorResult: { callbacks: number; dropped: number; registered: boolean } | undefined;
   const gpcSignalCapture = captureRuntimeEvidence ? createGpcSignalCapture({
@@ -829,7 +832,9 @@ export async function preConsentRuntimeScanner(
         now:()=>elapsed(input.scanStartedAtMs),readBinding:()=>({url:page.url(),token:currentBrowserDocumentIdentity(page)?.token}),
         isCurrent:()=>!cmpBasicCaptureClosed && !input.signal?.aborted && remainingModuleBudgetMs()>0});
     },
-    impactCapture,
+    // The installed GPC observer forwards one original document stream and
+    // commit timestamp. Baseline and unavailable-session paths retain theirs.
+    impactCapture: gpcObservationSession && input.globalPrivacyControlEnabled === true ? undefined : impactCapture,
   }).catch((error) => {
     runtimeErrors.push(`CDP network metadata capture unavailable: ${errorMessageFromUnknown(error)}`);
     return null;
@@ -1138,12 +1143,19 @@ export async function preConsentRuntimeScanner(
   // diagnostic remains pending, including its screenshot/scroll recovery.
   let pairedConsentGeometryProof: { geometry: ConsentControlGeometryArtifact; frames: Frame[]; frameRevision: number } | undefined;
   let initialNavigationHttpStatus: number | undefined;
+  let committedConsentResponse: { url: string; httpStatus: number; documentRevision: number } | undefined;
+  const committedAccessResponses = new WeakMap<ConsentGeometryAccessDiagnostic, CommittedConsentResponse>();
+  const consentAccessForGeometry = (access: ConsentGeometryAccessDiagnostic, geometry: ConsentControlGeometryArtifact) => {
+    const binding = { url: geometry.pageUrl, documentIdentity: geometry.documentIdentity };
+    return retainCommittedConsentHttpStatus(access, committedAccessResponses.get(access), binding, binding);
+  };
   let effectiveNavigationUrl = input.normalizedUrl;
   const fallbackConsentUiObservations: ConsentUiObservation[] = [];
   const fallbackDomSnapshots: DomSnapshotArtifact[] = [];
   let retainedBlockingChallengeSnapshot: DomSnapshotArtifact | undefined;
   const collectBoundConsentGeometryPageAccess = async (...args: Parameters<typeof collectConsentGeometryPageAccess>) => {
     const before = { url: page.url(), documentIdentity: currentBrowserDocumentIdentity(page) };
+    const beforeRevision = browserDocumentIdentityState.mainDocumentRevision;
     const access = await collectConsentGeometryPageAccess(...args);
     const after = { url: page.url(), documentIdentity: currentBrowserDocumentIdentity(page) };
     const screenshot = screenshots.find(image => image.consentStateAtTime === "pre_consent" &&
@@ -1163,6 +1175,16 @@ export async function preConsentRuntimeScanner(
             hitTestMatches: proof.hitTestMatches, screenshotArtifactRef: screenshot.path },
         }
       : undefined;
+    if (captureScope === "consent_proof" && committedConsentResponse &&
+        committedConsentResponse.url === before.url &&
+        beforeRevision === committedConsentResponse.documentRevision &&
+        browserDocumentIdentityState.mainDocumentRevision === committedConsentResponse.documentRevision &&
+        sameDocumentCaptureBinding(before, after)) {
+      committedAccessResponses.set(access, { url: committedConsentResponse.url, documentIdentity: before.documentIdentity,
+        httpStatus: committedConsentResponse.httpStatus });
+    }
+    // Preserve the exact access result used by capture decisions. Join the
+    // response only at the existing write, against that geometry's own loader.
     return access;
   };
 
@@ -1177,6 +1199,11 @@ export async function preConsentRuntimeScanner(
   let cmpBasicLateInspectionComplete = false;
   let cmpBasicCaptureClosed=false;
   let cmpBasicCaptureElapsedMs=350;
+  let cmpConfigurationReadiness: {url:string;token:string;apis:string[]} | undefined;
+  const retainCmpConfigurationReadiness = (value:{url:string;token:string;apis:string[]}) => {
+    if (!cmpBasicCaptureClosed && !effectiveSignal?.aborted && remainingModuleBudgetMs()>0 &&
+        value.url===page.url() && value.token===currentBrowserDocumentIdentity(page)?.token) cmpConfigurationReadiness=value;
+  };
   const currentCmpBasicEvidence = () => {
     const network=termlyNetworkInventory?.snapshot();
     termlyNetworkInventory?.close();
@@ -1199,8 +1226,12 @@ export async function preConsentRuntimeScanner(
     if (cmpBasicCaptureClosed || !input.cmpBasicScanId || !captureConsentEvidence || cmpBasicCaptureStarted || remainingModuleBudgetMs() < 250) return;
     const readiness = {
       controlsObserved: retainedConsentUiObservation?.controls.some(control => control.visible !== false) ?? false,
+      choicePairObserved: retainedConsentUiObservation
+        ? hasSufficientFirstLayerConsentControls(retainedConsentUiObservation) : false,
       runtimeObservations: retainedCmpRuntimeObservations,
       lateInspectionComplete: cmpBasicLateInspectionComplete,
+      configurationApis: cmpConfigurationReadiness?.url===page.url() &&
+        cmpConfigurationReadiness.token===currentBrowserDocumentIdentity(page)?.token ? cmpConfigurationReadiness.apis : [],
     };
     if (!isCmpBasicCaptureReady(readiness)) return;
     // Keep the one read available while a registered SDK/configuration request
@@ -1430,6 +1461,7 @@ export async function preConsentRuntimeScanner(
         let lastError: unknown;
         for (const [index, candidateUrl] of candidates.entries()) {
         const attemptStartedAtMs = Date.now();
+        committedConsentResponse = undefined;
         const attemptMode = index === 0
           ? "initial_https_navigation"
           : candidateUrl.startsWith("https:")
@@ -1456,6 +1488,7 @@ export async function preConsentRuntimeScanner(
           const navigationTimeoutMs = index === 0 ? Math.max(1, Math.min(15_000, remainingModuleBudgetMs())) : recoveryNavigationTimeout(remainingModuleBudgetMs(), 7_500);
           if (navigationTimeoutMs <= 0) throw lastError ?? new Error("Navigation budget exhausted before recovery.");
           const navigationDispatchAtMs = Date.now();
+          const documentRevisionAtDispatch = browserDocumentIdentityState.mainDocumentRevision;
           const response = index === 0
             ? await page.goto(candidateUrl, {
               waitUntil: "commit",
@@ -1465,6 +1498,20 @@ export async function preConsentRuntimeScanner(
               waitUntil: "commit",
               timeout: navigationTimeoutMs,
             }));
+          // Keep the response fact when the following DCL wait times out. One
+          // main-document commit ties it to this goto, including server redirects.
+          // Two commits (including a same-URL replacement) cannot supply proof.
+          // Do not replace navigationResponse on timeout: that would enable
+          // existing recovery/retry work which did not previously run.
+          if (captureScope === "consent_proof" && response &&
+              documentRevisionAtDispatch !== undefined &&
+              response.request().isNavigationRequest() && response.frame() === page.mainFrame() &&
+              response.url() === page.url()) {
+            // The existing CDP event may arrive after goto returns. Bind only
+            // when the existing access read sees exactly the expected commit.
+            committedConsentResponse = { url: response.url(), httpStatus: response.status(),
+              documentRevision: documentRevisionAtDispatch + 1 };
+          }
           effectiveNavigationUrl = page.url() === "about:blank" ? candidateUrl : page.url();
           if (captureConsentEvidence) {
             // Start the existing rapid typed channel while parser/scripts settle.
@@ -1731,6 +1778,7 @@ export async function preConsentRuntimeScanner(
         "Early pre-consent viewport screenshot starts immediately after DOMContentLoaded alongside the already-started typed control inventory.",
         () => captureDocumentBoundValue({
           capture: () => capturePreConsentScreenshot(page, earlyScreenshotPath, {
+            borrowedCdpSession: captureScope === "consent_proof" ? networkMetadataSession ?? undefined : undefined,
             captureMode: "viewport_first",
             screenshotErrors,
             timeoutMs: Math.min(input.screenshotTimeoutMs ?? 5_000, 3_000),
@@ -1902,7 +1950,7 @@ export async function preConsentRuntimeScanner(
           "ConsentControlGeometryEvidence.json",
           {
             ...earlyConsentGeometry,
-            access: earlyGeometryAccess,
+            access: consentAccessForGeometry(earlyGeometryAccess, earlyConsentGeometry),
             egress: buildConsentGeometryEgressDiagnostic(),
             artifactOnly: true,
             productionFindingIntegration: false,
@@ -1937,6 +1985,7 @@ export async function preConsentRuntimeScanner(
             () => captureCmpRuntimeProbeInputs({
               page,
               scanStartedAtMs: input.scanStartedAtMs,
+              onConfigurationReadiness:retainCmpConfigurationReadiness,
             }),
             () => [],
           );
@@ -2105,6 +2154,7 @@ export async function preConsentRuntimeScanner(
         "protected settled consent screenshot",
         "Protected passive viewport checkpoint followed immediately by geometry, before duplicate inventory and lower-priority page extraction.",
         () => capturePreConsentScreenshot(page, settledScreenshotPath, {
+          borrowedCdpSession: captureScope === "consent_proof" ? networkMetadataSession ?? undefined : undefined,
           captureMode: "viewport_first",
           screenshotErrors,
           timeoutMs: Math.min(
@@ -2209,7 +2259,7 @@ export async function preConsentRuntimeScanner(
               "ConsentControlGeometryEvidence.json",
               {
                 ...pairedGeometry.geometry,
-                access: pairedGeometry.access,
+                access: consentAccessForGeometry(pairedGeometry.access, pairedGeometry.geometry),
                 egress: buildConsentGeometryEgressDiagnostic(),
                 artifactOnly: true,
                 productionFindingIntegration: false,
@@ -2453,7 +2503,7 @@ export async function preConsentRuntimeScanner(
       }
     }
     retainedGpcSignalObservation = gpcSignalObservation;
-    impactCapture?.finish(gpcSignalObservation);
+    const frozenImpactCapture = impactCapture?.finish(gpcSignalObservation);
     // Read the GPC visit's CMP state after work this same session already owes
     // (including cookies and sparse-page confirmation). Do not add a wait or
     // repeat the read. Paired impact evidence remains frozen above; its document
@@ -2802,6 +2852,7 @@ export async function preConsentRuntimeScanner(
               page,
               storageSnapshot,
               scanStartedAtMs: input.scanStartedAtMs,
+              onConfigurationReadiness:retainCmpConfigurationReadiness,
             }));
             return buildCmpRuntimeObservations(
               vendorResolverInputs,
@@ -2851,6 +2902,7 @@ export async function preConsentRuntimeScanner(
           "synchronized empty CMP screenshot",
           "Bounded viewport capture paired with a completed empty typed inventory before lower-priority supplemental full-page recovery.",
           () => capturePreConsentScreenshot(page, screenshotPath, {
+            borrowedCdpSession: captureScope === "consent_proof" ? networkMetadataSession ?? undefined : undefined,
             captureMode: "viewport_first",
             screenshotErrors,
             timeoutMs: Math.min(900, remainingModuleBudgetMs()),
@@ -2937,7 +2989,7 @@ export async function preConsentRuntimeScanner(
           "ConsentControlGeometryEvidence.json",
           {
             ...pairedGeometry.geometry,
-            access: pairedGeometry.access,
+            access: consentAccessForGeometry(pairedGeometry.access, pairedGeometry.geometry),
             egress: buildConsentGeometryEgressDiagnostic(),
             artifactOnly: true,
             productionFindingIntegration: false,
@@ -3148,6 +3200,7 @@ export async function preConsentRuntimeScanner(
             "synchronized CMP control screenshot",
             "Viewport capture immediately after typed CMP controls were retained, preserving visual and structured evidence from the same DOM state.",
             () => capturePreConsentScreenshot(page, synchronizedScreenshotPath, {
+              borrowedCdpSession: captureScope === "consent_proof" ? networkMetadataSession ?? undefined : undefined,
               captureMode: "viewport_first",
               screenshotErrors,
               timeoutMs: Math.min(1_500, remainingModuleBudgetMs()),
@@ -3254,7 +3307,7 @@ export async function preConsentRuntimeScanner(
                   "ConsentControlGeometryEvidence.json",
                   {
                     ...synchronizedGeometry.geometry,
-                    access: synchronizedGeometry.access,
+                    access: consentAccessForGeometry(synchronizedGeometry.access, synchronizedGeometry.geometry),
                     egress: buildConsentGeometryEgressDiagnostic(),
                     artifactOnly: true,
                     productionFindingIntegration: false,
@@ -3357,6 +3410,7 @@ export async function preConsentRuntimeScanner(
         "screenshot capture",
         "Full-page pre-consent screenshot with 1x1 fallback on failure.",
         () => capturePreConsentScreenshot(page, screenshotPath, {
+          borrowedCdpSession: captureScope === "consent_proof" ? networkMetadataSession ?? undefined : undefined,
           captureMode: input.screenshotCaptureMode ?? "viewport_first",
           screenshotErrors,
           timeoutMs: input.screenshotTimeoutMs ?? 5_000,
@@ -3790,7 +3844,7 @@ export async function preConsentRuntimeScanner(
         });
         const geometryArtifactPath = await input.artifactWriter.writeJsonArtifact("ConsentControlGeometryEvidence.json", {
           ...geometry,
-          access,
+          access: consentAccessForGeometry(access, geometry),
           egress: buildConsentGeometryEgressDiagnostic(),
           artifactOnly: true,
           productionFindingIntegration: false,
@@ -3899,7 +3953,7 @@ export async function preConsentRuntimeScanner(
             avoidOverlappingFrameReads: true, readFrameRevision: () => consentFrameRevision}),
           prepare: geometry => prepareFinalConsentGeometryArtifact(
             input.artifactWriter.artifactPath("ConsentControlGeometryEvidence.json"), geometry,
-            {access: latestRetainedConsentGeometryAccess!, egress: buildConsentGeometryEgressDiagnostic(),
+            {access: consentAccessForGeometry(latestRetainedConsentGeometryAccess!, geometry), egress: buildConsentGeometryEgressDiagnostic(),
               domObservedAtMs: existingInventory.observedAtMs,
               previousGeometryCapturedAt: latestRetainedConsentGeometry!.capturedAt}),
         });
@@ -3987,6 +4041,7 @@ export async function preConsentRuntimeScanner(
               "bounded same-session consent packet screenshot",
               "Representative viewport retained immediately before the final typed inventory and geometry retry on the untouched document.",
               () => capturePreConsentScreenshot(page, recoveryScreenshotPath, {
+                borrowedCdpSession: captureScope === "consent_proof" ? networkMetadataSession ?? undefined : undefined,
                 captureMode: "viewport_first",
                 fallbackMode: "bounded_viewport",
                 screenshotErrors,
@@ -4141,7 +4196,7 @@ export async function preConsentRuntimeScanner(
                 "ConsentControlGeometryEvidence.json",
                 {
                   ...recoveryGeometry.geometry,
-                  access: recoveryGeometry.access,
+                  access: consentAccessForGeometry(recoveryGeometry.access, recoveryGeometry.geometry),
                   egress: buildConsentGeometryEgressDiagnostic(),
                   artifactOnly: true,
                   productionFindingIntegration: false,
@@ -4215,6 +4270,7 @@ export async function preConsentRuntimeScanner(
         "late consent control screenshot",
         "Bounded viewport capture synchronized to the retained first-layer consent controls after late CMP rendering.",
         () => capturePreConsentScreenshot(page, synchronizedScreenshotPath, {
+          borrowedCdpSession: captureScope === "consent_proof" ? networkMetadataSession ?? undefined : undefined,
           captureMode: "viewport_first",
           fallbackMode: "bounded_viewport",
           screenshotErrors,
@@ -4298,6 +4354,7 @@ export async function preConsentRuntimeScanner(
           "no-go candidate confirmation screenshot",
           "Confirmation screenshot retained after the bounded second-look window.",
           () => capturePreConsentScreenshot(page, confirmationPath, {
+            borrowedCdpSession: captureScope === "consent_proof" ? networkMetadataSession ?? undefined : undefined,
             captureMode: "viewport_first",
             screenshotErrors,
             timeoutMs: Math.min(input.screenshotTimeoutMs ?? 5_000, 3_000),
@@ -4612,6 +4669,13 @@ export async function preConsentRuntimeScanner(
     responseCaptureFinalized = true;
     consentObservation = finalizeConsentGeometryCoverage(consentObservation);
     retainedConsentUiObservation = consentObservation;
+    const gpcCookieReadBinding = captureScope === "runtime_evidence" ? buildGpcCookieReadBinding({
+      scanId: input.gpcOptOutPrototype?.scanId ?? input.gpcImpactScanId ?? "", targetUrl: input.normalizedUrl,
+      captureId: prototypeBinding?.captureId, session: retainedGpcObservationSession, impact: frozenImpactCapture, signal: retainedGpcSignalObservation,
+      enabled: input.globalPrivacyControlEnabled === true, succeeded: cookieCaptureSucceeded, aborted: effectiveSignal?.aborted === true,
+      before: cookieCaptureBefore, after: cookieCaptureAfter, startedAtMs: cookieCaptureStartedAtMs, completedAtMs: cookieCaptureCompletedAtMs,
+      snapshot: cookieSnapshot,
+    }) : undefined;
     return {
       accessibilityAudit,
       cmpBasicEvidence: currentCmpBasicEvidence(),
@@ -4639,10 +4703,10 @@ export async function preConsentRuntimeScanner(
         webBotAuth: webBotAuthRoute.snapshot(),
       }),
       cookieEvents,
-      cookieSnapshots: [cookieSnapshot],
+      cookieSnapshots: [{ ...cookieSnapshot, ...(gpcCookieReadBinding ? { gpcReadBinding: gpcCookieReadBinding } : {}) }],
       storageSnapshots: [storageSnapshot],
       gpcSignalObservation: retainedGpcSignalObservation,
-      ...(impactCapture ? { gpcImpactCapture: impactCapture.finish(retainedGpcSignalObservation) } : {}),
+      ...(frozenImpactCapture ? { gpcImpactCapture: frozenImpactCapture } : {}),
       ...(retainedImpactSemanticObservation ? { gpcImpactSemanticObservation: retainedImpactSemanticObservation } : {}),
       scriptEvents,
       ...(retainedGpcOptOutObservation ? { gpcOptOutObservation: retainedGpcOptOutObservation } : {}),
@@ -5535,6 +5599,7 @@ async function captureCmpRuntimeProbeInputs(input: {
   page: Page;
   storageSnapshot?: StorageSnapshot;
   scanStartedAtMs: number;
+  onConfigurationReadiness?:(value:{url:string;token:string;apis:string[]})=>void;
 }): Promise<VendorResolverInput[]> {
   // Reuse the canonical library inside the same bounded DOM/global pass.
   // A reviewed marker must not also need a scanner-local keyword whitelist.
@@ -5542,7 +5607,9 @@ async function captureCmpRuntimeProbeInputs(input: {
     .filter(selector => /^[.#][\w-]+$/.test(selector)).map(selector => selector.slice(1));
   const exactGlobals = KNOWN_CMP_REGISTRY.flatMap(entry => entry.globalNames ?? [])
     .filter(name => !name.includes("."));
-  const observed = await input.page.evaluate(({ exactMarkers, exactGlobals }) => {
+  const configurationApis=KNOWN_CMP_REGISTRY.flatMap(entry=>entry.passiveConfigurationApi?[entry.passiveConfigurationApi]:[]);
+  const before={url:input.page.url(),documentIdentity:currentBrowserDocumentIdentity(input.page)};
+  const observed = await input.page.evaluate(({ exactMarkers, exactGlobals, configurationApis }) => {
     const knownMarkers = new Set(exactMarkers), knownGlobals = new Set(exactGlobals);
     const markerPattern =
       /(consent|cookie|cmp|privacy|drupal|eu_cookie_compliance|sliding-popup|onetrust|optanon|didomi|truste|trustarc|usercentrics|cookiebot|cybot|sourcepoint|sp_message|osano|ketch|quantcast|iubenda|termly|cookieyes|cky|coi)|^(?:ensNotifyBanner|ensModalWrapper|tcf2__ensNotifyBanner|tcf2__ensModalWrapper|ccm-root|ccm-widget)$/i;
@@ -5570,11 +5637,32 @@ async function captureCmpRuntimeProbeInputs(input: {
         break;
       }
     }
+    // Read callable data descriptors only, in the already-required probe. A
+    // root object or wrapper stub is not the registered configuration method.
+    const callableApis=configurationApis.filter(path=>{
+      let candidate:unknown=window;
+      const parts=path.split('.');
+      for(const [position,part] of parts.entries()) {
+        if(!candidate || (typeof candidate!=="object" && typeof candidate!=="function"))return false;
+        let owner:object|null=candidate,descriptor=Object.getOwnPropertyDescriptor(owner,part);
+        if(position===parts.length-1)for(let depth=0;!descriptor && owner && depth<4;depth++) {
+          owner=Object.getPrototypeOf(owner);
+          if(owner===Object.prototype || owner===Function.prototype)break;
+          if(owner)descriptor=Object.getOwnPropertyDescriptor(owner,part);
+        }
+        if(!descriptor || !("value" in descriptor))return false;
+        candidate=descriptor.value;
+      }
+      return typeof candidate==="function";
+    });
     return {
       globalNames,
       selectors: [...selectors],
+      callableApis,
     };
-  }, { exactMarkers, exactGlobals }).catch(() => ({ globalNames: [], selectors: [] }));
+  }, { exactMarkers, exactGlobals, configurationApis }).catch(() => ({ globalNames: [], selectors: [],callableApis:[] }));
+  if(before.documentIdentity?.token && sameDocumentCaptureBinding(before,{url:input.page.url(),documentIdentity:currentBrowserDocumentIdentity(input.page)}))
+    input.onConfigurationReadiness?.({url:before.url,token:before.documentIdentity.token,apis:observed.callableApis});
 
   const storageKeys = unique([
     ...(input.storageSnapshot?.localStorageKeys ?? []),
@@ -12407,6 +12495,8 @@ async function installCdpNetworkMetadataCapture(
     parentId?: string;
   } | undefined) => {
     if (!frame || frame.parentId || !frame.loaderId || frame.loaderId.length > 160) return;
+    if (stores.documentIdentityState.current?.token !== frame.loaderId)
+      stores.documentIdentityState.mainDocumentRevision = (stores.documentIdentityState.mainDocumentRevision ?? 0) + 1;
     stores.documentIdentityState.current = {
       source: "cdp_loader_id",
       token: frame.loaderId,
@@ -13150,6 +13240,8 @@ export async function capturePreConsentScreenshot(
   page: Page,
   screenshotPath: string,
   options: {
+    /** Already attached to this consent page; capture must never detach it. */
+    borrowedCdpSession?: CDPSession;
     captureMode: "full_page_first" | "viewport_first";
     fallbackMode?: "resilient" | "bounded_viewport";
     screenshotErrors: string[];
@@ -13187,7 +13279,7 @@ export async function capturePreConsentScreenshot(
         // Capture the live view first. A stalled surface/compositor request can
         // otherwise occupy Chromium's screenshot queue for the entire budget,
         // preventing the compatible view path from ever starting usefully.
-        await captureViewportScreenshotWithCdp(page, screenshotPath, cdpTimeoutMs, false);
+        await captureViewportScreenshotWithCdp(page, screenshotPath, cdpTimeoutMs, false, options.borrowedCdpSession);
         return {
           status: "available",
           captureMethod: captureMethods.viewportPrimary,
@@ -13215,7 +13307,7 @@ export async function capturePreConsentScreenshot(
       try {
         // A busy compositor can stall surface capture indefinitely. The view
         // path uses the same live viewport and remaining transaction budget.
-        await captureViewportScreenshotWithCdp(page, screenshotPath, compatibleViewportTimeoutMs, true);
+        await captureViewportScreenshotWithCdp(page, screenshotPath, compatibleViewportTimeoutMs, true, options.borrowedCdpSession);
         return {
           status: "available",
           captureMethod: captureMethods.viewportPrimary,
@@ -13245,6 +13337,7 @@ export async function capturePreConsentScreenshot(
         }
       }
     }
+    if (compatibleViewportTimeoutMs === null && cdpViewportFailure) deferredViewportAttemptErrors.push(cdpViewportFailure);
     if (boundedViewportOnly) {
       options.screenshotErrors.push(...deferredViewportAttemptErrors);
       return retainScreenshotPlaceholder({
@@ -13318,6 +13411,7 @@ export async function capturePreConsentScreenshot(
       options.screenshotErrors.push(`Viewport screenshot fallback failed: ${errorMessage}`);
     }
   } else {
+    options.screenshotErrors.push(...deferredViewportAttemptErrors);
     options.screenshotErrors.push(`Screenshot transaction deadline exhausted after ${Date.now() - captureStartedAtMs}ms.`);
   }
   return retainScreenshotPlaceholder({
@@ -13361,9 +13455,10 @@ async function captureViewportScreenshotWithCdp(
   screenshotPath: string,
   timeoutMs: number,
   fromSurface = true,
+  borrowedSession?: CDPSession,
 ): Promise<void> {
   const deadlineAtMs = Date.now() + Math.max(1, timeoutMs);
-  const client = await acquireCdpSessionBeforeDeadline(
+  const client = borrowedSession ?? await acquireCdpSessionBeforeDeadline(
     page,
     deadlineAtMs,
     "Viewport CDP session acquisition timed out",
@@ -13386,11 +13481,15 @@ async function captureViewportScreenshotWithCdp(
     if (timer) {
       clearTimeout(timer);
     }
-    const cleanupRemainingMs = deadlineAtMs - Date.now();
-    if (cleanupRemainingMs > 0) {
-      await boundedCleanup(client.detach(), Math.min(250, cleanupRemainingMs));
-    } else {
-      void client.detach().catch(() => undefined);
+    // The scanner owns its network/document session. A screenshot timeout must
+    // not detach that session or invalidate independently captured evidence.
+    if (!borrowedSession) {
+      const cleanupRemainingMs = deadlineAtMs - Date.now();
+      if (cleanupRemainingMs > 0) {
+        await boundedCleanup(client.detach(), Math.min(250, cleanupRemainingMs));
+      } else {
+        void client.detach().catch(() => undefined);
+      }
     }
   }
 }

@@ -1,4 +1,5 @@
 export { buildGpcCmpStateComparison } from "./gpc-cmp-state-comparison.js";
+import { serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage} from "@certscore/contracts";
 import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
 import { collectionRecipientPriorities } from "./collection-recipient-retention.js";
@@ -1563,7 +1564,7 @@ export function compactCanonicalEvidenceBundleForRetention(
   maxSerializedBytes = 400 * 1024,
 ): CanonicalEvidenceBundle {
   // The new graph has a separate hard cap; its bytes must never displace existing retained evidence.
-  const coreBytes = (value: CanonicalEvidenceBundle) => {
+  const coreValue = (value: CanonicalEvidenceBundle) => {
     const { runtimeEvidenceGraphs: _graphs, runtimeEvidenceGraphDiagnostics: _diagnostics, ...core } = value;
     if (core.gpcImpactCapture?.localRetention === "local_gpc_complete.v2") {
       const {requestLedger: _localLedger, ...capture} = core.gpcImpactCapture;
@@ -1576,8 +1577,11 @@ export function compactCanonicalEvidenceBundleForRetention(
     };
     // Form JPEGs have their own per-image and form-count bounds. They must not
     // consume the runtime evidence budget and evict network/cookie observations.
-    return serializedBytes({ ...core, collectionSurfaceSnapshots: core.collectionSurfaceSnapshots?.map(({ data: _data, ...metadata }) => metadata), postAcceptEvidence: withoutGraph(core.postAcceptEvidence), postRefusalEvidence: withoutGraph(core.postRefusalEvidence) });
+    return { ...core, collectionSurfaceSnapshots: core.collectionSurfaceSnapshots?.map(({ data: _data, ...metadata }) => metadata), postAcceptEvidence: withoutGraph(core.postAcceptEvidence), postRefusalEvidence: withoutGraph(core.postRefusalEvidence) };
   };
+  // Preserve every existing event selection/window decision using the original
+  // logical size. Only optional metadata uses the stored representation size.
+  const coreBytes = (value: CanonicalEvidenceBundle) => serializedBytes(coreValue(value));
   const typedEventIds = new Set([
     ...bundle.networkEvents,
     ...bundle.networkResponseEvents,
@@ -1630,7 +1634,8 @@ export function compactCanonicalEvidenceBundleForRetention(
   // Restore only original, already-sanitized window events. Never displace the
   // priority-selected evidence or recompute a digest from a truncated sample.
   const completeNetworkEvents = compacted.networkEvents;
-  const finishRetention = (result: CanonicalEvidenceBundle): CanonicalEvidenceBundle => {
+  let omittedCookieReadBindings: CookieSnapshot[] | undefined;
+  const finishWindowRetention = (result: CanonicalEvidenceBundle): CanonicalEvidenceBundle => {
     const capture = result.gpcImpactCapture;
     if (!capture?.document || !capture.windows.length) return result;
     const start = capture.document.committedAtMs;
@@ -1643,8 +1648,31 @@ export function compactCanonicalEvidenceBundleForRetention(
     if (serializedBytes(restored.networkEvents) - serializedBytes(result.networkEvents) <= 16 * 1024 && coreBytes(restored) <= maxSerializedBytes) return restored;
     return { ...result, gpcImpactCapture: { ...capture, retentionStatus: "incomplete" } };
   };
+  const finishRetention = (result: CanonicalEvidenceBundle): CanonicalEvidenceBundle => {
+    const retained = finishWindowRetention(result);
+    const originals = omittedCookieReadBindings;
+    if (!originals) return retained;
+    // Window restoration and all legacy retention decisions take priority.
+    // Reattach only the original optional proof when the final bytes fit; do
+    // not trim an event or weaken an incomplete window to make room for it.
+    const withBindings = { ...retained, cookieSnapshots: retained.cookieSnapshots.map((snapshot, index) => {
+      const original = originals[index];
+      return original?.gpcReadBinding && original.artifactId === snapshot.artifactId &&
+        original.capturedAtMs === snapshot.capturedAtMs && original.consentStateAtTime === snapshot.consentStateAtTime
+        ? { ...snapshot, gpcReadBinding: original.gpcReadBinding } : snapshot;
+    }) };
+    return Buffer.byteLength(serializeCanonicalEvidenceArtifact(coreValue(withBindings))) <= maxSerializedBytes ? withBindings : retained;
+  };
 
-  if (coreBytes(compacted) <= maxSerializedBytes) {
+  let initialCoreBytes = coreBytes(compacted);
+  // Optional GPC read metadata must never evict existing requests/cookies or
+  // change legacy retention decisions at the unchanged core byte allowance.
+  if (initialCoreBytes > maxSerializedBytes && compacted.cookieSnapshots.some(snapshot => snapshot.gpcReadBinding)) {
+    omittedCookieReadBindings = compacted.cookieSnapshots;
+    compacted = { ...compacted, cookieSnapshots: compacted.cookieSnapshots.map(({ gpcReadBinding: _binding, ...snapshot }) => snapshot) };
+    initialCoreBytes = coreBytes(compacted);
+  }
+  if (initialCoreBytes <= maxSerializedBytes) {
     return finishRetention(compacted);
   }
 

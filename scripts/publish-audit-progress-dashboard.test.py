@@ -9,7 +9,22 @@ class PublishTests(unittest.TestCase):
         for name in ['dashboard.html','daily-metrics.csv','daily-volumes.csv','daily-findings.csv','metric-contracts.json','exclusions.json']:(run/name).write_text('fixture')
         (run/'dashboard-seal.json').write_text(json.dumps({'files':[{'file':str(run/name),'sha256':publisher.digest(run/name),'bytes':(run/name).stat().st_size} for name in ['dashboard.json','dashboard.html','daily-metrics.csv','daily-volumes.csv','daily-findings.csv','metric-contracts.json','exclusions.json']]}));self.validate(run);return run
     def validate(self,run):
-        seal=json.loads((run/'dashboard-seal.json').read_text());(run/'dashboard-validation.json').write_text(json.dumps({'status':'passed','checks':{k:True for k in ['contracts','aggregation','csvParity','sourceBoundaries','focusedTests','desktop','mobile','filters','chartTooltips']},'snapshotHashes':{pathlib.Path(r['file']).name:r['sha256'] for r in seal['files']}}))
+        seal=json.loads((run/'dashboard-seal.json').read_text());(run/'dashboard-validation.json').write_text(json.dumps({'status':'passed','checks':{k:True for k in ['contracts','aggregation','csvParity','sourceBoundaries','focusedTests','desktop','mobile','filters','chartTooltips','quantityTotals']},'snapshotHashes':{pathlib.Path(r['file']).name:r['sha256'] for r in seal['files']}}))
+    def test_missing_or_failed_quantity_totals_cannot_replace_latest(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=pathlib.Path(t);a=self.fixture(root,'first','2026-10-26T12:00:00Z');publisher.publish(a,root)
+            before=(root/'progress-dashboard-latest.json').read_bytes()
+            b=self.fixture(root,'second','2026-10-27T12:00:00Z')
+            for missing in [True,False]:
+                with self.subTest(missing=missing):
+                    self.validate(b);p=b/'dashboard-validation.json';value=json.loads(p.read_text())
+                    if missing:del value['checks']['quantityTotals']
+                    else:value['checks']['quantityTotals']=False
+                    p.write_text(json.dumps(value))
+                    with self.assertRaisesRegex(ValueError,'Required dashboard checks incomplete'):publisher.publish(b,root)
+                    self.assertEqual((root/'latest').resolve(),a.resolve())
+                    self.assertEqual((root/'progress-dashboard-latest.json').read_bytes(),before)
+                    self.assertFalse((b/'dashboard-publication.json').exists())
     def test_missing_semantic_validation_and_changed_pins_cannot_publish(self):
         with tempfile.TemporaryDirectory() as t:
             root=pathlib.Path(t);a=self.fixture(root,'first','2026-10-27T12:00:00Z');(a/'dashboard-validation.json').unlink()

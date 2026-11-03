@@ -12,7 +12,7 @@ test("existing link read diagnoses reachability without clicks, scrolling or nav
       ["outside_viewport", '<a style="position:absolute;top:1500px" href="https://example.test/privacy">Privacy policy</a>'],
       ["not_rendered", '<a style="display:none" href="https://example.test/privacy">Privacy policy</a>'],
       ["hidden", '<a style="visibility:hidden" href="https://example.test/privacy">Privacy policy</a>'],
-      ["hidden", '<div aria-hidden="true"><a href="https://example.test/privacy">Privacy policy</a></div>'],
+      ["reachable", '<div aria-hidden="true"><a href="https://example.test/privacy">Privacy policy</a></div>'],
       ["transparent", '<div style="opacity:0"><a href="https://example.test/privacy">Privacy policy</a></div>'],
       ["inactive", '<div inert><a href="https://example.test/privacy">Privacy policy</a></div>'],
       ["pointer_disabled", '<a style="pointer-events:none" href="https://example.test/privacy">Privacy policy</a>'],
@@ -79,4 +79,36 @@ test("the single public-policy scroll cannot be spent on a policy generator or t
   {index:2,url:"https://example.test/our-privacy-policy/",label:"Our Privacy Policy"},
  ]);
  assert.deepEqual(candidates.map(c=>c.index),[2]);
+});
+
+test("a visually rendered modal under aria-hidden has pointer access without asserting accessibility exposure",async()=>{
+ const browser=await chromium.launch({headless:true});
+ try {
+  const page=await browser.newPage();
+  await page.setContent('<div aria-hidden="true"><section role="dialog" aria-modal="true"><p>Cookies and privacy</p><a href="https://example.test/privacy">Privacy Policy</a></section></div>');
+  const rows=await page.locator('a[href]').evaluateAll(readPrivacyLinkAccess,{});
+  assert.equal(rows[0]?.access.outcome,'reachable');assert.equal(rows[0]?.hitTargetBeforeAction,true);
+  assert.equal(rows[0]?.access.exclusion,undefined);
+  assert.equal(await page.getByRole('link').count(),0);
+  assert.equal(await page.locator('[aria-hidden]').getAttribute('aria-hidden'),'true');
+ }finally{await browser.close();}
+});
+
+test("aria-hidden cannot override physical blockers or create policy-link hit proof",async()=>{
+ const browser=await chromium.launch({headless:true});
+ try {
+  const page=await browser.newPage({viewport:{width:800,height:600}});
+  for(const [outcome,body] of [
+   ['not_rendered','<section style="display:none"><a href="https://example.test/privacy">Privacy Policy</a></section>'],
+   ['hidden','<section style="visibility:hidden"><a href="https://example.test/privacy">Privacy Policy</a></section>'],
+   ['transparent','<section style="opacity:0"><a href="https://example.test/privacy">Privacy Policy</a></section>'],
+   ['inactive','<section inert><a href="https://example.test/privacy">Privacy Policy</a></section>'],
+   ['hit_target_missed','<a href="https://example.test/privacy">Privacy Policy</a><div style="position:fixed;inset:0;z-index:999"></div>'],
+   ['not_rendered','<style>[aria-hidden=true]{display:none}</style><a href="https://example.test/privacy">Privacy Policy</a>'],
+  ]){
+   await page.setContent(`<div aria-hidden="true">${body}</div>`);
+   const rows=await page.locator('a[href]').evaluateAll(readPrivacyLinkAccess,{});
+   assert.equal(rows[0]?.access.outcome,outcome);assert.equal(rows[0]?.hitTargetBeforeAction,false);
+  }
+ }finally{await browser.close();}
 });

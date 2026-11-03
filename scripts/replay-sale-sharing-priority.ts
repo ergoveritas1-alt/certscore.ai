@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 /** CertScore.ai retained-only choice review. No network, database, model calls or historical writes.
  * pnpm exec tsx --tsconfig tsconfig.base.json scripts/replay-sale-sharing-priority.ts AUDIT_JSON RETAINED_RUN OUTPUT_JSON
  */
@@ -15,7 +16,7 @@ const [auditFile,runArg,outputArg]=process.argv.slice(2);
 assert.ok(auditFile&&runArg&&outputArg,"Supply audit JSON, retained run and a separate output JSON.");
 const root=path.resolve(runArg),output=path.resolve(outputArg);
 assert.ok(output!==root&&!output.startsWith(root+path.sep)&&output!==path.resolve(auditFile),"Never overwrite retained input.");
-const read=(p:string)=>JSON.parse(readFileSync(p,"utf8"));
+const read=(p:string)=>parseCanonicalEvidenceArtifact(readFileSync(p,"utf8")) as any;
 const hash=(bytes:Buffer|string)=>createHash("sha256").update(bytes).digest("hex");
 const audit=read(auditFile);
 const rows:Array<{scanId:string;host:string;limitations?:string[]}>= [...audit.positiveProjectionReview,...audit.qualifiedGpcButUnknownChoice];
@@ -30,7 +31,7 @@ for(const row of rows){
   const receipt=event?.metadata?.artifactMetadata?.scanArtifactUri;
   assert.ok(receipt,`Missing source receipt: ${row.scanId}`);
   assert.equal(hash(bytes),receipt.sha256);assert.equal(bytes.length,receipt.sizeBytes);
-  const bundle=JSON.parse(bytes.toString()) as CanonicalEvidenceBundle;assert.equal(bundle.scanId,row.scanId);
+  const bundle=parseCanonicalEvidenceArtifact(bytes.toString()) as CanonicalEvidenceBundle;assert.equal(bundle.scanId,row.scanId);
   const snapshot=read(path.join(dir,"persisted/snapshot.json"));
   const originalParent=consentControlAssessmentSchema.parse(snapshot.consent_control_assessment);
   const frozen=JSON.stringify(originalParent),runtime=snapshot.report_projection_payload.runtimeArtifacts;

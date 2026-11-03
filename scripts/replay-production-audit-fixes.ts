@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 // Local-only replay: reads the frozen audit cohort and writes separate diagnostic artifacts.
 import assert from 'node:assert/strict';
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
@@ -9,9 +10,9 @@ import {projectCaliforniaObservedScoreBasis} from '../apps/web/server/scans/cali
 import {deriveCaliforniaRegulatoryScore} from '../apps/web/lib/scans/california-regulatory-score';
 import {californiaPrivacyReviewSchema} from '@certscore/contracts';
 async function main(){
-const {scanBundleText}=await import('../packages/certscore-mcp/src/tools.ts');
+const {scanBundleText}=await import('../packages/certscore-mcp/src/tools');
 const input='artifacts/independent-production-audit-2026-10-22',output='artifacts/production-audit-fixes-2026-10-22';
-const read=(p:string)=>JSON.parse(readFileSync(`${input}/${p}`,'utf8'));
+const read=(p:string)=>parseCanonicalEvidenceArtifact(readFileSync(`${input}/${p}`,'utf8')) as any;
 mkdirSync(output,{recursive:true});
 const inventory=read('inventory.json');const rows=[];
 for(const scan of inventory){
@@ -49,7 +50,7 @@ for(const scan of inventory){
  for(const original of relevant){
   const next=replayedFindings.find(f=>f.unifiedFindingId===original.unifiedFindingId);
   assert.ok(next,`Missing replayed canonical finding ${scan.id} ${original.unifiedFindingId}`);
-  assert.ok(!next.evidence.snippets.some(s=>s.startsWith('Consent governance disclosure note:')));
+  assert.ok(!next.evidence?.snippets?.some(s=>s.startsWith('Consent governance disclosure note:')));
   assert.deepEqual(JSON.parse(JSON.stringify(next.scoreEffects??[])),original.scoreEffects??[],`Changed effects ${scan.id} ${original.unifiedFindingId}`);
  }
  const newFindings=report.projection.unifiedFindings.map((f:any)=>familyIds.has(f.unifiedFindingId)?replayedFindings.find(n=>n.unifiedFindingId===f.unifiedFindingId):f);

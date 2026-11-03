@@ -1631,6 +1631,42 @@ test("Termly passive public policy hit tests survive canonical persistence witho
  input.cmpBasicEvidence.privacyLinks[0]!.url='https://foreign.test/privacy';assert.equal(deriveCmpAuditAssessment(input),undefined);
 });
 
+test("CMP-scoped privacy diagnostics explain an unresolved check without a public-page marker",()=>{
+ const input=bundle();delete input.cmpPreferencesEvidence;delete input.cmpPreferenceLaneOutcome;input.completedAt="2026-10-13T00:00:02.000Z";
+ input.domSnapshots=[{url:input.url,capturedAtMs:100,consentStateAtTime:"pre_consent",documentIdentity:{token:"passive-loader"}}] as CanonicalEvidenceBundle["domSnapshots"];
+ input.cmpBasicEvidence={contractVersion:"certscore.cmp-basic-evidence.v1",sourceLane:"consent_proof",scanId:input.scanId,targetUrl:input.url,documentUrl:input.url,documentToken:"passive-loader",capturedAtMs:100,provider:"OneTrust",controls:[],privacyLinks:[{url:input.url+"privacy",hitTargetBeforeAction:false,access:{version:"privacy_link_access.v1",outcome:"not_rendered"}}],declarations:[],serviceNames:[],captureProgress:{version:"cmp_capture_checkpoints.v1",documentToken:"passive-loader",privacyLinksAtMs:100},limitations:["passive_first_layer_only","declaration_inventory_not_complete"]};
+ const before=structuredClone(input),audit=deriveCmpAuditAssessment(input)!;
+ const row=audit.rows.find(r=>r.id==="privacy_access")!;
+ assert.equal(row.status,"not_assessed");assert.match(row.detail,/not rendered in the captured view/);assert.ok(row.evidenceRefs.length);
+ const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+ const hydrated=JSON.parse(JSON.stringify(withCanonicalConsentAssessmentSnapshot({},assessment)));
+ const concerns=buildNormalizedConcerns({runtimeArtifacts:hydrated,reviewFindingCandidates:[],validationFindings:[]});
+ const report=publicCmpAuditSchema.parse(projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns}));
+ assert.equal(report.rows.find(r=>r.id==="privacy_access")!.status,"Not assessed");
+ assert.match(report.rows.find(r=>r.id==="privacy_access")!.detail!,/not rendered/);
+ assert.ok(concerns.filter(c=>c.originKey.startsWith("consent.cmp_audit.")).every(c=>!c.scoreEffects?.length));assert.deepEqual(input,before);
+ const mixed=structuredClone(input);
+ mixed.cmpBasicEvidence!.privacyLinks=(["outside_viewport","hidden","not_rendered"] as const).map((outcome,index)=>({url:input.url+`privacy-${index}`,hitTargetBeforeAction:false,access:{version:"privacy_link_access.v1",outcome}}));
+ const mixedRow=deriveCmpAuditAssessment(mixed)!.rows.find(r=>r.id==="privacy_access")!;
+ assert.equal(mixedRow.status,"not_assessed");assert.match(mixedRow.detail,/outside the captured viewport/);
+ assert.match(mixedRow.detail,/marked hidden/);assert.match(mixedRow.detail,/not rendered/);
+ assert.doesNotMatch(mixedRow.detail,/Individual inspection reasons|https:/);assert.ok(mixedRow.detail.length<=500);
+ const excluded=structuredClone(mixed);excluded.cmpBasicEvidence!.privacyLinks[1]!.access!.exclusion={version:"consent_scope_exclusion.v1",reason:"aria_hidden"};
+ const excludedRow=deriveCmpAuditAssessment(excluded)!.rows.find(r=>r.id==="privacy_access")!;
+ assert.equal(excludedRow.status,mixedRow.status);assert.match(excludedRow.detail,/ancestor was marked aria-hidden/);
+ assert.doesNotMatch(excludedRow.detail,/https:|successful|honor/);
+ const missing=structuredClone(input);delete missing.cmpBasicEvidence!.privacyLinks[0]!.access;
+ assert.equal(deriveCmpAuditAssessment(missing)!.rows.find(r=>r.id==="privacy_access")!.evidenceRefs.length,0);
+ const empty=structuredClone(input);empty.cmpBasicEvidence!.privacyLinks=[];
+ const emptyRow=deriveCmpAuditAssessment(empty)!.rows.find(r=>r.id==="privacy_access")!;
+ assert.equal(emptyRow.status,"not_assessed");assert.equal(emptyRow.detail,"No privacy-policy link was captured in this inspection.");
+ delete empty.cmpBasicEvidence!.captureProgress!.privacyLinksAtMs;
+ const missingInspection=deriveCmpAuditAssessment(empty)!.rows.find(r=>r.id==="privacy_access")!;
+ assert.equal(missingInspection.evidenceRefs.length,0);assert.match(missingInspection.detail,/No completed, document-bound pre-consent/);
+ const unbound=structuredClone(input);unbound.cmpBasicEvidence!.documentToken="foreign";
+ assert.equal(deriveCmpAuditAssessment(unbound),undefined);
+});
+
 test('verified linked privacy choices survive persistence and canonical concern policy without becoming cookie categories or score effects',()=>{
  const input=bundle();
  input.cmpPreferencesEvidence=cmpPreferencesEvidenceSchema.parse({...input.cmpPreferencesEvidence,
@@ -1696,4 +1732,23 @@ test("independent fallback does not mask configured-cookie facts from valid core
   assert.deepEqual(deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==="duration")!.inventory!.expiries!.map(row=>row.name),["borlabs-cookie","cookie_compliance"]);
   input.cmpBasicEvidence.documentToken="foreign";
   assert.deepEqual(deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==="duration")!.inventory!.expiries!.map(row=>row.name),["borlabs-cookie"]);
+});
+
+test("typed aria-hidden exclusions explain an unexecuted action without changing its status or score",()=>{
+ const input=bundle();input.postAcceptEvidence=failedChoicePacket('accept') as any;
+ const before=deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==='implementation')!;
+ const packet=input.postAcceptEvidence!;
+ packet.interactionDiagnostics!.click.outcome='not_attempted';delete packet.interactionDiagnostics!.click.failureClass;
+ packet.interactionDiagnostics!.resolver!.snapshots=[{attempt:1,elapsedMs:10,source:'canonical_geometry',state:'scope_not_interactive',selectorMatchCount:1,visibleCount:1,enabledCount:1,labelMatchCount:1,actionableCount:0,cmpIds:[],controlLabels:['agree'],scopeExclusion:{version:'consent_scope_exclusion.v1',reason:'aria_hidden'}}];
+ const audit=deriveCmpAuditAssessment(input)!;const row=audit.rows.find(row=>row.id==='implementation')!;
+ assert.equal(row.status,before.status);assert.match(row.detail,/marked aria-hidden; the scan did not click it/);
+ const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+ const concerns=buildNormalizedConcerns({runtimeArtifacts:withCanonicalConsentAssessmentSnapshot({},assessment),reviewFindingCandidates:[],validationFindings:[]});
+ const report=publicCmpAuditSchema.parse(projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns}));
+ assert.equal(report.rows.find(row=>row.id==='implementation')!.detail,row.detail);
+ assert.ok(concerns.filter(c=>c.originKey.startsWith('consent.cmp_audit.')).every(c=>!c.scoreEffects?.length));
+ const mismatched=structuredClone(input);mismatched.postAcceptEvidence!.parentScanId='other';
+ assert.doesNotMatch(deriveCmpAuditAssessment(mismatched)!.rows.find(row=>row.id==='implementation')!.detail,/aria-hidden/);
+ const laterAttempt=structuredClone(input);laterAttempt.postAcceptEvidence!.interactionDiagnostics!.click.outcome='failed_before_dispatch';laterAttempt.postAcceptEvidence!.interactionDiagnostics!.click.failureClass='actionability_timeout';
+ assert.doesNotMatch(deriveCmpAuditAssessment(laterAttempt)!.rows.find(row=>row.id==='implementation')!.detail,/aria-hidden/,'An earlier scope exclusion cannot explain a later failed click attempt');
 });

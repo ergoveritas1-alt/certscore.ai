@@ -1,5 +1,5 @@
 import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
-import { CONSENT_ACTION_RETENTION_OVERFLOW_EVALUATION_LIMIT } from "@certscore/contracts";
+import { CONSENT_ACTION_RETENTION_OVERFLOW_EVALUATION_LIMIT, ACCEPT_REQUEST_RETENTION_POLICY, CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT, CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT } from "@certscore/contracts";
 
 export const ACTION_REQUEST_RETENTION_POLICY = "priority_bounded_action_requests.v2" as const;
 export type ActionRequestRetentionClass = "delivery_asset" | "known_other" | "unknown" | "tracking" | "consent" | "document";
@@ -32,7 +32,10 @@ export function classifyActionRequestRetention(url: string, resourceType: string
  * eviction candidates for equally ranked traffic. Preserve the first request
  * from each tracking host before retaining more duplicates from another host.
  */
-export function createActionRequestRetention<T extends { request: { url(): string; resourceType(): string } }>(rows: T[], limit: number) {
+export function createActionRequestRetention<T extends { request: { url(): string; resourceType(): string } }>(rows: T[], limit: number,
+  policyVersion: typeof ACTION_REQUEST_RETENTION_POLICY | typeof ACCEPT_REQUEST_RETENTION_POLICY = ACTION_REQUEST_RETENTION_POLICY) {
+  const max = policyVersion === ACCEPT_REQUEST_RETENTION_POLICY ? CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT : CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT;
+  if (!Number.isInteger(limit) || limit < 0 || limit > max) throw new Error("Request-retention capacity exceeds its explicit policy");
   const cached = new WeakMap<T, Classification>();
   const classify = (row: T) => {
     let result = cached.get(row);
@@ -104,7 +107,7 @@ export function createActionRequestRetention<T extends { request: { url(): strin
       // Retain zero-loss accounting as well: an absent historical summary is
       // not evidence that the listener observed no requests. This inventory
       // accounts only for offered request events, never browser completeness.
-      return { policyVersion: ACTION_REQUEST_RETENTION_POLICY, requestsObserved: observed,
+      return { policyVersion, requestsObserved: observed,
         requestsRetained: rows.length, replacements, priorityEvaluations, omitted: { ...omitted } };
     },
   };

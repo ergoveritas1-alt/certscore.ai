@@ -16,6 +16,38 @@ import { californiaPriorityGpcFixture, QUALIFIED_URL } from "../../lib/scans/tes
 
 const visiblePdfText = (source: string) => [...source.matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)].map(match => match[1]!.replace(/\\([\\()])/g, "$1")).join(" ");
 
+test("CMP availability guidance renders as contextual PDF evidence without adding priorities",async()=>{
+  const {priorityReportFixture,priorityScanRecord}=await import("./report-priority.fixture");
+  const {buildCanonicalReportExport}=await import("./report-export");
+  const {pdfPriorityReview}=await import("./report-pdf-priorities");
+  const record=priorityScanRecord(priorityReportFixture());
+  record.runtimeArtifacts={...record.runtimeArtifacts,cmpVendorName:"OneTrust"};
+  const report=buildCanonicalReportExport(record,undefined,"ccpa_cpra")!;
+  assert.equal(report.appendix.evidenceDossier.cmp.audit.experience?.availability?.reason,"assessment_missing");
+  const without=structuredClone(report);delete without.appendix.evidenceDossier.cmp.audit.experience!.availability;
+  assert.deepEqual(pdfPriorityReview(report),pdfPriorityReview(without));
+  const text=visiblePdfText(renderCanonicalReportPdf(report).toString("latin1"));
+  assert.match(text,/Why detailed CMP checks are unavailable/);
+  assert.ok(text.includes(pdfPublicWords(report.appendix.evidenceDossier.cmp.audit.experience!.availability!.whatToCheck)));
+  assert.doesNotMatch(text,/13 assessed checks|captured controls and settings are listed below/);
+});
+
+test("CMP matrix retains check explanations without supplemental inventory or new priorities",async()=>{
+  const {priorityReportFixture,priorityScanRecord}=await import("./report-priority.fixture");
+  const {buildCanonicalReportExport}=await import("./report-export");
+  const {pdfPriorityReview}=await import("./report-pdf-priorities");
+  const report=buildCanonicalReportExport(priorityScanRecord(priorityReportFixture()),undefined,"ccpa_cpra")!;
+  const before=pdfPriorityReview(report);
+  for(const row of report.appendix.evidenceDossier.cmp.audit.rows) {
+    if(row.id==="privacy_access") row.detail="Privacy policy found. Its link was not rendered in the captured view.";
+    if(row.id==="implementation") row.detail="Accept: a usable control was not found. Reject: a usable control was not found.";
+  }
+  const text=visiblePdfText(renderCanonicalReportPdf(report).toString("latin1")).replace(/\s+/g," ");
+  assert.match(text,/Its link was not rendered in the captured view/);
+  assert.match(text,/Accept: a usable control was not found/);
+  assert.deepEqual(pdfPriorityReview(report),before);
+});
+
 test("renders a multi-section canonical report as a valid bounded PDF", async () => {
   const report = {
     artifactType: "certscore_canonical_report_export",

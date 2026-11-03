@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -74,7 +75,7 @@ async function selectScans(limit: number): Promise<ScanRow[]> {
   const artifactPaths = await findLocalBundlePaths(root);
   const rows = await mapWithConcurrency(artifactPaths, 32, async (localArtifactPath): Promise<ScanRow | null> => {
     try {
-      const bundle = JSON.parse(await readFile(localArtifactPath, "utf8")) as Record<string, unknown>;
+      const bundle = parseCanonicalEvidenceArtifact(await readFile(localArtifactPath, "utf8")) as Record<string, unknown>;
       const artifactBuffer = await readFile(localArtifactPath);
       const url = typeof bundle.url === "string" ? bundle.url : typeof bundle.normalizedUrl === "string" ? bundle.normalizedUrl : "https://unknown.invalid/";
       let hostname = "unknown";
@@ -143,7 +144,7 @@ async function verifyScan(row: ScanRow): Promise<RowResult> {
     const bundleBuffer = row.localArtifactPath
       ? await readFile(row.localArtifactPath)
       : await readS3Artifact(row.artifactUri!, row.artifactSha256, row.artifactSizeBytes);
-    const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(bundleBuffer.toString("utf8"))) as Record<string, unknown>;
+    const bundle = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(bundleBuffer.toString("utf8"), { schemaValidation: "caller" })) as Record<string, unknown>;
     const geometryBuffer = row.localArtifactPath
       ? await readLocalGeometryArtifact(row.localArtifactPath)
       : await readS3ArtifactOptional(adjacentArtifactUri(row.artifactUri!, "ConsentControlGeometryEvidence.json"));
@@ -362,7 +363,7 @@ function assessGeometryStatus(bundle: Record<string, unknown>, geometry: Record<
     typeof summary.confidence === "number" && summary.confidence > 0 &&
     Array.isArray(geometry.candidates) && geometryUrl && finalUrl,
   );
-  if (!complete) return "incomplete";
+  if (!complete || !summary) return "incomplete";
   if (geometryUrl !== finalUrl) return "document_mismatch";
   return summary.firstLayerAccept || summary.firstLayerReject || summary.firstLayerOptions
     ? "complete_positive"

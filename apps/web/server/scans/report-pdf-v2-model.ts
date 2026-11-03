@@ -1,4 +1,5 @@
 import { reportRequestInventory } from "./report-request-inventory";
+import {cmpAuditReportSummary} from "../../lib/scans/cmp-audit-projection";
 import { accessibilitySelectorHint } from "@certscore/contracts";
 import { REPORT_EXPORT_DISCLAIMER } from "./report-export-footer";
 import { REPORT_TRANSPORT_CHECKS } from "../../lib/scans/report-runtime-inventory";
@@ -218,7 +219,7 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
     const policySources = unique(details.filter(d => d.topic === "policy").flatMap(d => d.facts.filter(f => ["sourceUrl", "selectedPolicySectionUrl", "Policy provenance / sourceUrl"].includes(f.label)).map(f => f.value)));
     const sections: PdfV2Section[] = [];
     const section = (id: string, title: string, status: PdfV2Status, summary: string, coverage: string, blocks: PdfV2Block[]) => sections.push({ id, title, shortTitle: title, status, summary, coverage, blocks });
-    const consentSummary = `${report.appendix.evidenceDossier?.cmp?.provider ?? "CMP identity not recorded"}. ${auditRows.length} assessed checks; captured controls and settings are listed below.`;
+    const consentSummary = cmpAuditReportSummary(report.appendix.evidenceDossier?.cmp?.audit,report.appendix.evidenceDossier?.cmp?.provider??null);
     const consentStatus: PdfV2Status = refusal ? "Needs review" : !auditRows.length ? "Not tested" : auditRows.some(r => pdfV2Status(r.status) !== "Observed") ? "Partial" : "Observed";
     section("consent", "A · CMP and consent", consentStatus, consentSummary, "First-layer and preference inventories are bounded; listing a control does not prove choice registration.", [
         table("A.1 Banner and consent audit", ["Check", "Assessment", "Evidence excerpt"], auditRows.map(row => [row.label, pdfV2Status(row.status), pdfV2Words(row.detail)]), { widths: [.30, .15, .55], compact: true }),

@@ -1,7 +1,7 @@
 export { isSuccessfulChoicePath } from "./choice-path-execution.js";
 export { CertScoreClient } from "./client.js";
 export { reconstructReportEvidencePages } from "./detailed-evidence.js";
-export type { DetailedEvidenceCounts, DetailedEvidenceRow, DetailedEvidenceSection, DetailedEvidenceReport, PublicCmpAudit, PublicCmsSecurity, ConsentControlMeasurement, ReportEvidenceDocument } from "./detailed-evidence.js";
+export type { CmpAuditAvailability, DetailedEvidenceCounts, DetailedEvidenceRow, DetailedEvidenceSection, DetailedEvidenceReport, PublicCmpAudit, PublicCmsSecurity, ConsentControlMeasurement, ReportEvidenceDocument } from "./detailed-evidence.js";
 export type { ScanFormsSummary, ScanScoreExplanation } from "./scan-report-summary.js";
 export type { RuntimeEvidenceGraphProjection, RuntimeEvidenceGraph, RuntimeEvidenceGraphNode, RuntimeEvidenceGraphEdge } from "./runtime-evidence-graph.js";
 export {
@@ -86,3 +86,5 @@ export type { PrivacyAuditEvidence } from "./privacy-audit.js";
 
 export type { GpcCmpStateComparison } from "./gpc-cmp-state-comparison.js";
 export type { GpcGuidance } from "./gpc-guidance.js";
+
+export type { GpcCollectionComparison } from "./gpc-collection-comparison.js";

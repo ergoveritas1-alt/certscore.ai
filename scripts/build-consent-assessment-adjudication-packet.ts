@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -101,7 +102,7 @@ async function main() {
   )));
   const rows = [];
   for (const row of selected) {
-    const bundle = JSON.parse(await readFile(row.artifactPath, "utf8")) as Record<string, unknown>;
+    const bundle = parseCanonicalEvidenceArtifact(await readFile(row.artifactPath, "utf8")) as Record<string, unknown>;
     const geometryPath = path.join(path.dirname(row.artifactPath), "ConsentControlGeometryEvidence.json");
     let geometry: Record<string, unknown> | null = null;
     try { geometry = JSON.parse(await readFile(geometryPath, "utf8")) as Record<string, unknown>; } catch { /* optional */ }

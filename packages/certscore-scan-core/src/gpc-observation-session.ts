@@ -5,10 +5,12 @@ import { gpcObservationSessionSchema, type GpcOptOutObservation, type GpcObserva
 import { gpcDocumentHash } from "./gpc-signal-capture.js";
 import { installGpcSemanticMonitor } from "./gpc-semantic-monitor.js";
 import { createGpcRequestDiagnostics } from "./gpc-request-diagnostics.js";
+import type { createGpcImpactCapture } from "./gpc-impact-capture.js";
 
 /** Local opt-in. CDP binds actual navigation delivery to browser loader identity,
  * independently of wall-clock alignment between Node and performance.timeOrigin. */
-export async function startGpcObservationSession(input: { page: Page; scanId: string; captureId: string; scanStartedAtMs: number }) {
+export async function startGpcObservationSession(input: { page: Page; scanId: string; captureId: string; scanStartedAtMs: number;
+  impactCapture?: Pick<ReturnType<typeof createGpcImpactCapture>, "documentRequested" | "documentCommitted" | "navigatedWithinDocument"> }) {
   const { page } = input;
   const now = () => Math.max(0, Date.now() - input.scanStartedAtMs);
   const captureStartedAtMs = now();
@@ -57,11 +59,13 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
     const header = Object.entries(p.request.headers ?? {}).find(([key]) => key.toLowerCase() === "sec-gpc")?.[1];
     documents.push({ loader: p.loaderId, frame: p.frameId, requestId: p.requestId, requestAtMs: now(),
       urlHash: gpcDocumentHash(p.request.url), secGpc: typeof header === "string" && header.length <= 8 ? header : null });
+    input.impactCapture?.documentRequested(p, mainFrameId);
   };
   const onNavigated = (p: any) => {
     if (stopped || p.frame?.id !== mainFrameId || !p.frame.loaderId || !/^https?:/.test(p.frame.url ?? "")) return;
     invalidate("document_commit");
     committed = { loader: p.frame.loaderId, urlHash: gpcDocumentHash(p.frame.url), at: now() };
+    input.impactCapture?.documentCommitted(p.frame, committed.at);
     sameDocumentTaint = undefined;
     exactCommittedUrl = p.frame.url;
   };
@@ -69,6 +73,7 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
   // separate so history.pushState cannot invent a request to the new URL.
   const onWithinDocument = (p: any) => {
     if (stopped || p.frameId !== mainFrameId) return;
+    input.impactCapture?.navigatedWithinDocument(p, committed?.loader);
     // A history API no-op does not change the active loader or complete URL.
     // Unknown identity and URL change-then-return still invalidate pending proof.
     if (committed && p.navigationType === "historyApi" && p.url === exactCommittedUrl) return;

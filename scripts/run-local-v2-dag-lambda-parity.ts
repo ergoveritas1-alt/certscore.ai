@@ -1,12 +1,15 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { createHash, randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { runtimeGraphDispatchSchema, type RuntimeGraphDispatch } from "../packages/certscore-contracts/src/runtime-evidence-graph";
 import { saleSharingOptOutDispatchSchema, type SaleSharingOptOutDispatch } from "../packages/certscore-contracts/src/sale-sharing-opt-out";
-import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { IncomingMessage } from "node:http";
+import { Socket } from "node:net";
+import { GetObjectCommand, PutObjectCommand, type GetObjectCommandOutput, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
-import { InvokeCommand } from "@aws-sdk/client-lambda";
+import { InvokeCommand, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
 import { createLocalGpcAdaptivePair } from "@certscore/scan-core";
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
@@ -52,12 +55,14 @@ type S3Object = {
   metadata?: Record<string, string>;
 };
 
-class LocalDiskS3Client {
+export class LocalDiskS3Client {
   private readonly objects = new Map<string, S3Object>();
 
   constructor(private readonly rootDir: string) {}
 
-  async send(command: PutObjectCommand | GetObjectCommand) {
+  async send(command: PutObjectCommand): Promise<PutObjectCommandOutput>;
+  async send(command: GetObjectCommand): Promise<GetObjectCommandOutput>;
+  async send(command: PutObjectCommand | GetObjectCommand): Promise<PutObjectCommandOutput | GetObjectCommandOutput> {
     if (isPutObjectCommand(command)) {
       const bucket = requireCommandString(command.input.Bucket, "Bucket");
       const key = requireCommandString(command.input.Key, "Key");
@@ -90,7 +95,8 @@ class LocalDiskS3Client {
     }
     return {
       $metadata: {},
-      Body: object.body,
+      Body: localSdkBody(object.body),
+      ContentLength: object.body.length,
       ContentType: object.contentType,
       Metadata: object.metadata
     };
@@ -118,7 +124,7 @@ class LocalDiskS3Client {
   }
 }
 
-class LocalCaptureSqsClient {
+export class LocalCaptureSqsClient {
   readonly messages: string[] = [];
 
   constructor(private readonly messageStreamPath: string | null = null) {}
@@ -133,7 +139,7 @@ class LocalCaptureSqsClient {
   }
 }
 
-class LocalRecursiveLambdaClient {
+export class LocalRecursiveLambdaClient {
   private adaptivePair?: ReturnType<typeof createLocalGpcAdaptivePair>;
   constructor(
     private readonly input: {
@@ -144,9 +150,9 @@ class LocalRecursiveLambdaClient {
     }
   ) {}
 
-  async send(command: InvokeCommand, options?: { abortSignal?: AbortSignal }) {
+  async send(command: InvokeCommand, options?: { abortSignal?: AbortSignal }): Promise<InvokeCommandOutput> {
     const payload = command.input.Payload
-      ? JSON.parse(Buffer.from(command.input.Payload).toString("utf8")) as unknown
+      ? JSON.parse(localInvokeBytes(command.input.Payload).toString("utf8")) as unknown
       : {};
     const payloadRecord = asRecord(payload);
     if (payloadRecord.workerLane === "reject_observation") {
@@ -154,7 +160,7 @@ class LocalRecursiveLambdaClient {
         return {
           $metadata: {},
           FunctionError: "Unhandled",
-          Payload: Buffer.from(JSON.stringify({ errorMessage: "simulated reject worker failure" })),
+          Payload: localInvokeReply({ errorMessage: "simulated reject worker failure" }),
           StatusCode: 200,
         };
       }
@@ -183,14 +189,48 @@ class LocalRecursiveLambdaClient {
     }
     return {
       $metadata: {},
-      Payload: Buffer.from(JSON.stringify(result)),
+      Payload: localInvokeReply(result),
       StatusCode: 200
     };
   }
 }
 
+/** In-memory SDK response adapters. No sockets are connected and source bytes stay exact. */
+function localSdkBody(bytes: Buffer) {
+  const stream=new IncomingMessage(new Socket());stream.push(bytes);stream.push(null);
+  return Object.assign(stream,{
+    transformToByteArray:async()=>new Uint8Array(bytes),
+    transformToString:async(encoding?:string)=>bytes.toString((encoding??"utf8") as BufferEncoding),
+    transformToWebStream:()=>new ReadableStream<Uint8Array>({start(controller){controller.enqueue(new Uint8Array(bytes));controller.close();}}),
+  });
+}
+function localInvokeReply(value:unknown) {
+  const bytes=Buffer.from(JSON.stringify(value));
+  return Object.assign(bytes,{transformToString:(encoding?:string)=>bytes.toString((encoding??"utf8") as BufferEncoding)});
+}
+function localInvokeBytes(value:NonNullable<InvokeCommand["input"]["Payload"]>):Buffer {
+  if(typeof value==="string")return Buffer.from(value);
+  if(value instanceof ArrayBuffer)return Buffer.from(value);
+  if(ArrayBuffer.isView(value))return Buffer.from(new Uint8Array(value.buffer,value.byteOffset,value.byteLength));
+  throw new Error("Unsupported local Lambda invocation payload.");
+}
+
 function isPutObjectCommand(command: PutObjectCommand | GetObjectCommand): command is PutObjectCommand {
   return command.constructor.name === "PutObjectCommand" || Object.hasOwn(command.input, "Body");
+}
+
+/** The sharded coordinator always dispatches policy_evidence, even for tiny.
+ * Check before creating output files or invoking any browser worker. A key's
+ * presence is a prerequisite, never permission to spend or contact a target. */
+export function assertLocalParityPrerequisites(env: Record<string, string | undefined>) {
+  if (!env.OPENAI_API_KEY?.trim()) {
+    throw new Error("CertScore.ai local sharded scans require OPENAI_API_KEY for the policy-evidence lane. No workers were started. Use offline fixtures when model calls are not authorized.");
+  }
+}
+
+/** Preserve terminal artifacts before returning a failing process status. */
+export function assertLocalParityCompleted(status: string) {
+  if (status !== "completed") throw new Error(`CertScore.ai local scan did not complete (status: ${status}). See the retained local summary.`);
 }
 
 async function main() {
@@ -200,6 +240,7 @@ async function main() {
   }
 
   const args = parseArgs(process.argv.slice(2));
+  assertLocalParityPrerequisites(process.env);
   const workspaceRoot = process.cwd();
   const artifactBaseDir = path.resolve(workspaceRoot, args.artifactDir);
   const fakeS3Root = path.join(artifactBaseDir, "_fake-s3");
@@ -394,6 +435,7 @@ async function main() {
       scanId: args.scanId,
       status: summary.resultStatus
     }));
+    assertLocalParityCompleted(summary.resultStatus);
   } finally {
     restoreEnv(previousEnv);
   }
@@ -767,7 +809,7 @@ function requireCommandString(value: unknown, field: string) {
 
 async function readOptionalJson(filePath: string): Promise<unknown> {
   try {
-    return JSON.parse(await readFile(filePath, "utf8")) as unknown;
+    return parseCanonicalEvidenceArtifact(await readFile(filePath));
   } catch {
     return null;
   }

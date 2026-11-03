@@ -20,8 +20,9 @@ for(const action of ['accept','reject'] as const){
  const recipe={recipeId:'unmatched-fixture',controlSelector:'#absent',resolverMethod:'local_fixture_recipe' as const,confirmation:{kind:'local_storage_equals' as const,key:'consent',expectedValue:action==='accept'?'granted':'denied'}};
  try{
  const packet=action==='accept'?await runPostAcceptObserver({...input,allowCanonicalAcceptDiscovery:true,recipe:{...recipe,artifactVersion:'certscore.post_accept_action_recipe.v1'}}):await runPostRefusalObserver({...input,allowCanonicalRejectDiscovery:true,recipe:{...recipe,artifactVersion:'certscore.post_refusal_action_recipe.v1'}});
- assert.equal(clicks,variant === 'visible' ? 1 : 0,JSON.stringify({resolver:packet.resolver,diagnostics:packet.interactionDiagnostics}));
- if(variant === 'visible')assert.ok(packet.actionControlProof?.uniquelyActionable);
+ const executable=variant === 'visible' || variant === 'nested_aria_hidden';
+ assert.equal(clicks,executable ? 1 : 0,JSON.stringify({resolver:packet.resolver,diagnostics:packet.interactionDiagnostics}));
+ if(executable)assert.ok(packet.actionControlProof?.uniquelyActionable);
  else assert.equal(packet.actionControlProof,undefined);
  const registration='acceptanceRegistration' in packet?packet.acceptanceRegistration:packet.refusalRegistration;assert.notEqual(registration.status,'confirmed');
  }finally{await new Promise<void>(r=>server.close(()=>r()));}

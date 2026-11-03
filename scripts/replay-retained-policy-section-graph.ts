@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -99,7 +100,7 @@ async function replaySurface(surface: PolicySurface) {
 }
 
 async function replayBundle(bundlePath: string) {
-  const bundle = JSON.parse(await readFile(bundlePath, "utf8")) as CanonicalEvidenceBundle;
+  const bundle = parseCanonicalEvidenceArtifact(await readFile(bundlePath, "utf8")) as CanonicalEvidenceBundle;
   const surfaces = (bundle.policySurfaceObservations ?? []).filter(isTargetRelevantPolicy);
   const replayedWithObservations = (await Promise.all(surfaces.map(replaySurface))).filter(
     (row): row is NonNullable<typeof row> => row !== null,

@@ -325,3 +325,17 @@ test("customer action summaries require an observed first-layer control while re
     }
   }
 });
+
+test('expanded Accept inventory survives canonical projection and strict public API without confirmation promotion',async()=>{
+ const {postAcceptReportProjectionSchema,ACCEPT_REQUEST_RETENTION_POLICY:policy}=await import('@certscore/contracts');
+ const base=fixture('accept'),rows=Array.from({length:300},(_,i)=>({requestId:`accept-${i}`,sanitizedUrl:'https://example.test/event',hostname:'example.test',resourceType:'fetch',startedAtMs:200,nonEssential:false}));
+ const projection=postAcceptReportProjectionSchema.parse({...base,
+  decisionEvidence:{policyVersion:'semantic_consent_registration.v2',decision:'unknown',basis:'unverified'},
+  captureCoverage:{requestsDroppedBeforeAction:0,requestsDroppedAfterAction:0,postActionRetention:{policyVersion:policy,requestsObserved:300,requestsRetained:300,replacements:0,priorityEvaluations:0,omitted:{delivery_asset:0,known_other:0,unknown:0,tracking:0,consent:0,document:0,unclassified:0}}},
+  afterActionCapture:{...base.afterActionCapture,requestRetentionPolicy:policy,requestIds:rows.map(r=>r.requestId),requestAncestry:rows.map(r=>({requestId:r.requestId,rootStartedAtMs:r.startedAtMs}))},afterActionRequests:rows});
+ const record={events:[],runtimeArtifacts:{consentControlAssessment:observedControlAssessment,postAcceptEvidenceProjection:projection}} as any;
+ const result=deriveApiV2PostAcceptObservation(record);assert.ok(result);
+ const api=apiV2PostAcceptObservationSchema.parse(result);
+ assert.equal(api.afterAction?.requestCount,300);assert.equal(api.execution?.status,'succeeded');assert.equal(api.execution?.consentConfirmed,false);assert.equal(api.status,'unconfirmed');assert.equal(api.productionProjectable,false);
+ assert.ok(!JSON.stringify(api.afterAction).includes('requestRetentionPolicy'),'Internal capture budget markers are not public wire fields');
+});

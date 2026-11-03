@@ -491,7 +491,7 @@ async function readLabelBoundNecessaryOnlyContext(control: ConsentActionControl,
     const unreadable = new Set([...ancestors, ...descendants].filter(node => {
       const style = getComputedStyle(node);
       return style.display === "none" || style.visibility !== "visible" || Number(style.opacity) === 0 ||
-        node.matches('[hidden], [inert], [aria-hidden="true"]');
+        node.matches('[hidden], [inert]');
     }));
     const rect = banner.getBoundingClientRect();
     if (ancestors.some(node => unreadable.has(node)) || rect.width <= 0 || rect.height <= 0) return undefined;
@@ -524,7 +524,7 @@ async function verifyContextualApprovalScope(control: ConsentActionControl, bann
     const rect = banner.getBoundingClientRect();
     const style = getComputedStyle(banner);
     if (rect.width <= 0 || rect.height <= 0 || style.display === "none" || style.visibility === "hidden" ||
-      style.opacity === "0" || banner.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+      style.opacity === "0" || banner.closest('[hidden], [inert]')) return false;
     const nativeButton = element instanceof HTMLButtonElement && !element.form && !element.hasAttribute("form") &&
       (element.type === "button" || input.allowUnassociatedDefaultButton && element.getAttribute("type") === null);
     if (!nativeButton && !(element instanceof HTMLAnchorElement)) return false;

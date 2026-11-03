@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { gpcResponseAssessmentSchema } from "../packages/certscore-contracts/src/index";
@@ -30,7 +31,7 @@ async function main() {
     if (hosts.has(candidate.host) || rows.length >= 20) continue;
     try {
       const directory = path.join(root, candidate.directory);
-      const bundle = JSON.parse(await readFile(path.join(directory, "CanonicalEvidenceBundle.json"), "utf8"));
+      const bundle = parseCanonicalEvidenceArtifact(await readFile(path.join(directory, "CanonicalEvidenceBundle.json"), "utf8")) as any;
       const original = gpcResponseAssessmentSchema.parse(bundle.gpcResponseAssessment);
       if (original.contractVersion !== "certscore.gpc-response-assessment.v3" || !original.comparison.gpcArtifact) continue;
       const bytes = await readFile(path.join(directory, "lanes/gpc_observation/CanonicalEvidenceBundle.json"));

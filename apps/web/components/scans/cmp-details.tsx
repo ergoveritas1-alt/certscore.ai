@@ -87,7 +87,7 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
       badge={experience.mode === "cmp_details" ? <EvidenceHeaderStatus rows={rows} /> : experience.mode === "capture_limited"
         ? <EvidenceStatusBadge label="Limited" tone="limited" /> : <EvidenceHeaderStatus rows={defaultRows.filter(row => row.status === "Review recommended")} />} />
     <div className="mt-5">
-      {experience.mode === "cmp_details" ? <VendorBrandChip label={experience.provider ?? "Consent platform not identified"} showMeta={false} /> :
+      {experience.mode === "cmp_details" || experience.mode === "capture_limited" && experience.provider ? <VendorBrandChip label={experience.provider ?? "Consent platform not identified"} showMeta={false} /> :
         <p className="text-sm text-zinc-600">Provider: {experience.mode === "capture_limited" ? "Not determined" : "Not identified"}</p>}
       {experience.mode === "consent_controls" && experience.controls ? <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
         {(["accept", "reject", "options"] as const).map(role => <div key={role}>
@@ -95,6 +95,14 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
           <dd className="mt-1 text-zinc-600">{experience.controls![role] === "observed" ? "Observed" : "Not observed"}</dd>
         </div>)}
       </dl> : null}
+      {experience.availability ? <details className="mt-3 text-xs leading-5 text-zinc-600" data-cmp-availability>
+        <summary className="cursor-pointer font-medium">Why detailed CMP checks are unavailable</summary>
+        <div className="mt-2 space-y-2">
+          {experience.availability.recordedLimitations ? <p>{experience.availability.recordedLimitations}</p> : null}
+          <p><strong>What to check:</strong> {experience.availability.whatToCheck}</p>
+          <p><strong>Retest:</strong> {experience.availability.retest}</p>
+        </div>
+      </details> : null}
       {experience.mode !== "cmp_details" && experience.mode !== "consent_signals" ? <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs">
         {experience.controls ? <EvidenceJumpLink targetId="consent-choice-controls">View consent choices</EvidenceJumpLink> : null}
         {relatedEvidence.map(link => <EvidenceJumpLink key={link.targetId} targetId={link.targetId}>{link.label}</EvidenceJumpLink>)}

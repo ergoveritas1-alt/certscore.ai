@@ -485,6 +485,70 @@ test("production result handoff verifies retained bytes and scan identity before
   );
 });
 
+test("lossless encoded production handoff keeps outer receipts, identity and original byte caches", async () => {
+  const scanId = "bca91cbb-cb56-4d8b-8056-a94d5472bf86";
+  const manifest = Buffer.from(JSON.stringify({
+    processor: "local-certscore-v2-dag-parallel-v1",
+    scanId,
+    targetEnvironment: "production",
+  }));
+  const { serializeCanonicalEvidenceArtifact } = await import("@certscore/contracts/dist/canonical-evidence-artifact.js");
+  const { gpcCookieReadWideDictionaryFixture } = await import("../../../../packages/certscore-scan-core/src/test-fixtures/gpc-cookie-read.cases");
+  const bundle = Buffer.from(serializeCanonicalEvidenceArtifact(gpcCookieReadWideDictionaryFixture(scanId).bundle));
+  assert.ok(bundle.byteLength < 400 * 1024);
+  const parsed = parseLambdaResultMessage(JSON.stringify({
+    artifactOnly: true,
+    artifactMetadata: {
+      manifestUri: { sha256: createHash("sha256").update(manifest).digest("hex"), sizeBytes: manifest.byteLength },
+      scanArtifactUri: { sha256: createHash("sha256").update(bundle).digest("hex"), sizeBytes: bundle.byteLength },
+    },
+    artifactPointers: {
+      manifestUri: "s3://certscore-artifacts/scan/LocalV2DagLambdaManifest.json",
+      scanArtifactUri: "s3://certscore-artifacts/scan/CanonicalEvidenceBundle.json",
+    },
+    completedAt: "2026-08-05T18:03:42.182Z",
+    contractVersion: "certscore.v2.lambda-dag-result.v1",
+    processor: "local-certscore-v2-dag-parallel-v1",
+    productionFindingIntegration: false,
+    scanId,
+    status: "completed",
+    targetEnvironment: "production",
+  }), "production");
+  const objects = new Map([
+    ["scan/LocalV2DagLambdaManifest.json", manifest],
+    ["scan/CanonicalEvidenceBundle.json", bundle],
+  ]);
+  const verified = await verifyProductionArtifactChain(parsed, {
+    async send(command: GetObjectCommand) {
+      const body = objects.get(String(command.input.Key));
+      assert.ok(body);
+      return { $metadata: {}, Body: Readable.from([body]) as never, ContentLength: body.byteLength };
+    },
+  });
+
+  assert.equal(verified?.manifest.sizeBytes, manifest.byteLength);
+  assert.equal(verified?.scanArtifact.sizeBytes, bundle.byteLength);
+  assert.deepEqual(verifiedCanonicalBundleBytes.get({
+    uri: "s3://certscore-artifacts/scan/CanonicalEvidenceBundle.json",
+    expectedSha256: createHash("sha256").update(bundle).digest("hex"),
+    expectedSizeBytes: bundle.byteLength,
+  }), bundle, "identity-bound ingestion primes original bytes for subsequent policy review");
+
+  await assert.rejects(
+    verifyProductionArtifactChain(parsed, {
+      async send(command: GetObjectCommand) {
+        const body = objects.get(String(command.input.Key));
+        assert.ok(body);
+        const retained = String(command.input.Key).endsWith("CanonicalEvidenceBundle.json")
+          ? Buffer.concat([body, Buffer.from("tamper")])
+          : body;
+        return { $metadata: {}, Body: Readable.from([retained]) as never, ContentLength: retained.byteLength };
+      },
+    }),
+    /content length|checksum or size/,
+  );
+});
+
 test("late results recover only typed transient control-plane failures", () => {
   assert.equal(isRecoverableLateResultFailure("ops.scan_marked_failed", {
     reason: "lambda_terminal_result_absent_after_execution_deadline",

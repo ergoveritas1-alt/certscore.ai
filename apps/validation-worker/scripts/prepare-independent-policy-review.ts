@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { canonicalEvidenceBundleSchema } from "@certscore/contracts";
@@ -82,7 +83,7 @@ async function loadCanonicalPacket(input: {
   for (const bundlePath of [...new Set(candidates)]) {
     try {
       const bundle = canonicalEvidenceBundleSchema.parse(
-        JSON.parse(await readFile(bundlePath, "utf8"))
+        parseCanonicalEvidenceArtifact(await readFile(bundlePath, "utf8"), { schemaValidation: "caller" })
       );
       if (input.bundlePath && bundle.scanId !== input.scanId) {
         throw new Error(

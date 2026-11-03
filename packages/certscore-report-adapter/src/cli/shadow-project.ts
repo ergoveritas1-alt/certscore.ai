@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
@@ -154,7 +155,7 @@ async function listSiteDirs(calibrationPath: string) {
 }
 
 async function readBundle(path: string): Promise<CanonicalEvidenceBundle> {
-  return canonicalEvidenceBundleSchema.parse(JSON.parse(await readFile(path, "utf8")));
+  return canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(await readFile(path, "utf8"), { schemaValidation: "caller" }));
 }
 
 async function readReviewIfPresent(path: string): Promise<ReviewResult | undefined> {

@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 /** CertScore.ai offline candidate materialization. Retained bytes and reports are never rewritten.
  * Usage: pnpm exec tsx --tsconfig tsconfig.base.json scripts/replay-policy-choice-methods.ts RETAINED_ROOT OUTPUT_JSON
  * RETAINED_ROOT contains receipts.json and <scanId>/CanonicalEvidenceBundle.json.
@@ -18,7 +19,7 @@ const results=receipts.map((r:{scanId:string;host:string;parent:unknown;event:{m
  assert.match(r.scanId,/^[a-f0-9-]{36}$/);const file=path.join(root,r.scanId,'CanonicalEvidenceBundle.json'),bytes=readFileSync(file);
  const sha=createHash('sha256').update(bytes).digest('hex'),receipt=r.event.metadata.artifactMetadata.scanArtifactUri;
  assert.equal(sha,receipt.sha256);assert.equal(bytes.length,receipt.sizeBytes);
- const bundle=JSON.parse(bytes.toString()) as CanonicalEvidenceBundle;assert.equal(bundle.scanId,r.scanId);
+ const bundle=parseCanonicalEvidenceArtifact(bytes.toString()) as CanonicalEvidenceBundle;assert.equal(bundle.scanId,r.scanId);
  const parent=consentControlAssessmentSchema.parse(r.parent),frozen=JSON.stringify(parent);assert.ok(parent.californiaPrivacyReview);
  const review=parent.californiaPrivacyReview;
  const project=(value:typeof parent)=>{

@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
@@ -36,7 +37,7 @@ async function retainedFormCheck(path: string, report: CanonicalReportExport) {
     if (packet.targetUrl !== report.consentControlAssessment?.scan.finalUrl || createHash("sha256").update(packet.targetUrl).digest("hex") !== packet.exactTargetSha256) return { source: root, status: "target_binding_unverified" };
     const bundleBytes = await optional(join(root, "CanonicalEvidenceBundle.json"));
     if (!bundleBytes) return { source: root, status: "bundle_join_unavailable" };
-    const bundle = JSON.parse(bundleBytes.toString());
+    const bundle = parseCanonicalEvidenceArtifact(bundleBytes.toString()) as any;
     assert.equal(bundle.scanId, report.scan.id); assert.deepEqual(bundle.postAcceptEvidence, packet);
     const sha256 = createHash("sha256").update(packetBytes).digest("hex");
     const projection = projectPostAcceptEvidenceForReport({ packet, packetSha256: sha256 });
@@ -77,7 +78,7 @@ async function main() {
   for (const path of (await Promise.all(COHORT.map(files))).flat().sort()) {
     const bytes = await readFile(path), original = JSON.parse(bytes.toString()) as CanonicalReportExport;
     if (original.artifactVersion !== "canonical-report-export-v8") continue;
-    sites.add(original.scan.domainHostname);
+    if (original.scan.domainHostname) sites.add(original.scan.domainHostname);
     const sha256 = createHash("sha256").update(bytes).digest("hex"), views: Record<string, unknown> = {};
     for (const focus of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
       const report = structuredClone(original); report.reviewFocus = focus; report.reviewFocusLabel = focus === "gdpr_eprivacy" ? "GDPR/ePrivacy" : "CCPA/CPRA";

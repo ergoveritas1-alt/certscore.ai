@@ -1,7 +1,7 @@
 import { consentControlAssessmentSchema } from "@certscore/contracts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { consentControlReportLabels, projectConsentControlReport } from "./consent-control-report";
+import { consentControlReportLabels, evaluateConsentControlReport, projectConsentControlReport } from "./consent-control-report";
 import { observedControlAssessment } from "./test-fixtures/observed-control-assessment";
 import { isAfterActionReportEligible } from "./after-action-report-eligibility";
 
@@ -13,6 +13,18 @@ function limited() {
   a.coverage.reasonCodes = ["unresolved_visible_consent_decision"];
   return a;
 }
+
+test("availability distinguishes handoff and proof failures without accepting an unusable assessment", () => {
+  const scan = limited(), noGo = limited(), document = limited(), visit = limited(), coverage = limited();
+  scan.scan.scanId="other"; noGo.scan.noGo=true; document.document.identityStatus="mismatched";
+  visit.coverage.reasonCodes=["loading_or_stalled"]; coverage.coverage.status="none";
+  for(const [value,reason] of [[undefined,"assessment_missing"],[{},"assessment_invalid"],[scan,"scan_mismatch"],
+    [noGo,"scan_no_go"],[document,"document_unverified"],[visit,"visit_unusable"],[coverage,"coverage_unavailable"]] as const) {
+    assert.deepEqual(evaluateConsentControlReport(value,"scan-1"),{reason,report:null});
+    assert.equal(projectConsentControlReport(value,"scan-1"),null);
+  }
+  assert.equal(evaluateConsentControlReport(limited(),"scan-1").reason,"usable");
+});
 
 test("usable retained surface projects binary results without upgrading the assessment", () => {
   const assessment = limited();

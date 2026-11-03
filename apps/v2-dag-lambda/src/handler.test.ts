@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import {derivePolicySurfaceInspectionOutcome} from "@certscore/contracts";
 import { PRESENCE_ONLY_CAPTURE_PROFILE, PRESENCE_ONLY_WORKER_LANES } from "@certscore/contracts";
 import {exactRouteEvidenceFixture} from "../../../packages/certscore-contracts/src/sale-sharing-exact-route.fixture";
@@ -2227,6 +2228,7 @@ async function runCoordinatorFixture(input: {
   dispatchDelayMs: number;
   actionLane?: "accept" | "reject";
   gpcPair?: { baseline: CanonicalEvidenceBundle; gpc: CanonicalEvidenceBundle };
+  encodedCanonicalArtifacts?: boolean;
   preferences?: "complete" | "partial" | "hang" | "wrong_hash" | "wrong_target";
   explicitPreferences?: boolean;
   presenceOnly?: boolean;
@@ -2281,7 +2283,7 @@ async function runCoordinatorFixture(input: {
   if(routeOriginal)for(const [lane,bundle] of passiveBundles)passiveBundles.set(lane,JSON.parse(JSON.stringify(bundle).replaceAll("https://example.com/",routeOriginal)));
   const pointers = new Map<string, { uri: string; body: Buffer; sha256: string; sizeBytes: number }>();
   for (const [lane, bundle] of passiveBundles) {
-    const body = Buffer.from(JSON.stringify(bundle));
+    const body = Buffer.from(input.encodedCanonicalArtifacts ? serializeCanonicalEvidenceBundle(bundle) : JSON.stringify(bundle));
     const key = `workers/${input.scanId}/${lane}/CanonicalEvidenceBundle.json`;
     const uri = `s3://test-bucket/${key}`;
     const metadata = { uri, body, sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.byteLength };
@@ -2491,7 +2493,7 @@ async function runCoordinatorFixture(input: {
         async read(key:string){return key.endsWith("/dispatch.json")?{authorization:canaryAuthorization}:null;},async create(){},
       }}}:{}),
     });
-    const bundle = JSON.parse(await readFile(path.join(artifactRoot, "CanonicalEvidenceBundle.json"))) as Record<string, any>;
+    const bundle = parseCanonicalEvidenceArtifact(await readFile(path.join(artifactRoot, "CanonicalEvidenceBundle.json"))) as Record<string, any>;
     return { actionCalls, workerCalls, artifactRoot, bundle, result, uploads };
   } catch (error) {
     await rm(artifactRoot, { recursive: true, force: true });
@@ -4993,7 +4995,7 @@ test("a captured WCAG audit survives worker path rewriting and canonical seriali
       consentProof: canonicalBundleFixture(scanId, { url, normalizedUrl: url }),
       policyEvidence: canonicalBundleFixture(scanId, { url, normalizedUrl: url }),
     });
-    const retained = JSON.parse(serializeCanonicalEvidenceBundle(merged));
+    const retained = parseCanonicalEvidenceArtifact(serializeCanonicalEvidenceBundle(merged)) as typeof merged;
     assert.deepEqual(retained.accessibilityAudit, runtimeEvidence.accessibilityAudit);
     assert.equal(retained.modulesRun.find((module: { moduleName: string }) => module.moduleName === "accessibilityAudit").status, "completed");
   } finally {
@@ -5709,20 +5711,62 @@ test("presence-only coordinator invokes at most the six core workers with both o
 
 test("GPC product coordinator derives one packet from existing original-byte reads without extra workers or publications",async()=>{
   const {cmpStatePairFixture}=await import("../../../packages/certscore-scan-core/src/test-fixtures/gpc-cmp-state-pair.cases");
-  const scanId="gpc-product-coordinator", pair=cmpStatePairFixture({scanId}), reads:string[]=[];
+  const {gpcObservationSessionSchema}=await import("@certscore/contracts");
+  const { collectionPairFixture } = await import("../../../packages/certscore-scan-core/src/test-fixtures/gpc-collection-pair.cases");
+  for(const mode of ["cmp", "not_ready", "collection", "encoded_collection", "brotli_collection", "brotli_cmp"]) {
+  const notReady = mode === "not_ready";
+  const collection=mode === "collection" || mode === "encoded_collection" || mode === "brotli_collection";
+  const scanId="gpc-product-coordinator", pair=collection ? collectionPairFixture(undefined, scanId) : cmpStatePairFixture({scanId}), reads:string[]=[];
+  if(mode === "encoded_collection" || mode === "brotli_collection") {
+    const {gpcCookieReadOversizedFixture,gpcCookieReadWideDictionaryFixture}=await import("../../../packages/certscore-scan-core/src/test-fixtures/gpc-cookie-read.cases");
+    const {buildGpcCookieReadBinding}=await import("../../../packages/certscore-scan-core/src/gpc-cookie-read-binding");
+    const {compactCanonicalEvidenceBundleForRetention}=await import("../../../packages/certscore-scan-core/src/index");
+    const f=(mode === "brotli_collection" ? gpcCookieReadWideDictionaryFixture : gpcCookieReadOversizedFixture)(scanId);
+    f.bundle.cookieSnapshots[0]!.gpcReadBinding=buildGpcCookieReadBinding(f.input)!;
+    pair.gpc=compactCanonicalEvidenceBundleForRetention(f.bundle);
+    assert.ok(pair.gpc.cookieSnapshots[0]!.gpcReadBinding);
+    assert.equal(JSON.parse(serializeCanonicalEvidenceBundle(pair.gpc)).artifactFormat,`certscore.canonical-evidence-artifact.${mode === "brotli_collection" ? "v2" : "v1"}`);
+  }
+  if(mode === "brotli_cmp") {
+    const {canonicalWideJourneyFixture}=await import("../../../packages/certscore-contracts/src/test-fixtures/canonical-wide-journeys");
+    pair.gpc.observedJourneys.push(...canonicalWideJourneyFixture().map(j=>({...j,firstObservedAtMs:500,lastObservedAtMs:500})));
+    assert.equal(JSON.parse(serializeCanonicalEvidenceBundle(pair.gpc)).artifactFormat,"certscore.canonical-evidence-artifact.v2");
+  }
   pair.baseline.domSnapshots=[{...runtimeSnapshotFixture(),url:pair.baseline.url}];
+  if(notReady) {
+    const session=pair.gpc.gpcObservationSession!, semantic=session.semanticObservation!;
+    semantic.gppStatus="not_ready";semantic.usca=semantic.usnat=null;semantic.stateSha256=null;semantic.stateTransitions=[];
+    semantic.gppDiagnostics={reason:"cmp_or_signal_not_ready",callbackCount:1,applicableSections:[],sectionList:[],diagnosticCodes:["signal_status_not_ready"]};
+    pair.gpc.gpcObservationSession=gpcObservationSessionSchema.parse(session);
+    pair.gpc.gpcPrototypeSessionBinding!.sessionSha256=createHash("sha256").update(JSON.stringify(pair.gpc.gpcObservationSession)).digest("hex");
+  }
   const priorBucket=process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET="test-bucket";
   let root:string|undefined;
   try {
     const out=await runCoordinatorFixture({scanId,action:"none",dispatchDelayMs:1000,
-      consentBundle:coordinatorConsentBundle(scanId,{inspectionCompleted:true,acceptControlObserved:false}),gpcPair:pair,onRead:key=>reads.push(key)});
+      consentBundle:coordinatorConsentBundle(scanId,{inspectionCompleted:true,acceptControlObserved:false}),gpcPair:pair,onRead:key=>reads.push(key),encodedCanonicalArtifacts:mode === "encoded_collection" || mode === "brotli_collection" || mode === "brotli_cmp"});
     root=out.artifactRoot;
     const p=out.bundle.gpcCmpStateComparison;
+    if(collection) {
+      assert.equal(p, undefined);
+      const c = out.bundle.gpcActivityComparison?.collectionComparison;
+      assert.ok(c); assert.equal(c.scanId, scanId);
+      assert.equal(c.sourceHashes.baseline, createHash("sha256").update(JSON.stringify(pair.baseline)).digest("hex"));
+      assert.equal(c.sourceHashes.gpc, out.bundle.gpcResponseAssessment.comparison.gpcArtifact.sha256);
+      assert.equal(c.baseline.rows[0]?.identifierActivity, "identity_sync");
+      assert.equal(c.gpc.rows[0]?.identifierActivity, "identity_sync");
+    } else if(notReady) {
+      assert.equal(p,undefined);
+      assert.equal(out.bundle.gpcResponseAssessment.observation.semanticProbe,"not_ready");
+      assert.deepEqual(out.bundle.gpcResponseAssessment.observation.semanticReadiness,{contractVersion:"certscore.gpc-semantic-readiness.v1",
+        reason:"cmp_or_signal_not_ready",cmpStatusLoaded:true,signalStatusReady:false,observedAfterDocumentCommitMs:899});
+    } else {
     assert.ok(p);assert.equal(p.scanId,scanId);
     assert.equal(p.sourceHashes.baseline,createHash("sha256").update(JSON.stringify(pair.baseline)).digest("hex"));
     assert.equal(p.sourceHashes.gpc,out.bundle.gpcResponseAssessment.comparison.gpcArtifact.sha256);
     assert.equal(p.baseline.sale,"not_opted_out");assert.equal(p.gpc.sale,"opted_out");
+    }
     assert.deepEqual(out.workerCalls.sort(),["consent_proof","gpc_observation","policy_evidence","runtime_evidence"]);
     assert.equal(out.actionCalls.length,0);
     assert.equal(reads.length,4);assert.equal(new Set(reads).size,4,"one existing read per original passive artifact");
@@ -5730,5 +5774,6 @@ test("GPC product coordinator derives one packet from existing original-byte rea
   } finally {
     if(priorBucket===undefined)delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET=priorBucket;
     if(root)await rm(root,{recursive:true,force:true});
+  }
   }
 });

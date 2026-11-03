@@ -1,3 +1,4 @@
+import { readBoundGpcCollectionComparison } from "./gpc-collection-comparison.js";
 import { gpcCmpStateComparisonSchema, readBoundGpcCmpStateComparison } from "./gpc-cmp-state-comparison.js";
 import { gpcGuidanceSchema } from "./gpc-guidance.js";
 import { apiV2ConsentReceiptAvailabilitySchema } from "./receipt-availability.js";
@@ -220,8 +221,10 @@ const apiV2GpcResponseObjectSchema = z.object({
 
 // Keep the public type named: embedding this schema in API, Pulse and MCP
 // otherwise exceeds TypeScript's declaration-serialization limit.
-export type ApiV2GpcResponse = z.infer<typeof apiV2GpcResponseObjectSchema>;
+export interface ApiV2GpcResponse extends z.infer<typeof apiV2GpcResponseObjectSchema> {}
 export const apiV2GpcResponseSchema: z.ZodType<ApiV2GpcResponse> = apiV2GpcResponseObjectSchema.superRefine((response, context) => {
+  if (response.activityComparison?.collectionComparison && !readBoundGpcCollectionComparison(response.activityComparison.collectionComparison, response))
+    context.addIssue({ code: "custom", message: "Collection comparison requires bound source pair and agreeing GPC evidence." });
   if (response.cmpStateComparison && !readBoundGpcCmpStateComparison(response.cmpStateComparison, response))
     context.addIssue({ code: "custom", message: "CMP comparison requires bound source pair and agreeing current state." });
   if (response.activityComparison && (response.activityComparison.sourceHashes.baseline !== response.comparison.baselineArtifact?.sha256 ||

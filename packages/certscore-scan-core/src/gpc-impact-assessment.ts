@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { createHash } from "node:crypto";
 import { canonicalEvidenceBundleSchema, gpcImpactAssessmentSchema, type CanonicalEvidenceBundle, type GpcImpactCapture, type GpcImpactAssessment, type NetworkEvent } from "@certscore/contracts";
 import { gpcImpactRequestSetHash, gpcImpactIdentityHash } from "./gpc-impact-capture.js";
@@ -10,7 +11,7 @@ export function readVerifiedGpcImpactSource(source: GpcImpactSource | undefined)
   try {
     if (!source || source.bytes.length > 20_000_000 || source.bytes.length !== source.pointer.sizeBytes ||
       createHash("sha256").update(source.bytes).digest("hex") !== source.pointer.sha256) return null;
-    return canonicalEvidenceBundleSchema.parse(JSON.parse(Buffer.from(source.bytes).toString("utf8")));
+    return canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(Buffer.from(source.bytes).toString("utf8"), { schemaValidation: "caller" }));
   } catch { return null; }
 }
 function ledgerFor(bundle: CanonicalEvidenceBundle, ms:number) {

@@ -1,0 +1,23 @@
+# CertScore.ai local GPC release hardening
+
+Implementation base: `6a9d197a207765ea958059d6ee2f2b2fdd94aa07` on the shared, already dirty `main`. No shared edits were reset, cleaned, staged or committed. No push, package publication, deployment, production configuration change, public target visit, paid model call or production artifact retrieval is part of this phase.
+
+## Changes
+
+The standalone evidence consumers and verification tools now pass a persisted strict TypeScript configuration, `scripts/tsconfig.gpc-release-tools.json`. The previous 48 diagnostics included nullable evidence, obsolete vendor fields, tuple inference, dynamic import suffixes and local AWS response doubles. The doubles now supply SDK-compatible stream/transform responses while preserving original bytes; a binary round-trip regression checks both memory and disk reads. No live calibration or replay command was executed to fix its types.
+
+The existing GPC fast/full predeploy coverage now includes that typecheck and `apps/v2-dag-lambda/src/gpc-release-pipeline.test.ts`. The new smoke runs four real passive artifact-chain workers against a substantive, loopback-only page with ready supported California GPP state. A programmatic local policy fixture uses the core's existing provider seam, rejects public/production targets before artifact work, and never enters a dispatch contract. The production Lambda target guard remains unchanged and still rejects loopback targets.
+
+The fixture verifies actual off/on browser delivery, exact stored original source sizes/SHA-256 receipts, independent document/session bindings, GPC cookie-read proof, the shared GPC document commit clock, the real coordinator merge, four original bundle reads, existing auxiliary reads, and a single terminal result publication through the existing publication helper. It passes the resulting canonical artifact through the actual materializer, canonical finding builder, persisted hydration, web projection, API/JSON, Markdown and MCP. Source bytes are neither relabeled nor rehashed as historical receipts. A public PDF correctly refuses this loopback scan; positive PDF output and jurisdiction scope remain covered by the separate public-domain synthetic handoff fixtures. The loopback smoke is not proof of public-site population coverage or the public Lambda entry guard's network behavior.
+
+The large-artifact proof remains the lossless codec/retention/coordinator fixtures and the read-only 60-original-source replay documented in `gpc-wide-artifact-fallback-2026-11-02.md`. The new real-browser fixture is deliberately small; it does not claim to reproduce an oversized production capture.
+
+## Verification and release boundary
+
+Exact commands, exit codes and test counts are recorded under `outputs/gpc-release-hardening-2026-11-02/`. PostgreSQL checks use a new disposable loopback cluster and do not load application environment files. External test traffic is blocked. The unchanged MCP release guard receives authentic, freshly fetched GitHub connector metadata for its one exact metadata GET; its receipt identifies this replay explicitly. No release archive is downloaded. This verifies published asset metadata and digest agreement, not the archive's contents.
+
+The review source snapshot excludes local evidence outputs, contact/calibration ledgers and audit activation metadata. It is an archive of the base plus explicit source patches, not a merge or a publication. Shared-file changes remain visible in the patch for review. No historical records are repaired or regenerated; materialization v47 and report projection v27 are unchanged in this phase.
+
+Local hardening adds $0/month recurring AWS spend and no paid-service use. The existing pending producer candidate still has the conservative combined $9.74/month estimate at 100,000 scans and 30-day retention, versus the approved $8 allowance. This is an estimate, not a billing limit. Preserve the release hold unless the owner expressly approves sufficient headroom. The lower-cost alternative is a compatible-reader release while deferring the new producer/capture changes; do not discard evidence or relax proof gates to meet the allowance. No measured Lambda savings or production coverage is claimed.
+
+Future release order remains compatible contracts/SDK/MCP and web/validation consumers before producer packets/images, using repository-controlled AWS workflows. The source snapshot and verification receipts authorize no deployment or flag change. Additional CMP adapters beyond the separately approved internal reader, persistence/override actions, alerts, webhooks and monitoring remain outside this release.

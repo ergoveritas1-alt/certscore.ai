@@ -20,9 +20,9 @@ export function cmpInventoryScopeSelector(definition: KnownCmpDefinition): strin
 /** One existing all-vendor DOM read. Configuration lookup uses own-data roots
  * and bounded prototype data methods, without getters or additional waits.
  * The optional OneTrust inventory reuses its registered read-only SDK call. */
-export function readCmpScopeInventory(page: Page, definitions: KnownCmpDefinition[], captureOneTrustInventory = false) {
+export function readCmpScopeInventory(page: Page, definitions: KnownCmpDefinition[], captureOneTrustInventory = false, deferPublicPrivacyLinks = false) {
   const entries = definitions.map(d => ({ name: d.canonicalName, inventoryRoot: d.preferenceDialogBinding?.deferredRootSelector, bannerRoot: d.rejectLabelBoundNecessaryOnly?.bannerSelector, recipe: d.preferenceCategoryInventory, selector: d.preferenceScopeSelector ?? d.preferenceInspection?.entranceSelector ?? d.domSelectors!.join(","), path: d.configuredConsentCookiePath, domains: d.domains, configurationApi:d.passiveConfigurationApi }));
-  const read = (nodes: Element[], entries: Array<{ name: string; inventoryRoot?: string; bannerRoot?: string; recipe?: KnownCmpDefinition["preferenceCategoryInventory"]; selector: string; path?: string; domains: readonly string[]; configurationApi?: string }>, readOneTrust?: () => ReturnType<typeof readOneTrustInventoryInDocument>, readControls?: typeof readPreferenceControlsInDocument, readLinks?: typeof readPrivacyLinkAccess, readInventory?: typeof readVisibleInventoryInDocument) => {
+  const read = (nodes: Element[], entries: Array<{ name: string; inventoryRoot?: string; bannerRoot?: string; recipe?: KnownCmpDefinition["preferenceCategoryInventory"]; selector: string; path?: string; domains: readonly string[]; configurationApi?: string }>, readOneTrust?: () => ReturnType<typeof readOneTrustInventoryInDocument>, readControls?: typeof readPreferenceControlsInDocument, readLinks?: typeof readPrivacyLinkAccess, readInventory?: typeof readVisibleInventoryInDocument, deferPublicPrivacyLinks = false) => {
     const empty = { documentReadyState: document.readyState, overflow: nodes.length > 1000, indices: [] as number[], configurationIndices:[] as number[], scopeStates: [] as Array<{ index: number; state: "visible" | "inactive" | "unverified" }>, revealed: false, runtimeIdentified: false, surface: undefined as { controls: ReturnType<typeof readPreferenceControlsInDocument>; links: ReturnType<typeof readPrivacyLinkAccess>; visibleInventory?: ReturnType<typeof readVisibleInventoryInDocument> } | undefined, oneTrustInventory: undefined as ReturnType<typeof readOneTrustInventoryInDocument>, configuredConsentCookies: [] as Array<{ version: "cmp_configured_cookie_identity.v1"; configurationPath: string; name: string }> };
     if (empty.overflow) return empty;
     const matched = entries.flatMap((entry, index) => nodes.some(node => node.ownerDocument === document && node.matches(entry.selector)) ? [index] : []);
@@ -100,7 +100,7 @@ export function readCmpScopeInventory(page: Page, definitions: KnownCmpDefinitio
       : selectedNodes.length === 1 ? selectedNodes[0] : undefined;
     const surface = root && entries[indices[0]!]!.name === "OneTrust" && readControls && readLinks ? {
       controls: readControls([...root.querySelectorAll('input[type="checkbox"], [role="switch"], [role="checkbox"]')], entries[indices[0]!]!.recipe),
-      links: readLinks([...root.querySelectorAll('a[href]')], {}),
+      links: deferPublicPrivacyLinks ? [] : readLinks([...root.querySelectorAll('a[href]')], {}),
       visibleInventory: readInventory?.([...root.querySelectorAll('table, [role="table"], dl')]),
     } : undefined;
     const oneTrustInventory = selected.length === 1 && entries[selected[0]!]!.name === "OneTrust" && configurationIndices.includes(selected[0]!)
@@ -120,5 +120,5 @@ export function readCmpScopeInventory(page: Page, definitions: KnownCmpDefinitio
     ? `() => (${readOneTrustInventoryInDocument.toString()})(${parseNamedCmpPartnerDisclosure.toString()},${captureCmpNameManifest.toString()})`
     : "undefined";
   return page.locator(entries.map(entry => entry.selector).join(",")).evaluateAll<ReturnType<typeof read>, typeof entries>(
-    new Function("nodes", "entries", `const __name = (fn) => fn; return (${read.toString()})(nodes, entries, ${inventory}, ${controls}, ${links}, ${visibleInventory});`) as (nodes: Element[], values: typeof entries) => ReturnType<typeof read>, entries);
+    new Function("nodes", "entries", `const __name = (fn) => fn; return (${read.toString()})(nodes, entries, ${inventory}, ${controls}, ${links}, ${visibleInventory}, ${deferPublicPrivacyLinks});`) as (nodes: Element[], values: typeof entries) => ReturnType<typeof read>, entries);
 }

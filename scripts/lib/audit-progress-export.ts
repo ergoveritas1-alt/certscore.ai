@@ -1,3 +1,4 @@
+import { pairedGpcAudit } from "./audit-progress-gpc";
 import { checklistEvidence, returnedState, publicSource } from './audit-progress-contracts';
 /** Historical public canonical exports: report what was returned, never re-score. */
 import { choicePathExecutionSchema } from "../../packages/certscore-contracts/src/choice-path-execution";
@@ -75,6 +76,9 @@ export function extractExportRow(report:Obj,ref:ProgressRow["refs"][number]):Pro
     metricSources[key]=source+scope;
   }
   for(const {id:q} of QUANTITIES)metricSources[q]=source+(q.startsWith('accessibility.')?'/'+String(report.accessibilityAudit?.engine??'unknown')+'/'+String(report.accessibilityAudit?.engineVersion??'unknown')+'/'+String(report.accessibilityAudit?.scope??'unknown'):'');
+  const gpcScopes = pairedGpcAudit(report), pairedScope = gpcScopes.scope;
+  for (const q of QUANTITIES.filter(q => q.id.startsWith('gpc.paired.'))) metricSources[q.id] = source + '/' + pairedScope;
+  for (const q of QUANTITIES.filter(q => q.id.startsWith('gpc.session.'))) metricSources[q.id] = source + '/' + gpcScopes.sessionScope;
   for(const key of Object.keys(metricSources))if(metricSources[key]===source)delete metricSources[key];
   metricSources.findings=source+'/'+String(meta.canonicalResolverVersion??'unknown');
   return {scanId:id,site:String(report.domain??"unknown"),createdAt,region:String(context.scanFrom??"unknown"),producer:"not retained in public export",profile:"not retained in public export",assessmentVersion:String(meta.projectionVersion??"unknown"),projectionVersion:String(meta.reportProjectionVersion??"unknown"),originRequestId:"archive folder provenance; original credential not independently verified",states,defaultSource:source,publicProjectionSourceHash:typeof meta.reportProjectionSourceHash==="string"?meta.reportProjectionSourceHash:undefined,metricSources,measurements:supplement.measurements,metricLabels:supplement.metricLabels,findings,findingInventory,topInventory:false,reportable,refs:[ref]};

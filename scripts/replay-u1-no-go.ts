@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 /** Offline retained-evidence regression. Never launches scans or writes reports. */
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync,mkdirSync,readdirSync} from 'node:fs';
@@ -10,12 +11,12 @@ import {resolveScanReportScore} from '../apps/web/lib/scans/scan-report-disposit
 const root=path.resolve(process.argv[2]!);const input=path.resolve(process.argv[3]!);const out=path.resolve(process.argv[4]!);
 assert.ok(root&&input&&out&&out!==root&&out!==input);mkdirSync(out,{recursive:true});
 const sha=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
-const read=(p:string)=>JSON.parse(readFileSync(p,'utf8'));
+const read=(p:string)=>parseCanonicalEvidenceArtifact(readFileSync(p,'utf8')) as any;
 const ids=['4170c762-890b-4b29-9e17-ae5b4bf4abb8','a32fb82a-4f3e-40f6-bf29-86bd644bcee5','76f124da-c939-462e-8ca1-1fc52cb8e5dc'];
 const receipts=read(path.join(root,'evidence-retrieval-receipts.json'));const cases=[];
 for(const id of ids){
  const bytes=readFileSync(path.join(root,'scans',id,'evidence/0/CanonicalEvidenceBundle.json'));const receipt=receipts.find((r:any)=>r.scanId===id&&r.kind==='scanArtifactUri'&&r.eventIndex===0);
- assert.equal(sha(bytes),receipt.expected.sha256);const original=JSON.parse(bytes.toString());
+ assert.equal(sha(bytes),receipt.expected.sha256);const original=parseCanonicalEvidenceArtifact(bytes.toString()) as any;
  const load=(lane:string)=>canonicalEvidenceBundleSchema.parse(read(path.join(input,`${id}-${lane}.json`)));
  const runtime=load('runtime_evidence'),consent=load('consent_proof'),policy=load('policy_evidence');
  // Runtime content is independently joined to the previously verified merged packet.

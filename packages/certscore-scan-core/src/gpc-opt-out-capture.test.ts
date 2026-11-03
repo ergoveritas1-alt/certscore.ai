@@ -8,7 +8,7 @@ import { captureGpcOptOutObservation } from "./gpc-opt-out-capture.js";
 test("fresh Chromium GPP readback keeps ready, stale, partial and unsupported states separate", async t => {
   const browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
   try {
-    const cases = ["ready", "canonical_array", "not_ready", "wrong_section", "wrong_version", "bad_core", "duplicate_callback", "async_callback", "unavailable", "false_success", "gpc_echo_only", "duplicate_section", "missing_section", "conflicting_sections", "wrong_core_version"] as const;
+    const cases = ["ready", "canonical_array", "not_ready", "wrong_section", "wrong_version", "bad_core", "duplicate_callback", "async_callback", "microtask_callback", "unavailable", "non_function_api", "false_success", "gpc_echo_only", "duplicate_section", "missing_section", "conflicting_sections", "wrong_core_version"] as const;
     for (const scenario of cases) await t.test(scenario, async () => {
       const context = await browser.newContext(); await installGpcNavigatorSignal(context, true);
       await context.route("**/*", route => route.fulfill({ contentType: "text/html", body: "<!doctype html><p>Public fixture</p>" }));
@@ -17,6 +17,7 @@ test("fresh Chromium GPP readback keeps ready, stale, partial and unsupported st
       await page.evaluate(scenario => {
         const w = window as unknown as { __gpp?: (command: string, cb: (v: unknown, success: boolean) => void) => void };
         if (scenario === "unavailable") return;
+        if (scenario === "non_function_api") { (w as Record<string,unknown>).__gpp={queued:true};return; }
         w.__gpp = (command, callback) => {
           if (command !== "ping") throw Error("Only passive ping is authorized");
           const value = { gppVersion: scenario === "wrong_version" ? "1.0" : "1.1", cmpStatus: "loaded",
@@ -27,6 +28,7 @@ test("fresh Chromium GPP readback keeps ready, stale, partial and unsupported st
                 SaleOptOut: scenario === "bad_core" ? "1" : 1, SharingOptOut: 1 }, { [scenario === "canonical_array" ? "GpcSegmentType" : "SubsectionType"]: 1, Gpc: true }] } };
           if (scenario === "conflicting_sections") value.parsedSections.usca.push({ Version: 1, SaleOptOutNotice: 1, SharingOptOutNotice: 1, SaleOptOut: 2, SharingOptOut: 2 });
           if (scenario === "async_callback") { setTimeout(() => callback(value, true), 10); return; }
+          if (scenario === "microtask_callback") { queueMicrotask(() => callback(value, true)); return; }
           callback(value, scenario !== "false_success");
           if (scenario === "duplicate_callback") callback(value, true);
         };
@@ -37,7 +39,17 @@ test("fresh Chromium GPP readback keeps ready, stale, partial and unsupported st
       assert.ok(result.capturedAtMs >= result.documentStartedAtMs);
       if (scenario === "not_ready") assert.deepEqual(result.gppDiagnostics?.diagnosticCodes, ["signal_status_not_ready"]);
       if (scenario === "wrong_version") assert.deepEqual(result.gppDiagnostics?.diagnosticCodes, ["gpp_version_unsupported"]);
-      if (scenario === "unavailable") assert.deepEqual(result.gppDiagnostics?.diagnosticCodes, ["api_unavailable"]);
+      if (scenario === "unavailable" || scenario === "non_function_api") {
+        assert.equal(result.gppStatus,"unavailable");assert.equal(result.gppDiagnostics?.callbackCount,0);
+        assert.deepEqual(result.gppDiagnostics?.diagnosticCodes, ["api_unavailable"]);
+      }
+      if (scenario === "async_callback" || scenario === "microtask_callback") {
+        assert.equal(result.gppStatus, "not_ready");
+        assert.equal(result.gppDiagnostics?.reason, "synchronous_ping_unavailable");
+        assert.equal(result.gppDiagnostics?.callbackCount, 0);
+        assert.equal(result.usca, null); assert.equal(result.usnat, null);
+        assert.equal(result.stateSha256, null);
+      }
       assert.ok((result.gppDiagnostics?.diagnosticCodes ?? []).every(code => /^[a-z0-9_]+$/.test(code)));
       assert.doesNotMatch(JSON.stringify(result), /PRIVATE_GPP|gppString/);
       assert.deepEqual(result.acknowledgment, []);

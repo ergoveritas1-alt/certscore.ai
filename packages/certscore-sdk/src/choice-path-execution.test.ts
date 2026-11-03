@@ -7,7 +7,7 @@ test("counts registered and unconfirmed successful paths independently of afterA
   const paths: Array<Pick<PostAcceptObservation, "execution" | "afterAction">> = [
     { execution: { policyVersion: "choice_path_execution.v1", status: "succeeded_with_confirmation", clickCompleted: true, observationCompleted: true, consentConfirmed: true } },
     { execution: { policyVersion: "choice_path_execution.v1", status: "succeeded", clickCompleted: true, observationCompleted: true, consentConfirmed: false },
-      afterAction: { policyVersion: "bounded_after_action_capture.v2", action: "accept", activationStatus: "completed", stopReason: "window_elapsed", requestsDropped: 0, requestCount: 0, storageWriteCount: 0, storageSnapshotRetained: true } },
+      afterAction: { policyVersion: "bounded_after_action_capture.v2", action: "accept", activationStatus: "completed", stopReason: "window_elapsed", requestsDropped: 0, requestCount: 300, storageWriteCount: 0, storageSnapshotRetained: true } },
     { execution: { policyVersion: "choice_path_execution.v1", status: "limited", clickCompleted: true, observationCompleted: false, consentConfirmed: false } },
     {},
   ];

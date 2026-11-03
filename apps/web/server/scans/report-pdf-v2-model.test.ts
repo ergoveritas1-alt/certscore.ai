@@ -4,6 +4,7 @@ import { buildReportPdfV2Model, pdfV2Status, pdfV2Words } from "./report-pdf-v2-
 import {REPORT_STATUS_LABELS,REPORT_FOLLOW_UP} from "../../lib/scans/report-status-presentation";
 import type { CanonicalReportExport } from "./report-export";
 import { isRegulatoryFindingRelevant } from "../../lib/scans/regulatory-review-catalog";
+import {projectCmpAudit} from "../../lib/scans/cmp-audit-projection";
 function fixture(): CanonicalReportExport {
     return { artifactType: "certscore_canonical_report_export", artifactVersion: "canonical-report-export-v8", reviewFocus: "gdpr_eprivacy", reviewFocusLabel: "GDPR/ePrivacy", reviewScope: "Starting page", score: { value: 80, scope: "starting_page" }, californiaScore: { score: 86 },
         scan: { id: "pdf-v2-fixture", domainHostname: "example.test", requestedUrl: "https://example.test/", completedAt: "2026-10-21T23:19:00Z", scanFrom: "eu_de" },
@@ -17,6 +18,15 @@ function finding(id: string, summary = "A qualified observation was recorded.", 
         presentationDecision: { status: "surface" }, surfacingDecision: { reportable: true, decisionState: "review", reportLane: "main" }, scoreEffects: scoreEffect ? [{ deductionPoints: 7 }] : [] };
 }
 function add(r: CanonicalReportExport, f: ReturnType<typeof finding>) { r.projection.unifiedFindings.push(f as never); }
+
+test("unavailable CMP evidence is not described as thirteen assessed checks or captured settings",()=>{
+    const r=fixture();r.appendix.evidenceDossier!.cmp={provider:"OneTrust",audit:projectCmpAudit({scanId:r.scan.id,consentVendor:"OneTrust"})};
+    const m=buildReportPdfV2Model(r),section=m.sections.find(s=>s.id==="consent")!;
+    assert.match(section.summary,/OneTrust identified/);
+    assert.match(section.summary,/13 retained criteria/);
+    assert.doesNotMatch(section.summary,/assessed checks|captured controls and settings/);
+    assert.equal(m.issues.length,0);assert.equal(m.retest,null);
+});
 function windows(r: CanonicalReportExport, requestPurpose = "analytics") {
     r.appendix.evidenceDossier!.cmp!.audit.rows = [{ id: "implementation", label: "Choice activity", status: "Review recommended", supportingEvidence: { inventory: { choiceActivity: [
                         { action: "accept", windowMs: 3000, requestCount: 1, nonEssentialRequestCount: 1, requests: [{ hostname: "collector.example", path: "/event", vendor: "Reviewed recipient", purpose: requestPurpose, msAfterClick: 500, nonEssential: true }] },

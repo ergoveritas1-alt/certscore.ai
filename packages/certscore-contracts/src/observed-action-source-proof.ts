@@ -1,11 +1,13 @@
 import { z } from "zod";
 import type { ActionMainDocumentWriteCoverage } from "./after-action-capture";
+import { ACCEPT_REQUEST_RETENTION_POLICY, CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT, CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT } from "./consent-action-evidence-policy";
 
 export const OBSERVED_ACTION_EXCLUDED_CHANNELS = ["workers", "subframes", "response_set_cookie", "cookie_store", "storage_named_properties", "storage_define_property", "other_browser_channels"] as const;
 const count = z.number().int().nonnegative();
 /** Prospective diagnostic proof only; never browser-wide completeness or finding eligibility. */
 export type ObservedActionSourceProof = {
   policyVersion: "bounded_observed_action_sources.v1";
+  requestRetentionPolicy?: typeof ACCEPT_REQUEST_RETENTION_POLICY;
   scope: "primary_page_request_listener_and_main_document_setter_hooks";
   excludedChannels: Array<typeof OBSERVED_ACTION_EXCLUDED_CHANNELS[number]>;
   authorization: { kind: "loopback" | "owned_canary" | "explicit_allowlist" | "scan_target" | "scan_target_resolution";
@@ -20,6 +22,7 @@ export type ObservedActionSourceProof = {
 };
 export const observedActionSourceProofSchema: z.ZodType<ObservedActionSourceProof> = z.object({
   policyVersion: z.literal("bounded_observed_action_sources.v1"),
+  requestRetentionPolicy: z.literal(ACCEPT_REQUEST_RETENTION_POLICY).optional(),
   scope: z.literal("primary_page_request_listener_and_main_document_setter_hooks"),
   excludedChannels: z.array(z.enum(OBSERVED_ACTION_EXCLUDED_CHANNELS)).length(OBSERVED_ACTION_EXCLUDED_CHANNELS.length)
     .refine(v => new Set(v).size === OBSERVED_ACTION_EXCLUDED_CHANNELS.length),
@@ -37,8 +40,10 @@ export const observedActionSourceProofSchema: z.ZodType<ObservedActionSourceProo
   configuredWindowCompleted: z.boolean(), semanticDecisionConfirmed: z.boolean(),
   requests: z.object({ handlerReceivedCount: count, retainedCount: count, droppedCount: count,
     pendingCount: count, pendingClassificationCount: z.literal(0), unresolvedIdentityCount: count, unresolvedClassificationCount: count,
-    projectionOmittedCount: count, retainedRequestIds: z.array(z.string().min(1).max(120)).max(192) }).strict(),
+    projectionOmittedCount: count, retainedRequestIds: z.array(z.string().min(1).max(120)).max(CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT) }).strict(),
 }).strict().superRefine((v, ctx) => {
+  if (!v.requestRetentionPolicy && v.requests.retainedRequestIds.length > CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT)
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"Legacy source proofs retain their original request bound."});
   if (v.requestWindowStartedAtMs > v.windowStartedAtMs || v.windowStartedAtMs > v.windowEndedAtMs ||
     v.requests.retainedRequestIds.length !== v.requests.retainedCount || new Set(v.requests.retainedRequestIds).size !== v.requests.retainedCount ||
     v.requests.handlerReceivedCount !== v.requests.retainedCount + v.requests.droppedCount ||
@@ -70,10 +75,12 @@ export function validateObservedActionSourceProof(p: ObservedActionSourceProof |
   scanId: string; navigationAuthorized: boolean; targetSha256?: string; dispatchedAtMs?: number; registeredAtMs?: number; endedAtMs?: number; scanStartedAtMs: number;
   configuredWindowMs: number; exitReason?: string; confirmed: boolean; decisionConfirmed: boolean; clickCompleted: boolean;
   writeCoverage?: ActionMainDocumentWriteCoverage;
-  retention?: { requestsObserved: number; requestsRetained: number };
+  retention?: { policyVersion?: string; requestsObserved: number; requestsRetained: number };
   requests: Array<{ requestId: string; startedAtMs: number; completedAtMs?: number; hostname?: string; purpose?: string }>;
 }) {
   if (!p) return; // Historical bytes never acquire prospective proof on read.
+  if ((p.requestRetentionPolicy === ACCEPT_REQUEST_RETENTION_POLICY) !== (source.retention?.policyVersion === ACCEPT_REQUEST_RETENTION_POLICY))
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"Source proof must retain its original request-retention policy."});
   const w = source.writeCoverage;
   const rows = source.requests.filter(r => p.requests.retainedRequestIds.includes(r.requestId));
   if (p.authorization.scanId !== source.scanId || !source.navigationAuthorized || p.scanClockOriginAtMs > source.scanStartedAtMs || p.requestWindowStartedAtMs < source.scanStartedAtMs || !w || !source.retention || p.targetUrlSha256 !== source.targetSha256 ||

@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { canonicalEvidenceBundleSchema, type SupportedPrivacyEvidenceLocale } from "@certscore/contracts";
@@ -60,7 +61,7 @@ async function summarizeTarget(target: Target, artifactRoot: string) {
   const artifactDir = path.resolve(artifactRoot, target.artifactDir ?? target.key);
   const bundlePath = path.join(artifactDir, "CanonicalEvidenceBundle.json");
   try {
-    const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(await readFile(bundlePath, "utf8")));
+    const bundle = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(await readFile(bundlePath, "utf8"), { schemaValidation: "caller" }));
     const controls = bundle.consentUiObservations.flatMap((observation) => observation.controls);
     const expectedControlLocale = target.controlLocale ?? target.locale;
     const observed = {

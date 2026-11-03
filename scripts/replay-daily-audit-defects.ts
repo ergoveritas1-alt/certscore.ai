@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 /** Offline verification only. No fetching, scans, model calls or database writes.
  * Reclassifications are local candidate interpretations of immutable retained
  * observations, never a rewrite of the original scan or its source receipt.
@@ -22,7 +23,7 @@ const root=path.resolve(process.argv[2] ?? "artifacts/daily-scan-audit/runs/2026
 const output=path.resolve(process.argv[3] ?? "artifacts/daily-audit-fixes-2026-10-23");
 assert.ok(output!==root && !output.startsWith(root+path.sep),"Do not write into the frozen audit");
 mkdirSync(output,{recursive:true});
-const read=(file:string)=>JSON.parse(readFileSync(file,"utf8"));
+const read=(file:string)=>parseCanonicalEvidenceArtifact(readFileSync(file,"utf8")) as any;
 const sha=(bytes:Buffer|string)=>createHash("sha256").update(bytes).digest("hex");
 const receipts=read(path.join(root,"evidence-retrieval-receipts.json"));
 const integrity:Array<{scanId:string;sha256:string}>=[];
@@ -33,7 +34,7 @@ function bundleFor(id:string):CanonicalEvidenceBundle {
   assert.equal(sha(bytes),receipt.expected.sha256,id);
   assert.equal(bytes.length,receipt.expected.sizeBytes,id);
   integrity.push({scanId:id,sha256:sha(bytes)});
-  return JSON.parse(bytes.toString());
+  return parseCanonicalEvidenceArtifact(bytes.toString()) as any;
 }
 function sourceFor(id:string) {return {sha256:integrity.find(r=>r.scanId===id)!.sha256,verificationStatus:"verified"};}
 const inventory=read(path.join(root,"mechanical-results.json"));

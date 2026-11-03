@@ -1876,7 +1876,9 @@ function collectConsentGeometryInPage(input: {
       if (cached !== undefined) { readable = cached; break; }
       visited.push(current);
       const style = styleFor(current);
-      if (current.matches("script,style,noscript,template,[hidden],[inert],[aria-hidden='true' i]") ||
+      // Read rendered consent prose for a DOM/pointer action. Accessibility
+      // exposure is a separate observation; aria-hidden alone does not hide it.
+      if (current.matches("script,style,noscript,template,[hidden],[inert]") ||
         style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" ||
         Number.parseFloat(style.opacity || "1") <= 0.05) break;
       current = parentElementOrHost(current);
@@ -2372,6 +2374,9 @@ function collectConsentGeometryInPage(input: {
       }
       seenRoots.add(node);
       roots.push(node);
+      // querySelectorAll excludes the root itself. A context read rooted at a
+      // shadow host must include its own open root under the same depth cap.
+      if (node instanceof Element && node.shadowRoot) visit(node.shadowRoot, depth + 1);
       for (const element of Array.from(node.querySelectorAll("*"))) {
         if (element.shadowRoot) {
           visit(element.shadowRoot, depth + 1);

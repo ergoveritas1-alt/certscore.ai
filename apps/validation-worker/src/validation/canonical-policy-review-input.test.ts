@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -14,6 +15,19 @@ const fixturePath = path.resolve(
   __dirname,
   "../../../../packages/certscore-contracts/fixtures/saved-bundles/policy-surface-positive.json",
 );
+
+test("policy review reuses original encoded bytes and verifies the stored receipt before decoding",async()=>{
+  const {gpcCookieReadWideDictionaryFixture}=await import("../../../../packages/certscore-scan-core/src/test-fixtures/gpc-cookie-read.cases");
+  const fixture=gpcCookieReadWideDictionaryFixture().bundle,body=Buffer.from(serializeCanonicalEvidenceArtifact(fixture));
+  const pointer={uri:"s3://fixture-eu-west-1/encoded.json",region:"eu-west-1" as const,
+    expectedSha256:createHash("sha256").update(body).digest("hex"),expectedSizeBytes:body.length};
+  const cache=createVerifiedCanonicalBundleByteCache();cache.retain(pointer,body);
+  let reads=0;const client={async send(){reads++;return {Body:body};}};
+  const decoded=await loadCanonicalBundleForPolicyReview({cache,client,pointer});
+  assert.deepEqual(JSON.parse(JSON.stringify(decoded)),JSON.parse(JSON.stringify(fixture)));assert.equal(reads,0);
+  await assert.rejects(loadCanonicalBundleForPolicyReview({client,pointer:{...pointer,expectedSha256:"0".repeat(64)}}));
+  await assert.rejects(loadCanonicalBundleForPolicyReview({client,pointer:{...pointer,expectedSizeBytes:body.length+1}}));
+});
 
 test("policy review reuses ingestion's verified bytes without a second download and still enforces the schema", async () => {
   const cache = createVerifiedCanonicalBundleByteCache();

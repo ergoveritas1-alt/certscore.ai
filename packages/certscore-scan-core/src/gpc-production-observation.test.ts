@@ -6,6 +6,98 @@ import { gpcProductionRuntimeFixture } from "../../certscore-contracts/src/test-
 import { buildGpcProductionObservation } from "./gpc-production-observation";
 import { resolveVendorObservations, decodeGppRequest } from "@certscore/vendor-resolver";
 
+test("API availability preserves the original absent-function reason without creating CMP state or weakening source proof", () => {
+  const fixture=()=>{
+    const bundle=gpcProductionRuntimeFixture(),semantic=bundle.gpcObservationSession!.semanticObservation!;
+    semantic.gppDiagnostics={reason:"api_unavailable",callbackCount:0,applicableSections:[],sectionList:[],diagnosticCodes:["api_unavailable"]};
+    return bundle;
+  };
+  const run=(bundle:ReturnType<typeof fixture>, scanId=bundle.scanId)=>{
+    const session=gpcObservationSessionSchema.safeParse(bundle.gpcObservationSession);
+    if(session.success)bundle.gpcObservationSession=session.data;
+    if(bundle.gpcPrototypeSessionBinding)bundle.gpcPrototypeSessionBinding.sessionSha256=createHash("sha256").update(JSON.stringify(bundle.gpcObservationSession)).digest("hex");
+    const bytes=Buffer.from(JSON.stringify(bundle));
+    return buildGpcProductionObservation({scanId,source:{bytes,pointer:{uri:"fixture://api-unavailable-original.json",sizeBytes:bytes.length,sha256:createHash("sha256").update(bytes).digest("hex")}}});
+  };
+  const good=fixture(),result=run(good);
+  assert.equal(result.status,"complete","complete observation is separate from semantic interface availability");
+  assert.equal(result.semanticProbe,"unavailable");
+  assert.deepEqual(result.semanticReadiness,{contractVersion:"certscore.gpc-semantic-readiness.v1",reason:"api_unavailable",
+    cmpStatusLoaded:null,signalStatusReady:null,observedAfterDocumentCommitMs:899});
+  assert.deepEqual(result.registration,{basis:"current_recorded_state",sale:"unknown",sharing:"unknown",cmpGpcSignal:"unknown",causedByGpc:"not_established"});
+  for(const mutate of [
+    (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.gppDiagnostics!.callbackCount=1;},
+    (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.gppDiagnostics!.reason="unreviewed reason";},
+    (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.gppDiagnostics!.diagnosticCodes=["cmp_status_not_loaded"];},
+    (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.gppDiagnostics!.sectionList=[8];},
+    (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.gppDiagnostics!.applicableSections=[8];},
+    (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.adapterVersion="gpc_usca_usnat_and_live_status.v3";},
+    (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.gppStatus="unsupported";},
+    (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.captureBinding!.documentToken="replacement";},
+    (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.capturedAtMs=0;},
+    (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.capturedAtMs=1001;},
+    (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.limitationKeys=["document_changed_during_semantic_readback"];},
+    (b:typeof good)=>{delete b.gpcObservationSession!.semanticObservation!.gppDiagnostics;},
+  ]){const b=fixture();mutate(b);assert.equal(run(b).semanticReadiness,undefined);}
+  assert.equal(run(fixture(),"wrong-scan").semanticReadiness,undefined);
+  const bytes=Buffer.from(JSON.stringify(good));const pointer={uri:"fixture://unavailable-receipt.json",sizeBytes:bytes.length,sha256:createHash("sha256").update(bytes).digest("hex")};
+  for(const bad of [{...pointer,sizeBytes:bytes.length+1},{...pointer,sha256:"f".repeat(64)}])
+    assert.equal(buildGpcProductionObservation({scanId:good.scanId,source:{bytes,pointer:bad}}).semanticReadiness,undefined);
+});
+
+test("not-ready diagnostics use only verified original source and same-document terminal facts", () => {
+  for (const reason of ["synchronous_ping_unavailable", "cmp_or_signal_not_ready"] as const) {
+    const bundle=gpcProductionRuntimeFixture(), session=bundle.gpcObservationSession!, semantic=session.semanticObservation!;
+    semantic.gppStatus="not_ready"; semantic.usca=semantic.usnat=null; semantic.stateSha256=null;
+    semantic.stateTransitions=[]; semantic.limitationKeys=[];
+    semantic.gppDiagnostics={reason,callbackCount:reason==="synchronous_ping_unavailable"?0:1,
+      applicableSections:[],sectionList:[],diagnosticCodes:["cmp_status_not_loaded"]};
+    const sourceFor=()=>{
+      bundle.gpcObservationSession=gpcObservationSessionSchema.parse(session);
+      bundle.gpcPrototypeSessionBinding!.sessionSha256=createHash("sha256").update(JSON.stringify(bundle.gpcObservationSession)).digest("hex");
+      const bytes=Buffer.from(JSON.stringify(bundle));
+      return {bytes,pointer:{uri:"fixture://not-ready.json",sizeBytes:bytes.length,sha256:createHash("sha256").update(bytes).digest("hex")}};
+    };
+    const original=sourceFor(), run=(source=original)=>buildGpcProductionObservation({scanId:bundle.scanId,source});
+    const result=run();
+    assert.equal(result.semanticProbe,"not_ready");
+    assert.deepEqual(result.semanticReadiness,{contractVersion:"certscore.gpc-semantic-readiness.v1",reason,
+      cmpStatusLoaded:reason==="synchronous_ping_unavailable"?null:false,
+      signalStatusReady:reason==="synchronous_ping_unavailable"?null:true,
+      observedAfterDocumentCommitMs:semantic.capturedAtMs-session.mainDocument!.committedAtMs});
+    assert.equal(result.delivery.httpHeaderRetained,true);
+    assert.equal(result.registration.sale,"unknown");
+    assert.equal(run({...original,pointer:{...original.pointer,sha256:"f".repeat(64)}}).semanticReadiness,undefined);
+    assert.equal(run({...original,pointer:{...original.pointer,sizeBytes:original.bytes.length+1}}).semanticReadiness,undefined);
+    const binding=structuredClone(semantic.captureBinding!);
+    semantic.captureBinding!.documentToken="other-document";
+    assert.equal(run(sourceFor()).semanticReadiness,undefined);
+    semantic.captureBinding=binding;
+    semantic.capturedAtMs=session.mainDocument!.committedAtMs-1;
+    assert.equal(run(sourceFor()).semanticReadiness,undefined);
+    semantic.capturedAtMs=session.captureEndedAtMs+1;
+    assert.equal(run(sourceFor()).semanticReadiness,undefined);
+    semantic.capturedAtMs=session.captureEndedAtMs;
+    semantic.limitationKeys=["document_changed_during_semantic_readback"];
+    assert.equal(run(sourceFor()).semanticReadiness,undefined);
+    semantic.limitationKeys=[];
+    semantic.gppDiagnostics!.reason="https://secret.test/path?token=private";
+    assert.equal(run(sourceFor()).semanticReadiness,undefined,"unknown diagnostic text is never projected");
+    semantic.gppDiagnostics!.reason=reason;
+    semantic.gppDiagnostics!.callbackCount=2;
+    assert.equal(run(sourceFor()).semanticReadiness,undefined,"duplicate callbacks cannot supply a readiness diagnosis");
+    semantic.gppDiagnostics!.callbackCount=reason==="synchronous_ping_unavailable"?0:1;
+    semantic.gppDiagnostics!.diagnosticCodes=["cmp_status_not_loaded","gpp_version_unsupported"];
+    assert.equal(run(sourceFor()).semanticReadiness,undefined,"unreviewed diagnostic combinations fail closed");
+    semantic.gppDiagnostics!.diagnosticCodes=["cmp_status_not_loaded"];
+    semantic.stateSha256="f".repeat(64);
+    assert.equal(gpcObservationSessionSchema.safeParse(session).success,false,"the original source schema already rejects a contradictory terminal state marker");
+    semantic.stateSha256=null;
+    semantic.adapterVersion="gpc_usca_usnat_and_live_status.v3";
+    assert.equal(run(sourceFor()).semanticReadiness,undefined,"older adapters remain readable without this new diagnostic");
+  }
+});
+
 test("bounded GPC completion uses its own representative visit independently of DOM inventory coverage", () => {
   const bundle=gpcProductionRuntimeFixture();
   bundle.runtimeCoverage!.coverageStatus="limited_partial";

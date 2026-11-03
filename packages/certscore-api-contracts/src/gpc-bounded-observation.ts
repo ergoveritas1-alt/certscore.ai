@@ -73,6 +73,8 @@ export const saleSharingRequestQualificationSchema = z.object({
         gpp: gpcRequestGppSchema.optional(),
         propertyEvidence: propertySaleSharingProofSchema.optional(),
 }).strict();
+/** Shared closed activity/basis mapping; no finding qualification is inferred. */
+export function gpcQualificationActivityForBasis(basis: keyof typeof activityByBasis) { return activityByBasis[basis]; }
 /** Facts within a retained window. Completion is never an opt-out or compliance decision. */
 export const gpcBoundedObservationSchema = z.object({
   contractVersion: z.literal("certscore.gpc-bounded-observation.v1"),
@@ -85,6 +87,15 @@ export const gpcBoundedObservationSchema = z.object({
   positiveEvidence: z.object({ policyVersion: z.literal("gpc_positive_evidence.v1"), representativeDocument: z.boolean() }).strict().optional(),
   delivery: z.object({ httpHeaderRetained: z.boolean(), mainNavigatorReadbackRetained: z.boolean(), fullContextVerified: z.boolean() }).strict(),
   semanticProbe: z.enum(["observed", "unsupported", "unavailable", "not_ready", "invalid", "incomplete"]),
+  // Optional future producer fact. A missing legacy field has no inferred reason.
+  // No callback timing, payload, document token or arbitrary diagnostic text.
+  semanticReadiness: z.object({
+    contractVersion: z.literal("certscore.gpc-semantic-readiness.v1"),
+    reason: z.enum(["api_unavailable", "synchronous_ping_unavailable", "cmp_or_signal_not_ready"]),
+    cmpStatusLoaded: z.boolean().nullable(),
+    signalStatusReady: z.boolean().nullable(),
+    observedAfterDocumentCommitMs: z.number().int().min(0).max(120_000),
+  }).strict().optional(),
   registration: z.object({ basis: z.literal("current_recorded_state"), sale: axis, sharing: axis,
     cmpGpcSignal: z.enum(["received", "not_received", "unknown"]), causedByGpc: z.literal("not_established") }).strict(),
   acknowledgment: z.object({ observed: z.boolean(), captureComplete: z.boolean() }).strict(),
@@ -123,6 +134,18 @@ export const gpcBoundedObservationSchema = z.object({
   limitationKeys: z.array(z.string().min(1).max(160)).max(32),
   scoreEffect: z.literal("none"), legalInterpretation: z.literal("not_assessed"),
 }).strict().superRefine((o, ctx) => {
+  const readiness = o.semanticReadiness;
+  if (readiness && ((readiness.reason === "api_unavailable"
+      ? o.semanticProbe !== "unavailable" || o.status === "unavailable"
+      : o.semanticProbe !== "not_ready" || o.status !== "limited") || !o.scanId ||
+    !o.sourceSha256 || !o.sessionSha256 || !o.documentUrlSha256 ||
+    o.requests.documentCommittedAtMs === null || o.requests.throughMs === null ||
+    o.requests.documentCommittedAtMs + readiness.observedAfterDocumentCommitMs > o.requests.throughMs ||
+    (readiness.reason !== "cmp_or_signal_not_ready"
+      ? readiness.cmpStatusLoaded !== null || readiness.signalStatusReady !== null
+      : readiness.cmpStatusLoaded === null || readiness.signalStatusReady === null ||
+        readiness.cmpStatusLoaded && readiness.signalStatusReady)))
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"Availability diagnostics require a bound, timed observation with matching probe status and consistent readiness facts."});
   const review = o.requests.collectionReview;
   if (review && (new Set(review.rows.map(r => r.evidenceId)).size !== review.rows.length ||
     review.rows.length > o.requests.collectionCount || review.rows.some(r =>

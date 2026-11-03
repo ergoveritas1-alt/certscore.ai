@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { createRequire } from "node:module";
 import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -28,8 +29,8 @@ function loadServerModules() {
     if (request === "server-only") return {};
     return originalLoad.call(this, request, parent, isMain);
   };
-  return import("../apps/web/server/scans/local-v2-dag-report.ts").then(async (localModule) => {
-    const projectionModule = await import("../apps/web/lib/pulse/projection.ts");
+  return import("../apps/web/server/scans/local-v2-dag-report").then(async (localModule) => {
+    const projectionModule = await import("../apps/web/lib/pulse/projection");
     Module._load = originalLoad;
     return {
       materializeLocalV2DagScanDetail: localModule.materializeLocalV2DagScanDetail,
@@ -74,7 +75,7 @@ async function main() {
   const out = path.resolve(process.argv[process.argv.indexOf("--out") + 1] ?? "artifacts/gdpr-transparency-post-projection-sample");
   const regionMapPath = process.argv.indexOf("--region-map") >= 0 ? process.argv[process.argv.indexOf("--region-map") + 1] : null;
   const regionMap = regionMapPath ? JSON.parse(await readFile(path.resolve(regionMapPath), "utf8")) as Record<string, string> : {};
-  process.env.NODE_ENV = "development";
+  Object.assign(process.env, { NODE_ENV: "development" });
   process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
   const { materializeLocalV2DagScanDetail, buildPulseProjection } = await loadServerModules();
   const bundlePaths = await walk(input);
@@ -84,7 +85,7 @@ async function main() {
   let written = 0;
   for (let index = 0; index < bundlePaths.length; index += 1) {
     const bundlePath = bundlePaths[index]!;
-    const bundle = JSON.parse(await readFile(bundlePath, "utf8")) as JsonObject;
+    const bundle = parseCanonicalEvidenceArtifact(await readFile(bundlePath, "utf8")) as JsonObject;
     const localOutDir = path.dirname(bundlePath);
     const mirrorDir = path.join(mirrorRoot, String(index).padStart(3, "0"));
     try { await symlink(localOutDir, mirrorDir, "dir"); } catch { /* Existing deterministic mirror is safe to reuse. */ }

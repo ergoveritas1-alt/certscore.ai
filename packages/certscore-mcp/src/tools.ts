@@ -1874,7 +1874,8 @@ export function buildScanBundle(input: {
     interpretationGuidance: interpretationGuidance(
       input.scan.resultDisposition === "no_go" ? COMPACT_SCAN_BUNDLE_INTERPRETATION_STATEMENT :
       (input.scan.postAcceptObservation || input.scan.postRefusalObservation ? CHOICE_PATH_INTERPRETATION_STATEMENT : "") +
-      SCAN_BUNDLE_INTERPRETATION_STATEMENT),
+      SCAN_BUNDLE_INTERPRETATION_STATEMENT +
+      (input.scan.gpcResponse?.activityComparison?.collectionComparison ? " For activityComparison.collectionComparison, describe positive retained samples and supplied recipient/timing facts. Missing body/header evidence and zero retained samples never establish absence, honoring or a complete inventory." : "")),
     resultDisposition: input.scan.resultDisposition ?? null,
     noGo: input.scan.noGo ?? null,
     coverage: input.scan.coverage ?? null,

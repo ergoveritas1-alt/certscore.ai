@@ -1,7 +1,7 @@
 import type { PostureScores, ReportEvidencePage } from "./types.js";
 
 import type { DetailedEvidenceReport, PublicCmpAudit, PublicCmsSecurity } from "./detailed-evidence-types.js";
-export type { DetailedEvidenceCounts, DetailedEvidenceRow, DetailedEvidenceSection, DetailedEvidenceReport, PublicCmpAudit, PublicCmsSecurity, ConsentControlMeasurement } from "./detailed-evidence-types.js";
+export type { CmpAuditAvailability, DetailedEvidenceCounts, DetailedEvidenceRow, DetailedEvidenceSection, DetailedEvidenceReport, PublicCmpAudit, PublicCmsSecurity, ConsentControlMeasurement } from "./detailed-evidence-types.js";
 
 /** Reconstructed report content; canonical findings and the audit remain separate. */
 export interface ReportEvidenceDocument {

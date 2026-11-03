@@ -1,4 +1,6 @@
+import { parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { buildGpcCmpStateComparison } from "@certscore/scan-core/gpc-cmp-state-comparison";
+import { isLoopbackPostRefusalTarget } from "@certscore/scan-core/post-refusal-target-authorization";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
 import { assertPrivacyCaptureProfile, PRESENCE_ONLY_CAPTURE_PROFILE } from "@certscore/contracts";
 import { describeCaptureFailure } from "@certscore/contracts";
@@ -1272,6 +1274,7 @@ export async function runLocalV2DagLambdaArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
     localGpcAdaptiveParticipant?: RunScanInput["localGpcAdaptiveParticipant"];
+    localPolicyNanoAssistProvider?: RunScanInput["localPolicyNanoAssistProvider"];
     allowedConsentFlowScenarios?: ConsentFlowScenario[];
     artifactSignal?: AbortSignal;
     allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
@@ -1298,6 +1301,10 @@ export async function runLocalV2DagLambdaArtifactChain(
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
   shards?: LocalV2DagLambdaShardResult[];
 }> {
+  if (options.localPolicyNanoAssistProvider && (payload.targetEnvironment !== "local" ||
+      !isLoopbackPostRefusalTarget(payload.targetUrl))) {
+    throw new Error("A local policy-assist fixture is restricted to local loopback scans.");
+  }
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
   const artifactRoot = path.resolve(workspaceRoot, options.artifactRoot);
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
@@ -1314,6 +1321,7 @@ export async function runLocalV2DagLambdaArtifactChain(
   );
   const scanBundlePromise = runLocalV2DagLambdaScanBundle(payload, {
     localGpcAdaptiveParticipant: options.localGpcAdaptiveParticipant,
+    localPolicyNanoAssistProvider: options.localPolicyNanoAssistProvider,
     allowRuntimeEvidenceFinalizationAfterAbort: options.allowRuntimeEvidenceFinalizationAfterAbort,
     artifactRoot,
     phaseLabelPrefix: options.phaseLabelPrefix,
@@ -1372,6 +1380,7 @@ async function runLocalV2DagLambdaScanBundle(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
     localGpcAdaptiveParticipant?: RunScanInput["localGpcAdaptiveParticipant"];
+    localPolicyNanoAssistProvider?: RunScanInput["localPolicyNanoAssistProvider"];
     allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
     artifactRoot: string;
     onScanCoreComplete?: () => void;
@@ -1407,6 +1416,7 @@ async function runLocalV2DagLambdaScanBundle(
       if (localGpcAdaptiveEnabled(payload) && !options.localGpcAdaptiveParticipant) throw new Error("Adaptive local comparison requires the paired simulator.");
       const bundle = await runScan({
         scanId: payload.scanId,
+        localPolicyNanoAssistProvider: options.localPolicyNanoAssistProvider,
         resourceInventoryCrawl: payload.resourceInventoryCrawl,
         resourceInventoryDiscovery: payload.resourceInventoryDiscovery,
         runtimeGraph: payload.runtimeGraph,
@@ -1507,9 +1517,8 @@ export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     }),
   );
   const scanArtifactPath = path.join(artifactRoot, "CanonicalEvidenceBundle.json");
-  // The retained bundle remains byte-for-byte complete JSON, but compact
-  // encoding avoids transferring hundreds of kilobytes of indentation to each
-  // downstream verifier and projector.
+  // Store all logical evidence. Oversized JSON uses the versioned lossless
+  // representation; receipts always bind these exact stored bytes.
   await timeLambdaPhase(phaseTimings, "scan_artifact_write", () => writeCompactJson(scanArtifactPath, bundle));
 
   const manifestPath = path.join(artifactRoot, "LocalV2DagLambdaManifest.json");
@@ -1606,7 +1615,7 @@ function writeCompactJson(filePath: string, value: unknown) {
 }
 
 export function serializeCanonicalEvidenceBundle(value: unknown) {
-  return JSON.stringify(value);
+  return serializeCanonicalEvidenceArtifact(value);
 }
 
 export type EgressProbeObservation = {
@@ -2952,6 +2961,22 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     const verifiedGpc = gpcResult?.status === "completed" ? gpcObservationBundle : undefined;
     const gpcGraphs = verifiedGpc ? verifyLaneRuntimeGraph(verifiedGpc, payload.scanId, "gpc", payload.runtimeGraph)
       : { graphs: [], diagnostics: [] };
+    const gpcResponseAssessment = buildGpcProductionAssessment({
+      scanId: payload.scanId,
+      propertySource: policyResult && verifiedGpcWorkerBytes.has(policyEvidenceBundle) ? {
+        bytes: verifiedGpcWorkerBytes.get(policyEvidenceBundle)!, pointer: verifiedWorkerArtifact(policyResult, "policy_evidence"),
+      } : undefined,
+      source: verifiedGpc && gpcResult && verifiedGpcWorkerBytes.has(verifiedGpc) ? {
+        bytes: verifiedGpcWorkerBytes.get(verifiedGpc)!, pointer: verifiedWorkerArtifact(gpcResult, "gpc_observation"),
+      } : undefined,
+      comparison: buildGpcResponseAssessment({
+        baseline: runtimeEvidenceBundle,
+        baselineArtifact: verifiedWorkerArtifact(baselineResult, "runtime_evidence"),
+        gpc: verifiedGpc,
+        gpcArtifact: verifiedGpc && gpcResult ? verifiedWorkerArtifact(gpcResult, "gpc_observation") : undefined,
+        failureReason: gpcResult?.failureReason ?? (!verifiedGpc ? "gpc_worker_failed" : undefined),
+      }),
+    });
     bundle = canonicalEvidenceBundleSchema.parse({
       ...bundle,
       runtimeEvidenceGraphs: [
@@ -2961,6 +2986,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       runtimeEvidenceGraphDiagnostics: [...(bundle.runtimeEvidenceGraphDiagnostics ?? []), ...gpcGraphs.diagnostics],
       gpcActivityComparison: buildGpcActivityComparison({
         scanId: payload.scanId,
+        observation: gpcResponseAssessment.observation,
         baseline: verifiedGpcWorkerBytes.has(runtimeEvidenceBundle) ? {
           bytes: verifiedGpcWorkerBytes.get(runtimeEvidenceBundle)!, pointer: verifiedWorkerArtifact(baselineResult, "runtime_evidence"),
         } : undefined,
@@ -2977,22 +3003,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           bytes: verifiedGpcWorkerBytes.get(verifiedGpc)!, pointer: verifiedWorkerArtifact(gpcResult, "gpc_observation"),
         } : undefined,
       }),
-      gpcResponseAssessment: buildGpcProductionAssessment({
-        scanId: payload.scanId,
-        propertySource: policyResult && verifiedGpcWorkerBytes.has(policyEvidenceBundle) ? {
-          bytes: verifiedGpcWorkerBytes.get(policyEvidenceBundle)!, pointer: verifiedWorkerArtifact(policyResult, "policy_evidence"),
-        } : undefined,
-        source: verifiedGpc && gpcResult && verifiedGpcWorkerBytes.has(verifiedGpc) ? {
-          bytes: verifiedGpcWorkerBytes.get(verifiedGpc)!, pointer: verifiedWorkerArtifact(gpcResult, "gpc_observation"),
-        } : undefined,
-        comparison: buildGpcResponseAssessment({
-        baseline: runtimeEvidenceBundle,
-        baselineArtifact: verifiedWorkerArtifact(baselineResult, "runtime_evidence"),
-        gpc: verifiedGpc,
-        gpcArtifact: verifiedGpc && gpcResult ? verifiedWorkerArtifact(gpcResult, "gpc_observation") : undefined,
-        failureReason: gpcResult?.failureReason ?? (!verifiedGpc ? "gpc_worker_failed" : undefined),
-        }),
-      }),
+      gpcResponseAssessment,
     });
   }
   // reject_join_existing_work.v1: keep an already-invoked Reject response
@@ -4214,7 +4225,7 @@ async function readWorkerBundleFromArtifactResult(
   if (expected?.sizeBytes !== undefined && expected.sizeBytes !== body.byteLength) {
     throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} scan artifact size mismatch.`);
   }
-  const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(body.toString("utf8")));
+  const bundle = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(body.toString("utf8"), { schemaValidation: "caller" }));
   if (result.workerLane === "gpc_observation" && bundle.scanId !== result.scanId) {
     throw new Error("GPC worker bundle does not retain its parent scan identity.");
   }
@@ -4224,9 +4235,7 @@ async function readWorkerBundleFromArtifactResult(
 
 async function readConsentRejectAvailabilityFromArtifactRoot(artifactRoot: string) {
   try {
-    const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(
-      await readFile(path.join(artifactRoot, "CanonicalEvidenceBundle.json"), "utf8"),
-    ));
+    const bundle = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(await readFile(path.join(artifactRoot, "CanonicalEvidenceBundle.json"), "utf8"), { schemaValidation: "caller" }));
     const geometryPath = path.join(artifactRoot, "ConsentControlGeometryEvidence.json");
     const geometry = await stat(geometryPath).then(async metadata => {
       if (!metadata.isFile() || metadata.size > 2 * 1024 * 1024) return undefined;

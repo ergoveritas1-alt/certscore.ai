@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { canonicalEvidenceBundleSchema } from "@certscore/contracts";
@@ -19,7 +20,7 @@ async function main(): Promise<void> {
   const reports = [];
   for (const bundlePath of args.bundlePaths) {
     const bundleJson = await readFile(path.resolve(bundlePath), "utf8");
-    const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(bundleJson));
+    const bundle = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(bundleJson, { schemaValidation: "caller" }));
     reports.push(await inspectBundle(bundle));
   }
 

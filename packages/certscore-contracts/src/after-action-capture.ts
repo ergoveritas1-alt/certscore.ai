@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT } from "./consent-action-evidence-policy";
+import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT, CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT, ACCEPT_REQUEST_RETENTION_POLICY } from "./consent-action-evidence-policy";
 import { exactCookieWriteEvidenceSchema } from "./exact-cookie-write-evidence";
 
 export const afterActionWriteDiagnosticsSchema = z.object({
@@ -27,6 +27,7 @@ export type AfterActionWriteDiagnostics = z.infer<typeof afterActionWriteDiagnos
 export const afterActionCaptureSchema = z.object({
   writeDiagnostics: afterActionWriteDiagnosticsSchema.optional(),
   policyVersion: z.enum(["bounded_after_action_capture.v1", "bounded_after_action_capture.v2"]),
+  requestRetentionPolicy: z.literal(ACCEPT_REQUEST_RETENTION_POLICY).optional(),
   action: z.enum(["accept", "reject"]),
   activationStatus: z.enum(["completed", "uncertain"]),
   actionDispatchedAtMs: z.number().int().nonnegative(),
@@ -45,13 +46,17 @@ export const afterActionCaptureSchema = z.object({
     vendor: z.string().max(160).optional(),
     exactCookieWrite: exactCookieWriteEvidenceSchema.optional(),
   }).strict()).max(48),
-  requestIds: z.array(z.string().min(1).max(120)).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT),
+  requestIds: z.array(z.string().min(1).max(120)).max(CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT),
   // Earliest start in each redirect chain, including ancestors outside retention.
   requestAncestry: z.array(z.object({
     requestId: z.string().min(1).max(120),
     rootStartedAtMs: z.number().int().nonnegative(),
-  }).strict()).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT).optional(),
+  }).strict()).max(CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT).optional(),
 }).strict().superRefine((capture, context) => {
+  const expanded = capture.requestRetentionPolicy === ACCEPT_REQUEST_RETENTION_POLICY;
+  if ((expanded && capture.action !== "accept") || (!expanded &&
+    (capture.requestIds.length > CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT || (capture.requestAncestry?.length ?? 0) > CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT)))
+    context.addIssue({code:z.ZodIssueCode.custom, message:"Expanded request references require the explicit Accept retention policy."});
   if (capture.policyVersion === "bounded_after_action_capture.v2" && (
     !capture.requestAncestry || capture.requestAncestry.length !== capture.requestIds.length ||
     new Set(capture.requestAncestry.map((row) => row.requestId)).size !== capture.requestIds.length ||

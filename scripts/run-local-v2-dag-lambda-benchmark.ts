@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { query } from "../packages/db/src/postgres";
@@ -166,7 +167,7 @@ async function loadArtifactPerformanceSummary(input: {
   scanId: string;
 }): Promise<Record<string, unknown>> {
   const [manifest, bundle, handoffTimings] = await Promise.all([
-    readJson(path.join(input.outDir, "LocalV2DagLambdaManifest.json")).catch(() => ({})),
+    readJson(path.join(input.outDir, "LocalV2DagLambdaManifest.json")).catch((): Record<string,unknown> => ({})),
     readJson(path.join(input.outDir, "CanonicalEvidenceBundle.json")),
     input.mode === "lambda" ? loadScanHandoffTimings(input.scanId) : Promise.resolve(null),
   ]);
@@ -230,7 +231,7 @@ async function loadResourceTelemetry(input: {
   }
 
   try {
-    const expectedSha256 = typeof telemetryArtifact.sha256 === "string" ? telemetryArtifact.sha256 : null;
+    const expectedSha256 = typeof telemetryArtifact?.sha256 === "string" ? telemetryArtifact.sha256 : null;
     return await readLocalV2DagLambdaArtifactJson({
       expectedSha256,
       region: input.lambdaRegion,
@@ -291,7 +292,7 @@ function elapsedBetween(start: string | null, end: string | null) {
 }
 
 async function readJson(filePath: string): Promise<Record<string, unknown>> {
-  return asRecord(JSON.parse(await readFile(filePath, "utf8")));
+  return asRecord(parseCanonicalEvidenceArtifact(await readFile(filePath, "utf8")) as any);
 }
 
 function startLambdaResultPump(args: Args) {
@@ -525,7 +526,7 @@ function printUsage() {
 }
 
 function parseJsonObjectArg(value: string, flag: string): Record<string, unknown> {
-  const parsed = JSON.parse(value) as unknown;
+  const parsed = parseCanonicalEvidenceArtifact(value) as unknown;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(`${flag} must be a JSON object.`);
   }

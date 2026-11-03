@@ -1,4 +1,5 @@
 import { reportRequestInventory } from "./report-request-inventory";
+import {describeCmpAuditAvailability} from "../../../../packages/certscore-api-contracts/src/cmp-audit-availability";
 import { REPORT_TRANSPORT_CHECKS } from "../../lib/scans/report-runtime-inventory";
 import { pdfNarrativeFindings } from "./report-pdf-evidence";
 import type { CanonicalReportExport } from "./report-export";
@@ -141,8 +142,9 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
   const a = sections.consent;
   if (cmp) {
     if (cmp.audit.experience?.summary) a.push(...layout.text(cmp.audit.experience.summary));
+    if(cmp.audit.experience?.availability) a.push(layout.heading("Why detailed CMP checks are unavailable"),...layout.text(describeCmpAuditAvailability(cmp.audit.experience.availability)));
     a.push(layout.heading("CMP identity and consent choices"), ...layout.text(`Provider: ${cmp.audit.experience?.provider ?? cmp.provider ?? "Not retained"}. Consent experience: ${cmp.audit.experience?.title ?? "Consent choices"}.${cmp.audit.inspectionSupport ? ` Preference inspection: ${label(cmp.audit.inspectionSupport.state)}.` : ""}`, 9));
-    a.push(layout.heading("CMP audit matrix"), ...pdfEvidenceTable("cmp-matrix", ["Criterion", "Result"], cmp.audit.rows.map(row => [row.label, row.status]), [350, 162]));
+    a.push(layout.heading("CMP audit matrix"), ...pdfEvidenceTable("cmp-matrix", ["Criterion", "Result", "Evidence"], cmp.audit.rows.map(row => [row.label, row.status, row.detail ?? ""]), [190, 80, 242]));
     for (const row of cmp.audit.rows) {
       const support = row.supportingEvidence;
       if (!support) continue;

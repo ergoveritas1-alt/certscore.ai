@@ -150,6 +150,7 @@ export interface AfterActionSummary {
   activationStatus: "completed" | "uncertain";
   stopReason: "window_elapsed" | "aborted" | "target_changed" | "click_uncertain";
   requestsDropped: number;
+  /** Retained request count; use execution for path success and confirmation. */
   requestCount: number;
   storageWriteCount: number;
   storageSnapshotRetained: boolean;

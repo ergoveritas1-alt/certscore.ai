@@ -3,6 +3,7 @@ import {accessibilityRuleObservationSchema} from "./accessibility-audit";
 import {captureFailureDiagnosticSchema} from "./capture-failure-diagnostic";
 import {cmpNetworkCookieInventorySchema,projectNetworkCmpCookies} from "./cmp-network-cookie-inventory";
 import { z } from "zod";
+import { consentScopeExclusionSchema } from "./consent-scope-exclusion";
 import {cmpInventoryManifestSchema,cmpCaptureProgressSchema} from "./cmp-inventory-manifest";
 import { cmpVisibleInventorySchema, projectVisibleCmpInventory } from "./cmp-visible-inventory";
 import { cmpLoadedInventorySchema, projectLoadedCmpInventory } from "./cmp-loaded-inventory";
@@ -54,9 +55,14 @@ export const cmpPrivacyLinkSchema = z.object({
   url: z.string().url().max(2000), hitTargetBeforeAction: z.boolean(),
   access: z.object({ version: z.enum(["privacy_link_access.v1", "privacy_link_access.v2"]),
     outcome: z.enum(["reachable", "outside_viewport", "not_rendered", "hidden", "transparent", "inactive", "pointer_disabled", "hit_target_missed", "inspection_incomplete"]),
+    exclusion: consentScopeExclusionSchema.optional(),
     scroll: z.object({ version: z.literal("privacy_link_scroll.v1"), initialOutcome: z.literal("outside_viewport"),
       beforeY: z.number().finite(), inspectedY: z.number().finite(), restored: z.boolean() }).strict().optional(),
-  }).strict().refine(access => access.version === "privacy_link_access.v1" ? !access.scroll :
+  }).strict().refine(access => !access.exclusion ||
+    (access.outcome === "hidden" && ["aria_hidden", "hidden"].includes(access.exclusion.reason)) ||
+    (access.outcome === "inactive" && access.exclusion.reason === "inert") ||
+    (access.outcome === "transparent" && access.exclusion.reason === "transparent"),
+    "An exclusion reason must agree with the failed accessibility check.").refine(access => access.version === "privacy_link_access.v1" ? !access.scroll :
     Boolean(access.scroll && (access.scroll.restored || access.outcome === "inspection_incomplete")),
     "Scrolled link evidence requires a restoration witness; legacy reads cannot claim a scroll.").optional(),
 }).refine(link => !link.access || link.hitTargetBeforeAction === (link.access.outcome === "reachable"),

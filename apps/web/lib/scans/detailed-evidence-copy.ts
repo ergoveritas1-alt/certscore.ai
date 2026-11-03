@@ -85,7 +85,6 @@ export function detailedEvidenceCopy(input: { id?: string; status?: string; titl
       .replace("A reject action and post-reject comparison window were retained, and eligible non-essential tracking activity persisted after reject.", "Non-essential tracking requests were detected after a confirmed Reject choice.")
       .replace(/(\d+) selectable categories observed in the inspected consent surface:/, (_match, count: string) => count === "1" ? "1 category was available:" : `${count} categories were available:`)
       .replace(/The CMP configuration identifies (\d+) individual services\. Separate service controls were not assessed\./, "The CMP lists $1 services. Individual service controls were not tested.")
-      .replace("A privacy-policy link had an unobstructed click target before consent interaction. Retrieval of the linked document is outside this criterion.", "The privacy-policy link was accessible before a consent choice. The linked page was not checked here.")
       .replace("Accept and Reject client-side decision confirmed with a timestamp and hashed state evidence. Server-side audit history is outside this assessment.", "Accept and Reject choices were recorded in the browser with a timestamp.")
       .replace(/Cookie names, purposes and duration text were retained for (\d+) CMP inventory entries\./, "$1 cookie entries included names, purposes and storage durations.")
       .replace(/(\d+) observed cookie names did not match (\d+) retained CMP declaration patterns\./, "$1 cookie names did not match the CMP's $2 listed patterns.")

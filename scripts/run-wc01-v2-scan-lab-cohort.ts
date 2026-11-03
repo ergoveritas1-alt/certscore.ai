@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { existsSync, readFileSync } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -791,6 +792,7 @@ function buildSkippedResult(input: { index: number; url: string }): CohortResult
     runtime: emptyRuntimeSummary(),
     startedAt: new Date().toISOString(),
     status: "skipped",
+    scannerRuntimeStarted: false,
     url: input.url,
   };
 }
@@ -993,7 +995,7 @@ function parsePositiveInteger(value: string, flag: string) {
 }
 
 async function readJson<T>(filePath: string): Promise<T> {
-  return JSON.parse(await readFile(filePath, "utf8")) as T;
+  return parseCanonicalEvidenceArtifact(await readFile(filePath, "utf8")) as T;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -1050,7 +1052,7 @@ function detectNoGoCandidateReasons(bundle: Record<string, unknown>, calibration
   const domText = readOptionalText(calibrationDir ? path.join(calibrationDir, "dom-text-pre-consent.txt") : undefined);
   const normalizedDomText = domText.replace(/\s+/g, " ").trim();
   const lowerDomText = normalizedDomText.toLowerCase();
-  const blockTextMatches = [
+  const blockTextMatches = ([
     ["access_temporarily_restricted", "access is temporarily restricted"],
     ["automated_activity", "automated (bot) activity"],
     ["security_service_block", "this website is using a security service"],
@@ -1059,7 +1061,7 @@ function detectNoGoCandidateReasons(bundle: Record<string, unknown>, calibration
     ["human_verification", "verify you are human"],
     ["connection_security_review", "checking if the site connection is secure"],
     ["connection_security_review", "needs to review the security of your connection"],
-  ].filter(([, needle]) => lowerDomText.includes(needle));
+  ] as const).filter(([, needle]) => lowerDomText.includes(needle));
 
   for (const [reason] of blockTextMatches) {
     reasons.add(`block_page_text:${reason}`);

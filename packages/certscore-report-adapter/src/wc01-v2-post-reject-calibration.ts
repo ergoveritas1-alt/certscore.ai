@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
@@ -1159,7 +1160,7 @@ function selectArtifactPath(
 
 async function readJsonIfPresent<T>(filePath: string): Promise<T | undefined> {
   try {
-    return JSON.parse(await readFile(filePath, "utf8")) as T;
+    return parseCanonicalEvidenceArtifact(await readFile(filePath, "utf8")) as T;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return undefined;

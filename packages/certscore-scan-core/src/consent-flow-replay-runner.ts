@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -576,7 +577,7 @@ async function validateReplayManifest(
 ): Promise<ConsentFlowReplayValidationEntry> {
   const resolvedManifestPath = path.resolve(manifestPath);
   try {
-    const manifest = JSON.parse(await readFile(resolvedManifestPath, "utf8")) as ConsentFlowReplayManifest;
+    const manifest = parseCanonicalEvidenceArtifact(await readFile(resolvedManifestPath, "utf8")) as ConsentFlowReplayManifest;
     const harPath = resolveArtifactPath(resolvedManifestPath, manifest.artifactPaths?.har);
     const sourceUrl = manifest.url ?? manifest.normalizedUrl;
     if (!harPath || !existsSync(harPath)) {
@@ -1946,7 +1947,7 @@ async function readJsonSafely<T>(filePath: string): Promise<T | undefined> {
     const text = /\.zip$/i.test(filePath)
       ? await readJsonTextFromZip(filePath)
       : await readFile(filePath, "utf8");
-    return JSON.parse(text) as T;
+    return parseCanonicalEvidenceArtifact(text) as T;
   } catch {
     return undefined;
   }

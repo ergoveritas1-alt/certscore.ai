@@ -24,3 +24,6 @@ export { apiV2ConsentCategoryDiagnosticsSchema, type ApiV2ConsentCategoryDiagnos
 
 export * from "./gpc-cmp-state-comparison.js";
 export * from "./gpc-guidance.js";
+export * from "./cmp-audit-availability.js";
+
+export * from "./gpc-collection-comparison.js";

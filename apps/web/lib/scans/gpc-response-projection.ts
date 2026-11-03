@@ -134,6 +134,7 @@ export function buildCanonicalGpcResponseProjection(
   const deduction=finding.scoreEffects?.some(e=>e.appliesTo === "california_posture" && e.policyVersion === policy.policyVersion &&
     e.policyKey === policy.policyKey && e.deductionPoints === policy.deductionPoints) ? policy.deductionPoints : 0;
   const activityComparison = readGpcActivityComparison(finding.details.activityComparison, parsedAssessment.data);
+  const cmpStateComparison = readBoundGpcCmpStateComparison(finding.details.cmpStateComparison, parsedAssessment.data);
   const measured = describeMeasuredGpcActivity(activityComparison);
   const presentation = describeCanonicalGpcResponse(parsedAssessment.data);
   const observedFacts = describeGpcObservedFacts(parsedAssessment.data.contractVersion === "certscore.gpc-response-assessment.v3"
@@ -157,8 +158,8 @@ export function buildCanonicalGpcResponseProjection(
     headline: presentation.headline,
     summary: gpcReaderSummary(finding.summary),
     observedFacts,
-    guidance: buildGpcGuidance(parsedAssessment.data, findings),
-    cmpStateComparison: readBoundGpcCmpStateComparison(finding.details.cmpStateComparison, parsedAssessment.data),
+    guidance: buildGpcGuidance(parsedAssessment.data, findings, cmpStateComparison),
+    cmpStateComparison,
     activityComparison,
   };
 }

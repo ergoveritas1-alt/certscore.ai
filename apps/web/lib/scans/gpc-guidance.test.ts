@@ -9,6 +9,61 @@ import { QUALIFIED_URL, ANALYTICS_URL, UNRESOLVED_AD_URL } from "./test-fixtures
 
 const findings = (assessment: ReturnType<typeof gpcProductFixture>['assessment']) => buildUnifiedFindingDisplayPackets({runtimeArtifacts:{gpcResponseAssessment:assessment},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
 
+test("unavailable GPP guidance names only the bound terminal interface fact and preserves independent comparison limits",()=>{
+  const {assessment}=gpcProductFixture({apiUnavailable:true,baselineReadbackIncomplete:true});
+  const legacy=structuredClone(assessment);delete legacy.observation.semanticReadiness;
+  const packets=findings(assessment),without=findings(legacy);
+  const effects=(rows:typeof packets)=>rows.map(f=>({id:f.unifiedFindingId,status:f.presentationDecision.status,severity:f.severity,score:f.scoreEffects,top:f.topFindingEligibility}));
+  assert.deepEqual(effects(packets),effects(without));
+  const guidance=buildGpcGuidance(assessment,packets)!,text=describeGpcGuidance(guidance).join(" ");
+  assert.equal(guidance.items.length,1);assert.equal(guidance.items[0]!.kind,"neutral");
+  assert.match(text,/supported GPP API was not callable in the main document at the terminal checkpoint/);
+  assert.match(text,/CMP identification is separate evidence/);assert.match(text,/Observed \+\d+ ms/);
+  assert.match(text,/full-context GPC-off browser readback was not verified/);
+  assert.doesNotMatch(text,/install GPP|failed to honor|not honoring|not configured|permanently|documentToken|fixture-loader|deduct/i);
+  const oldText=describeGpcGuidance(buildGpcGuidance(legacy,without)!).join(" ");
+  assert.match(oldText,/specific interface-availability reason was not retained/);assert.doesNotMatch(oldText,/API was not callable/);
+  const all=structuredClone(assessment);
+  all.comparison.limitationKeys=["baseline_signal_readback_unverified","gpc_signal_readback_unverified","baseline_gpc_off_not_verified",
+    "paired_scan_context_mismatch","baseline_not_representative","baseline_settle_not_completed","unreviewed=https://private.test/?token=secret"];
+  const bounded=buildGpcGuidance(all,[])!;assert.ok(bounded.items[0]!.whatToCheck.every(s=>s.length<=600));
+  assert.match(describeGpcGuidance(bounded).join(" "),/additional paired prerequisites/);
+  assert.doesNotMatch(describeGpcGuidance(bounded).join(" "),/private.test|secret|token=/);
+});
+
+test("not-ready guidance explains only retained readiness and independent paired proof limitations", () => {
+  for(const notReady of ["synchronous_ping_unavailable","cmp_status_not_loaded","signal_status_not_ready","both"] as const) {
+    const f=gpcProductFixture({notReady,baselineReadbackIncomplete:true});
+    assert.equal(f.cmpStateComparison,undefined);
+    const packets=findings(f.assessment), projection=buildCanonicalGpcResponseProjection(packets)!;
+    assert.equal(projection.assessment.contractVersion,"certscore.gpc-response-assessment.v3");
+    assert.equal(projection.guidance?.items.length,1);
+    const text=describeGpcGuidance(projection.guidance!).join(" ");
+    assert.match(text,notReady==="synchronous_ping_unavailable"?/successful synchronous callback/:/ping reported/);
+    assert.match(text,/full-context GPC-off browser readback was not verified/);
+    assert.match(text,/No baseline setting or unchanged state is inferred/);
+    assert.doesNotMatch(text,/failed to honor|not honoring|install GPP|caused by|documentToken|fixture-loader|deduct/i);
+    const without=structuredClone(f.assessment); delete without.observation.semanticReadiness;
+    const effects=(rows:typeof packets)=>rows.map(f=>({id:f.unifiedFindingId,severity:f.severity,status:f.presentationDecision.status,score:f.scoreEffects}));
+    assert.deepEqual(effects(packets),effects(findings(without)));
+    assert.match(describeGpcGuidance(buildGpcGuidance(without,findings(without))!).join(" "),/specific readiness reason was not retained/);
+  }
+  const f=gpcProductFixture(), packets=buildUnifiedFindingDisplayPackets({runtimeArtifacts:{gpcResponseAssessment:f.assessment,gpcCmpStateComparison:f.cmpStateComparison},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+  assert.doesNotMatch(describeGpcGuidance(buildCanonicalGpcResponseProjection(packets)!.guidance!).join(" "),/settings comparison is unavailable/);
+});
+
+test("readiness metadata cannot change an independently qualifying collection finding or its effect",()=>{
+  const {assessment}=gpcProductFixture({notReady:"signal_status_not_ready",urls:[QUALIFIED_URL]});
+  const present=findings(assessment), legacy=structuredClone(assessment);delete legacy.observation.semanticReadiness;
+  const absent=findings(legacy);
+  const effects=(rows:typeof present)=>rows.map(f=>({id:f.unifiedFindingId,severity:f.severity,status:f.presentationDecision.status,
+    score:f.scoreEffects,categories:f.categoryAlignments,topFindingEligibility:f.topFindingEligibility,details:f.details?.family}));
+  assert.deepEqual(effects(present),effects(absent));
+  assert.ok(buildGpcGuidance(assessment,present)!.items.some(i=>i.code==="qualified_collection_under_gpc"));
+  const adverse=(a:typeof assessment,f:typeof present)=>buildGpcGuidance(a,f)!.items.filter(i=>i.kind==="adverse");
+  assert.deepEqual(adverse(assessment,present),adverse(legacy,absent));
+});
+
 test("canonical contradiction and collection coexist with distinct evidence-owned guidance", () => {
   const {assessment} = gpcProductFixture({contradiction:true,urls:[QUALIFIED_URL]});
   const packets = findings(assessment), guidance = buildCanonicalGpcResponseProjection(packets)?.guidance;

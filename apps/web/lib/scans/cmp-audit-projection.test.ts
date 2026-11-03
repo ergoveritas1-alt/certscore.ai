@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { consentControlAssessmentSchema } from "@certscore/contracts";
 import type { ScanScoreExplanation } from "@certscore/api-contracts";
+import {publicCmpAuditSchema} from "@certscore/api-contracts";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
-import { projectCmpAudit } from "./cmp-audit-projection";
+import { cmpDetailsExperience, projectCmpAudit } from "./cmp-audit-projection";
 import { observedControlAssessment } from "./test-fixtures/observed-control-assessment";
 
 const find = (audit: ReturnType<typeof projectCmpAudit>, id: string) => audit.rows.find(row => row.id === id)!;
@@ -12,6 +13,48 @@ const finding = (id: string, status: "surface" | "suppress" = "surface") => ({ u
   presentationDecision: { status }, summary: "Retained canonical concern." }) as UnifiedFindingDisplayPacket;
 const policyRow = (overrides = {}) => ({ id: "privacy_notice_availability", status: "Observed",
   evidenceState: "observed", assessmentStatus: "checked", ...overrides }) as GdprEprivacyCoverageChecklistItem;
+
+test("known CMP identity survives unavailable detailed evidence without changing any criterion", () => {
+  for (const value of [undefined, {}, {...structuredClone(observedControlAssessment), scan:{...observedControlAssessment.scan,scanId:"other-scan"}},
+    {...structuredClone(observedControlAssessment),document:{...observedControlAssessment.document,identityStatus:"mismatched"}}]) {
+    const input = {scanId:"scan-1",consentControlAssessment:value,checklistRows:[policyRow()]};
+    const unknown = projectCmpAudit(input), known = projectCmpAudit({...input,consentVendor:"OneTrust"});
+    assert.deepEqual(known.rows,unknown.rows);
+    assert.equal(known.assessmentSourceHash,null);
+    assert.equal(known.experience?.mode,"capture_limited");
+    assert.equal(known.experience?.provider,"OneTrust");
+    assert.equal(known.experience?.controls,null);
+    assert.match(known.experience!.summary,/OneTrust identified\./);
+    assert.equal(cmpDetailsExperience(known,"OneTrust").summary,known.experience!.summary);
+    assert.equal(find(known,"privacy_link").status,"Observed");
+    assert.ok(known.rows.filter(r=>r.id!=="privacy_link").every(r=>r.status==="Not assessed"));
+  }
+  const legacy = projectCmpAudit({scanId:"scan-1",consentVendor:"OneTrust"});
+  legacy.experience!.summary="CMP identification and consent banner detection could not be determined on this visit.";
+  assert.match(cmpDetailsExperience(legacy,"OneTrust").summary,/OneTrust identified.*not verified/);
+  legacy.experience!.provider="https://private.test/path?token=sensitive";
+  const untrusted=cmpDetailsExperience(legacy,"OneTrust");
+  assert.equal(untrusted.provider,null);
+  assert.doesNotMatch(untrusted.summary,/private\.test|sensitive|token=/);
+});
+
+test("unavailable CMP details retain exact assessment limitations without borrowing another scan or changing rows",()=>{
+  for(const code of ["blank_or_unusable_page","loading_or_stalled","navigation_transport_failure"] as const){
+    const assessment=consentControlAssessmentSchema.parse(structuredClone(observedControlAssessment));
+    assessment.coverage.reasonCodes=[code,"https://private.test/?token=secret"];
+    const result=projectCmpAudit({scanId:"scan-1",consentControlAssessment:assessment,consentVendor:"OneTrust"});
+    const packet=result.experience!.availability!;
+    assert.deepEqual(publicCmpAuditSchema.parse(result).experience!.availability,packet);
+    assert.equal(packet.reason,"visit_unusable");
+    assert.equal(packet.sourceAssessmentHash,assessment.provenance.sourceHash);
+    assert.deepEqual(packet.reasonCodes,[code]);
+    assert.equal(result.assessmentSourceHash,null,"unusable controls are not promoted into an accepted audit");
+    assert.ok(result.rows.every(r=>r.status==="Not assessed"));
+    assert.doesNotMatch(JSON.stringify(packet),/private\.test|secret|token=/);
+    const wrong=projectCmpAudit({scanId:"another-scan",consentControlAssessment:assessment,consentVendor:"OneTrust"}).experience!.availability!;
+    assert.equal(wrong.reason,"scan_mismatch");assert.equal(wrong.sourceAssessmentHash,null);assert.deepEqual(wrong.reasonCodes,[]);
+  }
+});
 
 test("audit preserves verified control results and leaves broader CMP capabilities unassessed", () => {
   const input = { scanId: "scan-1", consentControlAssessment: structuredClone(observedControlAssessment) };
@@ -76,6 +119,16 @@ test("public-policy discovery does not assert banner access, cookie detail or CM
   for (const row of [policyRow({ assessmentStatus: "coverage_limitation" }), policyRow({ status: "Not confirmed" }), policyRow({ status: "Not observed", evidenceState: "not_observed" })]) {
     assert.equal(find(projectCmpAudit({ scanId: "scan-1", checklistRows: [row] }), "privacy_link").status, "Not assessed");
   }
+});
+
+test("policy-link coverage explanations remain canonical unknowns and survive the public schema", () => {
+  const limitation="A policy-link candidate was retained, but its target-owned policy document could not be verified.";
+  const row=policyRow({assessmentStatus:"coverage_limitation",status:"Not confirmed",evidenceState:"unknown",limitation});
+  const report=publicCmpAuditSchema.parse(projectCmpAudit({scanId:"scan-1",checklistRows:[row]}));
+  assert.equal(find(report as ReturnType<typeof projectCmpAudit>,"privacy_link").status,"Not assessed");
+  assert.equal(find(report as ReturnType<typeof projectCmpAudit>,"privacy_link").detail,limitation);
+  assert.deepEqual(find(report as ReturnType<typeof projectCmpAudit>,"privacy_link").sourceIds,[row.id]);
+  assert.equal(find(report as ReturnType<typeof projectCmpAudit>,"privacy_access").status,"Not assessed");
 });
 
 test("unobserved CMP controls and policy links never describe positive observations", () => {

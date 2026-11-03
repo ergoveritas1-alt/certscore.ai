@@ -1,5 +1,6 @@
 import type { Frame, Locator, Page } from "playwright";
 import type { ConsentActionControl } from "./cmp-control-actionability.js";
+import type { ConsentScopeExclusion } from "@certscore/contracts";
 
 /** Confirmation may inspect a boxless consent scope only through its unique,
  * visible control. Composed ancestry includes open-shadow hosts. This proves
@@ -31,6 +32,7 @@ export async function canonicalConsentSurfacePresent(
 }
 
 /** A zero-area wrapper or shadow host can contain a visible actionable control.
+ * aria-hidden affects accessibility exposure, not DOM pointer interaction.
  * Verify that the exact scope permits interaction; callers must still prove
  * the control's own visibility, uniqueness, label and viewport hit target.
  */
@@ -41,24 +43,37 @@ export async function consentScopePermitsInteraction(scope: ConsentActionControl
 /** Opacity-only animation is distinct from hidden, inert or unavailable DOM.
  * This is a settling aid, never action authorization or proof of visibility. */
 export async function consentScopeInteractionState(scope: ConsentActionControl, timeoutMs?: number): Promise<"interactive" | "transparent" | "unavailable"> {
+  return (await inspectConsentScopeInteraction(scope, timeoutMs)).state;
+}
+
+/** Preserve the existing gate and RPC, retaining only its fixed exclusion code. */
+export async function inspectConsentScopeInteraction(scope: ConsentActionControl, timeoutMs?: number): Promise<{
+  state: "interactive" | "transparent" | "unavailable";
+  exclusion?: ConsentScopeExclusion;
+}> {
   const read = (element: HTMLElement | SVGElement) => {
     if (!element.isConnected) return "unavailable" as const;
     let transparent = false;
     let current: Element | null = element;
     for (let depth = 0; current && depth < 64; depth += 1) {
       const style = getComputedStyle(current);
-      if (current.matches('[hidden], [inert], [aria-hidden="true" i]') ||
+      if (current.matches('[inert]')) return "inert" as const;
+      if (current.matches('[hidden]') ||
         style.display === "none" || style.visibility === "hidden" ||
-        style.visibility === "collapse") return "unavailable" as const;
+        style.visibility === "collapse") return "hidden" as const;
       if (style.opacity === "0") transparent = true;
       const root = current.getRootNode();
       current = current.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
     }
     return current !== null ? "unavailable" as const : transparent ? "transparent" as const : "interactive" as const;
   };
-  return ("elementHandle" in scope
+  const reason = await ("elementHandle" in scope
     ? scope.evaluate(read, undefined, timeoutMs === undefined ? undefined : {timeout: timeoutMs})
     : scope.evaluate(read)).catch(() => "unavailable" as const);
+  return reason === "interactive" ? {state: "interactive"} : {
+    state: reason === "transparent" ? "transparent" : "unavailable",
+    exclusion: {version: "consent_scope_exclusion.v1", reason},
+  };
 }
 
 /** Observation text/headings/tabs must not compete with actionable choices. */

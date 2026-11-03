@@ -221,3 +221,12 @@ test("visible inventory retains exact labelled sources without manufacturing ope
   input.visibleInventory.records[0].fields[0].label="Category";
   assert.equal(cmpPreferencesEvidenceSchema.safeParse(input).success,false);
 });
+
+test("scope exclusion facts are bounded and cannot promote a blocked policy link",()=>{
+ const base={url:'https://example.test/privacy',hitTargetBeforeAction:false,access:{version:'privacy_link_access.v1',outcome:'hidden',exclusion:{version:'consent_scope_exclusion.v1',reason:'aria_hidden'}}};
+ assert.equal(cmpPrivacyLinkSchema.safeParse(base).success,true);
+ for(const access of [{...base.access,outcome:'reachable'},{...base.access,outcome:'inactive'},
+  {...base.access,exclusion:{...base.access.exclusion,reason:'inferred_cmp_failure'}},
+  {...base.access,exclusion:{...base.access.exclusion,rawHtml:'sensitive'}}])
+  assert.equal(cmpPrivacyLinkSchema.safeParse({...base,access}).success,false);
+});

@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
@@ -148,7 +149,7 @@ function geometryData(raw: Record<string, unknown>, bundleUrl: string): { status
             : "other",
           label: typeof row.label === "string" ? row.label : null,
           matchedTerm: typeof row.matchedTerm === "string" ? row.matchedTerm : null,
-          matchedLocale: typeof row.matchedLocale === "string" ? row.matchedLocale as ConsentControlAssessmentCandidate["locale"] : null,
+          locale: typeof row.matchedLocale === "string" ? row.matchedLocale as ConsentControlAssessmentCandidate["locale"] : null,
           matchStrength: typeof row.matchStrength === "string" ? row.matchStrength as ConsentControlAssessmentCandidate["matchStrength"] : null,
           classifierReasonCodes: Array.isArray(row.classifierReasonCodes) ? row.classifierReasonCodes.filter((value): value is string => typeof value === "string") : [],
           layer: row.layer === "deeper_layer" ? "deeper_layer" : row.layer === "first_layer" ? "first_layer" : "unknown",
@@ -201,7 +202,7 @@ export async function replayBundle(artifactPath: string): Promise<ReplayRow> {
   const rawText = await readFile(artifactPath, "utf8");
   let bundle: ReturnType<typeof canonicalEvidenceBundleSchema.parse>;
   try {
-    bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(rawText));
+    bundle = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(rawText, { schemaValidation: "caller" }));
   } catch (error) {
     return {
       artifactPath, scanId: "unknown", url: "unknown", status: "invalid_bundle", geometry: "missing",

@@ -8439,6 +8439,25 @@ test("materializeLocalV2DagScanDetail withholds missing controls and score when 
   }
 });
 
+test("screenshot timeout wording does not invent a closed page or change the no-go decision", async () => {
+  const {buildLocalV2ScanNoGoAssessment}=await loadLocalV2DagReport();
+  const base={scanId:"timeout-wording-fixture",url:"https://example.test/",normalizedUrl:"https://example.test/",
+    consentUiObservations:[],cookieEvents:[],domSnapshots:[],networkEvents:[],networkResponseEvents:[],policySurfaceObservations:[],runtimeTimeline:[],
+    screenshots:[{artifactId:"screenshot_pre_consent",captureMethod:"primary_placeholder",path:"screenshot-pre-consent.png"}],
+    visualCapture:{status:"placeholder",failureReason:"placeholder_used"},
+    modulesRun:[{moduleName:"preConsentRuntimeScanner",errors:["Screenshot transaction deadline exhausted after 3000ms.","1x1 screenshot placeholder used after screenshot capture failures."]}],
+  } as unknown as Parameters<typeof buildLocalV2ScanNoGoAssessment>[0]["bundle"];
+  const input={bundle:base,consentSurfaceLikelyPresent:false,runtimeActivityObserved:true,lowRuntimeActivity:false};
+  const timeout=buildLocalV2ScanNoGoAssessment(input)!;
+  assert.equal(timeout.primaryReasonCode,"visual_capture_failed_or_placeholder");
+  assert.equal(timeout.scanNoGoAssessment.decision,"no_go");
+  assert.doesNotMatch(timeout.matchedText,/page\/context closure/);
+  const closed=structuredClone(base);closed.modulesRun[0]!.errors!.push("Target page, context or browser has been closed");
+  const closure=buildLocalV2ScanNoGoAssessment({...input,bundle:closed})!;
+  assert.match(closure.matchedText,/page\/context closure/);
+  assert.deepEqual(closure.scanNoGoAssessment.reasonCodes,timeout.scanNoGoAssessment.reasonCodes);
+});
+
 test("materializeLocalV2DagScanDetail promotes 1x1 screenshot placeholders to scan no-go", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -9605,6 +9624,50 @@ test("transferred artifacts and original S3 artifacts produce the same complete 
       artifactTransfer: buildReportArtifactTransfer({ scanId, bundle, manifest }) });
     assert.equal(reads, 2, "transfer does not add any S3 read");
     assert.deepEqual(transferred, remotelyRead, "all canonical runtime, assessment, finding and report outputs must match");
+  } finally { S3Client.prototype.send = send; }
+});
+
+test("lossless oversized artifacts materialize identically from verified transfer and existing S3 reads", async (context) => {
+  context.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-08T12:00:00.000Z") });
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const { buildReportArtifactTransfer } = await import("../../../../packages/shared/src/report-artifact-transfer");
+  const { S3Client } = await import("@aws-sdk/client-s3");
+  const scanId = "report-transfer-lossless-parity";
+  const completedAt = "2026-10-08T12:00:00.000Z";
+  const pageUrl = "https://example.test/";
+  const { gpcCookieReadWideDictionaryFixture } = await import("../../../../packages/certscore-scan-core/src/test-fixtures/gpc-cookie-read.cases");
+  const { serializeCanonicalEvidenceArtifact, parseCanonicalEvidenceArtifact } = await import("@certscore/contracts/dist/canonical-evidence-artifact.js");
+  const logical = gpcCookieReadWideDictionaryFixture(scanId).bundle;
+  logical.schemaVersion = "certscore.v2.alpha.1";
+  const bundle = Buffer.from(serializeCanonicalEvidenceArtifact(logical));
+  assert.ok(bundle.byteLength < 400 * 1024);
+  assert.ok(Buffer.byteLength(JSON.stringify(logical)) > 400 * 1024);
+  assert.deepEqual(parseCanonicalEvidenceArtifact(bundle), JSON.parse(JSON.stringify(logical)));
+  const manifest = Buffer.from(JSON.stringify({ scanId, processor: LOCAL_V2_DAG_SCAN_PROCESSOR, targetEnvironment: "production", auxiliaryArtifacts: [] }));
+  const metadata = (body: Buffer) => ({ sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.byteLength });
+  const original = makeScanRecord();
+  const record = makeScanRecord({ scan: { ...original.scan, id: scanId, domainHostname: "example.test",
+    scanConfigJson: { hostname: "example.test", normalizedUrl: pageUrl, processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+      execution: { v2DagParallel: { artifactOnly: true, localOnly: true, profile: "standard", productionFindingIntegration: false } } } },
+    events: [{ id: "transfer-event", eventType: "v2_lambda_result.received", createdAt: completedAt, message: "Retained originals",
+      metadataJson: { artifactOnly: true, productionFindingIntegration: false, artifactAccess: { productionReadMode: "verified_s3" }, processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+        artifactMetadata: { manifestUri: metadata(manifest), scanArtifactUri: metadata(bundle) },
+        artifactPointers: { manifestUri: "s3://transport-lossless-parity/manifest", scanArtifactUri: "s3://transport-lossless-parity/bundle" } } }],
+  });
+  const send = S3Client.prototype.send;
+  let reads = 0;
+  S3Client.prototype.send = (async (command: { input: { Key: string } }) => {
+    reads++; return { Body: command.input.Key === "bundle" ? bundle : manifest };
+  }) as typeof send;
+  try {
+    const remotelyRead = await materializeLocalV2DagScanDetail(record, { requireBundle: false });
+    assert.equal(reads, 2);
+    const transferred = await materializeLocalV2DagScanDetail(record, { requireBundle: true,
+      artifactTransfer: buildReportArtifactTransfer({ scanId, bundle, manifest }) });
+    assert.equal(reads, 2, "transfer does not add any S3 read");
+    assert.deepEqual(transferred, remotelyRead, "all canonical runtime, assessment, finding and report outputs must match");
+    assert.ok(transferred.runtimeArtifacts, "decoded canonical evidence reaches report materialization");
+    assert.doesNotMatch(JSON.stringify(transferred), /canonical-evidence-artifact|gzip_base64/, "private storage envelope never enters report facts");
   } finally { S3Client.prototype.send = send; }
 });
 

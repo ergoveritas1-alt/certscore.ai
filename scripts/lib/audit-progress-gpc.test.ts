@@ -1,0 +1,72 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { pairedGpcAudit } from "./audit-progress-gpc";
+import { buildGpcActivityComparison } from "../../packages/certscore-scan-core/src/gpc-activity-comparison";
+import { buildGpcProductionObservation } from "../../packages/certscore-scan-core/src/gpc-production-observation";
+import { collectionPairFixture, collectionFixtureSource } from "../../packages/certscore-scan-core/src/test-fixtures/gpc-collection-pair.cases";
+function fixture(atMs = 500) {
+  const p = collectionPairFixture(undefined, undefined, atMs), baseline = collectionFixtureSource(p.baseline), gpc = collectionFixtureSource(p.gpc);
+  const observation = buildGpcProductionObservation({ scanId: p.gpc.scanId, source: gpc });
+  return { scanId: p.gpc.scanId, gpcResponse: { contractVersion: "certscore.gpc-response-assessment.v3", activityComparison: buildGpcActivityComparison({ scanId: p.gpc.scanId, baseline, gpc, observation }),
+    comparison: { baselineArtifact: baseline.pointer, gpcArtifact: gpc.pointer },
+    observation } };
+}
+test("daily GPC audit measures paired requests, duration and positive samples without GPP", () => {
+  const r = fixture(), a = pairedGpcAudit(r);
+  assert.equal(a.states['detail.gpc.paired_pair'], 'measured');
+  assert.equal(a.states['detail.gpc.paired_collection'], 'retained_samples');
+  assert.equal(a.measurements['gpc.paired.duration_ms'], 5000);
+  assert.equal(a.measurements['gpc.paired.baseline.collection_sample'], 1);
+  assert.equal(a.measurements['gpc.paired.gpc.identified_sample'], 1);
+  assert.match(a.scope, /window_5000ms/);
+});
+test("missing/invalid source pairs stay in unknown counts and never create numeric zeroes", () => {
+  assert.deepEqual(pairedGpcAudit({}).measurements, {});
+  for (const mutate of [
+    (r: ReturnType<typeof fixture>) => { r.scanId = 'wrong'; },
+    (r: ReturnType<typeof fixture>) => { r.gpcResponse.comparison.baselineArtifact.sha256 = '0'.repeat(64); },
+  ]) { const r = fixture(); mutate(r); const a = pairedGpcAudit(r); assert.equal(a.states['detail.gpc.paired_pair'], 'invalid_or_unbound'); assert.equal(a.measurements['gpc.paired.duration_ms'], undefined); }
+});
+test("legacy comparison and conflicting collection packet preserve independent request facts", () => {
+  const r = fixture(); delete r.gpcResponse.activityComparison!.collectionComparison;
+  let a = pairedGpcAudit(r); assert.equal(a.states['detail.gpc.paired_pair'], 'measured');
+  assert.equal(a.states['detail.gpc.paired_collection'], 'unavailable'); assert.equal(a.measurements['gpc.paired.gpc.collection_sample'], undefined);
+  const changed = fixture(); changed.gpcResponse.activityComparison!.collectionComparison!.gpc.rows[0]!.label = 'Tampered';
+  a = pairedGpcAudit(changed); assert.equal(a.states['detail.gpc.paired_pair'], 'measured');
+  assert.equal(a.states['detail.gpc.paired_collection'], 'invalid_or_unbound');
+  assert.equal(a.measurements['gpc.paired.gpc.advertising_requests'], 1); assert.equal(a.measurements['gpc.paired.gpc.collection_sample'], undefined);
+});
+
+test("daily request quantities keep different verified window series separate", async () => {
+  const { progressEngine } = await import("./audit-progress-engine");
+  const rows = [1000, 5000].map(ms => ({ scanId: String(ms), site: "fixture.test", createdAt: "2026-11-02T20:00:00Z", reportable: true,
+    states: {}, measurements: { "gpc.paired.gpc.advertising_requests": 1 }, findings: [],
+    metricSources: { "gpc.paired.gpc.advertising_requests": `public_export/pulse-public-v11/scan-report-projection-v27/window_${ms}ms` } }));
+  const days = progressEngine().aggregate({ days: [{ date: "2026-11-02", completeDay: true }], metrics: [], quantities: [{ id: "gpc.paired.gpc.advertising_requests" }] }, rows);
+  const q = days[0].quantities["gpc.paired.gpc.advertising_requests"];
+  assert.equal(q.source, "mixed_sources"); assert.equal(q.total, null); assert.equal(q.median, null); assert.equal(q.delta, null);
+  assert.equal(Object.keys(q.series).length, 2); assert.ok(Object.values(q.series).every((s: any) => s.total === 1));
+});
+
+test("daily audit keeps later full-session collection visible when the early paired count is zero", () => {
+  const r = fixture(5500), a = pairedGpcAudit(r);
+  assert.equal(a.measurements['gpc.paired.gpc.collection_sample'], 0);
+  assert.equal(a.measurements['gpc.session.advertising_collection'], 1);
+  assert.equal(a.states['detail.gpc.session_collection'], 'positive_retained');
+  delete r.gpcResponse.activityComparison;
+  const withoutPair = pairedGpcAudit(r);
+  assert.equal(withoutPair.states['detail.gpc.paired_pair'], 'unavailable');
+  assert.equal(withoutPair.measurements['gpc.session.advertising_collection'], 1);
+});
+
+test("daily audit counts only source-bound CMP snapshots and preserves availability separately", async () => {
+  const { gpcProductFixture } = await import("../../apps/web/lib/scans/test-fixtures/gpc-product");
+  const f = gpcProductFixture();
+  const r = { scanId: f.assessment.observation.scanId, gpcResponse: { ...f.assessment, cmpStateComparison: f.cmpStateComparison } };
+  assert.equal(pairedGpcAudit(r).states["detail.gpc.paired_cmp"], "available");
+  assert.equal(pairedGpcAudit(fixture()).states["detail.gpc.paired_cmp"], "unavailable");
+  assert.equal(pairedGpcAudit({ ...r, gpcResponse: { cmpStateComparison: f.cmpStateComparison } }).states["detail.gpc.paired_cmp"], "invalid_or_unbound");
+  assert.equal(pairedGpcAudit({ ...r, gpcResponse: { ...r.gpcResponse, observation: { status: "complete" } } }).states["detail.gpc.paired_cmp"], "invalid_or_unbound");
+  const changed = structuredClone(r); changed.gpcResponse.cmpStateComparison!.sourceHashes.baseline = "0".repeat(64);
+  assert.equal(pairedGpcAudit(changed).states["detail.gpc.paired_cmp"], "invalid_or_unbound");
+});

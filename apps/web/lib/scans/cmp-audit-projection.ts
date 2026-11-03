@@ -5,7 +5,8 @@ import { consentControlAssessmentSchema } from "@certscore/contracts";
 import type { PublicCmpAudit, ScanScoreExplanation } from "@certscore/api-contracts";
 import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
-import { projectConsentControlReport } from "./consent-control-report";
+import { evaluateConsentControlReport, projectConsentControlReport } from "./consent-control-report";
+import {buildCmpAuditAvailability} from "./cmp-audit-availability";
 import { evidenceRowAnchor } from "./report-evidence-navigation";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 
@@ -73,7 +74,8 @@ export function projectCmpAudit(input: {
   }));
   const set = (id: CmpAuditCriterionId, result: Partial<CmpAuditRow>) => Object.assign(rows.find(row => row.id === id)!, result);
   const parsed = consentControlAssessmentSchema.safeParse(input.consentControlAssessment);
-  const controlReport = parsed.success ? projectConsentControlReport(parsed.data, input.scanId) : null;
+  const availability = evaluateConsentControlReport(input.consentControlAssessment, input.scanId);
+  const controlReport = availability.report;
   const assessment = parsed.success && controlReport ? parsed.data : null;
   if (assessment) {
     if (assessment.visualEvidence?.status === "withheld" && assessment.visualEvidence.reasonCodes.some(reason =>
@@ -102,6 +104,10 @@ export function projectCmpAudit(input: {
   // Public policy discovery has its own canonical scope; it does not establish
   // banner placement, overlay access, or a CMP-specific inventory comparison.
   const privacy = input.checklistRows?.find(row => row.id === "privacy_notice_availability");
+  if (privacy?.assessmentStatus === "coverage_limitation") set("privacy_link", {
+    detail: privacy.limitation || privacy.note || "A verified privacy-policy link assessment could not be completed for this visit.",
+    sourceIds: [privacy.id], evidenceAnchor: evidenceRowAnchor(privacy.id),
+  });
   if (privacy && privacy.assessmentStatus !== "coverage_limitation" && privacy.assessmentStatus !== "not_applicable") {
     const status = privacy.status === "Observed" && privacy.evidenceState === "observed" ? "Observed"
       : privacy.assessmentStatus === "gap_observed" && privacy.evidenceState === "not_observed" ? "Not observed" : null;
@@ -287,19 +293,25 @@ export function projectCmpAudit(input: {
     ...(audit && ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6", "cmp_audit_assessment.v7"].includes(audit.version) ? { limitationGroups: cmpLimitationGroups(rows) } : {}), scope: "starting_page", scanId: input.scanId,
     assessmentSourceHash: assessment?.provenance.sourceHash ?? null, ...(audit ? { inspectionSupport: audit.support } : {}), rows,
     experience: projectCmpExperience({ assessment, controls: controlReport?.controls ?? null,
+      availability:availability.reason==="usable" ? undefined : buildCmpAuditAvailability(availability.reason,parsed.success?parsed.data:null,input.scanId),
       explicitCustom: explicitlyCustomConsentVendor(input.consentVendor),
-      provider: KNOWN_CMP_REGISTRY.find(entry => [entry.canonicalName, ...entry.aliases]
-        .some(name => name.toLowerCase() === input.consentVendor?.trim().toLowerCase()))?.canonicalName ?? null, rows }) };
+      provider: canonicalCmpProvider(input.consentVendor), rows }) };
+}
+
+function canonicalCmpProvider(value: string | null | undefined) {
+  return KNOWN_CMP_REGISTRY.find(entry => [entry.canonicalName, ...entry.aliases]
+    .some(name => name.toLowerCase() === value?.trim().toLowerCase()))?.canonicalName ?? null;
 }
 
 /** Read-only grouping of retained conclusions. Never changes a row, counts,
  * applicability, findings, scoring or action authorization. */
-function projectCmpExperience({ assessment, controls, explicitCustom, provider, rows }: {
+function projectCmpExperience({ assessment, controls, explicitCustom, provider, rows, availability }: {
   assessment: z.infer<typeof consentControlAssessmentSchema> | null;
   controls: NonNullable<ReturnType<typeof projectConsentControlReport>>["controls"] | null;
   explicitCustom: boolean;
   provider: string | null;
   rows: readonly CmpAuditRow[];
+  availability?: NonNullable<PublicCmpAudit["experience"]>["availability"];
 }): NonNullable<PublicCmpAudit["experience"]> {
   const surfaceObserved = assessment && (["observed_actionable", "observed_non_actionable"].includes(assessment.surface.status)
     || Object.values(controls ?? {}).includes("observed"));
@@ -311,11 +323,11 @@ function projectCmpExperience({ assessment, controls, explicitCustom, provider, 
   const summary = mode === "cmp_details" ? noSurface ? "No consent banner observed on this visit." : "Consent management audit"
     : mode === "consent_controls" ? explicitCustom ? "Custom consent banner observed." : "Consent banner observed; provider not identified."
     : mode === "consent_signals" ? "No CMP identified. No consent banner observed on this visit."
-    : "CMP identification and consent banner detection could not be determined on this visit.";
+    : limitedCmpSummary(provider, availability?.observation);
   const meaningful = (row: CmpAuditRow) => ["Observed", "Review recommended", "Partially assessed", "Informational"].includes(row.status)
     || Boolean(row.deductionPoints) || Boolean(row.supportingEvidence);
   return { version: "cmp_details_experience.v1", mode, title: "CMP details", summary,
-    provider, controls,
+    provider, controls, ...(mode==="capture_limited" && availability ? {availability} : {}),
     defaultCriterionIds: rows.filter(row => mode === "cmp_details" || meaningful(row)
       || (mode === "consent_controls" && ["banner", "reject"].includes(row.id))).map(row => row.id) };
 }
@@ -325,16 +337,31 @@ function projectCmpExperience({ assessment, controls, explicitCustom, provider, 
 export function cmpDetailsExperience(audit: CmpAuditProjection | undefined, provider: string | null) {
   if (audit?.experience) {
     const experience = audit.experience;
+    const retainedProvider = experience.mode === "capture_limited" ? canonicalCmpProvider(experience.provider) : experience.provider;
     const summary = experience.mode === "consent_controls"
       ? explicitlyCustomConsentVendor(provider) ? "Custom consent banner observed." : "Consent banner observed; provider not identified."
       : experience.mode === "consent_signals" ? "No CMP identified. No consent banner observed on this visit."
-      : experience.mode === "capture_limited" ? "CMP identification and consent banner detection could not be determined on this visit."
+      : experience.mode === "capture_limited" && experience.summary === "CMP identification and consent banner detection could not be determined on this visit." ? limitedCmpSummary(retainedProvider)
       : experience.summary;
-    return { ...experience, title: "CMP details", summary };
+    return { ...experience, provider: retainedProvider, title: "CMP details", summary };
   }
   return { version: "cmp_details_experience.v1" as const,
     mode: "cmp_details" as const, title: "CMP details", summary: "Consent management audit", provider, controls: null,
     defaultCriterionIds: CMP_AUDIT_CRITERIA.map(row => row.id) };
+}
+
+function limitedCmpSummary(provider: string | null, observation?: string) {
+  const identity = provider ? `${provider} identified.` : "CMP identification was not verified.";
+  const detail = observation ?? "Detailed consent-banner and preference checks were not verified for this visit.";
+  return `${identity} ${detail}`;
+}
+
+/** A retained criterion is not necessarily an assessed criterion. Shared by
+ * report previews so unknown rows never become a claim of completed checks. */
+export function cmpAuditReportSummary(audit:CmpAuditProjection|undefined,provider:string|null) {
+  if(!audit)return "Detailed CMP check evidence was not retained.";
+  const experience=cmpDetailsExperience(audit,provider);
+  return `${experience.summary} ${audit.rows.length} retained criteria; see each criterion's recorded status.`;
 }
 
 function explicitlyCustomConsentVendor(value: string | null | undefined) {

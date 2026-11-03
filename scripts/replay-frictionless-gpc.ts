@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 /** CertScore.ai offline candidate replay. Reads only verified retained inputs.
  * Usage: pnpm exec tsx --tsconfig tsconfig.base.json scripts/replay-frictionless-gpc.ts SOURCE_INDEX OUTPUT_JSON
  */
@@ -17,11 +18,11 @@ import {deriveCaliforniaRegulatoryScore} from '../apps/web/lib/scans/california-
 const [input,output,option]=process.argv.slice(2);assert.ok(input&&output&&path.resolve(input)!==path.resolve(output));
 assert.ok(option===undefined||option==='--opt-out-signals');const includeSignals=option==='--opt-out-signals';
 const hash=(b:Buffer)=>createHash('sha256').update(b).digest('hex');
-const rows=JSON.parse(readFileSync(input,'utf8'));
+const rows=parseCanonicalEvidenceArtifact(readFileSync(input,'utf8')) as any;
 const results=rows.map((row:{root:string;receipt:{scanId:string;host:string;parent:unknown;event:{metadata:{artifactMetadata:{scanArtifactUri:{sha256:string;sizeBytes:number}}}}};domDocuments?:Array<{path:string;sha256:string;sizeBytes:number;artifactId:string}>;documents:Array<{path:string;sha256:string;sizeBytes:number;evidenceRef:string;url:string;complete:boolean}>})=>{
  const r=row.receipt;assert.match(r.scanId,/^[a-f0-9-]{36}$/);const file=path.join(row.root,r.scanId,'CanonicalEvidenceBundle.json');assert.notEqual(path.resolve(output),path.resolve(file));
  const bytes=readFileSync(file),meta=r.event.metadata.artifactMetadata.scanArtifactUri;assert.equal(hash(bytes),meta.sha256);assert.equal(bytes.length,meta.sizeBytes);
- const bundle=JSON.parse(bytes.toString()) as CanonicalEvidenceBundle;assert.equal(bundle.scanId,r.scanId);
+ const bundle=parseCanonicalEvidenceArtifact(bytes.toString()) as CanonicalEvidenceBundle;assert.equal(bundle.scanId,r.scanId);
  // Artifact-only reprocessing uses the original verified DOM bytes and its own
  // retained identity. Never modify the original bundle or historical record.
  if(includeSignals)for(const d of row.domDocuments??[]){
@@ -77,5 +78,5 @@ const results=rows.map((row:{root:string;receipt:{scanId:string;host:string;pare
 });
 const report={product:'CertScore.ai',mode:'offline_future_assessment_candidate_only',liveVisits:0,productionWrites:0,historicalWrites:0,
  verified:results.filter((r:{verified?:boolean})=>r.verified).length,contradictions:results.filter((r:{status?:string})=>r.status==='contradicted_in_assessed_scope').length,
- unresolved:results.filter((r:{status?:string})=>r.status==='unresolved').length,...(includeSignals?{positiveRecoveries:results.filter(r=>'optOutBefore' in r&&r.optOutBefore==='unknown'&&r.optOutAfter==='observed').length}:{}),results};
+ unresolved:results.filter((r:{status?:string})=>r.status==='unresolved').length,...(includeSignals?{positiveRecoveries:results.filter((r:Record<string,unknown>)=>'optOutBefore' in r&&r.optOutBefore==='unknown'&&r.optOutAfter==='observed').length}:{}),results};
 writeFileSync(output,JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify({verified:report.verified,contradictions:report.contradictions,unresolved:report.unresolved}));

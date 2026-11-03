@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -282,7 +283,7 @@ async function findBundles(root: string): Promise<string[]> {
 async function readSites(root: string): Promise<PrivacyPolicyCalibrationSite[]> {
   const paths = await findBundles(root);
   return Promise.all(paths.map(async (bundlePath) =>
-    summarizePrivacyPolicyCalibrationBundle(JSON.parse(await readFile(bundlePath, "utf8")), bundlePath)
+    summarizePrivacyPolicyCalibrationBundle(parseCanonicalEvidenceArtifact(await readFile(bundlePath, "utf8")), bundlePath)
   ));
 }
 

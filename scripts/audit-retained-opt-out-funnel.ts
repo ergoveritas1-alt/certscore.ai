@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import {readFile} from "node:fs/promises";
 import {existsSync} from "node:fs";
 import {createHash} from "node:crypto";
@@ -19,7 +20,7 @@ export async function auditRetainedOptOutCohort(root:string,receiptPath:string){
     const path=join(root,"scans",row.id,"original","CanonicalEvidenceBundle.json"),bytes=await readFile(path);
     const receipt=receipts.find((r:{output?:string})=>typeof r.output==="string"&&resolve(r.output)===resolve(path));
     if(!receipt || sha(bytes)!==receipt.expected.sha256 || bytes.length!==receipt.expected.sizeBytes)throw new Error(`Original bundle integrity failed: ${row.id}`);
-    const bundle=JSON.parse(bytes.toString()),observation=bundle.saleSharingOptOut;
+    const bundle=parseCanonicalEvidenceArtifact(bytes.toString()) as any,observation=bundle.saleSharingOptOut;
     if(bundle.scanId!==row.id)throw new Error(`Original bundle scan binding failed: ${row.id}`);
     if(observation){
       const packetBytes=Buffer.from(JSON.stringify(observation.evidence));

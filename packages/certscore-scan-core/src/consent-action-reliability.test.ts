@@ -8,6 +8,7 @@ import { runPostRefusalObserver } from "./post-refusal-observer.js";
 import { buildCanonicalPostAcceptActionRecipes } from "./post-accept-cmp-recipes.js";
 import { buildCanonicalPostRefusalActionRecipes } from "./post-refusal-cmp-recipes.js";
 import { postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema,
+  CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT, CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT,
   projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport } from "@certscore/contracts";
 
 type Action = "accept" | "reject";
@@ -328,11 +329,13 @@ for (const action of ["accept", "reject"] as const) {
     });
   });
 
-  test(`${action}: post-action overflow beyond the new bound stays explicitly incomplete`, async () => {
-    await fixture(action, { after: "for(let i=0;i<210;i++)fetch('/post-noise?i='+i);" }, async (url) => {
+  const requestLimit = action === "accept" ? CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT : CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT;
+
+  test(`${action}: post-action overflow beyond its policy bound stays explicitly incomplete`, async () => {
+    await fixture(action, { after: `for(let i=0;i<${requestLimit + 18};i++)fetch('/post-noise?i='+i);` }, async (url) => {
       const packet = await observe(action, url, { observationWindowMs: 1000 });
       assert.equal(packet.productionProjectable, false);
-      assert.equal(packet.network.requests.length, 192);
+      assert.equal(packet.network.requests.length, requestLimit);
       assert.ok(packet.captureCoverage!.requestsDroppedAfterAction > 0);
       assert.ok(packet.limitations.includes("post_action_network_capture_truncated"));
       assert.equal(packet.afterActionCapture?.requestsDropped, packet.captureCoverage!.requestsDroppedAfterAction);
@@ -360,7 +363,7 @@ for (const action of ["accept", "reject"] as const) {
       };
       try {
         await fixture(action, { decision, after: `
-          Promise.all(Array.from({length:205},(_,i)=>new Promise(resolve=>{
+          Promise.all(Array.from({length:${requestLimit + 13}},(_,i)=>new Promise(resolve=>{
             const image=new Image(); image.onload=image.onerror=resolve;
             image.src='https://images.ctfassets.net/fixture-'+i+'.png';
           }))).then(()=>{fetch('/late-unknown');new Image().src='https://unknown.test/redirect';new Image().src='https://images.ctfassets.net/redirect';});
@@ -368,7 +371,7 @@ for (const action of ["accept", "reject"] as const) {
           const packet = await observe(action, url, { browser, observationWindowMs: 2_000 });
           const retained = packet.network.requests;
           assert.equal(packet.productionProjectable, false);
-          assert.equal(retained.length, 192);
+          assert.equal(retained.length, requestLimit);
           assert.ok(retained.some(row => row.sanitizedUrl.endsWith("/late-unknown")));
           assert.ok(retained.some(row => row.sanitizedUrl === "https://www.google-analytics.com/collect"));
           assert.equal(retained.some(row => row.sanitizedUrl === "https://images.ctfassets.net/redirect"), false, "redirect root exceeded retention cap");

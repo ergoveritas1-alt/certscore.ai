@@ -26,7 +26,7 @@ export function progressEngine() {
       for(const q of data.quantities??[]){
         const selected=chosen.filter(r=>r.reportable&&(!q.id.startsWith('accessibility.')||r.states.accessibility!==undefined)),groups:any={};
         for(const r of selected){const s=source(r,q.id);(groups[s]??=[]).push(r);}
-        const tally=(rs:any[],s:string)=>{const values=rs.map(r=>r.measurements?.[q.id]).filter(num).sort((a:number,b:number)=>a-b),n=values.length;return {source:s,eligible:rs.length,measured:n,missing:rs.length-n,median:n&&s!=='mixed_sources'?(values[Math.floor((n-1)/2)]+values[Math.ceil((n-1)/2)])/2:null,total:n?values.reduce((a:number,b:number)=>a+b,0):null,delta:null as number|null};};
+        const tally=(rs:any[],s:string)=>{const values=rs.map(r=>r.measurements?.[q.id]).filter(num).sort((a:number,b:number)=>a-b),n=values.length;return {source:s,eligible:rs.length,measured:n,missing:rs.length-n,median:n&&s!=='mixed_sources'?(values[Math.floor((n-1)/2)]+values[Math.ceil((n-1)/2)])/2:null,total:n&&!(q.id.startsWith("gpc.")&&s==='mixed_sources')?values.reduce((a:number,b:number)=>a+b,0):null,delta:null as number|null};};
         const keys=Object.keys(groups),v:any=tally(selected,keys.length===1?keys[0]!:'mixed_sources');v.series={};
         for(const [s,rs]of Object.entries(groups)){const sub=tally(rs as any[],s),p=previous?.quantities[q.id]?.series[s];sub.delta=p&&!/unversioned|unknown|unavailable/.test(s)&&sub.median!==null&&p.median!==null?sub.median-p.median:null;v.series[s]=sub;}
         const p=previous?.quantities[q.id];v.delta=p?.source===v.source&&v.source!=='mixed_sources'&&!/unversioned|unknown|unavailable/.test(v.source)&&v.median!==null&&p.median!==null?v.median-p.median:null;quantities[q.id]=v;

@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { readBoundGpcCmpStateComparison } from "@certscore/contracts";
 import {reviewedOptOutPolicyOwner,reviewedOptOutPolicyRedirect} from "@certscore/contracts";
 import {assessGpcPotentialRisk, type CaliforniaPotentialRiskAssessment} from "../../lib/scans/california-potential-risk-policy";
@@ -1608,7 +1609,7 @@ async function readLocalV2DagJsonArtifact(
     expectedSha256: verification.expectedSha256,
     expectedSizeBytes: verification.expectedSizeBytes,
   });
-  return JSON.parse(body.toString("utf8")) as unknown;
+  return parseCanonicalEvidenceArtifact(body);
 }
 
 async function readLocalV2DagBundle(
@@ -1783,9 +1784,9 @@ async function readLocalV2DagJsonArtifactFromS3(input: {
       uri: input.uri, sha256: input.expectedSha256, sizeBytes: input.expectedSizeBytes,
     }));
     if (body) {
-      const parsed = JSON.parse(verifyLocalV2DagLambdaArtifactBody({
+      const parsed = parseCanonicalEvidenceArtifact(verifyLocalV2DagLambdaArtifactBody({
         body, expectedSha256: input.expectedSha256, expectedSizeBytes: input.expectedSizeBytes,
-      }).toString("utf8")) as unknown;
+      }));
       // Preserve subsequent screenshot/evidence reads and stale-source retries:
       // the existing bounded cache must also receive this verified first read.
       void verifiedReportArtifactCache.getOrCreate(
@@ -1819,7 +1820,7 @@ async function readLocalV2DagJsonArtifactFromS3Uncached(input: {
     expectedSha256: input.expectedSha256,
     expectedSizeBytes: input.expectedSizeBytes
   });
-  return JSON.parse(body.toString("utf8")) as unknown;
+  return parseCanonicalEvidenceArtifact(body);
 }
 
 const localV2DagS3Clients = new Map<string, S3Client>();
@@ -5399,7 +5400,9 @@ export function buildLocalV2ScanNoGoAssessment(input: {
     crossDomainEvidenceText ??
     (retainedVisualErrorShell
       ? "The retained pre-consent screenshot appears to be a full-viewport visual error shell with negligible runtime evidence, not the normal public site."
-      : "The pre-consent runtime scanner retained only a 1x1 screenshot placeholder after page/context closure and screenshot capture failures.");
+      : pageContextClosed
+        ? "The pre-consent runtime scanner retained only a 1x1 screenshot placeholder after page/context closure and screenshot capture failures."
+        : "The pre-consent runtime scanner retained only a 1x1 screenshot placeholder after screenshot capture failures.");
   const evidenceRefs = [
     "scan_runtime_artifacts.scan_no_go_assessment",
     "scan_runtime_artifacts.visual_access_review",
@@ -6812,7 +6815,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v43";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v47";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

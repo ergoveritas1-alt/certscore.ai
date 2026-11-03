@@ -7,7 +7,10 @@ import { buildGpcProductionAssessment } from "../../../../../packages/certscore-
 import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import { gpcImpactRequestSetHash } from "../../../../../packages/certscore-scan-core/src/gpc-impact-capture";
 
-export function gpcProductFixture(options: {scanId?: string; urls?: string[]; contradiction?: boolean; priorCmpState?: boolean} = {}) {
+export function gpcProductFixture(options: {scanId?: string; urls?: string[]; contradiction?: boolean; priorCmpState?: boolean;
+  notReady?: "synchronous_ping_unavailable" | "cmp_status_not_loaded" | "signal_status_not_ready" | "both";
+  apiUnavailable?: boolean;
+  baselineReadbackIncomplete?: boolean} = {}) {
   const pair = cmpStatePairFixture({scanId:options.scanId,gpcSale:options.contradiction ? 2 : 1});
   const g = pair.gpc, session = g.gpcObservationSession!, semantic = session.semanticObservation!;
   if (options.urls?.length) {
@@ -24,6 +27,26 @@ export function gpcProductFixture(options: {scanId?: string; urls?: string[]; co
     }
   }
   if (options.priorCmpState) semantic.stateTransitions = [{observedAtMs:100,status:"observed",state:semantic.usca!,stateSha256:semantic.stateSha256}];
+  if (options.notReady) {
+    semantic.gppStatus = "not_ready";
+    semantic.usca = semantic.usnat = null;
+    semantic.stateSha256 = null;
+    semantic.stateTransitions = [];
+    semantic.limitationKeys = [];
+    const synchronous = options.notReady === "synchronous_ping_unavailable";
+    semantic.gppDiagnostics = {reason:synchronous ? "synchronous_ping_unavailable" : "cmp_or_signal_not_ready",
+      callbackCount:synchronous ? 0 : 1, applicableSections:[], sectionList:[],
+      diagnosticCodes:synchronous ? ["cmp_status_not_loaded"] : options.notReady === "both"
+        ? ["cmp_status_not_loaded", "signal_status_not_ready"] : [options.notReady]};
+  }
+  if (options.baselineReadbackIncomplete) {
+    pair.baseline.gpcSignalObservation!.limitationKeys = ["frame_signal_readback_incomplete"];
+  }
+  if (options.apiUnavailable) {
+    semantic.gppStatus="unavailable";semantic.usca=semantic.usnat=null;semantic.stateSha256=null;
+    semantic.stateTransitions=[];semantic.limitationKeys=[];
+    semantic.gppDiagnostics={reason:"api_unavailable",callbackCount:0,applicableSections:[],sectionList:[],diagnosticCodes:["api_unavailable"]};
+  }
   g.gpcObservationSession = gpcObservationSessionSchema.parse(session);
   g.gpcPrototypeSessionBinding!.sessionSha256 = fixtureHash(JSON.stringify(g.gpcObservationSession));
   canonicalEvidenceBundleSchema.parse(g);
@@ -31,6 +54,6 @@ export function gpcProductFixture(options: {scanId?: string; urls?: string[]; co
   const comparison = buildGpcResponseAssessment({baseline:pair.baseline,gpc:g,baselineArtifact:baseline.pointer,gpcArtifact:gpc.pointer});
   const assessment = buildGpcProductionAssessment({scanId:g.scanId,comparison,source:gpc});
   const cmpStateComparison = buildGpcCmpStateComparison({scanId:g.scanId,targetUrl:g.normalizedUrl,baseline,gpc});
-  const activityComparison = buildGpcActivityComparison({scanId:g.scanId,baseline,gpc});
+  const activityComparison = buildGpcActivityComparison({scanId:g.scanId,baseline,gpc,observation:assessment.observation});
   return {...pair,baselineSource:baseline,gpcSource:gpc,assessment,cmpStateComparison,activityComparison};
 }

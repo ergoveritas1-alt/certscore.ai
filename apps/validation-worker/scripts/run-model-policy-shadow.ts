@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { canonicalEvidenceBundleSchema } from "@certscore/contracts";
@@ -54,7 +55,7 @@ async function main() {
   if (!bundlePath) {
     throw new Error(`Scan ${scanId} does not expose a local canonical v2 bundle path.`);
   }
-  const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(await readFile(bundlePath, "utf8")));
+  const bundle = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(await readFile(bundlePath, "utf8"), { schemaValidation: "caller" }));
   const packet = buildPolicyReviewPacketFromCanonicalBundle(bundle, { scanId });
   if (!packet) {
     throw new Error(`Bundle ${bundlePath} contains no usable retained policy documents.`);

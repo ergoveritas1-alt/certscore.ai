@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readlinkSync } from "node:fs";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
@@ -199,7 +200,7 @@ async function compareBundle(
   }
 
   await ensureArtifactMirror(target.artifactDir, target.mirroredArtifactDir);
-  const rawBundle = JSON.parse(await readFile(target.bundlePath, "utf8")) as unknown;
+  const rawBundle = parseCanonicalEvidenceArtifact(await readFile(target.bundlePath, "utf8")) as unknown;
   const bundle = asRecord(remapArtifactPaths(rawBundle, target.artifactDir, target.mirroredArtifactDir));
   const normalizedUrl = stringOrUndefined(bundle.normalizedUrl) ?? stringOrUndefined(bundle.url) ?? "";
   const rootDomain = hostnameFromUrl(normalizedUrl);
@@ -620,8 +621,8 @@ async function loadLocalV2DagReport(): Promise<LocalV2DagReportExports> {
     return originalLoad.call(this, request, parent, isMain);
   };
   try {
-    const mod = await import("../apps/web/server/scans/local-v2-dag-report.ts");
-    const exports = (mod.default ?? mod) as Partial<LocalV2DagReportExports>;
+    const mod = await import("../apps/web/server/scans/local-v2-dag-report");
+    const exports = ((mod as {default?: unknown}).default ?? mod) as Partial<LocalV2DagReportExports>;
     if (typeof exports.dedupePolicySurfaces !== "function" || typeof exports.summarizePolicySurfaces !== "function") {
       throw new Error("local-v2-dag-report exports were not available for local comparison.");
     }
@@ -636,7 +637,7 @@ async function loadLocalV2DagReport(): Promise<LocalV2DagReportExports> {
 
 async function loadSharedScanDetail(): Promise<SharedScanDetailExports> {
   const mod = await import("../apps/web/components/scans/shared-scan-detail-view");
-  const exports = (mod.default ?? mod) as Partial<SharedScanDetailExports>;
+  const exports = ((mod as {default?: unknown}).default ?? mod) as Partial<SharedScanDetailExports>;
   if (typeof exports.deriveSharedScanDetailGdprEprivacyCoverageChecklist !== "function") {
     throw new Error("shared-scan-detail-view export missing deriveSharedScanDetailGdprEprivacyCoverageChecklist.");
   }

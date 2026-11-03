@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { canonicalEvidenceBundleSchema, endpointEnrichmentOverlaySchema } from "@certscore/contracts";
@@ -15,7 +16,7 @@ async function main(): Promise<void> {
   }
 
   const raw = await readFile(args.bundle, "utf8");
-  const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(raw));
+  const bundle = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(raw, { schemaValidation: "caller" }));
   const endpointEnrichmentOverlay = args.endpointEnrichmentOverlay
     ? endpointEnrichmentOverlaySchema.parse(JSON.parse(await readFile(args.endpointEnrichmentOverlay, "utf8")))
     : undefined;

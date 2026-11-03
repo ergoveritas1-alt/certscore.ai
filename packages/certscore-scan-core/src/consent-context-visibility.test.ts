@@ -52,12 +52,11 @@ test("script and style text do not establish generic consent context", async () 
   assertNoConsentContext(artifact);
 });
 
-test("hidden, CSS-hidden, visibility-hidden, aria-hidden, and inert prose do not establish context", async () => {
+test("hidden, CSS-hidden, visibility-hidden and inert prose do not establish context", async () => {
   const variants = [
     `<div hidden>We use cookies and similar technologies. Choose your privacy preferences.</div>`,
     `<div class="gone">We use cookies and similar technologies. Choose your privacy preferences.</div>`,
     `<div style="visibility:hidden">We use cookies and similar technologies. Choose your privacy preferences.</div>`,
-    `<div aria-hidden="true">We use cookies and similar technologies. Choose your privacy preferences.</div>`,
     `<div inert>We use cookies and similar technologies. Choose your privacy preferences.</div>`,
   ];
   for (const prose of variants) {
@@ -77,8 +76,19 @@ test("hidden prose inside an open shadow root does not establish context", async
     <script>
       const host = document.querySelector("#scope");
       const root = host.attachShadow({ mode: "open" });
-      root.innerHTML = '<div aria-hidden="true">We use cookies and similar technologies. Choose your privacy preferences.</div><button>Allow</button>';
+      root.innerHTML = '<div hidden>We use cookies and similar technologies. Choose your privacy preferences.</div><button>Allow</button>';
     </script>
   `);
   assertNoConsentContext(artifact);
+});
+
+test("visually rendered aria-hidden prose can bind a DOM consent control in ordinary and open-shadow trees", async()=>{
+ for(const shadow of [false,true]) {
+  const content='<p aria-hidden="true">We use cookies and similar technologies. Choose your privacy preferences.</p><button>Allow</button>';
+  const artifact=await capture(shadow
+   ? `<example-cmp role="dialog" style="display:block;position:fixed;left:10px;top:10px;width:420px;height:180px;background:white"></example-cmp><script>document.querySelector('example-cmp').attachShadow({mode:'open'}).innerHTML=${JSON.stringify(content)}</script>`
+   : `<section role="dialog" aria-hidden="true" style="position:fixed;left:10px;top:10px;width:420px;height:180px;background:white">${content}</section>`);
+  assert.equal(artifact.summary.firstLayerAccept,true,shadow?"open_shadow":"main");
+  assert.equal(artifact.candidates.find(row=>row.label==='Allow')?.consentContextConfirmed,true);
+ }
 });

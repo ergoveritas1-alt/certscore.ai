@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { randomUUID } from "node:crypto";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
@@ -98,7 +99,7 @@ async function runRegion(region: Region) {
   }
   const { bucket, key } = parseS3Uri(artifactUri);
   const object = await new S3Client({ region }).send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-  const bundle = JSON.parse(await object.Body!.transformToString()) as CanonicalBundle;
+  const bundle = parseCanonicalEvidenceArtifact(await object.Body!.transformToString()) as CanonicalBundle;
   const status = mainDocumentStatus(bundle);
   if (status !== 200) {
     throw new Error(`${region}: Cloudflare Web Bot Auth verifier returned ${status ?? "no retained status"}; expected 200.`);

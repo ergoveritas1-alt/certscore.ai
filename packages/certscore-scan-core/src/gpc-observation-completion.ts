@@ -1,10 +1,11 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { createHash } from "node:crypto";
 import { canonicalEvidenceBundleSchema, retainedGpcObservationSessionSchema, type CanonicalEvidenceBundle, type GpcObservationSession } from "@certscore/contracts";
 import type { GpcPrototypeArtifact } from "./gpc-opt-out-assessment.js";
 const hash = (value: Uint8Array | string) => createHash("sha256").update(value).digest("hex");
 function verified(source: GpcPrototypeArtifact) {
   if (source.bytes.byteLength > 20_000_000 || source.bytes.byteLength !== source.pointer.sizeBytes || hash(source.bytes) !== source.pointer.sha256) throw Error("Unverifiable GPC retained source");
-  return JSON.parse(Buffer.from(source.bytes).toString("utf8"));
+  return parseCanonicalEvidenceArtifact(source.bytes, { schemaValidation: "caller" });
 }
 /** Evaluates completion of the declared bounded observation, not GPC compliance.
  * Historical packets lacking direct coverage proof cannot enter this gate. */

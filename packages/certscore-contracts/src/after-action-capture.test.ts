@@ -53,3 +53,10 @@ test("optional after-click write diagnostics count retained facts without claimi
  assert.equal(afterActionCaptureSchema.safeParse({...capture,writeDiagnostics:{...diagnostics,diagnosticOnly:false}}).success,false);
  assert.equal(afterActionCaptureSchema.parse(capture).writeDiagnostics,undefined,"historical capture must not acquire retrospective diagnostics");
 });
+
+test('larger references require an explicit Accept marker; old captures and Reject stay at 192',()=>{
+ const requestIds=Array.from({length:193},(_,i)=>`row-${i}`);
+ const expanded={...capture,policyVersion:'bounded_after_action_capture.v1',action:'accept',requestIds,requestAncestry:undefined,requestRetentionPolicy:'priority_bounded_action_requests.v3-accept384'};
+ assert.equal(afterActionCaptureSchema.safeParse(expanded).success,true);
+ for(const altered of [{...expanded,requestRetentionPolicy:undefined},{...expanded,action:'reject'},{...expanded,requestIds:Array.from({length:385},(_,i)=>`row-${i}`)}])assert.equal(afterActionCaptureSchema.safeParse(altered).success,false);
+});

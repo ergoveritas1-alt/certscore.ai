@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 // Local-only concurrency diagnostic. Runs actual status/internal route handlers
 // and the canonical publisher in separate HTTP processes against disposable PG.
 import assert from 'node:assert/strict';
@@ -48,7 +49,7 @@ async function main() {
     bundle: await readFile(artifactFiles.bundle),
     manifest: await readFile(artifactFiles.manifest),
   };
-  const originalId = JSON.parse(originals.bundle.toString()).scanId;
+  const originalId = (parseCanonicalEvidenceArtifact(originals.bundle) as any).scanId;
   await writeFile(fixture, `
     const {Pool}=require(${JSON.stringify(require.resolve('pg'))});
     const pool=new Pool(${JSON.stringify(connection)});
@@ -136,8 +137,8 @@ async function main() {
       values($1,$2,$3,case when $4='active' then now() when $4='expired' then now()-interval '151 seconds' else null end,
       case when $4='expired' then now()-interval '151 seconds' else now() end,case when $4='failed' then now()+interval '10 seconds' else now() end)`,[id,createHash('sha256').update(token).digest('hex'),owner==='terminal'?'terminal_failure':owner==='completed'?'completed':'pending',owner]);
   }
-  async function poll(mode:string,id:string){return fetch(servers[mode][0]+'/api/scan-status/'+id+'?includeFindings=0')}
-  async function publish(mode:string,id:string,transfer?:unknown){return fetch(servers[mode][1]+'/api/internal/scan-score-materialization',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'publish_report',scanId:id,token,artifactTransfer:transfer})})}
+  async function poll(mode:typeof modes[number],id:string){return fetch(servers[mode]![0]+'/api/scan-status/'+id+'?includeFindings=0')}
+  async function publish(mode:typeof modes[number],id:string,transfer?:unknown){return fetch(servers[mode]![1]+'/api/internal/scan-score-materialization',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'publish_report',scanId:id,token,artifactTransfer:transfer})})}
   const results:any[]=[];
   for(const mode of modes){
     await reset(originalId,'queued');

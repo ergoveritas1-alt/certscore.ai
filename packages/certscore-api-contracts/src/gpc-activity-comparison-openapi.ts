@@ -61,6 +61,307 @@ export const gpcActivityComparisonOpenApi = {
         }
       }
     },
+    "collectionComparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "scanId",
+        "durationMs",
+        "sourceHashes",
+        "scope",
+        "baseline",
+        "gpc",
+        "scoreEffect",
+        "causedByGpc",
+        "legalInterpretation"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "certscore.gpc-collection-comparison.v1",
+          "type": "string"
+        },
+        "scanId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,200}$"
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "sourceHashes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "baseline",
+            "gpc"
+          ],
+          "properties": {
+            "baseline": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "gpc": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "scope": {
+          "const": "retained_successful_advertising_requests_in_matched_window",
+          "type": "string"
+        },
+        "baseline": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "coverage",
+            "identifierCoverage",
+            "rowsTruncated",
+            "rows"
+          ],
+          "properties": {
+            "coverage": {
+              "const": "retained_sample",
+              "type": "string"
+            },
+            "identifierCoverage": {
+              "type": "string",
+              "enum": [
+                "url_only",
+                "canonical_qualification"
+              ]
+            },
+            "rowsTruncated": {
+              "type": "boolean"
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "evidenceId",
+                  "entityId",
+                  "label",
+                  "observedAfterDocumentCommitMs",
+                  "identifierActivity",
+                  "identifierBasis",
+                  "processing"
+                ],
+                "properties": {
+                  "evidenceId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.:-]{1,160}$"
+                  },
+                  "entityId": {
+                    "type": "string",
+                    "pattern": "^ent_[a-f0-9]{12}$"
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "observedAfterDocumentCommitMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 5000
+                  },
+                  "identifierActivity": {
+                    "type": "string",
+                    "enum": [
+                      "identity_sync",
+                      "audience_collection",
+                      "identified_advertising_collection",
+                      "not_established"
+                    ]
+                  },
+                  "identifierBasis": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "endpoint_or_identity_unresolved",
+                          "google_advertising_feature_identifier",
+                          "google_cookie_matching",
+                          "google_remarketing_audience",
+                          "google_advertising_conversion_identifier",
+                          "linkedin_hashed_email",
+                          "meta_advanced_matching_identifier",
+                          "linkedin_ads_identifier",
+                          "meta_pixel_identifier",
+                          "tiktok_pixel_identifier",
+                          "pinterest_tag_identifier",
+                          "snap_pixel_identifier",
+                          "reddit_pixel_identifier",
+                          "microsoft_uet_identifier",
+                          "adobe_identity_mapping",
+                          "criteo_first_party_identity",
+                          "amazon_identity_sync",
+                          "pubmatic_cookie_sync",
+                          "trade_desk_identity_mapping",
+                          "lotame_profile_mapping",
+                          "openx_identity_resolution",
+                          "index_exchange_bid_user_identifier",
+                          "magnite_exchange_bid_user_identifier",
+                          "magnite_bid_user_identifier",
+                          "owner_property_sale",
+                          "owner_property_sharing",
+                          "owner_property_audience"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "processing": {
+                    "type": "string",
+                    "enum": [
+                      "privacy_context_observed",
+                      "no_supported_privacy_context_observed"
+                    ]
+                  }
+                }
+              },
+              "maxItems": 8
+            }
+          }
+        },
+        "gpc": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "coverage",
+            "identifierCoverage",
+            "rowsTruncated",
+            "rows"
+          ],
+          "properties": {
+            "coverage": {
+              "const": "retained_sample",
+              "type": "string"
+            },
+            "identifierCoverage": {
+              "type": "string",
+              "enum": [
+                "url_only",
+                "canonical_qualification"
+              ]
+            },
+            "rowsTruncated": {
+              "type": "boolean"
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "evidenceId",
+                  "entityId",
+                  "label",
+                  "observedAfterDocumentCommitMs",
+                  "identifierActivity",
+                  "identifierBasis",
+                  "processing"
+                ],
+                "properties": {
+                  "evidenceId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.:-]{1,160}$"
+                  },
+                  "entityId": {
+                    "type": "string",
+                    "pattern": "^ent_[a-f0-9]{12}$"
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "observedAfterDocumentCommitMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 5000
+                  },
+                  "identifierActivity": {
+                    "type": "string",
+                    "enum": [
+                      "identity_sync",
+                      "audience_collection",
+                      "identified_advertising_collection",
+                      "not_established"
+                    ]
+                  },
+                  "identifierBasis": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "endpoint_or_identity_unresolved",
+                          "google_advertising_feature_identifier",
+                          "google_cookie_matching",
+                          "google_remarketing_audience",
+                          "google_advertising_conversion_identifier",
+                          "linkedin_hashed_email",
+                          "meta_advanced_matching_identifier",
+                          "linkedin_ads_identifier",
+                          "meta_pixel_identifier",
+                          "tiktok_pixel_identifier",
+                          "pinterest_tag_identifier",
+                          "snap_pixel_identifier",
+                          "reddit_pixel_identifier",
+                          "microsoft_uet_identifier",
+                          "adobe_identity_mapping",
+                          "criteo_first_party_identity",
+                          "amazon_identity_sync",
+                          "pubmatic_cookie_sync",
+                          "trade_desk_identity_mapping",
+                          "lotame_profile_mapping",
+                          "openx_identity_resolution",
+                          "index_exchange_bid_user_identifier",
+                          "magnite_exchange_bid_user_identifier",
+                          "magnite_bid_user_identifier",
+                          "owner_property_sale",
+                          "owner_property_sharing",
+                          "owner_property_audience"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "processing": {
+                    "type": "string",
+                    "enum": [
+                      "privacy_context_observed",
+                      "no_supported_privacy_context_observed"
+                    ]
+                  }
+                }
+              },
+              "maxItems": 8
+            }
+          }
+        },
+        "scoreEffect": {
+          "const": "none",
+          "type": "string"
+        },
+        "causedByGpc": {
+          "const": "not_established",
+          "type": "string"
+        },
+        "legalInterpretation": {
+          "const": "not_assessed",
+          "type": "string"
+        }
+      }
+    },
     "activity": {
       "type": "object",
       "additionalProperties": false,

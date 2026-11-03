@@ -26,11 +26,12 @@ import { CONSENT_ACTION_RECIPE_CANDIDATE_MAX, prioritizeConsentActionRecipes, co
 import type { ActionTcfData } from "./consent-action-tcf-state.js";
 import { captureOneTrustBaseline, oneTrustBaselineLimitation, type OneTrustBaseline } from "./onetrust-consent-state.js";
 import { decodeTcfV2PurposeConsents, readConsentActionTcfData } from "./consent-action-tcf-state.js";
-import { canonicalConsentSurfacePresent, consentScopePermitsInteraction, distinctActionTargets, hasActionControlStructure } from "./cmp-action-target.js";
+import { canonicalConsentSurfacePresent, inspectConsentScopeInteraction, distinctActionTargets, hasActionControlStructure } from "./cmp-action-target.js";
 import { finishOptionalRuntimeGraph, installRuntimeGraphCapture } from "./runtime-evidence-graph-capture.js";
 import { finishAfterActionWindow } from "./after-action-capture.js";
 import {
-  CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT,
+  CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT,
+  ACCEPT_REQUEST_RETENTION_POLICY,
   consentReceiptChangeValue,
   POST_ACCEPT_DEFAULT_OBSERVATION_WINDOW_MS,
   postAcceptEvidencePacketSchema,
@@ -407,8 +408,9 @@ export async function runPostAcceptObserver(
   };
   const preActionRequests: CapturedRequest[] = [];
   const postActionRequests: CapturedRequest[] = [];
-  const postActionRetention = createActionRequestRetention(postActionRequests, CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT);
+  const postActionRetention = createActionRequestRetention(postActionRequests, CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT, ACCEPT_REQUEST_RETENTION_POLICY);
   const captureCoverage = { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 };
+  let networkObservationClosed = false;
   let sourceDocumentChanged = false;
   let sourcePendingAtEnd = 0;
   let sourceHookInstalledAtMs: number | undefined;
@@ -657,7 +659,7 @@ export async function runPostAcceptObserver(
     page.on("request", (request) => {
       // Optional form images may continue in this session after the action
       // window closes. They must not grow or truncate its request evidence.
-      if (timing.observationEndedAtMs !== undefined) return;
+      if (networkObservationClosed || timing.observationEndedAtMs !== undefined) return;
       if (request.isNavigationRequest() && request.frame() === page?.mainFrame()) {
         mainNavigationRequestCount += 1;
       }
@@ -679,7 +681,7 @@ export async function runPostAcceptObserver(
           ancestorStart !== undefined && ancestorStart < acceptanceRegisteredAtEpochMs,
       };
       if (actionDispatched) {
-        const wasFull = bucket.length >= CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT;
+        const wasFull = bucket.length >= CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT;
         const selection = postActionRetention.offer(captured);
         if (wasFull) captureCoverage.requestsDroppedAfterAction += 1;
         if (selection.evicted) activeRequestIds.delete(selection.evicted.requestId);
@@ -1261,6 +1263,13 @@ export async function runPostAcceptObserver(
         dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
         clickCompleted: diagnostics.click.outcome === "completed", signal: effectiveSignal, targetStillAuthorized,
       });
+      // Freeze the unconfirmed branch at the same boundary as a confirmed
+      // observation. Terminal snapshots must not extend network collection or
+      // consume its bounded request inventory after the window has ended.
+      const observationEndedAtEpochMs = Date.now();
+      networkObservationClosed = true;
+      sourcePendingAtEnd = postActionRequests.filter(row => activeRequestIds.has(row.requestId)).length;
+      originDomStorageCapture?.finish();
       formCapture = formCaptureHandle?.finish();
       formSnapshotCapture = await formSnapshotHandle?.finish();
       timing.observationMs = Math.max(0, Date.now() - captureStartedAtMs);
@@ -1276,12 +1285,14 @@ export async function runPostAcceptObserver(
       const requests = classifyRequests(retainedRequests(), parentScanStartedAtMs);
       afterActionCapture = {
         policyVersion: "bounded_after_action_capture.v1", action: "accept",
+        requestRetentionPolicy: ACCEPT_REQUEST_RETENTION_POLICY,
         activationStatus: diagnostics.click.outcome === "completed" ? "completed" : "uncertain",
         actionDispatchedAtMs, captureEndedAtMs, requestedWindowMs: observationWindowMs, stopReason,
         requestsDropped: captureCoverage.requestsDroppedAfterAction,
         storageSnapshotRetained: postActionStorage !== undefined,
         storageWriteCoverage: "bounded_main_document_sample",
-        storageWrites: capturedWrites.filter((write) => write.observedAtEpochMs >= actionDispatchedAtEpochMs)
+        storageWrites: capturedWrites.filter((write) => write.observedAtEpochMs >= actionDispatchedAtEpochMs &&
+          write.observedAtEpochMs <= observationEndedAtEpochMs)
           .flatMap((write) => {
             const row = classifyStorageWrite(write, parentScanStartedAtMs, actionDispatchedAtEpochMs, observationTargetUrl, postActionStorage ?? []);
             return row ? [{ storageType: row.storageType, name: row.name, hostname: row.hostname,
@@ -1927,7 +1938,11 @@ async function waitForCanonicalAcceptControlRecipe(
         sawAmbiguousCanonicalControl = true;
         continue;
       }
-      if (!await consentScopePermitsInteraction(containers.first())) { bindingState("scope_not_interactive"); continue; }
+      const scopeInteraction = await inspectConsentScopeInteraction(containers.first());
+      if (scopeInteraction.state !== "interactive") {
+        reportDiagnostic?.({...snapshot, state: "scope_not_interactive", actionableCount: 0, scopeExclusion: scopeInteraction.exclusion});
+        return {status:sawAmbiguousCanonicalControl?"ambiguous":"not_found"};
+      }
       const controlSelector = candidate.selectorHint === containerSelector ||
           candidate.selectorHint.startsWith(`${containerSelector} `)
         ? candidate.selectorHint
@@ -1960,7 +1975,13 @@ async function waitForCanonicalAcceptControlRecipe(
       const customControlBinding = customBindings.get(candidate);
       // A custom generic binding must not bypass any named CMP's exact recipe.
       if (customControlBinding && candidateCmpName) { bindingState("control_binding_unverified"); continue; }
-      if (!candidate.consentContextConfirmed && !candidateCmpName) { bindingState("scope_not_interactive"); continue; }
+      if (!candidate.consentContextConfirmed && !candidateCmpName) {
+        // A page-wide CMP hint cannot bind an unrelated Agree/terms control.
+        // Yield the remaining slice to the existing named resolver rather than
+        // repeating this rejected geometry candidate until the slice expires.
+        bindingState("precondition_unsatisfied");
+        return {status:sawAmbiguousCanonicalControl?"ambiguous":"not_found"};
+      }
       const registeredCmpRecipe = selectCanonicalAcceptConfirmationRecipe(registeredRecipes, candidateCmpName);
       const recipe: PostAcceptActionRecipe = {
         artifactVersion: "certscore.post_accept_action_recipe.v1",

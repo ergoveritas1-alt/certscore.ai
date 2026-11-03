@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -561,7 +562,7 @@ async function buildExampleSnapshots(examples: GoldExample[]): Promise<ExampleSn
       continue;
     }
     seenBundlePaths.add(bundlePath);
-    const bundle = JSON.parse(await readFile(bundlePath, "utf8"));
+    const bundle = parseCanonicalEvidenceArtifact(await readFile(bundlePath, "utf8")) as any;
     const review = await reviewEvidenceBundle(bundle);
     const debugConfidenceRows = buildDebugConfidenceSnapshots(
       review.regulatoryReview,
@@ -1462,7 +1463,7 @@ function bucketDebugScore(score: number) {
 }
 
 function countScoreBuckets(rows: DebugConfidenceSnapshot[]) {
-  const buckets: Record<string, number> = {
+  const buckets: Record<string,number> = {
     "1-2": 0,
     "3-4": 0,
     "5-6": 0,
@@ -1470,7 +1471,7 @@ function countScoreBuckets(rows: DebugConfidenceSnapshot[]) {
     "9-10": 0,
   };
   for (const row of rows) {
-    buckets[row.scoreBucket] += 1;
+    buckets[row.scoreBucket] = (buckets[row.scoreBucket] ?? 0) + 1;
   }
   return buckets;
 }
@@ -1754,7 +1755,7 @@ function buildLaneSummaries(examples: ExampleSnapshot[]): LaneSummary[] {
 }
 
 function bucketConfidences(confidences: number[]) {
-  const buckets: Record<string, number> = {
+  const buckets = {
     "0.00-0.24": 0,
     "0.25-0.49": 0,
     "0.50-0.69": 0,

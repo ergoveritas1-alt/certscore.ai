@@ -10,8 +10,22 @@ import { runScan } from "./index";
 import { buildGpcImpactAssessment } from "./gpc-impact-assessment";
 import { buildGpcProductionObservation } from "./gpc-production-observation";
 import { buildLocalV2DagLambdaLaneRun } from "../../../apps/v2-dag-lambda/src/handler";
+import { readOriginalGpcCookieReadBinding } from "./gpc-cookie-read-binding";
+import { chromium } from "playwright";
 
-test("existing baseline and GPC browsers retain comparable windows on a continuously busy page", async () => {
+test("existing baseline and GPC browsers retain comparable windows on a continuously busy page", async t => {
+  const cookieReads = { runtime_evidence: 0, gpc_observation: 0 };
+  let activeLane: keyof typeof cookieReads = "runtime_evidence";
+  const launch = chromium.launch.bind(chromium);
+  t.mock.method(chromium, "launch", async (...args: Parameters<typeof chromium.launch>) => {
+    const browser = await launch(...args), createContext = browser.newContext.bind(browser);
+    browser.newContext = async options => {
+      const context = await createContext(options), cookies = context.cookies.bind(context), lane = activeLane;
+      context.cookies = async (...cookieArgs) => { cookieReads[lane]++; return cookies(...cookieArgs); };
+      return context;
+    };
+    return browser;
+  });
   const server = createServer((req, res) => {
     if (req.url === '/hanging') return;
     if (req.url !== '/') { res.end('observed'); return; }
@@ -34,6 +48,7 @@ test("existing baseline and GPC browsers retain comparable windows on a continuo
     const sources=[];
     const capturedHorizons: number[] = [];
     for (const lane of ['runtime_evidence','gpc_observation'] as const) {
+      activeLane = lane;
       const outDir = path.join(out,lane);
       const bundle = await runScan({scanId:'busy-pair',url,outDir,evidenceLane:lane,profile:'standard',scenarioResourceMode:'lean',retainGpcObservation:lane==='gpc_observation',preConsentScreenshotMode:'never',formSnapshotReviewer:lane==='runtime_evidence'?async()=>({safeForDisplay:true}):undefined});
       assert.ok(bundle.gpcImpactCapture, lane);
@@ -49,11 +64,26 @@ test("existing baseline and GPC browsers retain comparable windows on a continuo
       const retained = JSON.parse(await readFile(path.join(outDir,'CanonicalEvidenceBundle.json'),'utf8'));
       // Production workers add the lane envelope after runScan; use that same
       // envelope builder here rather than treating a bare local run as a worker.
+      assert.ok(bundle.region);
       retained.scanLaneRuns = [buildLocalV2DagLambdaLaneRun({bundle,workerLane:lane,region:bundle.region,physicalInvocationId:`fixture-${lane}`})];
       const bytes = Buffer.from(JSON.stringify(retained));
       const source = {bytes,pointer:{uri:path.join(outDir,'CanonicalEvidenceBundle.json'),sha256:createHash('sha256').update(bytes).digest('hex'),sizeBytes:bytes.length}};
       sources.push(source);
-      if(lane==='gpc_observation') assert.equal(buildGpcProductionObservation({scanId:'busy-pair',source}).status,'complete');
+      assert.equal(cookieReads[lane], lane === "runtime_evidence" ? 2 : 1, "existing baseline preview/final reads and the single GPC final read are unchanged");
+      if(lane==='gpc_observation') {
+        assert.equal(buildGpcProductionObservation({scanId:'busy-pair',source}).status,'complete');
+        assert.equal(retained.gpcObservationSession.mainDocument.committedAtMs, retained.gpcImpactCapture.document.committedAtMs);
+        const snapshot = retained.cookieSnapshots[0];
+        assert.ok(snapshot?.gpcReadBinding, "future original GPC bytes retain the existing read's binding");
+        assert.equal(snapshot.captureCoverage, undefined, "baseline-only eligibility is unchanged");
+        assert.deepEqual(readOriginalGpcCookieReadBinding(retained, snapshot), snapshot.gpcReadBinding);
+        console.log("GPC_WORKER_BINDING_FIXTURE", JSON.stringify({ cookieReads: cookieReads[lane],
+          bindingBytes: Buffer.byteLength(JSON.stringify(snapshot.gpcReadBinding)),
+          commitTimesExactlyEqual: true, cookieReadDurationMs: snapshot.gpcReadBinding.completedAtMs - snapshot.gpcReadBinding.startedAtMs }));
+      } else {
+        assert.ok(retained.cookieSnapshots[0]?.captureCoverage);
+        assert.equal(retained.cookieSnapshots[0]?.gpcReadBinding, undefined);
+      }
     }
     const impact=buildGpcImpactAssessment({scanId:'busy-pair',baseline:sources[0],gpc:sources[1]});
     assert.equal(impact.status,'measured',JSON.stringify(impact));

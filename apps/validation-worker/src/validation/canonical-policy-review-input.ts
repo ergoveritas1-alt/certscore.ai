@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import {
   GetObjectCommand,
   S3Client
@@ -213,7 +214,7 @@ export async function loadCanonicalBundleForPolicyReview(input: {
   if (sha256 !== input.pointer.expectedSha256) {
     throw new Error("Canonical policy-review artifact checksum does not match retained metadata.");
   }
-  const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(body.toString("utf8")));
+  const bundle = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(body.toString("utf8"), { schemaValidation: "caller" }));
   if (!cacheHit) cache?.retain(input.pointer, body);
   console.info(JSON.stringify({ event: "validation.policy_bundle.loaded", scanId: bundle.scanId, cacheHit }));
   return bundle;

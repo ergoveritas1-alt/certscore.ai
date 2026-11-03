@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { execFile as execFileWithCallback, spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -953,7 +954,7 @@ async function loadEnvFile(filePath: string): Promise<void> {
 
 async function readJsonIfExists<T>(filePath: string): Promise<T | null> {
   try {
-    return JSON.parse(await readFile(filePath, "utf8")) as T;
+    return parseCanonicalEvidenceArtifact(await readFile(filePath, "utf8")) as T;
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT") {
@@ -999,7 +1000,7 @@ function parseSqsScanId(body: string | undefined): string | null {
     return null;
   }
   try {
-    const parsed = JSON.parse(body) as { scanId?: unknown };
+    const parsed = parseCanonicalEvidenceArtifact(body) as { scanId?: unknown };
     return typeof parsed.scanId === "string" ? parsed.scanId : null;
   } catch {
     return null;

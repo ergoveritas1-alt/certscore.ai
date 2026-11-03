@@ -10,6 +10,8 @@ export const CONSENT_ACTION_CONFIRMATION_POLICY = "semantic_consent_registration
  * This does not change capture windows or make overflow complete.
  */
 export const CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT = 192;
+export const CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT = 384;
+export const ACCEPT_REQUEST_RETENTION_POLICY = "priority_bounded_action_requests.v3-accept384" as const;
 export const CONSENT_ACTION_RETENTION_OVERFLOW_EVALUATION_LIMIT = 256;
 
 const oneTrustGroupId = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
@@ -113,7 +115,7 @@ export type ActionCaptureCoverage = {
   requestsDroppedBeforeAction: number;
   requestsDroppedAfterAction: number;
   postActionRetention?: {
-    policyVersion: "priority_bounded_action_requests.v1" | "priority_bounded_action_requests.v2";
+    policyVersion: "priority_bounded_action_requests.v1" | "priority_bounded_action_requests.v2" | typeof ACCEPT_REQUEST_RETENTION_POLICY;
     requestsObserved: number; requestsRetained: number; replacements: number; priorityEvaluations: number;
     omitted: { delivery_asset: number; known_other: number; unknown: number; tracking: number; consent: number; document: number; unclassified: number };
   };
@@ -125,9 +127,9 @@ export const actionCaptureCoverageSchema: z.ZodType<ActionCaptureCoverage> = z.o
   // Diagnostic accounting only. Summaries do not replace omitted evidence or
   // relax any existing completeness, finding or score eligibility gate.
   postActionRetention: z.object({
-    policyVersion: z.enum(["priority_bounded_action_requests.v1", "priority_bounded_action_requests.v2"]),
+    policyVersion: z.enum(["priority_bounded_action_requests.v1", "priority_bounded_action_requests.v2", ACCEPT_REQUEST_RETENTION_POLICY]),
     requestsObserved: z.number().int().nonnegative(),
-    requestsRetained: z.number().int().nonnegative().max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT),
+    requestsRetained: z.number().int().nonnegative().max(CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT),
     replacements: z.number().int().nonnegative(),
     priorityEvaluations: z.number().int().nonnegative().max(CONSENT_ACTION_RETENTION_OVERFLOW_EVALUATION_LIMIT),
     omitted: z.object({
@@ -140,12 +142,31 @@ export const actionCaptureCoverageSchema: z.ZodType<ActionCaptureCoverage> = z.o
 }).strict().superRefine((coverage, context) => {
   const summary = coverage.postActionRetention;
   if (!summary) return; // Historical packets retain their original coverage.
+  if (summary.policyVersion !== ACCEPT_REQUEST_RETENTION_POLICY && summary.requestsRetained > CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT)
+    context.addIssue({code: z.ZodIssueCode.custom, message: "Legacy request-retention policies retain their original 192-row bound."});
   const omitted = Object.values(summary.omitted).reduce((sum, count) => sum + count, 0);
   if (omitted !== coverage.requestsDroppedAfterAction || summary.replacements > omitted ||
     summary.requestsObserved !== summary.requestsRetained + omitted) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Priority retention must account for every observed and omitted request." });
   }
 });
+
+/** The larger inventory requires an explicit Accept-only producer policy.
+ * Old/missing policy markers never inherit its capacity. */
+export function validateActionRetentionBudget(input: {
+  action: "accept" | "reject"; coverage?: ActionCaptureCoverage; requestCount: number;
+  fullInventory?: boolean;
+  capture?: {requestRetentionPolicy?: typeof ACCEPT_REQUEST_RETENTION_POLICY};
+}, context: z.RefinementCtx) {
+  const expanded = input.coverage?.postActionRetention?.policyVersion === ACCEPT_REQUEST_RETENTION_POLICY;
+  const limit = expanded && input.action === "accept" ? CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT : CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT;
+  if ((expanded && input.action !== "accept") || input.requestCount > limit ||
+    (expanded && input.requestCount > CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT &&
+      (input.fullInventory ? input.coverage!.postActionRetention!.requestsRetained !== input.requestCount
+        : input.coverage!.postActionRetention!.requestsRetained < input.requestCount)) ||
+    (input.capture && (input.capture.requestRetentionPolicy === ACCEPT_REQUEST_RETENTION_POLICY) !== expanded))
+    context.addIssue({code:z.ZodIssueCode.custom, message:"Request capacity must bind to its action and original retention policy."});
+}
 
 // Legacy packets remain readable. A UI transition or an opaque receipt change
 // is not semantic proof, regardless of a legacy writer's "confirmed" label.

@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -403,7 +404,7 @@ export async function buildCalibrationCorpus(input: {
     if (reference.path) {
       try {
         evidenceText = await readFile(reference.path, "utf8");
-        evidenceRecord = JSON.parse(evidenceText) as EvidenceRecord;
+        evidenceRecord = parseCanonicalEvidenceArtifact(evidenceText) as EvidenceRecord;
       } catch {
         reasons.push("evidence_unreadable");
       }

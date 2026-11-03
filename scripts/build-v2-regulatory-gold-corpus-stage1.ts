@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { existsSync, statSync } from "node:fs";
 import { open, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -513,8 +514,8 @@ function buildConfidenceDistribution(artifactRecords: ArtifactRecord[]) {
   for (const candidate of allCandidates) {
     const confidence = candidate.confidence ?? 0;
     const bucket = buckets.find((entry) => confidence >= entry.min && confidence <= entry.max)?.id ?? "unknown";
-    byFinding[candidate.findingKey] ??= {};
-    byFinding[candidate.findingKey][bucket] = (byFinding[candidate.findingKey][bucket] ?? 0) + 1;
+    const findingBuckets = byFinding[candidate.findingKey] ??= {};
+    findingBuckets[bucket] = (findingBuckets[bucket] ?? 0) + 1;
   }
   return {
     distributionVersion: "wc01.v2_regulatory_gold_corpus_stage1.confidence_distribution.1",
@@ -963,7 +964,7 @@ function getEligibilityStatus(candidate: Record<string, unknown>) {
 }
 
 async function readJson<T>(filePath: string): Promise<T> {
-  return JSON.parse(await readFile(filePath, "utf8")) as T;
+  return parseCanonicalEvidenceArtifact(await readFile(filePath, "utf8")) as T;
 }
 
 async function readBundleMetadata(filePath: string): Promise<BundleMetadata> {

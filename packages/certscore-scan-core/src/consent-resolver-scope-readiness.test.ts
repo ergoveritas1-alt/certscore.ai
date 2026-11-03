@@ -52,10 +52,11 @@ for (const action of ["accept", "reject"] as const) {
         const packet = action === "accept"
           ? await runPostAcceptObserver({...common, allowCanonicalAcceptDiscovery: true})
           : await runPostRefusalObserver({...common, allowCanonicalRejectDiscovery: true, recipeSetId: "scope-readiness-fixture"});
-        assert.equal(clicks, mode === "fade" ? 1 : 0, JSON.stringify(packet.interactionDiagnostics));
+        const executable = mode === "fade" || mode === "aria_hidden";
+        assert.equal(clicks, executable ? 1 : 0, JSON.stringify(packet.interactionDiagnostics));
         assert.equal(clickedWhileTransparent, false);
         const registration = "acceptanceRegistration" in packet ? packet.acceptanceRegistration : packet.refusalRegistration;
-        if (mode === "fade") {
+        if (executable) {
           assert.equal(registration.status, "confirmed");
           assert.ok(packet.timing.resolverMs >= 1000, "search must retain the pending transparent control");
           assert.ok(packet.interactionDiagnostics?.resolver?.snapshots.some(snapshot => snapshot.state === "control_hidden"));
@@ -80,7 +81,7 @@ test("resolver readiness reads composed ancestry without changing ordinary hit-t
     assert.equal((await inspectLocatorConsentReadiness(control)).scopeInteractive, true);
     for (const attr of ["hidden", "inert", "aria-hidden"]) {
       await page.locator("#host").evaluate((host, attr) => host.setAttribute(attr, "true"), attr);
-      assert.equal((await inspectLocatorConsentReadiness(control)).scopeInteractive, false);
+      assert.equal((await inspectLocatorConsentReadiness(control)).scopeInteractive, attr === "aria-hidden");
       await page.locator("#host").evaluate((host, attr) => host.removeAttribute(attr), attr);
     }
   } finally {await browser.close();}

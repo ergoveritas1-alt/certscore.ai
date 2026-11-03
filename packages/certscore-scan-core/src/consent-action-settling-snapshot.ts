@@ -20,7 +20,7 @@ export function readConsentActionSettlingSnapshot(elements: Element[]): {
   let current: Element | null = element;
   for (let depth = 0; current && depth < 64; depth += 1) {
     const style = getComputedStyle(current);
-    if (current.matches('[hidden], [inert], [aria-hidden="true" i]') ||
+    if (current.matches('[hidden], [inert]') ||
       style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") {
       return {state: "unavailable", labels};
     }

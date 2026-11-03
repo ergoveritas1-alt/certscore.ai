@@ -1,4 +1,4 @@
-import { gpcGuidanceSchema, gpcPolicyCollectionEvidenceIds, type GpcGuidanceItem, type GpcResponseAssessment } from "@certscore/contracts";
+import { gpcGuidanceSchema, gpcPolicyCollectionEvidenceIds, type GpcBoundedObservation, type GpcCmpStateComparison, type GpcGuidanceItem, type GpcResponseAssessment } from "@certscore/contracts";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import { deriveCaliforniaGpcResponsePolicy } from "./california-gpc-response-policy";
 import { deriveGppPropagationPolicy, GPP_PROPAGATION_FINDING_ID } from "./gpp-propagation-policy";
@@ -21,7 +21,7 @@ function requestEvidence(row: { evidenceId: string; label: string; observedAtMs?
 
 /** Descriptive only: the caller supplies existing surfaced canonical owners.
  * Neither neutral availability nor a paired CMP packet can create an owner. */
-export function buildGpcGuidance(assessment: GpcResponseAssessment, findings: UnifiedFindingDisplayPacket[]) {
+export function buildGpcGuidance(assessment: GpcResponseAssessment, findings: UnifiedFindingDisplayPacket[], cmpStateComparison?: GpcCmpStateComparison) {
   if (assessment.contractVersion !== "certscore.gpc-response-assessment.v3") return undefined;
   const o = assessment.observation, policy = deriveCaliforniaGpcResponsePolicy(assessment);
   const hasOwner = (id: string) => findings.some(f => f.unifiedFindingId === id && f.presentationDecision.status === "surface" &&
@@ -62,8 +62,49 @@ export function buildGpcGuidance(assessment: GpcResponseAssessment, findings: Un
         "Inspect the integration's documented CMP interface and forwarding configuration, then verify the corrected request with sanitized test evidence."], retest});
   }
   items.push({kind: "neutral", code: "gpc_observation_availability", semanticProbe: o.semanticProbe,
-    observation: `GPC delivery: ${o.delivery.httpHeaderRetained && o.delivery.mainNavigatorReadbackRetained ? "verified on the page request and browser property" : "not fully verified"}. CMP semantic observation: ${o.semanticProbe}.`,
+    observation: `GPC delivery: ${o.delivery.httpHeaderRetained && o.delivery.mainNavigatorReadbackRetained ? "verified on the page request and browser property" : "not fully verified"}. CMP semantic observation: ${o.semanticProbe}.${readinessDescription(o)}`,
     responsibleRole: "Developer + CMP owner", evidence: [],
-    whatToCheck: [o.semanticProbe === "observed" ? "Inspect current recorded sale/sharing state separately from site-recorded signal receipt, visible acknowledgment and request activity. These facts alone do not establish downstream treatment." : "Reproduce in a fresh visit and inspect the CMP's documented supported interface, readiness and document lifecycle. This availability result does not establish its cause or require a particular API."], retest});
+    whatToCheck: [o.semanticProbe === "observed" ? "Inspect current recorded sale/sharing state separately from site-recorded signal receipt, visible acknowledgment and request activity. These facts alone do not establish downstream treatment." : "Reproduce in a fresh visit and inspect the CMP's documented supported interface, readiness and document lifecycle. This availability result does not establish its cause or require a particular API.",
+      ...(!cmpStateComparison ? [cmpComparisonOmission(assessment)] : [])], retest});
   return gpcGuidanceSchema.parse({contractVersion: "certscore.gpc-guidance.v1", items});
+}
+
+function readinessDescription(o: GpcBoundedObservation) {
+  if (o.semanticProbe !== "not_ready" && o.semanticProbe !== "unavailable") return "";
+  const r = o.semanticReadiness;
+  if (!r) return o.semanticProbe === "not_ready" ? " A more specific readiness reason was not retained in this report."
+    : " A more specific interface-availability reason was not retained in this report.";
+  const reason = r.reason === "api_unavailable"
+    ? "The supported GPP API was not callable in the main document at the terminal checkpoint. CMP identification is separate evidence and does not establish this interface's availability."
+    : r.reason === "synchronous_ping_unavailable"
+    ? "The single bounded GPP ping did not yield a successful synchronous callback; CMP and signal readiness were not established."
+    : `The GPP ping reported ${[!r.cmpStatusLoaded ? "CMP status other than loaded" : "", !r.signalStatusReady ? "signal status other than ready" : ""].filter(Boolean).join(" and ")}.`;
+  return ` ${reason} Observed +${r.observedAfterDocumentCommitMs} ms from this visit's document commit.`;
+}
+
+function cmpComparisonOmission(assessment: GpcResponseAssessment) {
+  const limits = new Set(assessment.comparison.limitationKeys);
+  const observation = assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? assessment.observation : undefined;
+  const semanticReason = observation && ({
+    unavailable: observation.semanticReadiness?.reason === "api_unavailable"
+      ? "the supported main-document GPP API was not callable in the GPC visit"
+      : "a usable GPC-session CMP state was not retained (semantic probe unavailable)",
+    not_ready: "a usable GPC-session CMP state was not verified because the supported semantic probe was not ready at the checkpoint",
+    unsupported: "the GPC-session semantic probe did not yield a supported CMP state",
+    invalid: "the GPC-session semantic probe did not yield a valid CMP state",
+    incomplete: "the GPC-session semantic probe did not complete with verified document-bound state",
+    observed: observation.registration.sale === "unknown" || observation.registration.sharing === "unknown"
+      ? "both applicable sale and sharing opt-out values were not explicitly known in the GPC-session snapshot" : "",
+  })[observation.semanticProbe];
+  const reasons = [
+    semanticReason,
+    limits.has("baseline_signal_readback_unverified") ? "full-context GPC-off browser readback was not verified" : "",
+    limits.has("gpc_signal_readback_unverified") ? "full-context GPC-on browser readback was not verified" : "",
+    limits.has("baseline_gpc_off_not_verified") ? "actual GPC-off delivery was not verified in the baseline visit" : "",
+    limits.has("paired_scan_context_mismatch") || limits.has("browser_protocol_mismatch") || limits.has("baseline_gpc_document_mismatch")
+      ? "the paired scan, browser or document context did not match the comparison requirements" : "",
+    limits.has("baseline_not_representative") || limits.has("gpc_not_representative") ? "representative page access was not verified for both visits" : "",
+    limits.has("baseline_settle_not_completed") || limits.has("gpc_settle_not_completed") ? "the paired document-settling checks did not complete" : "",
+  ].filter(Boolean);
+  return `Site-recorded opt-out settings comparison is unavailable${reasons.length ? `: ${reasons.slice(0,3).join("; ")}${reasons.length > 3 ? "; additional paired prerequisites remain unverified" : ""}` : ": a verified pair of ready, supported sale and sharing snapshots is not available in this report"}. No baseline setting or unchanged state is inferred. Current GPC-session facts and any request-activity comparison remain separate evidence.`;
 }

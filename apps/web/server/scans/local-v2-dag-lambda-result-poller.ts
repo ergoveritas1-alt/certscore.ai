@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import {
   ChangeMessageVisibilityCommand,
@@ -142,7 +143,7 @@ async function readRetainedScanCompletionDiagnostics(
     (artifact) => artifact.fileName === "CanonicalEvidenceBundle.json",
   );
   if (!scanArtifact) return null;
-  const bundle = asRecord(JSON.parse(await readFile(scanArtifact.localPath, "utf8")));
+  const bundle = asRecord(parseCanonicalEvidenceArtifact(await readFile(scanArtifact.localPath)));
   const automatedAccessObservationResult = automatedAccessObservationSchema.safeParse(
     bundle.automatedAccessObservation,
   );
@@ -245,7 +246,7 @@ export async function readLocalV2DagLambdaArtifactJson(input: {
   if (input.expectedSha256 && createHash("sha256").update(body).digest("hex") !== input.expectedSha256) {
     throw new Error("Local v2 DAG Lambda JSON artifact checksum mismatch.");
   }
-  return asRecord(JSON.parse(body.toString("utf8")));
+  return asRecord(parseCanonicalEvidenceArtifact(body));
 }
 
 export async function mirrorLocalV2DagLambdaArtifacts(input: {

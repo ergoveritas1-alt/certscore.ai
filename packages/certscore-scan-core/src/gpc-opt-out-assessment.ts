@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { createHash } from "node:crypto";
 import {
   canonicalEvidenceBundleSchema, retainedGpcOptOutObservationSchema, gpcOptOutPrototypeSchema,
@@ -12,7 +13,7 @@ function verify(source: GpcPrototypeArtifact) {
   if (source.bytes.byteLength > 20_000_000 || source.bytes.byteLength !== source.pointer.sizeBytes || digest(source.bytes) !== source.pointer.sha256) {
     throw new Error("GPC prototype source checksum/size mismatch");
   }
-  return JSON.parse(Buffer.from(source.bytes).toString("utf8"));
+  return parseCanonicalEvidenceArtifact(source.bytes, { schemaValidation: "caller" });
 }
 function bundle(source: GpcPrototypeArtifact | undefined) {
   if (!source) return null;

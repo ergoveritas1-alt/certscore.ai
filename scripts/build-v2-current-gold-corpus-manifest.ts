@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -997,7 +998,7 @@ function usage(): string {
 }
 
 async function readJson<T>(filePath: string): Promise<T> {
-  return JSON.parse(await readFile(filePath, "utf8")) as T;
+  return parseCanonicalEvidenceArtifact(await readFile(filePath, "utf8")) as T;
 }
 
 async function readJsonl<T>(filePath: string): Promise<T[]> {

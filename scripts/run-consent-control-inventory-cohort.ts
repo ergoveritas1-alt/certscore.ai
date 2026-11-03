@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -122,8 +123,8 @@ async function runSite(candidate: SourceCandidate, siteDir: string, index: numbe
   const cmpVendorProduct = [
     ...result.cmpRuntimeObservations.map((cmp) => [cmp.vendor, cmp.product].filter(Boolean).join(" / ")),
     ...normalizedVendorObservations
-      .filter((vendor) => vendor.vendorCategory === "consent_management")
-      .map((vendor) => [vendor.vendorName, vendor.productName].filter(Boolean).join(" / ")),
+      .filter((vendor) => vendor.purpose === "consent_management")
+      .map((vendor) => [vendor.vendor, vendor.product].filter(Boolean).join(" / ")),
   ].filter(Boolean);
   const viewportScreenshot = result.screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent");
   const fullPageScreenshot = result.screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_full_page");
@@ -426,7 +427,7 @@ function artifactLink(value: string | undefined): string {
 }
 
 async function readJson<T>(filePath: string): Promise<T> {
-  return JSON.parse(await readFile(filePath, "utf8")) as T;
+  return parseCanonicalEvidenceArtifact(await readFile(filePath, "utf8")) as T;
 }
 
 function hostForUrl(value: string | undefined): string | null {

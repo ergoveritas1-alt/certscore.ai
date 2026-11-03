@@ -8,6 +8,17 @@ import test from "node:test";
 import { getPredeployPlan } from "./predeploy.js";
 import { commandWords, RELEASE_REGRESSION_MATRIX, reviewReleaseRegressions, type ReleaseRegressionMatrix } from "./lib/scan-release-regressions.js";
 
+test("GPC release checks include real worker-to-report proof and strict CLI consumer types", () => {
+  for (const changed of ["apps/v2-dag-lambda/src/handler.ts", "apps/v2-dag-lambda/src/gpc-release-pipeline.test.ts",
+    "scripts/tsconfig.gpc-release-tools.json", "packages/certscore-contracts/src/canonical-evidence-artifact.ts"]) {
+    for (const full of [false, true]) {
+      const checks = getPredeployPlan([changed], { full }).checks;
+      assert.ok(checks.some(c => c.key === "gpc-real-pipeline"));
+      assert.ok(checks.some(c => c.key === "gpc-release-tools-typecheck"));
+    }
+  }
+});
+
 test("completed EU and California headline regressions run in fast web and full preflight", () => {
   const tests = [
     "apps/web/lib/scans/california-assessment-presentation.test.ts",
@@ -305,6 +316,16 @@ test("MCP contract, manifest and SDK changes run the release drift guard locally
     for (const full of [false, true]) {
       const guard = getPredeployPlan([file], { full }).checks.find(check => check.key === "mcp-release-drift");
       assert.deepEqual(guard?.command, ["node", "--import", "tsx", "scripts/verify-certscore-mcp-release-guards.ts"]);
+    }
+  }
+});
+
+test("lossless artifact and writer regressions stay in GPC fast and full predeploy coverage", () => {
+  for (const source of ["packages/certscore-contracts/src/canonical-evidence-artifact.ts", "packages/certscore-scan-core/src/artifact-writer.ts", "packages/certscore-contracts/src/test-fixtures/canonical-wide-journeys.ts"]) {
+    for (const full of [false, true]) {
+      const check = getPredeployPlan([source], { full }).checks.find(row => row.key === "gpc-production-observation");
+      for (const fixture of ["packages/certscore-contracts/src/canonical-evidence-artifact.test.ts", "packages/certscore-scan-core/src/artifact-writer.test.ts"])
+        assert.ok(check?.command.includes(fixture), `${source}: ${full ? "full" : "fast"} omits ${fixture}`);
     }
   }
 });

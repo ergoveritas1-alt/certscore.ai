@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import {qualifyGpcRequest,prioritizeGpcRecipients} from "./gpc-request-proof";
 import {isCanonicalAdvertisingCollectionCandidate, resolveCanonicalVendor, CANONICAL_VENDOR_RESOLVER_VERSION,
   GPC_REQUEST_QUALIFICATION_POLICY} from "@certscore/vendor-resolver";
@@ -20,7 +21,7 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
   try {
     if (source && source.bytes.byteLength <= 20_000_000 && source.bytes.byteLength === source.pointer.sizeBytes &&
       createHash("sha256").update(source.bytes).digest("hex") === source.pointer.sha256) {
-      const parsed = canonicalEvidenceBundleSchema.parse(JSON.parse(Buffer.from(source.bytes).toString("utf8")));
+      const parsed = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(Buffer.from(source.bytes).toString("utf8"), { schemaValidation: "caller" }));
       if (parsed.scanId === input.scanId) bundle = parsed;
     }
   } catch { /* Invalid evidence produces an explicit unavailable observation. */ }
@@ -32,7 +33,7 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
     const s = input.propertySource;
     try {
       if (s.bytes.length <= 20_000_000 && s.bytes.length === s.pointer.sizeBytes && createHash("sha256").update(s.bytes).digest("hex") === s.pointer.sha256) {
-        const candidate = canonicalEvidenceBundleSchema.parse(JSON.parse(Buffer.from(s.bytes).toString("utf8")));
+        const candidate = canonicalEvidenceBundleSchema.parse(parseCanonicalEvidenceArtifact(Buffer.from(s.bytes).toString("utf8"), { schemaValidation: "caller" }));
         if (candidate.scanId === input.scanId && candidate.url === bundle?.url) { policyBundle = candidate; policyHash = s.pointer.sha256; }
       }
     } catch { /* A bad corroborating source cannot invalidate independent requests. */ }
@@ -50,6 +51,27 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
       lane.executionOutcome !== "failed" : bundle?.scanEvidenceLaneAssessment?.lanes.homepageRuntime === "usable");
   const limitationKeys = [...result.limitations, ...(!representative ? ["representative_access_not_verified"] : [])];
   const semantic = result.documentBound ? session?.semanticObservation : null;
+  const diagnostics = semantic?.gppDiagnostics;
+  const afterCommit = semantic && session?.mainDocument ? semantic.capturedAtMs - session.mainDocument.committedAtMs : -1;
+  const codes = diagnostics?.diagnosticCodes ?? [];
+  const apiUnavailable = semantic?.gppStatus === "unavailable" && diagnostics?.reason === "api_unavailable" &&
+    diagnostics.callbackCount === 0 && diagnostics.applicableSections.length === 0 && diagnostics.sectionList.length === 0 &&
+    codes.length === 1 && codes[0] === "api_unavailable";
+  const synchronousUnavailable = diagnostics?.reason === "synchronous_ping_unavailable" && diagnostics.callbackCount <= 1 &&
+    codes.length === 1 && codes[0] === "cmp_status_not_loaded";
+  const reportedNotReady = diagnostics?.reason === "cmp_or_signal_not_ready" && diagnostics.callbackCount === 1 &&
+    codes.length > 0 && new Set(codes).size === codes.length &&
+    codes.every(code => code === "cmp_status_not_loaded" || code === "signal_status_not_ready");
+  const semanticReadiness: GpcBoundedObservation["semanticReadiness"] = semantic &&
+    semantic.adapterVersion === "gpc_usca_usnat_and_live_status.v4" &&
+    semantic.usca === null && !semantic.usnat && semantic.stateSha256 === null &&
+    semantic.limitationKeys.every(key => key === "acknowledgment_capture_truncated") &&
+    Number.isInteger(afterCommit) && afterCommit >= 0 && afterCommit <= 120_000 &&
+    (apiUnavailable || semantic.gppStatus === "not_ready" && (synchronousUnavailable || reportedNotReady))
+    ? {contractVersion:"certscore.gpc-semantic-readiness.v1", reason: apiUnavailable ? "api_unavailable" : synchronousUnavailable ? "synchronous_ping_unavailable" : "cmp_or_signal_not_ready",
+      cmpStatusLoaded: apiUnavailable || synchronousUnavailable ? null : !codes.includes("cmp_status_not_loaded"),
+      signalStatusReady: apiUnavailable || synchronousUnavailable ? null : !codes.includes("signal_status_not_ready"), observedAfterDocumentCommitMs:afterCommit}
+    : undefined;
   const state = semantic?.gppStatus === "observed" ? result.currentSaleSharingState : null;
   const axis = (notice?: number, value?: number) => notice === 1 && value === 1 ? "opted_out" : notice === 1 && value === 2 ? "not_opted_out" : "unknown";
   const vendors = new Map<string, CanonicalEvidenceBundle["normalizedVendorObservations"]>();
@@ -173,6 +195,7 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
     documentUrlSha256: result.documentBound ? session!.mainDocument!.documentUrlSha256 : null,
     positiveEvidence: { policyVersion: "gpc_positive_evidence.v1", representativeDocument: Boolean(result.sourceVerified && result.documentBound && representative) },
     delivery: result.delivery, semanticProbe: semantic?.gppStatus ?? "incomplete",
+    ...(semanticReadiness ? {semanticReadiness} : {}),
     registration: { basis: "current_recorded_state", sale: axis(state?.saleNotice, state?.saleOptOut), sharing: axis(state?.sharingNotice, state?.sharingOptOut),
       cmpGpcSignal: state?.gpc === true ? "received" : state?.gpc === false ? "not_received" : "unknown", causedByGpc: "not_established" },
     acknowledgment: { observed: result.acknowledgmentObserved, captureComplete: result.acknowledgmentCaptureComplete },

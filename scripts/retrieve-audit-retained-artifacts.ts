@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 /** Bounded exact-object recovery; never lists buckets or visits scanned sites. */
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 import path from 'node:path';import {createHash} from 'node:crypto';
@@ -27,7 +28,7 @@ async function recover(ref:any){
   }
   const b=verifiedReceipt(receipt);receipts.push(receipt);return b;
  }
- const bundle=JSON.parse((await get('scanArtifactUri',event.artifactPointers.scanArtifactUri,event.artifactMetadata.scanArtifactUri)).toString());
+ const bundle=parseCanonicalEvidenceArtifact(await get('scanArtifactUri',event.artifactPointers.scanArtifactUri,event.artifactMetadata.scanArtifactUri)) as any;
  const manifest=JSON.parse((await get('manifestUri',event.artifactPointers.manifestUri,event.artifactMetadata.manifestUri)).toString());
  if(bundle.scanId!==id||manifest.scanId!==id)throw Error('Wrong original scan');
  const names=new Set((bundle.policySurfaceObservations??[]).filter((o:any)=>o.surfaceType==='privacy_policy').flatMap((o:any)=>o.artifactRefs??[]).filter((a:any)=>String(a.artifactId).startsWith('policy_surface_text_')).map((a:any)=>path.basename(a.path)));

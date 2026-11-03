@@ -1,4 +1,5 @@
 import React from "react";
+import { describeGpcCollectionComparison } from "@certscore/contracts";
 import type { GpcActivityComparison as Comparison } from "@certscore/contracts";
 
 export function GpcActivityComparison({ comparison }: { comparison?: Comparison }) {
@@ -17,6 +18,15 @@ export function GpcActivityComparison({ comparison }: { comparison?: Comparison 
           <td className="px-3 py-2 font-mono text-zinc-900">{comparison.activity[key].gpcRequests}</td>
         </tr>)}</tbody>
     </table>
+    {comparison.collectionComparison ? <details className="border-t border-zinc-100 px-3 py-2 text-xs text-zinc-700">
+      <summary className="cursor-pointer font-medium">Successful advertising collection · retained evidence</summary>
+      <p className="mt-2">{describeGpcCollectionComparison(comparison.collectionComparison, false)}</p>
+      {([['baseline', 'Without GPC'], ['gpc', 'With GPC']] as const).map(([side, label]) => <div key={side} className="mt-2">
+        <p className="font-medium">{label}</p>
+        <ul className="list-inside list-disc">{comparison.collectionComparison![side].rows.map(row =>
+          <li key={row.evidenceId}>{row.label} · +{row.observedAfterDocumentCommitMs} ms after document commit · {row.identifierActivity === 'not_established' ? 'identifier activity not established' : `${row.identifierActivity.replaceAll('_', ' ')}; ${row.identifierBasis!.replaceAll('_', ' ')}`}{row.processing === 'privacy_context_observed' ? ' · privacy declarations or conflicts observed' : ''}</li>)}</ul>
+      </div>)}
+    </details> : null}
     {comparison.evidencePolicy ? <p className="border-t border-zinc-100 px-3 py-2 text-xs text-zinc-600">Matched page HTTP requests during this interval. Counts do not establish that GPC caused a change or that the choice was honored.</p> : null}
   </section>;
 }

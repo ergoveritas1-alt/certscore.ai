@@ -41,7 +41,7 @@ test("no-go reports do not enter added evidence-check or numeric denominators",(
 test("numeric summaries retain zero, exclude null and reject negative/nonfinite counts",()=>{
   const rows=[0,4,null,-1,Infinity].map((value,i)=>extractExportRow({...packet(),scanId:`11111111-1111-4111-8111-11111111111${i}`,formsSummary:{totalObserved:value}},source));
   const q=summarizeQuantities(rows)["forms.observed"];assert.deepEqual(q,{measured:2,eligible:5,total:4,median:2});
-  assert.equal(summarizeQuantities([])["forms.observed"]!.median,null);assert.equal(QUANTITIES.length,21);
+  assert.equal(summarizeQuantities([])["forms.observed"]!.median,null);assert.equal(QUANTITIES.length,33);
 });
 test("detailed projections require the original scan and bundle hash before contributing counts",()=>{
   const p=siteIntegrityProjectionFixture;

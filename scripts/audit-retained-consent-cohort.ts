@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -37,7 +38,7 @@ async function main() {
   const rows = [] as Array<Record<string, unknown>>;
   for (const row of summary.rows) {
     const bundlePath = path.join(root, row.site, "CanonicalEvidenceBundle.json");
-    const raw = JSON.parse(await readFile(bundlePath, "utf8"));
+    const raw = parseCanonicalEvidenceArtifact(await readFile(bundlePath, "utf8"));
     const bundle = canonicalEvidenceBundleSchema.parse(raw);
     const observations = bundle.consentUiObservations;
     const currentDerivedInspection = deriveConsentSurfaceInspectionOutcome({

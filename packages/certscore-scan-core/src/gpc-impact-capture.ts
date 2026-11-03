@@ -48,11 +48,15 @@ export function createGpcImpactCapture(input: { expectedEnabled: boolean; now: (
       const header = Object.entries(p.request.headers ?? {}).find(([k]) => k.toLowerCase() === "sec-gpc")?.[1];
       pending = { loader: p.loaderId, urlHash: gpcDocumentHash(p.request.url), secGpc: typeof header === "string" && header.length <= 8 ? header : null };
     },
-    documentCommitted(frame: { parentId?: string; loaderId?: string; url?: string }) {
+    documentCommitted(frame: { parentId?: string; loaderId?: string; url?: string }, observedAtMs?: number) {
       if (frozen || frame.parentId || !frame.loaderId || !frame.url || !/^https?:/.test(frame.url)) return;
       if (document) invalidate("document_recommitted");
       if (!pending || pending.loader !== frame.loaderId || pending.urlHash !== gpcDocumentHash(frame.url)) { invalidate("commit_binding_mismatch"); return; }
-      document = { token: frame.loaderId, urlSha256: pending.urlHash, committedAtMs: input.now(), secGpc: pending.secGpc };
+      const now = input.now(), committedAtMs = observedAtMs ?? now;
+      // The GPC session can forward its original commit event/time. Never
+      // tolerate, round or reconstruct a mismatching retained timestamp.
+      if (!Number.isSafeInteger(committedAtMs) || committedAtMs < startedAt || committedAtMs > now) { invalidate("commit_binding_mismatch"); return; }
+      document = { token: frame.loaderId, urlSha256: pending.urlHash, committedAtMs, secGpc: pending.secGpc };
       input.adaptive?.commit(document.token);
       committedExactUrlSha256 = createHash("sha256").update(new URL(frame.url).href).digest("hex");
     },

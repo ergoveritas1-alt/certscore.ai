@@ -516,3 +516,32 @@ test("SDK applicability Accept proof survives canonical packet projection with d
   }
   assert.equal(postAcceptEvidencePacketSchema.safeParse({...raw,completedAt:new Date(Date.parse(base.startedAt)+click).toISOString()}).success,false);
 });
+
+test('384-row Accept requires the prospective retention policy through packet and projection',async()=>{
+ const {ACCEPT_REQUEST_RETENTION_POLICY:policy}=await import('./consent-action-evidence-policy');
+ const summary=(n:number)=>({policyVersion:policy,requestsObserved:n,requestsRetained:n,replacements:0,priorityEvaluations:0,omitted:{delivery_asset:0,known_other:0,unknown:0,tracking:0,consent:0,document:0,unclassified:0}});
+ for(const n of [192,193,384,385]) {
+  const rows=Array.from({length:n},(_,i)=>({requestId:`expanded-${i}`,sanitizedUrl:'https://example.test/event',hostname:'example.test',resourceType:'fetch',startedAtMs:140,inFlightAtAcceptanceRegistration:false,nonEssential:false}));
+  const packet={...confirmedPacket(),productionProjectable:false,observationWindowMs:1000,
+   decisionEvidence:{policyVersion:'semantic_consent_registration.v2',decision:'unknown',basis:'unverified'},
+   acceptanceRegistration:{status:'unconfirmed',acceptanceExercised:false,actionDispatchedAtMs:100,witnesses:[],reason:'decision_not_verified'},
+   network:{requests:rows,postAcceptNonEssentialRequests:[],activeRequestIdsAtAcceptanceRegistration:[]},
+   storage:{...confirmedPacket().storage,postActionCapturedAtMs:1100},
+   interactionDiagnostics:{navigation:{outcome:'completed',documentCommitted:true,finalUrlAuthorized:true},click:{outcome:'completed',reResolvedBeforeDispatch:false,confirmationCheckedAfterError:false}},
+   captureCoverage:{requestsDroppedBeforeAction:0,requestsDroppedAfterAction:0,postActionRetention:summary(n)},
+   afterActionCapture:{policyVersion:'bounded_after_action_capture.v1',requestRetentionPolicy:policy,action:'accept',activationStatus:'completed',actionDispatchedAtMs:100,captureEndedAtMs:1100,requestedWindowMs:1000,stopReason:'window_elapsed',requestsDropped:0,storageSnapshotRetained:true,storageWriteCoverage:'bounded_main_document_sample',storageWrites:[],requestIds:rows.map(r=>r.requestId)}};
+  assert.equal(postAcceptEvidencePacketSchema.safeParse(packet).success,n<=384);
+  if(n>384)continue;
+  const parsed=postAcceptEvidencePacketSchema.parse(packet),original=structuredClone(parsed);
+  const projection=projectPostAcceptEvidenceForReport({packet:parsed,packetSha256:createHash('sha256').update(JSON.stringify(packet)).digest('hex')});
+  assert.equal(projection.afterActionRequests?.length,n);assert.equal(projection.execution?.status,'succeeded');assert.equal(projection.execution?.consentConfirmed,false);
+  assert.deepEqual(parsed,original);
+  const missing=structuredClone(packet);delete (missing.afterActionCapture as any).requestRetentionPolicy;
+  assert.equal(postAcceptEvidencePacketSchema.safeParse(missing).success,false);
+  const stripped=structuredClone(projection);delete stripped.captureCoverage!.postActionRetention;
+  assert.equal(postAcceptReportProjectionSchema.safeParse(stripped).success,false);
+  if(n>192){const mismatched=structuredClone(packet);mismatched.captureCoverage.postActionRetention.requestsRetained=n-1;mismatched.captureCoverage.postActionRetention.requestsObserved=n-1;assert.equal(postAcceptEvidencePacketSchema.safeParse(mismatched).success,false);}
+  const legacy={...packet,captureCoverage:{...packet.captureCoverage,postActionRetention:{...summary(n),policyVersion:'priority_bounded_action_requests.v2'}},afterActionCapture:{...packet.afterActionCapture,requestRetentionPolicy:undefined}};
+  assert.equal(postAcceptEvidencePacketSchema.safeParse(legacy).success,n<=192);
+ }
+});

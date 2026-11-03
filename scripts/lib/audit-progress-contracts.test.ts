@@ -60,7 +60,7 @@ test('explicit nonrequired accessibility is excluded from states and quantities,
  assert.equal(row().states.accessibility,'unavailable');
 });
 test('every state, quantity and finding has a contract; unreviewed schemas fail closed',()=>{
- const metrics=[...METRICS,...evidenceMetricRegistry([row()])],c=makeContracts(metrics,QUANTITIES);assert.equal(c.metrics.length,metrics.length);assert.equal(c.quantities.length,21);for(const m of [...c.metrics,...c.quantities])for(const k of ['meaning','eligiblePopulation','numerator','denominator','source','field','stateMapping','supportedVersions','comparison'])assert.ok(k in m);
+ const metrics=[...METRICS,...evidenceMetricRegistry([row()])],c=makeContracts(metrics,QUANTITIES);assert.equal(c.metrics.length,metrics.length);assert.equal(c.quantities.length,33);for(const m of [...c.metrics,...c.quantities])for(const k of ['meaning','eligiblePopulation','numerator','denominator','source','field','stateMapping','supportedVersions','comparison'])assert.ok(k in m);
  assert.match(publicSource({}),/historical_unversioned/);assert.throws(()=>publicSource({meta:{projectionVersion:'pulse-public-v99'}}),/Unreviewed/);
 });
 test('CSV uses the same per-source denominators, state deltas and null values as charts',()=>{

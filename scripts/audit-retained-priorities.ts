@@ -1,3 +1,4 @@
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 /** Offline triage over the existing independently sealed audit sources. */
 import {readFileSync,writeFileSync,mkdirSync,existsSync,realpathSync,statSync} from "node:fs";
 import {createHash} from "node:crypto";
@@ -25,10 +26,10 @@ for(const run of runs){
   const canonical=receipts.find((r:any)=>r.scanId===rec.scanId&&r.kind==='scanArtifactUri'&&(r.eventIndex===undefined||r.eventIndex===0));if(!canonical)continue;
   const original=inventory.find((i:any)=>i.id===rec.scanId)?.retained?.[0];
   if(original?.pointers?.scanArtifactUri!==canonical.uri||original?.hashes?.scanArtifactUri?.sha256!==canonical.expected?.sha256)throw Error("Original canonical pointer mismatch");
-  const originalBytes=verifiedLocalBytes(root,canonical,20_000_000),main=JSON.parse(originalBytes.toString()),expected=main.gpcResponseAssessment?.comparison?.gpcArtifact;
+  const originalBytes=verifiedLocalBytes(root,canonical,20_000_000),main=parseCanonicalEvidenceArtifact(originalBytes.toString()) as any,expected=main.gpcResponseAssessment?.comparison?.gpcArtifact;
   if(main.scanId!==rec.scanId)throw Error("Original canonical identity mismatch");
   if(!expected||main.gpcResponseAssessment?.observation?.sourceSha256!==expected.sha256||expected.uri!==rec.uri)throw Error("Original GPC comparison binding mismatch");
-  const bytes=verifiedLocalBytes(root,{...rec,verified:true,expected:{sha256:expected.sha256,sizeBytes:expected.sizeBytes}},20_000_000),bundle=JSON.parse(bytes.toString());if(bundle.scanId!==rec.scanId)throw Error("GPC identity mismatch");seen.add(rec.scanId+'gpc');
+  const bytes=verifiedLocalBytes(root,{...rec,verified:true,expected:{sha256:expected.sha256,sizeBytes:expected.sizeBytes}},20_000_000),bundle=parseCanonicalEvidenceArtifact(bytes.toString()) as any;if(bundle.scanId!==rec.scanId)throw Error("GPC identity mismatch");seen.add(rec.scanId+'gpc');
   const source={file:rec.localPath,sha256:sha(bytes),bytes:bytes.length,parentFile:canonical.localPath,parentSha256:sha(originalBytes),parentBytes:originalBytes.length,originalWorkerUri:expected.uri};sources.push(source);for(const row of unsupportedProtocolReview(bundle))protocols.push({scanId:rec.scanId,...row,source});
  }
 }

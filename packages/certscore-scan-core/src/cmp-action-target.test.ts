@@ -13,7 +13,7 @@ test("confirmation surface requires exact composed ancestry and an available uni
     assert.equal(await canonicalConsentSurfacePresent(page, control, "#other"), false);
     assert.equal(await canonicalConsentSurfacePresent(page, control, "section"), false);
     assert.equal(await canonicalConsentSurfacePresent(page, page.locator("button"), "#banner"), false);
-    for (const attribute of ["hidden", "inert", "aria-hidden"]) {
+    for (const attribute of ["hidden", "inert"]) {
       await page.locator("#banner").evaluate((node, attribute) => node.setAttribute(attribute, "true"), attribute);
       assert.equal(await canonicalConsentSurfacePresent(page, control, "#banner"), false, attribute);
       await page.locator("#banner").evaluate((node, attribute) => node.removeAttribute(attribute), attribute);
@@ -83,4 +83,21 @@ test("keeps ambiguous locator matches and accessible-control recipes fail closed
   } finally {
     await browser.close();
   }
+});
+
+test("aria-hidden affects accessibility exposure without blocking a rendered pointer target",async()=>{
+ const {inspectConsentScopeInteraction}=await import('./cmp-action-target');
+ const browser=await chromium.launch({headless:true});
+ try {
+  const page=await browser.newPage();
+  await page.setContent('<div aria-hidden="true"><section role="dialog" aria-modal="true"><button>Agree</button></section></div>');
+  assert.equal(await page.locator('button').isVisible(),true);
+  assert.deepEqual(await inspectConsentScopeInteraction(page.locator('section')),{state:'interactive'});
+  assert.equal(await canonicalConsentSurfacePresent(page,page.locator('button'),'section'),true);
+  assert.equal(await page.getByRole('button').count(),0,'The accessible-control path still excludes this node');
+  await page.locator('button').evaluate(node=>node.addEventListener('click',()=>node.setAttribute('data-clicked','true')));
+  await page.locator('button').click({timeout:500});
+  assert.equal(await page.locator('button').getAttribute('data-clicked'),'true','Native browser click succeeds without force or DOM repair');
+  assert.equal(await page.locator('[aria-hidden]').getAttribute('aria-hidden'),'true');
+ }finally{await browser.close();}
 });

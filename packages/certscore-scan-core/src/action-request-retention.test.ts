@@ -139,3 +139,17 @@ test("new tracking endpoints can replace duplicated known support traffic withou
  assert.deepEqual(rows.map(r=>r.id),["support-first","unknown","tracker"]);
  assert.equal(capture.summary().omitted.known_other,1);
 });
+
+test('approved Accept inventory retains 384 and accounts for every later omission',async()=>{
+ const {CONSENT_ACCEPT_POST_CLICK_REQUEST_LIMIT:limit,ACCEPT_REQUEST_RETENTION_POLICY:policy,CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT:rejectLimit}=await import('@certscore/contracts');
+ const rows: ReturnType<typeof row>[]=[],capture=createActionRequestRetention(rows,limit,policy);
+ for(let i=0;i<385;i++)capture.offer(row(`https://unknown-${i}.test/event`));
+ assert.equal(rows.length,384);assert.equal(rejectLimit,192);
+ assert.equal(capture.summary().requestsObserved,385);assert.equal(capture.summary().omitted.unknown,1);
+ assert.equal(actionCaptureCoverageSchema.safeParse({requestsDroppedBeforeAction:0,requestsDroppedAfterAction:1,postActionRetention:capture.summary()}).success,true);
+ assert.equal(actionCaptureCoverageSchema.safeParse({requestsDroppedBeforeAction:0,requestsDroppedAfterAction:1,postActionRetention:{...capture.summary(),policyVersion:'priority_bounded_action_requests.v2'}}).success,false);
+});
+
+test('the legacy writer cannot silently allocate expanded capacity',()=>{
+ assert.throws(()=>createActionRequestRetention([],193),/explicit policy/);
+});

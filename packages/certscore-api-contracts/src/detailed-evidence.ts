@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {cmpAuditAvailabilitySchema} from "./cmp-audit-availability.js";
 
 const text = z.string().max(4000);
 const ref = z.string().max(2048);
@@ -47,6 +48,7 @@ export const publicCmpAuditSchema = z.object({
     version: z.literal("cmp_details_experience.v1"),
     mode: z.enum(["cmp_details", "consent_controls", "consent_signals", "capture_limited"]),
     title: text, summary: text, provider: z.string().max(120).nullable(),
+    availability:cmpAuditAvailabilitySchema.optional(),
     controls: z.object({ accept: z.enum(["observed", "not_observed"]), reject: z.enum(["observed", "not_observed"]),
       options: z.enum(["observed", "not_observed"]) }).strict().nullable(),
     defaultCriterionIds: z.array(z.enum(["banner", "reject", "prominence", "categories", "services", "privacy_link", "privacy_access", "consent_record", "implementation", "duration", "declared_not_found", "found_not_declared", "cookie_information"])).max(13)

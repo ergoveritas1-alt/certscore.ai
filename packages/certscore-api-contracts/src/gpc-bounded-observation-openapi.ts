@@ -121,6 +121,56 @@ export const gpcBoundedObservationOpenApi = {
         "incomplete"
       ]
     },
+    "semanticReadiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "reason",
+        "cmpStatusLoaded",
+        "signalStatusReady",
+        "observedAfterDocumentCommitMs"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "certscore.gpc-semantic-readiness.v1",
+          "type": "string"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "api_unavailable",
+            "synchronous_ping_unavailable",
+            "cmp_or_signal_not_ready"
+          ]
+        },
+        "cmpStatusLoaded": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "signalStatusReady": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observedAfterDocumentCommitMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120000
+        }
+      }
+    },
     "registration": {
       "type": "object",
       "additionalProperties": false,

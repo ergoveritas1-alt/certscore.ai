@@ -64,6 +64,16 @@ test("CMP disclosure sources survive SDK evidence reconstruction without becomin
   assert.deepEqual(result.cmpAudit?.rows[0]?.supportingEvidence?.inventory?.services,services);
 });
 
+test("CMP availability survives SDK reconstruction while all criterion statuses remain unknown",async()=>{
+  const {cmpAuditAvailabilityWording}=await import("../../certscore-api-contracts/src/cmp-audit-availability");
+  const availability={contractVersion:"certscore.cmp-audit-availability.v1",reason:"visit_unusable",sourceAssessmentHash:"fnv1a-1234abcd",
+    reasonCodes:["loading_or_stalled"],...cmpAuditAvailabilityWording("visit_unusable",["loading_or_stalled"]),scoreEffect:"none",findingEffect:"none"};
+  const rows=[{id:"banner",status:"Not assessed"}];
+  const result=reconstructReportEvidencePages([page([{path:"",value:{cmpAudit:{scanId,experience:{availability},rows}}}])]);
+  assert.deepEqual(result.cmpAudit?.experience?.availability,availability);
+  assert.deepEqual(result.cmpAudit?.rows,rows);
+});
+
 test("cookie comparison evidence preserves candidate templates and expiry arithmetic through SDK reconstruction", () => {
   const cookies = [{ name: "_ga_S4EX53B760", matchedPattern: null, observedIn: ["after_accept"],
     possibleTemplateMatch: { pattern: "_ga_xxxxxxxxxx", basis: "ga4_placeholder.v1" },

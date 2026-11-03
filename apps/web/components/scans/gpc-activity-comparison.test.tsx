@@ -24,3 +24,19 @@ test("measured requests and duration appear directly, without a response claim",
   }
   assert.equal(renderToStaticMarkup(<GpcActivityComparison />), "");
 });
+
+test("GPC product paired collection uses a neutral keyboard-native expander alongside the request table", async () => {
+  const { collectionPairFixture, collectionFixtureSource } = await import("../../../../packages/certscore-scan-core/src/test-fixtures/gpc-collection-pair.cases");
+  const { buildGpcActivityComparison } = await import("../../../../packages/certscore-scan-core/src/gpc-activity-comparison");
+  const pair = collectionPairFixture();
+  const { buildGpcProductionObservation } = await import("../../../../packages/certscore-scan-core/src/gpc-production-observation");
+  const gpc = collectionFixtureSource(pair.gpc);
+  const comparison = buildGpcActivityComparison({ scanId: pair.gpc.scanId, baseline: collectionFixtureSource(pair.baseline), gpc,
+    observation: buildGpcProductionObservation({ scanId: pair.gpc.scanId, source: gpc }) });
+  assert.ok(comparison?.collectionComparison);
+  const html = renderToStaticMarkup(<GpcActivityComparison comparison={comparison} />);
+  assert.match(html, /<details/); assert.match(html, /<summary/);
+  assert.match(html, /successful advertising collection/); assert.match(html, /zero does not establish absence/);
+  assert.match(html, /Without GPC/); assert.match(html, /With GPC/);
+  assert.doesNotMatch(html, /xcid|fixture-loader|deduct|compliance tick|role="alert"/i);
+});

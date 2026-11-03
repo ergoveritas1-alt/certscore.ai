@@ -30,6 +30,7 @@ export function readPrivacyLinkAccess(nodes: Element[], input: {
     if (!a?.isConnected || a.href !== candidate.url ||
       (a.getAttribute("aria-label") ?? a.textContent ?? "").trim().slice(0, 160) !== candidate.label) return [];
     let outcome: "reachable" | "outside_viewport" | "not_rendered" | "hidden" | "transparent" | "inactive" | "pointer_disabled" | "hit_target_missed" | "inspection_incomplete" = "inspection_incomplete";
+    let exclusion: {version: "consent_scope_exclusion.v1"; reason: "aria_hidden" | "hidden" | "inert" | "transparent"} | undefined;
     let scroll: { version: "privacy_link_scroll.v1"; initialOutcome: "outside_viewport"; beforeY: number; inspectedY: number; restored: boolean } | undefined;
     const beforeX = scrollX, beforeY = scrollY;
     try {
@@ -40,7 +41,7 @@ export function readPrivacyLinkAccess(nodes: Element[], input: {
       // alone proves nothing. Restore the viewport before returning to CMP work.
       if (input.allowOneDocumentScroll && !scrollUsed && boxes.length > 0 && boxes.length <= 3 &&
           (boxes[0]!.bottom <= 0 || boxes[0]!.top >= innerHeight) &&
-          getComputedStyle(a).visibility === "visible" && !a.closest('[hidden],[inert],[aria-hidden="true" i]') &&
+          getComputedStyle(a).visibility === "visible" && !a.closest('[hidden],[inert]') &&
           performance.now() < deadline) {
         scrollUsed = true;
         window.scrollBy({ top: boxes[0]!.top + boxes[0]!.height / 2 - innerHeight / 2, behavior: "instant" });
@@ -59,9 +60,9 @@ export function readPrivacyLinkAccess(nodes: Element[], input: {
         for (let depth = 0; current && depth < 64; depth++) {
           if (performance.now() >= deadline) { outcome = "inspection_incomplete"; break; }
           const style = getComputedStyle(current);
-          if (current.matches('[hidden], [aria-hidden="true" i]') || style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") { outcome = "hidden"; break; }
-          if (current.matches('[inert]')) { outcome = "inactive"; break; }
-          if (style.opacity === "0") { outcome = "transparent"; break; }
+          if (current.matches('[hidden]') || style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") { outcome = "hidden"; exclusion = {version: "consent_scope_exclusion.v1", reason: "hidden"}; break; }
+          if (current.matches('[inert]')) { outcome = "inactive"; exclusion = {version: "consent_scope_exclusion.v1", reason: "inert"}; break; }
+          if (style.opacity === "0") { outcome = "transparent"; exclusion = {version: "consent_scope_exclusion.v1", reason: "transparent"}; break; }
           // Only the link's computed value: descendants can override an ancestor.
           if (current === a && style.pointerEvents === "none") { outcome = "pointer_disabled"; break; }
           const root = current.getRootNode();
@@ -91,6 +92,6 @@ export function readPrivacyLinkAccess(nodes: Element[], input: {
     }
     if (!a.isConnected || a.href !== candidate.url ||
       (a.getAttribute("aria-label") ?? a.textContent ?? "").trim().slice(0, 160) !== candidate.label) return [];
-    return [{...candidate,hitTargetBeforeAction:outcome==="reachable",access:{version:scroll ? "privacy_link_access.v2" as const : "privacy_link_access.v1" as const,outcome,...(scroll ? {scroll} : {})}}];
+    return [{...candidate,hitTargetBeforeAction:outcome==="reachable",access:{version:scroll ? "privacy_link_access.v2" as const : "privacy_link_access.v1" as const,outcome,...(exclusion && ["hidden", "inactive", "transparent"].includes(outcome) ? {exclusion} : {}),...(scroll ? {scroll} : {})}}];
   });
 }

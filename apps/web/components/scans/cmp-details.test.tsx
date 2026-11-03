@@ -7,6 +7,20 @@ import { SHADOW_REPORT } from "./report-lab/shadow-report-data";
 import { projectCmpAudit } from "../../lib/scans/cmp-audit-projection";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 
+test("OneTrust remains visible when the detailed audit is unavailable", async () => {
+  const {CmpDetails}=await import("./cmp-details");
+  const audit=projectCmpAudit({scanId:"scan-1",consentVendor:"OneTrust"});
+  const html=renderToStaticMarkup(<CmpDetails audit={audit} vendor="OneTrust" />);
+  assert.match(html,/OneTrust identified/);
+  assert.match(html,/A retained consent-control assessment was unavailable/);
+  assert.match(html,/Limited/);
+  assert.doesNotMatch(html,/Provider: Not determined/);
+  assert.ok(audit.rows.every(r=>r.status==="Not assessed"));
+  assert.match(html,/Why detailed CMP checks are unavailable/);
+  assert.match(html,/Trace the retained consent assessment/);
+  assert.match(html,/Retest:/);
+});
+
 test("privacy-link magnifier uses only the referenced retained policy URL", async () => {
   const { CmpDetails } = await import("./cmp-details");
   const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment });
@@ -311,4 +325,16 @@ test('CMP details keeps supported results prominent and retains every unassessed
  const folded=html.slice(html.indexOf('data-cmp-unassessed-checks'));
  for(const row of audit.rows.filter(row=>row.status==='Not assessed'&&!row.supportingEvidence))assert.match(folded,new RegExp(`id="cmp-criterion-${row.id}"`));
  assert.deepEqual(audit.rows.map(row=>({id:row.id,status:row.status})),statuses,'Grouping changes no canonical assessment status');
+});
+
+test("policy-link pointer proof keeps its canonical scope in visible copy",async()=>{
+ const {CmpDetails}=await import('./cmp-details');
+ const audit=projectCmpAudit({scanId:'pointer-copy',consentControlAssessment:observedControlAssessment});
+ const row=audit.rows.find(row=>row.id==='privacy_access')!;
+ Object.assign(row,{status:'Observed',detail:'A privacy-policy link had an unobstructed click target before consent interaction. Retrieval of the linked document is outside this criterion.'});
+ const html=renderToStaticMarkup(<CmpDetails audit={audit} vendor="OneTrust" />);
+ const visibleMarkup=html.replace(/<pre[\s\S]*?<\/pre>/g,'');
+ assert.match(visibleMarkup,/unobstructed click target before consent interaction/);
+ assert.doesNotMatch(visibleMarkup,/The privacy-policy link was accessible before a consent choice/);
+ assert.equal(row.status,'Observed');
 });

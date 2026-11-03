@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -209,7 +210,7 @@ async function readRegistry(registryPath: string): Promise<EndpointEnrichmentReg
 }
 
 async function readBundle(filePath: string): Promise<CanonicalEvidenceBundle> {
-  const raw = JSON.parse(await readFile(filePath, "utf8")) as unknown;
+  const raw = parseCanonicalEvidenceArtifact(await readFile(filePath, "utf8")) as unknown;
   return canonicalEvidenceBundleSchema.parse(raw);
 }
 

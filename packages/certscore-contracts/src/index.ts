@@ -9,6 +9,8 @@ export * from "./dom-opt-out-label";
 import {californiaDisclosureChoiceCapturePolicySchema, type CaliforniaDisclosureChoiceAssessment} from "./california-disclosure-choice-assessment";
 export * from "./california-disclosure-choice-assessment";
 export * from "./exact-cookie-write-evidence";
+import { gpcCookieReadBindingSchema } from "./gpc-cookie-read-binding";
+export * from "./gpc-cookie-read-binding";
 import {captureFailureDiagnosticSchema, type CaptureFailureDiagnostic} from "./capture-failure-diagnostic";
 export * from "./capture-failure-diagnostic";
 import {storageReadTraceSchema} from "./storage-read-trace";
@@ -653,6 +655,7 @@ export const cookieEventSchema = runtimeEvidenceEventSchema.extend({
 });
 
 export const cookieSnapshotSchema = z.object({
+  gpcReadBinding: gpcCookieReadBindingSchema.optional(),
   captureCoverage:z.object({
     version:z.literal("bound_cookie_snapshot.v1"),scope:z.literal("browser_context_point_in_time"),
     documentBindingPolicy:z.literal("passive_final_document.v1").optional(),
@@ -3898,3 +3901,6 @@ export * from './consent-receipt-capture';
 
 export * from "./consent-receipt-availability";
 export * from "./consent-category-diagnostics";
+export * from "./consent-scope-exclusion";
+
+export * from "./gpc-collection-comparison.js";

@@ -11,22 +11,30 @@ import { readPassiveConsentmanagerLoadedInventory } from "./consentmanager-loade
 import { readPassiveDidomiServiceInventory } from "./didomi-service-inventory.js";
 
 /** Loader requests and wrapper stubs identify an installation, not a ready SDK.
- * Reserve the single passive read for visible controls, a registered API root,
+ * Reserve the single passive read for a typed first-layer choice pair,
+ * controls with a registered CMP DOM marker, a registered API root,
  * or completion of the existing late visual/inventory work. This is scheduling only;
  * capture must still verify its own scope, API and document binding. */
 export function isCmpBasicCaptureReady(input: {
   controlsObserved: boolean;
+  choicePairObserved?: boolean;
+  configurationApis?: readonly string[];
   runtimeObservations: CmpRuntimeObservation[];
   lateInspectionComplete: boolean;
 }): boolean {
-  if (input.controlsObserved) return true;
+  if (input.controlsObserved && input.choicePairObserved) return true;
+  if (KNOWN_CMP_REGISTRY.some(definition => definition.passiveConfigurationApi &&
+      input.configurationApis?.includes(definition.passiveConfigurationApi))) return true;
   return input.runtimeObservations.some(observation =>
     observation.confidence >= 0.9 && observation.directVsInferred === "direct" &&
     observation.signals.some(signal => {
       if (signal.confidence < 0.85) return false;
       if (input.lateInspectionComplete && ["script_url", "global", "network_request", "dom_selector"].includes(signal.signalType)) return true;
-      return signal.signalType === "global" && KNOWN_CMP_REGISTRY.some(definition =>
-        definition.passiveConfigurationApi?.split(".")[0] === signal.matchedValueRedacted);
+      // A site's own terms dialog can precede its CMP. Its controls alone must
+      // not consume the one read before the registered scope/API exists.
+      if (input.controlsObserved && signal.signalType === "dom_selector" &&
+          KNOWN_CMP_REGISTRY.some(definition => !definition.passiveConfigurationApi && definition.domSelectors?.includes(signal.matchedValueRedacted))) return true;
+      return false;
     })
   );
 }
@@ -76,7 +84,7 @@ export async function captureCmpBasicEvidence(input: {
   if (!input.isCurrent()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
   const definitions = KNOWN_CMP_REGISTRY.filter(d => d.domSelectors?.length || d.preferenceScopeSelector);
   const scopes = definitions.map(cmpInventoryScopeSelector);
-  const scopeInventory = await readCmpScopeInventory(page, definitions, true);
+  const scopeInventory = await readCmpScopeInventory(page, definitions, true, input.deferPublicPrivacyLinks);
   const configurationOnly=scopeInventory.indices.length===0 && scopeInventory.configurationIndices.length===1;
   const indices = configurationOnly?scopeInventory.configurationIndices:scopeInventory.indices;
   if (!(input.isRetainable ?? input.isCurrent)()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
@@ -107,8 +115,10 @@ export async function captureCmpBasicEvidence(input: {
     packet.controls = classifyControls(controls.controls);
     packet.captureProgress!.controlsAtMs = Date.now() - input.scanStartedAtMs;
     if (controls.overflow) packet.limitations.push("control_inventory_overflow");
-    packet.privacyLinks = privacyPolicyLinkCandidates(links).map(({url,hitTargetBeforeAction,access}) => ({url,hitTargetBeforeAction,access}));
-    packet.captureProgress!.privacyLinksAtMs = Date.now() - input.scanStartedAtMs;
+    if (!input.deferPublicPrivacyLinks || !usesDeferredPassivePrivacyLinks(definition.canonicalName)) {
+      packet.privacyLinks = privacyPolicyLinkCandidates(links).map(({url,hitTargetBeforeAction,access}) => ({url,hitTargetBeforeAction,access}));
+      packet.captureProgress!.privacyLinksAtMs = Date.now() - input.scanStartedAtMs;
+    }
     if (!checkpoint()) return undefined;
   }
   const inlineInventory = definition.canonicalName === "OneTrust" ? scopeInventory.oneTrustInventory : undefined;
@@ -197,8 +207,13 @@ export async function finishPassiveCmpPrivacyLinks(input: {
   const bound=()=>{const current=input.readBinding();return input.isCurrent() && current.url===packet.documentUrl && current.token===packet.documentToken;};
   if (!bound()) return undefined;
   const scope=page.locator('a[href]');
-  const links=await scope.evaluateAll(nodes=>nodes.slice(0,300).map((node,index)=>({index,url:(node as HTMLAnchorElement).href,
-    label:(node.getAttribute('aria-label')??node.textContent??'').trim().slice(0,160)})));
+  const links=await scope.evaluateAll(nodes=>{
+    // Preserve the same 300-candidate cap while covering footer/modal links
+    // after long publisher navigation. Indices still refer to original nodes.
+    const indices=nodes.length>300?[...Array.from({length:150},(_,i)=>i),...Array.from({length:150},(_,i)=>nodes.length-150+i)]:Array.from({length:nodes.length},(_,i)=>i);
+    return indices.map(index=>{const node=nodes[index]!;return {index,url:(node as HTMLAnchorElement).href,
+      label:(node.getAttribute('aria-label')??node.textContent??'').trim().slice(0,160)};});
+  });
   if(!bound())return undefined;
   const origin=new URL(packet.documentUrl).origin;
   const candidates=privacyPolicyLinkCandidates(links.filter(link=>{try{return new URL(link.url).origin===origin;}catch{return false;}}));
