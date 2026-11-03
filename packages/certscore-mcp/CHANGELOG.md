@@ -1,5 +1,10 @@
 # certscore-mcp
 
+## 0.2.33
+
+- Present retained GPC collection comparisons and structured observation-availability explanations through CertScore.ai’s shared projections.
+- Preserve full-session facts and matched request counts, bounded response budgets and jurisdiction scope; paired activity and CMP snapshots do not establish a GPC-caused transition or legal result.
+
 ## 0.2.32
 
 - Present canonical GPC investigation/retest guidance and independently verified fresh-visit CMP opt-out snapshots.

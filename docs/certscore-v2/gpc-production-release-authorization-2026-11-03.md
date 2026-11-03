@@ -1,0 +1,9 @@
+# CertScore.ai GPC production release authorization — November 3, 2026
+
+The owner's “Go” response authorizes the preceding proposal to publish compatible SDK/MCP consumers and deploy through the repository AWS workflows, including the required scanner image-provenance metadata updates. This follows the separately approved combined $10/month CMP/GPC allowance. The current combined planning estimate, including the deployment-guard CI reserve, is $9.89/month at 100,000 scans/month and 30-day retention.
+
+Publish unused SDK/MCP patch versions, produce the matching MCP Linux asset through the checked-in release workflow, and update advertised archive metadata only after that asset exists. Deploy compatible hosted MCP, web/materializer and validation consumers before scanner producer images. Bind all stages to clean committed source and verify the currently served revision and forward ancestry. The shared dirty development checkout remains untouched.
+
+For scanner promotion use `--preserve-scanner-operational-settings`. Its exact scope is the existing image promotions and revision-guarded `SCANNER_IMAGE_DIGEST` updates. Preserve all other environment values, action/coverage flags, 3,008 MB worker bounds, timeouts, regions and lane topology. Keep the existing verified runtime base; no new browser/runtime-base installation or capacity increase is authorized.
+
+No historical report rewrite, artifact reconstruction, backfill, additional CMP adapter activation, public scan, account creation, paid model call, direct production-database access or production scan-artifact download is authorized. Verify publication and deployment read-only through release metadata, workflow results, immutable image identities, service health and live revision. The existing checked-in web workflow retains its target-image migration and ECS stabilization gates; this release adds no schema migration.

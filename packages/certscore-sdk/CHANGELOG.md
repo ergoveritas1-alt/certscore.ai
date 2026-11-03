@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## 0.2.24
+
+- Type and export optional retained GPC collection-comparison packets and structured CMP/GPC observation-availability details.
+- Keep source-pair binding, current-state snapshots, historical omission and existing response versions intact; paired evidence does not establish GPC causation or a legal result.
+
 ## 0.2.23
 
 - Type and export optional, independently versioned GPC guidance and paired CMP sale/sharing state snapshots.
