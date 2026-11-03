@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { deployConsumersBeforeProducer } from "./lib/deployment-consumer-barrier";
-import { assertScannerConfigurationScope } from "./lib/scanner-configuration-scope";
+import { assertScannerConfigurationScope, configureScannerSettingsUnlessPreserved, scannerOperationalSnapshot,
+  assertScannerOperationalSettingsPreserved, type ScannerOperationalSnapshot } from "./lib/scanner-configuration-scope";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -22,6 +23,7 @@ type Args = {
   plan: boolean;
   pushScannerRuntimeBase: boolean;
   preserveScannerConfiguration: boolean;
+  preserveScannerOperationalSettings: boolean;
   ref: string | null;
   forceDb: boolean;
   forceValidation: boolean;
@@ -148,7 +150,7 @@ async function main() {
           skip: !args.forceValidation && !changed.validation,
           pushRuntimeBase: args.forceValidationRuntimeBase || changed.validationRuntimeBase }),
       ],
-      producer: () => deployScanners({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase }),
+      producer: () => deployScanners({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase, preserveOperationalSettings: args.preserveScannerOperationalSettings }),
       skippedProducer: () => skippedLane("Lambda scanner deploys", "a consumer deployment failed; preserve the existing producer contract"),
     });
     lanes.push(...coupled.map(result => Promise.resolve(result)));
@@ -169,7 +171,7 @@ async function main() {
   } else if (args.mode === "db") {
     lanes.push(deployDb({ ref: sha, workflowRef, skip: false }));
   } else {
-    lanes.push(deployScanners({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase }));
+    lanes.push(deployScanners({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase, preserveOperationalSettings: args.preserveScannerOperationalSettings }));
   }
 
   const results = await Promise.all(lanes);
@@ -226,6 +228,7 @@ function parseArgs(argv: string[]): Args {
     plan: false,
     pushScannerRuntimeBase: false,
     preserveScannerConfiguration: false,
+    preserveScannerOperationalSettings: false,
     ref: null
   };
 
@@ -279,6 +282,10 @@ function parseArgs(argv: string[]): Args {
     }
     if (arg === "--preserve-scanner-configuration") {
       args.preserveScannerConfiguration = true;
+      continue;
+    }
+    if (arg === "--preserve-scanner-operational-settings") {
+      args.preserveScannerOperationalSettings = true;
       continue;
     }
     if (arg === "--plan") {
@@ -450,8 +457,11 @@ async function deployDb(input: { ref: string; skip: boolean; workflowRef: string
   });
 }
 
-async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }): Promise<LaneResult> {
+async function deployScanners(input: { pushRuntimeBase: boolean; ref: string; preserveOperationalSettings: boolean }): Promise<LaneResult> {
   return timedLane("Lambda scanner deploys", async () => {
+    // Validate all existing workers before any build/promotion mutation. Never
+    // normalize disabled flags or capacity as part of the restricted release.
+    const preservedSettings = input.preserveOperationalSettings ? await readScannerOperationalSettings() : null;
     const runtimeBase = await scannerRuntimeBaseMode({
       buildRegion: SCANNER_BUILD_REGION,
       rebuild: input.pushRuntimeBase,
@@ -465,7 +475,9 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
         return result.exitCode === 0;
       }
     });
-    await applyScannerRuntimeConfiguration();
+    await configureScannerSettingsUnlessPreserved(input.preserveOperationalSettings, async () => {
+      await applyScannerRuntimeConfiguration();
+    });
 
     const dockerConfigRoot = path.join(tmpdir(), `certscore-lambda-deploy-${process.pid}-${input.ref.slice(0, 8)}`);
     const dockerConfigByRegion = Object.fromEntries(SCANNER_REGIONS.map((region) => [
@@ -553,7 +565,13 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
         };
       }));
 
-      await applyScannerRuntimeConfiguration(true);
+      await configureScannerSettingsUnlessPreserved(input.preserveOperationalSettings, async () => {
+        await applyScannerRuntimeConfiguration(true);
+      });
+      if (preservedSettings) {
+        const after = await readScannerOperationalSettings();
+        for (const [key, before] of preservedSettings) assertScannerOperationalSettingsPreserved(before, after.get(key)!);
+      }
       const details: Record<string, string> = {
         runtimeBase
       };
@@ -579,6 +597,24 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
       await rm(dockerConfigRoot, { force: true, recursive: true });
     }
   });
+}
+
+async function readScannerOperationalSettings() {
+  const entries = await Promise.all(SCANNER_REGIONS.flatMap(region =>
+    [SCANNER_FUNCTION_NAME, `${SCANNER_FUNCTION_NAME}-inventory`].map(async functionName => {
+      const current = await run(["aws", "lambda", "get-function-configuration", "--region", region,
+        "--function-name", functionName,
+        "--query", "{MemorySize:MemorySize,Timeout:Timeout,Variables:Environment.Variables,RevisionId:RevisionId,EnvironmentError:Environment.Error,State:State,LastUpdateStatus:LastUpdateStatus}",
+        "--output", "json"], { quiet: true });
+      let payload: unknown;
+      try { payload = JSON.parse(current.stdout); }
+      catch { throw new Error("Scanner operational settings readback is invalid JSON; sensitive details omitted."); }
+      const snapshot = scannerOperationalSnapshot(payload, {
+        memoryMb: SCANNER_MEMORY_SIZE, inventory: functionName.endsWith("-inventory"),
+      });
+      return [`${region}/${functionName}`, snapshot] as const;
+    })));
+  return new Map<string, ScannerOperationalSnapshot>(entries);
 }
 
 async function readScannerWebBotAuthPrivateKey() {
@@ -832,7 +868,10 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
       : `validation AWS deploy (runtime base ${args.forceValidationRuntimeBase || changed.validationRuntimeBase ? "rebuild/push" : "reuse"})`);
   }
   if (args.mode === "all" || args.mode === "scanners") {
-    lanes.push(`Lambda scanner deploys (${SCANNER_REGIONS.join(", ")}; apply/verify ${SCANNER_MEMORY_SIZE} MB before image promotion; runtime base ${args.pushScannerRuntimeBase ? "rebuild/push" : "reuse when available, cached full-image fallback otherwise"})`);
+    const settingsPlan = args.preserveScannerOperationalSettings
+      ? `verify existing ${SCANNER_MEMORY_SIZE} MB, flags and timeouts; update image provenance only`
+      : `apply/verify ${SCANNER_MEMORY_SIZE} MB before image promotion`;
+    lanes.push(`Lambda scanner deploys (${SCANNER_REGIONS.join(", ")}; ${settingsPlan}; runtime base ${args.pushScannerRuntimeBase ? "rebuild/push" : "reuse when available, cached full-image fallback otherwise"})`);
   }
   if (args.mode === "all" || args.mode === "db") {
     lanes.push(args.mode === "all"
@@ -847,6 +886,9 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
   console.log(`  git push: ${args.noPush || args.ref ? "skip" : "push current branch to origin"}`);
   if (args.preserveScannerConfiguration && (args.mode === "all" || args.mode === "scanners")) {
     console.log("  blocked: scanner promotion requires configuration/provenance writes; this plan authorizes no remote action");
+  }
+  if (args.preserveScannerOperationalSettings && (args.mode === "all" || args.mode === "scanners")) {
+    console.log("  scanner operational settings: preserve existing flags, memory and timeouts; image provenance environment writes remain required");
   }
   if (args.mode === "all") console.log("  order: finish web and affected validation consumers before scanner promotion");
   for (const lane of lanes) {
