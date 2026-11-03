@@ -41,6 +41,14 @@ const configuration = () => ({ MemorySize: 3008, Timeout: 40, RevisionId: "r0", 
     SECRET: "private-fixture-value", SCANNER_IMAGE_DIGEST: `sha256:${"a".repeat(64)}` } });
 const snapshot = (v: unknown) => scannerOperationalSnapshot(v, { memoryMb: 3008, inventory: false });
 
+test("a missing preceding argument cannot consume the no-configuration guard as its value", () => {
+  const result = spawnSync(process.execPath, ["--import", "tsx", "scripts/deploy-fast.ts", "all", "--base",
+    "--preserve-scanner-configuration", "--no-push", "--no-predeploy"], { encoding: "utf8", timeout: 15_000 });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /--base requires a value/);
+  assert.doesNotMatch(result.stdout + result.stderr, /Fast deploy mode:|OFFLINE_TEST_BLOCKED/);
+});
+
 test("operational snapshots allow only provenance changes and expose no environment values", () => {
   const before = configuration(), after = configuration();
   after.Variables.SCANNER_IMAGE_DIGEST = `sha256:${"b".repeat(64)}`;

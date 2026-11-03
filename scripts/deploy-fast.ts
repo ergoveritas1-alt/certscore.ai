@@ -312,7 +312,7 @@ function isDeployMode(value: string): value is DeployMode {
 
 function requireValue(args: string[], index: number, label: string) {
   const value = args[index + 1];
-  if (!value) {
+  if (!value || value.startsWith("--")) {
     throw new Error(`${label} requires a value`);
   }
   return value;
