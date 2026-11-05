@@ -11,6 +11,13 @@ export type CheckReceipt = {
   startedAt: string; completedAt: string; exitStatus: number; durationMs: number;
 };
 
+export function releaseEnvironmentFingerprint(environment: NodeJS.ProcessEnv) {
+  const relevant = Object.entries(environment).filter(([key]) =>
+    !/^(?:npm_|PNPM_|PWD$|OLDPWD$|SHLVL$|_$|TERM|COLORTERM|INIT_CWD$|PREDEPLOY_RECEIPT_DIR$|CODEX_TOOL_CALL_ID$)/i.test(key))
+    .sort(([a], [b]) => a.localeCompare(b));
+  return hash(JSON.stringify(relevant));
+}
+
 export async function releaseInputs(directory = process.cwd()): Promise<ReleaseInputs> {
   const git = async (args: string[]) => (await exec('git', args, { cwd: directory, maxBuffer: 16 * 1024 * 1024 })).stdout;
   const [shaText, tree, diff, untracked, status, pnpm] = await Promise.all([
@@ -30,9 +37,7 @@ export async function releaseInputs(directory = process.cwd()): Promise<ReleaseI
     try { fingerprint.update(hash(await readFile(path.resolve(directory, file)))); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') fingerprint.update('missing'); else throw error; }
   }
-  const environment = Object.entries(process.env).filter(([key]) =>
-    !/^(?:npm_|PNPM_|PWD$|OLDPWD$|SHLVL$|_$|TERM|COLORTERM|INIT_CWD$|PREDEPLOY_RECEIPT_DIR$)/i.test(key)).sort(([a], [b]) => a.localeCompare(b));
-  return { sha, fingerprint: fingerprint.digest('hex'), environment: hash(JSON.stringify(environment)),
+  return { sha, fingerprint: fingerprint.digest('hex'), environment: releaseEnvironmentFingerprint(process.env),
     node: process.version, pnpm: pnpm.stdout.trim(), clean: !status.trim() };
 }
 

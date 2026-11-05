@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { releaseInputs, receiptMatches, writeCheckReceipt, type CheckReceipt } from './release-receipts';
+import { releaseEnvironmentFingerprint, releaseInputs, receiptMatches, writeCheckReceipt, type CheckReceipt } from './release-receipts';
 const now = Date.now();
 const expected = { key: 'unit', command: ['node', '--test', '--test-name-pattern=allow', 'unit.test.ts'], inputs: {
   sha: 'a'.repeat(40), fingerprint: 'b'.repeat(64), environment: 'c'.repeat(64), node: 'v22.22.1', pnpm: '10.6.3', clean: true } };
@@ -59,4 +59,13 @@ test('fingerprints invalidate changed tracked/untracked source and ignored runti
     assert.equal(configured.clean, true); assert.notEqual(configured.fingerprint, initial.fingerprint);
     assert.doesNotMatch(JSON.stringify(configured), /private-local-value/);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('inert per-command bookkeeping does not invalidate receipts, while real execution configuration does', () => {
+  const initial: NodeJS.ProcessEnv = { NODE_ENV: 'test', PATH: '/owned/bin', NODE_OPTIONS: '--max-old-space-size=8192', TSX_TSCONFIG_PATH: '/owned/tsconfig.base.json', CODEX_SANDBOX_NETWORK_DISABLED: '0', CODEX_TOOL_CALL_ID: 'first', SHLVL: '1' };
+  const fingerprint = releaseEnvironmentFingerprint(initial);
+  assert.equal(releaseEnvironmentFingerprint({ ...initial, CODEX_TOOL_CALL_ID: 'second', SHLVL: '2' }), fingerprint);
+  for (const change of [{ NODE_OPTIONS: '--max-old-space-size=4096' }, { TSX_TSCONFIG_PATH: '/owned/other.json' }, { CODEX_SANDBOX_NETWORK_DISABLED: '1' }, { PATH: '/different/bin' }]) {
+    assert.notEqual(releaseEnvironmentFingerprint({ ...initial, ...change }), fingerprint);
+  }
 });
