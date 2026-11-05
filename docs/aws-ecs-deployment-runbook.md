@@ -292,3 +292,15 @@ the existing quota without increasing paid storage. The extra local memory
 reservation can delay a gate on a busy machine. Production wall-time savings
 require a future separately authorized comparable warm release; do not add
 parallel task totals or fixture savings to production deployment savings.
+
+### Preparation and isolated verification benchmark
+
+The follow-up verification-only path and costs are documented in
+`docs/operations/2026-11-05-verification-sharding-cost-review.md`. Use
+`pnpm release:prepare --receipts <full-receipts> --out <new-directory>` after the
+exact clean source has passed the full gate and required CI. Its 30-second target
+measures readiness validation; fresh verification is measured separately.
+The snapshot does not replace deploy preflight or required CI and does not
+authorize deployment. Partitioned verification is a disabled benchmark template;
+review costs before activating additional runners. Existing canonical full/fast
+commands, browser timing coverage, migrations and stability gates remain intact.

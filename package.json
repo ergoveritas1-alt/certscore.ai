@@ -194,7 +194,10 @@
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean",
     "test:post-accept-forms": "TSX_TSCONFIG_PATH=tsconfig.base.json node --import tsx --test --test-concurrency=1 scripts/post-accept-form-release.test.ts scripts/post-accept-slow-loader-release.test.ts packages/certscore-scan-core/src/post-accept-form-followup.test.ts scripts/post-accept-form-release-gate.test.ts scripts/local-isolated-lambda-worker.test.ts packages/certscore-scan-core/src/deferred-consent-readiness.test.ts packages/certscore-scan-core/src/post-accept-form-capture.test.ts packages/certscore-contracts/src/post-accept-form-capture.test.ts packages/certscore-contracts/src/post-accept-form-reconciliation.test.ts packages/certscore-contracts/src/post-accept-observation.test.ts apps/web/lib/scans/post-accept-form-projection.test.ts apps/web/server/scans/form-snapshot-evidence.test.ts",
-    "test:release-performance": "node scripts/release-node.mjs scripts/test-release-performance.ts"
+    "test:release-performance": "node scripts/release-node.mjs scripts/test-release-performance.ts",
+    "release:prepare": "node scripts/release-node.mjs scripts/release-prepare.ts",
+    "release:verification": "node scripts/release-node.mjs scripts/release-verification.ts",
+    "release:benchmark-shards": "node scripts/release-node.mjs scripts/benchmark-release-shards.ts"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

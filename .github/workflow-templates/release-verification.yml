@@ -1,0 +1,99 @@
+# Disabled template: files in this directory do not register Actions workflows.
+# Review the cost report and approve the runner count before moving this file
+# into .github/workflows. No deployment, AWS credentials or live smoke steps.
+name: CertScore.ai isolated release verification benchmark
+on:
+  workflow_dispatch:
+    inputs:
+      workers:
+        type: choice
+        options: ['1', '2', '4', '6', '8']
+        default: '1'
+        description: Reviewed number of isolated standard runners
+permissions:
+  contents: read
+env:
+  EXPECTED_GIT_REMOTE: https://github.com/ergoveritas1-alt/certscore.ai.git
+concurrency:
+  group: release-verification-benchmark-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with: {version: 10.6.3}
+      - uses: actions/setup-node@v6
+        with: {node-version: 22, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - id: plan
+        env:
+          REQUESTED_WORKERS: ${{ inputs.workers }}
+          APPROVED_WORKERS: ${{ vars.RELEASE_VERIFICATION_APPROVED_WORKERS || '1' }}
+        run: |
+          requested="$REQUESTED_WORKERS"
+          approved="$APPROVED_WORKERS"
+          unset REQUESTED_WORKERS APPROVED_WORKERS
+          node -e 'const n=Number(process.argv[1]), cap=Number(process.argv[2]); if(![1,2,4,6,8].includes(n)||!Number.isInteger(cap)||n>cap||cap>8)process.exit(1)' "$requested" "$approved"
+          node scripts/release-node.mjs scripts/release-verification.ts plan --workers "$requested" --out /tmp/release-plan.json
+          node -e 'console.log("matrix="+JSON.stringify({worker:Array.from({length:Number(process.argv[1])},(_,i)=>i)}))' "$requested" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with: {name: release-plan, path: /tmp/release-plan.json, retention-days: 1}
+  verify:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with: {version: 10.6.3}
+      - uses: actions/setup-node@v6
+        with: {node-version: 22, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: release-browser-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm exec playwright install chromium
+      - uses: actions/download-artifact@v4
+        with: {name: release-plan, path: /tmp/release-plan}
+      - env:
+          WORKER_INDEX: ${{ matrix.worker }}
+        run: |
+          index="$WORKER_INDEX"
+          unset WORKER_INDEX
+          node scripts/release-node.mjs scripts/release-verification.ts worker --plan /tmp/release-plan/release-plan.json --worker "$index" --out /tmp/release-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-results-${{ matrix.worker }}
+          path: /tmp/release-results
+          retention-days: 1
+          if-no-files-found: error
+  aggregate:
+    needs: [plan, verify]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every verification worker
+        env: {WORKERS_RESULT: '${{ needs.verify.result }}', PLAN_RESULT: '${{ needs.plan.result }}'}
+        run: test "$WORKERS_RESULT" = success && test "$PLAN_RESULT" = success
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with: {version: 10.6.3}
+      - uses: actions/setup-node@v6
+        with: {node-version: 22, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with: {name: release-plan, path: /tmp/release-plan}
+      - uses: actions/download-artifact@v4
+        with: {pattern: release-results-*, merge-multiple: true, path: /tmp/release-results}
+      - run: node scripts/release-node.mjs scripts/release-verification.ts aggregate --plan /tmp/release-plan/release-plan.json --results /tmp/release-results --out /tmp/partition-proof.json
+      - uses: actions/upload-artifact@v4
+        with: {name: partition-proof, path: /tmp/partition-proof.json, retention-days: 1}

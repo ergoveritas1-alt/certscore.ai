@@ -1,0 +1,127 @@
+import { createHash } from 'node:crypto';
+import type { Check } from '../predeploy';
+import { releaseEnvironmentFingerprint, type ReleaseInputs } from './release-receipts';
+
+export const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+export type ShardTask = { key: string; parent: string; command: string[]; files: string[]; estimatedMs: number };
+export type ShardPlan = {
+  version: 1; sha: string; sourceFingerprint: string; checks: Check[]; workers: ShardTask[][];
+  execution: { environment: string; platform: string; arch: string };
+  estimates: { kind: 'scheduling-model'; bootstrapMs: number; workerMs: number[]; setupMsPerWorker: number; controlPlaneMs: number; estimatedWallMs: number };
+};
+export type ShardResult = {
+  version: 1; planHash: string; worker: number; key: string; command: string[]; inputs: ReleaseInputs;
+  execution: ShardPlan['execution'];
+  outputsFingerprint?: string;
+  startedAt: string; completedAt: string; durationMs: number; exitStatus: number;
+};
+
+export function shardExecutionContext(environment: NodeJS.ProcessEnv = process.env, root = process.cwd()) {
+  // Runner/step transport metadata is not application configuration. Unknown
+  // variables, NODE_OPTIONS, security flags and all feature flags remain bound.
+  const metadata = /^(?:RUNNER_NAME|RUNNER_TRACKING_ID|GITHUB_JOB|GITHUB_ACTION|GITHUB_ENV|GITHUB_OUTPUT|GITHUB_STATE|GITHUB_STEP_SUMMARY|GITHUB_PATH|ACTIONS_RUNTIME_TOKEN|ACTIONS_RUNTIME_URL|ACTIONS_CACHE_URL|ACTIONS_RESULTS_URL)$/;
+  const normalized: NodeJS.ProcessEnv = { ...environment };
+  for (const [key, value] of Object.entries(normalized)) {
+    if (metadata.test(key)) delete normalized[key];
+    else normalized[key] = value?.split(root).join('<workspace>');
+  }
+  return { environment: releaseEnvironmentFingerprint(normalized), platform: process.platform, arch: process.arch };
+}
+
+// Only literal file lists at the end of reviewed direct test commands are split.
+// Options, filters, loaders, cwd and internal test concurrency are preserved.
+export function directTestFiles(command: string[]) {
+  const direct = command[0] === 'pnpm' && command[1] === 'exec' && command[2] === 'tsx';
+  if (!direct || !command.includes('--test')) return null;
+  const first = command.findIndex(value => /\.(?:test|spec)\.(?:ts|tsx|mjs|mts)$/.test(value));
+  if (first < 0) return null;
+  const files = command.slice(first);
+  if (files.some(file => !/^[\w./-]+\.(?:test|spec)\.(?:ts|tsx|mjs|mts)$/.test(file) || file.startsWith('/') || file.split('/').includes('..')) || new Set(files).size !== files.length) return null;
+  return { prefix: command.slice(0, first), files };
+}
+
+export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 'fingerprint'>,
+  options: { workers: number; timings?: Record<string, number>; fileTimings?: Record<string, number>; setupMsPerWorker?: number; controlPlaneMs?: number; execution?: ShardPlan['execution'] }) : ShardPlan {
+  if (!Number.isInteger(options.workers) || options.workers < 1 || options.workers > 8) throw new Error('Use 1–8 isolated workers.');
+  if (new Set(checks.map(check => check.key)).size !== checks.length || !checks.some(check => check.key === 'workspace-package-build')) throw new Error('Invalid parent check inventory.');
+  const timings = options.timings ?? {}, tasks: ShardTask[] = [];
+  for (const check of checks) {
+    if (check.key === 'workspace-package-build') continue;
+    const split = directTestFiles(check.command), estimate = timings[check.key] ?? 30_000;
+    if (!Number.isFinite(estimate) || estimate <= 0) throw new Error('Invalid timing profile.');
+    if (!split) tasks.push({ key: check.key, parent: check.key, command: check.command, files: [], estimatedMs: estimate });
+    else for (const file of split.files) {
+      const estimateMs = options.fileTimings?.[`${check.key}:${file}`] ?? estimate / split.files.length;
+      if (!Number.isFinite(estimateMs) || estimateMs <= 0) throw new Error('Invalid file timing profile.');
+      tasks.push({ key: `${check.key}:${file}`, parent: check.key, command: [...split.prefix, file], files: [file], estimatedMs: estimateMs });
+    }
+  }
+  const workers: ShardTask[][] = Array.from({ length: options.workers }, () => []), totals = workers.map(() => 0);
+  for (const task of tasks.sort((a, b) => b.estimatedMs - a.estimatedMs || a.key.localeCompare(b.key))) {
+    const index = totals.indexOf(Math.min(...totals)); workers[index]!.push(task); totals[index]! += task.estimatedMs;
+  }
+  // One invocation per parent per worker limits repeated process/loader startup.
+  const merged = workers.map(tasks => {
+    const groups = new Map<string, ShardTask>();
+    for (const task of tasks) {
+      const prior = groups.get(task.parent);
+      if (prior && task.files.length) { prior.files.push(...task.files); prior.command.push(...task.files); prior.estimatedMs += task.estimatedMs; }
+      else groups.set(task.parent, { ...task, files: [...task.files], command: [...task.command] });
+    }
+    return [...groups.values()].map(task => ({ ...task, key: `${task.parent}:${digest(task.command).slice(0, 16)}` }));
+  });
+  const bootstrapMs = timings['workspace-package-build'] ?? 20_000;
+  const setupMsPerWorker = options.setupMsPerWorker ?? 60_000;
+  const controlPlaneMs = options.controlPlaneMs ?? 60_000;
+  if (![bootstrapMs, setupMsPerWorker, controlPlaneMs].every(value => Number.isFinite(value) && value >= 0)) throw new Error('Invalid setup estimate.');
+  const plan: ShardPlan = { version: 1, sha: inputs.sha, sourceFingerprint: inputs.fingerprint, checks, workers: merged, execution: options.execution ?? shardExecutionContext(),
+    estimates: { kind: 'scheduling-model', bootstrapMs, workerMs: totals, setupMsPerWorker, controlPlaneMs,
+      estimatedWallMs: Math.max(...totals) + bootstrapMs + setupMsPerWorker + controlPlaneMs } };
+  validateShardPlan(plan, checks); return plan;
+}
+
+export function validateShardPlan(plan: ShardPlan, expectedChecks: Check[]) {
+  if (plan.version !== 1 || !/^[a-f0-9]{40}$/.test(plan.sha) || JSON.stringify(plan.checks) !== JSON.stringify(expectedChecks) || !plan.workers.length || plan.workers.length > 8) throw new Error('Shard inventory does not match the required gate.');
+  const all = plan.workers.flat(), keys = all.map(task => task.key);
+  if (new Set(keys).size !== keys.length || all.some(task => !expectedChecks.some(check => check.key === task.parent && check.key !== 'workspace-package-build'))) throw new Error('Duplicate or unknown shard task.');
+  for (const parent of expectedChecks) {
+    if (parent.key === 'workspace-package-build') continue;
+    const tasks = all.filter(task => task.parent === parent.key), split = directTestFiles(parent.command);
+    if (!tasks.length) throw new Error(`Missing check ${parent.key}.`);
+    if (!split) {
+      if (tasks.length !== 1 || tasks[0]!.files.length || JSON.stringify(tasks[0]!.command) !== JSON.stringify(parent.command)) throw new Error(`Opaque command changed: ${parent.key}.`);
+    } else {
+      const files = tasks.flatMap(task => task.files);
+      if (files.length !== split.files.length || new Set(files).size !== files.length || [...files].sort().join('\0') !== [...split.files].sort().join('\0')) throw new Error(`Missing/duplicate files: ${parent.key}.`);
+      for (const task of tasks) if (!task.files.length || JSON.stringify(task.command) !== JSON.stringify([...split.prefix, ...task.files])) throw new Error(`Test configuration changed: ${parent.key}.`);
+    }
+  }
+}
+
+export function aggregateShards(plan: ShardPlan, expectedChecks: Check[], results: ShardResult[], now = Date.now()) {
+  validateShardPlan(plan, expectedChecks);
+  const bootstrap = expectedChecks.find(check => check.key === 'workspace-package-build')!;
+  const expected = plan.workers.flatMap((tasks, worker) => [{ worker, key: 'workspace-package-build', command: bootstrap.command }, ...tasks.map(task => ({ worker, key: task.key, command: task.command }))]);
+  if (results.length !== expected.length) throw new Error('Missing, duplicate or unexpected shard results.');
+  const seen = new Set<string>();
+  for (const result of results) {
+    const id = `${result.worker}:${result.key}`, match = expected.find(value => value.worker === result.worker && value.key === result.key);
+    if (seen.has(id) || !match || result.version !== 1 || result.planHash !== digest(plan) || JSON.stringify(result.command) !== JSON.stringify(match.command) || JSON.stringify(result.execution) !== JSON.stringify(plan.execution)) throw new Error('Shard result identity/configuration mismatch.');
+    seen.add(id);
+    const start = Date.parse(result.startedAt), end = Date.parse(result.completedAt);
+    if (result.exitStatus !== 0 || result.inputs.clean !== true || result.inputs.sha !== plan.sha || result.inputs.fingerprint !== plan.sourceFingerprint || !Number.isFinite(result.durationMs) || result.durationMs < 0 || !Number.isFinite(start) || !Number.isFinite(end) || end < start || end > now || now - end > 24 * 60 * 60 * 1000) throw new Error('Failed, dirty, stale or incomplete shard result.');
+  }
+  for (let worker = 0; worker < plan.workers.length; worker++) {
+    const own = results.filter(result => result.worker === worker), setup = own.find(result => result.key === 'workspace-package-build')!;
+    if (!/^[a-f0-9]{64}$/.test(setup.outputsFingerprint ?? '')) throw new Error('Worker bootstrap export proof missing.');
+    for (const result of own) {
+      if (['sha', 'fingerprint', 'environment', 'node', 'pnpm'].some(key => result.inputs[key as keyof ReleaseInputs] !== setup.inputs[key as keyof ReleaseInputs]) || (result !== setup && Date.parse(result.startedAt) < Date.parse(setup.completedAt))) throw new Error('Worker inputs changed or dependency order violated.');
+    }
+  }
+  const toolchain = results[0]!.inputs;
+  if (results.some(result => result.inputs.node !== toolchain.node || result.inputs.pnpm !== toolchain.pnpm)) throw new Error('Worker toolchains differ.');
+  return { version: 1, kind: 'partitioned-verification' as const, planHash: digest(plan), sha: plan.sha,
+    completedAt: new Date(Math.max(...results.map(result => Date.parse(result.completedAt)))).toISOString(),
+    parentChecks: expectedChecks.map(check => check.key), successfulExecutions: results.length,
+    note: 'Partition coverage proof; does not impersonate whole-command receipts, replace required CI or authorize deployment.' };
+}
