@@ -18,7 +18,13 @@ export function releaseEnvironmentFingerprint(environment: NodeJS.ProcessEnv) {
   return hash(JSON.stringify(relevant));
 }
 
-export async function releaseInputs(directory = process.cwd()): Promise<ReleaseInputs> {
+export function portableDependencyMetadata(value: string, root: string) {
+  return value.replace(/^prunedAt:.*$/m, 'prunedAt: <installation-time>')
+    .replace(/^storeDir:.*$/m, 'storeDir: <pnpm-content-store>')
+    .split(root).join('<workspace>');
+}
+
+export async function releaseInputs(directory = process.cwd(), options: { portableDependencies?: boolean } = {}): Promise<ReleaseInputs> {
   const git = async (args: string[]) => (await exec('git', args, { cwd: directory, maxBuffer: 16 * 1024 * 1024 })).stdout;
   const [shaText, tree, diff, untracked, status, pnpm] = await Promise.all([
     git(['rev-parse', 'HEAD']), git(['rev-parse', 'HEAD^{tree}']), git(['diff', 'HEAD', '--binary', '--no-ext-diff']),
@@ -34,7 +40,10 @@ export async function releaseInputs(directory = process.cwd()): Promise<ReleaseI
     'apps/web/.env.local', 'apps/validation-worker/.env.local', 'node_modules/.modules.yaml'];
   for (const file of [...new Set(files)].sort()) {
     fingerprint.update(`${file}\0`);
-    try { fingerprint.update(hash(await readFile(path.resolve(directory, file)))); }
+    try {
+      const bytes = await readFile(path.resolve(directory, file));
+      fingerprint.update(hash(options.portableDependencies && file === 'node_modules/.modules.yaml' ? portableDependencyMetadata(bytes.toString('utf8'), directory) : bytes));
+    }
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') fingerprint.update('missing'); else throw error; }
   }
   return { sha, fingerprint: fingerprint.digest('hex'), environment: releaseEnvironmentFingerprint(process.env),

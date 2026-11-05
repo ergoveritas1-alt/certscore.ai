@@ -1,7 +1,28 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { boundedDiagnosticBody, diagnosticWindowOpen, assertSerializedPacketMatches } = require('./cmp-paired-runtime-visit.cjs');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { boundedDiagnosticBody, diagnosticWindowOpen, assertSerializedPacketMatches, saveExclusiveReceipt } = require('./cmp-paired-runtime-visit.cjs');
+
+test('visitor publishes a complete contact marker exactly once', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cmp-visitor-receipt-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const name = 'contact-started.json', target = path.join(dir, name), value = { event: 'contact_started' };
+  const realLink = fs.linkSync;
+  const link = t.mock.method(fs, 'linkSync', (source, destination) => {
+    assert.equal(fs.existsSync(destination), false);
+    assert.deepEqual(JSON.parse(fs.readFileSync(source, 'utf8')), value);
+    realLink(source, destination);
+  });
+  saveExclusiveReceipt(dir, name, value);
+  assert.equal(link.mock.callCount(), 1);
+  link.mock.restore();
+  assert.throws(() => saveExclusiveReceipt(dir, name, { event: 'replacement' }), { code: 'EEXIST' });
+  assert.deepEqual(JSON.parse(fs.readFileSync(target, 'utf8')), value);
+  assert.deepEqual(fs.readdirSync(dir), [name]);
+});
 
 test('diagnostic response bodies require positive bounded explicit identity length', () => {
   assert.equal(boundedDiagnosticBody({ 'content-length': '1048576' }, 1048576), true);
