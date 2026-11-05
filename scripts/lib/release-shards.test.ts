@@ -38,17 +38,21 @@ test('all 38 canonical parent checks retain exact partition coverage at 1/2/4/6/
     assert.equal(plan.estimates.kind, 'scheduling-model');
   }
 });
-test('cold eight-worker replay moves the measured commands once without changing inventory', () => {
+test('cold eight-worker replay moves the measured commands and only splits the intended typecheck', () => {
   const profile = JSON.parse(readFileSync(new URL('../release-verification-timings.json', import.meta.url), 'utf8'));
   const gate = getPredeployPlan([], { full: true }).checks;
   const options = { workers: 8, timings: profile.coldBenchmark.timings, fileTimings: profile.fileTimings };
-  const baseline = planShards(gate, inputs, options);
+  const baseline = planShards(gate, inputs, { ...options, replayMoves: profile.coldBenchmark.replayMoves.slice(0, 2) });
   const candidate = planShards(gate, inputs, { ...options, replayMoves: profile.coldBenchmark.replayMoves });
-  for (const { key, from, to } of profile.coldBenchmark.replayMoves) {
-    assert.ok(baseline.workers[from]!.some(task => task.key === key));
-    assert.ok(candidate.workers[to]!.some(task => task.key === key));
-  }
-  assert.deepEqual(candidate.workers.flat().map(task => task.key).sort(), baseline.workers.flat().map(task => task.key).sort());
+  assert.ok(candidate.workers[1]!.some(task => task.parent === 'gpc-release-tools-typecheck'));
+  assert.ok(candidate.workers[2]!.some(task => task.parent === 'workspace-typecheck' &&
+    task.command.includes('--filter=@website-signal-risk-scanner/validation-worker')));
+  assert.ok(candidate.workers[3]!.some(task => task.parent === 'workspace-typecheck' &&
+    task.command.includes('--filter=!@website-signal-risk-scanner/validation-worker')));
+  assert.ok(candidate.workers[4]!.some(task => task.key === 'consent-action-semantics:042d8c59af7473ec'));
+  const unchanged = (plan: typeof candidate) => plan.workers.flat().filter(task => task.parent !== 'workspace-typecheck').map(task => task.key).sort();
+  assert.deepEqual(unchanged(candidate), unchanged(baseline));
+  assert.equal(candidate.workers.flat().length, baseline.workers.flat().length + 1);
   assert.equal(candidate.checks.length, 38);
 });
 test('imported bootstrap evidence must bind to the original build worker receipt', () => {
@@ -113,16 +117,22 @@ test('parallel workspace typechecks require both complementary filters', () => {
   tasks[0]!.command = tasks[1]!.command;
   assert.throws(() => validateShardPlan(plan, gate), /partition coverage changed: workspace-typecheck/);
 });
-test('the two Turbo partitions execute each task from the original workspace typecheck exactly once', () => {
+test('the Turbo partitions execute each task from the original workspace typecheck exactly once', () => {
   const typecheck = getPredeployPlan([], { full: true }).checks.find(check => check.key === 'workspace-typecheck')!;
-  const plan = planShards([checks[0]!, typecheck], inputs, { workers: 2 });
+  const basic = planShards([checks[0]!, typecheck], inputs, { workers: 2 });
+  const profile = JSON.parse(readFileSync(new URL('../release-verification-timings.json', import.meta.url), 'utf8'));
+  const replay = planShards(getPredeployPlan([], { full: true }).checks, inputs, {
+    workers: 8, timings: profile.coldBenchmark.timings, fileTimings: profile.fileTimings, replayMoves: profile.coldBenchmark.replayMoves,
+  });
   const inventory = ([bin, ...args]: string[]) => {
     const dryRun = JSON.parse(execFileSync(bin!, [...args, '--dry=json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
     return dryRun.tasks.map((task: { taskId: string; command: string }) => [task.taskId, task.command]);
   };
   const original = inventory(typecheck.command);
-  const partitioned = plan.workers.flatMap(tasks => tasks.flatMap(task => inventory(task.command)));
-  assert.deepEqual(partitioned.sort(), original.sort());
+  for (const plan of [basic, replay]) {
+    const partitioned = plan.workers.flat().filter(task => task.parent === typecheck.key).flatMap(task => inventory(task.command));
+    assert.deepEqual(partitioned.sort(), original.sort());
+  }
 });
 test('an unrelated command cannot bind same-worker bootstrap exports', () => {
   const { plan, results } = fixture();

@@ -5,10 +5,13 @@
   "cacheState": "warm workspace build/typecheck caches; tests executed fresh",
   "coldBenchmark": {
     "sourceRunId": 41985290182,
-    "replaySourceRunId": 42078407003,
+    "replaySourceRunIds": [42078407003, 42083425543],
     "replayMoves": [
       { "key": "scan-core-policy-full:a47ca2bdcef2672a", "from": 5, "to": 4 },
-      { "key": "gpc-release-tools-typecheck:347eac380c513a2f", "from": 3, "to": 6 }
+      { "key": "gpc-release-tools-typecheck:347eac380c513a2f", "from": 3, "to": 6 },
+      { "key": "workspace-typecheck:8cddbdbc4799e884", "from": 3, "to": 2, "typecheckSliceMs": 50000 },
+      { "key": "gpc-release-tools-typecheck:347eac380c513a2f", "from": 6, "to": 1 },
+      { "key": "consent-action-semantics:042d8c59af7473ec", "from": 0, "to": 4 }
     ],
     "timings": {
       "accessibility-audit": 26556,

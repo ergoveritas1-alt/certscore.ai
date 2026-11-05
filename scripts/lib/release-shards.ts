@@ -8,7 +8,7 @@ import { releaseEnvironmentFingerprint, type ReleaseInputs } from './release-rec
 export const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const sharedBootstrapCommand = ['restore-verified-workspace-bootstrap'];
 export type ShardTask = { key: string; parent: string; command: string[]; files: string[]; estimatedMs: number };
-type ReplayMove = { key: string; from: number; to: number };
+type ReplayMove = { key: string; from: number; to: number; typecheckSliceMs?: number };
 export type ShardPlan = {
   version: 1; sha: string; sourceFingerprint: string; checks: Check[]; workers: ShardTask[][];
   execution: { environment: string; platform: string; arch: string };
@@ -67,16 +67,20 @@ function partitionableTestFiles(check: Check) {
   return { prefix: [...packageCommand, 'exec', ...runner], files };
 }
 
-function workspaceTypecheckPartitions(check: Check) {
+function workspaceTypecheckPartitions(check: Check, splitNonWeb = false) {
   const full = ['pnpm', 'turbo', 'run', 'typecheck', '--concurrency=2'];
   if (JSON.stringify(check.command) !== JSON.stringify(full)) throw new Error('Review the workspace typecheck command before partitioning.');
   const web = '@website-signal-risk-scanner/web';
-  return [
-    // Bootstrap already produced the dependency outputs. Their typechecks run
-    // in the complementary partition, so only run the web task here.
-    { key: 'workspace-typecheck:web', command: [...full, '--only', `--filter=${web}`] },
-    { key: 'workspace-typecheck:other', command: [...full, `--filter=!${web}`] },
-  ];
+  // Bootstrap already produced the dependency outputs. Their typechecks run
+  // in the complementary partition, so only run the selected app tasks here.
+  const webPartition = { key: 'workspace-typecheck:web', command: [...full, '--only', `--filter=${web}`] };
+  const other = { key: 'workspace-typecheck:other', command: [...full, `--filter=!${web}`] };
+  if (!splitNonWeb) return [webPartition, other] as const;
+
+  const workerApps = ['@website-signal-risk-scanner/v2-dag-lambda', '@website-signal-risk-scanner/validation-worker'];
+  const remaining = { ...other, command: [...other.command, ...workerApps.map(name => `--filter=!${name}`)] };
+  const moved = { key: 'workspace-typecheck:worker-apps', command: [...full, '--only', ...workerApps.map(name => `--filter=${name}`)] };
+  return [webPartition, remaining, moved] as const;
 }
 
 function consentQualityPartitions(check: Check) {
@@ -105,10 +109,14 @@ function consentQualityPartitions(check: Check) {
   });
 }
 
-function commandPartitions(check: Check) {
-  if (check.key === 'workspace-typecheck') return workspaceTypecheckPartitions(check);
+function commandPartitions(check: Check, splitNonWeb = false) {
+  if (check.key === 'workspace-typecheck') return workspaceTypecheckPartitions(check, splitNonWeb);
   if (check.key === 'scan-core-consent-quality') return consentQualityPartitions(check);
   return null;
+}
+
+function withTaskKey(task: ShardTask): ShardTask {
+  return { ...task, key: `${task.parent}:${digest(task.command).slice(0, 16)}` };
 }
 
 export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 'fingerprint'>,
@@ -157,20 +165,35 @@ export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 
       if (prior && task.files.length) { prior.files.push(...task.files); prior.command.push(...task.files); prior.estimatedMs += task.estimatedMs; }
       else groups.set(group, { ...task, files: [...task.files], command: [...task.command] });
     }
-    return [...groups.values()].map(task => ({ ...task, key: `${task.parent}:${digest(task.command).slice(0, 16)}` }));
+    return [...groups.values()].map(withTaskKey);
   });
   // Only replay a measured command when the current inventory still places it
   // on its original worker. Leave other worker counts and regrouped tasks alone.
-  for (const { key, from, to } of options.replayMoves ?? []) {
+  for (const { key, from, to, typecheckSliceMs } of options.replayMoves ?? []) {
     const source = merged[from], destination = merged[to];
     const index = source?.findIndex(task => task.key === key) ?? -1;
     if (!source || !destination || index === -1) continue;
     const task = source[index]!;
-    if (destination.some(candidate => candidate.parent === task.parent)) continue;
-    source.splice(index, 1);
-    destination.push(task);
-    totals[from]! -= task.estimatedMs;
-    totals[to]! += task.estimatedMs;
+    if (task.parent === 'scan-core-policy-full' && destination.some(candidate => candidate.parent === task.parent)) continue;
+    let moved = task;
+    if (typecheckSliceMs !== undefined) {
+      const check = checks.find(candidate => candidate.key === task.parent)!;
+      if (task.parent !== 'workspace-typecheck' || JSON.stringify(task.command) !== JSON.stringify(workspaceTypecheckPartitions(check)[1].command) ||
+          !Number.isFinite(typecheckSliceMs) || typecheckSliceMs <= 0 || typecheckSliceMs >= task.estimatedMs) {
+        throw new Error('Invalid workspace typecheck replay partition.');
+      }
+      const [, remaining, workerApps] = workspaceTypecheckPartitions(check, true);
+      if (!workerApps) throw new Error('Missing workspace typecheck replay partition.');
+      source[index] = withTaskKey({ ...task, command: remaining.command, estimatedMs: task.estimatedMs - typecheckSliceMs });
+      moved = withTaskKey({ ...task, command: workerApps.command, estimatedMs: typecheckSliceMs });
+    } else {
+      source.splice(index, 1);
+    }
+    // Keep a relocated test command intact even when the receiver already runs
+    // another shard of that check. The worker still runs each command serially.
+    destination.push(moved);
+    totals[from]! -= moved.estimatedMs;
+    totals[to]! += moved.estimatedMs;
   }
   const bootstrapMs = timings['workspace-package-build'] ?? 20_000;
   const setupMsPerWorker = options.setupMsPerWorker ?? 60_000;
@@ -190,7 +213,7 @@ export function validateShardPlan(plan: ShardPlan, expectedChecks: Check[]) {
     if (parent.key === 'workspace-package-build') continue;
     const tasks = all.filter(task => task.parent === parent.key), split = partitionableTestFiles(parent);
     if (!tasks.length) throw new Error(`Missing check ${parent.key}.`);
-    const partitions = tasks.length > 1 ? commandPartitions(parent) : null;
+    const partitions = tasks.length > 1 ? commandPartitions(parent, plan.workers.length === 8 && tasks.length === 3) : null;
     if (partitions) {
       const required = partitions.map(task => JSON.stringify(task.command)).sort();
       const actual = tasks.map(task => JSON.stringify(task.command)).sort();
