@@ -757,6 +757,67 @@ test("does not count contextual options words in static banner text as first-lay
   assert.equal(staticTextCandidate, undefined);
 });
 
+test("focusable descriptive notice wrappers do not become Settings controls", async () => {
+  const artifact = await captureFixture(`
+    <div id="onetrust-banner-sdk" role="region" aria-label="Cookie banner" tabindex="0" style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:white">
+      <div role="dialog" aria-label="Privacy">
+        <p>We use cookies to personalise content and ads and analyse our traffic. This notice explains advertising and analytics technologies and describes how information may be shared with service partners.</p>
+        <button id="sale-choice" aria-label="Do Not Sell or Share My Personal Information, Opens the preference center dialog">Do Not Sell or Share My Personal Information</button>
+        <button aria-label="Close">X</button>
+      </div>
+    </div>`);
+  assert.equal(artifact.summary.firstLayerOptions, false);
+  assert.ok(!artifact.candidates.some(c => c.selectorHint === "#onetrust-banner-sdk"));
+  assert.equal(findCandidate(artifact, "Do Not Sell or Share My Personal Information")?.actionType, "do_not_sell_share");
+  assert.equal(findCandidate(artifact, "Do Not Sell or Share My Personal Information")?.decisionStatus, "confirmed_visible");
+});
+
+test("wrapper filtering preserves explicit custom actions and standalone focusable controls", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" style="position:fixed;bottom:0;padding:24px;background:white">
+      <p>We use cookies for advertising and analytics.</p>
+      <div id="role-action" role="button" tabindex="0">Personalise <span tabindex="-1">cookies</span></div>
+      <div id="handler-action" tabindex="0" onclick="void 0">Manage preferences <span tabindex="0">details</span></div>
+      <div id="keyboard-action" tabindex="0">Cookie settings</div>
+      <button>Accept all</button><button>Reject all</button>
+    </div>`);
+  for (const id of ["role-action", "handler-action", "keyboard-action"]) {
+    const candidate = artifact.candidates.find(c => c.selectorHint === `#${id}`);
+    assert.equal(candidate?.actionType, "manage_preferences", id);
+    assert.equal(candidate?.decisionStatus, "confirmed_visible", id);
+  }
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+});
+
+test("localized iframe controls survive missing dialog roles and prose mentioning the footer", async () => {
+  const page = await newPage(browser!);
+  try {
+    for (const mode of ["notice", "footer", "account"] as const) {
+      const prose = mode === "account" ? "Kontoeinstellungen für Ihr Profil." : "Wir verwenden Cookies für Werbung. Sie können Ihre Präferenzen über die Privatsphäre-Einstellungen im Footer anpassen.";
+      const content = `<div id="notice"><div class="${mode === "account" ? "account-content" : "consent-content"}"><p>${prose}</p></div><div class="actions"><button>Annehmen</button><button>Einstellungen</button></div></div>`;
+      await page.route(`https://frame-scope.test/${mode}`, route => route.fulfill({contentType: "text/html", body: `<!doctype html><iframe src="https://frame-scope.test/${mode}/child" style="position:fixed;top:150px;left:400px;width:520px;height:500px;border:0"></iframe>`}));
+      await page.route(`https://frame-scope.test/${mode}/child`, route => route.fulfill({contentType: "text/html", body: `<!doctype html><html lang="de"><body>${mode === "footer" ? `<footer>${content}</footer>` : content}</body></html>`}));
+      await page.goto(`https://frame-scope.test/${mode}`);
+      const artifact = await captureConsentControlGeometry(page, {timeoutMs: 1500});
+      if (mode === "notice") {
+        for (const label of ["Annehmen", "Einstellungen"]) {
+          const candidate = findCandidate(artifact, label);
+          assert.equal(candidate?.frameContext.frameKind, "child_frame", label);
+          assert.equal(candidate?.layer, "first_layer", label);
+          assert.equal(candidate?.decisionStatus, "confirmed_visible", label);
+        }
+        assert.equal(artifact.summary.firstLayerAccept, true);
+        assert.equal(artifact.summary.firstLayerOptions, true);
+      } else {
+        assert.equal(artifact.summary.firstLayerAccept, false, mode);
+        assert.equal(artifact.summary.firstLayerOptions, false, mode);
+      }
+    }
+  } finally { await page.close(); }
+});
+
 test("captures a Portuguese Preferências button only inside a first-layer cookie surface", async () => {
   const artifact = await captureFixture(`
     <main><button>Preferências</button></main>

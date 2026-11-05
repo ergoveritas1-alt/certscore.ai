@@ -64,7 +64,12 @@ export function pdfGroupRemediation(report: CanonicalReportExport, group: PdfRev
       guidance: accessibilityCorrectionGuidance(rule.ruleId), verification: accessibilityRemediationVerification(rule.ruleId), reference: rule.helpUrl,
     })) : [];
   if (group.topic === "accessibility" && !rules.length) locations.push("Rule-specific node evidence is unavailable or not bound to this issue. Obtain the referenced rule ID, page and affected element before applying an attribute/template fix; do not assume an image or button failure.");
-  const plan = webmasterRemediation(kind) ?? fallbackPlan(group);
+  const missingPolicyPassage = kind === "policy_clarity_risk" && findings.every(finding => {
+    const evidence = object(finding.evidence), details = object(finding.details);
+    return (!strings(evidence.snippets).length || !strings(evidence.sourceUrls).length) && typeof details.policySnippet !== "string";
+  });
+  if (missingPolicyPassage) locations.push("Evidence gap: the saved policy-clarity finding does not include its triggering passage. Recover the exact passage and source from the policy workpaper before revising the policy.");
+  const plan = missingPolicyPassage ? {owner:"Privacy/content owner + webmaster", steps:["Recover the triggering passage and confirm its document owner, intended practice and applicability before selecting a correction."], verification:"Retain the reviewed passage, source URL and approved wording; then repeat policy review. Missing source text remains an open evidence gap."} : webmasterRemediation(kind) ?? fallbackPlan(group);
   let withheld = false;
   const publicLocations = unique(locations).filter(location => {
     try { assertPublicReportPdfContent([location]); return true; }

@@ -169,7 +169,7 @@ export function pdfReportCounts(report: CanonicalReportExport) {
 export function pdfPublicWords(value: string) {
   return reportFindingSummary(value).replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/;\s*canonical_cookie_registry\.v\d+\b/g, "")
-    .replace(/\bretained\s+/gi, "").replace(/\b3rd[- ]party\b/gi, "third-party")
+    .replace(/\bNot Not retained\b/gi, "Not recorded").replace(/\bretained\b/gi, "recorded").replace(/\b3rd[- ]party\b/gi, "third-party")
     .replace(/\bURLS\b/g, "URLs").replace(/\b1 review signals\b/g, "1 review signal")
     .replace(/\s+;/g, ";").replace(/Sccs Assumed Unverified/gi, "SCCs assumed, not verified")
     .replace(/\bredirected_to_https\b/g, "redirected to HTTPS").replace(/\bperiodic_cookie_snapshot\b/g, "periodic cookie snapshot")

@@ -27,6 +27,16 @@ export function projectGpcTimeline(projection: GpcResponseReportProjection | nul
   return { clockLabel: "Times from GPC visit start", coverage: observation.status === "complete" && requests.complete ? "complete" : "limited", events };
 }
 
+/** Short index label; timing and comparison results belong inside the disclosure. */
+export function gpcEvidenceHeaderLabel(projection: GpcResponseReportProjection): string {
+  if (projection.assessment.contractVersion === "certscore.gpc-response-assessment.v3") {
+    return projection.assessment.observation.status === "complete" ? "Signal observed"
+      : projection.assessment.observation.status === "limited" ? "Observation limited" : "Unavailable";
+  }
+  return projection.assessment.status === "responsive" ? "Response observed"
+    : projection.assessment.status === "no_observable_response" ? "No observable response" : "Comparison incomplete";
+}
+
 export function gpcSummaryLabel(projection: GpcResponseReportProjection): string {
   if (projection.assessment.contractVersion !== "certscore.gpc-response-assessment.v3") {
     return projection.headline;

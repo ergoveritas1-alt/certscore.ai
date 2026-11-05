@@ -277,7 +277,8 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.doesNotMatch(source, /CA −\{report\.gpcResponse\.californiaDeductionPoints\}/);
   assert.match(source, /id="gpc-evidence"/);
   assert.match(source, /data-testid="gpc-evidence-index-card"/);
-  assert.match(gpcEvidenceCardSource, /gpcSummaryLabel\(projection\)/);
+  assert.match(gpcEvidenceCardSource, /gpcEvidenceHeaderLabel\(projection\)/);
+  assert.doesNotMatch(gpcEvidenceCardSource, /gpcSummaryLabel\(projection\)/);
   assert.match(gpcEvidenceCardSource, /projection\.coverageSummary/);
   assert.doesNotMatch(gpcEvidenceCardSource, /<details open=/);
   assert.doesNotMatch(evidenceDirectorySource, /expanded=\{report\.reviewFocus === "ccpa_cpra"\}/);

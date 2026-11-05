@@ -123,7 +123,7 @@ export function validateChoicePathExecution(execution: ChoicePathExecution | und
 
 export function choicePathExecutionLabel(execution: ChoicePathExecution | null | undefined): string {
   switch (execution?.status) {
-    case "succeeded": return "Succeeded";
+    case "succeeded": return "Consent unconfirmed";
     case "succeeded_with_confirmation": return "Succeeded with confirmation";
     case "not_attempted": return "Not attempted";
     case "unsupported": return "Unsupported";

@@ -47,7 +47,7 @@ test("web, PDF/Word content, API, SDK and both MCP profiles retain identical for
       assert.deepEqual(expectedRows, web.collectionTableRows);
       const content = canonicalReportDocumentContent(exported).lines.map(line => line.text).join("\n");
       assert.equal(expectedRows.length, proof === "retained" ? 2 : 0);
-      if (proof === "retained") assert.match(content, /2 forms; 9 fields/);
+      if (proof === "retained") assert.match(content, /2 recorded forms; 9 recorded fields/);
       else assert.equal(web.formsSummary.afterAcceptObserved, null, "missing or mismatched proof remains unknown");
       assert.match(content, /3 request events; 2 distinct request resources/);
       const calls: string[] = [];

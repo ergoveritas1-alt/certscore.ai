@@ -13,6 +13,29 @@ import {
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
 
+test("audience and location choices cannot borrow consent meaning from a sibling CMP", () => {
+  const audience = "Change Your Location. Tell us a little about you to help us personalize the site to your needs. Financial Advisor. Institutional Investor. Individual Investor. Terms and Conditions and Privacy Policies. Accept";
+  for (const scopeText of [audience, "Choose your language. English. Accept", "Select your country. Accept",
+    "Select your country to access our services. Accept. Cookie Policy"]) {
+    for (const usage of ["observation", "action"] as const) {
+      const result = classifyConsentControlLabel({label: "Accept", scopeKind: "dialog", scopeText,
+        contextText: "We use cookies for advertising. Manage consent preferences.", hasConsentContext: true, usage});
+      assert.equal(result.intent, "unknown");
+      assert.ok(result.reasonCodes.includes("audience_or_location_selection_control"));
+    }
+  }
+  // A specific privacy choice inside a mixed-purpose surface keeps its own meaning.
+  assert.equal(classifyConsentControlLabel({label: "Accept cookies", scopeKind: "dialog", scopeText: audience}).intent, "accept");
+  assert.equal(classifyConsentControlLabel({label: "Accept", scopeKind: "dialog",
+    scopeText: "Choose your region. We use cookies for analytics. Accept", hasConsentContext: true}).intent, "accept");
+  assert.equal(classifyConsentControlLabel({label: "Accept", scopeKind: "dialog",
+    scopeText: "We value your privacy. We use cookies for analytics. Accept"}).intent, "accept");
+  // Preserve legacy label-only interpretation; scope-sensitive callers supply local evidence.
+  assert.equal(classifyConsentControlLabel({label: "Accept"}).intent, "accept");
+  assert.equal(classifyConsentControlLabel({label: "Accept", ariaLabel: "Accept cookies", scopeKind: "dialog",
+    scopeText: audience}).intent, "unknown", "A different accessibility label cannot bypass the local-purpose veto.");
+});
+
 test("retained Dolby, Rijksmuseum, Pigu and Matas labels use exact contextual observation terms", () => {
   for (const fixture of retainedControls) {
     const c = fixture.candidate;
@@ -1325,6 +1348,40 @@ test("an inline Utiq opt-out needs its own scope and cannot replace general Reje
   assert.equal(classifyConsentControlLabel({ label: "jetzt ablehnen", scopeKind: "paragraph", scopeText: "Ihre Einwilligung für Utiq können Sie jetzt ablehnen", hasConsentContext: true }).intent, "privacy_opt_out");
   assert.equal(classifyConsentControlLabel({ label: "Reject all", contextText: "Cookies and Utiq advertising", hasConsentContext: true }).intent, "reject");
   assert.equal(classifyConsentControlLabel({ label: "jetzt ablehnen", contextText: "Cookies and Utiq advertising", hasConsentContext: true }).intent, "reject");
+});
+
+test("observes the longer Utiq refusal only with label-bound paragraph purpose", () => {
+  for (const scopeText of [
+    "Ihre Einwilligung für Utiq können Sie mit Einwilligung jetzt ablehnen widerrufen.",
+    "Sie können Ihre Einwilligung jetzt ablehnen oder später über „Utiq verwalten“ oder im Datenschutzportal von Utiq widerrufen.",
+  ]) {
+    const result = classifyConsentControlLabel({
+      label: "Einwilligung jetzt ablehnen", scopeKind: "paragraph", scopeText,
+      hasConsentContext: true, usage: "observation",
+    });
+    assert.equal(result.intent, "privacy_opt_out");
+    assert.equal(result.variant, "vendor_specific_opt_out");
+    assert.ok(result.reasonCodes.includes("observation_only_label"));
+    assert.ok(result.reasonCodes.includes("label_bound_vendor_refusal"));
+  }
+});
+
+test("does not borrow Utiq purpose from unrelated text or expand action classification", () => {
+  const label = "Einwilligung jetzt ablehnen";
+  const validScope = "Sie können Ihre Einwilligung jetzt ablehnen oder später über „Utiq verwalten“ widerrufen.";
+  for (const input of [
+    { label, contextText: validScope, hasConsentContext: true },
+    { label, scopeKind: "dialog" as const, scopeText: validScope, hasConsentContext: true },
+    { label, scopeKind: "paragraph" as const, scopeText: "Einwilligung jetzt ablehnen. Utiq wird an anderer Stelle erklärt.", hasConsentContext: true },
+    { label, scopeKind: "paragraph" as const, scopeText: "Ihre Einwilligung für Utiq verwalten Sie separat. Newsletter: Einwilligung jetzt ablehnen.", hasConsentContext: true },
+    { label, scopeKind: "paragraph" as const, scopeText: "Ihre Einwilligung für Utiq und alle Cookies können Sie mit Einwilligung jetzt ablehnen widerrufen.", hasConsentContext: true },
+    { label, scopeKind: "paragraph" as const, scopeText: "Ihre Einwilligung für Utiq können Sie nicht mit Einwilligung jetzt ablehnen widerrufen.", hasConsentContext: true },
+    { label, scopeKind: "paragraph" as const, scopeText: validScope, hasConsentContext: true, usage: "action" as const },
+    { label: "Reject all", scopeKind: "paragraph" as const, scopeText: validScope, hasConsentContext: true },
+  ]) {
+    assert.notEqual(classifyConsentControlLabel(input).variant, "vendor_specific_opt_out");
+  }
+  assert.equal(classifyConsentControlLabel({ label, scopeKind: "paragraph", scopeText: validScope, usage: "action", hasConsentContext: true }).intent, "reject");
 });
 
 test("acknowledgments require wording tying the click to consent", () => {

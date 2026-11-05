@@ -1,3 +1,4 @@
+import { signalSnapshotValueClass } from "../signal-snapshot-styles";
 import { GpcProductEvidence } from "../gpc-product-evidence";
 import { GdprEprivacyCoverageSummary, GdprEprivacyReview } from "../gdpr-eprivacy-review";
 import { GPC_CUSTOMER_RESULTS_ENABLED } from "../../../lib/scans/gpc-customer-policy";
@@ -27,7 +28,7 @@ import React from "react";
 import { RegulatoryReviewFocus, CaliforniaPrivacyWorkpaper, CaliforniaCoverageSummary } from "../regulatory-review-focus";
 import { resolveReportReviewFocus, reportUrlWithFocus, reviewFocusMismatchNote } from "../../../lib/scans/report-review-focus";
 import { ReportCoverageTiming } from "../report-coverage-timing";
-import { SinglePageResourceInventory } from "../single-page-resource-inventory";
+import { ReportPhaseEvidence } from "../report-phase-evidence";
 import { SitewideEvidenceCard } from "../sitewide-evidence-card";
 import { FullSiteIdentity } from "../full-site-identity";
 import { FullSiteExecutiveSummary } from "../full-site-executive-summary";
@@ -75,7 +76,7 @@ import {
 } from "./industry-benchmark-data";
 import { ShadowPolicyEvidenceViewer } from "./shadow-policy-evidence-viewer";
 import { evidenceRowAnchor } from "../../../lib/scans/report-evidence-navigation";
-import { gpcCollectionRecipients, gpcCardActivity, gpcCardResponse, gpcSummaryLabel } from "./gpc-report-projection";
+import { gpcCollectionRecipients, gpcCardActivity, gpcCardResponse, gpcSummaryLabel, gpcEvidenceHeaderLabel } from "./gpc-report-projection";
 import { getConsentControlSummaryLabel } from "./timeline-report-model";
 import {
   SHADOW_PRIVACY_NOTICE_EVIDENCE,
@@ -466,7 +467,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="shrink-0 whitespace-nowrap text-xs font-medium text-zinc-500">Consent platform</span>
-            <span className="flex min-w-0 flex-1 items-center justify-end gap-2 text-xs font-semibold text-zinc-800">
+            <span className={`${signalSnapshotValueClass} min-w-0 flex-1`}>
               <VendorBrandLogo label={consentVendor} />
               <span className="truncate" title={consentVendor}>{consentVendor}</span>
               <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" />
@@ -481,7 +482,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
         {report.consentControlsAvailable !== false ? <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Consent controls</span>
-            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{consentControlSummary} <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
+            <span className={signalSnapshotValueClass}>{consentControlSummary} <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
           </summary>
           <div className="mt-3"><p className="mb-2 text-xs font-semibold text-zinc-600">Consent choices</p><ControlStatusGrid compact report={report} /></div>
           {report.acceptPath ? (
@@ -498,7 +499,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Policy surfaces</span>
-            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{policySurfaceSummary}</span><DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
+            <span className={signalSnapshotValueClass}><span>{policySurfaceSummary}</span><DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
           </summary>
           <ul className={`${monoClass} mt-3 space-y-2 break-all text-[0.68rem] leading-5 text-zinc-600`}>
             {privacyUrls.length > 0 ? privacyUrls.map((url) => <li key={url}>{url}</li>) : (
@@ -514,11 +515,11 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
             )}
           </ul>
         </details>
-        {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "ccpa_cpra" ? <CaliforniaCoverageSummary optOutPresence={report.californiaOptOutPresence} frictionlessGpcException={report.californiaFrictionlessGpcException?.assessment.scanId === report.scan.id ? report.californiaFrictionlessGpcException : null} policyChoiceMethods={report.californiaPolicyChoiceMethods?.scanId === report.scan.id ? report.californiaPolicyChoiceMethods : null} coverage={report.californiaScore?.reviewCoverage} choicePresence={report.californiaChoicePresence?.scanId === report.scan.id ? report.californiaChoicePresence : null} /> : <GdprEprivacyCoverageSummary rows={report.gdprTransparencyRows} policyUrls={privacyUrls} />}
+        {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "ccpa_cpra" ? <CaliforniaCoverageSummary optOutPresence={report.californiaOptOutPresence} frictionlessGpcException={report.californiaFrictionlessGpcException?.assessment.scanId === report.scan.id ? report.californiaFrictionlessGpcException : null} policyChoiceMethods={report.californiaPolicyChoiceMethods?.scanId === report.scan.id ? report.californiaPolicyChoiceMethods : null} coverage={report.californiaScore?.reviewCoverage} choicePresence={report.californiaChoicePresence?.scanId === report.scan.id ? report.californiaChoicePresence : null} /> : <GdprEprivacyCoverageSummary rows={report.gdprTransparencyRows} policyUrls={privacyUrls} policySurfaceCoverage={report.policySurfaceCoverage} policySurfaceLinkObserved={report.policySurfaceLinkObserved} />}
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Transport security</span>
-            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{observedTransportRows} of {report.transportRows.length} observed</span><DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
+            <span className={signalSnapshotValueClass}><span>{observedTransportRows} of {report.transportRows.length} observed</span><DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
           </summary>
           <ul className="mt-3 space-y-2 text-xs leading-5 text-zinc-600">
             {report.transportRows.map((row) => (
@@ -533,7 +534,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
           <details className={signalRowClass} data-testid="accessibility-audit-status">
             <summary className={signalSummaryClass}>
               <span className="text-xs font-medium text-zinc-500">{ACCESSIBILITY_REPORT_LABEL}</span>
-              <span className="flex shrink-0 items-center gap-2 text-xs font-semibold text-zinc-800">
+              <span className={signalSnapshotValueClass}>
                 {accessibilityIssueCountLabel(report.accessibilityAudit)}
                 <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" />
               </span>
@@ -1255,8 +1256,7 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
       actions={<ShadowReportShareMenu key="share-report" reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
       snapshot={<SignalSnapshot siteOverview={Boolean(report.fullSite)} report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} homepageHighlightExpansion={report.assessmentHighlightExpansion} />
     <SitePriorityReview reportIdentity={{scanId: report.scan.id, documentUrl: report.scan.url, sourceHash: report.californiaPrivacyReview?.sourceHash}} californiaAssessment={report.californiaPrivacyReview} reviewFocus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} findings={priorityReview} pending={false} sitewideAvailable scannedPages={1} />
-    <ReportPageEventTimeline events={report.timeline} accept={report.actionTimelines?.accept} reject={report.actionTimelines?.reject} gpc={report.gpcTimeline} />
-    {report.resourceInventory ? <SinglePageResourceInventory inventory={report.resourceInventory} report={report}/> : <div id="report-resource-inventory"><RuntimeInventoryTable report={report} heading="Services & Resources" /></div>}
+    <ReportPhaseEvidence report={report} initialFallback={<RuntimeInventoryTable report={report} heading="Services & Resources" />} />
     <CollectionSurfacesTable afterAcceptLimited={report.afterAcceptFormsLimited} rows={report.collectionTableRows ?? []} loading={false} pagesWithoutInventory={report.collectionCoverage?.pagesWithoutInventory ?? 1} limitedPages={report.collectionCoverage?.limitedPages ?? 0} />
     <FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />
     <EvidenceDirectory compact report={report} />
@@ -1464,7 +1464,7 @@ export function GpcEvidenceIndexCard({ projection, california = false }: { proje
   return (
     <details className="group/gpc border-b border-r border-zinc-200 p-5" id="gpc-evidence" data-testid="gpc-evidence-index-card">
       <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.gpc}
-        recap={scoredRisk ? "Risk observed" : gpcSummaryLabel(projection)}
+        recap={scoredRisk ? "Risk observed" : gpcEvidenceHeaderLabel(projection)}
         badge={<EvidenceHeaderStatus rows={scoredRisk ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" && !projection.activityComparison ? [{status: "Limited"}] : []} />} />
       <div className="mt-4 space-y-3 text-xs leading-5 text-zinc-600">
         {activity ? <p>{activity}</p> : null}

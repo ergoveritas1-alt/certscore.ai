@@ -1,6 +1,7 @@
 import { parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { buildGpcCmpStateComparison } from "@certscore/scan-core/gpc-cmp-state-comparison";
 import { isLoopbackPostRefusalTarget } from "@certscore/scan-core/post-refusal-target-authorization";
+import { runtimeEvidenceClockSchema } from "@certscore/contracts";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
 import { assertPrivacyCaptureProfile, PRESENCE_ONLY_CAPTURE_PROFILE } from "@certscore/contracts";
 import { describeCaptureFailure } from "@certscore/contracts";
@@ -2914,6 +2915,11 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       consentProof: consentProofBundle,
       policyEvidence: policyEvidenceBundle,
       runtimeEvidence: runtimeEvidenceBundle,
+      runtimeEvidenceSource: (() => {
+        const bytes = verifiedGpcWorkerBytes.get(runtimeEvidenceBundle);
+        if (!bytes) throw new Error("Runtime clock preservation requires verified original worker bytes.");
+        return { sha256: createHash("sha256").update(bytes).digest("hex"), sizeBytes: bytes.length };
+      })(),
       scanId: payload.scanId,
       runtimeGraph: payload.runtimeGraph,
     })
@@ -4594,9 +4600,22 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
   consentProof: CanonicalEvidenceBundle;
   policyEvidence: CanonicalEvidenceBundle;
   runtimeEvidence: CanonicalEvidenceBundle;
+  runtimeEvidenceSource?: { sha256: string; sizeBytes: number };
   scanId: string;
   runtimeGraph?: RuntimeGraphDispatch;
 }): CanonicalEvidenceBundle {
+  const originalRuntime = input.runtimeEvidence;
+  if (input.runtimeEvidenceSource && (originalRuntime.scanId !== input.scanId ||
+    originalRuntime.url !== input.consentProof.url || originalRuntime.region !== input.consentProof.region ||
+    originalRuntime.runtimeEvidenceClock !== undefined || originalRuntime.scanLaneRuns.length !== 1 ||
+    originalRuntime.scanLaneRuns[0]?.laneId !== "runtime_evidence")) {
+    throw new Error("Runtime clock source must be the isolated original runtime worker for this scan.");
+  }
+  const runtimeEvidenceClock = input.runtimeEvidenceSource ? runtimeEvidenceClockSchema.parse({
+    contractVersion: "certscore.runtime-evidence-clock.v1", laneId: "runtime_evidence",
+    scanId: originalRuntime.scanId, targetUrl: originalRuntime.url, region: originalRuntime.region,
+    startedAt: originalRuntime.startedAt, completedAt: originalRuntime.completedAt, source: input.runtimeEvidenceSource,
+  }) : undefined;
   const consentProof = rewriteEvidenceLaneArtifactPaths(input.consentProof, "consent_proof", input.artifactRoot);
   const runtimeEvidence = rewriteEvidenceLaneArtifactPaths(input.runtimeEvidence, "runtime_evidence", input.artifactRoot);
   const runtimeGraphs = verifyLaneRuntimeGraph(runtimeEvidence, input.scanId, "pre_consent", input.runtimeGraph);
@@ -4671,6 +4690,7 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
   ]);
   const merged = {
     ...consentProof,
+    runtimeEvidenceClock,
     scanId: input.scanId,
     completedAt: new Date().toISOString(),
     scanProfile: {

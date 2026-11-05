@@ -11,6 +11,7 @@ import {
   classifyConsentControlLabel, verifyConsentControlInspection,
 } from "@certscore/contracts";
 import {captureConsentControlGeometry, type ConsentControlGeometryArtifact} from "../../../../packages/certscore-scan-core/src/consent-control-geometry";
+import {readRapidFirstLayerConsentUiObservation} from "../../../../packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner";
 import {projectPublicFirstLayerConsentEvidence} from "../../lib/scans/public-first-layer-consent-evidence";
 import {deriveMaterializedConsentControlAssessment} from "./consent-control-assessment-projector";
 import {buildNormalizedConcerns} from "../../lib/scans/normalized-concerns";
@@ -43,7 +44,7 @@ test.after(async () => {
 
 type CaptureFixture = {site: string; context: string;
   controls: readonly {label: string; ariaLabel: string | null; expectedIntent: string}[]};
-async function capture(f: CaptureFixture, mode: "visible" | "hidden" | "no_context", intent: "reject" | "options" = "reject") {
+async function capture(f: CaptureFixture, mode: "visible" | "hidden" | "no_context", intent: "reject" | "options" = "reject", bodyOverride?: string, inspectRapid = false) {
   const context = await browser.newContext({viewport: {width: 1366, height: 900}, serviceWorkers: "block"});
   const page = await context.newPage();
   const url = `https://retained-consent.test/${f.site}/${mode}`;
@@ -53,8 +54,8 @@ async function capture(f: CaptureFixture, mode: "visible" | "hidden" | "no_conte
     const region = mode === "no_context" && intent === "options"
       ? 'id="account-options"' : 'id="fixture-dialog" role="dialog"';
     const html = `<!doctype html><meta charset="utf-8"><style>body{margin:0;font:16px Arial}section{position:fixed;bottom:0;left:0;right:0;padding:20px;background:#fff}p{max-height:160px;overflow:hidden}button{padding:12px;margin:4px}</style>
-      <section ${region}><p>${escape(mode === "no_context" ? "Choose an account option." : f.context)}</p>
-      ${controls.map(c => `<button ${c.expectedIntent === intent && mode === "hidden" ? 'style="display:none"' : ""} ${c.ariaLabel ? `aria-label="${escape(c.ariaLabel)}"` : ""}>${escape(c.label)}</button>`).join("")}</section>
+      ${bodyOverride ?? `<section ${region}><p>${escape(mode === "no_context" ? "Choose an account option." : f.context)}</p>
+      ${controls.map(c => `<button ${c.expectedIntent === intent && mode === "hidden" ? 'style="display:none"' : ""} ${c.ariaLabel ? `aria-label="${escape(c.ariaLabel)}"` : ""}>${escape(c.label)}</button>`).join("")}</section>`}
       <script>window.fixtureClicks=0;document.addEventListener('click',()=>window.fixtureClicks++)</script>`;
     await page.route("**/*", route => route.request().url() === url
       ? route.fulfill({contentType: "text/html", body: html})
@@ -65,6 +66,7 @@ async function capture(f: CaptureFixture, mode: "visible" | "hidden" | "no_conte
     const tree = await cdp.send("Page.getFrameTree");
     const identity = {source: "cdp_loader_id" as const, token: tree.frameTree.frame.loaderId};
     const geometry = await captureConsentControlGeometry(page, {documentIdentity: identity, timeoutMs: 900});
+    const rapid = inspectRapid ? await readRapidFirstLayerConsentUiObservation(page, startedAt, 1500) : undefined;
     const dom = await page.content();
     const domCapturedAtMs = Date.now() - startedAt;
     const bundle = canonicalEvidenceBundleSchema.parse({
@@ -81,7 +83,7 @@ async function capture(f: CaptureFixture, mode: "visible" | "hidden" | "no_conte
     });
     assert.equal(await page.evaluate(() => (window as unknown as {fixtureClicks: number}).fixtureClicks), 0);
     assert.deepEqual(rejectedRequests, []);
-    return {geometry, bundle, domSha256: createHash("sha256").update(dom).digest("hex")};
+    return {geometry, bundle, rapid, domSha256: createHash("sha256").update(dom).digest("hex")};
   } finally {await context.close();}
 }
 function project(bundle: Awaited<ReturnType<typeof capture>>["bundle"], geometry: ConsentControlGeometryArtifact) {
@@ -114,6 +116,60 @@ function project(bundle: Awaited<ReturnType<typeof capture>>["bundle"], geometry
   assert.equal(first?.rejectControlObserved ?? null, publicEvidence?.rejectControlObserved ?? null);
   return {assessment: validated, publicEvidence, serializedFirstLayer: first, checklistRejectEvidenceState, checklistOptionsEvidenceState};
 }
+
+test("audience Accept is not projected as consent while local cookie agreement remains supported", async () => {
+  for (const cookieConsent of [false, true]) {
+    const body = `<section role="dialog" aria-label="Regional information">
+      <h2>Change Your Location</h2><p>Tell us a little about you to help us personalize the site to your needs.</p>
+      <div>Financial Advisor</div><div>Institutional Investor</div><div>Individual Investor</div>
+      <p>Terms and Conditions and Privacy Policies</p>
+      ${cookieConsent ? '<p>We use cookies for analytics.</p><button>Reject All</button><button>Manage Preferences</button>' : ''}<button>Accept</button></section>
+      <aside id="hidden-template" hidden>We use cookies for advertising. Manage consent preferences.</aside>`;
+    const {geometry, bundle, rapid} = await capture({site: cookieConsent ? "audience-cookie-consent" : "audience-selection", context: "", controls: []}, "visible", "options", body, true);
+    assert.equal(geometry.summary.firstLayerAccept, cookieConsent);
+    assert.ok(rapid);
+    if (cookieConsent) assert.equal(rapid.acceptControlObserved, true, JSON.stringify({basis: rapid.basis, controls: rapid.controls}));
+    else assert.notEqual(rapid.acceptControlObserved, true, "Rapid inventory must use the same local-purpose guard.");
+    const result = project(bundle, geometry);
+    assert.equal(result.assessment.controls.accept.state, cookieConsent ? "observed" : "unknown",
+      "Removing a non-consent candidate must not manufacture complete negative coverage.");
+    assert.equal(result.publicEvidence?.acceptControlObserved, cookieConsent ? true : null);
+    assert.equal(result.serializedFirstLayer.acceptControlObserved, cookieConsent ? true : null);
+  }
+});
+
+test("focusable banner prose cannot produce public Options while its sale/share control remains observed", async () => {
+  const {geometry, bundle} = await capture({site: "focusable-banner", context: "", controls: []}, "visible", "options", `
+    <section id="onetrust-banner-sdk" role="region" aria-label="Cookie banner" tabindex="0">
+      <div role="dialog" aria-label="Privacy">
+        <p>We use cookies to personalise content and ads and analyse our traffic. This notice explains advertising and analytics technologies and describes how information may be shared with service partners.</p>
+        <button aria-label="Do Not Sell or Share My Personal Information, Opens the preference center dialog">Do Not Sell or Share My Personal Information</button>
+      </div>
+    </section>`);
+  assert.ok(verifyConsentControlInspection(geometry.controlInspection, geometry.candidates));
+  const projected = project(bundle, geometry);
+  assert.equal(projected.assessment.controls.options.state, "not_observed");
+  assert.equal(projected.assessment.controls.privacyOptOut.state, "observed");
+  assert.equal(projected.publicEvidence?.managePreferencesControlObserved, false);
+  assert.equal(projected.serializedFirstLayer.managePreferencesControlObserved, false);
+  const wrongDocument = project(bundle, {...geometry, documentIdentity: {source: "cdp_loader_id", token: "different-loader"}});
+  assert.equal(wrongDocument.assessment.controls.options.state, "unknown");
+});
+
+test("localized controls beside footer-reference prose reach canonical and public presence without a dialog role", async () => {
+  const {geometry, bundle} = await capture({site: "localized-sibling-controls", context: "", controls: []}, "visible", "options", `
+    <div id="notice"><div class="consent-content"><p>Wir verwenden Cookies für Werbung. Sie können Ihre Präferenzen über die Privatsphäre-Einstellungen im Footer anpassen.</p></div>
+      <div class="actions"><button>Annehmen</button><button>Einstellungen</button></div>
+    </div>`);
+  assert.ok(verifyConsentControlInspection(geometry.controlInspection, geometry.candidates));
+  const projected = project(bundle, geometry);
+  assert.equal(projected.assessment.controls.accept.state, "observed");
+  assert.equal(projected.assessment.controls.options.state, "observed");
+  assert.equal(projected.publicEvidence?.acceptControlObserved, true);
+  assert.equal(projected.publicEvidence?.managePreferencesControlObserved, true);
+  assert.equal(projected.serializedFirstLayer.acceptControlObserved, true);
+  assert.equal(projected.serializedFirstLayer.managePreferencesControlObserved, true);
+});
 
 test("Church of England: retained Set cookie preferences label reaches canonical and serialized Options without inventing Accept or Reject", async () => {
   const {geometry, bundle, domSha256} = await capture(churchOptions, "visible", "options");

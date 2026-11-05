@@ -9,13 +9,13 @@ export function reconcilePostAcceptFormInventory(images: PostAcceptFormSnapshotP
   if (!original) return null;
   const unchanged = {inventory:original, structuredFrame:undefined as PostAcceptFormCapture["frames"][number] | undefined,
     additionalFormRefs:[] as string[]};
-  if (capture?.version !== "post_accept_form_capture.v3" || capture.status !== "captured" ||
+  if (!capture || !["post_accept_form_capture.v3", "post_accept_form_capture.v4"].includes(capture.version) || capture.status !== "captured" ||
     !capture.window?.terminalSampleCompleted || capture.exactTargetSha256 !== images.exactTargetSha256 ||
     capture.actionDispatchedAtMs !== images.actionDispatchedAtMs ||
     capture.window.startedAtMs !== (images.contractVersion === "certscore.post_accept_form_snapshots.v7"
       ? images.actionDispatchedAtMs : images.acceptanceRegisteredAtMs)) return unchanged;
   const originalCapturedAtMs = images.contractVersion === "certscore.post_accept_form_snapshots.v5" ||
-    images.contractVersion === "certscore.post_accept_form_snapshots.v6" ? images.postCaptureInventory.capturedAtMs : images.capturedAtMs;
+    (images.contractVersion === "certscore.post_accept_form_snapshots.v6" || images.contractVersion === "certscore.post_accept_form_snapshots.v8") ? images.postCaptureInventory.capturedAtMs : images.capturedAtMs;
   const frames = capture.frames.filter(frame => frame.frameRef === "accept_frame_0" &&
     frame.documentBinding?.source === "cdp_loader_id" && frame.documentBinding.token === images.documentIdentity.token &&
     frame.documentBinding.boundAtMs >= images.actionDispatchedAtMs &&

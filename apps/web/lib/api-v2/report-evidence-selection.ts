@@ -4,12 +4,12 @@ import { scopeReportPresentation } from "../scans/report-framework-scope";
 // Select existing display projections only. Never classify findings or infer observations.
 const CONTEXT_FIELDS = ["scan", "reviewFocus", "score", "postureScores", "californiaScore", "scoreExplanation", "verdict", "findings", "nextStep", "coverage"] as const;
 const SECTION_FIELDS: Record<ReportEvidenceSection, readonly string[]> = {
-  consent: ["controls", "consentControlsAvailable", "consentVendor", "consentRows", "acceptPath", "rejectPath", "choicePathComparison", "cmpAudit"],
+  consent: ["controls", "consentControlsAvailable", "consentVendor", "consentRows", "acceptPath", "rejectPath", "choicePathComparison", "actionTimelines", "actionInventories", "cmpAudit"],
   cmp: ["cmpAudit", "consentVendor"],
   cms: ["cmsSecurity"],
-  gpc: ["gpcResponse", "gpcLaneStatus"],
+  gpc: ["gpcResponse", "gpcLaneStatus", "gpcTimeline", "gpcResourceInventory"],
   policy: ["gdprTransparencyRows", "policySurfaceCoverage", "consentRows", "privacyAuditEvidence", "californiaPrivacyReview"],
-  tracking: ["preConsentRuntimeRows", "trackingExternalRows", "inventory", "inventorySummary", "resourceInventory", "trackerVendors", "fullSiteReport"],
+  tracking: ["preConsentRuntimeRows", "trackingExternalRows", "inventory", "inventorySummary", "resourceInventory", "trackerVendors", "fullSiteReport", "actionInventories", "actionTimelines", "gpcTimeline", "gpcResourceInventory"],
   transport: ["transportRows"],
   forms: ["formsSummary", "collectionFields", "collectionLimitations", "collectionStatus", "collectionSurfaces", "collectionTableRows", "fullSiteReport"],
   accessibility: ["accessibilityAudit", "accessibilityEvidence"],

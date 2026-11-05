@@ -15,7 +15,7 @@ const signal = (value: string): CmsSignal => ({ evidenceRef: "site_integrity:dom
 test("unknown CMS keeps neutral version labels and no stacked disclaimers", () => {
   const html = renderToStaticMarkup(<CmsSecurityEvidence projection={projection([signal("WordPress")])} />);
   assert.match(html, /aria-label="Version not detected">—/);
-  assert.match(html, /WordPress · Version not detected/);
+  assert.match(html, /<p>WordPress(?: · \d+ plugins)?<\/p>/);
   assert.match(html, /All source evidence/);
   assert.doesNotMatch(html, /Limited|Version check unavailable|Version could not be checked|Confirm the installed|Page-reported versions/);
 });
@@ -40,7 +40,7 @@ test("plugins have their own rows alongside the unknown core version", () => {
     { ...signal("Powered by WPBakery Page Builder - drag and drop page builder for WordPress."), evidenceRef: "site_integrity:dom:2" },
     { ...signal("WP Rocket 3.20.2"), evidenceRef: "site_integrity:dom:3" }];
   const html = renderToStaticMarkup(<CmsSecurityEvidence projection={projection(signals)} />);
-  assert.match(html, /WordPress · Version not detected/);
+  assert.match(html, /<p>WordPress(?: · \d+ plugins)?<\/p>/);
   assert.match(html, /Plugin/); assert.match(html, /WPML/); assert.match(html, /4\.8\.6/);
   assert.match(html, /WP Rocket/); assert.match(html, /3\.20\.2/); assert.match(html, /WPBakery Page Builder/);
   assert.match(html, /aria-label="Version not detected">—/);
@@ -53,7 +53,7 @@ test("multiple platform detections keep the header compact and the details intac
   const sample = projection([signal("WordPress 6.8")]);
   sample.assessment.detections.push({ ...sample.assessment.detections[0]!, name: "Other platform", evidenceRef: "site_integrity:dom:other" });
   const html = renderToStaticMarkup(<CmsSecurityEvidence projection={sample} />);
-  assert.match(html, /2 platforms detected/);
+  assert.match(html, /<p>2 platforms<\/p>/);
   assert.match(html, /WordPress/);
   assert.match(html, /Other platform/);
 });

@@ -217,7 +217,7 @@ test("EU and California scope opt-out limitations consistently with the shared r
 test("Word includes the same two after-Accept forms and nine retained fields as the scan", async () => {
   const scan = reportFormsScanFixture(), report = buildCanonicalReportExport(scan)!;
   const content = text(parts(await renderCanonicalReportDocx(report)).get("word/document.xml")!);
-  assert.match(content, /Inventory summary: 2 forms; 9 fields/);
+  assert.match(content, /Inventory summary: 2 recorded forms; 9 recorded fields/);
   assert.match(content, /Initial page: 0; after Accept: 2/);
   assert.match(content, /Contact field 8/); assert.match(content, /Search/); assert.match(content, /capture was limited/);
   assert.doesNotMatch(content, /\nNo forms found\./);
@@ -235,4 +235,13 @@ test("Word retains the complete initial request inventory and excludes EU review
     assert.match(content, /asset-2\.js/); assert.doesNotMatch(content, /PRIVATE_VALUE/);
     if (focus === "ccpa_cpra") assert.doesNotMatch(content, /EU_REVIEW_SUMMARY_SENTINEL|EU_PRIORITY_SUMMARY_SENTINEL|Summary counts:/);
   }
+});
+
+test("retained GPC inventory follows the resolved export focus, including a California default",()=>{
+ const scan=reportRequestScanFixture();scan.scan.scanFromValue='california';
+ const gpc={inventory:{resources:[],services:[],mix:{}},scope:'retained_capture',clockLabel:'Times from GPC visit start',note:'Owned empty fixture'} as any;
+ const ca=buildCanonicalReportExport(scan,undefined,undefined,gpc)!;
+ assert.equal(ca.reviewFocus,'ccpa_cpra');assert.deepEqual(ca.appendix.gpcResourceInventory,gpc);
+ const eu=buildCanonicalReportExport(scan,undefined,'gdpr_eprivacy',gpc)!;
+ assert.equal(eu.appendix.gpcResourceInventory,undefined);
 });

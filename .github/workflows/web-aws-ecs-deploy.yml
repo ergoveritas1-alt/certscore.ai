@@ -192,6 +192,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Chromium for form lifecycle release check
+        run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
+
+      - name: Verify post-Accept forms and images reach the report
+        run: pnpm test:post-accept-forms
+
+
       - name: Prevent non-descendant production rollback
         env:
           ALLOW_NON_DESCENDANT_WEB_DEPLOY: ${{ github.event.inputs.allow_non_descendant_deploy || 'false' }}

@@ -60,3 +60,16 @@ test("public cookie evidence keeps partial results, template candidates and exac
     assert.equal(publicCmpAuditSchema.safeParse(copy).success, false);
   }
 });
+
+test("public CMP choice activity preserves explicit clock origin and accepts legacy unknown anchors",()=>{
+ const ids=['banner','reject','prominence','categories','services','privacy_link','privacy_access','consent_record','implementation','duration','declared_not_found','found_not_declared','cookie_information'];
+ const audit:any={version:'cmp_audit_report.v3',scanId:'clock-origin-fixture',scope:'starting_page',assessmentSourceHash:'source',rows:ids.map(id=>({id,label:id,status:'Not assessed',sourceIds:[]}))};
+ const activity={action:'accept',windowMs:3000,requestCount:1,nonEssentialRequestCount:1,requests:[{hostname:'example.test',path:'/script.js',vendor:'Example',purpose:'analytics',msAfterClick:250,nonEssential:true}]};
+ const row=audit.rows.find((r:any)=>r.id==='implementation');row.supportingEvidence={inventory:{choiceActivity:[activity]}};
+ for(const clockOrigin of [undefined,'action_click','consent_confirmation']){
+  const copy=structuredClone(audit);if(clockOrigin)copy.rows.find((r:any)=>r.id==='implementation').supportingEvidence.inventory.choiceActivity[0].clockOrigin=clockOrigin;
+  assert.deepEqual(publicCmpAuditSchema.parse(copy),copy);
+ }
+ const invalid=structuredClone(audit);invalid.rows.find((r:any)=>r.id==='implementation').supportingEvidence.inventory.choiceActivity[0].clockOrigin='scan_start';
+ assert.equal(publicCmpAuditSchema.safeParse(invalid).success,false);
+});

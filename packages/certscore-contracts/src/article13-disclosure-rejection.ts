@@ -1,5 +1,6 @@
 import {
   AUTOMATED_DECISION_PRACTICES_PATTERN,
+  EXPLICIT_PROFILING_PRACTICE_PATTERN,
   RESIDENCE_RELATIVE_TRANSFER_PATTERN,
   NAMED_DATA_SERVICE_PURPOSE_PATTERN,
   STRUCTURED_DATA_PURPOSE_PATTERN,
@@ -15,9 +16,16 @@ import {
   DUTCH_PRIVACY_POSTAL_CONTACT_PATTERN,
   POLISH_CONTROLLER_ENQUIRY_CONTACT_PATTERN,
   findBehavioralProfilingDisclosure,
+  findGermanTransferDisclosure,
   classifyGdprTransparencyTopics,
   hasIncidentalGermanDisclosureTerms,
   hasOnlyOtherDutchControllerReferences,
+  hasUnsupportedGermanBasisEvidence,
+  hasOnlyPurposeIntroductionOrAssurance,
+  hasOnlyAffiliateActorContext,
+  findConcreteEnglishPurposeStatement,
+  findBoundedUsageOrRecruitmentPurpose,
+  findBoundedRetentionCriterion,
   hasOnlyPolishPurposeHeading,
   hasOnlyPortugueseDpoDefinition,
   hasUnsupportedGenericPrivacyContact,
@@ -60,7 +68,7 @@ export type Article13DisclosureRejectReasonOptions = {
   mode?: Article13DisclosureRejectionMode;
 };
 
-export const ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION = "article13_disclosure_eligibility.v12" as const;
+export const ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION = "article13_disclosure_eligibility.v13" as const;
 
 /** A list of information the law requires is not the information itself.
  * This is a negative semantic guard, never a new source of positive credit. */
@@ -104,16 +112,37 @@ export function isDataSubjectRightsDisclosureEvidenceUsable(value: string) {
 
 /** Data named in the same retained witness, including structural table cells. */
 export function hasProcessingPurposeDataContext(value: string) {
+  if (findBoundedUsageOrRecruitmentPurpose(value)) return true;
   if (POLISH_CORRESPONDENCE_PURPOSE_PATTERN.test(normalizeArticle13Whitespace(value))) return true;
   return /\b(?:personal data|personal information|your data|your information|this information|account data|information we collect|data we collect|cookies|processing of data|data will be processed|contact information|financial information|digital information|contact details|email address|device data|application data|application documents|your details|the data|payment information|donation information|technical data|contact data|usage data|name|account information|billing information)\b|\bdata categories\s*:\s*\S/i.test(value);
 }
 
+/** Passive noun lists still disclose a purpose when the same bounded witness
+ * binds the list to named data. Do not borrow an antecedent across unrelated
+ * sentences, accept a question, or turn a generic purpose heading into evidence. */
+function hasBoundPassiveNominalPurposes(text: string) {
+  const sentences = text.split(/(?<=[.!?])\s+/u);
+  const namedDataStatement = /^(?:we|the controller|the company)\s+(?:may\s+)?(?:process|collect)\s+(?:limited\s+)?(?:personal|technical|account|usage) data\b[^!?]{0,360}[.]?$/i;
+  const nominalPurpose = /^(?:ad(?:vertising)? delivery(?: and optimi[sz]ation)?|fraud prevention|analytics|system security|website delivery|customer support|payment processing|order fulfil(?:l)?ment)\b/i;
+  return sentences.some((sentence, index) => {
+    if (sentence.endsWith("?")) return false;
+    const match = /\b((?:personal|technical|account|usage) data|personal information|this data)\s+(?:is|are)\s+(?:used|processed)\s+(?:solely\s+|only\s+)?for\s*:?\s*([^.!?]{1,350}?)(?=\s+(?:We|The controller|The company)\b|[.]|$)/i.exec(sentence);
+    if (!match || !nominalPurpose.test(match[2]!) || /\b(?:not|never|no longer)\b/i.test(match[2]!)) return false;
+    const prefix = sentence.slice(0, match.index).trim();
+    if (match[1]!.toLowerCase() !== "this data") return prefix.length === 0;
+    const context = prefix || sentences[index - 1] || "";
+    return namedDataStatement.test(context);
+  });
+}
+
 export function hasSubstantiveProcessingPurposesEvidence(value: string) {
+  if (hasOnlyPurposeIntroductionOrAssurance(value)) return false;
   const text = normalizeArticle13Whitespace(value);
-  if (POLISH_CORRESPONDENCE_PURPOSE_PATTERN.test(text)) return true;
+  if (POLISH_CORRESPONDENCE_PURPOSE_PATTERN.test(text) || hasBoundPassiveNominalPurposes(text)) return true;
   // A role/rights clause can mention handling data without saying what it is
   // used for. Require named data context in this same bounded witness.
   if (!hasProcessingPurposeDataContext(text)) return false;
+  if (findConcreteEnglishPurposeStatement(text) || findBoundedUsageOrRecruitmentPurpose(text)) return true;
   const purposeOutcomePattern =
     /\b(?:provide|deliver|operate|maintain|improve|develop|personalize|communicate|respond|answer|process(?:ing)?(?=\s+(?:(?:your|the|an?)\s+)?(?:enquir\w*|inquir\w*|applications?|payments?|orders?|transactions?|requests?)\b)|fulfil|fulfill|protect|secure|prevent|detect|measure|analy[sz]e|understand|verify|validate|diagnose|comply|send|administer|manage|support|facilitate|handle(?=\s+(?:(?:your|the|an?)\s+)?(?:orders?|payments?|enquir\w*|inquir\w*|requests?|applications?|support|accounts?)\b)|perform|conduct|ensure|keep records?|follow[- ]?up|authenticate|optimise|optimize)\b/i;
   // A purpose heading/table header, or a reference to processing for purposes
@@ -154,6 +183,7 @@ export function hasSubstantiveProcessingPurposesEvidence(value: string) {
 }
 
 export function hasSubstantiveLegalBasisEvidence(value: string) {
+  if (hasUnsupportedGermanBasisEvidence(value)) return false;
   if (POLISH_CORRESPONDENCE_BASIS_PATTERN.test(normalizeArticle13Whitespace(value))) return true;
   const text = normalizeArticle13Whitespace(value);
   const explicitBasisFraming =
@@ -188,11 +218,16 @@ export function hasSubstantiveLegalBasisEvidence(value: string) {
   });
 }
 
+// A data-subject review/objection right is useful rights evidence, but does not
+// itself state the publisher's profiling practice. Keep the same guard in all
+// read modes so incidental multilingual matches cannot bypass it.
+const PROFILING_RIGHTS_CONTEXT_PATTERN = /\b(?:(?:you|residents|consumers|individuals|data subjects) (?:also |may )?have (?:the |a )?right|right to object|rights? (?:concerning|regarding)|if you object|this also applies to profiling)\b/i;
+
 export function hasSubstantiveAutomatedDecisionOrProfilingEvidence(value: string) {
   const text = normalizeArticle13Whitespace(value);
   // A description of the service's actual decision practices, not a generic
   // statement that visitors have rights concerning automated decisions.
-  if (AUTOMATED_DECISION_PRACTICES_PATTERN.test(text) || findBehavioralProfilingDisclosure(text)) return true;
+  if (AUTOMATED_DECISION_PRACTICES_PATTERN.test(text) || EXPLICIT_PROFILING_PRACTICE_PATTERN.test(text) || findBehavioralProfilingDisclosure(text)) return true;
   const topic = /\b(?:profiling|profiled|automated decision(?:-making| making|s)?|solely automated (?:processing|decision))\b/i;
   if (!topic.test(text)) return false;
   const dataOrEffectContext = /\b(?:personal data|personal information|user data|data about you|your data|your information|legal effects?|significantly affects?|similarly significant effects?|eligibility|credit|insurance|employment|access to (?:a )?service)\b/i;
@@ -210,7 +245,7 @@ export function hasSubstantiveAutomatedDecisionOrProfilingEvidence(value: string
   const affirmativeOrNegativeDisclosure = /\b(?:do(?:es)? not|will not|not (?:be )?used|use|uses|used|perform|performs|conduct|conducts|carry out|carried out|engage in|based on|constitutes?)\b/i;
   const firstPartyDisclosure = /\b(?:we|the company|the controller|personal data|personal information|user data)\b/i;
   return text.split(/(?<=[.!?])\s+/u).some((sentence) =>
-    !/\b(?:you have (?:the |a )?right|right to object|rights? (?:concerning|regarding)|if you object|this also applies to profiling)\b/i.test(sentence) &&
+    !PROFILING_RIGHTS_CONTEXT_PATTERN.test(sentence) &&
     topic.test(sentence) && dataOrEffectContext.test(sentence) &&
     affirmativeOrNegativeDisclosure.test(sentence) &&
     firstPartyDisclosure.test(sentence)
@@ -218,6 +253,7 @@ export function hasSubstantiveAutomatedDecisionOrProfilingEvidence(value: string
 }
 
 export function hasSubstantiveRecipientsEvidence(value: string) {
+  if (hasOnlyAffiliateActorContext(value)) return false;
   const text = normalizeArticle13Whitespace(value);
   if (
     /\b(?:generic|aggregate(?:d)?)\b.{0,120}\b(?:not linked|not associated|de-identified|anonymous)\b.{0,120}\bpersonal (?:data|information)\b/i.test(text)
@@ -259,9 +295,15 @@ export function hasSubstantiveRetentionEvidence(value: string) {
   const retentionTableRow = /\b(?:retention|storage period)\s*:\s*(?:normally\s+)?(?:up to\s+)?\d+\s*(?:days?|weeks?|months?|years?)\b/i.test(text) &&
     /\b(?:data|records?|consent choice|correspondence|logs?|responses?|identifiers?)\b/i.test(text);
   const accountLifecycle = /\b(?:personal data|personal information|account (?:data|information))\b.{0,100}\bfor the duration of (?:your |the |an )?account\b.{0,120}\b(?:delete|erase|anonymi[sz]e)\b.{0,60}\bafter (?:account )?closure\b/i.test(text);
+  // In a policy witness, an explicit Data -> retention criterion -> disposal
+  // lifecycle states a criterion even when it does not repeat "personal".
+  // Keep generic storage, unrelated named objects, questions and headings out.
+  const bareDataLifecycle = (sentence: string) => sentence.length <= 500 && !sentence.endsWith("?") &&
+    /^data is retained\b/i.test(sentence) &&
+    /\bafter which (?:it|the data) is (?:deleted|erased|anonymi[sz]ed)\b/i.test(sentence);
   return text.split(/(?<=[.!?])\s+/u).some((sentence) =>
-    dataContext.test(sentence) && lifecycleAction.test(sentence) && periodOrCriterion.test(sentence)
-  ) || explicitStoragePeriod || completedPurpose || retentionTableRow || accountLifecycle ||
+    (dataContext.test(sentence) || bareDataLifecycle(sentence)) && lifecycleAction.test(sentence) && periodOrCriterion.test(sentence)
+  ) || Boolean(findBoundedRetentionCriterion(text)) || explicitStoragePeriod || completedPurpose || retentionTableRow || accountLifecycle ||
     PROVIDED_ACCOUNT_INFORMATION_RETENTION_PATTERN.test(text) ||
     COMPETITION_ENTRANT_RETENTION_PATTERN.test(text) ||
     PERSONAL_CATEGORY_PURPOSE_RETENTION_PATTERN.test(text) ||
@@ -300,6 +342,9 @@ export function article13CrossTopicRejectReason(value: string, topic: Article13D
   if (topic === "data_retention" && /\bwe retain each category of personal information\b/i.test(text) &&
       !hasSubstantiveRetentionEvidence(text)) return "insufficient_row_specific_terms";
   const normalized = normalizeGdprTransparencyText(text);
+  if (topic === "recipients_or_vendor_categories" && hasOnlyAffiliateActorContext(text)) return "insufficient_row_specific_terms";
+  if (topic === "processing_purposes" && hasOnlyPurposeIntroductionOrAssurance(text)) return "insufficient_row_specific_terms";
+  if (topic === "legal_basis" && hasUnsupportedGermanBasisEvidence(text)) return "insufficient_row_specific_terms";
   if (topic === "dpo_contact" && hasOnlyPortugueseDpoDefinition(text))
     return "insufficient_row_specific_terms";
   if (["processing_purposes", "legal_basis"].includes(topic ?? "") && hasOnlyPolishPurposeHeading(text))
@@ -333,7 +378,12 @@ export function article13CrossTopicRejectReason(value: string, topic: Article13D
   if (topic === "legal_basis" && /\b(?:derecho|derechos|retirar|revocar)\b/i.test(text) &&
       !/\b(?:base(?:s)? (?:jur[ií]dica|legal)|fundamento|art[ií]culo\s*6|basad[oa]|se basa|sobre la base)\b/i.test(text)) return "insufficient_row_specific_terms";
   if (topic === "recipients_or_vendor_categories" && !outbound.test(text) &&
-      /\b(?:we receive|we collect|directly from you|information (?:we receive|collected from)|known as ["“]?(?:controllers|processors)|distinguish between organizations|(?:recipient|processor|controller) (?:means|is defined))\b/i.test(text)) return "insufficient_row_specific_terms";
+      /\b(?:(?:we|the company|the controller)\s+(?:(?:may|will|also)\s+){0,3}(?:receive|collect)|directly from you|information (?:we receive|collected from)|known as ["“]?(?:controllers|processors)|distinguish between organizations|(?:recipient|processor|controller) (?:means|is defined))\b/i.test(text)) return "insufficient_row_specific_terms";
+  // An opt-out control can sit beside a copyright company name. Those words
+  // are neither a sharing statement nor identification of a data recipient.
+  if (topic === "recipients_or_vendor_categories" && !outbound.test(text) &&
+      /\bdo not sell(?: or share)? (?:my|your) personal information\b/i.test(text))
+    return "insufficient_row_specific_terms";
   if (topic === "international_transfers" && /\b(?:external websites|link destinations|no responsibility|not responsible)\b/i.test(text) &&
       !/\b(?:international|cross-border|transfers?|countries|country|jurisdictions?|eea|european union|united states|adequacy|standard contractual)\b/i.test(text)) return "insufficient_row_specific_terms";
   if (topic === "data_subject_rights" && /\b(?:dmca|copyright|intellectual property)\b/i.test(text) &&
@@ -371,8 +421,18 @@ export function article13DisclosureRejectReason(
       findBehavioralProfilingDisclosure(text))) {
     return "low_confidence_or_ambiguous";
   }
+  // These complete English sentences describe an authority as a recipient,
+  // not a visitor complaint route. Keep the guard sentence-bound so another
+  // disclosure (including a complaint in another language) is not erased.
+  if (disclosureType === "supervisory_authority" &&
+      /^(?:(?:privacy )?policy\.\s+)?(?:(?:this|your|personal) (?:data|information) (?:is|are) shared with[^.!?;]{0,260}\b(?:legal or regulatory authorities|regulatory authorities) as required|we (?:may )?(?:share|disclose|provide) personal (?:data|information) (?:to|with) (?:regulatory authorities|regulators|law enforcement) (?:as|when) required by law)\.$/i.test(text)) {
+    return "insufficient_row_specific_terms";
+  }
+  if (disclosureType === "data_subject_rights" &&
+    /\b(?:your rights|data subject rights|privacy controls|non-public (?:rdds|registration data directory service) data)\b/i.test(text) &&
+    !hasSubstantiveRightsDisclosure(text)) return "insufficient_row_specific_terms";
   if (disclosureType === "automated_decision_making_or_profiling" &&
-    /\b(?:you have (?:the |a )?right|right to object|rights? (?:concerning|regarding)|if you object|this also applies to profiling)\b/i.test(text) &&
+    PROFILING_RIGHTS_CONTEXT_PATTERN.test(text) &&
     !hasSubstantiveAutomatedDecisionOrProfilingEvidence(text)) {
     return "insufficient_row_specific_terms";
   }
@@ -391,8 +451,8 @@ export function article13DisclosureRejectReason(
   }
   if (
     disclosureType === "international_transfers" &&
-    /\boutside (?:of )?our team\b/i.test(text) &&
-    !/\b(?:international|cross-border|third countr|outside (?:the )?(?:eea|uk|eu|european)|standard contractual clauses|adequacy|transfer safeguard)\b/i.test(text)
+    /\boutside (?:of )?(?:our|the|this)\s+(?:[\p{L}\d&\x27-]+\s+){0,5}(?:team|company|organisation|organization|university|institution|group)\b/iu.test(text) &&
+    !/\b(?:international|cross-border|third countr|outside (?:the )?(?:eea|uk|eu|european)|standard contractual clauses|adequacy|transfer safeguard|foreign countries|other countries)\b/i.test(text) && !/\b(?:transferred|processed|stored|accessed)\b[^.!?]{0,180}\b(?:united states|usa|other jurisdictions|outside (?:of )?(?:your |the )?country)\b/i.test(text)
   ) {
     return "insufficient_row_specific_terms";
   }
@@ -743,7 +803,7 @@ function hasScanCoreRowSpecificArticle13Terms(
     case "data_subject_rights":
       return hasSubstantiveRightsDisclosure(text);
     case "international_transfers":
-      return RESIDENCE_RELATIVE_TRANSFER_PATTERN.test(text) ||
+      return Boolean(findGermanTransferDisclosure(text)) || RESIDENCE_RELATIVE_TRANSFER_PATTERN.test(text) ||
         /\b(?:data transfers?|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|usa|other jurisdictions|other countries|outside)|transfer (?:your )?(?:personal )?(?:data|information).{0,220}(?:located )?outside (?:of )?(?:your )?country|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))\b/i.test(text);
     case "dpo_contact":
       return /\b(?:data protection officer|data privacy officer|office of the data privacy officer|\bdpo\b|data protection contact|privacy contact point|privacy counsel.{0,180}(?:contact|email|mail|address|@)|(?:contact|email|mail|address|@).{0,180}privacy counsel)\b/i.test(text);
@@ -777,7 +837,7 @@ function hasRetainedReportRowSpecificArticle13Terms(
     case "data_subject_rights":
       return hasSubstantiveRightsDisclosure(text);
     case "international_transfers":
-      return RESIDENCE_RELATIVE_TRANSFER_PATTERN.test(text) ||
+      return Boolean(findGermanTransferDisclosure(text)) || RESIDENCE_RELATIVE_TRANSFER_PATTERN.test(text) ||
         /\b(?:data transfers?.{0,320}(?:servers around the world|outside (?:of )?the country|legal frameworks?|data privacy frameworks?|safeguards)|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|usa|other jurisdictions|other countries|outside)|transfer (?:your )?(?:personal )?(?:data|information).{0,220}(?:located )?outside (?:of )?(?:your )?country|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,260}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries|countries outside))\b/i.test(text);
     case "dpo_contact":
       return /\b(?:data protection officer|data privacy officer|office of the data privacy officer|\bdpo\b|data protection contact|privacy contact point|privacy counsel.{0,180}(?:contact|email|mail|address|@)|(?:contact|email|mail|address|@).{0,180}privacy counsel)\b/i.test(text);
@@ -878,8 +938,15 @@ function hasLocalizedArticle13EvidenceContext(
   }
 }
 
+const NON_PUBLIC_DIRECTORY_REQUEST = /(?:submit (?:a )?)?request to access non-public (?:RDDS|registration data directory service) data/giu;
+
 export function hasSubstantiveRightsDisclosure(value: string) {
-  const text = normalizeArticle13Whitespace(value);
+  // A third-party directory-access route is not a data subject's own access
+  // right. Keep a separate personal-data right in the same passage eligible.
+  const text = normalizeArticle13Whitespace(value).replace(NON_PUBLIC_DIRECTORY_REQUEST, " ");
+  if (/\b(?:you|residents|consumers|individuals|data subjects) (?:also |may )?have (?:the |a )?right to review (?:the |your )?personal (?:data|information)\b/i.test(text)) return true;
+  if (/\bright to withdraw (?:your )?consent\b/i.test(text) &&
+      /\bprocessing of (?:your |the )?personal (?:data|information)\b/i.test(text)) return true;
   if (
     /\brights? to\s*:?[\s]*(?:request|obtain)\b.{0,100}\b(?:access|copy|correct|rectif\w*|delete|erase|restrict|portability)\b/i.test(text) ||
     /\byou (?:can|may) (?:request |obtain )?access your (?:personal )?(?:information|data)\b/i.test(text)
@@ -887,7 +954,7 @@ export function hasSubstantiveRightsDisclosure(value: string) {
     return true;
   }
   if (
-    /\b(?:your rights|data subject rights|right to (?:access|delete|erasure|rectification|object|restrict|portability)|rights? to (?:access|delete|erasure|rectification|object|restrict|portability)|exercise (?:your )?rights|privacy controls|download a copy|export (?:your )?(?:data|information)|request to (?:remove|delete|access|correct))\b/i.test(text)
+    /\b(?:right to (?:access|delete|erasure|rectification|object|restrict|portability)|rights? to (?:access|delete|erasure|rectification|object|restrict|portability)|exercise (?:your )?rights|download a copy|export (?:your )?(?:data|information)|request to (?:remove|delete|access|correct))\b/i.test(text)
   ) {
     return true;
   }

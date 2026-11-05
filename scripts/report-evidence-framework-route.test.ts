@@ -16,7 +16,7 @@ test("actual evidence route preserves framework in pages/downloads and rejects c
     ticket: "export function issueReportDownloadTicket(){throw Error('Unexpected ticket');} export function verifyReportDownloadTicket(){return null;}",
     fullsite: "export async function loadFullSiteReport(){throw Error('Unexpected full-site read');}",
     access: "import {state} from 'test-state'; export class ReportEvidenceAccessError extends Error{} export async function loadAuthorizedReportEvidence(){return state.record;}",
-    resource: "export const API_V2_SCAN_ID_PATTERN=/^[a-f0-9-]{36}$/; export function apiV2JsonResponse({body,status,headers}){return Response.json(body,{status,headers});} export function buildApiV2Error(value){return value;}",
+    resource: "export const API_V2_SCAN_ID_PATTERN=/^[a-f0-9-]{36}$/; export function apiV2JsonResponse({body,status,headers}){return Response.json(body,{status,headers});} export function buildApiV2Error(value){return value;} export function deriveApiV2GpcResponse(){return null;}",
     keys: "export function parseBearerToken(){return 'owned';} export async function validateCertScoreBearerToken(){throw Error('Unexpected credential lookup');}",
     throttle: "export async function enforceApiV2ScanReadThrottle(){return null;}",
     projection: "export async function loadPersistedScanReportProjection(){throw Error('Unexpected DB read');} export async function loadAnonymousPersistedScanReportProjection(){throw Error('Unexpected DB read');}",
@@ -24,7 +24,7 @@ test("actual evidence route preserves framework in pages/downloads and rejects c
     model: "import {state} from 'test-state'; export async function buildVerifiedTimelineReportModel(){return state.model;}",
   };
   const suffixes: Record<string, string> = { "/detailed-evidence-report": "details", "/report-export": "export", "/tracking-workpaper": "workpaper", "/report-download-ticket": "ticket", "/full-site-report": "fullsite", "/report-evidence-access": "access", "/scan-resource": "resource", "/integrations/api-keys": "keys", "/api-v2-read-throttle": "throttle", "/scan-report-projection": "projection", "/verified-timeline-report-model": "model" };
-  const output = await build({ stdin: { contents: `export {GET} from './apps/web/app/api/v2/scans/[scanId]/report-evidence/route.ts'; export {state} from 'test-state';`, resolveDir: process.cwd() }, bundle: true, write: false, format: "esm", platform: "node", plugins: [{ name: "owned-route", setup(api) {
+  const output = await build({ tsconfig: process.env.TSX_TSCONFIG_PATH ?? "apps/web/tsconfig.test.json", stdin: { contents: `export {GET} from './apps/web/app/api/v2/scans/[scanId]/report-evidence/route.ts'; export {state} from 'test-state';`, resolveDir: process.cwd() }, bundle: true, write: false, format: "esm", platform: "node", plugins: [{ name: "owned-route", setup(api) {
     api.onResolve({ filter: /.*/ }, args => {
       const key = args.path === "test-state" ? "state" : Object.entries(suffixes).find(([suffix]) => args.path.endsWith(suffix))?.[1];
       return key ? { path: key, namespace: "owned" } : undefined;

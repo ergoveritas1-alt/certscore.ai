@@ -74,6 +74,7 @@ const RUNTIME_GRAPH_RELEASE_CHECK: Check = {
     "apps/web/server/scans/runtime-evidence-graph-dispatch.test.ts",
     "apps/web/server/scans/runtime-evidence-graph-projection.test.ts",
     "apps/web/server/scans/runtime-evidence-graph-read.test.ts",
+    "apps/web/lib/scans/gpc-resource-inventory.test.ts",
     "apps/web/server/scans/runtime-evidence-graph-storage.test.ts",
     "apps/web/lib/api-v2/scan-resource.test.ts",
     "apps/web/lib/api-v2/after-action-summary.test.ts",
@@ -366,7 +367,10 @@ const CMP_RUNTIME_COORDINATOR_CHECK: Check = {
   command: ["python3", "scripts/cmp-paired-runtime-runner.test.py"],
 };
 
+const POST_ACCEPT_FORMS_CHECK: Check = {key:"post-accept-forms",label:"Delayed Accept forms, safe images and report delivery",
+  command:["pnpm","test:post-accept-forms"]};
 const ROOT_FULL_CHECKS: Check[] = [
+  POST_ACCEPT_FORMS_CHECK,
   REPORT_PRESENTATION_CHECK,
   ASSESSMENT_HIGHLIGHTS_CHECK,
   RELEASE_REGRESSION_REVIEW_CHECK,
@@ -454,6 +458,10 @@ const ROOT_FULL_CHECKS: Check[] = [
 ];
 
 const TARGETS: Target[] = [
+  {key:"post-accept-form-lifecycle",label:"Post-Accept form capture and delivery",
+    matches:file=>["packages/certscore-scan-core/","packages/certscore-contracts/","apps/v2-dag-lambda/","apps/web/","apps/validation-worker/"].some(prefix=>file.startsWith(prefix)) ||
+      /scripts\/(?:post-accept-form|local-isolated-lambda|local-policy-lambda|run-local-v2-dag-lambda-parity|verify-form-canary)/.test(file) || file==="package.json" || file==="scripts/predeploy.ts",
+    checks:[POST_ACCEPT_FORMS_CHECK]},
   {
     key: "report-presentation-scope",
     label: "report contracts and local PDF presentation",

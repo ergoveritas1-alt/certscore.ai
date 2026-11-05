@@ -1,3 +1,4 @@
+import { ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION } from "@certscore/contracts";
 import retainedAccount from "../../../../packages/certscore-contracts/src/test-fixtures/retained-account-retention.json";
 import retainedDutchContact from "../../../../packages/certscore-contracts/src/test-fixtures/retained-dutch-privacy-contact.json";
 import retainedPolishContact from "../../../../packages/certscore-contracts/src/test-fixtures/retained-polish-controller-contact.json";
@@ -59,7 +60,7 @@ test("Polish purpose projection uses the actual clause and rejects the historica
   assert.ok(purpose, JSON.stringify(adapted.dispositions));
   assert.equal(purpose.evidenceText, f.clause);
   assert.equal(purpose.selectedPolicySectionUrl, f.sourceUrl);
-  assert.ok(purpose.classifierReasonCodes.includes("article13_disclosure_eligibility.v12"));
+  assert.ok(purpose.classifierReasonCodes.includes(ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION));
   const basis = adapted.acceptedProductionSignals.find(s => s.disclosureType === "legal_basis");
   assert.equal(basis?.evidenceText, f.legalBasisClause);
   assert.ok(concerns.some(c => c.originKey === "gdpr_transparency.article13.processing_purposes"));
@@ -79,7 +80,7 @@ test("retained native lifecycle criteria reach the retention checklist only for 
     assert.ok(f.section.textExcerpt.includes(retention.evidenceText));
     assert.ok(retention.evidenceText.includes(f.clause));
     assert.equal(retention.selectedPolicySectionUrl, f.sourceUrl);
-    assert.ok(retention.classifierReasonCodes.includes("article13_disclosure_eligibility.v12"));
+    assert.ok(retention.classifierReasonCodes.includes(ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION));
     assert.ok(concerns.some(c => c.originKey === "gdpr_transparency.article13.data_retention"));
     assert.equal(rows.find(r => r.id === "retention_disclosure_observed")?.status, "Observed", f.site);
     assert.equal(project(f.section.textExcerpt, false, f.sourceUrl).adapted.acceptedProductionSignals.length, 0);
@@ -93,7 +94,7 @@ test("retained Polish controller enquiry evidence reaches the canonical checklis
   assert.ok(contact, JSON.stringify(adapted.dispositions));
   assert.ok(f.contactSection.textExcerpt.includes(contact.evidenceText));
   assert.equal(contact.selectedPolicySectionUrl, f.sourceUrl);
-  assert.ok(contact.classifierReasonCodes.includes("article13_disclosure_eligibility.v12"));
+  assert.ok(contact.classifierReasonCodes.includes(ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION));
   assert.ok(concerns.some(c => c.originKey === "gdpr_transparency.article13.controller_contact"));
   assert.equal(rows.find(r => r.id === "controller_contact_disclosure")?.status, "Observed");
   assert.notEqual(rows.find(r => r.id === "dpo_contact_point_disclosure")?.status, "Observed");
@@ -109,7 +110,7 @@ test("retained Dutch postal contact reaches the controller checklist without bor
   assert.match(contact.evidenceText, /Postbus 74888 1070 DN/);
   assert.ok(text.includes(contact.evidenceText));
   assert.equal(contact.selectedPolicySectionUrl, f.sourceUrl);
-  assert.ok(contact.classifierReasonCodes.includes("article13_disclosure_eligibility.v12"));
+  assert.ok(contact.classifierReasonCodes.includes(ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION));
   assert.ok(concerns.some(c => c.originKey === "gdpr_transparency.article13.controller_contact"));
   assert.equal(rows.find(r => r.id === "controller_contact_disclosure")?.status, "Observed");
   assert.notEqual(rows.find(r => r.id === "dpo_contact_point_disclosure")?.status, "Observed");
@@ -166,7 +167,7 @@ test("retained account retention passes the canonical pipeline only for target-r
   const { adapted, concerns, rows } = project(text, true, retainedAccount.sourceUrl);
   const signal = adapted.acceptedProductionSignals.find(s => s.disclosureType === "data_retention");
   assert.ok(signal);
-  assert.ok(signal.classifierReasonCodes.includes("article13_disclosure_eligibility.v12"));
+  assert.ok(signal.classifierReasonCodes.includes(ARTICLE13_DISCLOSURE_ELIGIBILITY_POLICY_VERSION));
   assert.ok(text.includes(signal.evidenceText));
   assert.equal(signal.selectedPolicySectionUrl, retainedAccount.sourceUrl);
   assert.ok(concerns.some(c => c.originKey === "gdpr_transparency.article13.data_retention"));

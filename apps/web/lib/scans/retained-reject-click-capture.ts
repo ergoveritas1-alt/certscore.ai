@@ -10,13 +10,21 @@ export function retainedRejectClickCapture(assessmentValue: unknown, projectionV
   const current=readAfterRejectScoringAssessment(assessmentValue);
   const assessment = current && isRejectPresencePolicy(current.policyVersion)?current:readRejectClickTrackingAssessment(assessmentValue);
   const projection = postRefusalReportProjectionSchema.safeParse(projectionValue);
-  if (!assessment || !projection.success || !projection.data.afterActionCapture ||
+  if (!assessment || !projection.success ||
     projection.data.packetSha256 !== assessment.sourcePacketSha256) return null;
+  // Confirmed legacy sessions can retain a registered observation without the
+  // newer click-capture envelope. Preserve their own clock and execution too.
+  const registered = projection.data.registrationStatus === "confirmed" &&
+    projection.data.refusalExercised && projection.data.registeredObservationCompletion;
+  if (!projection.data.afterActionCapture && !registered) return null;
   const checked = current && isRejectPresencePolicy(current.policyVersion)?retainedAfterRejectScoringAssessment({afterRejectScoringAssessment:current,postRefusalEvidenceProjection:projection.data}):assessRejectClickTracking(projection.data);
   if (!checked || JSON.stringify(checked) !== JSON.stringify(assessment)) return null;
   return {
     reportEvidenceProjectionPolicy: "retained_reject_click_capture.v1",
-    afterActionCapture: projection.data.afterActionCapture,
+    ...(projection.data.afterActionCapture ? { afterActionCapture: projection.data.afterActionCapture } : {}),
+    observationWindowMs: projection.data.observationWindowMs,
+    ...(registered ? { registeredObservationCompletion: registered } : {}),
+    ...(projection.data.retainedActionTiming ? { retainedActionTiming: projection.data.retainedActionTiming } : {}),
     sourcePacketSha256: projection.data.packetSha256,
     execution: readChoicePathExecution(projection.data, "reject"),
     resolverMethod: projection.data.resolverMethod,

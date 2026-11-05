@@ -1,3 +1,4 @@
+import { signalSnapshotValueClass } from "./signal-snapshot-styles";
 import { FindingDisclosureSummary } from "./finding-disclosure-summary";
 import type { CaliforniaChoicePresence, CaliforniaPolicyChoiceMethods, CaliforniaFrictionlessGpcException, CaliforniaOptOutPresence } from "../../lib/scans/california-choice-presence";
 import { EvidenceJumpLink } from "./evidence-jump-link";
@@ -69,7 +70,7 @@ export function CaliforniaCoverageSummary({coverage, choicePresence, policyChoic
   return <details className="group/signal border-b border-zinc-200 py-2" data-california-coverage>
     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs leading-4 [&::-webkit-details-marker]:hidden">
       <span className="text-xs font-medium text-zinc-500">California coverage</span>
-      <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{coverage ? `${assessed} ${coverage.contractVersion === "certscore.california-review-coverage.v4" ? "assessed" : "supported"}` : optOutLabel}<DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
+      <span className={signalSnapshotValueClass}>{coverage ? `${assessed} ${coverage.contractVersion === "certscore.california-review-coverage.v4" ? "assessed" : "supported"}` : optOutLabel}<DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
     </summary>
     <div className="mt-3 space-y-2 text-xs leading-5 text-zinc-600">
       <div className="border-b border-zinc-200 pb-1" data-california-opt-out-presence>

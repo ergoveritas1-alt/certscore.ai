@@ -12,7 +12,7 @@ import { inventoryPurposeGroups } from "./inventory-purpose-presentation";
 type Resource = FullSiteReportResponse["services"][number]["resources"][number];
 export type SinglePageResourceInventory = { requestMetric?: { label: string; value: number; counts: { nonEssential: number; review: number; contextual: number; essential: number; unclassified?: number }; overview?: NetworkInventoryOverview }; resources: Resource[]; services: FullSiteReportResponse["services"]; mix: FullSiteReportResponse["inventoryMix"] };
 /** Adapt the canonical retained inventory to the same resource/service presentation as site scans. */
-export function buildSinglePageResourceInventory(pageId: string, rows: InventoryGroupRow[], requests: CrawlOccurrence[] | null, reviewedPolicies: ReviewedPolicy[] = []): SinglePageResourceInventory {
+export function buildSinglePageResourceInventory(pageId: string, rows: InventoryGroupRow[], requests: CrawlOccurrence[] | null, reviewedPolicies: ReviewedPolicy[] = [], retainedResources: Array<{ occurrence: CrawlOccurrence; evidence: string }> = []): SinglePageResourceInventory {
   const resources = new Map<string, Resource>();
   const add = (occurrence: CrawlOccurrence, evidence: string) => {
     const key = `${occurrence.kind}:${occurrence.identity}`;
@@ -42,6 +42,7 @@ export function buildSinglePageResourceInventory(pageId: string, rows: Inventory
       evidenceRefs: row.storageDetails?.evidenceRefs ?? row.cookieDetails.flatMap(detail => detail.evidenceRefs ?? []), details: row.storageDetails ? { origin: row.storageDetails.origin, type: row.storageDetails.storageType, key: row.storageDetails.key, identityBasis: row.storageDetails.identityBasis, sourceHash: row.storageDetails.sourceHash, valuesRedacted: true } : {} }, classifyInventoryEvidence(row));
   }
   for (const request of requests ?? []) add(request, classifyCrawlInventoryResource(request));
+  for (const resource of retainedResources) add(resource.occurrence, resource.evidence);
   const all = [...resources.values()];
   const services = new Map<string, FullSiteReportResponse["services"][number]>();
   for (const resource of all) {

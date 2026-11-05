@@ -1,4 +1,5 @@
 import { apiRuntimeEvidenceGraphProjectionSchema } from "@certscore/api-contracts";
+import { projectGpcResourceInventory } from "../../lib/scans/gpc-resource-inventory";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 
 /** The protection boundary precedes both report and artifact reads. No creation or API Activity writes. */
@@ -17,6 +18,9 @@ export async function handleRuntimeGraphRead(request: Request, scanId: string, d
     const hydrated = await dependencies.hydrate(record);
     const graph = apiRuntimeEvidenceGraphProjectionSchema.safeParse(hydrated.runtimeArtifacts?.runtimeEvidenceGraphProjection);
     if (!graph.success || graph.data.scanId !== scanId) return error(404, "Relationship evidence is unavailable.");
-    return Response.json(graph.data, { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+    const body = new URL(request.url).searchParams.get("view") === "gpc-inventory"
+      ? projectGpcResourceInventory({scanId,projection:graph.data,pageUrl:record.scan.domainHostname ? `https://${record.scan.domainHostname}/` : ""})
+      : graph.data;
+    return Response.json(body, { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
   } catch { return error(503, "Relationship evidence is temporarily unavailable. Try again later."); }
 }

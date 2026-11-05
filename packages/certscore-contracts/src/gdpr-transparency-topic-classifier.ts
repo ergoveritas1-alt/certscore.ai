@@ -70,6 +70,7 @@ type GdprTransparencySemanticRule = {
   matchedTerm: string;
   pattern?: RegExp;
   sourcePattern?: RegExp;
+  sourceClauseFinder?: (value: string) => string | undefined;
   retainSourceClause?: boolean;
   sourceExcerptGroup?: string;
   sectionOnly?: boolean;
@@ -99,6 +100,139 @@ const NAMED_CONTROLLER_RETENTION_CLAUSE = /(?:^|(?<=[.!?]\s))as a data controlle
 // before selecting the short witness; a closing parenthesis cannot supply proof.
 const GERMAN_INTEREST_BASIS_CLAUSE = /(?:^|\bauf dieser website werden unter einsatz (?:(?!\b(?:nicht|kein\w*|niemals|nie)\b)[^!?\r\n]){1,260}?)(?<basis>auf basis unseres berechtigten interesses an der (?:(?!\b(?:nicht|kein\w*|niemals|nie)\b)[^.!?\r\n]){1,100}? gemäß art\. 6 abs\. 1 lit\. f dsgvo daten gesammelt und gespeichert\.)/iu;
 
+/** Bounded German declarations, not a general translation/keyword bypass.
+ * Keep general nonuse and its exception together. The safeguard alternative
+ * must finish its cited guarantee clause; a clipped legal reference is not it.
+ * 640 is the existing downstream selected-evidence limit, not a capture budget.
+ */
+export function findGermanTransferDisclosure(value: string): string | undefined {
+  const patterns = [
+    /(?:in der regel )?übermitteln wir ihre (?:personenbezogenen )?daten nicht in (?:andere länder oder )?drittländer\b[^.!?\r\n]{0,240}\.\s+eine datenübermittlung in drittländer kann jedoch ausnahmsweise stattfinden,\s+soweit[^.!?\r\n]{20,300}\./giu,
+    /die übermittlung personenbezogener daten in (?:solche )?drittstaaten außerhalb der eu erfolgt nur, soweit die europäische kommission[^!?\r\n]{0,230}?angemessenheitsbeschluss[^!?\r\n]{0,150}?beschlossen hat[^!?\r\n]{0,60}?oder garantien gem\.\s*art\.\s*46 ds-gvo vorgesehen sind, insbesondere[^!?\r\n]{0,150}?standarddatenschutzklauseln gem\.\s*art\.?\s*46 abs\.\s*2 buchst\.\s*c ds-gvo(?:\s*\(siehe hier\s*\))?\s*\./giu,
+  ];
+  for (const pattern of patterns) {
+    let examined = 0;
+    for (const match of value.matchAll(pattern)) {
+      if (++examined > 16) break;
+      const prefix = value.slice(Math.max(0, match.index! - 200), match.index);
+      // Accept sentence/paragraph starts and the known geographic heading.
+      // Quoted third-party declarations, templates, questions and advice must
+      // not acquire publisher attribution by dropping their lead-in.
+      if (/[:„“"”]\s*$/u.test(prefix)) continue;
+      if (prefix && !/(?:[.!?]\s+|\n\s*|(?:^|[.!?]\s+)Datenübermittlung in Dritt(?:staaten|länder)\s*)$/iu.test(prefix)) continue;
+      if (match[0].length <= 640) return match[0];
+    }
+  }
+  return undefined;
+}
+
+/** Explicit own processing/basis relation; retain conditional wording and
+ * the complete citation instead of treating a bare article number as evidence. */
+export function findGermanOwnBasisStatement(value: string): string | undefined {
+  const pattern = /(?:^|(?<=[.!?]\s)|(?<=\n))(?:(?:in diesen fällen erfolgt die verarbeitung ihrer daten auf der rechtsgrundlage des)|(?:wenn ein vertrag zwischen ihnen und uns zustande kommt, verarbeiten wir ihre daten zur erfüllung dieses vertrages auf grundlage des)) art\.\s*6 abs\.\s*1 buchst\.\s*[ab] dsgvo\s*\./giu;
+  const clause = pattern.exec(value)?.[0];
+  return clause && clause.length <= MAX_EXCERPT_CHARS ? clause : undefined;
+}
+
+/** A complete first-party data-use statement. Introductory descriptions of
+ * what a policy explains cannot borrow its verbs or a later sentence's purpose. */
+export function findConcreteEnglishPurposeStatement(value: string): string | undefined {
+  const pattern = /(?:^|(?<=[.!?]\s)|(?<=\n))(?:put briefly,\s*)?(?:we|the company|the controller) (?:may )?(?:use|process|collect) (?:your |the |this )?(?:personal data|personal information|account data|contact details) to (?:be able to )?(?:provide|offer|inform|deliver|operate|maintain|improve|develop|personalize|respond|answer|fulfil|fulfill|protect|secure|prevent|detect|measure|verify|send|administer|manage|support|authenticate)\b[^.!?\r\n]{3,300}\./giu;
+  let examined = 0;
+  for (const match of value.matchAll(pattern)) {
+    if (++examined > 16) break;
+    if (/[:„“"”]\s*$/u.test(value.slice(Math.max(0, match.index! - 100), match.index))) continue;
+    if (match[0].length <= MAX_EXCERPT_CHARS) return match[0];
+  }
+  return undefined;
+}
+
+export function hasOnlyPurposeIntroductionOrAssurance(value: string): boolean {
+  const text = normalizeGdprTransparencyText(value);
+  const meta = /\b(?:this (?:privacy )?(?:policy|notice) (?:is designed to help you understand|applies to|covers|explains|describes)|in this document we explain|committed to protecting the privacy|we have appropriate security measures|to protect your privacy and security|(?:process|use|handle).{0,100}personal data.{0,60}(?:safe and secure manner|with care))\b/u.test(text);
+  const inventory = /\bcontents\b.{0,400}\bhow we (?:will )?use (?:the )?information about you\b/u.test(text) || /\b(?:what information we collect and why we collect it|why we collect it how we use the information we collect|how we use the information we collect and the choices you have)\b/u.test(text);
+  if (!meta && !inventory) return false;
+  return !findConcreteEnglishPurposeStatement(value) && !findBoundedUsageOrRecruitmentPurpose(value) &&
+    !NAMED_DATA_SERVICE_PURPOSE_PATTERN.test(text) && !STRUCTURED_DATA_PURPOSE_PATTERN.test(value) &&
+    !/\b(?:personal data|personal information|account data) (?:is|are) (?:used|processed) (?:solely )?for (?:fraud prevention|analytics|system security|website delivery|customer support|payment processing|order fulfilment)\b/u.test(text);
+}
+
+/** Joint publishers/processors are subjects, not automatically recipients.
+ * Preserve a separately stated outgoing relationship or a recipient receiving
+ * data; never reject all occurrences of “receive” or conditional sharing. */
+export function hasOnlyAffiliateActorContext(value: string): boolean {
+  const subject = /\b(?:we and (?:our )?|and our |our )affiliates\b(?:\s*\([^)]{0,100}\))?\s+(?:may\s+)?(?:collect|process|store|use|share)\b/iu.test(value);
+  if (!subject) return false;
+  const category = "(?:affiliates?|group companies|third parties|other users|service providers?|processors?|payment processors?|suppliers?|advertising partners?|analytics providers?|law enforcement|regulators?|authorities|google|microsoft|amazon|aws|stripe|salesforce|meta|facebook|oracle|adobe|hubspot|mailchimp|[A-Z][A-Za-z0-9&.'’-]+\\s+(?:Ltd|Limited|LLC|Inc|GmbH|AG|SAS|BV))";
+  const outgoing = new RegExp(`\\b(?:share[ds]?|disclos(?:e[ds]?|ing)|provid(?:e[ds]?|ing)|transfer(?:red)?|send|sent)\\b[^.!?]{0,160}\\b(?:data|information)\\b[^.!?]{0,80}\\b(?:with|to)\\s+(?:(?:our|the|these|those)\\s+)?${category}\\b`, "iu");
+  const passive = new RegExp(`\\b(?:personal data|personal information|your data|your information)\\s+(?:is|are|may be|will be)\\s+(?:shared|disclosed|provided|transferred)\\s+(?:with|to)\\s+(?:(?:our|the|these|those)\\s+)?${category}\\b`, "iu");
+  const receiving = new RegExp(`\\b${category}\\s+(?:may\\s+)?(?:receive[ds]?|access|process|handle)\\b[^.!?]{0,140}\\b(?:data|information)\\b`, "iu");
+  const labeled = /\brecipients? of (?:your |personal )?(?:data|information)\s*:/iu.test(value);
+  return !outgoing.test(value) && !passive.test(value) && !receiving.test(value) && !labeled;
+}
+
+/** Keep the named usage-data antecedent with “this data”, or one complete
+ * conditional recruitment-purpose list item. These are bounded source uses,
+ * not claims that every metric is personal or that a recruitment notice governs
+ * every visitor. The 640-character downstream evidence cap still applies. */
+export function findBoundedUsageOrRecruitmentPurpose(value: string): string | undefined {
+  const patterns = [
+    /(?:^|(?<=[.!?]\s)|(?<=\n))when you use our services, we may collect information about your engagement with and utilization of our services, such as[^.!?\r\n]{20,280}\.\s+we use this data to operate the services,[^.!?\r\n]{20,300}\./giu,
+    /(?:^|(?<=[.!?]\s)|(?<=\n))the situations in which we will process your personal information in accordance with the lawful bases set out above may include:\s*making a decision about your recruitment or appointment;/giu,
+  ];
+  for (const pattern of patterns) {
+    let examined = 0;
+    for (const match of value.matchAll(pattern)) {
+      if (++examined > 16) break;
+      if (/[:„“"”]\s*$/u.test(value.slice(Math.max(0, match.index! - 100), match.index))) continue;
+      if (match[0].length <= 640) return match[0];
+    }
+  }
+  return undefined;
+}
+
+/** One explicitly stated right or delegated exercise route is presence
+ * evidence. Keep its complete source sentence and conditional scope; no
+ * exhaustive rights list or universal jurisdiction is inferred. */
+export function findBoundedEnglishRightsStatement(value: string): string | undefined {
+  const patterns = [
+    /(?:^|(?<=[.!?]\s)|(?<=\n))(?:(?:[A-Z][\p{L}-]+ )?(?:residents|consumers|individuals|data subjects)|you) (?:also |may )?have (?:the |a )?right to (?:review|access) (?:the |your )?personal (?:data|information)[^.!?\r\n]{0,200}\./giu,
+    /(?:^|(?<=[.!?]\s)|(?<=\n))your right to object to us processing your (?:personal )?(?:data|information)\./giu,
+    /(?:^|(?<=[.!?]\s)|(?<=\n))if you have provided consent for the processing of your personal (?:data|information), you (?:may )?have the right to withdraw your consent\./giu,
+    /(?:^|(?<=[.!?]\s)|(?<=\n))if you are (?:an end-user of one of our customers whose personal information we process and you are )?seeking to exercise your rights under the ccpa, (?:you should )?contact our customer directly\./giu,
+  ];
+  for (const pattern of patterns) {
+    let examined = 0;
+    for (const match of value.matchAll(pattern)) {
+      if (++examined > 16) break;
+      if (/^(?:whether|when|do|can|could|should|must)\b/iu.test(match[0]) ||
+          /^if (?:residents|consumers|individuals|data subjects)\b/iu.test(match[0]) ||
+          /[:„“"”]\s*$/u.test(value.slice(Math.max(0, match.index! - 100), match.index))) continue;
+      if (match[0].length <= MAX_EXCERPT_CHARS) return match[0];
+    }
+  }
+  return undefined;
+}
+
+/** Consent withdrawal and conditions for erasure describe rights, not the
+ * publisher's processing basis. A separate explicit processing statement in
+ * the same bounded evidence remains eligible; rights elsewhere do not veto it.
+ */
+export function hasUnsupportedGermanBasisEvidence(value: string): boolean {
+  const text = normalizeGdprTransparencyText(value);
+  if (/^(?:rechtsgrundlage )?art(?:ikel)? 6(?: abs 1)?(?: (?:buchst|lit) [a-f])? ds-?gvo$/u.test(text)) return true;
+  const standaloneCitation = /(?:^|(?<=[.!?]\s))art\.?\s*6 abs\.?\s*1(?:\s+(?:buchst|lit)\.?(?:\s*[a-f])?)?(?:\s+ds-?gvo)?[.\s]*$/iu.test(value);
+  const rights = /\bsie haben das recht\b.{0,180}\beinwilligung\b.{0,160}\bwiderrufen\b/u.test(text) ||
+    /\brechtsgrundlage fur die verarbeitung\b.{0,90}\beinwilligung war\b.{0,90}\bwiderrufen haben\b/u.test(text) ||
+    /\bsie einer verarbeitung auf grundlage berechtigter interessen\b/u.test(text);
+  const inventory = /\binhalt\b.{0,160}\brechtsgrundlage\b/u.test(text) && /\b(?:ihre rechte|welche personenbezogenen daten)\b/u.test(text);
+  if (!rights && !standaloneCitation && !inventory) return false;
+  const ownBasis = /\bwir verarbeiten (?:ihre |personenbezogene |die )?daten\b.{0,180}\b(?:auf (?:der )?grundlage|auf basis|mit ihrer einwilligung|zur erfullung (?:dieses|eines|des) vertrages)\b/u.test(text) ||
+    /\bin diesen fallen erfolgt die verarbeitung ihrer daten auf der rechtsgrundlage des art 6\b/u.test(text) ||
+    GERMAN_INTEREST_BASIS_CLAUSE.test(value);
+  return !ownBasis;
+}
+
 /** Reject incidental German topic words before they become retained witnesses.
  * Shared by extraction and read-side validation; does not infer missing topics. */
 export function hasIncidentalGermanDisclosureTerms(value: string, topic: string | undefined): boolean {
@@ -123,6 +257,10 @@ export function hasIncidentalGermanDisclosureTerms(value: string, topic: string 
 
 // Shared with the retained-evidence validator: an explicit service-practice
 // statement is distinct from a visitor's generic Article 22 rights.
+/** A source's own bounded profiling statement, including a qualified
+ * self-description. It does not assert significant effects or actual execution. */
+export const EXPLICIT_PROFILING_PRACTICE_PATTERN = /(?:^|(?<=[.!?]\s))(?:the company|the controller|we) (?:may )?use (?:personal data|personal information|user information|user data) for profiling\b[^!?]{0,220}(?:\.(?=\s|$)|$)|(?:^|(?<=[.!?]\s))some of the ways in which we process (?:personal information|personal data)\b[^.!?]{0,160}\bmay be considered profiling\b[^.!?]{0,60}(?:[.]|$)/i;
+
 export const AUTOMATED_DECISION_PRACTICES_PATTERN = /\b(?:we|[\p{L}][\p{L}\d'-]*) (?:do not|does not|is not intended to) make decisions about (?:natural persons|individuals|people) based solely on automated processing that produce legal or similarly significant effects\b/iu;
 
 // Equivalent profiling disclosure requires evaluation of an individual's
@@ -223,8 +361,43 @@ export function hasOnlyOtherDutchControllerReferences(value: string): boolean {
     /\bandere\s+$/.test(text.slice(Math.max(0, match.index! - 24), match.index)));
 }
 
+/** Complete need-based retention statements and the conditional backup
+ * deletion endpoint. Return only the original source sentence. */
+export function findBoundedRetentionCriterion(value:string):string|undefined {
+ return value.split(/(?<=[.!?])\s+/u).find(sentence => sentence.length <= 600 && /[.!]$/.test(sentence) && (
+    /^(?:we|[\p{L}][\p{L}&'’ -]{0,70}) will not retain (?:your )?personal (?:data|information) for longer than (?:is )?necessary to fulfil{1,2} the purposes for which (?:the )?personal (?:data|information) has been collected\.$/iu.test(sentence) ||
+    /^we retain information about you and your use of our services for as long as is needed to fulfil{1,2} our (?:legitimate )?business purposes outlined in this privacy policy\.$/i.test(sentence) ||
+    /\bbecause your personal information has been stored in backup archives\b[^.!?]{0,80}\bwe will securely store your personal information and isolate it from any further processing until deletion is possible\.$/i.test(sentence)
+  ));
+}
+
 /** Canonical precision-first clause rules for wording too variable to list as literal headings. */
 const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] = [
+  {
+    locale: "en", matchedTerm: "stated retention need or backup deletion criterion",
+    pattern: /\b(?:retain|stored)\b/i,
+    sourceClauseFinder: findBoundedRetentionCriterion, topic: "data_retention",
+  },
+  {
+    locale: "en", matchedTerm: "source-bound usage data or conditional recruitment purpose",
+    pattern: /\b(?:when you use our services|the situations in which we will process your personal information)\b/i,
+    sourceClauseFinder: findBoundedUsageOrRecruitmentPurpose, topic: "processing_purposes",
+  },
+  {
+    locale: "en", matchedTerm: "complete first-party personal-data purpose statement",
+    pattern: /\b(?:we|the company|the controller) (?:may )?(?:use|process|collect)\b/i,
+    sourceClauseFinder: findConcreteEnglishPurposeStatement, topic: "processing_purposes",
+  },
+  {
+    locale: "de", matchedTerm: "own conditional processing on an explicitly cited basis",
+    pattern: /\b(?:in diesen fallen erfolgt die verarbeitung|wenn ein vertrag zwischen ihnen und uns)\b/i,
+    sourceClauseFinder: findGermanOwnBasisStatement, topic: "legal_basis",
+  },
+  {
+    locale: "de", matchedTerm: "source-bound geographic transfer declaration with qualifications",
+    pattern: /\b(?:ubermitteln wir ihre|ubermittlung personenbezogener daten)\b/i,
+    sourceClauseFinder: findGermanTransferDisclosure, topic: "international_transfers",
+  },
   {
     locale: "en", matchedTerm: "personal-data transfer safeguards in third-party contracts",
     pattern: /\binclude standard data protection clauses\b/i,
@@ -234,6 +407,11 @@ const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] 
     locale: "en", matchedTerm: "named destination outside the visitor's jurisdiction",
     pattern: /\bthis information (?:may|will|can) be transferred\b/i,
     sourcePattern: VISITOR_JURISDICTION_TRANSFER_CLAUSE, retainSourceClause: true, topic: "international_transfers",
+  },
+  {
+    locale: "en", matchedTerm: "bounded personal-data right or delegated exercise route",
+    pattern: /\b(?:have (?:the |a )?right to (?:review|access)|your right to object|right to withdraw your consent|exercise your rights under the ccpa)\b/i,
+    sourceClauseFinder: findBoundedEnglishRightsStatement, topic: "data_subject_rights",
   },
   {
     locale: "en", matchedTerm: "affirmative personal-data rights enumeration",
@@ -447,6 +625,12 @@ const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] 
     pattern: BEHAVIORAL_PROFILING_DISCLOSURE_PATTERN,
     topic: "automated_decision_making_or_profiling",
     variant: "behavioral_profiling_disclosure_v1",
+  },
+  {
+    locale: "en",
+    matchedTerm: "explicit first-party profiling practice",
+    pattern: EXPLICIT_PROFILING_PRACTICE_PATTERN,
+    topic: "automated_decision_making_or_profiling",
   },
   {
     locale: "en",
@@ -2399,6 +2583,7 @@ export function classifyGdprTransparencyTopics(
     .filter((rule) => {
       // Normalization removes sentence/question punctuation and parentheses.
       // This rule additionally requires the exact affirmative source sentence.
+      if (rule.sourceClauseFinder && !rule.sourceClauseFinder(sourceText)) return false;
       if (rule.sourcePattern) {
         rule.sourcePattern.lastIndex = 0;
         if (!rule.sourcePattern.test(sourceText)) return false;
@@ -2438,6 +2623,9 @@ export function classifyGdprTransparencyTopics(
     }
     const evidenceExcerpt = boundedEvidenceExcerptFromIndex(evidenceSourceText, evidenceSearchIndex, term.phrase, MAX_EXCERPT_CHARS, term.topic);
     if (!evidenceExcerpt || hasIncidentalGermanDisclosureTerms(evidenceExcerpt, term.topic) ||
+      term.topic === "legal_basis" && hasUnsupportedGermanBasisEvidence(evidenceExcerpt) ||
+      term.topic === "processing_purposes" && hasOnlyPurposeIntroductionOrAssurance(evidenceExcerpt) ||
+      term.topic === "recipients_or_vendor_categories" && hasOnlyAffiliateActorContext(evidenceExcerpt) ||
       term.topic === "dpo_contact" && hasOnlyPortugueseDpoDefinition(evidenceExcerpt) ||
       ["processing_purposes", "legal_basis"].includes(term.topic) && hasOnlyPolishPurposeHeading(evidenceExcerpt) ||
       term.topic === "controller_contact" && hasOnlyOtherDutchControllerReferences(evidenceExcerpt)) continue;
@@ -2472,12 +2660,17 @@ export function classifyGdprTransparencyTopics(
     // windows could select an earlier question or mismatched addressee.
     const sourceMatch = rule.retainSourceClause ? rule.sourcePattern?.exec(evidenceSourceText) : undefined;
     const sourceClause = rule.sourceExcerptGroup ? sourceMatch?.groups?.[rule.sourceExcerptGroup] : sourceMatch?.[0];
-    const evidenceExcerpt = rule.retainSourceClause
+    const evidenceExcerpt = rule.sourceClauseFinder
+      ? rule.sourceClauseFinder(sourceText)
+      : rule.retainSourceClause
       ? sourceClause && sourceClause.length <= MAX_EXCERPT_CHARS ? sourceClause : undefined
       : rule.sectionOnly && input.section
       ? boundedSectionSemanticEvidenceExcerpt(input.section, rule)
       : boundedEvidenceExcerptFromIndex(evidenceSourceText, evidenceSearchIndex, semanticRuleAnchor(normalizedText, rule), MAX_EXCERPT_CHARS, rule.topic);
     if (!evidenceExcerpt || hasIncidentalGermanDisclosureTerms(evidenceExcerpt, rule.topic) ||
+      rule.topic === "legal_basis" && hasUnsupportedGermanBasisEvidence(evidenceExcerpt) ||
+      rule.topic === "processing_purposes" && hasOnlyPurposeIntroductionOrAssurance(evidenceExcerpt) ||
+      rule.topic === "recipients_or_vendor_categories" && hasOnlyAffiliateActorContext(evidenceExcerpt) ||
       rule.topic === "dpo_contact" && hasOnlyPortugueseDpoDefinition(evidenceExcerpt) ||
       ["processing_purposes", "legal_basis"].includes(rule.topic) && hasOnlyPolishPurposeHeading(evidenceExcerpt) ||
       rule.topic === "controller_contact" && hasOnlyOtherDutchControllerReferences(evidenceExcerpt)) continue;

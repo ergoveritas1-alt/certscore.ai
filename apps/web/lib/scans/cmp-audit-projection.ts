@@ -145,7 +145,7 @@ export function projectCmpAudit(input: {
       // Observed records a verified comparison under the narrower criterion;
       // the policy's neutral risk outcome and scoring remain unchanged.
       set("prominence", { label: "Accept / Reject prominence comparison", status: "Observed",
-        detail: "Accept and Reject were compared in the captured view. No material prominence difference met the review threshold.",
+        detail: "Accept and Reject had different visual styling. No structural prominence difference met the assessment threshold.",
         supportingEvidence: { prominence: { accept, reject, captureSkewMs } }, evidenceAnchor: "consent-review-evidence",
         sourceIds: [neutral!.originKey] });
     }

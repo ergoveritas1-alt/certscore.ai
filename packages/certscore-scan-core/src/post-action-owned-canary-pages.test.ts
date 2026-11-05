@@ -359,7 +359,7 @@ async function listen(server: Server) {
 }
 
 
-test("artifact-only full-window opt-in preserves positive evidence and finishes the same configured Accept window", async () => {
+test("form capture preserves positive evidence and the configured Accept window with or without explicit full-window opt-in", async () => {
   await withCanaryServer(async origin => {
     const url = `${origin}/full-window-accept.html`;
     const options = { observationWindowMs: 1500, resultBudgetMs: 30000 };
@@ -367,8 +367,9 @@ test("artifact-only full-window opt-in preserves positive evidence and finishes 
     const complete = await observeAccept(url, "full-window-opt-in", { ...options, requireFullConfiguredWindow: true });
     assert.equal(ordinary.acceptanceRegistration.status, "confirmed");
     assert.equal(complete.acceptanceRegistration.status, "confirmed");
-    assert.equal(ordinary.timing.observationExitReason, "non_essential_storage_write_observed");
-    assert.equal(ordinary.observedActionSourceProof?.configuredWindowCompleted, false);
+    assert.equal(ordinary.timing.observationExitReason, "window_elapsed");
+    assert.ok(ordinary.formCapture);
+    assert.equal(ordinary.observedActionSourceProof?.configuredWindowCompleted, true);
     assert.equal(complete.timing.observationExitReason, "window_elapsed");
     assert.equal(complete.observedActionSourceProof?.configuredWindowCompleted, true);
     assert.equal(complete.observedActionSourceProof?.semanticDecisionConfirmed, true);
@@ -378,6 +379,7 @@ test("artifact-only full-window opt-in preserves positive evidence and finishes 
     assert.ok(complete.storage.writesAfterAccept.some(write => write.name === "_gid" && write.nonEssential));
     const proof = complete.observedActionSourceProof!;
     assert.ok(proof.windowEndedAtMs - proof.windowStartedAtMs >= complete.observationWindowMs);
-    assert.ok(ordinary.timing.observationMs < ordinary.observationWindowMs);
+    assert.ok(ordinary.timing.observationMs >= ordinary.observationWindowMs);
+    assert.ok(ordinary.storage.writesAfterAccept.some(write => write.name === "_gid" && write.nonEssential));
   });
 });

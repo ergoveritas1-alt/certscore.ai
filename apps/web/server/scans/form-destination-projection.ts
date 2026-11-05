@@ -1,4 +1,5 @@
 import { getDomain } from "tldts";
+import { resolveRuntimeEvidenceClock } from "@certscore/contracts";
 import { formDestinationProjectionSchema, formDestinationTraceSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
 
 // Compare the retained endpoint, including scheme, host, port and path. Query
@@ -16,7 +17,7 @@ export function projectFormDestinations(bundle: CanonicalEvidenceBundle, source:
   if (source?.verificationStatus !== "verified" || !/^[a-f0-9]{64}$/.test(source.sha256 ?? "")) return null;
   const trace = formDestinationTraceSchema.safeParse(bundle.formDestinationTrace);
   if (!trace.success) return null;
-  const duration = Date.parse(bundle.completedAt) - Date.parse(bundle.startedAt);
+  const duration = resolveRuntimeEvidenceClock(bundle)?.durationMs ?? NaN;
   const snapshots = bundle.runtimeMetadataSnapshots ?? bundle.domSnapshots;
   if (!Number.isFinite(duration) || trace.data.events.some(event => event.observedAtMs > duration || !snapshots.some(snapshot => snapshot.url === event.documentUrl && snapshot.documentIdentity?.token === event.documentToken)) ||
     trace.data.requests.some(request => request.observedAtMs > duration || !bundle.networkEvents.some(network => network.requestId === request.networkRequestId))) return null;

@@ -452,7 +452,10 @@ test("v4 partial action coverage persists through concern policy; review still t
   assert.equal(project(true).status, "Review recommended");
   input.postRefusalEvidence = postRefusalEvidencePacketSchema.parse(choicePacket("reject"));
   assert.equal(project().status, "Observed");
-  assert.match(project().detail!, /Reject: 0.5-second activity check completed/);
+  assert.match(project().detail!, /Reject: 0.52-second activity check completed/);
+  const window = project().supportingEvidence!.inventory!.choiceActivity!.find(row => row.action === "reject")!;
+  assert.equal(window.clockOrigin, "action_click");
+  assert.equal(window.windowMs, 520, "measured click-to-end duration includes the confirmation interval");
   assert.equal(project(true).status, "Review recommended");
   delete input.cmpPreferencesEvidence;
   input.cmpPreferenceLaneOutcome = { status: "limited", startedAt: "2026-10-13T00:00:00.000Z", completedAt: "2026-10-13T00:00:17.000Z", limitationCode: "preference_budget_exhausted" };
@@ -654,6 +657,22 @@ test("operation timeout keeps its specific cause and does not create missing-fea
   assert.ok(audit.rows.every(row => !["feature_not_supported", "not_observed", "review"].includes(row.status)));
 });
 
+test("runtime clock keeps cookie-expiry timestamps independent of consent timing", () => {
+  const input=bundle(), runtimeStart=input.startedAt;
+  input.region="local"; input.completedAt="2026-10-13T00:00:20.000Z";
+  input.scanLaneRuns=[{laneId:"runtime_evidence",region:"local"}] as CanonicalEvidenceBundle["scanLaneRuns"];
+  input.runtimeEvidenceClock={contractVersion:"certscore.runtime-evidence-clock.v1",laneId:"runtime_evidence",scanId:input.scanId,targetUrl:input.url,region:"local",
+    startedAt:runtimeStart,completedAt:"2026-10-13T00:00:10.000Z",source:{sha256:"e".repeat(64),sizeBytes:123}};
+  input.cookieSnapshots=[{artifactId:"cookies-before",capturedAtMs:1500,consentStateAtTime:"pre_consent",evidenceRefs:[],cookieNames:["OptanonConsent"],
+    cookies:[{name:"OptanonConsent",domain:".example.com",path:"/",expires:Date.parse(runtimeStart)/1000+86400}]}];
+  const expiry=()=>deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==="duration")!.inventory?.expiries?.[0];
+  input.startedAt="2026-10-13T00:00:00.700Z";
+  assert.equal(expiry()?.capturedAtEpochSeconds,Date.parse(runtimeStart)/1000+1.5);
+  input.startedAt="2026-10-12T23:59:59.300Z";
+  assert.equal(expiry()?.remainingSeconds,86398.5);
+  input.runtimeEvidenceClock.scanId="other";
+  assert.equal(expiry(),undefined);
+});
 test("v5 baseline CMP expiry survives preference/action failure with exact identity, timing and source hash", () => {
   const input = bundle();
   input.cookieSnapshots = [{ artifactId: "cookies-before", capturedAtMs: 1500, consentStateAtTime: "pre_consent", evidenceRefs: [],

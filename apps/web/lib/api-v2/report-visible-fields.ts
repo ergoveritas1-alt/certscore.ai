@@ -33,8 +33,8 @@ function services(value: unknown, resourceRows: Row[] = [], path?: string) {
     }),
   }));
 }
-export function visibleResourceInventory(value: Row) {
-  return { ...pick(value, 'requestMetric mix'), resources: rows(value.resources).map(resource), services: services(value.services, rows(value.resources), "/resourceInventory/resources") };
+export function visibleResourceInventory(value: Row, resourcePath = "/resourceInventory/resources") {
+  return { ...pick(value, 'requestMetric mix'), resources: rows(value.resources).map(resource), services: services(value.services, rows(value.resources), resourcePath) };
 }
 export function visibleFullSiteReport(value: Row) {
   const pages = rows(value.pages?.rows).filter(row => !['excluded', 'cancelled'].includes(row.status));

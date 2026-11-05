@@ -9,7 +9,7 @@ test("choice paths use one session summary and only actual request rows, without
       consentStorage: [{ visit: "Accept", name: "ChoiceCookie", change: "stored" }, { visit: "Reject", name: "ChoiceCookie", change: "updated" }],
       choiceActivity: [
         { action: "accept", windowMs: 3000, requestCount: 0, nonEssentialRequestCount: 0, requests: [] },
-        { action: "reject", windowMs: 346, requestCount: 1, nonEssentialRequestCount: 1, requests: [{ vendor: "Example", purpose: "analytics", hostname: "metrics.example.test", path: "/collect", msAfterClick: 71, nonEssential: true }] },
+        { action: "reject", clockOrigin: "action_click", windowMs: 346, requestCount: 1, nonEssentialRequestCount: 1, requests: [{ vendor: "Example", purpose: "analytics", hostname: "metrics.example.test", path: "/collect", msAfterClick: 71, nonEssential: true }] },
       ],
     } } }] } } },
   } } as unknown as CanonicalReportExport;

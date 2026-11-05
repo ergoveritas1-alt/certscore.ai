@@ -76,11 +76,11 @@ test("post-Accept observer confirms one deterministic action and retains bounded
     assert.ok(packet.observations.some((observation) =>
       observation.observationType === "post_accept_non_essential_activity"
     ));
-    assert.equal(packet.timing.observationExitReason, "non_essential_storage_write_observed");
-    assert.ok(packet.timing.observationMs < 1_000);
-    assert.ok(packet.limitations.includes(
-      "observation_early_exit:non_essential_storage_write_observed",
-    ));
+    assert.equal(packet.timing.observationExitReason, "window_elapsed");
+    assert.ok(packet.formCapture, "structured forms retain the configured window even after positive tracking evidence");
+    assert.ok(packet.timing.observationMs >= packet.observationWindowMs);
+    assert.equal(packet.observedActionSourceProof?.configuredWindowCompleted, true);
+    assert.ok(!packet.limitations.some(reason => reason.startsWith("observation_early_exit:")));
     const serialized = JSON.stringify(packet);
     assert.equal(serialized.includes("GA1.1.CERTSCORE_ACCEPT_RAW"), false);
   });

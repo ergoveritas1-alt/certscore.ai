@@ -1,4 +1,8 @@
+import { gpcNavigationRecoverySchema } from "./gpc-navigation-recovery";
+export * from "./gpc-navigation-recovery";
 export * from "./gpc-guidance";
+import { runtimeEvidenceClockSchema, resolveRuntimeEvidenceClock } from "./runtime-evidence-clock";
+export * from "./runtime-evidence-clock";
 import {domOptOutSearchSchema} from "./scoped-opt-out-search";
 export * from "./scoped-opt-out-search";
 export * from "./broad-opt-out-assessment";
@@ -3532,6 +3536,7 @@ const bundleField6: z.ZodType<z.output<typeof normalizedVendorObservationSchema>
 const canonicalEvidenceBundleObjectSchema = z.object({
   accessibilityAudit: canonicalAccessibilityAuditSchema.optional(),
   runtimeMetadataSnapshots: z.array(canonicalDomSnapshotSchema).max(1).optional(),
+  runtimeEvidenceClock: runtimeEvidenceClockSchema.optional(),
   resourceInventoryContext: z.object({
     finalUrl: z.string().max(2000), links: z.array(z.string().max(2000)).max(5000),
     configuration: z.record(z.unknown()), configurationHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -3556,6 +3561,7 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   gpcPrototypeSessionBinding: gpcPrototypeSessionBindingSchema.optional(),
   gpcObservationSession: canonicalGpcSessionSchema.optional(),
   gpcImpactCapture: canonicalImpactCaptureSchema.optional(),
+  gpcNavigationRecovery: gpcNavigationRecoverySchema.optional(),
   gpcImpactSemanticObservation: canonicalImpactSemanticSchema.optional(),
   runtimeTimeline: z.array(bundleField0),
   networkEvents: z.array(canonicalNetworkEventSchema),
@@ -3605,6 +3611,9 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   schemaVersion: z.string(),
 });
 const canonicalEvidenceBundleBaseSchema: z.ZodType<z.output<typeof canonicalEvidenceBundleObjectSchema>, z.ZodTypeDef, z.input<typeof canonicalEvidenceBundleObjectSchema>> = canonicalEvidenceBundleObjectSchema.superRefine((bundle, context) => {
+  if (bundle.runtimeEvidenceClock && !resolveRuntimeEvidenceClock(bundle)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Runtime evidence clock is not bound to this bundle and lane.", path: ["runtimeEvidenceClock"] });
+  }
   const policyObservationIds = new Set<string>();
   bundle.policySurfaceObservations.forEach((observation, index) => {
     if (policyObservationIds.has(observation.observationId)) {

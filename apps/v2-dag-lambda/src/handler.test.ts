@@ -2001,12 +2001,17 @@ function coordinatorConsentBundle(
     acceptControlObserved?: boolean;
     limited?: boolean;
     rejectControlObserved?: boolean;
+    targetUrl?: string;
+    region?: string;
   },
 ) {
+  const targetUrl = options.targetUrl ?? "https://example.com/";
   const acceptControlObserved = options.acceptControlObserved === true;
   const rejectControlObserved = options.rejectControlObserved === true;
   const actionableControlObserved = acceptControlObserved || rejectControlObserved;
   return canonicalBundleFixture(scanId, {
+    url: targetUrl, normalizedUrl: targetUrl,
+    ...(options.region !== undefined ? {region: options.region} : {}),
     consentSurfaceInspection: {
       artifactVersion: "certscore.consent_surface_inspection.v1",
       coverageStatus: options.limited ? "limited" : "complete",
@@ -2027,7 +2032,7 @@ function coordinatorConsentBundle(
     },
     consentUiObservations: actionableControlObserved ? [{
       observationId: "fixture-consent-ui",
-      url: "https://example.com/",
+      url: targetUrl,
       observedAt: "2026-09-10T00:00:00.000Z",
       observedAtMs: 100,
       bannerDetected: true,
@@ -2268,6 +2273,8 @@ async function runCoordinatorFixture(input: {
       },
     })],
     ["policy_evidence", canonicalBundleFixture(input.scanId, {
+      ...(input.gpcPair ? {url: input.gpcPair.baseline.url, normalizedUrl: input.gpcPair.baseline.normalizedUrl,
+        region: input.gpcPair.baseline.region} : {}),
       scanLaneRuns: [laneRunFixture("policy_evidence", "fixture-policy")],
     })],
   ] as const);
@@ -5044,6 +5051,7 @@ function canonicalBundleFixture(
     observedJourneys: [],
     policySurfaceObservations: [],
     runtimeTimeline: [],
+    region: "eu-west-1",
     scanId,
     scanProfile: {
       enabledModules: [],
@@ -5291,7 +5299,8 @@ test("GPC coordinator publishes bounded comparison from the original verified wo
   let artifactRoot: string | undefined;
   try {
     const outcome = await runCoordinatorFixture({ scanId, action: "none", dispatchDelayMs: 1000,
-      consentBundle: coordinatorConsentBundle(scanId, { inspectionCompleted: true, acceptControlObserved: false }),
+      consentBundle: coordinatorConsentBundle(scanId, { inspectionCompleted: true, acceptControlObserved: false,
+        targetUrl: pair[0]!.url, region: pair[0]!.region }),
       gpcPair: { baseline: pair[0]!, gpc: pair[1]! } });
     artifactRoot = outcome.artifactRoot;
     const comparison = outcome.bundle.gpcActivityComparison;
@@ -5694,7 +5703,8 @@ test("presence-only coordinator invokes at most the six core workers with both o
     baseline.scanId=scanId;gpc.scanId=scanId;
     baseline.domSnapshots=[{...runtimeSnapshotFixture(),url:baseline.url}];
     const outcome=await runCoordinatorFixture({scanId,presenceOnly:true,bothActions:true,action:"completed",dispatchDelayMs:0,
-      consentBundle:coordinatorConsentBundle(scanId,{inspectionCompleted:true,acceptControlObserved:true,rejectControlObserved:true}),gpcPair:{baseline,gpc}});
+      consentBundle:coordinatorConsentBundle(scanId,{inspectionCompleted:true,acceptControlObserved:true,rejectControlObserved:true,
+        targetUrl:baseline.url,region:baseline.region}),gpcPair:{baseline,gpc}});
     artifactRoot=outcome.artifactRoot;
     assert.deepEqual([...outcome.workerCalls].sort(),[...PRESENCE_ONLY_WORKER_LANES].sort());
     assert.equal(outcome.bundle.cmpPreferencesEvidence,undefined);assert.equal(outcome.bundle.cmpPreferenceLaneOutcome,undefined);
@@ -5745,7 +5755,8 @@ test("GPC product coordinator derives one packet from existing original-byte rea
   let root:string|undefined;
   try {
     const out=await runCoordinatorFixture({scanId,action:"none",dispatchDelayMs:1000,
-      consentBundle:coordinatorConsentBundle(scanId,{inspectionCompleted:true,acceptControlObserved:false}),gpcPair:pair,onRead:key=>reads.push(key),encodedCanonicalArtifacts:mode === "encoded_collection" || mode === "brotli_collection" || mode === "brotli_cmp"});
+      consentBundle:coordinatorConsentBundle(scanId,{inspectionCompleted:true,acceptControlObserved:false,
+        targetUrl:pair.baseline.url,region:pair.baseline.region}),gpcPair:pair,onRead:key=>reads.push(key),encodedCanonicalArtifacts:mode === "encoded_collection" || mode === "brotli_collection" || mode === "brotli_cmp"});
     root=out.artifactRoot;
     const p=out.bundle.gpcCmpStateComparison;
     if(collection) {

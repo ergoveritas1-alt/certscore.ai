@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Page } from "playwright";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
-import { postAcceptFormSnapshotCaptureSchema, postAcceptFormInventorySchema,
-  postAcceptImageInventoryMatchesLaterInventory, type PostAcceptFormSnapshotCapture } from "@certscore/contracts";
+import { collectionSurfaceSnapshotSchema, postAcceptFormSnapshotCaptureSchema, postAcceptFormInventorySchema,
+  postAcceptImageInventoryMatchesLaterInventory, type PostAcceptFormSnapshotCapture, type PostAcceptFormImageFollowup, type PostAcceptFormImageDiagnostics } from "@certscore/contracts";
 import { capturePostAcceptFormInventory } from "./post-accept-form-inventory.js";
 import { captureCollectionSurfaceSnapshots, type FormSnapshotReviewer } from "./collection-surface-snapshots.js";
 
@@ -48,8 +48,11 @@ function startPostAcceptFormSnapshots(input: FormSnapshotInput & ({
   let frozen = false, done = false, changed = false;
   let captureDeadlineAtMs = input.deadlineAtMs;
   let lateFormExtensionActive = false;
+  let formFollowup: PostAcceptFormImageFollowup | undefined;
   let lateFormDetectedAtMs: number | undefined;
   let result: PostAcceptFormSnapshotCapture | undefined;
+  let diagnostics: PostAcceptFormImageDiagnostics | undefined;
+  let captureFailed=false;
   const navigated = (frame: import("playwright").Frame) => { if (frame === input.page.mainFrame()) changed = true; };
   input.page.on("framenavigated", navigated);
   const active = () => !frozen && !changed && !signal.aborted && !input.page.isClosed() &&
@@ -61,7 +64,7 @@ function startPostAcceptFormSnapshots(input: FormSnapshotInput & ({
     timer.unref?.();
   };
   const extendForDetectedForm = (raw: Awaited<ReturnType<typeof capturePostAcceptFormInventory>>, detectedAtEpochMs: number) => {
-    if (input.afterClickOnly || !raw.forms.length || raw.pageUrl !== input.exactTargetUrl || !active() || lateFormExtensionActive ||
+    if (input.afterClickOnly || !raw.forms.length || raw.pageUrl !== input.exactTargetUrl || !active() || lateFormExtensionActive || formFollowup ||
       detectedAtEpochMs >= input.deadlineAtMs ||
       detectedAtEpochMs < input.parentScanStartedAtMs + input.acceptanceRegisteredAtMs + LATE_FORM_MINIMUM_AGE_MS ||
       detectedAtEpochMs < input.deadlineAtMs - LATE_FORM_REMAINING_WINDOW_MS) return;
@@ -77,11 +80,11 @@ function startPostAcceptFormSnapshots(input: FormSnapshotInput & ({
   };
   scheduleCaptureDeadline();
   const work = (async () => {
-    let stage = "inventory_wait";
+    let stage: PostAcceptFormImageDiagnostics["lastStage"] = "inventory_wait";
     const stageStartedAtMs = Date.now();
     let currentStageStartedAtMs = stageStartedAtMs;
     const stageTimingsMs: Record<string, number> = {};
-    const nextStage = (name: string) => {
+    const nextStage = (name: PostAcceptFormImageDiagnostics["lastStage"]) => {
       const now = Date.now();
       stageTimingsMs[stage] = now - currentStageStartedAtMs;
       stage = name;
@@ -118,6 +121,18 @@ function startPostAcceptFormSnapshots(input: FormSnapshotInput & ({
       // bounded inventory; the document proof was already started in parallel.
       let raw = await capturePostAcceptFormInventory(input.page, input.parentScanStartedAtMs, exclusionSelectors, input.deadlineAtMs - 150,
         { onDetected: extendForDetectedForm, signal });
+      // Keep the final inventory reserve open to a retained bootstrap request.
+      // Otherwise a request in the last 150 ms can extend only structured capture.
+      while (!raw.forms.length && !formFollowup && active()) {
+        await new Promise(resolve => setTimeout(resolve, Math.min(25, Math.max(1, input.deadlineAtMs - Date.now()))));
+      }
+      // The same form lifecycle can outlive activity collection, without
+      // widening request/storage evidence or extending the worker deadline.
+      while (!raw.forms.length && formFollowup && active()) {
+        raw = await capturePostAcceptFormInventory(input.page, input.parentScanStartedAtMs, exclusionSelectors,
+          captureDeadlineAtMs - 150, {onDetected:extendForDetectedForm,signal});
+        if (!raw.forms.length) break;
+      }
       inventoryDiagnostics = { forms: raw.forms.length, fields: raw.forms.reduce((count, form) => count + form.fields.length, 0) };
       if (!raw.forms.length) return;
       if (!active()) return;
@@ -164,8 +179,8 @@ function startPostAcceptFormSnapshots(input: FormSnapshotInput & ({
           fitFormToCrop: true,
           hideControlsDuringCapture: true,
           ...(input.afterClickOnly ? { layoutRetryAllowed: false } : {}),
-          ...(lateFormExtensionActive ? { pixelBudgetMs: Math.max(1, captureDeadlineAtMs - Date.now()) } : {}),
-          reviewDeadlineAtMs: input.afterClickOnly || lateFormExtensionActive ? captureDeadlineAtMs : input.deadlineAtMs + 1500,
+          ...(lateFormExtensionActive || formFollowup ? { pixelBudgetMs: Math.max(1, captureDeadlineAtMs - Date.now()) } : {}),
+          reviewDeadlineAtMs: input.afterClickOnly || lateFormExtensionActive || formFollowup ? captureDeadlineAtMs : input.deadlineAtMs + 1500,
           onPixelWorkCompleted: () => {
             if (!laterInventoryWork) return;
             // All initial browser mutations/pixels have finished. The second
@@ -174,7 +189,21 @@ function startPostAcceptFormSnapshots(input: FormSnapshotInput & ({
               const later = await laterInventoryWork;
               if (!later || !active() || pixelProvedAtMs === undefined || later.capturedAtMs < pixelProvedAtMs) return undefined;
               const newForms = later.inventory.forms.filter(form => !inventory.forms.some(original => original.formRef === form.formRef));
-              if (!newForms.length || inventory.forms.length >= 2 || Date.now() + 750 >= captureDeadlineAtMs) return {inventory:later};
+              if (!newForms.length || inventory.forms.length >= 2) return {inventory:later};
+              if (Date.now() + 750 >= captureDeadlineAtMs) {
+                // Keep the directly observed form usable and explain its missing
+                // image. This is an unavailable-image receipt, never pixel proof.
+                const sourceInventoryHash = createHash("sha256").update(JSON.stringify(later.inventory)).digest("hex");
+                return { inventory: later, snapshots: { capturedAtMs: later.capturedAtMs,
+                  snapshots: newForms.slice(0, 2 - inventory.forms.length).map(form => collectionSurfaceSnapshotSchema.parse({
+                    contractVersion: "certscore.collection-surface-snapshot.v1", formRef: form.formRef,
+                    pageUrl: later.inventory.pageUrl,
+                    capturedAt: new Date(input.parentScanStartedAtMs + later.capturedAtMs).toISOString(),
+                    sourceInventoryHash, mimeType: "image/jpeg", valuesMasked: true,
+                    status: "unavailable", reason: "capture_budget_exhausted",
+                  })),
+                } };
+              }
               let laterPixelProvedAtMs: number | undefined;
               const extra = await captureCollectionSurfaceSnapshots(input.page, {...later.inventory,
                 forms:newForms.slice(0,2-inventory.forms.length)}, input.reviewer, input.signal, boundSession,
@@ -201,9 +230,11 @@ function startPostAcceptFormSnapshots(input: FormSnapshotInput & ({
               // Read the later form DOM while image moderation runs. This is
               // the same session and existing late-form deadline, with no
               // additional browser lane or screenshot.
-              if (lateFormExtensionActive && !laterInventoryWork) {
+              if ((lateFormExtensionActive || formFollowup) && !laterInventoryWork) {
                 laterInventoryWork = (async () => {
-                  const first = await sampleLaterInventory(LATER_INVENTORY_WAIT_MS);
+                  // The bootstrap follow-up has already waited for mounted forms.
+                  // Sample immediately, leaving the existing retry for a second form.
+                  const first = await sampleLaterInventory(formFollowup ? 0 : LATER_INVENTORY_WAIT_MS);
                   if (first?.inventory.forms.length === 2 || Date.now() + LATER_INVENTORY_RETRY_MS >= captureDeadlineAtMs) return first;
                   const second = await sampleLaterInventory(LATER_INVENTORY_RETRY_MS);
                   if (!first) return second;
@@ -233,7 +264,11 @@ function startPostAcceptFormSnapshots(input: FormSnapshotInput & ({
           contractVersion: "certscore.post_accept_form_snapshots.v7", phase: "after_accept_click",
           captureDeadlineAtMs: input.deadlineAtMs - input.parentScanStartedAtMs,
         } : { phase: "after_accept", acceptanceRegisteredAtMs: input.acceptanceRegisteredAtMs,
-        ...(lateFormExtensionActive ? {
+        ...(formFollowup ? {
+          contractVersion: "certscore.post_accept_form_snapshots.v8", followup:formFollowup,
+          postCaptureInventory: postCaptureInventory ?? {capturedAtMs:pixelProvedAtMs,documentIdentity:{source:"cdp_loader_id",token},inventory},
+          postCaptureSnapshots: postCaptureSnapshots ?? {capturedAtMs:postCaptureInventory?.capturedAtMs ?? pixelProvedAtMs,snapshots:[]},
+        } : lateFormExtensionActive ? {
           contractVersion: postCaptureSnapshots ? "certscore.post_accept_form_snapshots.v6" : postCaptureInventory ? "certscore.post_accept_form_snapshots.v5" : "certscore.post_accept_form_snapshots.v4",
           lateForm: { baseCaptureDeadlineAtMs: input.deadlineAtMs - input.parentScanStartedAtMs,
             detectedAtMs: lateFormDetectedAtMs, extensionMs: LATE_FORM_CAPTURE_EXTENSION_MS },
@@ -246,10 +281,19 @@ function startPostAcceptFormSnapshots(input: FormSnapshotInput & ({
         documentIdentity: { source: "cdp_loader_id", token }, inventory, snapshots,
       });
     } catch (error) {
+      captureFailed=true;
       console.warn("[post-accept-form-snapshots]", JSON.stringify({stage, failureClass:error instanceof Error ? error.name : "unknown", issues: (error as {issues?: Array<{path: unknown; code: unknown}>}).issues?.map(issue => ({path:issue.path,code:issue.code})), deadlineExpired:Date.now() >= captureDeadlineAtMs}));
     }
     finally {
       stageTimingsMs[stage] = Date.now() - currentStageStartedAtMs;
+      const images=result ? [...result.snapshots,...(result.contractVersion === "certscore.post_accept_form_snapshots.v6" || result.contractVersion === "certscore.post_accept_form_snapshots.v8" ? result.postCaptureSnapshots.snapshots : [])] : snapshotDiagnostics ?? [];
+      diagnostics={version:"post_accept_form_image_diagnostics.v1",lastStage:stage,
+        outcome:result?"completed":changed?"document_changed":input.signal?.aborted?"cancelled":
+          !inventoryDiagnostics?.forms && !captureFailed?"no_form_observed":Date.now()>=captureDeadlineAtMs?"deadline":"error",
+        elapsedMs:Date.now()-stageStartedAtMs,observedForms:Math.min(2,result && "postCaptureInventory" in result ? result.postCaptureInventory?.inventory.forms.length ?? inventoryDiagnostics?.forms ?? 0 : inventoryDiagnostics?.forms ?? 0),
+        availableImages:images.filter(x=>x.status==="available").length,withheldImages:images.filter(x=>x.status==="withheld").length,
+        unavailableImages:images.filter(x=>x.status==="unavailable").length,
+        reasons:[...new Set(images.flatMap(x=>x.reason?[x.reason]:[]))].slice(0,8)};
       if (inventoryDiagnostics?.forms) console.info("[post-accept-form-snapshot-timing]", JSON.stringify({
         completed: Boolean(result), stageTimingsMs, imageTimingsMs,
         elapsedMs: Date.now() - stageStartedAtMs, lateFormExtensionActive,
@@ -261,11 +305,22 @@ function startPostAcceptFormSnapshots(input: FormSnapshotInput & ({
     }
   })();
   return {
+    followThrough(followup: PostAcceptFormImageFollowup) {
+      if (input.afterClickOnly || done || !active() || lateFormExtensionActive || formFollowup ||
+        followup.originalWindowEndedAtMs !== input.deadlineAtMs - input.parentScanStartedAtMs ||
+        followup.captureDeadlineAtMs <= followup.originalWindowEndedAtMs ||
+        followup.captureDeadlineAtMs > Math.min(followup.originalWindowEndedAtMs+8000,followup.workerDeadlineAtMs)) return false;
+      formFollowup={...followup};
+      captureDeadlineAtMs=input.parentScanStartedAtMs+followup.captureDeadlineAtMs;
+      scheduleCaptureDeadline();
+      return true;
+    },
+    diagnostics: () => diagnostics,
     done: () => done || !active(),
     async finish() {
       // A late detected form may finish the already authorized browser work
       // inside its one-time extension. Ordinary scans still freeze immediately.
-      if (!lateFormExtensionActive) { frozen = true; controller.abort(); }
+      if (!lateFormExtensionActive && !formFollowup) { frozen = true; controller.abort(); }
       await work;
       frozen = true; controller.abort(); clearTimeout(timer);
       input.page.off("framenavigated", navigated);

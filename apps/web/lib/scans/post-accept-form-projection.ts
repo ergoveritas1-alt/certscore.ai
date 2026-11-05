@@ -29,7 +29,7 @@ export function projectPostAcceptForms(value: unknown): { rows: CollectionSurfac
     if (!reconciled) return empty;
     const displayedInventory = reconciled.inventory;
     const imagedRows: CollectionSurfaceTableRow[] = displayedInventory.forms.map(form => {
-      const laterSnapshot = images.contractVersion === "certscore.post_accept_form_snapshots.v6"
+      const laterSnapshot = (images.contractVersion === "certscore.post_accept_form_snapshots.v6" || images.contractVersion === "certscore.post_accept_form_snapshots.v8")
         ? images.postCaptureSnapshots.snapshots.find(snapshot=>snapshot.formRef===form.formRef) : undefined;
       const snapshot = images.snapshots.find(snapshot => snapshot.formRef === form.formRef) ?? laterSnapshot;
       return { id: `after_accept:${images.sessionId}:${form.formRef}`, form,
@@ -38,8 +38,8 @@ export function projectPostAcceptForms(value: unknown): { rows: CollectionSurfac
           frameRef:reconciled.structuredFrame?.frameRef ?? "main",
           documentToken:reconciled.structuredFrame?.documentBinding?.token ?? images.documentIdentity.token, exactTargetSha256:images.exactTargetSha256,
           actionDispatchedAtMs:images.actionDispatchedAtMs,
-          capturedAtMs:reconciled.structuredFrame?.capturedAtMs ?? (laterSnapshot && images.contractVersion === "certscore.post_accept_form_snapshots.v6"
-            ? images.postCaptureSnapshots.capturedAtMs : snapshot ? images.capturedAtMs : (images.contractVersion === "certscore.post_accept_form_snapshots.v5" || images.contractVersion === "certscore.post_accept_form_snapshots.v6")
+          capturedAtMs:reconciled.structuredFrame?.capturedAtMs ?? (laterSnapshot && (images.contractVersion === "certscore.post_accept_form_snapshots.v6" || images.contractVersion === "certscore.post_accept_form_snapshots.v8")
+            ? images.postCaptureSnapshots.capturedAtMs : snapshot ? images.capturedAtMs : (images.contractVersion === "certscore.post_accept_form_snapshots.v5" || (images.contractVersion === "certscore.post_accept_form_snapshots.v6" || images.contractVersion === "certscore.post_accept_form_snapshots.v8"))
             ? images.postCaptureInventory.capturedAtMs : images.capturedAtMs)},
         snapshot: snapshot?.status === "available" ? {status:"available" as const,
           url:`/api/scans/${scanId}/form-snapshot?formRef=${encodeURIComponent(`after_accept:${form.formRef}`)}`} :

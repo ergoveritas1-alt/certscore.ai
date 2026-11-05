@@ -1,0 +1,31 @@
+name: Post-Accept Form Lifecycle
+on:
+  pull_request:
+    paths:
+      - 'packages/certscore-scan-core/**'
+      - 'packages/certscore-contracts/**'
+      - 'apps/web/**'
+      - 'apps/v2-dag-lambda/**'
+      - 'apps/validation-worker/**'
+      - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
+      - 'scripts/**'
+      - 'package.json'
+      - '.github/workflows/post-accept-form-lifecycle.yml'
+  workflow_dispatch:
+jobs:
+  post-accept-form-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.3
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
+      - run: pnpm test:post-accept-forms

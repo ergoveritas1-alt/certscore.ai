@@ -32,6 +32,9 @@ import {
   NAMED_DATA_SERVICE_PURPOSE_PATTERN,
   STRUCTURED_DATA_PURPOSE_PATTERN,
   RESIDENCE_RELATIVE_TRANSFER_PATTERN,
+  findGermanTransferDisclosure,
+  findGermanOwnBasisStatement,
+  findBoundedUsageOrRecruitmentPurpose,
   type DirectVsInferred,
   type EvidenceRef,
   isSupportedPrivacyEvidenceLocale,
@@ -54,7 +57,7 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import { chromium, type Browser, type Locator, type Page, type JSHandle } from "playwright";
 import { createHash } from "node:crypto";
-import { Resolver } from "node:dns";
+import { lookup, type LookupAddress } from "node:dns";
 import { isIP } from "node:net";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -567,6 +570,8 @@ export function shouldRetryCanonicalPolicyHost(
 interface PolicyBrowserRuntime {
   close(): Promise<void>;
   getBrowser(): Promise<Browser>;
+  getDiscoveryPage?(): Page | undefined;
+  retainDiscoveryPage?(page: Page): boolean;
 }
 
 /** Redirects guide acquisition, never replace the original ownership target. */
@@ -2365,6 +2370,17 @@ async function processPolicyCandidate({
   // evidence when browser startup or rendered discovery consumes the soft
   // module budget; no new direct network work is started in this case.
 
+  const documentFetchTimeoutMs = protectedObservedFetch
+    ? Math.min(
+        POLICY_PROTECTED_OBSERVED_FETCH_TIMEOUT_MS,
+        remainingProtectedPolicyFetchMs(input, moduleStartedAtMs),
+      )
+    : boundedSameOriginSupplement
+      ? Math.min(
+          supplementalDocumentBudgetMs,
+          remainingPolicyFetchMs(input, moduleStartedAtMs),
+        )
+      : remainingPolicyFetchMs(input, moduleStartedAtMs);
   const documentFetchStartedAtMs = Date.now();
   const prefetchedSupplement = boundedSameOriginSupplement && fetchCaches.direct.has(
     policyDocumentFetchCacheKey(candidate.normalizedUrl),
@@ -2377,18 +2393,9 @@ async function processPolicyCandidate({
       const fetchPromise = fetchPolicyDocumentSingleFlight(
         fetchCaches.direct,
         candidate.normalizedUrl,
-        protectedObservedFetch
-          ? Math.min(
-              POLICY_PROTECTED_OBSERVED_FETCH_TIMEOUT_MS,
-              remainingProtectedPolicyFetchMs(input, moduleStartedAtMs),
-            )
-          : boundedSameOriginSupplement
-            ? Math.min(
-                supplementalDocumentBudgetMs,
-                remainingPolicyFetchMs(input, moduleStartedAtMs),
-              )
-            : remainingPolicyFetchMs(input, moduleStartedAtMs),
+        documentFetchTimeoutMs,
         input.signal,
+        { allowWwwFallback: !isObservedFetchablePrivacyCandidate(candidate) },
       );
       return prefetchedSupplement
         ? settlePrefetchedPolicyChild(fetchPromise, Math.min(
@@ -2405,7 +2412,8 @@ async function processPolicyCandidate({
   });
   if (!fetched.ok && !boundedSameOriginSupplement && !blockedPolicyFetchCaches.has(fetchCaches.direct)) {
     const canonicalHostVariant = canonicalWwwPolicyUrlVariant(candidate.normalizedUrl);
-    if (canonicalHostVariant && shouldRetryCanonicalPolicyHost(candidate.normalizedUrl, fetched.attempts ?? [])) {
+    const remainingDirectFetchMs = documentFetchTimeoutMs - (Date.now() - documentFetchStartedAtMs);
+    if (canonicalHostVariant && remainingDirectFetchMs >= 500 && shouldRetryCanonicalPolicyHost(candidate.normalizedUrl, fetched.attempts ?? [])) {
       const variantFetched = await recordPolicyTiming(
         timingBreakdown,
         `policy canonical host retry ${candidateIndex + 1}`,
@@ -2413,7 +2421,7 @@ async function processPolicyCandidate({
         () => fetchPolicyDocumentSingleFlight(
           fetchCaches.direct,
           canonicalHostVariant!,
-          remainingPolicyFetchMs(input, moduleStartedAtMs),
+          Math.min(remainingDirectFetchMs, remainingPolicyFetchMs(input, moduleStartedAtMs)),
           input.signal,
         ),
       );
@@ -3555,8 +3563,12 @@ export async function fetchRenderedPolicyDocumentText(input: {
     remainingRecoveryMs(input.timeoutMs);
     const browser = await input.browserRuntime.getBrowser();
     remainingRecoveryMs(input.timeoutMs);
-    retainedRecoveryPage = input.linkContext && input.input.renderedRecoveryPage
-      ? input.input.renderedRecoveryPage
+    const discoveryPage = input.browserRuntime.getDiscoveryPage?.();
+    const matchingDiscoveryPage = discoveryPage && !discoveryPage.isClosed() && input.linkContext &&
+      canonicalPolicyUrlIdentity(discoveryPage.url()) === canonicalPolicyUrlIdentity(input.linkContext.pageUrl)
+      ? discoveryPage : undefined;
+    retainedRecoveryPage = input.linkContext
+      ? input.input.renderedRecoveryPage ?? matchingDiscoveryPage
       : undefined;
     failureStage = "browser_context";
     if (!retainedRecoveryPage) {
@@ -3629,16 +3641,16 @@ export async function fetchRenderedPolicyDocumentText(input: {
         });
     failureStage = "document_readiness";
     if(recoveryDiagnostic)recoveryDiagnostic.stage="document_ready";
-    if (input.hardDeadlineAtMs === undefined) await page.waitForLoadState("networkidle", {
-      timeout: remainingRecoveryMs(1_000),
-    }).catch(() => undefined);
+    // Unrelated requests must not consume recovery time before the policy
+    // body readiness check. Keep that semantic check and its settle interval.
     await page.waitForFunction(
       () => {
-        const normalizedLength = (element: Element | null): number =>
-          ((element as HTMLElement | null)?.innerText ?? "").replace(/\s+/g, " ").trim().length;
+        // Keep browser callbacks self-contained: transpiled named helpers can
+        // reference an esbuild __name shim that is absent in the page.
         const semanticPolicyBodyReady = [
           ...document.querySelectorAll("article, main, [role='main']"),
-        ].some((element) => normalizedLength(element) >= 500);
+        ].some((element) =>
+          ((element as HTMLElement).innerText ?? "").replace(/\s+/g, " ").trim().length >= 500);
 
         // Header, navigation, and footer chrome can exceed the old whole-body
         // threshold before a client-rendered policy article exists. Prefer a
@@ -4319,7 +4331,15 @@ function createConcurrencyLimiter(concurrency: number) {
 
 function createPolicyBrowserRuntime(existingBrowser: Browser | undefined): PolicyBrowserRuntime {
   let ownedBrowserPromise: Promise<Browser> | undefined;
+  let discoveryPage: Page | undefined;
+  let closed = false;
   return {
+    getDiscoveryPage: () => discoveryPage,
+    retainDiscoveryPage(page) {
+      if (closed || page.isClosed()) return false;
+      discoveryPage = page;
+      return true;
+    },
     getBrowser() {
       if (existingBrowser) {
         return Promise.resolve(existingBrowser);
@@ -4328,6 +4348,11 @@ function createPolicyBrowserRuntime(existingBrowser: Browser | undefined): Polic
       return ownedBrowserPromise;
     },
     async close() {
+      closed = true;
+      const retainedPage = discoveryPage;
+      discoveryPage = undefined;
+      // Own the discovery context even when the browser itself was borrowed.
+      await retainedPage?.context().close().catch(() => undefined);
       if (!existingBrowser && ownedBrowserPromise) {
         const browser = await ownedBrowserPromise.catch(() => undefined);
         await browser?.close().catch(() => undefined);
@@ -4354,6 +4379,7 @@ async function warmPolicyDocumentFetchCache(input: {
         candidate.normalizedUrl,
         remainingPolicyFetchMs(input.input, input.moduleStartedAtMs),
         input.input.signal,
+        { allowWwwFallback: !isObservedFetchablePrivacyCandidate(candidate) },
       );
       // A unique deterministic California child uses the existing one-hop
       // slot while footer discovery runs, rather than losing that selected
@@ -4740,6 +4766,7 @@ async function extractRenderedCandidates(
   };
   const abortCheckpoint = () => { checkpointAborted = true; releaseFrameCheckpoint(); };
   input.signal?.addEventListener("abort", abortCheckpoint, { once: true });
+  let retainedForPolicyRecovery = false;
   let stage = "browser launch";
   let stageStartedAtMs = Date.now();
   const nextStage = (next: string) => {
@@ -5438,6 +5465,15 @@ async function extractRenderedCandidates(
     nextStage("optional CMP policy reference");
     const didomiPublisherUrl = await page.evaluate(readDidomiPublisherPolicy, undefined).catch(() => { auxiliaryReadsComplete = false; return undefined; });
     const inspectionComplete = auxiliaryReadsComplete && domInspection?.documentReady && inventoryComplete;
+    // Discovery has frozen its observations. Keep this exact, still-live page
+    // for the serialized policy recovery instead of reopening and re-priming
+    // the homepage inside its four-second allowance. This does not assert a
+    // complete inventory; recovery independently verifies the policy document.
+    // The runtime owns cleanup.
+    if (!input.signal?.aborted && !progress?.closed && domInspection?.bodyPresent &&
+        domInspection.documentUrl === renderedBaseUrl && page.url() === renderedBaseUrl) {
+      retainedForPolicyRecovery = browserRuntime.retainDiscoveryPage?.(page) === true;
+    }
     return { candidates: dedupeCandidates([
         ...cmpConfigCandidates(didomiPolicyReference(didomiPublisherUrl, renderedBaseUrl), renderedBaseUrl),
         ...candidates, ...(progress?.candidates ?? []),
@@ -5453,7 +5489,7 @@ async function extractRenderedCandidates(
     releaseFrameCheckpoint();
     nextStage("cleanup");
     releaseAbortContext?.();
-    await context?.close().catch(() => undefined);
+    if (!retainedForPolicyRecovery) await context?.close().catch(() => undefined);
     nextStage("done");
   }
 }
@@ -8025,7 +8061,7 @@ export function gdprTransparencyTopicCandidatesFromText(text: string): PolicySur
     // Nano analysis packet. The classifier retains only bounded native excerpts.
     text,
   });
-  return classification.matches.map((match) => ({
+  return qualifyDpoMatchesAgainstSource(classification.matches, text, false).map((match) => ({
     topic: match.topic,
     status: "diagnostic_only" as const,
     evidenceText: match.evidenceExcerpt.slice(0, 640),
@@ -8044,7 +8080,7 @@ export function gdprTransparencyTopicCandidatesFromRetainedPolicySections(
 ): PolicySurfaceObservation["gdprTransparencyTopicCandidates"] {
   const sectionCandidates = sections
     .filter((section) => section.textExcerpt.length >= 80)
-    .flatMap((section) => classifyGdprTransparencyTopics({
+    .flatMap((section) => qualifyDpoMatchesAgainstSource(classifyGdprTransparencyTopics({
       section: {
         body: section.textExcerpt,
         // Visible-text windows already contain their source headings. Adding
@@ -8053,9 +8089,27 @@ export function gdprTransparencyTopicCandidatesFromRetainedPolicySections(
           ? section.heading
           : undefined,
       },
-    }).matches)
+    }).matches, section.textExcerpt, true))
     .map(gdprTransparencyTopicCandidateFromMatch);
   return mergeGdprTransparencyTopicCandidates([], sectionCandidates);
+}
+
+function qualifyDpoMatchesAgainstSource(
+  matches: GdprTransparencyTopicMatch[], source: string, boundedSection: boolean,
+): GdprTransparencyTopicMatch[] {
+  if (!matches.some(match => match.topic === "dpo_contact") || !OVERSIGHT_AUTHORITY_INTRO.test(source)) return matches;
+  const own = ownDpoContactInMixedAuthoritySection({ textExcerpt: source });
+  if (own) {
+    return [...matches.filter(match => match.topic !== "dpo_contact"),
+      ...classifyGdprTransparencyTopics({ text: own }).matches.filter(match => match.topic === "dpo_contact")];
+  }
+  const normalized = normalizeWhitespace(source);
+  return matches.filter(match => {
+    if (match.topic !== "dpo_contact") return true;
+    if (boundedSection) return false;
+    const excerpt = normalizeWhitespace(match.evidenceExcerpt), start = normalized.indexOf(excerpt);
+    return start < 0 || !OVERSIGHT_AUTHORITY_INTRO.test(normalized.slice(Math.max(0, start - 400), start + excerpt.length));
+  });
 }
 
 function gdprTransparencyTopicCandidateFromMatch(
@@ -8430,10 +8484,24 @@ function article13SignalsFromText(text: string): Pick<PolicyFacts, "article13Dis
     if (!rawStatus) {
       continue;
     }
-    const evidenceText = completePolicyExcerpt(boundedExcerptForPatterns(normalizedText, rawStatus === "partial" && rule.partialPattern
+    let evidenceText = completePolicyExcerpt(boundedExcerptForPatterns(normalizedText, rawStatus === "partial" && rule.partialPattern
       ? [rule.partialPattern, ...rule.excerptPatterns]
       : rule.excerptPatterns), rule.maxEvidenceChars ?? 320);
-    const rejectReason = article13DisclosureRejectReason(evidenceText, rule.disclosureType);
+    let externalAuthorityOfficer = false;
+    if (rule.disclosureType === "dpo_contact" && OVERSIGHT_AUTHORITY_INTRO.test(normalizedText)) {
+      const ownContact = ownDpoContactInMixedAuthoritySection({ textExcerpt: normalizedText });
+      if (ownContact) evidenceText = completePolicyExcerpt(ownContact, rule.maxEvidenceChars ?? 320);
+      else {
+        const sourceStart = normalizedText.indexOf(evidenceText);
+        // Reattach the original local context lost by legacy quote compaction.
+        // Do not reject a whole policy merely because it also names a regulator.
+        const sourceContext = sourceStart < 0 ? "" : normalizedText.slice(Math.max(0, sourceStart - 400), sourceStart + evidenceText.length);
+        externalAuthorityOfficer = OVERSIGHT_AUTHORITY_INTRO.test(sourceContext);
+      }
+    }
+    const rejectReason = externalAuthorityOfficer
+      ? "insufficient_row_specific_terms" as const
+      : article13DisclosureRejectReason(evidenceText, rule.disclosureType);
     const confidence = confidenceForArticle13DisclosureSignal(rule.disclosureType, rawStatus, evidenceText);
     const status = rawStatus === "observed" && confidence < 0.74
       ? "partial" as const
@@ -8986,6 +9054,7 @@ function fetchPolicyDocumentSingleFlight(
   url: string,
   timeoutMs: number,
   signal?: AbortSignal,
+  options: { allowWwwFallback?: boolean } = {},
 ): Promise<FetchTextResult> {
   const key = policyDocumentFetchCacheKey(url);
   const existing = cache.get(key);
@@ -8993,7 +9062,7 @@ function fetchPolicyDocumentSingleFlight(
     return existing;
   }
   if(blockedPolicyFetchCaches.has(cache))return Promise.resolve(policyFetchBlocked());
-  const pending = fetchText(url, timeoutMs, signal).then(result=>{
+  const pending = fetchText(url, timeoutMs, signal, options).then(result=>{
     if(blockBoundPolicyFetchCaches.has(cache)&&isPolicyAccessBlock(result))blockedPolicyFetchCaches.add(cache);
     return result;
   });
@@ -9075,10 +9144,10 @@ export async function fetchText(
   url: string,
   timeoutMs: number,
   signal?: AbortSignal,
-  options: { allowHttpTransportFallback?: boolean } = {},
+  options: { allowHttpTransportFallback?: boolean; allowWwwFallback?: boolean } = {},
 ): Promise<FetchTextResult> {
   const startedAtMs = Date.now();
-  const fallbackUrl = wwwFallbackUrlForPolicyFetch(url);
+  const fallbackUrl = options.allowWwwFallback === false ? null : wwwFallbackUrlForPolicyFetch(url);
   // Reserve part of the same deadline for the already-supported www candidate.
   // Previously a stalled apex spent the whole budget, then the fallback received
   // only a 500ms overrun and could never retrieve an otherwise reachable policy.
@@ -9482,60 +9551,29 @@ async function requestBoundedPolicyResponseWithNodeTransport(
   });
 }
 
-async function resolvePolicyHostname(hostname: string, signal: AbortSignal): Promise<string> {
+/** Use the system resolver, matching the public-network guard and browser host
+ * environment. Raw c-ares queries bypass macOS/VPN resolver routing and can
+ * consume the entire policy deadline before a socket is opened. The callback
+ * boundary and abortable wrapper also consume late resolver errors safely. */
+export async function resolvePolicyHostname(
+  hostname: string,
+  signal: AbortSignal,
+  lookupHost: (hostname: string, callback: (error: NodeJS.ErrnoException | null, addresses: LookupAddress[]) => void) => void =
+    (hostname, callback) => lookup(hostname, { all: true }, callback),
+): Promise<string> {
+  throwIfAborted(signal);
   if (isIP(hostname)) return hostname;
-  const resolver = new Resolver();
-  const cancelResolution = () => resolver.cancel();
-  signal.addEventListener("abort", cancelResolution, { once: true });
-  try {
-    try {
-      const addresses = await awaitAbortablePolicyOperation(
-        resolvePolicyIpv4(resolver, hostname),
-        signal,
-        "Policy hostname resolution aborted.",
-      );
-      if (addresses[0]) return addresses[0];
-    } catch (error) {
-      throwIfAborted(signal);
-      const addresses = await awaitAbortablePolicyOperation(
-        resolvePolicyIpv6(resolver, hostname),
-        signal,
-        "Policy hostname resolution aborted.",
-      );
-      if (addresses[0]) return addresses[0];
-      throw error;
-    }
-    throw new Error(`Policy hostname did not resolve: ${hostname}`);
-  } finally {
-    signal.removeEventListener("abort", cancelResolution);
-  }
-}
-
-function resolvePolicyIpv4(resolver: Resolver, hostname: string): Promise<string[]> {
-  // Keep DNS failures on an explicitly handled callback boundary. The
-  // promise-based Resolver can surface a late ENOTFOUND as an unhandled
-  // rejection after bounded Lambda policy work has already moved on.
-  return new Promise((resolve, reject) => {
-    resolver.resolve4(hostname, (error, addresses) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(addresses);
-    });
-  });
-}
-
-function resolvePolicyIpv6(resolver: Resolver, hostname: string): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    resolver.resolve6(hostname, (error, addresses) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(addresses);
-    });
-  });
+  const addresses = await awaitAbortablePolicyOperation(
+    new Promise<LookupAddress[]>((resolve, reject) => {
+      lookupHost(hostname, (error, answers) => error ? reject(error) : resolve(answers));
+    }),
+    signal,
+    "Policy hostname resolution aborted.",
+  );
+  throwIfAborted(signal);
+  const address = addresses.find(answer => answer.family === 4) ?? addresses.find(answer => answer.family === 6);
+  if (!address) throw new Error(`Policy hostname did not resolve: ${hostname}`);
+  return address.address;
 }
 
 export async function readBoundedResponseBody(
@@ -10111,7 +10149,8 @@ export function extractPolicySections(input: {
   const normalizedVisibleTextSha256 = sha256Text(normalizedVisibleText);
   const sanitizedHtmlSha256 = sha256Text(sanitizedHtml);
   const boundedSections = sections
-    .map((section) => {
+    .map((originalSection) => {
+      const section = restoreDpoAuthorityContext(originalSection, normalizedVisibleText);
       const normalizedText = normalizeWhitespace(section.textExcerpt);
       const sourceOffsetBasis = section.sourceOffsetBasis ?? "normalized_visible_text";
       return {
@@ -10131,6 +10170,24 @@ export function extractPolicySections(input: {
     })
     .filter((section) => section.textExcerpt.length >= 80);
   return retainedPolicySectionsForObservation(boundedSections, 80, true);
+}
+
+function restoreDpoAuthorityContext(section: RetainedPolicySection, source: string): RetainedPolicySection {
+  if (section.extractionMethod !== "visible_text_heading" ||
+      !/\b(?:data protection officer|dpo)\b/i.test(section.heading) ||
+      !Number.isInteger(section.charStart) || section.charStart! < 0) return section;
+  const start = section.charStart!, excerpt = normalizeWhitespace(section.textExcerpt);
+  if (source.slice(start, start + excerpt.length) !== excerpt) return section;
+  const prefixStart = Math.max(0, start - 400), prefix = source.slice(prefixStart, start);
+  const authority = [...prefix.matchAll(new RegExp(OVERSIGHT_AUTHORITY_INTRO.source, "gi"))].at(-1);
+  if (!authority) return section;
+  const authorityStart = prefixStart + authority.index!;
+  const restored = source.slice(authorityStart, start + excerpt.length);
+  // Preserve the exact source relation when a visible-text heading split cuts
+  // off whose officer this is. The existing 1200-character retention cap still
+  // applies after this repair; offsets and hashes use the same source string.
+  return { ...section, textExcerpt: restored, charStart: authorityStart,
+    charEnd: start + excerpt.length, quality: policySectionQuality(restored) };
 }
 
 function extractBoundedUnstructuredPolicyBodySections(
@@ -10202,6 +10259,15 @@ function extractCanonicalTopicWindowSectionsFromVisibleText(
     }
     const windows = occurrences.flatMap((located) => {
       if (located.index === undefined) return [];
+      const exactBoundClause = match.topic === "international_transfers"
+        ? findGermanTransferDisclosure(located[0])
+        : match.topic === "processing_purposes" ? findBoundedUsageOrRecruitmentPurpose(located[0]) : undefined;
+      if (exactBoundClause === located[0]) {
+        // The complete qualified declaration is already bounded and literal.
+        // Do not expand it into an abbreviation-split surrounding window.
+        return [{ start: located.index, end: located.index + located[0].length,
+          textExcerpt: located[0], quality: policySectionQuality(located[0]), score: 124 }];
+      }
       const anchorStart = located.index;
       const anchorEnd = anchorStart + located[0].length;
       const precedingBoundaries = [
@@ -10820,6 +10886,8 @@ function bestSectionForProfile(
     // A platform's officer is not the governing controller's officer. Do not
     // let structural extraction quality outrank subject ownership.
     if (profile.disclosureType === "dpo_contact" && controllerSubjectScore < 0) continue;
+    if (profile.disclosureType === "dpo_contact" && OVERSIGHT_AUTHORITY_INTRO.test(section.textExcerpt) &&
+        !ownDpoContactInMixedAuthoritySection(section)) continue;
     const haystack = `${section.heading}\n${section.textExcerpt}`;
     const canonicalMatches = canonicalMatchesBySection.get(section) ?? [];
     const canonicalTopicMatch = canonicalTopicMatchForDisclosure(canonicalMatches, profile.disclosureType);
@@ -10867,8 +10935,8 @@ function bestSectionForProfile(
     const specificTransfer = profile.disclosureType === "international_transfers" &&
       (RESIDENCE_RELATIVE_TRANSFER_PATTERN.test(selectedExcerpt) || /\b(?:personal data|personal information|your data|your information)\b.{0,180}\b(?:transferred|processed|stored|accessed)\b.{0,180}\b(?:USA|United States|outside (?:the )?(?:EEA|EU)|other countries)\b/i.test(selectedExcerpt));
     const generalProcessingBasis = profile.disclosureType === "legal_basis" &&
-      !/\b(?:fanpages?|job applicants?|application documents|recruitment|recruiting|talent pool)\b/i.test(haystack) &&
-      /\b(?:process(?:ing|ed)?|collect(?:ion|ed)?)\b.{0,160}\b(?:data|information)\b.{0,180}\b(?:Art\.?\s*6|Article 6|consent|legitimate interests?|contract)\b/i.test(selectedExcerpt);
+      (Boolean(findGermanOwnBasisStatement(selectedExcerpt)) || !/\b(?:fanpages?|job applicants?|application documents|recruitment|recruiting|talent pool)\b/i.test(haystack) &&
+      /\b(?:process(?:ing|ed)?|collect(?:ion|ed)?)\b.{0,160}\b(?:data|information)\b.{0,180}\b(?:Art\.?\s*6|Article 6|consent|legitimate interests?|contract)\b/i.test(selectedExcerpt));
     const substantiveHeadingMatch = headingMatched &&
       evidenceStatus !== "not_confirmed";
     if (
@@ -10885,6 +10953,34 @@ function bestSectionForProfile(
     }
   }
   return best && best.score >= 3 ? best.section : undefined;
+}
+
+// This relation identifies an external oversight authority, not merely a
+// document mentioning a regulator. A regulator's own website can still name its
+// own officer, and mixed sections can retain a separate explicit own contact.
+const OVERSIGHT_AUTHORITY_INTRO = /\b(?:our (?:competent )?(?:supervisory|data protection) authority\s+(?:is|:)|(?:the )?(?:competent )?(?:supervisory|data protection) authority (?:for us|responsible for us)\s+(?:is|:))/i;
+
+function ownDpoContactInMixedAuthoritySection(section: Pick<RetainedPolicySection, "textExcerpt">): string | undefined {
+  const text = normalizeWhitespace(section.textExcerpt);
+  const ownPattern = /\b(?:our (?:(?:appointed|designated) )?(?:data protection officer|dpo)|we have (?:appointed|designated) (?:a |the )?(?:data protection officer|dpo))\b/gi;
+  let examined = 0;
+  for (const own of text.matchAll(ownPattern)) {
+    if (++examined > 16) break;
+    const preceding = text.slice(Math.max(0, own.index! - 150), own.index);
+    // A regulator quoting its own contact does not change the subject to the
+    // publisher. Keep looking for a separately stated publisher contact.
+    if (/\b(?:authority|regulator|commissioner)\b[^.!?]{0,100}\b(?:says|states|writes|explains)\b[^.!?]{0,30}$/i.test(preceding)) continue;
+    let tail = text.slice(own.index, own.index! + 640);
+    const authority = OVERSIGHT_AUTHORITY_INTRO.exec(tail);
+    if (authority) tail = tail.slice(0, authority.index);
+    const end = /[.!?](?:\s|$)/.exec(tail);
+    if (end) tail = tail.slice(0, end.index + 1);
+    const email = /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.exec(tail);
+    const candidate = email ? tail.slice(0, email.index + email[0].length) : tail.trim();
+    if (!/\b(?:contact(?:ed)?|e-?mail|write|post|phone|telephone|call|form)\b/i.test(candidate) && !email) continue;
+    if (isArticle13DisclosureEvidenceUsable(candidate, "dpo_contact")) return candidate;
+  }
+  return undefined;
 }
 
 function controllerSubjectSectionScore(section: RetainedPolicySection): number {
@@ -10912,6 +11008,26 @@ function controllerSubjectSectionScore(section: RetainedPolicySection): number {
   return 0;
 }
 
+function ownDpoAddresseeContactExcerpt(section: RetainedPolicySection): string | undefined {
+  const text = normalizeWhitespace(section.textExcerpt);
+  // A postal addressee often follows the email and street address. Selecting
+  // around the officer title alone loses those routes, especially when a suite
+  // number is followed by a full stop. Keep one contiguous source statement.
+  const pattern = /\b(?:please )?contact us\b.{0,560}?\b(?:attn\.?|attention)\s*:?\s*(?:privacy(?: and)?\s+)?(?:data protection officer|dpo)\b\.?/gi;
+  let examined = 0;
+  for (const match of text.matchAll(pattern)) {
+    if (++examined > 8) break;
+    const prefix = text.slice(Math.max(0, match.index! - 70), match.index);
+    if (/\b(?:do not|don't|should not|cannot|no longer)\s*$/i.test(prefix)) continue;
+    const candidate = match[0];
+    const email = /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(candidate);
+    const postal = /\b(?:by mail|by post|write to|postal address)\b.{0,220}\b\d{1,6}\s+[\p{L}]/iu.test(candidate);
+    if (!email && !postal) continue;
+    if (candidate.length <= 640 && isArticle13DisclosureEvidenceUsable(candidate, "dpo_contact")) return candidate;
+  }
+  return undefined;
+}
+
 const sectionExcerptCache = new WeakMap<RetainedPolicySection, Map<Article13DisclosureType, string>>();
 
 function bestSectionExcerptForProfile(
@@ -10927,6 +11043,26 @@ function bestSectionExcerptForProfile(
     sectionExcerptCache.set(section, cached);
   }
   let selected = selectSectionExcerptForProfile(section, profile, canonicalMatches);
+  if (profile.disclosureType === "processing_purposes") {
+    const purpose = findBoundedUsageOrRecruitmentPurpose(section.textExcerpt);
+    if (purpose && isArticle13DisclosureEvidenceUsable(purpose, profile.disclosureType)) selected = purpose;
+  }
+  if (profile.disclosureType === "legal_basis") {
+    const basis = findGermanOwnBasisStatement(section.textExcerpt);
+    if (basis && isArticle13DisclosureEvidenceUsable(basis, profile.disclosureType)) selected = basis;
+  }
+  if (profile.disclosureType === "international_transfers") {
+    const declaration = findGermanTransferDisclosure(section.textExcerpt);
+    if (declaration && isArticle13DisclosureEvidenceUsable(declaration, profile.disclosureType)) selected = declaration;
+  }
+  if (profile.disclosureType === "dpo_contact" && OVERSIGHT_AUTHORITY_INTRO.test(section.textExcerpt)) {
+    const ownContact = ownDpoContactInMixedAuthoritySection(section);
+    if (ownContact) selected = ownContact;
+  }
+  if (profile.disclosureType === "dpo_contact" && !OVERSIGHT_AUTHORITY_INTRO.test(section.textExcerpt)) {
+    const contactRoute = ownDpoAddresseeContactExcerpt(section);
+    if (contactRoute && !selected.includes(contactRoute)) selected = contactRoute;
+  }
   if (profile.disclosureType === "processing_purposes" &&
       !canonicalMatches.some(match => match.topic === profile.disclosureType && match.matchedLocale !== "en") &&
       (!hasSubstantiveProcessingPurposesEvidence(selected) || !hasProcessingPurposeDataContext(selected))) {
@@ -10937,6 +11073,16 @@ function bestSectionExcerptForProfile(
     const boundSection = completePolicyExcerpt(normalizeWhitespace(section.textExcerpt), 640);
     if (hasProcessingPurposeDataContext(boundSection) &&
         isArticle13DisclosureEvidenceUsable(boundSection, profile.disclosureType)) selected = boundSection;
+  }
+  if (profile.disclosureType === "automated_decision_making_or_profiling" &&
+      sharedArticle13DisclosureRejectReason(selected, profile.disclosureType) === "code_or_non_policy_excerpt" &&
+      assessArticle13PolicyTextQuality(selected).reason === "low_quality_non_policy_text") {
+    // A long retained policy paragraph can fail document-quality heuristics even
+    // when it contains a complete practice statement. Retry a contiguous source
+    // statement under the same qualification and 640-character budget. Never
+    // bypass the quality guard or replace an already usable witness.
+    const candidates = compactSourceDisclosureStatements(normalizeWhitespace(section.textExcerpt), profile.disclosureType, profile.observedPattern);
+    if (candidates.length > 0) selected = candidates[0]!;
   }
   cached.set(profile.disclosureType, selected);
   return selected;

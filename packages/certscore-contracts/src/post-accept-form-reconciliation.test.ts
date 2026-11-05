@@ -35,6 +35,18 @@ test("loader-bound terminal inventory enriches three imaged fields to seven with
   assert.equal(JSON.stringify({images,capture}),original);
 });
 
+test("bounded form follow-up reconciles only the same proven document",()=>{
+  const {images,capture}=fixture();
+  const followup=postAcceptFormCaptureSchema.parse({...capture,version:"post_accept_form_capture.v4",
+    window:{...capture.window,endedAtMs:6120},followup:{reason:"retained_form_bootstrap",
+      triggerRequestId:"request_1",originalWindowEndedAtMs:3120,workerDeadlineAtMs:7000},
+    frames:capture.frames.map(frame=>({...frame,capturedAtMs:5900}))});
+  assert.equal(reconcilePostAcceptFormInventory(images,followup)?.inventory.forms[0]?.fields.length,7);
+  const other={...followup,frames:followup.frames.map(frame=>({...frame,
+    documentBinding:{...frame.documentBinding!,token:"different_document"}}))};
+  assert.equal(reconcilePostAcceptFormInventory(images,other)?.structuredFrame,undefined);
+});
+
 test("click-only images reconcile terminal fields only against the dispatch-anchored window",()=>{
   const {images,capture}=fixture();
   const {acceptanceRegisteredAtMs:_registered,...common}=images;

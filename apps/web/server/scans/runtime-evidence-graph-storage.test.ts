@@ -91,3 +91,13 @@ test("presentation off and legacy reports do not read artifacts or mutate retain
   const legacy = fixture(); delete legacy.runtimeArtifacts!.runtimeEvidenceGraphProjection;
   assert.equal(await hydrateRuntimeGraphForRead(legacy, { read: async () => { assert.fail("no graph must not fetch"); }, environment: { CERTSCORE_RUNTIME_GRAPH_PRESENTATION: "on" } }), legacy);
 });
+
+test("inventory-only hydration can read retained GPC without changing the default graph view or persisted data", async () => {
+ const {compact,body}=await stored();
+ const before=structuredClone(compact);
+ const hydrated=await hydrateRuntimeGraphForRead(compact,{read:async()=>body,environment:{CERTSCORE_RUNTIME_GRAPH_PRESENTATION:"on"},includeGpcForInventory:true});
+ const graph=apiRuntimeEvidenceGraphProjectionSchema.parse(hydrated.runtimeArtifacts?.runtimeEvidenceGraphProjection);
+ assert.ok(graph.graphs.some(g=>g.scenario==="gpc"));assert.deepEqual(compact,before);
+ const corrupt=await hydrateRuntimeGraphForRead(compact,{read:async()=>Buffer.from("{}"),environment:{CERTSCORE_RUNTIME_GRAPH_PRESENTATION:"on"},includeGpcForInventory:true});
+ assert.equal(apiRuntimeEvidenceGraphProjectionSchema.parse(corrupt.runtimeArtifacts?.runtimeEvidenceGraphProjection).graphs.length,0);
+});

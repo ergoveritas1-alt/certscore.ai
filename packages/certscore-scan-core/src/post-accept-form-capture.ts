@@ -11,6 +11,7 @@ export function startPostAcceptFormCapture(input: {
   actionDispatchedAtMs: number; windowMs: number; signal?: AbortSignal; documentChangedBeforeStart?: boolean;
 }) {
   const { page } = input;
+  const captureClock = input.parentScanStartedAtMs;
   const sessionId = randomUUID();
   const capture: PostAcceptFormCapture = {
     version: "post_accept_form_capture.v2", phase: "after_accept_click", sessionId,
@@ -26,7 +27,11 @@ export function startPostAcceptFormCapture(input: {
   const retained = new Map<string, { frame: Frame; epoch: number }>();
   const inspected = new Map<Frame, number>();
   const inFlight = new Set<Frame>();
-  const nextSampleAt = new Map<Frame, number>();
+  // Three reusable sampling slots preserve the original concurrency and cadence.
+  // Hidden helpers consume one sample, not a permanent place in the frame panel.
+  const slots: Array<{ frame?: Frame; nextAt: number }> = Array.from({length: 3}, () => ({nextAt: 0}));
+  const visibility = new Map<Frame, {epoch: number; shown: boolean}>();
+  const selectedFrames = () => slots.flatMap(slot => slot.frame ? [slot.frame] : []);
   const completed = new Map<Frame, {epoch: number; index: number; startedAtMs: number}>();
   const frameReasons = new Map<Frame, {epoch: number; index: number; reasons: Set<PostAcceptFormCapture["reasonCodes"][number]>}>();
   const navigated = (frame: Frame) => {
@@ -58,6 +63,7 @@ export function startPostAcceptFormCapture(input: {
           return !ancestor;
         });
         await element.dispose();
+        if (active() && !frame.isDetached() && epoch === (epochs.get(frame) ?? 0)) visibility.set(frame, {epoch, shown});
         if (!shown) {
           if (active() && !frame.isDetached() && epoch === (epochs.get(frame) ?? 0) && page.frames()[index] === frame) {
             inspected.set(frame, epoch);
@@ -189,7 +195,8 @@ export function startPostAcceptFormCapture(input: {
   };
   const updateTerminalCoverage = (frames: Frame[]) => {
     capture.window!.terminalSampleCompleted = !mainChanged && !input.signal?.aborted && !page.isClosed() && targetMatches() &&
-      inFlight.size === 0 && frames.length > 0 && frames.slice(0, 3).every((frame, index) => {
+      inFlight.size === 0 && frames.length > 0 && selectedFrames().length > 0 && selectedFrames().every(frame => {
+        const index = frames.indexOf(frame);
         const sample = completed.get(frame);
         return sample && sample.epoch === (epochs.get(frame) ?? 0) && sample.index === index &&
           sample.startedAtMs >= input.parentScanStartedAtMs + capture.window!.startedAtMs &&
@@ -199,19 +206,37 @@ export function startPostAcceptFormCapture(input: {
   const collect = () => {
     if (!active()) return;
     const frames = page.frames(); sampledFrames = frames; capture.candidateFrameCount = frames.length;
-    // Pending reads retain their slot even across navigation/replacement. Healthy
-    // siblings can progress, but no frame is retried and at most three reads run.
-    for (const [index, frame] of frames.slice(0, 3).entries()) {
-      if (inFlight.has(frame) || inFlight.size >= 3 ||
-        Date.now() < Math.min(nextSampleAt.get(frame) ?? 0, deadline - 150)) continue;
+    const rank = (frame: Frame) => {
+      const epoch = epochs.get(frame) ?? 0;
+      if (capture.frames.some(row => row.forms.length && retained.get(row.frameRef)?.frame === frame && retained.get(row.frameRef)?.epoch === epoch)) return 0;
+      if (inspected.get(frame) !== epoch) return 1;
+      return visibility.get(frame)?.epoch === epoch && !visibility.get(frame)?.shown ? 3 : 2;
+    };
+    let launched = false;
+    for (const [slotIndex, slot] of slots.entries()) {
+      // A pending command keeps its slot even if its frame detaches. Never
+      // replace or retry it while pending, or overlap it with a new command.
+      if ((slot.frame && inFlight.has(slot.frame)) || inFlight.size >= 3 ||
+        Date.now() < Math.min(slot.nextAt, deadline - 150)) continue;
+      const frame = slotIndex === 0 ? page.mainFrame() : frames.filter(frame => frame !== page.mainFrame() &&
+        !inFlight.has(frame) && !slots.some(other => other !== slot && other.frame === frame))
+        .sort((a, b) => rank(a) - rank(b) || (completed.get(a)?.startedAtMs ?? 0) - (completed.get(b)?.startedAtMs ?? 0))[0];
+      if (!frame) continue;
+      const index = frames.indexOf(frame);
+      if (index < 0) continue;
+      if (slot.frame !== frame) {
+        const previous = slot.frame;
+        capture.frames = capture.frames.filter(row => retained.get(row.frameRef)?.frame !== previous);
+        slot.frame = frame;
+      }
       const epoch = epochs.get(frame) ?? 0, sampleStartedAtMs = Date.now();
       const sampleReasons = new Set<PostAcceptFormCapture["reasonCodes"][number]>();
       completed.delete(frame); frameReasons.set(frame, {epoch, index, reasons: sampleReasons});
-      inFlight.add(frame);
+      inFlight.add(frame); launched = true;
       void sampleFrame(frame, index, epoch, sampleStartedAtMs, sampleReasons).finally(() => {
         inFlight.delete(frame);
         if (frozen) return;
-        nextSampleAt.set(frame, Date.now() + 500);
+        slot.nextAt = Date.now() + 500;
         if (active() && !frame.isDetached() && epoch === (epochs.get(frame) ?? 0) && page.frames()[index] === frame)
           completed.set(frame, {epoch, index, startedAtMs: sampleStartedAtMs});
         updateTerminalCoverage(page.frames());
@@ -219,14 +244,20 @@ export function startPostAcceptFormCapture(input: {
       });
     }
     updateTerminalCoverage(frames);
+    // Timers may wake just before their due millisecond. Do not lose the final
+    // scheduled sample when no slot was quite ready; do not add another round.
+    if (!launched && Date.now() < deadline - 150) schedule();
   };
   let timer: ReturnType<typeof setTimeout>;
   const schedule = () => {
     clearTimeout(timer);
     if (!active() || inFlight.size >= 3) return;
     const now = Date.now();
-    const due = page.frames().slice(0, 3).filter(frame => !inFlight.has(frame))
-      .map(frame => Math.min(nextSampleAt.get(frame) ?? now + 500, deadline - 150));
+    const frames = page.frames();
+    const due = slots.filter((slot, index) => (!slot.frame || !inFlight.has(slot.frame)) &&
+      (index === 0 || frames.some(frame => frame !== page.mainFrame() && !inFlight.has(frame) &&
+        !slots.some(other => other !== slot && other.frame === frame))))
+      .map(slot => Math.min(slot.nextAt || now + 500, deadline - 150));
     if (!due.length) return;
     // A slow sibling cannot postpone an earlier healthy frame's next sample.
     timer = setTimeout(() => { void collect(); }, Math.max(0, Math.min(...due) - now));
@@ -241,7 +272,7 @@ export function startPostAcceptFormCapture(input: {
     bindMainDocument(token: string) {
       if (!active() || mainDocumentBinding || !token || token.length > 128) return;
       mainDocumentBinding = {source:"cdp_loader_id",token,boundAtMs:Date.now()-input.parentScanStartedAtMs};
-      capture.version = "post_accept_form_capture.v3";
+      if (capture.version !== "post_accept_form_capture.v4") capture.version = "post_accept_form_capture.v3";
     },
     continueThrough(confirmedAtMs: number, windowMs: number) {
       if (frozen || input.signal?.aborted) return;
@@ -257,6 +288,18 @@ export function startPostAcceptFormCapture(input: {
       // in the confirmed window; prior reads cannot certify the new window.
       schedule();
     },
+    followThrough(input: {originalWindowEndedAtMs: number; endAtMs: number; workerDeadlineAtMs: number; triggerRequestId: string}) {
+      if (frozen || mainChanged || input.originalWindowEndedAtMs !== capture.window!.endedAtMs || input.endAtMs <= capture.window!.endedAtMs ||
+          input.endAtMs > Math.min(capture.window!.endedAtMs + 8000, input.workerDeadlineAtMs)) return false;
+      capture.followup = {reason:"retained_form_bootstrap", triggerRequestId:input.triggerRequestId,
+        originalWindowEndedAtMs:capture.window!.endedAtMs, workerDeadlineAtMs:input.workerDeadlineAtMs};
+      capture.version = "post_accept_form_capture.v4";
+      deadline = captureClock + input.endAtMs;
+      capture.window!.endedAtMs = input.endAtMs;
+      capture.window!.terminalSampleCompleted = false;
+      schedule();
+      return true;
+    },
     finish(): PostAcceptFormCapture {
     if (result) return result;
     clearTimeout(timer); frozen = true; page.off("framenavigated", navigated);
@@ -264,16 +307,17 @@ export function startPostAcceptFormCapture(input: {
     if (input.signal?.aborted) { reasons.add("cancelled"); capture.frames = []; }
     if (mainChanged || page.isClosed() || !targetMatches()) { reasons.add("document_changed"); capture.frames = []; }
     const currentFrames = page.frames();
-    capture.frames = capture.frames.filter(row => { const binding = retained.get(row.frameRef)!; const valid = currentFrames.slice(0, 3).includes(binding.frame) && !binding.frame.isDetached() && binding.epoch === (epochs.get(binding.frame) ?? 0); if (!valid) reasons.add("document_changed"); return valid; });
+    capture.frames = capture.frames.filter(row => { const binding = retained.get(row.frameRef)!; const valid = selectedFrames().includes(binding.frame) && currentFrames.includes(binding.frame) && !binding.frame.isDetached() && binding.epoch === (epochs.get(binding.frame) ?? 0); if (!valid) reasons.add("document_changed"); return valid; });
     capture.candidateFrameCount = currentFrames.length;
     if (currentFrames.length > 3) reasons.add("capture_limit");
-    currentFrames.slice(0, 3).forEach((frame, index) => {
+    selectedFrames().forEach(frame => {
+      const index = currentFrames.indexOf(frame);
       const latest = frameReasons.get(frame);
       if (latest?.epoch === (epochs.get(frame) ?? 0) && latest.index === index)
         latest.reasons.forEach(reason => reasons.add(reason));
     });
     updateTerminalCoverage(currentFrames);
-    capture.inspectedFrameCount = currentFrames.slice(0, 3).filter(frame => inspected.has(frame) && inspected.get(frame) === (epochs.get(frame) ?? 0) && !frame.isDetached()).length;
+    capture.inspectedFrameCount = selectedFrames().filter(frame => currentFrames.includes(frame) && inspected.has(frame) && inspected.get(frame) === (epochs.get(frame) ?? 0) && !frame.isDetached()).length;
     if (!capture.window!.terminalSampleCompleted || capture.inspectedFrameCount < capture.candidateFrameCount && !reasons.size) reasons.add("window_ended");
     capture.frames.sort((a,b)=>a.frameRef.localeCompare(b.frameRef));
     capture.reasonCodes = [...reasons]; capture.status = reasons.size ? "limited" : "captured";

@@ -16,6 +16,7 @@ import {
   readBoundedResponseBody,
   requestBoundedPolicyResponse,
   fetchText,
+  resolvePolicyHostname,
 } from "./scanners/policy-surface-scanner.js";
 
 test("stalled apex policy fetch leaves the existing www recovery time inside the original deadline", async t => {
@@ -108,13 +109,13 @@ test("policy URL identity removes sensitive query names and values", () => {
 });
 
 test("policy response transport avoids bundled fetch inside AWS Lambda", () => {
-  assert.equal(policyResponseTransportForEnvironment({}), "fetch_with_node_fallback");
+  assert.equal(policyResponseTransportForEnvironment({ NODE_ENV: "test" }), "fetch_with_node_fallback");
   assert.equal(
-    policyResponseTransportForEnvironment({ AWS_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-local-lambda" }),
+    policyResponseTransportForEnvironment({ NODE_ENV: "test", AWS_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-local-lambda" }),
     "node",
   );
   assert.equal(
-    policyResponseTransportForEnvironment({ AWS_LAMBDA_RUNTIME_API: "127.0.0.1:9001" }),
+    policyResponseTransportForEnvironment({ NODE_ENV: "test", AWS_LAMBDA_RUNTIME_API: "127.0.0.1:9001" }),
     "node",
   );
 });
@@ -377,4 +378,45 @@ test("policy response reads stop when a pending stream read ignores transport ca
   await assert.rejects(pending, /policy deadline reached/);
   assert.equal(cancelled, true);
   assert.ok(Date.now() - startedAtMs < 250);
+});
+
+
+test("observed policy URL keeps its full deadline instead of speculative www splitting", async t => {
+  const calls: string[] = [];
+  t.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
+    calls.push(String(url));
+    return new Promise<Response>((resolve, reject) => {
+      const timer = setTimeout(() => resolve(new Response("<h1>Privacy Policy</h1><p>We process personal data to provide services.</p>", {headers: {"content-type": "text/html"}})), 1200);
+      init!.signal!.addEventListener("abort", () => { clearTimeout(timer); reject(new DOMException("aborted", "AbortError")); }, {once: true});
+    });
+  });
+  const started = Date.now();
+  const result = await fetchText("https://observed-policy.test/privacy", 2000, undefined, {allowWwwFallback: false});
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, ["https://observed-policy.test/privacy"]);
+  assert.ok(Date.now() - started < 2100);
+});
+
+test("system policy DNS preserves IPv4 preference and IPv6-only answers", async () => {
+  const signal = new AbortController().signal;
+  assert.equal(await resolvePolicyHostname("policy.test", signal, (_host, done) => done(null, [
+    {address: "2001:4860:4860::8888", family: 6}, {address: "8.8.8.8", family: 4},
+  ])), "8.8.8.8");
+  assert.equal(await resolvePolicyHostname("policy.test", signal, (_host, done) => done(null, [
+    {address: "2001:4860:4860::8888", family: 6},
+  ])), "2001:4860:4860::8888");
+  await assert.rejects(resolvePolicyHostname("policy.test", signal, (_host, done) => done(null, [])), /did not resolve/);
+});
+
+test("system policy DNS is bounded and consumes errors delivered after cancellation", async () => {
+  const controller = new AbortController();
+  let complete!: Parameters<NonNullable<Parameters<typeof resolvePolicyHostname>[2]>>[1];
+  const pending = resolvePolicyHostname("policy.test", controller.signal, (_host, done) => { complete = done; });
+  controller.abort(new Error("fixture deadline"));
+  await assert.rejects(pending, /fixture deadline/);
+  complete(Object.assign(new Error("late DNS failure"), {code: "ENOTFOUND"}), []);
+  await new Promise(resolve => setImmediate(resolve));
+  let calls = 0;
+  await assert.rejects(resolvePolicyHostname("policy.test", controller.signal, () => { calls++; }), /fixture deadline/);
+  assert.equal(calls, 0);
 });

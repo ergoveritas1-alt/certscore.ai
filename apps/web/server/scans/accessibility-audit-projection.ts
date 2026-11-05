@@ -1,4 +1,5 @@
 import {cmpPreferencesEvidenceSchema,cmpPreferenceAccessibilityProjectionSchema,hasBoundCmpPreferenceDocument} from "@certscore/contracts";
+import { resolveRuntimeEvidenceClock } from "@certscore/contracts";
 import {
   accessibilityAuditObservationSchema, accessibilityAuditProjectionSchema,
   type AccessibilityAuditObservation, type CanonicalEvidenceBundle, type DomSnapshotArtifact,
@@ -31,7 +32,8 @@ export function projectAccessibilityAudit(bundle: CanonicalEvidenceBundle, sourc
     throw new Error("Required accessibility evidence is malformed or belongs to another scan.");
   }
   let observation = result.data;
-  const start = Date.parse(bundle.startedAt), end = Date.parse(bundle.completedAt);
+  const clock = resolveRuntimeEvidenceClock(bundle);
+  const start = clock?.startMs ?? NaN, end = clock?.endMs ?? NaN;
   const snapshot = latestUnambiguousRuntimeSnapshot(bundle.runtimeMetadataSnapshots ?? bundle.domSnapshots ?? []);
   // Snapshot offsets use the capture's start clock. Matching URL/loader proof
   // outside that visit cannot bind an audit; do not select an older fallback.

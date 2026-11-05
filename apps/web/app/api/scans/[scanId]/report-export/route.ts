@@ -1,3 +1,5 @@
+import { resolveReportReviewFocus } from "../../../../../lib/scans/report-review-focus";
+import {loadGpcResourceInventory} from "../../../../../server/scans/gpc-resource-inventory";
 import { readFullSiteOptions } from "../../../../../server/scans/full-site-options";
 import { loadFullSiteExport } from "../../../../../server/scans/full-site-report";
 import { NextRequest, NextResponse } from "next/server";
@@ -90,7 +92,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (request.nextUrl.searchParams.get("scope") === "full-site" && !fullSite) {
     return error(409, "The full-site report is not available for download.");
   }
-  const report = buildCanonicalReportExport(scanRecord, fullSite, focus ?? (format === "pdf" || format === "docx" ? "gdpr_eprivacy" : undefined));
+  const effectiveFocus = focus ?? (format === "pdf" || format === "docx" ? "gdpr_eprivacy" : resolveReportReviewFocus(undefined, scanRecord.scan.scanFromValue));
+  const report = buildCanonicalReportExport(scanRecord, fullSite, effectiveFocus,
+    effectiveFocus === "ccpa_cpra" ? await loadGpcResourceInventory(scanRecord) : undefined);
   if (!report) return error(409, "The canonical report projection is unavailable for this scan.");
 
   const safeHost = (report.scan.domainHostname ?? "scan-report").replace(/[^a-z0-9.-]+/gi, "-").slice(0, 80);
