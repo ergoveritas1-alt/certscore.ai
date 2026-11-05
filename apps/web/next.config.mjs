@@ -4,6 +4,8 @@ import { hasVerifiedBuildTypecheck } from "./build-typecheck.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const coldVerificationBuild = process.env.CERTSCORE_COLD_WEB_BUILD === "1" &&
+  process.env.WEB_COMPILER_CACHE_ENABLED !== "1";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -18,7 +20,8 @@ const nextConfig = {
     // Our extension-alias customization disables Next's automatic build worker.
     // Restore isolated compilation and release each compiler's retained graph.
     webpackBuildWorker: true,
-    webpackMemoryOptimizations: true
+    webpackMemoryOptimizations: true,
+    ...(coldVerificationBuild ? { parallelServerBuildTraces: true } : {}),
   },
   outputFileTracingRoot: path.join(__dirname, "../.."),
   // Scan/calibration output is runtime data, not a server dependency. Mirror
@@ -221,9 +224,11 @@ const nextConfig = {
     ];
   },
   webpack(config, options) {
-    // The uncompressed production cache exceeds the bounded persisted snapshot.
-    // Use Webpack's native format; public output and dev caching are unchanged.
-    if (process.env.WEB_COMPILER_CACHE_ENABLED === "1" && !options?.dev && config.cache && typeof config.cache === "object" && config.cache.type === "filesystem") {
+    // The fresh verification runner never reuses its Webpack cache.
+    if (coldVerificationBuild && !options?.dev) {
+      config.cache = false;
+    } else if (process.env.WEB_COMPILER_CACHE_ENABLED === "1" && !options?.dev && config.cache && typeof config.cache === "object" && config.cache.type === "filesystem") {
+      // Use Webpack's native compression to fit the bounded persisted cache.
       config.cache.compression = "gzip";
     }
     config.resolve.extensionAlias = {

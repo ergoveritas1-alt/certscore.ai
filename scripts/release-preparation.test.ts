@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { workspaceExportsFingerprint, planReleaseBootstrap } from './lib/release-bootstrap';
@@ -62,6 +62,33 @@ test('bootstrap compiles shared exports once and fails before dropping unknown b
   assert.deepEqual(plan[1]?.dependencies, ['a']);
   assert.throws(() => planReleaseBootstrap([{ directory: 'packages/x', manifest: { name: 'x', scripts: { build: 'generate-assets && tsc -p tsconfig.json' } } }]), /Unreviewed/);
   assert.throws(() => planReleaseBootstrap([{ directory: 'packages/x', manifest: { name: 'x', scripts: { build: 'tsc -p tsconfig.json', prebuild: 'generate-assets' } } }]), /lifecycle/);
+});
+
+test('verification builds every workspace target and preserves app build checks', async () => {
+  const workspaces = [];
+  for (const root of ['packages', 'apps']) {
+    for (const entry of await readdir(root)) {
+      const directory = `${root}/${entry}`;
+      try {
+        workspaces.push({ directory, manifest: JSON.parse(await readFile(`${directory}/package.json`, 'utf8')) });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
+  }
+  const plan = planReleaseBootstrap(workspaces, true);
+  assert.deepEqual(plan.map(task => task.key).sort(), workspaces.map(item => item.manifest.name).sort());
+  assert.ok(plan.every(task => task.commands.every(command => !command.includes('--filter'))));
+  assert.deepEqual(plan.find(task => task.directory === 'apps/web')?.commands, [
+    ['pnpm', 'check-runtime:build'], ['next', 'build'],
+  ]);
+  assert.deepEqual(plan.find(task => task.directory === 'apps/browser-extension')?.commands, [
+    ['node', 'scripts/validate-extension.mjs'],
+  ]);
+  const mcp = plan.find(task => task.directory === 'apps/mcp');
+  assert.ok(mcp);
+  assert.ok(mcp.dependencies.includes('@certscore/mcp') && mcp.dependencies.includes('@certscore/contracts'));
+  assert.deepEqual(mcp.commands, [['tsc', '-p', 'tsconfig.json']]);
 });
 
 test('bootstrap output binding detects stale or missing exports even at the same source SHA', async () => {

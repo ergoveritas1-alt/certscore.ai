@@ -35,13 +35,21 @@ test("ordinary legacy JSON, including old/missing optional facts, keeps JSON.par
     const stored=serialize(legacy,2);assert.equal(stored,JSON.stringify(legacy,null,2));assert.deepEqual(parse(stored),legacy);
   }
 });
-test("incompressible or unsupported oversized evidence falls back to unchanged ordinary JSON",()=>{
+test("oversized evidence stays lossless and falls back to ordinary JSON when encoding grows it",context=>{
   const bytes = Buffer.alloc(500_000); let seed = 0x12345678;
   for (let i=0;i<bytes.length;i++) { seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;bytes[i]=seed&255; }
   const value={...gpcProductionRuntimeFixture(),retainedFutureContext:bytes.toString("base64")};
   const json=JSON.stringify(value);assert.ok(Buffer.byteLength(json)>400*1024);
-  assert.equal(serialize(value),json,"encoding must never grow the stored artifact or remove evidence to fit");
-  assert.deepEqual(parse(json),JSON.parse(json));
+  const stored=serialize(value);
+  assert.ok(Buffer.byteLength(stored)<=Buffer.byteLength(json),"encoding must never grow the stored artifact");
+  assert.equal(JSON.stringify(parse(stored)),json,"encoding must preserve every JSON field");
+  // Native compression ratios vary with the runtime. Force a larger candidate
+  // to exercise the exact fallback on every supported platform.
+  const zlib=createRequire(path.join(process.cwd(),"fixture.cjs"))("node:zlib");
+  const mock=context.mock.method(zlib,"gzipSync",()=>Buffer.alloc(Buffer.byteLength(json)));
+  syncBuiltinESMExports();
+  try { assert.equal(serialize(value),json); }
+  finally { mock.mock.restore();syncBuiltinESMExports(); }
   const unsupported={schemaVersion:"unsupported",retainedFutureContext:"x".repeat(500_000)};
   assert.equal(serialize(unsupported),JSON.stringify(unsupported));
 });
