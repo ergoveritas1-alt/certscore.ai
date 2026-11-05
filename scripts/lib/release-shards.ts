@@ -75,6 +75,38 @@ function workspaceTypecheckPartitions(check: Check) {
   ];
 }
 
+function consentQualityPartitions(check: Check) {
+  const packageCommand = ['pnpm', '--filter', '@certscore/scan-core'];
+  const script = 'test:integration-fixtures:consent';
+  const runner = ['node', '--import', 'tsx', '--test'];
+  const file = 'src/integration-fixtures.test.ts';
+  const pattern = 'first-layer|choice controls|CMP recapture|CMP script|supplemental full-page|off-viewport|bare generic|post-screenshot consent|ambiguous consent|soft module deadline|parent scan is cancelled';
+  const { scripts } = JSON.parse(readFileSync(new URL('../../packages/certscore-scan-core/package.json', import.meta.url), 'utf8'));
+  if (JSON.stringify(check.command) !== JSON.stringify([...packageCommand, script]) ||
+      scripts?.[script] !== `${runner.join(' ')} --test-name-pattern='${pattern}' ${file}` || scripts?.[`pre${script}`] || scripts?.[`post${script}`]) {
+    throw new Error('Review the consent quality command before partitioning.');
+  }
+  // Balance the expensive fixture cases using timings from run 41990304522.
+  // Earlier selectors are excluded, and the last partition takes the remainder.
+  const selectors = [
+    'keeps high-confidence CMP recapture|performs a structured read after supplemental full-page capture|avoids long post-screenshot consent recapture',
+    'render in separate waves|context-confirmed off-viewport approval|retained ambiguous consent surfaces',
+    'off-viewport footer settings|off-viewport controls inside|dismiss-only first-layer',
+  ];
+  return [...selectors, ''].map((selector, index) => {
+    const any = '[\\s\\S]*';
+    const earlier = selectors.slice(0, index).join('|');
+    const filter = `^(?=${any}(?:${pattern}))${earlier ? `(?!${any}(?:${earlier}))` : ''}${selector ? `(?=${any}(?:${selector}))` : ''}`;
+    return { key: `${check.key}:${index}`, command: [...packageCommand, 'exec', ...runner, `--test-name-pattern=${filter}`, file] };
+  });
+}
+
+function commandPartitions(check: Check) {
+  if (check.key === 'workspace-typecheck') return workspaceTypecheckPartitions(check);
+  if (check.key === 'scan-core-consent-quality') return consentQualityPartitions(check);
+  return null;
+}
+
 export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 'fingerprint'>,
   options: { workers: number; timings?: Record<string, number>; fileTimings?: Record<string, number>; setupMsPerWorker?: number; controlPlaneMs?: number; execution?: ShardPlan['execution'] }) : ShardPlan {
   if (!Number.isInteger(options.workers) || options.workers < 1 || options.workers > 8) throw new Error('Use 1–8 isolated workers.');
@@ -84,10 +116,11 @@ export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 
     if (check.key === 'workspace-package-build') continue;
     const split = partitionableTestFiles(check), estimate = timings[check.key] ?? 30_000;
     if (!Number.isFinite(estimate) || estimate <= 0) throw new Error('Invalid timing profile.');
-    if (check.key === 'workspace-typecheck' && options.workers > 1) {
-      for (const partition of workspaceTypecheckPartitions(check)) {
-        const estimatedMs = timings[partition.key] ?? estimate / 2;
-        if (!Number.isFinite(estimatedMs) || estimatedMs <= 0) throw new Error('Invalid typecheck timing profile.');
+    const partitions = options.workers > 1 ? commandPartitions(check) : null;
+    if (partitions) {
+      for (const partition of partitions) {
+        const estimatedMs = timings[partition.key] ?? estimate / partitions.length;
+        if (!Number.isFinite(estimatedMs) || estimatedMs <= 0) throw new Error('Invalid partition timing profile.');
         tasks.push({ ...partition, parent: check.key, files: [], estimatedMs });
       }
       continue;
@@ -100,14 +133,22 @@ export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 
     }
   }
   const workers: ShardTask[][] = Array.from({ length: options.workers }, () => []), totals = workers.map(() => 0);
+  // Bound per-worker policy files so a single policy shard cannot absorb the tail.
+  const policyLimit = Math.ceil(tasks.filter(task => task.parent === 'scan-core-policy-full').length / options.workers) + 1;
   for (const task of tasks.sort((a, b) => b.estimatedMs - a.estimatedMs || a.key.localeCompare(b.key))) {
-    const index = totals.indexOf(Math.min(...totals)); workers[index]!.push(task); totals[index]! += task.estimatedMs;
+    let index = 0;
+    if (task.parent === 'scan-core-policy-full') {
+      index = totals.reduce((best, total, worker) => workers[worker]!.filter(candidate => candidate.parent === task.parent).length < policyLimit &&
+        (best === -1 || total < totals[best]!) ? worker : best, -1);
+    } else index = totals.indexOf(Math.min(...totals));
+    workers[index]!.push(task);
+    totals[index]! += task.estimatedMs;
   }
   // One invocation per parent per worker limits repeated process/loader startup.
   const merged = workers.map(tasks => {
     const groups = new Map<string, ShardTask>();
     for (const task of tasks) {
-      const group = task.parent === 'workspace-typecheck' ? task.key : task.parent;
+      const group = task.files.length ? task.parent : task.key;
       const prior = groups.get(group);
       if (prior && task.files.length) { prior.files.push(...task.files); prior.command.push(...task.files); prior.estimatedMs += task.estimatedMs; }
       else groups.set(group, { ...task, files: [...task.files], command: [...task.command] });
@@ -132,10 +173,11 @@ export function validateShardPlan(plan: ShardPlan, expectedChecks: Check[]) {
     if (parent.key === 'workspace-package-build') continue;
     const tasks = all.filter(task => task.parent === parent.key), split = partitionableTestFiles(parent);
     if (!tasks.length) throw new Error(`Missing check ${parent.key}.`);
-    if (parent.key === 'workspace-typecheck' && tasks.length > 1) {
-      const required = workspaceTypecheckPartitions(parent).map(task => JSON.stringify(task.command)).sort();
+    const partitions = tasks.length > 1 ? commandPartitions(parent) : null;
+    if (partitions) {
+      const required = partitions.map(task => JSON.stringify(task.command)).sort();
       const actual = tasks.map(task => JSON.stringify(task.command)).sort();
-      if (tasks.some(task => task.files.length) || JSON.stringify(required) !== JSON.stringify(actual)) throw new Error('Workspace typecheck partition coverage changed.');
+      if (tasks.some(task => task.files.length) || JSON.stringify(required) !== JSON.stringify(actual)) throw new Error(`Command partition coverage changed: ${parent.key}.`);
       continue;
     }
     if (!split) {

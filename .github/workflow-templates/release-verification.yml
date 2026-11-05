@@ -123,6 +123,7 @@ jobs:
           name: cold-build-timing
           path: |
             /tmp/release-results/workspace-build.json
+            /tmp/release-results/workspace-build-phases.ndjson
             /tmp/release-results/workspace-package-build.json
           retention-days: 1
           if-no-files-found: ignore

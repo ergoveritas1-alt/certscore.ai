@@ -96,7 +96,7 @@ test('parallel workspace typechecks require both complementary filters', () => {
     '--filter=!@website-signal-risk-scanner/web', '--filter=@website-signal-risk-scanner/web',
   ]);
   tasks[0]!.command = tasks[1]!.command;
-  assert.throws(() => validateShardPlan(plan, gate), /typecheck partition coverage/);
+  assert.throws(() => validateShardPlan(plan, gate), /partition coverage changed: workspace-typecheck/);
 });
 test('only the workspace build can bind same-worker bootstrap exports', () => {
   const { plan, results } = fixture();
@@ -206,4 +206,26 @@ for (const fault of ['new-failure', 'pending', 'rerun', 'wrong-sha', 'fork', 'st
   if (fault === 'skipped') bad.conclusion = 'skipped';
   if (!['wrong-sha', 'fork', 'stale'].includes(fault)) runs.push(bad);
   assert.throws(() => validatePreparation(checks, inputs, receipts, 'exports', runs, now));
+});
+
+test('consent quality partitions preserve the original selection once and keep the package runner', async () => {
+  const check = getPredeployPlan([], { full: true }).checks.find(check => check.key === 'scan-core-consent-quality')!;
+  const gate = [checks[0]!, check];
+  assert.deepEqual(planShards(gate, inputs, { workers: 1 }).workers[0]![0]!.command, check.command);
+  const plan = planShards(gate, inputs, { workers: 8 });
+  const tasks = plan.workers.flat();
+  assert.equal(tasks.length, 4);
+  const prefixes = tasks.map(task => task.command.slice(0, -2));
+  assert.ok(prefixes.every(prefix => JSON.stringify(prefix) === JSON.stringify(['pnpm', '--filter', '@certscore/scan-core', 'exec', 'node', '--import', 'tsx', '--test'])));
+  const filters = tasks.map(task => new RegExp(task.command.at(-2)!.split('--test-name-pattern=')[1]!));
+  const directory = new URL('../../packages/certscore-scan-core/', import.meta.url);
+  const { readFile } = await import('node:fs/promises');
+  const manifest = JSON.parse(await readFile(new URL('package.json', directory), 'utf8'));
+  const original = new RegExp(manifest.scripts['test:integration-fixtures:consent'].match(/--test-name-pattern='([^']+)'/)![1]);
+  const source = await readFile(new URL('src/integration-fixtures.test.ts', directory), 'utf8');
+  const titles = [...source.matchAll(/^test\("([^"]+)"/gm)].map(match => match[1]!);
+  assert.ok(titles.some(title => original.test(title)));
+  for (const title of titles) assert.equal(filters.filter(filter => filter.test(title)).length, Number(original.test(title)), title);
+  tasks[0]!.command = tasks[1]!.command;
+  assert.throws(() => validateShardPlan(plan, gate), /partition coverage changed: scan-core-consent-quality/);
 });

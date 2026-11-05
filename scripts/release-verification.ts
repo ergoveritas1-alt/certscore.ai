@@ -114,9 +114,12 @@ async function main() {
           }
         }
         console.log(`Worker ${worker}: ${task.key}\n$ ${command.join(' ')}`);
-        const status = bootstrapSource ? 0 : await run(command, reusedPackageExportsFingerprint
-          ? { ...process.env, CERTSCORE_VERIFIED_PACKAGE_EXPORTS: reusedPackageExportsFingerprint }
-          : process.env);
+        const buildEnv = task === build ? {
+          ...process.env,
+          CERTSCORE_WORKSPACE_BUILD_TIMING_FILE: path.resolve(out, 'workspace-build-phases.ndjson'),
+          ...(reusedPackageExportsFingerprint ? { CERTSCORE_VERIFIED_PACKAGE_EXPORTS: reusedPackageExportsFingerprint } : {}),
+        } : process.env;
+        const status = bootstrapSource ? 0 : await run(command, buildEnv);
         if (task.key === bootstrap.key) {
           if (status !== 0) throw new Error(`Workspace bootstrap failed (${status}).`);
           outputsFingerprint = await workspaceExportsFingerprint();

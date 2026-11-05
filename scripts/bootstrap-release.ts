@@ -1,5 +1,7 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { resolve as absolutePath } from 'node:path';
 import { planReleaseBootstrap, workspaceExportsFingerprint } from './lib/release-bootstrap';
 import { scheduleReleaseTasks } from './lib/release-scheduler';
 async function main() {
@@ -36,12 +38,14 @@ async function main() {
     run: async () => {
       console.log(`Building ${value.key}`);
       for (const command of value.commands) await new Promise<void>((resolve, reject) => {
-        const args = command[0] === 'pnpm' ? command.slice(1) : ['exec', ...command];
+        const isTypeScript = command[0] === 'tsc';
+        const args = isTypeScript ? [createRequire(absolutePath(value.directory, 'package.json')).resolve('typescript/bin/tsc'), ...command.slice(1)]
+          : command[0] === 'pnpm' ? command.slice(1) : ['exec', ...command];
         const env = command[0] === 'next'
           ? { ...process.env, NODE_OPTIONS: process.env.NODE_OPTIONS || '--max-old-space-size=8192',
               ...(process.env.CERTSCORE_VERIFICATION_COLD_BUILD === '1' ? { CERTSCORE_COLD_WEB_BUILD: '1' } : {}) }
           : process.env;
-        const child = spawn('pnpm', args, { cwd: value.directory, env, stdio: 'inherit' });
+        const child = spawn(isTypeScript ? process.execPath : 'pnpm', args, { cwd: value.directory, env, stdio: 'inherit' });
         child.on('error', reject);
         child.on('exit', code => code === 0 ? resolve() : reject(new Error(`Bootstrap failed for ${value.key} (${code ?? 'signal'}).`)));
       });
@@ -49,7 +53,12 @@ async function main() {
   })), { lanes: 2, memoryMb: 8192 });
   const wallMs = Math.round(performance.now() - started);
   if (fullWorkspace) {
-    console.log(JSON.stringify({ workspaceBuildWallMs: wallMs, reusedPackageTasks: plan.length - pending.length, tasks: timings }));
+    const summary = JSON.stringify({ workspaceBuildWallMs: wallMs, reusedPackageTasks: plan.length - pending.length, tasks: timings });
+    console.log(summary);
+    const timingFile = process.env.CERTSCORE_WORKSPACE_BUILD_TIMING_FILE;
+    if (timingFile) await writeFile(timingFile, `${summary}\n`, { flag: 'wx', mode: 0o600 }).catch(() => {
+      console.warn('Workspace build phase timing could not be written; total timing remains in the check receipt.');
+    });
   } else {
     console.log(JSON.stringify({ bootstrapWallMs: wallMs, taskTotalMs: Math.round(timings.reduce((sum, value) => sum + value.durationMs, 0)), packages: plan.length }));
   }
