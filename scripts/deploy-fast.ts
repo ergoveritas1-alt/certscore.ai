@@ -370,9 +370,7 @@ async function classifyChanges(baseRef: string): Promise<ChangedTargets> {
   return {
     changedFiles,
     db: changedFiles.some(isDbDeployInput),
-    lambdaRuntimeBase: changedFiles.some(isLambdaRuntimeBaseInput) ||
-      await runtimeBaseInputsChanged("scanners", changedFiles.filter(file => file === "apps/v2-dag-lambda/Dockerfile"),
-        readBase, readWorking),
+    lambdaRuntimeBase: await runtimeBaseInputsChanged("scanners", changedFiles, readBase, readWorking),
     scanners: await select("scanners"),
     validation: await select("validation"),
     validationRuntimeBase: await runtimeBaseInputsChanged("validation", changedFiles, readBase, readWorking),
@@ -445,13 +443,6 @@ function isDbDeployInput(file: string) {
   return file.startsWith("packages/db/migrations/") ||
     file === "scripts/apply-db-migrations.mjs" ||
     file === ".github/workflows/prod-db-migrate.yml";
-}
-
-function isLambdaRuntimeBaseInput(file: string) {
-  return file === "apps/v2-dag-lambda/package.json" ||
-    file === "package.json" ||
-    file === "pnpm-lock.yaml" ||
-    file === "pnpm-workspace.yaml";
 }
 
 async function readLiveWebVersion(useConfiguredHost = false) {
