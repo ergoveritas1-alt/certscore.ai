@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { hasVerifiedBuildTypecheck } from "../apps/web/build-typecheck.mjs";
 import { runtimeBaseDockerInputs, runtimeBaseInputsChanged, runtimeBaseSourceFingerprint } from "./lib/runtime-base-inputs.mjs";
@@ -66,6 +69,30 @@ test("runtime-base input selection detects real dependency changes and fails clo
   }
   assert.equal(await runtimeBaseInputsChanged("web",['apps/web/Dockerfile'],read({}),read({})),true);
   assert.equal(await runtimeBaseInputsChanged("validation",['apps/validation-worker/src/index.ts'],read({}),read({})),false);
+});
+
+test("the staged release planner reuses the scanner base for script-only manifest changes", async (t) => {
+  const checkout = await mkdtemp(path.join(tmpdir(), "certscore-staged-plan-"));
+  t.after(() => rm(checkout, { recursive: true, force: true }));
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: checkout, encoding: "utf8" }).trim();
+  const commit = async (script: string, dependency: string) => {
+    await writeFile(path.join(checkout, "package.json"), JSON.stringify({ scripts: { verify: script }, dependencies: { example: dependency } }));
+    git("add", "package.json");
+    git("-c", "user.name=Test", "-c", "user.email=test@example.test", "-c", "commit.gpgsign=false", "commit", "-qm", "Fixture");
+    return git("rev-parse", "HEAD");
+  };
+  const plan = (base: string, ref: string) => execFileSync(process.execPath, [
+    "--import", createRequire(path.resolve("package.json")).resolve("tsx"), path.resolve("scripts/deploy-fast.ts"), "all",
+    "--base", base, "--ref", ref, "--no-push", "--no-predeploy", "--preflight-receipts", path.join(checkout, "receipts"),
+    "--preserve-scanner-operational-settings", "--plan", "--stage-release", path.join(checkout, "staged.json"),
+  ], { cwd: checkout, encoding: "utf8" });
+
+  git("init", "-q");
+  const base = await commit("old", "1.0");
+  const scriptOnly = await commit("new", "1.0");
+  assert.match(plan(base, scriptOnly), /Lambda runtime base inputs changed: false/);
+  const changedDependency = await commit("new", "2.0");
+  assert.match(plan(base, changedDependency), /Lambda runtime base inputs changed: true/);
 });
 
 test("web base fingerprint detects source drift even if the previous deploy failed", async () => {

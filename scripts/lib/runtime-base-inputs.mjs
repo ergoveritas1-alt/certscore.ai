@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
 
+const runtimeBases = {
+  web: { dockerfile: "apps/web/Dockerfile", stage: "web-runtime-base" },
+  validation: { dockerfile: "apps/validation-worker/Dockerfile", stage: "validation-worker-runtime-base" },
+  scanners: { dockerfile: "apps/v2-dag-lambda/Dockerfile", stage: "lambda-runtime-base" },
+};
+
 const dependencyInputs = value => {
   const data = JSON.parse(value);
   return JSON.stringify([data.dependencies, data.devDependencies, data.optionalDependencies,
@@ -10,9 +16,14 @@ const dependencyInputs = value => {
  * Keep dependency installation, base images and prod-dependency assembly. */
 export function runtimeBaseDockerInputs(source, component) {
   const stages = source.split(/(?=^FROM )/m);
-  const runtimeName = component === "web" ? "web-runtime-base" : "validation-worker-runtime-base";
+  const { stage: runtimeName } = runtimeBases[component];
   const runtime = stages.find(stage => new RegExp(`^FROM .* AS ${runtimeName}\\s*$`, "m").test(stage));
   if (!runtime) throw new Error(`Missing ${runtimeName} stage`);
+  if (component === "scanners") {
+    const runtimeParent = stages.find(stage => /^FROM .* AS runtime\s*$/m.test(stage))?.split("\n")[0];
+    if (!runtimeParent) throw new Error("Missing scanner runtime image stage");
+    return [stages[0].trim(), runtime.trim(), runtimeParent].join("\n");
+  }
   if (component === "web") return runtime.trim();
   const build = stages.find(stage => /^FROM .* AS build\s*$/m.test(stage));
   const prod = stages.find(stage => /^FROM .* AS validation-worker-prod-deps\s*$/m.test(stage));
@@ -27,7 +38,7 @@ export function runtimeBaseDockerInputs(source, component) {
 }
 
 export async function runtimeBaseInputsChanged(component, files, before, after) {
-  const dockerfile = component === "web" ? "apps/web/Dockerfile" : "apps/validation-worker/Dockerfile";
+  const { dockerfile } = runtimeBases[component];
   for (const file of files) {
     if ([".npmrc", "pnpm-lock.yaml", "pnpm-workspace.yaml"].includes(file) || file.startsWith("patches/")) return true;
     if (file !== dockerfile && !/^(?:package\.json|(?:apps|packages)\/[^/]+\/package\.json)$/.test(file)) continue;
@@ -45,7 +56,7 @@ export async function runtimeBaseInputsChanged(component, files, before, after) 
 
 /** Bind reuse to the actual published base, including after a failed deploy. */
 export async function runtimeBaseSourceFingerprint(component, files, read) {
-  const dockerfile = component === "web" ? "apps/web/Dockerfile" : "apps/validation-worker/Dockerfile";
+  const { dockerfile } = runtimeBases[component];
   const selected = files.filter(file => file === dockerfile ||
     [".npmrc", "pnpm-lock.yaml", "pnpm-workspace.yaml"].includes(file) || file.startsWith("patches/") ||
     /^(?:package\.json|(?:apps|packages)\/[^/]+\/package\.json)$/.test(file)).sort();
