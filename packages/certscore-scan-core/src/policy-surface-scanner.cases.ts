@@ -382,7 +382,14 @@ test("canonical Slovenian policy paths include the combined privacy and cookie n
 });
 
 test("policySurfaceScanner warms an observed privacy link before guessed policy paths", async () => {
+  await assertObservedPolicyWarmup(false);
+  await assertObservedPolicyWarmup(true);
+});
+
+async function assertObservedPolicyWarmup(needsFallback: boolean) {
   const requestedPaths: string[] = [];
+  const observedPath = "/about/governance/privacy/";
+  const fallbackPath = "/privacy-notice";
   const policyText = Array.from({ length: 12 }, () =>
     "Curtin University is the data controller and processes personal information for stated purposes. " +
     "Contact the Privacy Officer. We retain records under defined criteria and provide access, correction, deletion, objection, and complaint rights."
@@ -394,9 +401,17 @@ test("policySurfaceScanner warms an observed privacy link before guessed policy 
       response.end("<!doctype html><html><body><footer><a href='/about/governance/privacy/'>Privacy</a></footer></body></html>");
       return;
     }
-    if (request.url === "/about/governance/privacy/") {
+    if (request.url === observedPath && needsFallback) {
+      response.writeHead(404).end("Observed policy unavailable");
+      return;
+    }
+    if (request.url === (needsFallback ? fallbackPath : observedPath)) {
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       response.end(`<!doctype html><html><body><main><h1>Privacy</h1><p>${policyText}</p></main></body></html>`);
+      return;
+    }
+    if (needsFallback) {
+      response.writeHead(404).end("Not found");
       return;
     }
     setTimeout(() => {
@@ -430,7 +445,7 @@ test("policySurfaceScanner warms an observed privacy link before guessed policy 
       ],
     });
     const retained = result.policySurfaceObservations.find((observation) =>
-      observation.normalizedUrl === `${baseUrl}/about/governance/privacy/` &&
+      observation.normalizedUrl === `${baseUrl}${needsFallback ? fallbackPath : observedPath}` &&
       observation.status === "fetched"
     );
 
@@ -440,13 +455,18 @@ test("policySurfaceScanner warms an observed privacy link before guessed policy 
     assert.ok(result.moduleRun.siteFacingNavigation?.firstResponseAt);
     assert.equal(result.moduleRun.siteFacingNavigation?.navigationCount, 1);
     assert.equal(result.moduleRun.siteFacingNavigation?.challengeDetected, false);
-    assert.ok(requestedPaths.indexOf("/about/governance/privacy/") < requestedPaths.indexOf("/privacy-notice"));
+    const observedIndex = requestedPaths.indexOf(observedPath);
+    const fallbackIndex = requestedPaths.indexOf(fallbackPath);
+    const requestOrder = JSON.stringify(requestedPaths);
+    assert.ok(observedIndex >= 0, requestOrder);
+    if (needsFallback) assert.ok(fallbackIndex >= 0, requestOrder);
+    assert.ok(fallbackIndex === -1 || observedIndex < fallbackIndex, requestOrder);
   } finally {
     server.close();
     await once(server, "close");
     await rm(tempRoot, { recursive: true, force: true });
   }
-});
+}
 
 test("policySurfaceScanner retains a prefetched observed policy when raw page HTML is noisy", async () => {
   const requestedPaths: string[] = [];

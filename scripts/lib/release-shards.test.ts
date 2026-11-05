@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { getPredeployPlan } from '../predeploy';
-import { aggregateShards, digest, directTestFiles, planShards, shardExecutionContext, validateShardPlan, type ShardResult } from './release-shards';
+import { aggregateShards, digest, directTestFiles, planShards, shardExecutionContext, sharedBootstrapCommand, validateShardPlan, type ShardResult } from './release-shards';
+import { workspaceExportsFingerprint } from './release-bootstrap';
+import { publishBootstrapArtifact, restoreBootstrapArtifact } from './release-bootstrap-artifact';
 import { requiredCiWorkflows, validatePartitionPreparation, validatePreparation, type CiRun } from './release-preparation';
 import type { CheckReceipt, ReleaseInputs } from './release-receipts';
 import { portableDependencyMetadata } from './release-receipts';
@@ -12,8 +17,8 @@ const checks = [
   { key: 'direct', label: 'direct', command: ['pnpm', 'exec', 'tsx', '--tsconfig', 'a.json', '--test', '--test-concurrency=2', '--test-name-pattern=owned', 'a.test.ts', 'b.test.ts', 'c.test.ts'] },
   { key: 'opaque', label: 'opaque', command: ['pnpm', 'test:all'] },
 ];
-const fixture = () => {
-  const plan = planShards(checks, inputs, { workers: 2 });
+const fixture = (gate = checks) => {
+  const plan = planShards(gate, inputs, { workers: 2 });
   const results: ShardResult[] = plan.workers.flatMap((tasks, worker) => [checks[0]!, ...tasks].map(task => ({
     version: 1, planHash: digest(plan), worker, key: task.key, command: task.command, inputs: { ...inputs }, execution: plan.execution, outputsFingerprint: task.key === checks[0]!.key ? 'c'.repeat(64) : undefined,
     startedAt: new Date(now - (task.key === checks[0]!.key ? 3000 : 2000)).toISOString(), completedAt: new Date(now - (task.key === checks[0]!.key ? 2500 : 1000)).toISOString(), durationMs: 500, exitStatus: 0,
@@ -23,12 +28,80 @@ const fixture = () => {
 
 test('all 38 canonical parent checks retain exact partition coverage at 1/2/4/6/8 workers', () => {
   const full = getPredeployPlan([], { full: true }).checks;
+  assert.equal(full.length, 38);
   for (const workers of [1, 2, 4, 6, 8]) {
     const plan = planShards(full, inputs, { workers });
     assert.equal(plan.checks.length, full.length); validateShardPlan(plan, full);
     assert.equal(plan.workers.length, workers);
     assert.equal(plan.estimates.kind, 'scheduling-model');
   }
+});
+test('imported bootstrap evidence must bind to the original build worker receipt', () => {
+  const gate = [...checks, { key: 'workspace-build', label: 'build', command: ['node', 'workspace.mjs'] }];
+  const { plan, results } = fixture(gate);
+  const buildWorker = plan.workers.findIndex(tasks => tasks.some(task => task.parent === 'workspace-build'));
+  const producer = results.find(result => result.worker === buildWorker && result.key === checks[0]!.key)!;
+  const consumer = results.find(result => result.worker !== buildWorker && result.key === checks[0]!.key)!;
+  consumer.command = sharedBootstrapCommand;
+  consumer.bootstrapSource = { worker: buildWorker, receiptHash: digest(producer) };
+  consumer.startedAt = producer.completedAt;
+  assert.equal(aggregateShards(plan, gate, results, now).successfulExecutions, results.length);
+  consumer.bootstrapSource.receiptHash = 'c'.repeat(64);
+  assert.throws(() => aggregateShards(plan, gate, results, now), /Shared bootstrap receipt/);
+});
+
+test('bootstrap restore rejects tampered bytes and preserves existing output directories', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'release-bootstrap-test-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const [producer, consumer, clean, artifact] = ['producer', 'consumer', 'clean', 'artifact'].map(name => path.join(root, name));
+  for (const checkout of [producer!, consumer!, clean!]) {
+    await mkdir(path.join(checkout, 'node_modules'), { recursive: true });
+    await mkdir(path.join(checkout, 'packages', 'example'), { recursive: true });
+    await writeFile(path.join(checkout, 'packages', 'example', 'package.json'), '{"main":"./dist/index.js"}');
+  }
+  const output = path.join(producer!, 'packages', 'example', 'dist');
+  await mkdir(output);
+  await writeFile(path.join(output, 'index.js'), 'module.exports = 1;');
+  const fingerprint = await workspaceExportsFingerprint(producer);
+  const receipt = fixture().results[0]!;
+  await publishBootstrapArtifact(artifact!, { ...receipt, outputsFingerprint: fingerprint }, producer);
+  await restoreBootstrapArtifact(artifact!, fingerprint, consumer);
+  assert.equal(await workspaceExportsFingerprint(consumer), fingerprint);
+  await assert.rejects(restoreBootstrapArtifact(artifact!, fingerprint, consumer), /clean package output directories/);
+  assert.equal(await workspaceExportsFingerprint(consumer), fingerprint);
+  await writeFile(path.join(artifact!, 'packages', 'example', 'dist', 'index.js'), 'module.exports = 2;');
+  await assert.rejects(restoreBootstrapArtifact(artifact!, fingerprint, clean), /fingerprint mismatch/);
+  await assert.rejects(workspaceExportsFingerprint(clean), /ENOENT/);
+});
+test('scan-core policy keeps all eight fixture files and the package-scoped runner', () => {
+  const policy = getPredeployPlan([], { full: true }).checks.find(check => check.key === 'scan-core-policy-full')!;
+  const gate = [checks[0]!, policy];
+  const plan = planShards(gate, inputs, { workers: 8 });
+  for (const [index, [task]] of plan.workers.entries()) {
+    assert.ok(task);
+    const file = `src/test-shards/policy-surface-scanner-${index}.test.ts`;
+    assert.deepEqual(task.files, [file]);
+    assert.deepEqual(task.command, ['pnpm', '--filter', '@certscore/scan-core', 'exec', 'node', '--import', 'tsx', '--test', '--test-concurrency=2', file]);
+  }
+  plan.workers[0]!.length = 0;
+  assert.throws(() => validateShardPlan(plan, gate), /Missing\/duplicate files: scan-core-policy-full/);
+});
+test('parallel workspace typechecks require both complementary filters', () => {
+  const typecheck = getPredeployPlan([], { full: true }).checks.find(check => check.key === 'workspace-typecheck')!;
+  const gate = [checks[0]!, typecheck];
+  assert.deepEqual(planShards(gate, inputs, { workers: 1 }).workers[0]![0]!.command, typecheck.command);
+  const plan = planShards(gate, inputs, { workers: 2 });
+  const tasks = plan.workers.flat();
+  assert.deepEqual(tasks.map(task => task.command.at(-1)).sort(), [
+    '--filter=!@website-signal-risk-scanner/web', '--filter=@website-signal-risk-scanner/web',
+  ]);
+  tasks[0]!.command = tasks[1]!.command;
+  assert.throws(() => validateShardPlan(plan, gate), /typecheck partition coverage/);
+});
+test('only the workspace build can bind same-worker bootstrap exports', () => {
+  const { plan, results } = fixture();
+  results.find(result => result.key !== checks[0]!.key)!.reusedPackageExportsFingerprint = 'c'.repeat(64);
+  assert.throws(() => aggregateShards(plan, checks, results, now), /reused unverified package exports/);
 });
 test('splitting retains every option and opaque commands retain their exact execution', () => {
   const { plan } = fixture();

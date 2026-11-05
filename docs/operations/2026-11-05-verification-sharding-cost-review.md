@@ -28,15 +28,21 @@ path filter did not trigger. Do not assume a skipped workflow passed.
 ## Partition coverage and isolation
 
 `pnpm release:verification plan --workers 8 --out <new-plan.json>` inventories all
-38 canonical full-gate parents. Only reviewed direct `pnpm exec tsx --test` commands
-with literal final file lists can be partitioned. Every original option, filter
-and internal test-concurrency setting remains. Package aliases, shell scripts,
-globs and unknown commands execute intact. Identical filenames in different
-parents are retained. No browser clock, assertion or production deadline changes.
+38 canonical full-gate parents. The planner partitions reviewed direct
+`pnpm exec tsx --test` commands with literal final file lists. It also checks
+the exact scan-core policy package script and expands its fixture glob from
+the package directory. Both paths preserve the loader, filters and internal
+test concurrency. Other package aliases, shell scripts, globs and unknown
+commands execute intact. Identical filenames in different parents are retained.
+No browser clock, assertion or production deadline changes.
 
 Workers require separate clean checkouts with matching source/configuration,
-toolchain, platform and architecture. Each compiles shared exports once before
-its assigned checks. Worker/step transport metadata and workspace location are
+toolchain, platform and architecture. By default each worker compiles shared
+exports once before its assigned checks. The opt-in template can distribute
+verified package outputs from the build worker within the same run and attempt.
+Receiving workers validate the artifact, rerun the workspace import check and
+fall back to local compilation if the artifact is missing or invalid. The
+aggregator matches each restore receipt to the producer's original receipt. Worker/step transport metadata and workspace location are
 normalized in a separate execution fingerprint; feature flags, NODE_OPTIONS and
 unknown execution configuration remain bound. Portable dependency metadata only
 normalizes pnpm's install timestamp/store location. Original local receipt rules
@@ -78,6 +84,29 @@ additional. Optional `--file-timings <json>` accepts measured `parent:file` timi
 Parent elapsed time includes its original internal parallelism, so equal-share
 estimates can underestimate individual file cost. Calibrate against hosted runs.
 
+The cold benchmark profile uses measured attempt durations from hosted run
+`41985290182`. Parent weights sum the observed shard command durations and use
+the slowest observed package bootstrap. The policy file weights come from a local four-lane
+run of all eight files. It passed the same 226 tests as the original command,
+in 143.072 seconds versus 283.597 seconds. These weights guide placement and
+do not predict runner speed or replace verification receipts.
+
+Multiple workers run complementary workspace typecheck filters for the web app
+and the rest of the workspace. Turbo still runs each filter's prerequisites. The
+cold build worker validates the exports from its successful package bootstrap
+before compiling the app graph. The early timing artifact includes both attempt
+receipts so the elapsed package work remains visible.
+
+One local package benchmark compiled all 14 packages in 17.6 seconds, then
+exported and restored the same bytes in 0.62 seconds combined. The raw bundle
+occupied about 46 MiB on disk. These timings exclude hosted upload, polling,
+download and queueing. A replay of hosted run `41990304522` shows that worker 7
+would have waited 46.1 seconds for the build worker to finish bootstrap. Even
+with instant transfer and restore, that leaves at most 22.9 seconds of wall
+time savings for that run. A future opt-in pilot must measure the upload step,
+per-worker wait and successful download duration, restore receipts, queueing,
+cold-build receipt publication and total wall time against the 9m17s baseline.
+
 `pnpm release:benchmark-shards --out <new-directory>` measures four reviewed owned
 fixture files sequentially and with two process lanes on one host, retaining
 real clocks, original command options and identical observed assertion names.
@@ -114,7 +143,9 @@ The disabled template retains small plan/result metadata for one day. A
 conservative 40 MiB/run at 20 runs/month is about 0.0261 GiB-month. Even if entirely
 above the included allowance, at GitHub's current
 [$0.25/GiB-month artifact rate](https://docs.github.com/en/billing/concepts/product-billing/github-actions#storage-pricing)
-that is about **$0.0066/month**, below $0.01. Dependencies use the existing pnpm
+that is about **$0.0066/month**, below $0.01. Budgeting an additional 46 MiB
+per run for optional shared package exports brings the combined estimate to
+about **$0.014/month** at the same usage and retention. Dependencies use the existing pnpm
 cache configuration plus a pinned browser-binary cache; no cache quota or paid storage limit is increased. The browser cache can evict other existing cache entries. Actual
 account allowance/other artifact consumption has not been audited.
 

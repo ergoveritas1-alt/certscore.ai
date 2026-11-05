@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
+import { globSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { Check } from '../predeploy';
 import { releaseEnvironmentFingerprint, type ReleaseInputs } from './release-receipts';
 
 export const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+export const sharedBootstrapCommand = ['restore-verified-workspace-bootstrap'];
 export type ShardTask = { key: string; parent: string; command: string[]; files: string[]; estimatedMs: number };
 export type ShardPlan = {
   version: 1; sha: string; sourceFingerprint: string; checks: Check[]; workers: ShardTask[][];
@@ -13,6 +16,8 @@ export type ShardResult = {
   version: 1; planHash: string; worker: number; key: string; command: string[]; inputs: ReleaseInputs;
   execution: ShardPlan['execution'];
   outputsFingerprint?: string;
+  bootstrapSource?: { worker: number; receiptHash: string };
+  reusedPackageExportsFingerprint?: string;
   startedAt: string; completedAt: string; durationMs: number; exitStatus: number;
 };
 
@@ -40,6 +45,36 @@ export function directTestFiles(command: string[]) {
   return { prefix: command.slice(0, first), files };
 }
 
+function partitionableTestFiles(check: Check) {
+  if (check.key !== 'scan-core-policy-full') return directTestFiles(check.command);
+
+  // The package runs these fixtures from its own cwd. Preserve its loader,
+  // concurrency cap and entire glob, and require review if the wrapper changes.
+  const packageCommand = ['pnpm', '--filter', '@certscore/scan-core'];
+  const script = 'test:policy:full';
+  const runner = ['node', '--import', 'tsx', '--test', '--test-concurrency=2'];
+  const pattern = 'src/test-shards/policy-surface-scanner-*.test.ts';
+  const directory = new URL('../../packages/certscore-scan-core/', import.meta.url);
+  const { scripts } = JSON.parse(readFileSync(new URL('package.json', directory), 'utf8'));
+  if (JSON.stringify(check.command) !== JSON.stringify([...packageCommand, script]) ||
+      scripts?.[script] !== `${runner.join(' ')} '${pattern}'` || scripts?.[`pre${script}`] || scripts?.[`post${script}`]) {
+    throw new Error('Review the scan-core policy shard command before partitioning.');
+  }
+  const files = globSync(pattern, { cwd: fileURLToPath(directory) }).sort();
+  if (files.length === 0) throw new Error('No scan-core policy shards found.');
+  return { prefix: [...packageCommand, 'exec', ...runner], files };
+}
+
+function workspaceTypecheckPartitions(check: Check) {
+  const full = ['pnpm', 'turbo', 'run', 'typecheck', '--concurrency=2'];
+  if (JSON.stringify(check.command) !== JSON.stringify(full)) throw new Error('Review the workspace typecheck command before partitioning.');
+  const web = '@website-signal-risk-scanner/web';
+  return [
+    { key: 'workspace-typecheck:web', command: [...full, `--filter=${web}`] },
+    { key: 'workspace-typecheck:other', command: [...full, `--filter=!${web}`] },
+  ];
+}
+
 export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 'fingerprint'>,
   options: { workers: number; timings?: Record<string, number>; fileTimings?: Record<string, number>; setupMsPerWorker?: number; controlPlaneMs?: number; execution?: ShardPlan['execution'] }) : ShardPlan {
   if (!Number.isInteger(options.workers) || options.workers < 1 || options.workers > 8) throw new Error('Use 1–8 isolated workers.');
@@ -47,8 +82,16 @@ export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 
   const timings = options.timings ?? {}, tasks: ShardTask[] = [];
   for (const check of checks) {
     if (check.key === 'workspace-package-build') continue;
-    const split = directTestFiles(check.command), estimate = timings[check.key] ?? 30_000;
+    const split = partitionableTestFiles(check), estimate = timings[check.key] ?? 30_000;
     if (!Number.isFinite(estimate) || estimate <= 0) throw new Error('Invalid timing profile.');
+    if (check.key === 'workspace-typecheck' && options.workers > 1) {
+      for (const partition of workspaceTypecheckPartitions(check)) {
+        const estimatedMs = timings[partition.key] ?? estimate / 2;
+        if (!Number.isFinite(estimatedMs) || estimatedMs <= 0) throw new Error('Invalid typecheck timing profile.');
+        tasks.push({ ...partition, parent: check.key, files: [], estimatedMs });
+      }
+      continue;
+    }
     if (!split) tasks.push({ key: check.key, parent: check.key, command: check.command, files: [], estimatedMs: estimate });
     else for (const file of split.files) {
       const estimateMs = options.fileTimings?.[`${check.key}:${file}`] ?? estimate / split.files.length;
@@ -64,9 +107,10 @@ export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 
   const merged = workers.map(tasks => {
     const groups = new Map<string, ShardTask>();
     for (const task of tasks) {
-      const prior = groups.get(task.parent);
+      const group = task.parent === 'workspace-typecheck' ? task.key : task.parent;
+      const prior = groups.get(group);
       if (prior && task.files.length) { prior.files.push(...task.files); prior.command.push(...task.files); prior.estimatedMs += task.estimatedMs; }
-      else groups.set(task.parent, { ...task, files: [...task.files], command: [...task.command] });
+      else groups.set(group, { ...task, files: [...task.files], command: [...task.command] });
     }
     return [...groups.values()].map(task => ({ ...task, key: `${task.parent}:${digest(task.command).slice(0, 16)}` }));
   });
@@ -86,8 +130,14 @@ export function validateShardPlan(plan: ShardPlan, expectedChecks: Check[]) {
   if (new Set(keys).size !== keys.length || all.some(task => !expectedChecks.some(check => check.key === task.parent && check.key !== 'workspace-package-build'))) throw new Error('Duplicate or unknown shard task.');
   for (const parent of expectedChecks) {
     if (parent.key === 'workspace-package-build') continue;
-    const tasks = all.filter(task => task.parent === parent.key), split = directTestFiles(parent.command);
+    const tasks = all.filter(task => task.parent === parent.key), split = partitionableTestFiles(parent);
     if (!tasks.length) throw new Error(`Missing check ${parent.key}.`);
+    if (parent.key === 'workspace-typecheck' && tasks.length > 1) {
+      const required = workspaceTypecheckPartitions(parent).map(task => JSON.stringify(task.command)).sort();
+      const actual = tasks.map(task => JSON.stringify(task.command)).sort();
+      if (tasks.some(task => task.files.length) || JSON.stringify(required) !== JSON.stringify(actual)) throw new Error('Workspace typecheck partition coverage changed.');
+      continue;
+    }
     if (!split) {
       if (tasks.length !== 1 || tasks[0]!.files.length || JSON.stringify(tasks[0]!.command) !== JSON.stringify(parent.command)) throw new Error(`Opaque command changed: ${parent.key}.`);
     } else {
@@ -106,16 +156,27 @@ export function aggregateShards(plan: ShardPlan, expectedChecks: Check[], result
   const seen = new Set<string>();
   for (const result of results) {
     const id = `${result.worker}:${result.key}`, match = expected.find(value => value.worker === result.worker && value.key === result.key);
-    if (seen.has(id) || !match || result.version !== 1 || result.planHash !== digest(plan) || JSON.stringify(result.command) !== JSON.stringify(match.command) || JSON.stringify(result.execution) !== JSON.stringify(plan.execution)) throw new Error('Shard result identity/configuration mismatch.');
+    const command = result.bootstrapSource ? sharedBootstrapCommand : match?.command;
+    if (seen.has(id) || !match || (result.bootstrapSource && result.key !== bootstrap.key) || result.version !== 1 || result.planHash !== digest(plan) || JSON.stringify(result.command) !== JSON.stringify(command) || JSON.stringify(result.execution) !== JSON.stringify(plan.execution)) throw new Error('Shard result identity/configuration mismatch.');
     seen.add(id);
     const start = Date.parse(result.startedAt), end = Date.parse(result.completedAt);
     if (result.exitStatus !== 0 || result.inputs.clean !== true || result.inputs.sha !== plan.sha || result.inputs.fingerprint !== plan.sourceFingerprint || !Number.isFinite(result.durationMs) || result.durationMs < 0 || !Number.isFinite(start) || !Number.isFinite(end) || end < start || end > now || now - end > 24 * 60 * 60 * 1000) throw new Error('Failed, dirty, stale or incomplete shard result.');
   }
   for (let worker = 0; worker < plan.workers.length; worker++) {
     const own = results.filter(result => result.worker === worker), setup = own.find(result => result.key === 'workspace-package-build')!;
+    const build = plan.workers[worker]!.find(task => task.parent === 'workspace-build');
     if (!/^[a-f0-9]{64}$/.test(setup.outputsFingerprint ?? '')) throw new Error('Worker bootstrap export proof missing.');
+    if (setup.bootstrapSource) {
+      const producer = results.find(result => result.worker === setup.bootstrapSource!.worker && result.key === bootstrap.key);
+      if (!producer || producer.bootstrapSource || producer.worker === worker ||
+          !plan.workers[producer.worker]?.some(task => task.parent === 'workspace-build') ||
+          digest(producer) !== setup.bootstrapSource.receiptHash || producer.outputsFingerprint !== setup.outputsFingerprint ||
+          Date.parse(producer.completedAt) > Date.parse(setup.startedAt)) throw new Error('Shared bootstrap receipt does not match the original build worker.');
+    }
     for (const result of own) {
       if (['sha', 'fingerprint', 'environment', 'node', 'pnpm'].some(key => result.inputs[key as keyof ReleaseInputs] !== setup.inputs[key as keyof ReleaseInputs]) || (result !== setup && Date.parse(result.startedAt) < Date.parse(setup.completedAt))) throw new Error('Worker inputs changed or dependency order violated.');
+      if (result.reusedPackageExportsFingerprint !== undefined &&
+          (result.key !== build?.key || result.reusedPackageExportsFingerprint !== setup.outputsFingerprint)) throw new Error('Workspace build reused unverified package exports.');
     }
   }
   const toolchain = results[0]!.inputs;
