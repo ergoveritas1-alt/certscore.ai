@@ -132,3 +132,12 @@ test('optional compiler-cache export overlaps stabilization and never delays tar
   assert.ok(source.indexOf('Export successful compiler cache') < source.indexOf('Wait for ECS services to stabilize'));
   assert.match(source, /WEB_COMPILER_CACHE_ENABLED: \$\{\{ inputs.use_compiler_cache && '1' \|\| '0' \}\}/);
 });
+
+test('manual x64 fallback remains usable across both prerequisite jobs and the image job', async () => {
+  const source = await readFile('.github/workflows/web-aws-ecs-deploy.yml', 'utf8');
+  const runner = (job: string) => source.slice(source.indexOf(`  ${job}:`)).match(/^    runs-on: (.+)$/m)?.[1];
+  const image = runner('deploy-public-web-aws');
+  assert.match(image ?? '', /inputs.use_x64_fallback.*'ubuntu-24.04'.*'ubuntu-24.04-arm'/);
+  assert.equal(runner('verify-public-web'), image);
+  assert.equal(runner('verify-post-accept-forms'), image);
+});

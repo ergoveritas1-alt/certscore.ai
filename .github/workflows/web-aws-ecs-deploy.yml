@@ -77,7 +77,7 @@ concurrency:
 
 jobs:
   verify-public-web:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -223,7 +223,7 @@ jobs:
         run: node scripts/select-workflow-deployment.mjs web
 
   verify-post-accept-forms:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 20
     permissions:
       contents: read
