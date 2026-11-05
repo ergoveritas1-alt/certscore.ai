@@ -5,7 +5,7 @@ import { assertScannerConfigurationScope, configureScannerSettingsUnlessPreserve
 import { checkReleasePrerequisites } from "./lib/release-prerequisites";
 import { assertScannerArtifact, assertScannerArtifactMetadata, settleScannerOperations, runScannerPromotions, type ScannerArtifact } from "./lib/scanner-artifact";
 import { readStagedEcsReceipt } from "./lib/staged-ecs-image.mjs";
-import { assertStagedCoupledRelease, type StagedCoupledRelease } from "./lib/staged-coupled-release";
+import { assertStagedCoupledRelease, stagedPromotionTiming, type StagedCoupledRelease } from "./lib/staged-coupled-release";
 import { existsSync } from "node:fs";
 import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -99,6 +99,15 @@ const DB_WORKFLOW = "prod-db-migrate.yml";
 async function main() {
   const startedAt = Date.now();
   const args = parseArgs(process.argv.slice(2));
+  const timing = args.stagedRelease?.action === "promote" && !args.plan && !args.dryRun ? stagedPromotionTiming() : undefined;
+  try {
+    await executeDeployment(args, startedAt, timing);
+  } finally {
+    if (timing) console.log(JSON.stringify(timing.summary()));
+  }
+}
+
+async function executeDeployment(args: Args, startedAt: number, timing?: ReturnType<typeof stagedPromotionTiming>) {
   assertScannerConfigurationScope(args);
   const sourceRef = args.ref ?? await git(["rev-parse", "--abbrev-ref", "HEAD"]);
   const sha = await git(["rev-parse", sourceRef]);
@@ -127,16 +136,17 @@ async function main() {
   await checkReleasePrerequisites({ deployment: true, scanner: args.mode === "all" || args.mode === "scanners",
     prebuilt: args.stagedRelease?.action === "promote" });
   await confirmSkippedRuntimeInputs(changed, args);
-  const preflight = await timedLane("preflight", async () => {
+  const runPreflight = () => timedLane("preflight", async () => {
     const target = { web: "web", validation: "validation-worker", scanners: "v2-dag-lambda", db: "db", all: "all" }[args.mode];
     const predeployArgs = args.mode === "all" ? ["--fast", "--all"] : ["--fast", "--target", target];
     await run(["node", "scripts/release-node.mjs", "scripts/predeploy.ts", ...predeployArgs, "--base", args.baseRef,
       ...(args.noPredeploy ? ["--require-receipts", "--reuse-receipts", args.preflightReceiptDir!] : [])]);
   });
+  const preflight = await (timing ? timing.measure("preflight-receipts", runPreflight) : runPreflight());
   if (preflight.status === "failed") throw new Error("Deployment aborted because preflight failed.");
 
   if (args.stagedRelease) {
-    const results = await runStagedCoupledRelease(args, changed, sha, args.stagedRelease);
+    const results = await runStagedCoupledRelease(args, changed, sha, args.stagedRelease, timing ?? stagedPromotionTiming());
     printSummary(results, Date.now() - startedAt, shortSha);
     if (results.some(result => result.status === "failed")) process.exitCode = 1;
     return;
@@ -468,7 +478,7 @@ function readStagedImage(kind: "web" | "validation", sha: string, runId: string)
   return readStagedEcsReceipt({ kind, sha, runId, repository: RELEASE_REPOSITORY });
 }
 
-async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha: string, operation: NonNullable<Args["stagedRelease"]>) {
+async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha: string, operation: NonNullable<Args["stagedRelease"]>, timing: ReturnType<typeof stagedPromotionTiming>) {
   const origin = await git(["remote", "get-url", "origin"]);
   if (origin.replace(/\.git$/, "") !== `https://github.com/${RELEASE_REPOSITORY}`) throw new Error("Staged release requires the canonical GitHub origin.");
   const [main, enabled] = await Promise.all([
@@ -530,7 +540,7 @@ async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha:
   const validation = receipt.validation;
   if (changed.validation && !validation) throw new Error("Validation is affected and has no staged image. Prepare a new coupled release.");
   // Verify the approved regional tags still resolve to the recorded immutable bytes.
-  await settleScannerOperations([
+  await timing.measure("staged-artifact-readback", () => settleScannerOperations([
     readStagedImage("web", sha, receipt.webRunId).then(({ binding }) => {
       if (binding !== receipt.webImage) throw new Error("Staged web digest or run attempt changed.");
     }),
@@ -543,23 +553,25 @@ async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha:
         "--query", "imageDetails[0].imageDigest", "--output", "text"], { quiet: true });
       if (receipt.scanner.images[region]?.split("@")[1] !== result.stdout.trim()) throw new Error(`Staged scanner image changed in ${region}.`);
     }),
-  ]);
+  ]));
   const artifact: PreparedScanner = { ...receipt.scanner, preservedSettings: new Map(Object.entries(receipt.scannerSettings)) };
   const results = await deployConsumersBeforeProducer({
     consumers: [
       async () => {
-        const web = await deployWeb({ force: true, ref: sha, workflowRef: "main", stage: { runId: receipt.webRunId, image: receipt.webImage, baseSha: receipt.baseSha } });
+        const web = await timing.measure("web-migration-and-ecs", () => deployWeb({ force: true, ref: sha, workflowRef: "main", stage: { runId: receipt.webRunId, image: receipt.webImage, baseSha: receipt.baseSha } }));
         if (web.status !== "succeeded") return web;
-        const verification = await verifyLiveWeb(sha, true);
+        const verification = await timing.measure("live-web-revision", () => verifyLiveWeb(sha, true));
         return verification.status === "succeeded" ? web : verification;
       },
-      () => deployValidation({ ref: sha, workflowRef: "main", skip: !changed.validation, pushRuntimeBase: false, stage: validation }),
+      () => timing.measure("validation-ecs", () => deployValidation({ ref: sha, workflowRef: "main", skip: !changed.validation, pushRuntimeBase: false, stage: validation })),
     ],
-    producer: () => promoteScannerArtifact(artifact, { ...scannerInput, parallelFunctions: true }),
+    producer: () => timing.measure("scanner-promotion", () => promoteScannerArtifact(artifact, { ...scannerInput, parallelFunctions: true })),
     skippedProducer: () => skippedLane("Lambda scanner deploys", "a consumer deployment failed; preserve the existing producer contract"),
   });
   if (results.at(-1)?.status === "succeeded") {
-    results.push(await timedLane("verify Lambda scanners", async () => { await verifyScanners(sha); }));
+    results.push(await timing.measure("scanner-final-readback", () => timedLane("verify Lambda scanners", async () => {
+      await verifyScanners(sha, { afterStagedPromotion: true });
+    })));
   }
   return results;
 }
@@ -904,11 +916,13 @@ async function applyScannerRuntimeConfiguration(enableCoverage = false) {
   }
 }
 
-async function verifyScanners(expectedSha: string) {
+async function verifyScanners(expectedSha: string, { afterStagedPromotion = false } = {}) {
   const reports = await Promise.all(SCANNER_REGIONS.map(async (region) => {
     const [result, expectedDigestResult] = await Promise.all([
       (async () => {
-        await run([
+        // Staged promotion has already waited for each update. A new in-flight
+        // mutation fails the fresh health read below rather than being waited out.
+        if (!afterStagedPromotion) await run([
           "aws", "lambda", "wait", "function-updated-v2",
           "--region", region,
           "--function-name", SCANNER_FUNCTION_NAME

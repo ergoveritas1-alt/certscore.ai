@@ -39,3 +39,27 @@ export function assertStagedCoupledRelease(
       !/^[0-9a-f]{64}$/.test(snapshot.environmentSha256);
   })) throw new Error('Staged release is missing the six scanner settings snapshots.');
 }
+
+/** Measure one promotion command. Concurrent phases keep their own offsets. */
+export function stagedPromotionTiming(now = () => performance.now()) {
+  const started = now();
+  const phases: { name: string; startMs: number; endMs: number; outcome: string }[] = [];
+  return {
+    async measure<T>(name: string, run: () => Promise<T>): Promise<T> {
+      const startMs = Math.round(now() - started);
+      let outcome = 'failed';
+      try {
+        const result = await run();
+        outcome = result && typeof result === 'object' && 'status' in result && typeof result.status === 'string'
+          ? result.status : 'succeeded';
+        return result;
+      } finally {
+        phases.push({ name, startMs, endMs: Math.round(now() - started), outcome });
+      }
+    },
+    summary() {
+      return { kind: 'staged-promotion-timing', commandWallMs: Math.round(now() - started),
+        phases: [...phases].sort((a, b) => a.startMs - b.startMs) };
+    },
+  };
+}

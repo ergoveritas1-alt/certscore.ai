@@ -58,3 +58,29 @@ test('rollout event timings exclude autoscaling events after the exact deploymen
   assert.equal(timing.latestServiceEventsMsFromDeployment.tasksDraining, 120_000);
   assert.equal(timing.latestServiceEventsMsFromDeployment.targetsRegistered, 60_000);
 });
+
+test('ALB timing samples only targets bound to the exact ECS replacement', async () => {
+  const { stagedAlbObservations } = await import('./lib/staged-ecs-observations.mjs');
+  let elapsed = 0;
+  const commands = [];
+  const diagnostic = stagedAlbObservations('fixture', async args => {
+    commands.push(args);
+    if (args[1] === 'list-tasks') return { taskArns: ['old', 'replacement'] };
+    if (args[1] === 'describe-tasks') return { tasks: ['old', 'replacement'].map((taskArn, index) => ({
+      taskArn, startedBy: index ? 'ecs-svc/2' : 'ecs-svc/1', taskDefinitionArn: index ? 'web:2' : 'web:1', lastStatus: 'RUNNING',
+      attachments: [{ type: 'ElasticNetworkInterface', details: [{ name: 'privateIPv4Address', value: `10.0.0.${index + 1}` }] }],
+    })) };
+    return { TargetHealthDescriptions: [1, 2].map(id => ({ Target: { Id: `10.0.0.${id}`, Port: 3000 },
+      TargetHealth: { State: id === 1 || elapsed > 0 ? 'healthy' : 'initial' },
+    })) };
+  }, () => elapsed);
+  const service = { serviceName: 'web', loadBalancers: [{ targetGroupArn: 'group', containerPort: 3000 }] };
+  const deployment = { id: 'ecs-svc/2', taskDefinition: 'web:2', runningCount: 1 };
+  await diagnostic.observe(service, deployment);
+  assert.equal(diagnostic.summary()[0].tasks[0].firstHealthyObservedMs, null);
+  elapsed = 8000;
+  await diagnostic.observe(service, deployment);
+  assert.deepEqual(commands[0], ['ecs', 'list-tasks', '--cluster', 'fixture', '--started-by', 'ecs-svc/2', '--max-items', '20']);
+  assert.deepEqual(diagnostic.summary()[0].tasks.map(({ taskArn, firstHealthyObservedMs }) => [taskArn, firstHealthyObservedMs]), [['replacement', 8000]]);
+  assert.ok(!JSON.stringify(diagnostic.summary()).includes('10.0.0.'));
+});

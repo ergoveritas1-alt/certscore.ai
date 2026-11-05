@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { stagedAlbObservations } from './lib/staged-ecs-observations.mjs';
 
 const exec = promisify(execFile);
 const eventTypes = [
@@ -12,10 +13,11 @@ const eventTypes = [
 ];
 
 export async function waitForStagedEcs(expected, describe, {
-  now = () => performance.now(), pause = sleep, timeoutMs = 600_000, intervalMs = 3000, report = console.log,
+  now = () => performance.now(), pause = sleep, timeoutMs = 600_000, intervalMs = 3000, report = console.log, observations,
 } = {}) {
   const started = now();
-  const observed = expected.map(({ name }) => ({ name, firstPrimaryMs: null, allTargetTasksRunningMs: null, steadyMs: null }));
+  const waitStartedAt = new Date().toISOString();
+  const observed = expected.map(({ name }) => ({ name, firstPrimaryMs: null, allTargetTasksRunningMs: null, oldDeploymentsRemovedMs: null, steadyMs: null }));
   while (now() - started < timeoutMs) {
     const result = await describe();
     const elapsed = now() - started;
@@ -36,6 +38,8 @@ export async function waitForStagedEcs(expected, describe, {
         continue;
       }
       timing.firstPrimaryMs ??= elapsed;
+      if (service.deployments.length === 1) timing.oldDeploymentsRemovedMs ??= elapsed;
+      void observations?.observe(service, target);
       if (target.runningCount === service.desiredCount) timing.allTargetTasksRunningMs ??= elapsed;
       const steady = target.rolloutState === 'COMPLETED' && service.deployments.length === 1 &&
         target.runningCount === service.desiredCount && service.runningCount === service.desiredCount && service.pendingCount === 0;
@@ -60,7 +64,7 @@ export async function waitForStagedEcs(expected, describe, {
       }));
     }
     if (complete) {
-      report(JSON.stringify({ waitMs: elapsed, services: observed }));
+      report(JSON.stringify({ waitStartedAt, waitMs: elapsed, services: observed, alb: observations?.summary() }));
       return;
     }
     await pause(Math.min(intervalMs, timeoutMs - elapsed));
@@ -78,11 +82,23 @@ async function main() {
         expected.some(entry => entry.name === name)) throw new Error('Invalid ECS service or task definition.');
     expected.push({ name, task });
   }
-  await waitForStagedEcs(expected, async () => {
-    const { stdout } = await exec('aws', ['ecs', 'describe-services', '--cluster', cluster, '--services',
-      ...expected.map(({ name }) => name), '--output', 'json'], { timeout: 12_000 });
+  const controller = new AbortController();
+  const observations = process.env.STAGED_ECS_ALB_TIMING === '1' ? stagedAlbObservations(cluster, async args => {
+    const { stdout } = await exec('aws', [...args, '--output', 'json'], { timeout: 2500, signal: controller.signal });
     return JSON.parse(stdout);
-  });
+  }) : undefined;
+  try {
+    await waitForStagedEcs(expected, async () => {
+      const { stdout } = await exec('aws', ['ecs', 'describe-services', '--cluster', cluster, '--services',
+        ...expected.map(({ name }) => name), '--output', 'json'], { timeout: 12_000 });
+      return JSON.parse(stdout);
+    }, { observations });
+  } catch (error) {
+    if (observations) console.log(JSON.stringify({ alb: observations.summary(), outcome: 'rollout-failed' }));
+    throw error;
+  } finally {
+    controller.abort();
+  }
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {

@@ -129,3 +129,30 @@ test('offline staged rehearsal preserves exact migration, ECS and scanner promot
     assert.equal(result.at(-1)?.status, rollback ? 'skipped' : 'succeeded');
   }
 });
+
+test('promotion timing separates overlapping lanes, rollback, and total wall time', async () => {
+  const { stagedPromotionTiming } = await import('./staged-coupled-release');
+  let time = 0;
+  const timing = stagedPromotionTiming(() => time);
+  let finish!: () => void;
+  const web = timing.measure('web', () => new Promise<void>(resolve => { finish = resolve; }));
+  time = 3;
+  await timing.measure('validation', async () => { time = 7; return { status: 'failed' }; });
+  time = 11;
+  finish();
+  await web;
+  assert.deepEqual(timing.summary(), { kind: 'staged-promotion-timing', commandWallMs: 11, phases: [
+    { name: 'web', startMs: 0, endMs: 11, outcome: 'succeeded' },
+    { name: 'validation', startMs: 3, endMs: 7, outcome: 'failed' },
+  ] });
+});
+
+test('staged final scanner read omits a duplicate waiter and still verifies fresh state and digest', async () => {
+  const source = await readFile('scripts/deploy-fast.ts', 'utf8');
+  const verify = source.slice(source.indexOf('async function verifyScanners('), source.indexOf('async function ensureWorkflowRun('));
+  assert.match(source, /verifyScanners\(sha, \{ afterStagedPromotion: true \}\)/);
+  assert.match(verify, /if \(!afterStagedPromotion\) await run\(\[\s*"aws", "lambda", "wait"/);
+  assert.match(verify, /"lambda", "get-function"/);
+  assert.match(verify, /payload\.LastUpdateStatus !== "Successful" \|\| payload\.State !== "Active"/);
+  assert.match(verify, /payload\.RecordedImageDigest !== expectedDigest/);
+});
