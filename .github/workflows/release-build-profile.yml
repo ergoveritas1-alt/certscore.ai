@@ -1,0 +1,36 @@
+name: CertScore.ai one-time cold build profile
+on:
+  push:
+    branches: [codex/release-build-profile-20261105]
+    paths: [.github/workflows/release-build-profile.yml]
+permissions:
+  contents: read
+jobs:
+  profile:
+    if: github.repository == 'ergoveritas1-alt/certscore.ai' && github.run_attempt == 1 && github.event.before == '0000000000000000000000000000000000000000'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      CERTSCORE_VERIFICATION_COLD_BUILD: '1'
+      EXPECTED_GIT_REMOTE: https://github.com/ergoveritas1-alt/certscore.ai.git
+    steps:
+      - uses: actions/checkout@v6
+        with: {persist-credentials: false}
+      - uses: pnpm/action-setup@v6
+        with: {version: 10.6.3}
+      - uses: actions/setup-node@v6
+        with: {node-version: 22.22.1, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - name: Profile fresh workspace build
+        run: |
+          unset GH_TOKEN GITHUB_TOKEN
+          safe_env=(env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_VERIFICATION_COLD_BUILD=1 NEXT_TELEMETRY_DISABLED=1)
+          "${safe_env[@]}" node scripts/release-node.mjs scripts/release-verification.ts plan --workers 1 --out /tmp/release-plan.json
+          "${safe_env[@]}" node scripts/release-node.mjs scripts/release-verification.ts worker --phase build --plan /tmp/release-plan.json --worker 0 --out /tmp/release-build-profile
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: cold-build-timing
+          path: /tmp/release-build-profile
+          retention-days: 1
+          if-no-files-found: error
