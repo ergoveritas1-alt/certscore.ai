@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 
+export const verifiedTypecheckExportsEnv = 'CERTSCORE_VERIFIED_TYPECHECK_EXPORTS';
+
 const packages = {
   'test:report-presentation': '@certscore/api-contracts',
   'test:canonical-projection-parity': '@certscore/api-contracts',

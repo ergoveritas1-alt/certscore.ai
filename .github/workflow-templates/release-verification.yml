@@ -174,8 +174,6 @@ jobs:
           REQUESTED_WORKERS: ${{ inputs.workers }}
         run: |
           env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_VERIFICATION_COLD_BUILD="$CERTSCORE_VERIFICATION_COLD_BUILD" \
-            node scripts/release-node.mjs scripts/release-verification.ts plan --workers "$REQUESTED_WORKERS" --out /tmp/release-plan.json
-          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_VERIFICATION_COLD_BUILD="$CERTSCORE_VERIFICATION_COLD_BUILD" \
-            node scripts/release-node.mjs scripts/release-verification.ts aggregate --plan /tmp/release-plan.json --results /tmp/release-results --out /tmp/partition-proof.json
+            node scripts/release-node.mjs scripts/release-verification.ts aggregate --workers "$REQUESTED_WORKERS" --results /tmp/release-results --out /tmp/partition-proof.json
       - uses: actions/upload-artifact@v4
         with: {name: partition-proof, path: /tmp/partition-proof.json, retention-days: 1}

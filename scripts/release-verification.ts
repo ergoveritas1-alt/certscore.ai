@@ -3,10 +3,10 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { getPredeployPlan } from './predeploy';
-import { receiptMatches, releaseInputs } from './lib/release-receipts';
+import { receiptMatches, releaseInputs, type ReleaseInputs } from './lib/release-receipts';
 import { checkReleasePrerequisites } from './lib/release-prerequisites';
 import { workspaceExportsFingerprint } from './lib/release-bootstrap';
-import { verifiedSuiteCommand } from './lib/release-suite-reuse';
+import { verifiedSuiteCommand, verifiedTypecheckExportsEnv } from './lib/release-suite-reuse';
 import { publishBootstrapArtifact, restoreBootstrapArtifact } from './lib/release-bootstrap-artifact';
 import { aggregateShards, digest, planShards, shardExecutionContext, sharedBootstrapCommand, validateShardPlan, type ShardPlan, type ShardResult } from './lib/release-shards';
 
@@ -36,29 +36,36 @@ async function run(command: string[], env = process.env) {
     child.on('exit', code => resolve(code ?? 1));
   });
 }
+async function createPlan(inputs: ReleaseInputs) {
+  const retained = JSON.parse(await readFile('scripts/release-verification-timings.json', 'utf8'));
+  const timings: Record<string, number> = { ...retained.timings };
+  if (process.env.CERTSCORE_VERIFICATION_COLD_BUILD === '1') Object.assign(timings, retained.coldBenchmark?.timings);
+  if (values.has('--timings')) for (const file of await readdir(required('--timings'))) {
+    if (!file.endsWith('.json')) continue;
+    const value = JSON.parse(await readFile(path.join(required('--timings'), file), 'utf8'));
+    if (value.exitStatus === 0 && value.durationMs > 0) timings[value.key] = value.durationMs;
+  }
+  const fileTimings: Record<string, number> = { ...retained.fileTimings };
+  if (values.has('--file-timings')) Object.assign(fileTimings, JSON.parse(await readFile(required('--file-timings'), 'utf8')));
+  const workers = Number(mode === 'aggregate' ? required('--workers') : values.get('--workers') ?? 1);
+  const replayMoves = process.env.CERTSCORE_VERIFICATION_COLD_BUILD === '1' && workers === 8 ? retained.coldBenchmark?.replayMoves : undefined;
+  return planShards(checks, inputs, { workers, timings, fileTimings, replayMoves,
+    setupMsPerWorker: Number(values.get('--setup-ms') ?? 60_000), controlPlaneMs: Number(values.get('--control-ms') ?? 60_000) });
+}
+
 async function main() {
-  if (process.env.CERTSCORE_VERIFIED_PACKAGE_EXPORTS !== undefined) throw new Error('Bootstrap reuse must be established by the worker.');
+  if (process.env.CERTSCORE_VERIFIED_PACKAGE_EXPORTS !== undefined || process.env[verifiedTypecheckExportsEnv] !== undefined) throw new Error('Bootstrap reuse must be established by the worker.');
   await checkReleasePrerequisites();
+  const initial = await inputsForWorker();
   if (mode === 'plan') {
-    const retained = JSON.parse(await readFile('scripts/release-verification-timings.json', 'utf8'));
-    const timings: Record<string, number> = { ...retained.timings };
-    if (process.env.CERTSCORE_VERIFICATION_COLD_BUILD === '1') Object.assign(timings, retained.coldBenchmark?.timings);
-    if (values.has('--timings')) for (const file of await readdir(required('--timings'))) {
-      if (!file.endsWith('.json')) continue;
-      const value = JSON.parse(await readFile(path.join(required('--timings'), file), 'utf8'));
-      if (value.exitStatus === 0 && value.durationMs > 0) timings[value.key] = value.durationMs;
-    }
-    const inputs = await inputsForWorker();
-    const fileTimings: Record<string, number> = { ...retained.fileTimings };
-    if (values.has('--file-timings')) Object.assign(fileTimings, JSON.parse(await readFile(required('--file-timings'), 'utf8')));
-    const plan = planShards(checks, inputs, { workers: Number(values.get('--workers') ?? 1), timings, fileTimings,
-      setupMsPerWorker: Number(values.get('--setup-ms') ?? 60_000), controlPlaneMs: Number(values.get('--control-ms') ?? 60_000) });
+    const plan = await createPlan(initial);
     await immutable(required('--out'), plan);
     console.log(JSON.stringify({ planHash: digest(plan), workers: plan.workers.length, parentChecks: checks.length, estimates: plan.estimates, caveat: 'Scheduling model; file estimates are equal shares until measured. Queueing, cache misses and hardware differences remain unmeasured.' })); return;
   }
-  const plan = JSON.parse(await readFile(required('--plan'), 'utf8')) as ShardPlan;
+  const plan = mode === 'aggregate' && !values.has('--plan')
+    ? await createPlan(initial)
+    : JSON.parse(await readFile(required('--plan'), 'utf8')) as ShardPlan;
   validateShardPlan(plan, checks);
-  const initial = await inputsForWorker();
   if (!initial.clean || initial.sha !== plan.sha || initial.fingerprint !== plan.sourceFingerprint || JSON.stringify(shardExecutionContext()) !== JSON.stringify(plan.execution)) throw new Error('Verification requires the exact clean planned source, execution configuration and installed inputs.');
   if (mode === 'worker') {
     const worker = Number(required('--worker'));
@@ -115,17 +122,20 @@ async function main() {
           }
         }
         const suite = verifiedExports ? verifiedSuiteCommand(command) : null;
-        if (suite && await workspaceExportsFingerprint().catch(() => undefined) === verifiedExports) {
-          command = suite;
+        const typecheck = 'parent' in task && task.parent === 'workspace-typecheck';
+        if (verifiedExports && (suite || typecheck) && await workspaceExportsFingerprint().catch(() => undefined) === verifiedExports) {
+          command = suite ?? command;
           reusedPackageExportsFingerprint = verifiedExports;
         }
         console.log(`Worker ${worker}: ${task.key}\n$ ${command.join(' ')}`);
-        const buildEnv = task === build ? {
+        const taskEnv = task === build ? {
           ...process.env,
           CERTSCORE_WORKSPACE_BUILD_TIMING_FILE: path.resolve(out, 'workspace-build-phases.ndjson'),
           ...(reusedPackageExportsFingerprint ? { CERTSCORE_VERIFIED_PACKAGE_EXPORTS: reusedPackageExportsFingerprint } : {}),
-        } : process.env;
-        const status = bootstrapSource ? 0 : await run(command, buildEnv);
+        } : typecheck && reusedPackageExportsFingerprint
+          ? { ...process.env, [verifiedTypecheckExportsEnv]: reusedPackageExportsFingerprint }
+          : process.env;
+        const status = bootstrapSource ? 0 : await run(command, taskEnv);
         if (task.key === bootstrap.key) {
           if (status !== 0) throw new Error(`Workspace bootstrap failed (${status}).`);
           outputsFingerprint = await workspaceExportsFingerprint();

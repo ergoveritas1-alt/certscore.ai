@@ -8,6 +8,7 @@ import { releaseEnvironmentFingerprint, type ReleaseInputs } from './release-rec
 export const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const sharedBootstrapCommand = ['restore-verified-workspace-bootstrap'];
 export type ShardTask = { key: string; parent: string; command: string[]; files: string[]; estimatedMs: number };
+type ReplayMove = { key: string; from: number; to: number };
 export type ShardPlan = {
   version: 1; sha: string; sourceFingerprint: string; checks: Check[]; workers: ShardTask[][];
   execution: { environment: string; platform: string; arch: string };
@@ -71,7 +72,9 @@ function workspaceTypecheckPartitions(check: Check) {
   if (JSON.stringify(check.command) !== JSON.stringify(full)) throw new Error('Review the workspace typecheck command before partitioning.');
   const web = '@website-signal-risk-scanner/web';
   return [
-    { key: 'workspace-typecheck:web', command: [...full, `--filter=${web}`] },
+    // Bootstrap already produced the dependency outputs. Their typechecks run
+    // in the complementary partition, so only run the web task here.
+    { key: 'workspace-typecheck:web', command: [...full, '--only', `--filter=${web}`] },
     { key: 'workspace-typecheck:other', command: [...full, `--filter=!${web}`] },
   ];
 }
@@ -109,7 +112,7 @@ function commandPartitions(check: Check) {
 }
 
 export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 'fingerprint'>,
-  options: { workers: number; timings?: Record<string, number>; fileTimings?: Record<string, number>; setupMsPerWorker?: number; controlPlaneMs?: number; execution?: ShardPlan['execution'] }) : ShardPlan {
+  options: { workers: number; timings?: Record<string, number>; fileTimings?: Record<string, number>; setupMsPerWorker?: number; controlPlaneMs?: number; execution?: ShardPlan['execution']; replayMoves?: readonly ReplayMove[] }) : ShardPlan {
   if (!Number.isInteger(options.workers) || options.workers < 1 || options.workers > 8) throw new Error('Use 1–8 isolated workers.');
   if (new Set(checks.map(check => check.key)).size !== checks.length || !checks.some(check => check.key === 'workspace-package-build')) throw new Error('Invalid parent check inventory.');
   const timings = options.timings ?? {}, tasks: ShardTask[] = [];
@@ -156,6 +159,19 @@ export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 
     }
     return [...groups.values()].map(task => ({ ...task, key: `${task.parent}:${digest(task.command).slice(0, 16)}` }));
   });
+  // Only replay a measured command when the current inventory still places it
+  // on its original worker. Leave other worker counts and regrouped tasks alone.
+  for (const { key, from, to } of options.replayMoves ?? []) {
+    const source = merged[from], destination = merged[to];
+    const index = source?.findIndex(task => task.key === key) ?? -1;
+    if (!source || !destination || index === -1) continue;
+    const task = source[index]!;
+    if (destination.some(candidate => candidate.parent === task.parent)) continue;
+    source.splice(index, 1);
+    destination.push(task);
+    totals[from]! -= task.estimatedMs;
+    totals[to]! += task.estimatedMs;
+  }
   const bootstrapMs = timings['workspace-package-build'] ?? 20_000;
   const setupMsPerWorker = options.setupMsPerWorker ?? 60_000;
   const controlPlaneMs = options.controlPlaneMs ?? 60_000;
@@ -193,6 +209,7 @@ export function validateShardPlan(plan: ShardPlan, expectedChecks: Check[]) {
 
 export function aggregateShards(plan: ShardPlan, expectedChecks: Check[], results: ShardResult[], now = Date.now()) {
   validateShardPlan(plan, expectedChecks);
+  const planHash = digest(plan);
   const bootstrap = expectedChecks.find(check => check.key === 'workspace-package-build')!;
   const expected = plan.workers.flatMap((tasks, worker) => [{ worker, key: 'workspace-package-build', command: bootstrap.command }, ...tasks.map(task => ({ worker, key: task.key, command: task.command }))]);
   if (results.length !== expected.length) throw new Error('Missing, duplicate or unexpected shard results.');
@@ -201,7 +218,7 @@ export function aggregateShards(plan: ShardPlan, expectedChecks: Check[], result
     const id = `${result.worker}:${result.key}`, match = expected.find(value => value.worker === result.worker && value.key === result.key);
     const suite = match && result.reusedPackageExportsFingerprint !== undefined ? verifiedSuiteCommand(match.command) : null;
     const command = result.bootstrapSource ? sharedBootstrapCommand : suite ?? match?.command;
-    if (seen.has(id) || !match || (result.bootstrapSource && result.key !== bootstrap.key) || result.version !== 1 || result.planHash !== digest(plan) || JSON.stringify(result.command) !== JSON.stringify(command) || JSON.stringify(result.execution) !== JSON.stringify(plan.execution)) throw new Error('Shard result identity/configuration mismatch.');
+    if (seen.has(id) || !match || (result.bootstrapSource && result.key !== bootstrap.key) || result.version !== 1 || result.planHash !== planHash || JSON.stringify(result.command) !== JSON.stringify(command) || JSON.stringify(result.execution) !== JSON.stringify(plan.execution)) throw new Error('Shard result identity/configuration mismatch.');
     seen.add(id);
     const start = Date.parse(result.startedAt), end = Date.parse(result.completedAt);
     if (result.exitStatus !== 0 || result.inputs.clean !== true || result.inputs.sha !== plan.sha || result.inputs.fingerprint !== plan.sourceFingerprint || !Number.isFinite(result.durationMs) || result.durationMs < 0 || !Number.isFinite(start) || !Number.isFinite(end) || end < start || end > now || now - end > 24 * 60 * 60 * 1000) throw new Error('Failed, dirty, stale or incomplete shard result.');
@@ -221,13 +238,13 @@ export function aggregateShards(plan: ShardPlan, expectedChecks: Check[], result
       if (['sha', 'fingerprint', 'environment', 'node', 'pnpm'].some(key => result.inputs[key as keyof ReleaseInputs] !== setup.inputs[key as keyof ReleaseInputs]) || (result !== setup && Date.parse(result.startedAt) < Date.parse(setup.completedAt))) throw new Error('Worker inputs changed or dependency order violated.');
       const task = plan.workers[worker]!.find(candidate => candidate.key === result.key);
       if (result.reusedPackageExportsFingerprint !== undefined &&
-          ((result.key !== build?.key && !(task && verifiedSuiteCommand(task.command))) ||
+          ((result.key !== build?.key && !(task && (verifiedSuiteCommand(task.command) || task.parent === 'workspace-typecheck'))) ||
             result.reusedPackageExportsFingerprint !== setup.outputsFingerprint)) throw new Error('Verification reused unverified package exports.');
     }
   }
   const toolchain = results[0]!.inputs;
   if (results.some(result => result.inputs.node !== toolchain.node || result.inputs.pnpm !== toolchain.pnpm)) throw new Error('Worker toolchains differ.');
-  return { version: 1, kind: 'partitioned-verification' as const, planHash: digest(plan), sha: plan.sha,
+  return { version: 1, kind: 'partitioned-verification' as const, planHash, sha: plan.sha,
     completedAt: new Date(Math.max(...results.map(result => Date.parse(result.completedAt)))).toISOString(),
     parentChecks: expectedChecks.map(check => check.key), successfulExecutions: results.length,
     note: 'Partition coverage proof; does not impersonate whole-command receipts, replace required CI or authorize deployment.' };

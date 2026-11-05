@@ -5,6 +5,11 @@
   "cacheState": "warm workspace build/typecheck caches; tests executed fresh",
   "coldBenchmark": {
     "sourceRunId": 41985290182,
+    "replaySourceRunId": 42078407003,
+    "replayMoves": [
+      { "key": "scan-core-policy-full:a47ca2bdcef2672a", "from": 5, "to": 4 },
+      { "key": "gpc-release-tools-typecheck:347eac380c513a2f", "from": 3, "to": 6 }
+    ],
     "timings": {
       "accessibility-audit": 26556,
       "accessibility-scoring": 11333,

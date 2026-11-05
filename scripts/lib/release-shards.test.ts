@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -35,6 +37,19 @@ test('all 38 canonical parent checks retain exact partition coverage at 1/2/4/6/
     assert.equal(plan.workers.length, workers);
     assert.equal(plan.estimates.kind, 'scheduling-model');
   }
+});
+test('cold eight-worker replay moves the measured commands once without changing inventory', () => {
+  const profile = JSON.parse(readFileSync(new URL('../release-verification-timings.json', import.meta.url), 'utf8'));
+  const gate = getPredeployPlan([], { full: true }).checks;
+  const options = { workers: 8, timings: profile.coldBenchmark.timings, fileTimings: profile.fileTimings };
+  const baseline = planShards(gate, inputs, options);
+  const candidate = planShards(gate, inputs, { ...options, replayMoves: profile.coldBenchmark.replayMoves });
+  for (const { key, from, to } of profile.coldBenchmark.replayMoves) {
+    assert.ok(baseline.workers[from]!.some(task => task.key === key));
+    assert.ok(candidate.workers[to]!.some(task => task.key === key));
+  }
+  assert.deepEqual(candidate.workers.flat().map(task => task.key).sort(), baseline.workers.flat().map(task => task.key).sort());
+  assert.equal(candidate.checks.length, 38);
 });
 test('imported bootstrap evidence must bind to the original build worker receipt', () => {
   const gate = [...checks, { key: 'workspace-build', label: 'build', command: ['node', 'workspace.mjs'] }];
@@ -98,10 +113,31 @@ test('parallel workspace typechecks require both complementary filters', () => {
   tasks[0]!.command = tasks[1]!.command;
   assert.throws(() => validateShardPlan(plan, gate), /partition coverage changed: workspace-typecheck/);
 });
-test('only the workspace build can bind same-worker bootstrap exports', () => {
+test('the two Turbo partitions execute each task from the original workspace typecheck exactly once', () => {
+  const typecheck = getPredeployPlan([], { full: true }).checks.find(check => check.key === 'workspace-typecheck')!;
+  const plan = planShards([checks[0]!, typecheck], inputs, { workers: 2 });
+  const inventory = ([bin, ...args]: string[]) => {
+    const dryRun = JSON.parse(execFileSync(bin!, [...args, '--dry=json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
+    return dryRun.tasks.map((task: { taskId: string; command: string }) => [task.taskId, task.command]);
+  };
+  const original = inventory(typecheck.command);
+  const partitioned = plan.workers.flatMap(tasks => tasks.flatMap(task => inventory(task.command)));
+  assert.deepEqual(partitioned.sort(), original.sort());
+});
+test('an unrelated command cannot bind same-worker bootstrap exports', () => {
   const { plan, results } = fixture();
   results.find(result => result.key !== checks[0]!.key)!.reusedPackageExportsFingerprint = 'c'.repeat(64);
   assert.throws(() => aggregateShards(plan, checks, results, now), /reused unverified package exports/);
+});
+test('workspace typecheck reuse requires the same worker’s bootstrap output', () => {
+  const workspace = getPredeployPlan([], { full: true }).checks.find(check => check.key === 'workspace-typecheck')!;
+  const gate = [checks[0]!, workspace];
+  const { plan, results } = fixture(gate);
+  const typecheck = results.find(result => result.key.startsWith('workspace-typecheck:'))!;
+  typecheck.reusedPackageExportsFingerprint = 'c'.repeat(64);
+  assert.equal(aggregateShards(plan, gate, results, now).successfulExecutions, results.length);
+  typecheck.reusedPackageExportsFingerprint = 'd'.repeat(64);
+  assert.throws(() => aggregateShards(plan, gate, results, now), /reused unverified package exports/);
 });
 test('splitting retains every option and opaque commands retain their exact execution', () => {
   const { plan } = fixture();

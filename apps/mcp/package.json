@@ -10,7 +10,7 @@
     "build:deps": "pnpm --filter @certscore/contracts build && pnpm --filter @website-signal-risk-scanner/shared build && pnpm --filter @certscore/api-contracts build && pnpm --filter @certscore/sdk build && pnpm --filter @certscore/mcp-auth build && pnpm --filter @certscore/mcp build",
     "dev": "pnpm run build:deps && node --env-file=../web/.env.local --enable-source-maps --import tsx src/index.ts",
     "start": "node --enable-source-maps ./dist/index.js",
-    "typecheck": "pnpm run build:deps && tsc --noEmit -p tsconfig.json",
+    "typecheck": "node --import tsx ../../scripts/prepare-typecheck-deps.ts mcp && tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test src/*.test.ts",
     "clean": "rm -rf dist"
   },
