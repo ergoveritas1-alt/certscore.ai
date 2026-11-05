@@ -86,7 +86,8 @@ test('verification builds every workspace target and preserves app build checks'
     ['node', 'scripts/validate-extension.mjs'],
   ]);
   const mcp = plan.find(task => task.directory === 'apps/mcp');
-  assert.ok(mcp?.dependencies.includes('@certscore/mcp') && mcp.dependencies.includes('@certscore/contracts'));
+  assert.ok(mcp);
+  assert.ok(mcp.dependencies.includes('@certscore/mcp') && mcp.dependencies.includes('@certscore/contracts'));
   assert.deepEqual(mcp.commands, [['tsc', '-p', 'tsconfig.json']]);
 });
 

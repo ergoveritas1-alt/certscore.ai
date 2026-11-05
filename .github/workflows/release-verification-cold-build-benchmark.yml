@@ -21,7 +21,7 @@ jobs:
         with: {node-version: 22.22.1, cache: pnpm}
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
-      - name: Plan and run the full verification inventory
+      - name: Run the cold build and every planned verification check
         run: |
           release() {
             env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" node scripts/release-node.mjs scripts/release-verification.ts "$@"
