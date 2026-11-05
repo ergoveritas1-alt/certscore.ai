@@ -1,0 +1,169 @@
+name: CertScore.ai one-time verification rebalance pilot
+on:
+  push:
+    branches: [codex/verification-rebalance-pilot-20261105]
+    paths: [.github/workflows/release-rebalance-pilot.yml]
+permissions:
+  contents: read
+env:
+  EXPECTED_GIT_REMOTE: https://github.com/ergoveritas1-alt/certscore.ai.git
+  CERTSCORE_VERIFICATION_COLD_BUILD: '1'
+concurrency:
+  group: release-verification-benchmark-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'ergoveritas1-alt/certscore.ai' && github.run_attempt == 1 && github.event.before == '0000000000000000000000000000000000000000'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        worker: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v6
+        with: {persist-credentials: false}
+      - uses: pnpm/action-setup@v6
+        with: {version: 10.6.3}
+      - uses: actions/setup-node@v6
+        with: {node-version: 22.22.1, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - name: Plan the exact verification inventory
+        id: plan
+        env:
+          REQUESTED_WORKERS: '8'
+          WORKER_INDEX: ${{ matrix.worker }}
+        run: |
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_VERIFICATION_COLD_BUILD="$CERTSCORE_VERIFICATION_COLD_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts plan --workers "$REQUESTED_WORKERS" --out /tmp/release-plan.json
+          node -e '
+            const { workers } = require("/tmp/release-plan.json");
+            const buildWorker = workers.findIndex(tasks => tasks.some(task => task.parent === "workspace-build"));
+            const assigned = workers[Number(process.env.WORKER_INDEX)];
+            if (buildWorker < 0 || !assigned) process.exit(1);
+            const browserFree = new Set(["workspace-build", "workspace-typecheck", "scan-core-typecheck",
+              "lambda-typecheck", "gpc-release-tools-typecheck", "deploy-topology", "cmp-runtime-coordinator"]);
+            console.log("build_worker=" + buildWorker);
+            console.log("needs_chromium=" + assigned.some(task => !browserFree.has(task.parent)));
+          ' >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        if: ${{ matrix.worker != fromJSON(steps.plan.outputs.build_worker || '-1') && steps.plan.outputs.needs_chromium == 'true' }}
+        with:
+          path: ~/.cache/ms-playwright
+          key: release-browser-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Chromium for test workers
+        if: ${{ false && matrix.worker != fromJSON(steps.plan.outputs.build_worker || '-1') && steps.plan.outputs.needs_chromium == 'true' }}
+        run: pnpm exec playwright install chromium
+      - name: Prepare worker and look for same-run package exports
+        id: shared_exports
+        if: ${{ true && matrix.worker != fromJSON(steps.plan.outputs.build_worker || '-1') }}
+        env:
+          NEEDS_CHROMIUM: ${{ steps.plan.outputs.needs_chromium }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/prepare-shared-verification-worker.sh
+      - name: Build package exports for verification workers
+        id: shared_bootstrap
+        if: ${{ true && matrix.worker == fromJSON(steps.plan.outputs.build_worker || '-1') }}
+        env:
+          WORKER_INDEX: ${{ matrix.worker }}
+        run: |
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_VERIFICATION_COLD_BUILD="$CERTSCORE_VERIFICATION_COLD_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts worker --phase bootstrap --plan /tmp/release-plan.json --worker "$WORKER_INDEX" --out /tmp/release-results --bootstrap-out /tmp/release-bootstrap
+      - name: Upload shared package exports
+        uses: actions/upload-artifact@v4
+        if: ${{ steps.shared_bootstrap.outcome == 'success' }}
+        continue-on-error: true
+        with:
+          name: release-bootstrap-${{ github.run_attempt }}
+          path: /tmp/release-bootstrap
+          retention-days: 1
+          include-hidden-files: true
+          if-no-files-found: ignore
+      - name: Run the cold workspace build
+        id: cold_build
+        if: ${{ matrix.worker == fromJSON(steps.plan.outputs.build_worker || '-1') }}
+        env:
+          WORKER_INDEX: ${{ matrix.worker }}
+          SHARE_BOOTSTRAP: 'true'
+        run: |
+          index="$WORKER_INDEX"
+          phase=build
+          if [[ "$SHARE_BOOTSTRAP" == true ]]; then phase=workspace; fi
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_VERIFICATION_COLD_BUILD="$CERTSCORE_VERIFICATION_COLD_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts worker --phase "$phase" --plan /tmp/release-plan.json --worker "$index" --out /tmp/release-results
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') }}
+        with:
+          name: cold-build-timing
+          path: |
+            /tmp/release-results/workspace-build.json
+            /tmp/release-results/workspace-build-phases.ndjson
+            /tmp/release-results/workspace-package-build.json
+          retention-days: 1
+          if-no-files-found: ignore
+      - uses: actions/cache@v4
+        if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') && steps.plan.outputs.needs_chromium == 'true' }}
+        with:
+          path: ~/.cache/ms-playwright
+          key: release-browser-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Chromium after publishing cold-build timing
+        id: build_worker_chromium
+        if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') && steps.plan.outputs.needs_chromium == 'true' }}
+        run: pnpm exec playwright install chromium
+      - name: Run the build worker's remaining checks
+        if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') && (steps.build_worker_chromium.outcome == 'success' || steps.build_worker_chromium.outcome == 'skipped') }}
+        env:
+          WORKER_INDEX: ${{ matrix.worker }}
+        run: |
+          index="$WORKER_INDEX"
+          unset WORKER_INDEX
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_VERIFICATION_COLD_BUILD="$CERTSCORE_VERIFICATION_COLD_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts worker --phase remaining --plan /tmp/release-plan.json --worker "$index" --out /tmp/release-results
+      - name: Run checks on other workers
+        if: ${{ matrix.worker != fromJSON(steps.plan.outputs.build_worker || '-1') }}
+        env:
+          WORKER_INDEX: ${{ matrix.worker }}
+          SHARED_EXPORTS_DIR: ${{ steps.shared_exports.outputs.directory }}
+        run: |
+          shared=()
+          if [[ -n "$SHARED_EXPORTS_DIR" ]]; then shared=(--bootstrap-in "$SHARED_EXPORTS_DIR"); fi
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_VERIFICATION_COLD_BUILD="$CERTSCORE_VERIFICATION_COLD_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts worker --plan /tmp/release-plan.json --worker "$WORKER_INDEX" --out /tmp/release-results "${shared[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-results-${{ matrix.worker }}
+          path: /tmp/release-results
+          retention-days: 1
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && matrix.worker == 0 && steps.plan.outcome == 'success' }}
+        with: {name: release-plan, path: /tmp/release-plan.json, retention-days: 1}
+  aggregate:
+    needs: verify
+    if: ${{ always() && github.repository == 'ergoveritas1-alt/certscore.ai' && github.run_attempt == 1 && github.event.before == '0000000000000000000000000000000000000000' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every verification worker
+        env: {WORKERS_RESULT: '${{ needs.verify.result }}'}
+        run: test "$WORKERS_RESULT" = success
+      - uses: actions/checkout@v6
+        with: {persist-credentials: false}
+      - uses: pnpm/action-setup@v6
+        with: {version: 10.6.3}
+      - uses: actions/setup-node@v6
+        with: {node-version: 22.22.1, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with: {pattern: release-results-*, merge-multiple: true, path: /tmp/release-results}
+      - name: Recreate the plan and validate every worker receipt
+        env:
+          REQUESTED_WORKERS: '8'
+        run: |
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_VERIFICATION_COLD_BUILD="$CERTSCORE_VERIFICATION_COLD_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts aggregate --workers "$REQUESTED_WORKERS" --results /tmp/release-results --out /tmp/partition-proof.json
+      - uses: actions/upload-artifact@v4
+        with: {name: partition-proof, path: /tmp/partition-proof.json, retention-days: 1}
