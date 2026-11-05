@@ -1,0 +1,10 @@
+{
+  "command": [
+    "CMD-SHELL",
+    "read -r pid start < /tmp/certscore-validation-worker.ready || exit 1; case \"$pid\" in ''|0|*[!0-9]*) exit 1;; esac; test -n \"$start\" && test \"$start\" = \"$(awk '{ sub(/^.*\\) /, \"\"); print $20 }' /proc/$pid/stat)\""
+  ],
+  "interval": 5,
+  "timeout": 2,
+  "retries": 3,
+  "startPeriod": 60
+}

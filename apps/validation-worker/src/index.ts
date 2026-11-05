@@ -2,6 +2,7 @@ import { startFullSiteScheduler } from "./full-site/scheduler";
 import { hostname as getHostname } from "node:os";
 import { createBrowserCleanupScheduler } from "./browser-cleanup";
 import { getWorkerEnv } from "./env";
+import { clearEcsReadiness, markEcsReadiness } from "./ecs-readiness";
 import { startValidationDispatcher } from "./validation/dispatcher";
 import {
   startLocalV2DagLambdaOrphanReconciler,
@@ -81,14 +82,26 @@ function bootstrapValidationWorker() {
   startPersistedCompletedResultFinalizationRecovery({
     webBaseUrl: env.CERTSCORE_WEB_BASE_URL,
   });
+  const ecsReadinessEnabled = process.platform === "linux" && process.env.BUILD_RUNTIME_TARGET === "ecs-fargate";
   void startValidationDispatcher({
     browserCleanup,
-    concurrency: env.WORKER_CONCURRENCY
+    concurrency: env.WORKER_CONCURRENCY,
+    onReady: ecsReadinessEnabled ? () => {
+      try {
+        markEcsReadiness();
+        console.info("[validation-worker] ready");
+      } catch (error) {
+        console.error("[validation-worker] failed to mark ECS readiness", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    } : undefined
   }).catch((error) => {
     console.error("[validation-worker] dispatcher fatal error", {
       error: error instanceof Error ? error.message : String(error)
     });
     process.exitCode = 1;
+    if (ecsReadinessEnabled) clearEcsReadiness();
   });
 
   const interval = setInterval(() => {

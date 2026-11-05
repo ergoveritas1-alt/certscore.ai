@@ -28,6 +28,7 @@ on:
       - "scripts/lib/deployment-inputs.mjs"
       - "scripts/lib/deployed-image.mjs"
       - "scripts/runtime-base-changes.mjs"
+      - "scripts/validation-worker-ecs-healthcheck.json"
       - "scripts/lib/runtime-base-inputs.mjs"
       - "scripts/docker-source-policy.json"
       - "scripts/build-with-pinned-node-fallback.mjs"
@@ -365,8 +366,8 @@ jobs:
             --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
             --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
             --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
-            -t "${WORKER_IMAGE}:${GITHUB_SHA}" \
-            -t "${WORKER_IMAGE}:latest" \
+            --metadata-file "$RUNNER_TEMP/validation-build-metadata.json" \
+            "${tags[@]}" \
             --push \
             .
 
@@ -413,13 +414,14 @@ jobs:
           )"
 
           aws ecs describe-task-definition --task-definition "${current_task_definition}" \
-            | jq '.taskDefinition
+            | jq --slurpfile healthcheck scripts/validation-worker-ecs-healthcheck.json '.taskDefinition
               | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
               | .cpu = env.ECS_WORKER_CPU
               | .memory = env.ECS_WORKER_MEMORY
               | .containerDefinitions = (.containerDefinitions | map(
                   if .name == env.ECS_WORKER_CONTAINER_NAME
                   then .image = env.TARGET_VALIDATION_IMAGE
+                    | .healthCheck = $healthcheck[0]
                     | .dockerLabels = ((.dockerLabels // {}) + {"org.opencontainers.image.revision":env.GITHUB_SHA})
                     | del(.command)
                     | .secrets = (
@@ -543,13 +545,26 @@ jobs:
           echo "Registered ${task_definition_arn}"
 
       - name: Force ECS deployments
+        id: worker-rollout
         if: steps.runtime-selection.outputs.deploy == 'true' && !inputs.stage_only
         run: |
+          # A diagnostic read must not block the rollout if ECS telemetry is unavailable.
+          if previous_tasks=$(timeout 5s aws ecs list-tasks \
+            --cluster "$ECS_CLUSTER_NAME" --service-name "$ECS_WORKER_SERVICE_NAME" \
+            --desired-status RUNNING --max-items 100 --output json \
+            | jq -ce '.taskArns | select(type == "array")'); then
+            echo "VALIDATION_PREVIOUS_TASKS=$previous_tasks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Could not snapshot the previous validation tasks for rollout timing."
+          fi
+
           aws ecs update-service \
             --cluster "${ECS_CLUSTER_NAME}" \
             --service "${ECS_WORKER_SERVICE_NAME}" \
             --task-definition "${VALIDATION_WORKER_TASK_DEFINITION_ARN}" \
-            --force-new-deployment >/dev/null
+            --force-new-deployment \
+            --query 'service.deployments[?status==`PRIMARY`].{id:id,createdAt:createdAt}' \
+            --output json
 
       - name: Wait for ECS services to stabilize
         if: steps.runtime-selection.outputs.deploy == 'true' && !inputs.stage_only
@@ -584,3 +599,13 @@ jobs:
         run: |
           echo "Skipping validation worker ECS boot check because AWS_VALIDATION_ECS_WORKER_LOG_GROUP is not configured."
           echo "Set AWS_VALIDATION_ECS_WORKER_LOG_GROUP to enable post-deploy heartbeat/log validation."
+
+      - name: Report previous validation task stop timing
+        if: ${{ !cancelled() && steps.worker-rollout.outcome == 'success' && env.VALIDATION_PREVIOUS_TASKS != '' && env.VALIDATION_PREVIOUS_TASKS != '[]' }}
+        run: |
+          mapfile -t previous_tasks < <(jq -r '.[]' <<< "$VALIDATION_PREVIOUS_TASKS")
+          if ! timeout 5s aws ecs describe-tasks --cluster "$ECS_CLUSTER_NAME" --tasks "${previous_tasks[@]}" --output json \
+            | jq -ce '{previousTasks: [.tasks[] | {taskArn, taskDefinitionArn, lastStatus, stoppingAt, executionStoppedAt, stoppedAt}],
+                unavailableTasks: [.failures[]? | {arn, reason}]}'; then
+            echo "::warning::Could not read stop timing for the previous validation tasks."
+          fi

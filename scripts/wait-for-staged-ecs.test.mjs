@@ -51,6 +51,9 @@ test('rollout event timings exclude autoscaling events after the exact deploymen
   ];
   await waitForStagedEcs(target, async () => input, options);
   const timing = output[0].services[0];
+  assert.equal(timing.deploymentId, 'ecs-svc/42');
+  assert.equal(timing.deploymentCreatedAt, '2026-11-05T00:00:00Z');
+  assert.equal(timing.deploymentCompletedAt, '2026-11-05T00:03:00Z');
   assert.equal(timing.deploymentCompletedMsFromCreation, 180_000);
   assert.equal(timing.latestServiceEventsMsFromDeployment.tasksDraining, 120_000);
   assert.equal(timing.latestServiceEventsMsFromDeployment.targetsRegistered, 60_000);

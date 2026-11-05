@@ -90,6 +90,24 @@ test("validation publishes its importable cache and web retains exact-image migr
   assert.match(validation,/aws ecs wait services-stable/);
 });
 
+test("stage-only web and validation builds pass immutable tags and receipt metadata to BuildKit", async () => {
+  for (const [workflow, component, image] of [
+    ["web-aws-ecs-deploy.yml", "web", "WEB_IMAGE"],
+    ["validation-aws-deploy.yml", "validation", "WORKER_IMAGE"],
+  ]) {
+    const source = await readFile(`.github/workflows/${workflow}`, "utf8");
+    const tags = source.indexOf(`tags=(-t "\${${image}}:\${GITHUB_SHA}")`);
+    const receipt = source.indexOf(`staged-${component}.json`, tags);
+    assert.ok(tags >= 0 && receipt > tags);
+    const stageBuild = source.slice(tags, receipt);
+    assert.ok(stageBuild.includes(`if [[ "$STAGE_ONLY" != true ]]; then tags+=(-t "\${${image}}:latest"); fi`));
+    const build = stageBuild.slice(stageBuild.indexOf("docker buildx build"));
+    assert.ok(build.includes('"${tags[@]}"'));
+    assert.ok(build.includes(`--metadata-file "$RUNNER_TEMP/${component}-build-metadata.json"`));
+    assert.ok(!build.includes(":latest"));
+  }
+});
+
 test("ECR release cleanup gives bounded mutable build artifacts higher priority", async () => {
   for (const file of ["infra/aws/web-ecs/main.tf", "infra/aws/validation/main.tf"]) {
     const source = await readFile(file,"utf8");

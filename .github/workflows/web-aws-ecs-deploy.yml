@@ -539,8 +539,8 @@ jobs:
             --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
             --build-arg WEB_TYPECHECK_VERIFIED_SHA="${{ needs.verify-public-web.outputs.verified_sha }}" \
             --build-arg WEB_COMPILER_CACHE_ENABLED="${WEB_COMPILER_CACHE_ENABLED}" \
-            -t "${WEB_IMAGE}:${GITHUB_SHA}" \
-            -t "${WEB_IMAGE}:latest" \
+            --metadata-file "$RUNNER_TEMP/web-build-metadata.json" \
+            "${tags[@]}" \
             --push \
             .
 

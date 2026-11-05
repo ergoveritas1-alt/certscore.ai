@@ -49,6 +49,9 @@ export async function waitForStagedEcs(expected, describe, {
       const events = service.events ?? [];
       const completion = target.id && events.find(entry => entry.message?.includes(`(deployment ${target.id}) deployment completed`));
       const completedAt = Date.parse(completion?.createdAt);
+      timing.deploymentId = target.id ?? null;
+      timing.deploymentCreatedAt = target.createdAt ?? null;
+      timing.deploymentCompletedAt = completedAt >= deployedAt ? completion.createdAt : null;
       timing.deploymentCompletedMsFromCreation = completedAt >= deployedAt ? completedAt - deployedAt : null;
       timing.latestServiceEventsMsFromDeployment = Object.fromEntries(eventTypes.map(([key, pattern]) => {
         const time = Math.max(...events.filter(entry => pattern.test(entry.message ?? ''))
