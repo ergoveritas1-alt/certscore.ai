@@ -69,7 +69,7 @@ concurrency:
 
 jobs:
   deploy-public-web-aws:
-    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 90
     services:
       marketplace-test-db:
