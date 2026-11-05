@@ -1,6 +1,7 @@
 /** Read-only deployment selection against the actual installed runtime. */
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
+import { installedEcsRevision } from './lib/deployed-image.mjs';
 import { deploymentInputDecision } from './lib/deployment-inputs.mjs';
 const [service] = process.argv.slice(2);
 const exec = (bin, args) => execFileSync(bin, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000, maxBuffer: 16 * 1024 * 1024 });
@@ -18,16 +19,12 @@ if (process.env.GITHUB_EVENT_NAME === 'push') {
     } else {
       const aws = args => JSON.parse(exec('aws', [...args, '--output', 'json']));
       const observed = aws(['ecs', 'describe-services', '--cluster', process.env.ECS_CLUSTER_NAME, '--services', process.env.ECS_SERVICE_NAME]);
-      const active = observed.services?.[0];
-      if (observed.failures?.length || !active || active.deployments?.length !== 1 || active.deployments[0].rolloutState !== 'COMPLETED' || active.desiredCount < 1 || active.runningCount !== active.desiredCount || active.pendingCount !== 0) throw new Error('Runtime unsettled');
-      const definition = aws(['ecs', 'describe-task-definition', '--task-definition', active.taskDefinition]);
-      const images = definition.taskDefinition?.containerDefinitions?.filter(value => value.name === process.env.ECS_CONTAINER_NAME);
-      if (images?.length !== 1) throw new Error('Unknown runtime container');
-      const match = /^199536052647\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com\/([^:]+):([a-f0-9]{40})$/.exec(images[0].image);
-      const repository = service === 'mcp' ? 'certscore-web-mcp' : process.env.ECR_WORKER_REPOSITORY;
-      const region = service === 'mcp' ? 'us-west-1' : process.env.AWS_REGION;
-      if (!repository || !region || match?.[1] !== region || match?.[2] !== repository) throw new Error('Runtime repository binding mismatch');
-      base = match[3];
+      const definition = aws(['ecs', 'describe-task-definition', '--task-definition', observed.services?.[0]?.taskDefinition ?? 'unverified']);
+      base = installedEcsRevision(observed, definition, {
+        container: process.env.ECS_CONTAINER_NAME,
+        repository: service === 'mcp' ? 'certscore-web-mcp' : process.env.ECR_WORKER_REPOSITORY,
+        region: service === 'mcp' ? 'us-west-1' : process.env.AWS_REGION,
+      });
     }
     if (!/^[a-f0-9]{40}$/.test(base ?? '') || !/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA ?? '')) throw new Error('Unknown revision');
     git(['cat-file', '-e', `${base}^{commit}`]);

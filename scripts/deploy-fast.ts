@@ -9,6 +9,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { awsScannerImageControl, synchronizeScannerImage } from "./lib/scanner-image-provenance";
+import { installedEcsRevision } from "./lib/deployed-image.mjs";
 import { deploymentInputDecision } from "./lib/deployment-inputs.mjs";
 import { runtimeBaseInputsChanged } from "./lib/runtime-base-inputs.mjs";
 import { scannerRuntimeBaseMode } from "./lib/scanner-runtime-base";
@@ -382,13 +383,11 @@ async function confirmSkippedRuntimeInputs(changed: ChangedTargets, args: Args) 
       const cluster = await variable("AWS_VALIDATION_ECS_CLUSTER"), service = await variable("AWS_VALIDATION_ECS_WORKER_SERVICE");
       const region = (await run(["gh", "variable", "get", "AWS_REGION"], { quiet: true, reject: false })).stdout.trim() || "us-west-1";
       const state = await readAws(["ecs", "describe-services", "--region", region, "--cluster", cluster, "--services", service]);
-      const installed = state.services?.[0];
-      if (state.failures?.length || !installed || installed.deployments?.length !== 1 || installed.deployments[0].rolloutState !== "COMPLETED" || installed.pendingCount !== 0 || installed.desiredCount < 1 || installed.runningCount !== installed.desiredCount) throw Error("Unsettled consumer");
-      const definition = await readAws(["ecs", "describe-task-definition", "--region", region, "--task-definition", installed.taskDefinition]);
-      const images = definition.taskDefinition.containerDefinitions.map((value: { image: string }) => value.image);
-      const revisions = images.map((image: string) => /^199536052647\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com\/[^:]+:([a-f0-9]{40})$/.exec(image)?.[1]);
-      if (!revisions.length || revisions.some((sha: string | undefined) => !sha || sha !== revisions[0])) throw Error("Unknown consumer image");
-      changed.validation = !await equivalent("validation", revisions[0]);
+      const definition = await readAws(["ecs", "describe-task-definition", "--region", region, "--task-definition", state.services?.[0]?.taskDefinition ?? "unverified"]);
+      const repository = await variable("AWS_VALIDATION_WORKER_ECR_REPOSITORY");
+      const container = (await run(["gh", "variable", "get", "AWS_VALIDATION_ECS_WORKER_CONTAINER"], { quiet: true, reject: false })).stdout.trim() || "validation-worker";
+      const revision = installedEcsRevision(state, definition, { repository, region, container });
+      changed.validation = !await equivalent("validation", revision);
     } catch { changed.validation = true; }
   }
   if ((args.mode === "all" || args.mode === "scanners")) {

@@ -703,7 +703,7 @@ const TARGETS: Target[] = [
 ];
 
 function isGlobalBuildInput(file: string) {
-  return file.startsWith("scripts/lib/release-") || ["scripts/release-node.mjs", "scripts/lib/scanner-artifact.ts", "scripts/lib/deployment-inputs.mjs", "scripts/select-workflow-deployment.mjs", "scripts/web-compiler-cache.mjs"].includes(file) || [
+  return file.startsWith("scripts/lib/release-") || ["scripts/release-node.mjs", "scripts/lib/scanner-artifact.ts", "scripts/lib/deployment-inputs.mjs", "scripts/lib/deployed-image.mjs", "scripts/select-workflow-deployment.mjs", "scripts/web-compiler-cache.mjs"].includes(file) || [
     "package.json",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",

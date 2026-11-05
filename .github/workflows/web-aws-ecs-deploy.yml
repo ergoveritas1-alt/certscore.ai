@@ -9,6 +9,7 @@ on:
       - ".github/workflows/web-aws-ecs-deploy.yml"
       - "scripts/select-workflow-deployment.mjs"
       - "scripts/lib/deployment-inputs.mjs"
+      - "scripts/lib/deployed-image.mjs"
       - "apps/web/**"
       - "packages/certscore-contracts/**"
       - "packages/certscore-vendor-resolver/**"

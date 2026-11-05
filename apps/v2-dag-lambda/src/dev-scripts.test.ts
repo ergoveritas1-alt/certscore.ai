@@ -56,7 +56,12 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(deployScript, /SCANNER_BUILD_REGION = "eu-central-1"/);
   assert.match(deployScript, /scripts\/local-v2-dag-lambda\/replicate-dev-image\.sh/);
   assert.match(deployScript, /const sourceImageUri =/);
-  assert.match(deployScript, /synchronizeScannerImage\(awsScannerImageControl\(region\), digestImageUri, true\)/);
+  const preparation = deployScript.slice(deployScript.indexOf("async function prepareScannerArtifact("), deployScript.indexOf("async function promoteScannerArtifact("));
+  const promotion = deployScript.slice(deployScript.indexOf("async function promoteScannerArtifact("), deployScript.indexOf("async function deployScanners("));
+  assert.match(preparation, /assertScannerArtifact\(artifact, input.ref\)/);
+  assert.doesNotMatch(preparation, /synchronizeScannerImage|applyScannerRuntimeConfiguration/);
+  assert.match(promotion, /synchronizeScannerImage\(awsScannerImageControl\(region\), artifact.images\[region\]!, true\)/);
+  assert.match(promotion, /synchronizeScannerImage\(awsScannerImageControl\(region, true\), artifact.images\[region\]!, true\)/);
   assert.match(deployScript, /payload\.RecordedImageDigest !== expectedDigest/);
   assert.match(deployScript, /RevisionId:RevisionId,EnvironmentError:Environment\.Error/);
   assert.match(deployScript, /!currentPayload\.RevisionId \|\| currentPayload\.EnvironmentError \|\| !currentPayload\.Variables/);

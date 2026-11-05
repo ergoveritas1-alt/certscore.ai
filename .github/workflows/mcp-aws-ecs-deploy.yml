@@ -8,6 +8,7 @@ on:
       - ".github/workflows/mcp-aws-ecs-deploy.yml"
       - "scripts/select-workflow-deployment.mjs"
       - "scripts/lib/deployment-inputs.mjs"
+      - "scripts/lib/deployed-image.mjs"
       - "apps/mcp/**"
       - "packages/certscore-api-contracts/**"
       - "packages/certscore-mcp-auth/**"

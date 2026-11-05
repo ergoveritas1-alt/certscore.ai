@@ -25,6 +25,7 @@ on:
       - "turbo.json"
       - "scripts/select-workflow-deployment.mjs"
       - "scripts/lib/deployment-inputs.mjs"
+      - "scripts/lib/deployed-image.mjs"
       - "scripts/runtime-base-changes.mjs"
       - "scripts/lib/runtime-base-inputs.mjs"
       - "scripts/docker-source-policy.json"
