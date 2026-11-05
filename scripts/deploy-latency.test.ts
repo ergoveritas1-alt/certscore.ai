@@ -85,7 +85,7 @@ test("the staged release planner reuses the scanner base for script-only manifes
     "--import", createRequire(path.resolve("package.json")).resolve("tsx"), path.resolve("scripts/deploy-fast.ts"), "all",
     "--base", base, "--ref", ref, "--no-push", "--no-predeploy", "--preflight-receipts", path.join(checkout, "receipts"),
     "--preserve-scanner-operational-settings", "--plan", "--stage-release", path.join(checkout, "staged.json"),
-  ], { cwd: checkout, encoding: "utf8" });
+  ], { cwd: checkout, encoding: "utf8", env: { ...process.env, TSX_TSCONFIG_PATH: path.resolve("tsconfig.base.json") } });
 
   git("init", "-q");
   const base = await commit("old", "1.0");
