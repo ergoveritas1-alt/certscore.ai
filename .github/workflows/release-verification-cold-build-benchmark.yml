@@ -1,0 +1,39 @@
+name: CertScore.ai single-runner cold build benchmark
+on:
+  push:
+    branches: [codex/verification-cold-build-20261105]
+    paths: [.github/workflows/release-verification-cold-build-benchmark.yml]
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'ergoveritas1-alt/certscore.ai' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    env:
+      EXPECTED_GIT_REMOTE: https://github.com/ergoveritas1-alt/certscore.ai.git
+    steps:
+      - uses: actions/checkout@v6
+        with: {persist-credentials: false}
+      - uses: pnpm/action-setup@v6
+        with: {version: 10.6.3}
+      - uses: actions/setup-node@v6
+        with: {node-version: 22.22.1, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
+      - name: Plan and run the full verification inventory
+        run: |
+          release() {
+            env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" node scripts/release-node.mjs scripts/release-verification.ts "$@"
+          }
+          evidence=/tmp/release-cold-build
+          release plan --workers 1 --out "$evidence/plan.json"
+          release worker --plan "$evidence/plan.json" --worker 0 --out "$evidence/results"
+          release aggregate --plan "$evidence/plan.json" --results "$evidence/results" --out "$evidence/proof.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cold-build-verification-evidence
+          path: /tmp/release-cold-build
+          retention-days: 1
+          if-no-files-found: error

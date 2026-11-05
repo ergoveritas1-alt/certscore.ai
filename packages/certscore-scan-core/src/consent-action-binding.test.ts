@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createServer} from 'node:http';
-import {chromium} from 'playwright';
+import {chromium, type Frame} from 'playwright';
 import {runPostAcceptObserver} from './post-accept-observer';
 import {runPostRefusalObserver} from './post-refusal-observer';
 import {CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE} from './post-accept-cmp-recipes';
@@ -20,17 +20,20 @@ for (const action of ['accept','reject'] as const) {
     await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
     const browser=await chromium.launch({headless:true});
     const newContext=browser.newContext.bind(browser);
+    const delayedFrames = new Set<Frame>();
     // Reproduce browser-transport latency while retaining actual Chromium DOM,
     // frame uniqueness, geometry, authorization and click behavior.
     browser.newContext=async(options)=>{
       const context=await newContext(options),newPage=context.newPage.bind(context);
       context.newPage=async()=>{
         const page=await newPage();
-        const patch=(scope:any)=>{const locator=scope.locator.bind(scope);scope.locator=(...args:any[])=>{
+        const patch=(scope:Frame)=>{const locator=scope.locator.bind(scope);scope.locator=(...args:Parameters<Frame['locator']>)=>{
           const result=locator(...args),count=result.count.bind(result);
-          result.count=async()=>{await new Promise(resolve=>setTimeout(resolve,110));return count();};return result;
+          result.count=async()=>{delayedFrames.add(scope);await new Promise(resolve=>setTimeout(resolve,110));return count();};return result;
         };};
-        patch(page);page.on('frameattached',patch);return page;
+        // Stress cross-frame uniqueness without delaying unrelated main-frame
+        // readiness probes that share the bounded search window.
+        page.on('frameattached',patch);return page;
       };return context;
     };
     try {
@@ -41,6 +44,7 @@ for (const action of ['accept','reject'] as const) {
         :await runPostRefusalObserver({...common,allowCanonicalRejectDiscovery:true,
           recipe:{artifactVersion:'certscore.post_refusal_action_recipe.v1',recipeId:'missing-recipe',resolverMethod:'owned_site_recipe',controlSelector:'#absent',bannerSelector:'#cookie-banner',confirmation:{kind:'local_storage_equals',key:'consent',expectedValue:'denied'}}});
       assert.equal(clicks,1,JSON.stringify({resolver:packet.resolver,diagnostics:packet.interactionDiagnostics,limitations:packet.limitations}));
+      assert.equal(delayedFrames.size,2,'the uniqueness sweep must inspect both competing frames');
       assert.equal(packet.afterActionCapture?.activationStatus,'completed');
       assert.equal(packet.afterActionCapture?.stopReason,'window_elapsed');
       assert.equal(packet.afterActionCapture?.requestsDropped,0);

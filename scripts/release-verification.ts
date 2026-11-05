@@ -24,9 +24,10 @@ async function immutable(file: string, value: unknown) {
   await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, bytes, { flag: 'wx', mode: 0o600 });
 }
 async function run(command: string[]) {
-  await new Promise<void>((resolve, reject) => {
+  return new Promise<number>((resolve, reject) => {
     const child = spawn(command[0]!, command.slice(1), { stdio: 'inherit' });
-    child.on('error', reject); child.on('exit', code => code === 0 ? resolve() : reject(new Error(`Verification command failed (${code ?? 'signal'}).`)));
+    child.on('error', reject);
+    child.on('exit', code => resolve(code ?? 1));
   });
 }
 async function main() {
@@ -54,27 +55,39 @@ async function main() {
     const worker = Number(required('--worker'));
     if (!Number.isInteger(worker) || !plan.workers[worker]) throw new Error('Invalid worker.');
     const bootstrap = checks.find(check => check.key === 'workspace-package-build')!;
-    const tasks = [{ key: bootstrap.key, command: bootstrap.command }, ...plan.workers[worker]!];
+    const assigned = plan.workers[worker]!;
+    // Start the workspace build before other checks can warm its app outputs.
+    const build = assigned.find(task => task.parent === 'workspace-build');
+    const ordered = build ? [build, ...assigned.filter(task => task !== build)] : assigned;
+    const tasks = [{ key: bootstrap.key, command: bootstrap.command }, ...ordered];
+    const failed: string[] = [];
     for (const task of tasks) {
       const before = await inputsForWorker();
       if (JSON.stringify(before) !== JSON.stringify(initial)) throw new Error('Worker inputs changed before execution.');
       const startedAt = new Date().toISOString(), start = performance.now(); let exitStatus = 1, outputsFingerprint: string | undefined;
       console.log(`Worker ${worker}: ${task.key}\n$ ${task.command.join(' ')}`);
       try {
-        await run(task.command);
+        const status = await run(task.command);
         if (task.key === bootstrap.key) {
+          if (status !== 0) throw new Error(`Workspace bootstrap failed (${status}).`);
           outputsFingerprint = await workspaceExportsFingerprint();
-          await run([process.execPath, 'scripts/release-node.mjs', 'scripts/check-regional-web-bot-auth.ts', '--check-imports']);
+          const imports = await run([process.execPath, 'scripts/release-node.mjs', 'scripts/check-regional-web-bot-auth.ts', '--check-imports']);
+          if (imports !== 0) throw new Error(`Bootstrap import check failed (${imports}).`);
         }
         const after = await inputsForWorker();
         if (JSON.stringify(after) !== JSON.stringify(initial)) throw new Error('Worker inputs changed during execution.');
-        exitStatus = 0;
+        exitStatus = status;
+        if (status !== 0) {
+          failed.push(task.key);
+          console.error(`Check ${task.key} failed (${status}). Continuing with independent checks.`);
+        }
       } finally {
         const result: ShardResult = { version: 1, planHash: digest(plan), worker, key: task.key, command: task.command,
           inputs: before, execution: shardExecutionContext(), outputsFingerprint, startedAt, completedAt: new Date().toISOString(), durationMs: performance.now() - start, exitStatus };
         await immutable(path.join(required('--out'), `${worker}-${randomUUID()}.json`), result);
       }
     }
+    if (failed.length) throw new Error(`Verification failures (${failed.length}): ${failed.join(', ')}`);
     return;
   }
   if (mode === 'aggregate') {
