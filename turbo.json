@@ -19,6 +19,13 @@
       "dependsOn": [
         "^typecheck"
       ],
+      "passThroughEnv": ["CERTSCORE_VERIFIED_TYPECHECK_EXPORTS"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/scripts/prepare-typecheck-deps.ts",
+        "$TURBO_ROOT$/scripts/lib/release-bootstrap.ts",
+        "$TURBO_ROOT$/scripts/lib/release-suite-reuse.ts"
+      ],
       "outputs": []
     },
     "test:policy:fast": {

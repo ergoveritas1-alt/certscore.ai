@@ -18,6 +18,7 @@ import re
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import urllib.parse
 
@@ -63,18 +64,23 @@ def durable_json(path, value, exclusive=False):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     data = json.dumps(value, indent=2, sort_keys=True) + "\n"
-    if exclusive:
-        with path.open("x") as stream:
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, prefix=f".{path.name}.", delete=False) as stream:
+        temp = Path(stream.name)
+        try:
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
-    else:
-        temp = path.with_name(path.name + ".tmp")
-        with temp.open("w") as stream:
-            stream.write(data)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temp, path)
+        except BaseException:
+            temp.unlink(missing_ok=True)
+            raise
+    try:
+        if exclusive:
+            # Link only a complete file and preserve create-once claims.
+            os.link(temp, path)
+        else:
+            os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
     fd = os.open(path.parent, os.O_RDONLY)
     try:
         os.fsync(fd)
