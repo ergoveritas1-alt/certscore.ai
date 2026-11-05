@@ -267,7 +267,9 @@ both must succeed before the native ARM64 image job starts. Only the successful
 exact-SHA CI typecheck supplies its receipt. Compiler restoration copies only
 webpack/SWC caches into a freshly cleared `.next`; it never restores release
 output, route types, build identity or a typecheck receipt. Cache snapshots are
-bounded to 512 MiB within the existing GitHub cache quota. Cache export failure is
+bounded to 512 MiB within the existing GitHub cache quota. Production Webpack
+filesystem caches use its native gzip format so the actual web cache fits that
+bound; development and non-filesystem caches are unchanged. Cache export failure is
 an optimization miss; exact-image migrations and ECS stabilization still gate
 release success. Benchmark locally with
 `node scripts/benchmark-web-compiler-cache.mjs /tmp/compiler-cache-benchmark.json`;

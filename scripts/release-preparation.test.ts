@@ -102,3 +102,16 @@ test('automatic ECS workflows preserve compatibility checks while guarding every
     for (const step of mutationSteps) assert.match(step, /if:.*steps.runtime-selection.outputs.deploy == 'true'/);
   }
 });
+
+test('production compiler cache uses native compression without changing dev or non-filesystem caches', async () => {
+  const config = (await import('../apps/web/next.config.mjs')).default;
+  const webpack = config.webpack;
+  assert.ok(webpack);
+  const options = (dev: boolean) => ({ dev } as Parameters<NonNullable<typeof config.webpack>>[1]);
+  const production = webpack({ resolve: {}, cache: { type: 'filesystem' } }, options(false));
+  assert.equal(production.cache.compression, 'gzip');
+  assert.deepEqual(production.resolve.extensionAlias['.js'], ['.ts', '.tsx', '.js']);
+  for (const cache of [false, { type: 'memory' }]) assert.equal(webpack({ resolve: {}, cache }, options(false)).cache, cache);
+  const development = webpack({ resolve: {}, cache: { type: 'filesystem' } }, options(true));
+  assert.equal(development.cache.compression, undefined);
+});
