@@ -777,13 +777,27 @@ jobs:
             if [[ "${MATERIALIZER_SERVICE_DEPLOYED}" == "true" ]]; then
               expected+=("$TARGET_MATERIALIZER_TASK_DEFINITION")
             fi
-            stable=$(aws ecs describe-services --cluster "$ECS_CLUSTER_NAME" --services "${services[@]}" --output json)
-            for i in "${!services[@]}"; do
-              jq -e --arg service "${services[$i]}" --arg task "${expected[$i]}" '
-                any(.services[]; .serviceName == $service and .taskDefinition == $task and
-                  any(.deployments[]; .status == "PRIMARY" and .taskDefinition == $task and .rolloutState == "COMPLETED"))
-              ' <<< "$stable" >/dev/null || exit 1
+            # The standard waiter can return before ECS records COMPLETED.
+            for ((attempt=0; attempt<=10; attempt++)); do
+              stable=$(aws ecs describe-services --cluster "$ECS_CLUSTER_NAME" --services "${services[@]}" --output json)
+              complete=true
+              for i in "${!services[@]}"; do
+                rollout=$(jq -er --arg service "${services[$i]}" --arg task "${expected[$i]}" '
+                  .services[] | select(.serviceName == $service and .taskDefinition == $task)
+                  | .deployments[] | select(.status == "PRIMARY" and .taskDefinition == $task)
+                  | .rolloutState
+                ' <<< "$stable") || { echo "ECS stabilized on an unexpected task definition"; exit 1; }
+                case "$rollout" in
+                  COMPLETED) ;;
+                  IN_PROGRESS) complete=false ;;
+                  *) echo "ECS did not complete the requested rollout"; exit 1 ;;
+                esac
+              done
+              if [[ "$complete" == true ]]; then exit 0; fi
+              if ((attempt < 10)); then sleep 3; fi
             done
+            echo "ECS did not record rollout completion within 30 seconds of stability"
+            exit 1
           fi
 
       - name: Submit IndexNow URLs
