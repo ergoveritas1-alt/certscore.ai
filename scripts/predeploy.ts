@@ -437,7 +437,7 @@ const ROOT_FULL_CHECKS: Check[] = [
   {
     key: "workspace-build",
     label: "workspace build",
-    command: ["pnpm", "turbo", "run", "build", "--concurrency=1"]
+    command: ["node", "scripts/release-node.mjs", "scripts/bootstrap-release.ts", "--workspace"]
   },
   {
     key: "validation-scan-pipeline",

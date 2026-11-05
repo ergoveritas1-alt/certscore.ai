@@ -16,7 +16,9 @@ for(const action of ['accept','reject'] as const){
   root.querySelectorAll('button').forEach(b=>b.onclick=()=>{fetch('/click');host.hidden=true});</script>${variant === 'covered' ? '<div style="position:fixed;inset:0;z-index:9999;background:white">Overlay</div>' : ''}`);
  });
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const addr=server.address();assert.ok(addr&&typeof addr==='object');
- const input={url:`http://127.0.0.1:${addr.port}/`,scanId:`boxless-${action}`,recipeSetId:'boxless-test',actionSearchTimeoutMs:1600,confirmationTimeoutMs:50,observationWindowMs:50,interactionAuthorization:{authorizationId:'loopback_local_lab',kind:'loopback' as const}};
+ // The absent named Accept recipe uses a search slice before geometry and the live uniqueness sweep.
+ const actionSearchTimeoutMs = action === 'accept' ? 2_500 : 1_600;
+ const input={url:`http://127.0.0.1:${addr.port}/`,scanId:`boxless-${action}`,recipeSetId:'boxless-test',actionSearchTimeoutMs,confirmationTimeoutMs:50,observationWindowMs:50,interactionAuthorization:{authorizationId:'loopback_local_lab',kind:'loopback' as const}};
  const recipe={recipeId:'unmatched-fixture',controlSelector:'#absent',resolverMethod:'local_fixture_recipe' as const,confirmation:{kind:'local_storage_equals' as const,key:'consent',expectedValue:action==='accept'?'granted':'denied'}};
  try{
  const packet=action==='accept'?await runPostAcceptObserver({...input,allowCanonicalAcceptDiscovery:true,recipe:{...recipe,artifactVersion:'certscore.post_accept_action_recipe.v1'}}):await runPostRefusalObserver({...input,allowCanonicalRejectDiscovery:true,recipe:{...recipe,artifactVersion:'certscore.post_refusal_action_recipe.v1'}});
