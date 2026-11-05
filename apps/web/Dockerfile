@@ -39,6 +39,11 @@ RUN --mount=type=cache,id=wc01-web-pnpm-store,target=/pnpm/store \
     --filter @website-signal-risk-scanner/web... \
     --filter @certscore/vendor-resolver...
 
+# A named build context overrides this empty fallback in CI. It contains only
+# previously successful compiler cache bytes, never .next release output.
+FROM scratch AS web-compiler-cache-input
+COPY scripts/empty-compiler-cache /compiler-cache
+
 FROM build-dependencies AS builder
 
 # Next's production compilation now exceeds V8's default ~4 GB old-space
@@ -92,8 +97,12 @@ RUN printf 'export const generatedBuildInfo = {"gitRef":"%s","gitSha":"%s","imag
   "${BUILD_RUNTIME_TARGET}" > /app/apps/web/server/generated-build-info.ts
 
 RUN rm -rf ./apps/web/.next
+COPY --from=web-compiler-cache-input /compiler-cache /app/apps/web/.next/cache
 RUN WEB_TYPECHECK_VERIFIED_SHA="${WEB_TYPECHECK_VERIFIED_SHA}" \
   pnpm --filter @website-signal-risk-scanner/web build:container
+
+FROM scratch AS web-compiler-cache-export
+COPY --from=builder /app/apps/web/.next/cache /compiler-cache
 
 FROM node:22-bookworm-slim AS web-runtime-base
 

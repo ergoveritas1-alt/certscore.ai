@@ -14,7 +14,7 @@ test("web typecheck reuse requires the successful exact-SHA CI receipt", async (
   const step = workflow.slice(workflow.indexOf("- name: Typecheck web"), workflow.indexOf("- name: Test Marketplace Light"));
   assert.ok(step.indexOf("set -euo pipefail") < step.indexOf("/web typecheck"));
   assert.ok(step.indexOf("/web typecheck") < step.indexOf('echo "verified_sha='));
-  assert.match(workflow, /WEB_TYPECHECK_VERIFIED_SHA="\$\{\{ steps.web-typecheck.outputs.verified_sha \}\}"/);
+  assert.match(workflow, /WEB_TYPECHECK_VERIFIED_SHA="\$\{\{ needs.verify-public-web.outputs.verified_sha \}\}"/);
   const evaluate = (receipt: string) => execFileSync(process.execPath, ["--input-type=module", "-e",
     "import config from './apps/web/next.config.mjs'; process.stdout.write(String(config.typescript.ignoreBuildErrors));"],
     {encoding:"utf8",env:{...process.env,BUILD_GIT_SHA:sha,WEB_TYPECHECK_VERIFIED_SHA:receipt}});

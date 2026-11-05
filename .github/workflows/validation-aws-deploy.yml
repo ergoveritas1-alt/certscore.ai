@@ -190,6 +190,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Bootstrap workspace exports before dependent verification
+        run: node scripts/release-node.mjs scripts/bootstrap-release.ts
+
       - name: Install Chromium for form lifecycle release check
         run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
 
@@ -199,8 +202,6 @@ jobs:
 
       - name: Typecheck validation worker
         run: |
-          pnpm --filter @certscore/contracts build
-          pnpm --filter @website-signal-risk-scanner/shared build
           pnpm --filter @website-signal-risk-scanner/validation-worker typecheck
 
       - name: Run validation pipeline tests

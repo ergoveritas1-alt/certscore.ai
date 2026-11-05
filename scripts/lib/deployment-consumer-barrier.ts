@@ -13,3 +13,22 @@ export async function deployConsumersBeforeProducer<T extends { status: string }
   const producer = !results.every(result => result.status === "succeeded" || result.status === "skipped") ? input.skippedProducer() : await input.producer();
   return [...results, producer];
 }
+
+/** Artifact preparation has no runtime writers. Every producer writer, including
+ * provenance/configuration repair, belongs inside producer after this barrier. */
+export async function deployConsumersWithPreparedProducer<T extends { status: string }>(input: {
+  consumers: Array<() => Promise<T>>;
+  prepareProducer: () => Promise<T>;
+  producer: () => Promise<T>;
+  skippedProducer: () => T;
+}): Promise<T[]> {
+  if (!input.consumers.length) throw new Error('At least one consumer deployment is required.');
+  const settled = await Promise.allSettled([...input.consumers, input.prepareProducer].map(run => Promise.resolve().then(run)));
+  const rejected = settled.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (rejected.length) throw new AggregateError(rejected.map(result => result.reason), 'Consumer deployment or artifact preparation did not complete.');
+  const results = settled.map(result => (result as PromiseFulfilledResult<T>).value);
+  const prepared = results.at(-1)!;
+  const consumers = results.slice(0, -1);
+  const ready = prepared.status === 'succeeded' && consumers.every(result => result.status === 'succeeded' || result.status === 'skipped');
+  return [...results, ready ? await input.producer() : input.skippedProducer()];
+}

@@ -75,3 +75,5 @@ supabase/.temp
 config/iplocate/*.mmdb
 
 config/iplocate/*.installing
+
+.release-cache/

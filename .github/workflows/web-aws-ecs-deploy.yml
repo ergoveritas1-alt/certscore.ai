@@ -7,6 +7,8 @@ on:
     paths:
       - ".dockerignore"
       - ".github/workflows/web-aws-ecs-deploy.yml"
+      - "scripts/select-workflow-deployment.mjs"
+      - "scripts/lib/deployment-inputs.mjs"
       - "apps/web/**"
       - "packages/certscore-contracts/**"
       - "packages/certscore-vendor-resolver/**"
@@ -68,9 +70,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy-public-web-aws:
-    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
-    timeout-minutes: 90
+  verify-public-web:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      verified_sha: ${{ steps.web-typecheck.outputs.verified_sha }}
+      deploy: ${{ steps.runtime-selection.outputs.deploy }}
+    env:
+      CERTSCORE_BASE_URL: ${{ vars.AWS_WEB_CERTSCORE_BASE_URL }}
     services:
       marketplace-test-db:
         image: public.ecr.aws/docker/library/postgres@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
@@ -82,6 +91,172 @@ jobs:
         options: >-
           --health-cmd pg_isready --health-interval 5s
           --health-timeout 5s --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build scan-source test dependencies
+        run: node scripts/release-node.mjs scripts/bootstrap-release.ts
+
+      - name: Test scan-source contracts
+        run: |
+          pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
+            apps/web/components/marketing/domain-scan-form.test.ts \
+            apps/web/components/scans/scan-from-select.test.tsx \
+            apps/web/server/scans/recent-scan-reuse.test.ts \
+            apps/web/server/scans/restricted-scan-options.test.ts \
+            scripts/assert-forward-web-deploy.test.ts \
+            scripts/deploy-latency.test.ts \
+            scripts/web-deploy-migration-order.test.ts \
+            scripts/web-deployment-skew-protection.test.ts
+
+      - name: Test reviewed assessment highlights
+        run: pnpm test:assessment-highlights
+
+      - name: Test canonical scan no-go reports
+        run: pnpm test:scan-no-go
+
+      - name: Test canonical accessibility scoring
+        run: |
+          pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
+            apps/web/lib/scans/accessibility-score-policy.test.ts \
+            apps/web/lib/scans/scoring-policy.test.ts \
+            apps/web/server/scans/accessibility-audit-projection.test.ts \
+            apps/web/server/scans/persisted-canonical-report-projection.test.ts \
+            apps/web/server/scans/full-site-score.test.ts \
+            apps/web/lib/api-v2/scan-report-summary.test.ts
+
+      - name: Test report publication ownership and artifact transfer
+        env:
+          CERTSCORE_PUBLICATION_TEST_ADMIN_URL: postgresql://postgres:local-fixture-only@127.0.0.1:5432/postgres
+        run: |
+          pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
+            apps/web/server/scans/canonical-scan-report-publisher.test.ts \
+            apps/web/server/scans/score-materialization-failure.test.ts \
+            apps/web/server/scans/score-materialization-request-repository.test.ts \
+            apps/web/server/scans/report-artifact-transfer.test.ts
+
+      - name: Test public page request logging
+        run: |
+          node --import tsx --test \
+            apps/web/lib/product-analytics/*.test.ts \
+            apps/web/middleware.test.ts
+
+      - name: Typecheck web
+        id: web-typecheck
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: |
+          set -euo pipefail
+          pnpm --filter @website-signal-risk-scanner/web typecheck
+          echo "verified_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Test admin scan activity consistency
+        env:
+          ADMIN_ACTIVITY_TEST_DATABASE_URL: postgresql://postgres:local-fixture-only@localhost:5432/marketplace_browser_test
+        run: |
+          pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
+            apps/web/lib/admin/admin-scan-activity.test.ts \
+            apps/web/app/app/admin/scans/admin-scans-auto-refresh.test.ts \
+            apps/web/app/app/admin/scans/admin-scans-filter-form.test.ts \
+            apps/web/components/admin/admin-document-get-form.test.ts \
+            apps/web/server/admin/admin-scan-activity-query.test.ts \
+            apps/web/server/admin/admin-scan-operational-snapshot.test.ts \
+            apps/web/server/admin/admin-operational-snapshot-consistency.test.ts
+
+      - name: Test Marketplace Light security contracts
+        run: |
+          node --import tsx --test \
+            apps/web/server/marketplace/contracts.test.ts \
+            apps/web/server/marketplace/sns.test.ts \
+            scripts/configure-marketplace-light.test.ts \
+            apps/web/server/marketplace-browser/agreement.test.ts \
+            apps/web/server/marketplace-browser/workspace-binding.test.ts \
+            scripts/configure-marketplace-browser.test.ts \
+            scripts/marketplace-browser-registration.test.ts
+
+      - name: Test browser Marketplace transactions
+        env:
+          BROWSER_TEST_DATABASE_URL: postgresql://postgres:local-fixture-only@localhost:5432/marketplace_browser_test
+          NODE_OPTIONS: --conditions=react-server
+        run: node --import tsx --test apps/web/server/marketplace-browser/repository.test.ts
+
+      - name: Validate certscore web runtime contract
+        run: |
+          APP_FLAVOR=certscore \
+          NEXT_PUBLIC_APP_URL="${CERTSCORE_BASE_URL}" \
+          DATABASE_URL=postgresql://localhost/certscore \
+          BETTER_AUTH_SECRET=abcdefghijklmnopqrstuvwxyz123456 \
+          GMAIL_SMTP_USER=ops@example.com \
+          GMAIL_SMTP_APP_PASSWORD=placeholder \
+          FEEDBACK_TO_EMAIL=ops@example.com \
+          S3_BUCKET=placeholder-bucket \
+          S3_REGION=us-west-1 \
+          S3_ACCESS_KEY_ID=placeholder \
+          S3_SECRET_ACCESS_KEY=placeholder \
+          node --enable-source-maps --import tsx ./apps/web/scripts/check-amplify-runtime-env.ts
+
+      - name: Select deployment from live web runtime inputs
+        id: runtime-selection
+        run: node scripts/select-workflow-deployment.mjs web
+
+  verify-post-accept-forms:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build form fixture dependencies
+        run: node scripts/release-node.mjs scripts/bootstrap-release.ts
+
+      - name: Install Chromium for form lifecycle release check
+        run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
+
+      - name: Verify post-Accept forms and images reach the report
+        run: pnpm test:post-accept-forms
+
+
+
+  deploy-public-web-aws:
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    timeout-minutes: 90
+    needs: [verify-public-web, verify-post-accept-forms]
+    if: needs.verify-public-web.outputs.deploy == 'true'
     permissions:
       contents: read
       id-token: write
@@ -192,123 +367,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Chromium for form lifecycle release check
-        run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
-
-      - name: Verify post-Accept forms and images reach the report
-        run: pnpm test:post-accept-forms
-
-
       - name: Prevent non-descendant production rollback
         env:
           ALLOW_NON_DESCENDANT_WEB_DEPLOY: ${{ github.event.inputs.allow_non_descendant_deploy || 'false' }}
           LIVE_WEB_BASE_URL: ${{ env.CERTSCORE_BASE_URL }}
         run: pnpm exec tsx ./scripts/assert-forward-web-deploy.ts --target "${GITHUB_SHA}"
 
-      - name: Build scan-source test dependencies
-        run: |
-          pnpm --filter @certscore/contracts build
-          pnpm --filter @website-signal-risk-scanner/shared build
-          pnpm --filter @website-signal-risk-scanner/ui build
-          pnpm --filter @website-signal-risk-scanner/db build
+      - name: Restore bounded web compiler cache
+        id: compiler-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .release-cache/web/saved
+          key: web-compiler-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('pnpm-lock.yaml', 'apps/web/next.config.mjs', 'apps/web/tsconfig.json') }}-${{ github.sha }}
+          restore-keys: |
+            web-compiler-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('pnpm-lock.yaml', 'apps/web/next.config.mjs', 'apps/web/tsconfig.json') }}-
 
-      - name: Test scan-source contracts
-        run: |
-          pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
-            apps/web/components/marketing/domain-scan-form.test.ts \
-            apps/web/components/scans/scan-from-select.test.tsx \
-            apps/web/server/scans/recent-scan-reuse.test.ts \
-            apps/web/server/scans/restricted-scan-options.test.ts \
-            scripts/assert-forward-web-deploy.test.ts \
-            scripts/deploy-latency.test.ts \
-            scripts/web-deploy-migration-order.test.ts \
-            scripts/web-deployment-skew-protection.test.ts
-
-      - name: Test reviewed assessment highlights
-        run: pnpm test:assessment-highlights
-
-      - name: Test canonical scan no-go reports
-        run: pnpm test:scan-no-go
-
-      - name: Test canonical accessibility scoring
-        run: |
-          pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
-            apps/web/lib/scans/accessibility-score-policy.test.ts \
-            apps/web/lib/scans/scoring-policy.test.ts \
-            apps/web/server/scans/accessibility-audit-projection.test.ts \
-            apps/web/server/scans/persisted-canonical-report-projection.test.ts \
-            apps/web/server/scans/full-site-score.test.ts \
-            apps/web/lib/api-v2/scan-report-summary.test.ts
-
-      - name: Test report publication ownership and artifact transfer
-        env:
-          CERTSCORE_PUBLICATION_TEST_ADMIN_URL: postgresql://postgres:local-fixture-only@127.0.0.1:5432/postgres
-        run: |
-          pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
-            apps/web/server/scans/canonical-scan-report-publisher.test.ts \
-            apps/web/server/scans/score-materialization-failure.test.ts \
-            apps/web/server/scans/score-materialization-request-repository.test.ts \
-            apps/web/server/scans/report-artifact-transfer.test.ts
-
-      - name: Test public page request logging
-        run: |
-          node --import tsx --test \
-            apps/web/lib/product-analytics/*.test.ts \
-            apps/web/middleware.test.ts
-
-      - name: Typecheck web
-        id: web-typecheck
-        env:
-          NODE_OPTIONS: --max-old-space-size=8192
-        run: |
-          set -euo pipefail
-          pnpm --filter @website-signal-risk-scanner/web typecheck
-          echo "verified_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
-
-      - name: Test admin scan activity consistency
-        env:
-          ADMIN_ACTIVITY_TEST_DATABASE_URL: postgresql://postgres:local-fixture-only@localhost:5432/marketplace_browser_test
-        run: |
-          pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
-            apps/web/lib/admin/admin-scan-activity.test.ts \
-            apps/web/app/app/admin/scans/admin-scans-auto-refresh.test.ts \
-            apps/web/app/app/admin/scans/admin-scans-filter-form.test.ts \
-            apps/web/components/admin/admin-document-get-form.test.ts \
-            apps/web/server/admin/admin-scan-activity-query.test.ts \
-            apps/web/server/admin/admin-scan-operational-snapshot.test.ts \
-            apps/web/server/admin/admin-operational-snapshot-consistency.test.ts
-
-      - name: Test Marketplace Light security contracts
-        run: |
-          node --import tsx --test \
-            apps/web/server/marketplace/contracts.test.ts \
-            apps/web/server/marketplace/sns.test.ts \
-            scripts/configure-marketplace-light.test.ts \
-            apps/web/server/marketplace-browser/agreement.test.ts \
-            apps/web/server/marketplace-browser/workspace-binding.test.ts \
-            scripts/configure-marketplace-browser.test.ts \
-            scripts/marketplace-browser-registration.test.ts
-
-      - name: Test browser Marketplace transactions
-        env:
-          BROWSER_TEST_DATABASE_URL: postgresql://postgres:local-fixture-only@localhost:5432/marketplace_browser_test
-          NODE_OPTIONS: --conditions=react-server
-        run: node --import tsx --test apps/web/server/marketplace-browser/repository.test.ts
-
-      - name: Validate certscore web runtime contract
-        run: |
-          APP_FLAVOR=certscore \
-          NEXT_PUBLIC_APP_URL="${CERTSCORE_BASE_URL}" \
-          DATABASE_URL=postgresql://localhost/certscore \
-          BETTER_AUTH_SECRET=abcdefghijklmnopqrstuvwxyz123456 \
-          GMAIL_SMTP_USER=ops@example.com \
-          GMAIL_SMTP_APP_PASSWORD=placeholder \
-          FEEDBACK_TO_EMAIL=ops@example.com \
-          S3_BUCKET=placeholder-bucket \
-          S3_REGION=us-west-1 \
-          S3_ACCESS_KEY_ID=placeholder \
-          S3_SECRET_ACCESS_KEY=placeholder \
-          node --enable-source-maps --import tsx ./apps/web/scripts/check-amplify-runtime-env.ts
+      - name: Prepare compiler cache input
+        run: node scripts/web-compiler-cache.mjs .release-cache/web/saved .release-cache/web/input/compiler-cache
 
       - name: Build and push public web image
         timeout-minutes: 60
@@ -375,12 +450,13 @@ jobs:
             --cache-from "type=registry,ref=${WEB_CACHE}" \
             --cache-to "type=registry,ref=${WEB_CACHE},mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true" \
             -f apps/web/Dockerfile \
+            --build-context web-compiler-cache-input=.release-cache/web/input \
             --build-arg WEB_RUNTIME_BASE="${WEB_RUNTIME_BASE_IMAGE}" \
             --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
             --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
             --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
             --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
-            --build-arg WEB_TYPECHECK_VERIFIED_SHA="${{ steps.web-typecheck.outputs.verified_sha }}" \
+            --build-arg WEB_TYPECHECK_VERIFIED_SHA="${{ needs.verify-public-web.outputs.verified_sha }}" \
             -t "${WEB_IMAGE}:${GITHUB_SHA}" \
             -t "${WEB_IMAGE}:latest" \
             --push \
@@ -390,6 +466,36 @@ jobs:
           wait "${heartbeat_pid}" 2>/dev/null || true
           trap - EXIT
           echo "TARGET_WEB_IMAGE=${WEB_IMAGE}:${GITHUB_SHA}" >> "${GITHUB_ENV}"
+
+      - name: Export successful compiler cache
+        id: compiler-export
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          set -euo pipefail
+          WEB_IMAGE="${REGISTRY}/${ECR_WEB_REPOSITORY}"
+          docker buildx build --platform linux/arm64 --progress=plain \
+            --provenance=false --sbom=false --target web-compiler-cache-export \
+            --cache-from "type=registry,ref=${WEB_IMAGE}:buildcache" \
+            --build-context web-compiler-cache-input=.release-cache/web/input \
+            --build-arg WEB_RUNTIME_BASE="${WEB_IMAGE}:runtime-base" \
+            --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
+            --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
+            --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
+            --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
+            --build-arg WEB_TYPECHECK_VERIFIED_SHA="${{ needs.verify-public-web.outputs.verified_sha }}" \
+            --output type=local,dest=.release-cache/web/export -f apps/web/Dockerfile .
+          node scripts/web-compiler-cache.mjs .release-cache/web/export/compiler-cache .release-cache/web/saved
+
+      - name: Save bounded compiler cache
+        if: steps.compiler-export.outcome == 'success' && steps.compiler-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .release-cache/web/saved
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
 
       - name: Apply database migrations from target web image
         run: |

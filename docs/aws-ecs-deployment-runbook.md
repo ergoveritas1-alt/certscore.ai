@@ -215,3 +215,76 @@ measurements and any remaining limitations in the release work summary.
 5. For a migration release, confirm that the migration step succeeded before
    claiming the feature is live.
 6. Report workflow URLs and any warnings or skipped checks.
+
+## Release preparation and artifact overlap
+
+For CertScore.ai release work, use an isolated checkout outside synced Documents,
+install the frozen lockfile, and use `pnpm preflight:full` for shared build changes.
+The release entry point supplies the repository TypeScript configuration before
+loading tsx. `node scripts/release-node.mjs scripts/check-regional-web-bot-auth.ts
+--check-imports` verifies imports without any AWS request or canary invocation.
+The canonical deploy helper checks Node/pnpm, GitHub/AWS authentication, Docker
+and the existing country/ASN database freshness before expensive work.
+
+Preflight builds package exports first, expanding reviewed package build wrappers
+so each compiler/export command runs once in dependency order. Unknown lifecycle
+commands fail before any build. Remaining work has at most two bounded lanes;
+browser, database, build, type generation and unknown groups run exclusively.
+`pnpm preflight:full -- --inventory` lists exact commands, package scripts,
+configurations, test files/globs, filters, dependencies and resource reservations.
+No browser timing coverage or production deadline is shortened.
+
+Each executed check writes an immutable attempt receipt in the directory printed
+by preflight. Receipts contain the exact source SHA, tracked tree/worktree and
+untracked input fingerprint, hashed environment/configuration, toolchain,
+command, timestamps, duration and exit status. Failed receipts are retained.
+Bootstrap reuse additionally verifies actual generated export bytes and imports.
+Only successful receipts for the same clean commit, inputs and configuration,
+completed within 24 hours, can be reused:
+
+```sh
+pnpm preflight:full -- --receipt-dir /tmp/certscore-release-receipts
+pnpm preflight:full -- --reuse-receipts /tmp/certscore-release-receipts
+pnpm deploy:all -- --base <live-sha> --no-predeploy --preflight-receipts /tmp/certscore-release-receipts
+```
+
+The last command validates every required receipt; it is not an unchecked bypass.
+Local receipts never set `WEB_TYPECHECK_VERIFIED_SHA` and never replace CI.
+Do not edit a receipt to bind old results to a new commit. Start a new gate after
+source changes. Preserve historical and failed attempt files.
+
+After required checks, coupled releases prepare the single scanner image and
+regional replicas concurrently with web and affected validation consumers.
+Preparation has no Lambda writer. Complete regional digest parity and embedded
+SHA/tag checks precede promotion. All code, settings and provenance environment
+writes stay behind both consumer outcomes. Failed/unresolved consumers or failed
+preparation prevent every scanner runtime mutation. Existing runtime-base reuse,
+regions, budgets, worker bounds and optimistic revision checks remain mandatory.
+Concurrent artifact operations drain before temporary credentials are removed.
+
+Web CI runs compatibility/typecheck and the owned form/browser gate independently;
+both must succeed before the native ARM64 image job starts. Only the successful
+exact-SHA CI typecheck supplies its receipt. Compiler restoration copies only
+webpack/SWC caches into a freshly cleared `.next`; it never restores release
+output, route types, build identity or a typecheck receipt. Cache snapshots are
+bounded to 512 MiB within the existing GitHub cache quota. Cache export failure is
+an optimization miss; exact-image migrations and ECS stabilization still gate
+release success. Benchmark locally with
+`node scripts/benchmark-web-compiler-cache.mjs /tmp/compiler-cache-benchmark.json`;
+its owned minimal fixture is not a production-build benchmark.
+
+Deployment skipping requires positive runtime-input equivalence against the
+installed service revision. Web reads `/api/version`; hosted MCP reads the stable
+isolated ECS task image. Canonical validation/scanner selection verifies their
+own installed images before skipping. Documentation and erased type-only edits
+retain compatibility checks. Missing revisions, dependency/build changes,
+unsettled services and unknown inputs conservatively require deployment. Existing
+exact-SHA workflow discovery, duplicate-dispatch safeguards and production
+concurrency groups remain in place.
+
+This change adds no AWS capacity, schedules or recurring AWS cost. Extra standard
+hosted-runner setup is estimated below $0.50/month at 20 releases/month; caches use
+the existing quota without increasing paid storage. The extra local memory
+reservation can delay a gate on a busy machine. Production wall-time savings
+require a future separately authorized comparable warm release; do not add
+parallel task totals or fixture savings to production deployment savings.
