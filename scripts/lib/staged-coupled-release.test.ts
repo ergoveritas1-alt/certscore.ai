@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { assertStagedCoupledRelease, type StagedCoupledRelease } from './staged-coupled-release';
-import { stagedWebImage } from './staged-web-image.mjs';
+import { stagedEcsImage } from './staged-ecs-image.mjs';
 import { SCANNER_PROVENANCE_REGIONS } from './scanner-image-provenance';
 
 const sha = 'a'.repeat(40), baseSha = 'b'.repeat(40), digest = `sha256:${'c'.repeat(64)}`;
@@ -29,7 +30,7 @@ test('the coupled receipt binds a warm release to the exact target, live base, a
 });
 
 test('only a successful, exact-SHA staging attempt can supply the web digest', () => {
-  const expected = { sha, runId, repository, imageRepository, now };
+  const expected = { kind: "web", sha, runId, repository, imageRepository, now };
   const receipt = { version: 1, sha, typecheckedSha: sha, runId, attempt, repository: imageRepository, digest };
   const run = {
     id: Number(runId), run_attempt: Number(attempt), head_sha: sha, head_branch: 'main',
@@ -37,13 +38,42 @@ test('only a successful, exact-SHA staging attempt can supply the web digest', (
     display_title: `Stage public web ${sha}`, updated_at: stagedAt,
     repository: { full_name: repository }, head_repository: { full_name: repository },
   };
-  assert.equal(stagedWebImage(run, receipt, expected), `${imageRepository}@${digest}`);
+  assert.equal(stagedEcsImage(run, receipt, expected), `${imageRepository}@${digest}`);
   for (const changed of [
     { head_sha: baseSha }, { event: 'push' }, { status: 'in_progress' }, { conclusion: 'failure' },
     { display_title: `Deploy public web ${sha}` }, { head_branch: 'feature' }, { updated_at: '2026-11-01T00:00:00Z' },
     { path: '.github/workflows/unrelated.yml' }, { head_repository: { full_name: 'someone/else' } },
-  ]) assert.throws(() => stagedWebImage({ ...run, ...changed }, receipt, expected), /successful web staging run/);
+  ]) assert.throws(() => stagedEcsImage({ ...run, ...changed }, receipt, expected), /successful web staging run/);
   for (const changed of [{ attempt: '1' }, { typecheckedSha: baseSha }, { digest: 'latest' }, { repository: 'other' }]) {
-    assert.throws(() => stagedWebImage(run, { ...receipt, ...changed }, expected), /does not match/);
+    assert.throws(() => stagedEcsImage(run, { ...receipt, ...changed }, expected), /does not match/);
   }
+});
+
+test('validation staging cannot be substituted by a web run and requires its own image binding', () => {
+  const validation = { runId, image: `${attempt}:${digest}` };
+  assert.doesNotThrow(() => assertStagedCoupledRelease({ ...staged, validation }, sha, baseSha, now));
+  assert.throws(() => assertStagedCoupledRelease({ ...staged, validation: { ...validation, image: '2:latest' } }, sha, baseSha, now));
+  const expected = { kind: 'validation', sha, runId, repository, imageRepository, now };
+  const receipt = { version: 1, sha, typecheckedSha: sha, runId, attempt, repository: imageRepository, digest };
+  const run = {
+    id: Number(runId), run_attempt: Number(attempt), head_sha: sha, head_branch: 'main',
+    path: '.github/workflows/validation-aws-deploy.yml', event: 'workflow_dispatch', status: 'completed', conclusion: 'success',
+    display_title: `Stage validation ${sha}`, updated_at: stagedAt,
+    repository: { full_name: repository }, head_repository: { full_name: repository },
+  };
+  assert.equal(stagedEcsImage(run, receipt, expected), `${imageRepository}@${digest}`);
+  assert.throws(() => stagedEcsImage({ ...run, path: '.github/workflows/web-aws-ecs-deploy.yml' }, receipt, expected));
+});
+
+test('validation stages all existing checks and keeps ECS writes and boot checks behind promotion', async () => {
+  const workflow = await readFile('.github/workflows/validation-aws-deploy.yml', 'utf8');
+  const step = (name: string) => workflow.split(/(?=      - name:)/).find(value => value.startsWith(`      - name: ${name}\n`)) ?? '';
+  for (const name of ['Verify post-Accept forms and images reach the report', 'Typecheck validation worker', 'Run validation pipeline tests']) {
+    assert.match(step(name), /if: inputs.staged_run_id == ''/);
+    assert.ok(workflow.indexOf(name) < workflow.indexOf('Build and push validation worker image'));
+  }
+  for (const name of ['Register validation worker task definition', 'Force ECS deployments', 'Wait for ECS services to stabilize', 'Check validation worker ECS boot']) {
+    assert.match(step(name), /if:.*!inputs.stage_only/);
+  }
+  assert.ok(workflow.indexOf('Verify and select staged validation image') < workflow.indexOf('Register validation worker task definition'));
 });

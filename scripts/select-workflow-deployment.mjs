@@ -20,10 +20,13 @@ if (process.env.GITHUB_EVENT_NAME === 'push') {
       const aws = args => JSON.parse(exec('aws', [...args, '--output', 'json']));
       const observed = aws(['ecs', 'describe-services', '--cluster', process.env.ECS_CLUSTER_NAME, '--services', process.env.ECS_SERVICE_NAME]);
       const definition = aws(['ecs', 'describe-task-definition', '--task-definition', observed.services?.[0]?.taskDefinition ?? 'unverified']);
-      base = installedEcsRevision(observed, definition, {
+      const repository = service === 'mcp' ? 'certscore-web-mcp' : process.env.ECR_WORKER_REPOSITORY;
+      base = await installedEcsRevision(observed, definition, {
         container: process.env.ECS_CONTAINER_NAME,
-        repository: service === 'mcp' ? 'certscore-web-mcp' : process.env.ECR_WORKER_REPOSITORY,
+        repository,
         region: service === 'mcp' ? 'us-west-1' : process.env.AWS_REGION,
+        resolveDigest: sha => aws(['ecr', 'describe-images', '--repository-name', repository, '--image-ids',
+          `imageTag=${sha}`]).imageDetails?.[0]?.imageDigest,
       });
     }
     if (!/^[a-f0-9]{40}$/.test(base ?? '') || !/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA ?? '')) throw new Error('Unknown revision');

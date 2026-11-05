@@ -9,6 +9,7 @@ export type StagedCoupledRelease = {
   stagedAt: string;
   webRunId: string;
   webImage: string;
+  validation?: { runId: string; image: string };
   scanner: ScannerArtifact;
   scannerSettings: Record<string, ScannerOperationalSnapshot>;
 };
@@ -22,6 +23,11 @@ export function assertStagedCoupledRelease(
       !/^[1-9][0-9]{0,5}:sha256:[0-9a-f]{64}$/.test(release.webImage) ||
       !Number.isFinite(stagedAt) || stagedAt > now || now - stagedAt > 24 * 60 * 60_000 ||
       release.scanner?.runtimeBase !== 'reused') throw new Error('Staged release does not match the exact, recent, warm release.');
+  if (release.validation !== undefined && (!release.validation ||
+      !/^[1-9][0-9]{0,15}$/.test(release.validation.runId) ||
+      !/^[1-9][0-9]{0,5}:sha256:[0-9a-f]{64}$/.test(release.validation.image))) {
+    throw new Error('Staged release validation image is invalid.');
+  }
   assertScannerArtifact(release.scanner, sha);
   const names = SCANNER_PROVENANCE_REGIONS.flatMap(region =>
     [`${region}/certscore-v2-dag-local-lambda`, `${region}/certscore-v2-dag-local-lambda-inventory`]);

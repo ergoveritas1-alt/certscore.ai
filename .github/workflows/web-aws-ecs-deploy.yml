@@ -569,31 +569,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          stage=$(mktemp -d)
-          trap 'rm -rf -- "$stage"' EXIT
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGED_RUN_ID" > "$stage/run.json"
-          attempt=$(jq -er '.run_attempt | select(type == "number" and . > 0)' "$stage/run.json")
-          gh run download "$STAGED_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "staged-web-image-$attempt" --dir "$stage/artifact"
-          receipt="$stage/artifact/staged-web.json"
-          [[ -f "$receipt" && ! -L "$receipt" ]] || exit 1
-          test "$(wc -c < "$receipt")" -le 4096
-          account=$(aws sts get-caller-identity --query Account --output text)
-          export WEB_IMAGE="$account.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WEB_REPOSITORY"
-          image=$(node --input-type=module - "$stage" <<'NODE'
-          import { readFileSync } from 'node:fs';
-          import { stagedWebImage } from './scripts/lib/staged-web-image.mjs';
-          const dir = process.argv[2];
-          const read = file => JSON.parse(readFileSync(dir + '/' + file, 'utf8'));
-          console.log(stagedWebImage(read('run.json'), read('artifact/staged-web.json'), {
-            sha: process.env.GITHUB_SHA, runId: process.env.STAGED_RUN_ID,
-            repository: process.env.GITHUB_REPOSITORY, imageRepository: process.env.WEB_IMAGE
-          }));
-          NODE
-          )
-          tagged_digest=$(aws ecr describe-images --repository-name "$ECR_WEB_REPOSITORY" \
-            --image-ids "imageTag=$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)
-          test "$attempt:${image##*@}" = "$STAGED_IMAGE"
-          test "${image##*@}" = "$tagged_digest"
+          image=$(node scripts/resolve-staged-ecs-image.mjs web "$ECR_WEB_REPOSITORY")
           echo "TARGET_WEB_IMAGE=$image" >> "$GITHUB_ENV"
 
       - name: Apply database migrations from target web image
@@ -696,7 +672,9 @@ jobs:
             --output text)"
           test -n "${TASK_ARN}" || (echo "Migration task did not start" && exit 1)
           aws ecs wait tasks-stopped --cluster "${ECS_CLUSTER_NAME}" --tasks "${TASK_ARN}"
-          EXIT_CODE="$(aws ecs describe-tasks --cluster "${ECS_CLUSTER_NAME}" --tasks "${TASK_ARN}" --query 'tasks[0].containers[0].exitCode' --output text)"
+          migration=$(aws ecs describe-tasks --cluster "${ECS_CLUSTER_NAME}" --tasks "${TASK_ARN}" --query 'tasks[0].{exitCode:containers[0].exitCode,createdAt:createdAt,pullStartedAt:pullStartedAt,pullStoppedAt:pullStoppedAt,startedAt:startedAt,stoppedAt:stoppedAt}' --output json)
+          echo "Exact-image migration task timing: $migration"
+          EXIT_CODE=$(jq -r '.exitCode // empty' <<< "$migration")
           test "${EXIT_CODE}" = "0" || (echo "Migration task failed with exit code ${EXIT_CODE}" && exit 1)
 
       - name: Force ECS deployments
@@ -771,33 +749,14 @@ jobs:
           if [[ "${MATERIALIZER_SERVICE_DEPLOYED}" == "true" ]]; then
             services+=("${ECS_MATERIALIZER_SERVICE_NAME}")
           fi
-          aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${services[@]}"
-          if [[ -n "$STAGED_RUN_ID" ]]; then
-            expected=("$TARGET_TASK_DEFINITION")
+          if [[ -z "$STAGED_RUN_ID" ]]; then
+            aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${services[@]}"
+          else
+            expected=("$ECS_CERTSCORE_SERVICE_NAME" "$TARGET_TASK_DEFINITION")
             if [[ "${MATERIALIZER_SERVICE_DEPLOYED}" == "true" ]]; then
-              expected+=("$TARGET_MATERIALIZER_TASK_DEFINITION")
+              expected+=("$ECS_MATERIALIZER_SERVICE_NAME" "$TARGET_MATERIALIZER_TASK_DEFINITION")
             fi
-            # The standard waiter can return before ECS records COMPLETED.
-            for ((attempt=0; attempt<=10; attempt++)); do
-              stable=$(aws ecs describe-services --cluster "$ECS_CLUSTER_NAME" --services "${services[@]}" --output json)
-              complete=true
-              for i in "${!services[@]}"; do
-                rollout=$(jq -er --arg service "${services[$i]}" --arg task "${expected[$i]}" '
-                  .services[] | select(.serviceName == $service and .taskDefinition == $task)
-                  | .deployments[] | select(.status == "PRIMARY" and .taskDefinition == $task)
-                  | .rolloutState
-                ' <<< "$stable") || { echo "ECS stabilized on an unexpected task definition"; exit 1; }
-                case "$rollout" in
-                  COMPLETED) ;;
-                  IN_PROGRESS) complete=false ;;
-                  *) echo "ECS did not complete the requested rollout"; exit 1 ;;
-                esac
-              done
-              if [[ "$complete" == true ]]; then exit 0; fi
-              if ((attempt < 10)); then sleep 3; fi
-            done
-            echo "ECS did not record rollout completion within 30 seconds of stability"
-            exit 1
+            node scripts/wait-for-staged-ecs.mjs "$ECS_CLUSTER_NAME" "${expected[@]}"
           fi
 
       - name: Submit IndexNow URLs

@@ -4,10 +4,10 @@ import { assertScannerConfigurationScope, configureScannerSettingsUnlessPreserve
   assertScannerOperationalSettingsPreserved, type ScannerOperationalSnapshot } from "./lib/scanner-configuration-scope";
 import { checkReleasePrerequisites } from "./lib/release-prerequisites";
 import { assertScannerArtifact, assertScannerArtifactMetadata, settleScannerOperations, runScannerPromotions, type ScannerArtifact } from "./lib/scanner-artifact";
-import { assertWebStageRun, stagedWebImage } from "./lib/staged-web-image.mjs";
+import { readStagedEcsReceipt } from "./lib/staged-ecs-image.mjs";
 import { assertStagedCoupledRelease, type StagedCoupledRelease } from "./lib/staged-coupled-release";
 import { existsSync } from "node:fs";
-import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { awsScannerImageControl, synchronizeScannerImage } from "./lib/scanner-image-provenance";
@@ -397,9 +397,20 @@ async function confirmSkippedRuntimeInputs(changed: ChangedTargets, args: Args) 
       const definition = await readAws(["ecs", "describe-task-definition", "--region", region, "--task-definition", state.services?.[0]?.taskDefinition ?? "unverified"]);
       const repository = await variable("AWS_VALIDATION_WORKER_ECR_REPOSITORY");
       const container = (await run(["gh", "variable", "get", "AWS_VALIDATION_ECS_WORKER_CONTAINER"], { quiet: true, reject: false })).stdout.trim() || "validation-worker";
-      const revision = installedEcsRevision(state, definition, { repository, region, container });
+      const revision = await installedEcsRevision(state, definition, { repository, region, container,
+        resolveDigest: async (sha: string) => (await readAws(["ecr", "describe-images", "--region", region,
+          "--repository-name", repository, "--image-ids", `imageTag=${sha}`])).imageDetails?.[0]?.imageDigest });
       changed.validation = !await equivalent("validation", revision);
-    } catch { changed.validation = true; }
+      if (args.stagedRelease && changed.validation) {
+        if (!await gitRefExists(revision)) throw new Error("Installed validation source is unavailable.");
+        const files = (await git(["diff", "--name-only", "--no-renames", revision, "HEAD"])).split("\n").filter(Boolean);
+        changed.validationRuntimeBase ||= await runtimeBaseInputsChanged("validation", files,
+          (file: string) => git(["show", `${revision}:${file}`]), (file: string) => readFile(file, "utf8"));
+      }
+    } catch {
+      changed.validation = true;
+      if (args.stagedRelease) changed.validationRuntimeBase = true;
+    }
   }
   if ((args.mode === "all" || args.mode === "scanners")) {
     try {
@@ -453,24 +464,8 @@ function verifyLiveWeb(sha: string, useConfiguredHost = false) {
   });
 }
 
-async function readStagedWebImage(sha: string, runId: string) {
-  const metadata = await run(["gh", "api", `repos/${RELEASE_REPOSITORY}/actions/runs/${runId}`], { quiet: true });
-  const workflow = JSON.parse(metadata.stdout);
-  const expected = { sha, runId, repository: RELEASE_REPOSITORY };
-  const attempt = assertWebStageRun(workflow, expected);
-  const directory = await mkdtemp(path.join(tmpdir(), "certscore-web-stage-"));
-  try {
-    await run(["gh", "run", "download", runId, "--repo", RELEASE_REPOSITORY,
-      "--name", `staged-web-image-${attempt}`, "--dir", directory], { quiet: true });
-    const file = path.join(directory, "staged-web.json");
-    const info = await lstat(file);
-    if (!info.isFile() || info.size > 4096) throw new Error("Invalid staged web receipt.");
-    const receipt = JSON.parse(await readFile(file, "utf8"));
-    stagedWebImage(workflow, receipt, { ...expected, imageRepository: receipt.repository });
-    return `${attempt}:${receipt.digest}`;
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+function readStagedImage(kind: "web" | "validation", sha: string, runId: string) {
+  return readStagedEcsReceipt({ kind, sha, runId, repository: RELEASE_REPOSITORY });
 }
 
 async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha: string, operation: NonNullable<Args["stagedRelease"]>) {
@@ -494,25 +489,34 @@ async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha:
     if (existsSync(operation.file)) throw new Error("Choose a new staged release receipt path.");
     let web: { runId: string; image: string } | undefined;
     let scanner: PreparedScanner | undefined;
+    let validation: StagedCoupledRelease["validation"];
     const results = await Promise.all([
       timedLane("Stage verified web image", async () => {
         const runId = await ensureWorkflowRun(WEB_WORKFLOW, "main", sha, ["-f", "stage_only=true", "-f", `staged_base_sha=${args.baseRef}`],
           true, 0, `Stage public web ${sha}`);
         const workflow = await waitForRun(runId);
-        const image = await readStagedWebImage(sha, runId);
+        const { binding: image } = await readStagedImage("web", sha, runId);
         web = { runId, image };
         return { url: workflow.url, image };
       }),
+      ...(changed.validation ? [timedLane("Stage verified validation image", async () => {
+        const runId = await ensureWorkflowRun(VALIDATION_WORKFLOW, "main", sha,
+          ["-f", "stage_only=true", "-f", `expected_sha=${sha}`], true, 0, `Stage validation ${sha}`);
+        const workflow = await waitForRun(runId);
+        const { binding: image } = await readStagedImage("validation", sha, runId);
+        validation = { runId, image };
+        return { url: workflow.url, image };
+      })] : []),
       timedLane("Stage regional scanner image", async () => {
         scanner = await prepareScannerArtifact({ ...scannerInput, pushRuntimeBase: false });
         return { runtimeBase: scanner.runtimeBase };
       }),
     ]);
     if (results.some(result => result.status === "failed")) return results;
-    if (!web || !scanner?.preservedSettings) throw new Error("Staging did not produce both verified artifacts.");
+    if (!web || !scanner?.preservedSettings || (changed.validation && !validation)) throw new Error("Staging did not produce every required verified artifact.");
     const { preservedSettings, ...artifact } = scanner;
     const staged: StagedCoupledRelease = { version: 1, sha, baseSha: args.baseRef, stagedAt: new Date().toISOString(),
-      webRunId: web.runId, webImage: web.image, scanner: artifact, scannerSettings: Object.fromEntries(preservedSettings) };
+      webRunId: web.runId, webImage: web.image, validation, scanner: artifact, scannerSettings: Object.fromEntries(preservedSettings) };
     assertStagedCoupledRelease(staged, sha, args.baseRef);
     await writeFile(operation.file, JSON.stringify(staged, null, 2) + "\n", { flag: "wx", mode: 0o600 });
     console.log(`Staged release receipt: ${operation.file}`);
@@ -523,11 +527,16 @@ async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha:
   if (!info.isFile() || info.size > 16_384) throw new Error("Invalid staged release receipt file.");
   const receipt = JSON.parse(await readFile(operation.file, "utf8")) as StagedCoupledRelease;
   assertStagedCoupledRelease(receipt, sha, args.baseRef);
+  const validation = receipt.validation;
+  if (changed.validation && !validation) throw new Error("Validation is affected and has no staged image. Prepare a new coupled release.");
   // Verify the approved regional tags still resolve to the recorded immutable bytes.
   await settleScannerOperations([
-    readStagedWebImage(sha, receipt.webRunId).then(image => {
-      if (image !== receipt.webImage) throw new Error("Staged web digest or run attempt changed.");
+    readStagedImage("web", sha, receipt.webRunId).then(({ binding }) => {
+      if (binding !== receipt.webImage) throw new Error("Staged web digest or run attempt changed.");
     }),
+    ...(validation ? [readStagedImage("validation", sha, validation.runId).then(({ binding }) => {
+      if (binding !== validation.image) throw new Error("Staged validation digest or run attempt changed.");
+    })] : []),
     ...SCANNER_REGIONS.map(async region => {
       const result = await run(["aws", "ecr", "describe-images", "--region", region,
         "--repository-name", "certscore-v2-dag-local-lambda", "--image-ids", `imageTag=${sha}`,
@@ -544,7 +553,7 @@ async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha:
         const verification = await verifyLiveWeb(sha, true);
         return verification.status === "succeeded" ? web : verification;
       },
-      () => deployValidation({ ref: sha, workflowRef: "main", skip: !changed.validation, pushRuntimeBase: false, staged: true }),
+      () => deployValidation({ ref: sha, workflowRef: "main", skip: !changed.validation, pushRuntimeBase: false, stage: validation }),
     ],
     producer: () => promoteScannerArtifact(artifact, { ...scannerInput, parallelFunctions: true }),
     skippedProducer: () => skippedLane("Lambda scanner deploys", "a consumer deployment failed; preserve the existing producer contract"),
@@ -572,17 +581,19 @@ async function deployWeb(input: { force: boolean; ref: string; workflowRef: stri
   });
 }
 
-async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; skip: boolean; workflowRef: string; registrationGraceMs?: number; staged?: boolean }): Promise<LaneResult> {
+async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; skip: boolean; workflowRef: string; registrationGraceMs?: number; stage?: StagedCoupledRelease["validation"] }): Promise<LaneResult> {
   if (input.skip) {
     return skippedLane("validation deploy", "no validation deploy inputs changed");
   }
   return timedLane("validation AWS deploy", async () => {
+    const { stage } = input;
     const runId = await ensureWorkflowRun(VALIDATION_WORKFLOW, input.workflowRef, input.ref, [
       "-f", "use_runtime_base=true",
       "-f", `push_runtime_base=${input.pushRuntimeBase ? "true" : "false"}`,
       "-f", "runtime_base_tag=validation-worker-runtime-base",
-      ...(input.staged ? ["-f", `expected_sha=${input.ref}`] : []),
-    ], input.pushRuntimeBase, input.registrationGraceMs);
+      ...(stage ? ["-f", `expected_sha=${input.ref}`, "-f", `staged_run_id=${stage.runId}`, "-f", `staged_image=${stage.image}`] : []),
+    ], input.pushRuntimeBase, input.registrationGraceMs,
+    stage ? `Promote validation ${input.ref} from ${stage.runId} ${stage.image}` : undefined);
     const workflowRun = await waitForRun(runId);
     return {
       runtimeBase: input.pushRuntimeBase ? "rebuilt" : "reused",
@@ -956,13 +967,11 @@ async function ensureWorkflowRun(
         "--limit", "10", "--json", "databaseId,headSha,status,conclusion,event,displayTitle"
       ], { quiet: true });
       const runs = JSON.parse(result.stdout) as Array<DeploymentWorkflowRun & { displayTitle: string }>;
-      if (workflow === VALIDATION_WORKFLOW) return runs.filter(run =>
-        !(run.event === "push" && run.displayTitle.startsWith("Verify validation ")));
-      if (workflow !== WEB_WORKFLOW) return runs;
-      return runs.filter(run => exactTitle
-        ? run.event === "workflow_dispatch" && run.displayTitle === exactTitle
-        : !(run.event === "workflow_dispatch" && run.displayTitle.startsWith("Stage public web ")) &&
-          !(run.event === "push" && run.displayTitle.startsWith("Verify public web ")));
+      if (exactTitle) return runs.filter(run => run.event === "workflow_dispatch" && run.displayTitle === exactTitle);
+      const kind = workflow === WEB_WORKFLOW ? "public web" : workflow === VALIDATION_WORKFLOW ? "validation" : null;
+      return kind ? runs.filter(run =>
+        !(run.event === "workflow_dispatch" && run.displayTitle.startsWith(`Stage ${kind} `)) &&
+        !(run.event === "push" && run.displayTitle.startsWith(`Verify ${kind} `))) : runs;
     },
     dispatch: async () => { await run(["gh", "workflow", "run", workflow, "--ref", workflowRef, ...extraArgs]); }
   });
@@ -1066,7 +1075,7 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
   }
   if (args.stagedRelease) {
     console.log(args.stagedRelease.action === "stage"
-      ? "  staged path: verify and build web and scanner artifacts; no ECS, database or Lambda updates"
+      ? "  staged path: verify and build web, scanner, and affected validation artifacts; no ECS, database or Lambda updates"
       : "  staged path: verify both immutable artifacts; promote web and affected validation before all six Lambda handoffs");
   } else if (args.mode === "all") {
     console.log("  order: prepare scanner artifacts alongside consumers; all Lambda writes wait for both affected consumers");
