@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 65
     env:
       EXPECTED_GIT_REMOTE: https://github.com/ergoveritas1-alt/certscore.ai.git
-      CERTSCORE_COLD_WEB_BUILD: '1'
+      CERTSCORE_VERIFICATION_COLD_BUILD: '1'
       BENCHMARK_EVIDENCE: /tmp/release-cold-build
     steps:
       - uses: actions/checkout@v6
@@ -22,12 +22,11 @@ jobs:
       - uses: actions/setup-node@v6
         with: {node-version: 22.22.1, cache: pnpm}
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
       - name: Run the cold workspace build
         id: cold_build
         run: |
           release() {
-            env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" node scripts/release-node.mjs scripts/release-verification.ts "$@"
+            env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_VERIFICATION_COLD_BUILD="$CERTSCORE_VERIFICATION_COLD_BUILD" node scripts/release-node.mjs scripts/release-verification.ts "$@"
           }
           release plan --workers 1 --out "$BENCHMARK_EVIDENCE/plan.json"
           release worker --phase build --plan "$BENCHMARK_EVIDENCE/plan.json" --worker 0 --out "$BENCHMARK_EVIDENCE/results"
@@ -40,21 +39,29 @@ jobs:
             node -e '
               const { durationMs, exitStatus } = require(process.argv[1]);
               const status = exitStatus === 0 ? "passed" : `failed (exit ${exitStatus})`;
-              console.log(`CertScore.ai cold workspace build ${status} in ${(durationMs / 1000).toFixed(2)} s.`);
+              const bootstrap = require(process.argv[1].replace(/workspace-build\.json$/, "workspace-package-build.json"));
+              const totalMs = bootstrap.durationMs + durationMs;
+              console.log(`CertScore.ai cold workspace build ${status} in ${(totalMs / 1000).toFixed(2)} s including package bootstrap.`);
             ' "$receipt" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') }}
         with:
           name: cold-build-timing
-          path: ${{ env.BENCHMARK_EVIDENCE }}/results/workspace-build.json
+          path: |
+            ${{ env.BENCHMARK_EVIDENCE }}/results/workspace-build.json
+            ${{ env.BENCHMARK_EVIDENCE }}/results/workspace-package-build.json
           retention-days: 1
           if-no-files-found: ignore
-      - name: Run remaining verification checks and verify coverage
+      - name: Install Chromium after publishing cold-build timing
+        id: chromium
         if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') }}
+        run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
+      - name: Run remaining verification checks and verify coverage
+        if: ${{ !cancelled() && steps.chromium.outcome == 'success' }}
         run: |
           release() {
-            env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" node scripts/release-node.mjs scripts/release-verification.ts "$@"
+            env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_VERIFICATION_COLD_BUILD="$CERTSCORE_VERIFICATION_COLD_BUILD" node scripts/release-node.mjs scripts/release-verification.ts "$@"
           }
           release worker --phase remaining --plan "$BENCHMARK_EVIDENCE/plan.json" --worker 0 --out "$BENCHMARK_EVIDENCE/results"
           release aggregate --plan "$BENCHMARK_EVIDENCE/plan.json" --results "$BENCHMARK_EVIDENCE/results" --out "$BENCHMARK_EVIDENCE/proof.json"

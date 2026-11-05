@@ -89,6 +89,24 @@ class HarnessTests(unittest.TestCase):
         with patch.object(runner, "verify_environment"):
             return instance.run()
 
+    def test_exclusive_receipt_publishes_complete_json_once(self):
+        path = self.root / "receipt.json"
+        value = {"status": "claimed"}
+        real_link = os.link
+
+        def publish(source, target):
+            self.assertFalse(Path(target).exists())
+            self.assertEqual(runner.read_json(source), value)
+            real_link(source, target)
+
+        with patch.object(runner.os, "link", side_effect=publish) as link:
+            runner.durable_json(path, value, exclusive=True)
+            link.assert_called_once()
+        with self.assertRaises(FileExistsError):
+            runner.durable_json(path, {"status": "replacement"}, exclusive=True)
+        self.assertEqual(runner.read_json(path), value)
+        self.assertEqual(list(self.root.iterdir()), [path])
+
     def test_complete_schedule_and_no_retries_on_resume(self):
         self.assertTrue(self.run_offline(self.make_runner()))
         self.assertEqual(len(self.calls), 4)

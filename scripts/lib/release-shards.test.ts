@@ -44,6 +44,23 @@ test('scan-core policy keeps all eight fixture files and the package-scoped runn
   plan.workers[0]!.length = 0;
   assert.throws(() => validateShardPlan(plan, gate), /Missing\/duplicate files: scan-core-policy-full/);
 });
+test('parallel workspace typechecks require both complementary filters', () => {
+  const typecheck = getPredeployPlan([], { full: true }).checks.find(check => check.key === 'workspace-typecheck')!;
+  const gate = [checks[0]!, typecheck];
+  assert.deepEqual(planShards(gate, inputs, { workers: 1 }).workers[0]![0]!.command, typecheck.command);
+  const plan = planShards(gate, inputs, { workers: 2 });
+  const tasks = plan.workers.flat();
+  assert.deepEqual(tasks.map(task => task.command.at(-1)).sort(), [
+    '--filter=!@website-signal-risk-scanner/web', '--filter=@website-signal-risk-scanner/web',
+  ]);
+  tasks[0]!.command = tasks[1]!.command;
+  assert.throws(() => validateShardPlan(plan, gate), /typecheck partition coverage/);
+});
+test('only the workspace build can bind same-worker bootstrap exports', () => {
+  const { plan, results } = fixture();
+  results.find(result => result.key !== checks[0]!.key)!.reusedPackageExportsFingerprint = 'c'.repeat(64);
+  assert.throws(() => aggregateShards(plan, checks, results, now), /reused unverified package exports/);
+});
 test('splitting retains every option and opaque commands retain their exact execution', () => {
   const { plan } = fixture();
   const direct = plan.workers.flat().filter(task => task.parent === 'direct');

@@ -15,6 +15,7 @@ export type ShardResult = {
   version: 1; planHash: string; worker: number; key: string; command: string[]; inputs: ReleaseInputs;
   execution: ShardPlan['execution'];
   outputsFingerprint?: string;
+  reusedPackageExportsFingerprint?: string;
   startedAt: string; completedAt: string; durationMs: number; exitStatus: number;
 };
 
@@ -62,6 +63,16 @@ function partitionableTestFiles(check: Check) {
   return { prefix: [...packageCommand, 'exec', ...runner], files };
 }
 
+function workspaceTypecheckPartitions(check: Check) {
+  const full = ['pnpm', 'turbo', 'run', 'typecheck', '--concurrency=2'];
+  if (JSON.stringify(check.command) !== JSON.stringify(full)) throw new Error('Review the workspace typecheck command before partitioning.');
+  const web = '@website-signal-risk-scanner/web';
+  return [
+    { key: 'workspace-typecheck:web', command: [...full, `--filter=${web}`] },
+    { key: 'workspace-typecheck:other', command: [...full, `--filter=!${web}`] },
+  ];
+}
+
 export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 'fingerprint'>,
   options: { workers: number; timings?: Record<string, number>; fileTimings?: Record<string, number>; setupMsPerWorker?: number; controlPlaneMs?: number; execution?: ShardPlan['execution'] }) : ShardPlan {
   if (!Number.isInteger(options.workers) || options.workers < 1 || options.workers > 8) throw new Error('Use 1–8 isolated workers.');
@@ -71,6 +82,14 @@ export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 
     if (check.key === 'workspace-package-build') continue;
     const split = partitionableTestFiles(check), estimate = timings[check.key] ?? 30_000;
     if (!Number.isFinite(estimate) || estimate <= 0) throw new Error('Invalid timing profile.');
+    if (check.key === 'workspace-typecheck' && options.workers > 1) {
+      for (const partition of workspaceTypecheckPartitions(check)) {
+        const estimatedMs = timings[partition.key] ?? estimate / 2;
+        if (!Number.isFinite(estimatedMs) || estimatedMs <= 0) throw new Error('Invalid typecheck timing profile.');
+        tasks.push({ ...partition, parent: check.key, files: [], estimatedMs });
+      }
+      continue;
+    }
     if (!split) tasks.push({ key: check.key, parent: check.key, command: check.command, files: [], estimatedMs: estimate });
     else for (const file of split.files) {
       const estimateMs = options.fileTimings?.[`${check.key}:${file}`] ?? estimate / split.files.length;
@@ -86,9 +105,10 @@ export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 
   const merged = workers.map(tasks => {
     const groups = new Map<string, ShardTask>();
     for (const task of tasks) {
-      const prior = groups.get(task.parent);
+      const group = task.parent === 'workspace-typecheck' ? task.key : task.parent;
+      const prior = groups.get(group);
       if (prior && task.files.length) { prior.files.push(...task.files); prior.command.push(...task.files); prior.estimatedMs += task.estimatedMs; }
-      else groups.set(task.parent, { ...task, files: [...task.files], command: [...task.command] });
+      else groups.set(group, { ...task, files: [...task.files], command: [...task.command] });
     }
     return [...groups.values()].map(task => ({ ...task, key: `${task.parent}:${digest(task.command).slice(0, 16)}` }));
   });
@@ -110,6 +130,12 @@ export function validateShardPlan(plan: ShardPlan, expectedChecks: Check[]) {
     if (parent.key === 'workspace-package-build') continue;
     const tasks = all.filter(task => task.parent === parent.key), split = partitionableTestFiles(parent);
     if (!tasks.length) throw new Error(`Missing check ${parent.key}.`);
+    if (parent.key === 'workspace-typecheck' && tasks.length > 1) {
+      const required = workspaceTypecheckPartitions(parent).map(task => JSON.stringify(task.command)).sort();
+      const actual = tasks.map(task => JSON.stringify(task.command)).sort();
+      if (tasks.some(task => task.files.length) || JSON.stringify(required) !== JSON.stringify(actual)) throw new Error('Workspace typecheck partition coverage changed.');
+      continue;
+    }
     if (!split) {
       if (tasks.length !== 1 || tasks[0]!.files.length || JSON.stringify(tasks[0]!.command) !== JSON.stringify(parent.command)) throw new Error(`Opaque command changed: ${parent.key}.`);
     } else {
@@ -135,9 +161,12 @@ export function aggregateShards(plan: ShardPlan, expectedChecks: Check[], result
   }
   for (let worker = 0; worker < plan.workers.length; worker++) {
     const own = results.filter(result => result.worker === worker), setup = own.find(result => result.key === 'workspace-package-build')!;
+    const build = plan.workers[worker]!.find(task => task.parent === 'workspace-build');
     if (!/^[a-f0-9]{64}$/.test(setup.outputsFingerprint ?? '')) throw new Error('Worker bootstrap export proof missing.');
     for (const result of own) {
       if (['sha', 'fingerprint', 'environment', 'node', 'pnpm'].some(key => result.inputs[key as keyof ReleaseInputs] !== setup.inputs[key as keyof ReleaseInputs]) || (result !== setup && Date.parse(result.startedAt) < Date.parse(setup.completedAt))) throw new Error('Worker inputs changed or dependency order violated.');
+      if (result.reusedPackageExportsFingerprint !== undefined &&
+          (result.key !== build?.key || result.reusedPackageExportsFingerprint !== setup.outputsFingerprint)) throw new Error('Workspace build reused unverified package exports.');
     }
   }
   const toolchain = results[0]!.inputs;

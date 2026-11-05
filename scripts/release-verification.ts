@@ -25,19 +25,20 @@ async function immutable(file: string, value: unknown) {
   if (Buffer.byteLength(bytes) > 2 * 1024 * 1024) throw new Error('Verification metadata exceeds its 2 MiB file bound.');
   await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, bytes, { flag: 'wx', mode: 0o600 });
 }
-async function run(command: string[]) {
+async function run(command: string[], env = process.env) {
   return new Promise<number>((resolve, reject) => {
-    const child = spawn(command[0]!, command.slice(1), { stdio: 'inherit' });
+    const child = spawn(command[0]!, command.slice(1), { stdio: 'inherit', env });
     child.on('error', reject);
     child.on('exit', code => resolve(code ?? 1));
   });
 }
 async function main() {
+  if (process.env.CERTSCORE_VERIFIED_PACKAGE_EXPORTS !== undefined) throw new Error('Bootstrap reuse must be established by the worker.');
   await checkReleasePrerequisites();
   if (mode === 'plan') {
     const retained = JSON.parse(await readFile('scripts/release-verification-timings.json', 'utf8'));
     const timings: Record<string, number> = { ...retained.timings };
-    if (process.env.CERTSCORE_COLD_WEB_BUILD === '1') Object.assign(timings, retained.coldBenchmark?.timings);
+    if (process.env.CERTSCORE_VERIFICATION_COLD_BUILD === '1') Object.assign(timings, retained.coldBenchmark?.timings);
     if (values.has('--timings')) for (const file of await readdir(required('--timings'))) {
       if (!file.endsWith('.json')) continue;
       const value = JSON.parse(await readFile(path.join(required('--timings'), file), 'utf8'));
@@ -76,13 +77,17 @@ async function main() {
     }
     const tasks = phase === 'build' ? first : phase === 'remaining' ? remaining : [...first, ...remaining];
     const failed: string[] = [];
+    let verifiedExports: string | undefined;
     for (const task of tasks) {
       const before = await inputsForWorker();
       if (JSON.stringify(before) !== JSON.stringify(initial)) throw new Error('Worker inputs changed before execution.');
       const startedAt = new Date().toISOString(), start = performance.now(); let exitStatus = 1, outputsFingerprint: string | undefined;
+      const reusedPackageExportsFingerprint = task === build && process.env.CERTSCORE_VERIFICATION_COLD_BUILD === '1' ? verifiedExports : undefined;
       console.log(`Worker ${worker}: ${task.key}\n$ ${task.command.join(' ')}`);
       try {
-        const status = await run(task.command);
+        const status = await run(task.command, reusedPackageExportsFingerprint
+          ? { ...process.env, CERTSCORE_VERIFIED_PACKAGE_EXPORTS: reusedPackageExportsFingerprint }
+          : process.env);
         if (task.key === bootstrap.key) {
           if (status !== 0) throw new Error(`Workspace bootstrap failed (${status}).`);
           outputsFingerprint = await workspaceExportsFingerprint();
@@ -91,6 +96,7 @@ async function main() {
         }
         const after = await inputsForWorker();
         if (JSON.stringify(after) !== JSON.stringify(initial)) throw new Error('Worker inputs changed during execution.');
+        if (task.key === bootstrap.key) verifiedExports = outputsFingerprint;
         exitStatus = status;
         if (status !== 0) {
           failed.push(task.key);
@@ -98,7 +104,7 @@ async function main() {
         }
       } finally {
         const result: ShardResult = { version: 1, planHash, worker, key: task.key, command: task.command,
-          inputs: before, execution: shardExecutionContext(), outputsFingerprint, startedAt, completedAt: new Date().toISOString(), durationMs: performance.now() - start, exitStatus };
+          inputs: before, execution: shardExecutionContext(), outputsFingerprint, reusedPackageExportsFingerprint, startedAt, completedAt: new Date().toISOString(), durationMs: performance.now() - start, exitStatus };
         const filename = phase === 'build' ? `${task === build ? build.parent : bootstrap.key}.json` : `${worker}-${randomUUID()}.json`;
         await immutable(path.join(out, filename), result);
       }

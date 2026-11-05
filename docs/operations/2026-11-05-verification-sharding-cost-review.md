@@ -80,11 +80,18 @@ additional. Optional `--file-timings <json>` accepts measured `parent:file` timi
 Parent elapsed time includes its original internal parallelism, so equal-share
 estimates can underestimate individual file cost. Calibrate against hosted runs.
 
-The cold benchmark profile uses measured build and typecheck durations from
-hosted run `41976958185`. The policy file weights come from a local four-lane
+The cold benchmark profile uses measured attempt durations from hosted run
+`41985290182`. Parent weights sum the observed shard command durations and use
+the slowest observed package bootstrap. The policy file weights come from a local four-lane
 run of all eight files. It passed the same 226 tests as the original command,
 in 143.072 seconds versus 283.597 seconds. These weights guide placement and
 do not predict runner speed or replace verification receipts.
+
+Multiple workers run complementary workspace typecheck filters for the web app
+and the rest of the workspace. Turbo still runs each filter's prerequisites. The
+cold build worker validates the exports from its successful package bootstrap
+before compiling the app graph. The early timing artifact includes both attempt
+receipts so the elapsed package work remains visible.
 
 `pnpm release:benchmark-shards --out <new-directory>` measures four reviewed owned
 fixture files sequentially and with two process lanes on one host, retaining

@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import { planReleaseBootstrap } from './lib/release-bootstrap';
+import { planReleaseBootstrap, workspaceExportsFingerprint } from './lib/release-bootstrap';
 import { scheduleReleaseTasks } from './lib/release-scheduler';
 async function main() {
   const started = performance.now();
@@ -16,15 +16,30 @@ async function main() {
     }
   }
   const plan = planReleaseBootstrap(packages, fullWorkspace);
-  console.log(`${fullWorkspace ? 'Workspace build' : 'Bootstrap'}: ${plan.length} tasks; two lanes, 8 GiB shared cap.`);
-  const timings = await scheduleReleaseTasks(plan.map(value => ({
+  const reuse = process.env.CERTSCORE_VERIFIED_PACKAGE_EXPORTS;
+  let pending = plan;
+  if (reuse !== undefined) {
+    const packagePlan = plan.filter(task => task.directory.startsWith('packages/'));
+    const bootstrapPlan = planReleaseBootstrap(packages.filter(value => value.directory.startsWith('packages/')));
+    if (!fullWorkspace || process.env.CERTSCORE_VERIFICATION_COLD_BUILD !== '1' ||
+        JSON.stringify(packagePlan) !== JSON.stringify(bootstrapPlan) || reuse !== await workspaceExportsFingerprint()) {
+      throw new Error('Workspace build requires the verified exports and matching package build graph.');
+    }
+    const completed = new Set(packagePlan.map(task => task.key));
+    pending = plan.filter(task => !completed.has(task.key)).map(task => ({
+      ...task, dependencies: task.dependencies.filter(dependency => !completed.has(dependency)),
+    }));
+  }
+  console.log(`${fullWorkspace ? 'Workspace build' : 'Bootstrap'}: ${pending.length} tasks; two lanes, 8 GiB shared cap.`);
+  const timings = await scheduleReleaseTasks(pending.map(value => ({
     ...value, exclusive: value.directory === 'apps/web', memoryMb: value.directory === 'apps/web' ? 8192 : 4096,
     run: async () => {
       console.log(`Building ${value.key}`);
       for (const command of value.commands) await new Promise<void>((resolve, reject) => {
         const args = command[0] === 'pnpm' ? command.slice(1) : ['exec', ...command];
         const env = command[0] === 'next'
-          ? { ...process.env, NODE_OPTIONS: process.env.NODE_OPTIONS || '--max-old-space-size=8192' }
+          ? { ...process.env, NODE_OPTIONS: process.env.NODE_OPTIONS || '--max-old-space-size=8192',
+              ...(process.env.CERTSCORE_VERIFICATION_COLD_BUILD === '1' ? { CERTSCORE_COLD_WEB_BUILD: '1' } : {}) }
           : process.env;
         const child = spawn('pnpm', args, { cwd: value.directory, env, stdio: 'inherit' });
         child.on('error', reject);
@@ -34,7 +49,7 @@ async function main() {
   })), { lanes: 2, memoryMb: 8192 });
   const wallMs = Math.round(performance.now() - started);
   if (fullWorkspace) {
-    console.log(JSON.stringify({ workspaceBuildWallMs: wallMs, tasks: timings }));
+    console.log(JSON.stringify({ workspaceBuildWallMs: wallMs, reusedPackageTasks: plan.length - pending.length, tasks: timings }));
   } else {
     console.log(JSON.stringify({ bootstrapWallMs: wallMs, taskTotalMs: Math.round(timings.reduce((sum, value) => sum + value.durationMs, 0)), packages: plan.length }));
   }
