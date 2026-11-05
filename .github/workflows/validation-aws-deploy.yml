@@ -1,4 +1,5 @@
 name: Validation AWS Deploy
+run-name: ${{ github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' && format('Verify validation {0}', github.sha) || format('Deploy validation {0}', github.sha) }}
 
 on:
   push:
@@ -40,6 +41,10 @@ on:
       - "!apps/web/**/*.spec.tsx"
   workflow_dispatch:
     inputs:
+      expected_sha:
+        description: Exact target for an approved staged coupled release
+        type: string
+        default: ''
       use_runtime_base:
         description: "Use the prebuilt validation worker runtime base image."
         required: false
@@ -104,6 +109,12 @@ jobs:
       CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED: "1"
 
     steps:
+      - name: Verify requested staged revision
+        if: inputs.expected_sha != ''
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$GITHUB_REF" = refs/heads/main && test "$GITHUB_SHA" = "$EXPECTED_SHA"
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
@@ -215,7 +226,13 @@ jobs:
         env:
           ECS_SERVICE_NAME: ${{ env.ECS_WORKER_SERVICE_NAME }}
           ECS_CONTAINER_NAME: ${{ env.ECS_WORKER_CONTAINER_NAME }}
-        run: node scripts/select-workflow-deployment.mjs validation
+          HOLD_AUTOMATIC_PROMOTION: ${{ github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' }}
+        run: |
+          if [[ "$HOLD_AUTOMATIC_PROMOTION" == true ]]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            node scripts/select-workflow-deployment.mjs validation
+          fi
 
       - name: Resolve validation worker runtime base mode
         if: steps.runtime-selection.outputs.deploy == 'true'

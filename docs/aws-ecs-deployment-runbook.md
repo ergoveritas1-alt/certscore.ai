@@ -292,3 +292,49 @@ the existing quota without increasing paid storage. The extra local memory
 reservation can delay a gate on a busy machine. Production wall-time savings
 require a future separately authorized comparable warm release; do not add
 parallel task totals or fixture savings to production deployment savings.
+
+### Staged web and scanner promotion
+
+Staged promotion is an opt-in path for a warm coupled release on the exact
+current remote `main` commit. Enabling the repository variable
+`AWS_STAGED_COUPLED_RELEASES=true` changes web and validation push runs to
+verification only. Review that switch separately before adopting it. Existing
+explicit manual deployments remain available.
+
+From a clean isolated checkout, record the current production web SHA and run
+`pnpm preflight:all -- --base "$LIVE_SHA" --receipt-dir "$PREFLIGHT_RECEIPTS"`.
+Keep the receipt directories outside the checkout. Once the gate passes, stage
+the web and scanner artifacts:
+
+```sh
+pnpm deploy:all -- --ref "$RELEASE_SHA" --base "$LIVE_SHA" --no-push \
+  --no-predeploy --preflight-receipts "$PREFLIGHT_RECEIPTS" \
+  --preserve-scanner-operational-settings --stage-release "$STAGED_RELEASE_JSON"
+```
+
+Staging runs both existing web CI jobs, pushes the SHA-tagged web image with an
+ECR-only session, and builds and replicates one scanner digest. It writes a
+private receipt with the exact successful GitHub attempt, the web digest, the
+three scanner image references, and hashes of the existing scanner settings.
+The web stage receipt expires after one day. Use a fresh stage after a source,
+image, settings, or workflow-attempt mismatch.
+
+After production approval, use the same command with
+`--promote-release "$STAGED_RELEASE_JSON"` in place of `--stage-release`.
+The workflow checks the stored ECR digest and the live base, then runs the
+migration task from that digest, waits for ECS stability, and verifies the
+expected task definitions. The orchestrator verifies the live web revision.
+Affected validation uses its canonical workflow in parallel. All scanner
+writes wait for both affected consumers to succeed. The six Lambda functions
+can then converge concurrently, with the existing revision, provenance,
+health, and settings checks per function. A retry of the same approved receipt
+can reuse a successful matching web promotion while the release is current.
+
+Measure command-to-verified wall time, the web queue and rollout, the affected
+validation lane, all six scanner handoffs, and final verification. The first
+five-minute target covers releases with stable, unchanged validation inputs.
+Affected validation retains its full workflow, including its build. The
+staged path uses existing runners, ECR repositories and retention policies.
+Normal stage-and-promote publishes the same release images once. Abandoned
+stages use storage under the existing retention policy and should be included
+when reviewing activation cost.

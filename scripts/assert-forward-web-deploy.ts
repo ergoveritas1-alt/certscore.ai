@@ -106,6 +106,12 @@ async function main() {
   }
 
   const liveSha = await readLiveRevision(liveBaseUrl);
+  const stagedBase = getArg("--expected-live-base");
+  const strictLiveBase = process.argv.includes("--require-live-base");
+  if (stagedBase !== null && (!SHA_PATTERN.test(stagedBase) ||
+      (liveSha !== stagedBase && (strictLiveBase || liveSha !== targetSha)))) {
+    throw new Error("The live web revision changed since the staged release was approved.");
+  }
   const liveRevisionIsSha = SHA_PATTERN.test(liveSha);
   if (liveRevisionIsSha) {
     await ensureCommitAvailable(liveSha);

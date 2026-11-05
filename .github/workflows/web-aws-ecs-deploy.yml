@@ -1,4 +1,5 @@
 name: Public Web AWS ECS Deploy
+run-name: ${{ inputs.stage_only && format('Stage public web {0}', github.sha) || inputs.staged_run_id != '' && format('Promote public web {0} from {1} {2}', github.sha, inputs.staged_run_id, inputs.staged_image) || github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' && format('Verify public web {0}', github.sha) || format('Deploy public web {0}', github.sha) }}
 
 on:
   push:
@@ -39,6 +40,22 @@ on:
       - "!apps/web/scripts/**"
   workflow_dispatch:
     inputs:
+      stage_only:
+        description: Verify and stage the exact main image in ECR
+        type: boolean
+        default: false
+      staged_run_id:
+        description: Successful staging run ID to promote by digest
+        type: string
+        default: ''
+      staged_image:
+        description: Approved staging attempt and SHA-256 digest
+        type: string
+        default: ''
+      staged_base_sha:
+        description: Live web SHA used to prepare the approved release
+        type: string
+        default: ''
       use_compiler_cache:
         description: "Opt-in benchmark only: restore/save bounded compiler cache (local app timings did not demonstrate a material speedup)."
         required: false
@@ -77,6 +94,7 @@ concurrency:
 
 jobs:
   verify-public-web:
+    if: inputs.staged_run_id == ''
     runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 30
     permissions:
@@ -223,6 +241,7 @@ jobs:
         run: node scripts/select-workflow-deployment.mjs web
 
   verify-post-accept-forms:
+    if: inputs.staged_run_id == ''
     runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 20
     permissions:
@@ -262,12 +281,22 @@ jobs:
     runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 90
     needs: [verify-public-web, verify-post-accept-forms]
-    if: needs.verify-public-web.outputs.deploy == 'true'
+    if: >-
+      ${{ !cancelled() && (
+        (inputs.staged_run_id == '' && needs.verify-public-web.result == 'success' &&
+          needs.verify-post-accept-forms.result == 'success' && needs.verify-public-web.outputs.deploy == 'true' &&
+          (github.event_name != 'push' || vars.AWS_STAGED_COUPLED_RELEASES != 'true')) ||
+        (inputs.staged_run_id != '' && needs.verify-public-web.result == 'skipped' &&
+          needs.verify-post-accept-forms.result == 'skipped')) }}
     permissions:
       contents: read
+      actions: read
       id-token: write
 
     env:
+      STAGED_RUN_ID: ${{ inputs.staged_run_id }}
+      STAGED_IMAGE: ${{ inputs.staged_image }}
+      STAGED_BASE_SHA: ${{ inputs.staged_base_sha }}
       WEB_COMPILER_CACHE_ENABLED: ${{ inputs.use_compiler_cache && '1' || '0' }}
       EXPERIMENTAL_BUILDKIT_SOURCE_POLICY: ${{ github.workspace }}/scripts/docker-source-policy.json
       AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
@@ -282,12 +311,32 @@ jobs:
       CERTSCORE_CHROME_EXTENSION_STORE_URL: ${{ vars.CERTSCORE_CHROME_EXTENSION_STORE_URL || 'https://chromewebstore.google.com/detail/certscore-ai/mjeaagdiegpaeokkdaghkndmkjhlbhbp' }}
 
     steps:
+      - name: Validate staged release invocation
+        if: inputs.stage_only || inputs.staged_run_id != '' || inputs.staged_image != '' || inputs.staged_base_sha != ''
+        env:
+          STAGING_ENABLED: ${{ vars.AWS_STAGED_COUPLED_RELEASES }}
+          STAGE_ONLY: ${{ inputs.stage_only }}
+          STANDARD_SETTINGS: ${{ !inputs.use_compiler_cache && !inputs.push_runtime_base && !inputs.allow_non_descendant_deploy && !inputs.use_x64_fallback && inputs.marketplace_light == 'preserve' && inputs.marketplace_browser == 'preserve' }}
+        run: |
+          test "$STAGING_ENABLED" = true
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$STANDARD_SETTINGS" = true
+          [[ "$STAGED_BASE_SHA" =~ ^[0-9a-f]{40}$ && "$STAGED_BASE_SHA" != "$GITHUB_SHA" ]] || exit 1
+          if [[ "$STAGE_ONLY" == true ]]; then
+            [[ -z "$STAGED_RUN_ID" && -z "$STAGED_IMAGE" ]] || exit 1
+          else
+            [[ "$STAGED_RUN_ID" =~ ^[1-9][0-9]{0,15}$ ]] || exit 1
+            [[ "$STAGED_IMAGE" =~ ^[1-9][0-9]{0,5}:sha256:[0-9a-f]{64}$ ]] || exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Report deploy-triggering changes
+        if: inputs.staged_run_id == ''
         run: |
           if [[ "${GITHUB_EVENT_NAME}" == "push" && -n "${{ github.event.before }}" ]]; then
             base_ref="${{ github.event.before }}"
@@ -342,15 +391,20 @@ jobs:
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          inline-session-policy: >-
+            ${{ inputs.stage_only && '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ecr:GetAuthorizationToken","ecr:DescribeImages","ecr:BatchGetImage","ecr:GetDownloadUrlForLayer","ecr:BatchCheckLayerAvailability","ecr:InitiateLayerUpload","ecr:UploadLayerPart","ecr:CompleteLayerUpload","ecr:PutImage"],"Resource":"*"}]}' || '' }}
 
       - name: Login to Amazon ECR
+        if: inputs.staged_run_id == ''
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
+        if: inputs.staged_run_id == ''
         uses: docker/setup-buildx-action@v3
 
       - name: Report image build architecture
+        if: inputs.staged_run_id == ''
         run: |
           echo "Runner architecture: ${RUNNER_ARCH}"
           echo "Target image platform: linux/arm64"
@@ -372,16 +426,25 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
+        if: inputs.staged_run_id == ''
         run: pnpm install --frozen-lockfile
 
       - name: Prevent non-descendant production rollback
         env:
+          STAGE_ONLY: ${{ inputs.stage_only }}
           ALLOW_NON_DESCENDANT_WEB_DEPLOY: ${{ github.event.inputs.allow_non_descendant_deploy || 'false' }}
           LIVE_WEB_BASE_URL: ${{ env.CERTSCORE_BASE_URL }}
-        run: pnpm exec tsx ./scripts/assert-forward-web-deploy.ts --target "${GITHUB_SHA}"
+        run: |
+          if [[ "$STAGE_ONLY" == true ]]; then
+            node --experimental-strip-types ./scripts/assert-forward-web-deploy.ts --target "$GITHUB_SHA" --expected-live-base "$STAGED_BASE_SHA" --require-live-base
+          elif [[ -n "$STAGED_RUN_ID" ]]; then
+            node --experimental-strip-types ./scripts/assert-forward-web-deploy.ts --target "$GITHUB_SHA" --expected-live-base "$STAGED_BASE_SHA"
+          else
+            pnpm exec tsx ./scripts/assert-forward-web-deploy.ts --target "${GITHUB_SHA}"
+          fi
 
       - name: Restore bounded web compiler cache
-        if: inputs.use_compiler_cache == true
+        if: inputs.staged_run_id == '' && !inputs.stage_only && inputs.use_compiler_cache == true
         id: compiler-cache
         uses: actions/cache/restore@v4
         with:
@@ -391,6 +454,7 @@ jobs:
             web-compiler-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('pnpm-lock.yaml', 'apps/web/next.config.mjs', 'apps/web/tsconfig.json') }}-
 
       - name: Prepare compiler cache input
+        if: inputs.staged_run_id == ''
         run: |
           if [[ "${WEB_COMPILER_CACHE_ENABLED}" == "1" ]]; then
             node scripts/web-compiler-cache.mjs .release-cache/web/saved .release-cache/web/input/compiler-cache
@@ -400,7 +464,9 @@ jobs:
 
       - name: Build and push public web image
         timeout-minutes: 60
+        if: inputs.staged_run_id == ''
         env:
+          STAGE_ONLY: ${{ inputs.stage_only }}
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
           set -euo pipefail
@@ -455,6 +521,8 @@ jobs:
           heartbeat_pid=$!
           trap 'kill "${heartbeat_pid}" 2>/dev/null || true' EXIT
 
+          tags=(-t "${WEB_IMAGE}:${GITHUB_SHA}")
+          if [[ "$STAGE_ONLY" != true ]]; then tags+=(-t "${WEB_IMAGE}:latest"); fi
           docker buildx build \
             --platform linux/arm64 \
             --progress=plain \
@@ -480,8 +548,56 @@ jobs:
           wait "${heartbeat_pid}" 2>/dev/null || true
           trap - EXIT
           echo "TARGET_WEB_IMAGE=${WEB_IMAGE}:${GITHUB_SHA}" >> "${GITHUB_ENV}"
+          if [[ "$STAGE_ONLY" == true ]]; then
+            digest=$(jq -er '."containerimage.digest" | select(test("^sha256:[0-9a-f]{64}$"))' "$RUNNER_TEMP/web-build-metadata.json")
+            jq -n --arg sha "$GITHUB_SHA" --arg typechecked '${{ needs.verify-public-web.outputs.verified_sha }}' \
+              --arg runId "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" --arg repo "$WEB_IMAGE" --arg digest "$digest" \
+              '{version:1,sha:$sha,typecheckedSha:$typechecked,runId:$runId,attempt:$attempt,repository:$repo,digest:$digest}' > "$RUNNER_TEMP/staged-web.json"
+          fi
+
+      - name: Publish staged web image receipt
+        if: inputs.stage_only
+        uses: actions/upload-artifact@v4
+        with:
+          name: staged-web-image-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/staged-web.json
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Verify and select staged web image
+        if: inputs.staged_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          stage=$(mktemp -d)
+          trap 'rm -rf -- "$stage"' EXIT
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGED_RUN_ID" > "$stage/run.json"
+          attempt=$(jq -er '.run_attempt | select(type == "number" and . > 0)' "$stage/run.json")
+          gh run download "$STAGED_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "staged-web-image-$attempt" --dir "$stage/artifact"
+          receipt="$stage/artifact/staged-web.json"
+          [[ -f "$receipt" && ! -L "$receipt" ]] || exit 1
+          test "$(wc -c < "$receipt")" -le 4096
+          account=$(aws sts get-caller-identity --query Account --output text)
+          export WEB_IMAGE="$account.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WEB_REPOSITORY"
+          image=$(node --input-type=module - "$stage" <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { stagedWebImage } from './scripts/lib/staged-web-image.mjs';
+          const dir = process.argv[2];
+          const read = file => JSON.parse(readFileSync(dir + '/' + file, 'utf8'));
+          console.log(stagedWebImage(read('run.json'), read('artifact/staged-web.json'), {
+            sha: process.env.GITHUB_SHA, runId: process.env.STAGED_RUN_ID,
+            repository: process.env.GITHUB_REPOSITORY, imageRepository: process.env.WEB_IMAGE
+          }));
+          NODE
+          )
+          tagged_digest=$(aws ecr describe-images --repository-name "$ECR_WEB_REPOSITORY" \
+            --image-ids "imageTag=$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)
+          test "$attempt:${image##*@}" = "$STAGED_IMAGE"
+          test "${image##*@}" = "$tagged_digest"
+          echo "TARGET_WEB_IMAGE=$image" >> "$GITHUB_ENV"
 
       - name: Apply database migrations from target web image
+        if: ${{ !inputs.stage_only }}
         run: |
           set -euo pipefail
 
@@ -526,8 +642,10 @@ jobs:
                   ]
               )
           ' current-task-definition.json > target-task-definition.json
-          node --import tsx scripts/configure-marketplace-light.ts target-task-definition.json "${{ inputs.marketplace_light || 'preserve' }}"
-          node --import tsx scripts/configure-marketplace-browser.ts target-task-definition.json "${{ inputs.marketplace_browser || 'preserve' }}"
+          node_types=(node --import tsx)
+          if [[ -n "$STAGED_RUN_ID" ]]; then node_types=(node --experimental-strip-types); fi
+          "${node_types[@]}" scripts/configure-marketplace-light.ts target-task-definition.json "${{ inputs.marketplace_light || 'preserve' }}"
+          "${node_types[@]}" scripts/configure-marketplace-browser.ts target-task-definition.json "${{ inputs.marketplace_browser || 'preserve' }}"
 
           TARGET_TASK_DEFINITION="$(aws ecs register-task-definition \
             --cli-input-json file://target-task-definition.json \
@@ -582,6 +700,7 @@ jobs:
           test "${EXIT_CODE}" = "0" || (echo "Migration task failed with exit code ${EXIT_CODE}" && exit 1)
 
       - name: Force ECS deployments
+        if: ${{ !inputs.stage_only }}
         run: |
           aws ecs update-service \
             --cluster "${ECS_CLUSTER_NAME}" \
@@ -607,7 +726,7 @@ jobs:
           fi
 
       - name: Export successful compiler cache
-        if: inputs.use_compiler_cache == true
+        if: inputs.staged_run_id == '' && !inputs.stage_only && inputs.use_compiler_cache == true
         id: compiler-export
         continue-on-error: true
         timeout-minutes: 5
@@ -631,20 +750,46 @@ jobs:
           node scripts/web-compiler-cache.mjs .release-cache/web/export/compiler-cache .release-cache/web/saved
 
       - name: Save bounded compiler cache
-        if: inputs.use_compiler_cache == true && steps.compiler-export.outcome == 'success' && steps.compiler-cache.outputs.cache-hit != 'true'
+        if: inputs.staged_run_id == '' && !inputs.stage_only && inputs.use_compiler_cache == true && steps.compiler-export.outcome == 'success' && steps.compiler-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: .release-cache/web/saved
           key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
 
+      - name: Install staged promotion reporting dependencies
+        id: promotion-deps
+        if: inputs.staged_run_id != ''
+        continue-on-error: true
+        timeout-minutes: 3
+        run: pnpm install --frozen-lockfile
+
       - name: Wait for ECS services to stabilize
+        if: ${{ !inputs.stage_only }}
         run: |
           services=("${ECS_CERTSCORE_SERVICE_NAME}")
           if [[ "${MATERIALIZER_SERVICE_DEPLOYED}" == "true" ]]; then
             services+=("${ECS_MATERIALIZER_SERVICE_NAME}")
           fi
           aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${services[@]}"
+          if [[ -n "$STAGED_RUN_ID" ]]; then
+            expected=("$TARGET_TASK_DEFINITION")
+            if [[ "${MATERIALIZER_SERVICE_DEPLOYED}" == "true" ]]; then
+              expected+=("$TARGET_MATERIALIZER_TASK_DEFINITION")
+            fi
+            stable=$(aws ecs describe-services --cluster "$ECS_CLUSTER_NAME" --services "${services[@]}" --output json)
+            for i in "${!services[@]}"; do
+              jq -e --arg service "${services[$i]}" --arg task "${expected[$i]}" '
+                any(.services[]; .serviceName == $service and .taskDefinition == $task and
+                  any(.deployments[]; .status == "PRIMARY" and .taskDefinition == $task and .rolloutState == "COMPLETED"))
+              ' <<< "$stable" >/dev/null || exit 1
+            done
+          fi
 
       - name: Submit IndexNow URLs
-        run: pnpm --filter @website-signal-risk-scanner/web indexnow:submit
+        if: ${{ !inputs.stage_only }}
+        env:
+          PROMOTION_DEPS: ${{ steps.promotion-deps.outcome }}
+        run: |
+          if [[ -n "$STAGED_RUN_ID" ]]; then test "$PROMOTION_DEPS" = success || exit 1; fi
+          pnpm --filter @website-signal-risk-scanner/web indexnow:submit

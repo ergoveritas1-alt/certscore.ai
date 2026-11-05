@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { assertScannerArtifactMetadata, assertScannerArtifact, type ScannerArtifact } from './scanner-artifact';
+import { assertScannerArtifactMetadata, assertScannerArtifact, runScannerPromotions, type ScannerArtifact } from './scanner-artifact';
 import { SCANNER_PROVENANCE_REGIONS } from './scanner-image-provenance';
-import { deployConsumersWithPreparedProducer } from './deployment-consumer-barrier';
+import { deployConsumersBeforeProducer, deployConsumersWithPreparedProducer } from './deployment-consumer-barrier';
 const sha = 'a'.repeat(40), digest = `sha256:${'b'.repeat(64)}`;
 const artifact = (): ScannerArtifact => ({ sha, runtimeBase: 'reused', images: Object.fromEntries(SCANNER_PROVENANCE_REGIONS.map(region => [region, `199536052647.dkr.ecr.${region}.amazonaws.com/certscore-v2-dag-local-lambda@${digest}`])) });
 test('scanner artifact binds exact SHA, approved regional inventory and digest parity', () => {
@@ -52,4 +52,35 @@ test('embedded image metadata must bind both build SHA and image tag', () => {
   for (const value of [null, {}, [], [`BUILD_GIT_SHA=${sha}`], [`BUILD_GIT_SHA=${'c'.repeat(40)}`, `BUILD_IMAGE_TAG=${sha}`]]) {
     assert.throws(() => assertScannerArtifactMetadata(value, sha), /metadata\/SHA mismatch/);
   }
+});
+
+test('staged scanner fan-out starts all six after the consumer gate and drains in-flight work on failure', async () => {
+  let releaseConsumer!: () => void;
+  let releaseOthers!: () => void;
+  const consumer = new Promise<void>(resolve => { releaseConsumer = resolve; });
+  const others = new Promise<void>(resolve => { releaseOthers = resolve; });
+  const started: string[] = [];
+  let completed = false;
+  const work = deployConsumersBeforeProducer({
+    consumers: [async () => { await consumer; return { status: 'succeeded' }; },
+      async () => ({ status: 'succeeded' })],
+    producer: async () => {
+      await runScannerPromotions(async (region, inventory) => {
+        started.push(`${region}/${inventory}`);
+        if (inventory && region === 'eu-central-1') throw new Error('fixture failure');
+        await others;
+      }, true);
+      return { status: 'succeeded' };
+    },
+    skippedProducer: () => ({ status: 'skipped' }),
+  });
+  const result = assert.rejects(work, /concurrent scanner work/).then(() => { completed = true; });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.deepEqual(started, []);
+  releaseConsumer();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(new Set(started).size, 6);
+  assert.equal(completed, false);
+  releaseOthers();
+  await result;
 });

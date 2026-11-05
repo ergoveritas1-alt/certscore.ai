@@ -9,7 +9,7 @@ export function assertReleaseToolchain(node: string, pnpm: string, expected: str
 }
 
 // These checks never mutate AWS, download data, invoke a scanner or print credentials.
-export async function checkReleasePrerequisites(input: { deployment?: boolean; scanner?: boolean } = {}) {
+export async function checkReleasePrerequisites(input: { deployment?: boolean; scanner?: boolean; prebuilt?: boolean } = {}) {
   const manifest = JSON.parse(await readFile('package.json', 'utf8'));
   const pnpm = await exec('pnpm', ['--version']);
   assertReleaseToolchain(process.version, pnpm.stdout, manifest.packageManager);
@@ -17,8 +17,10 @@ export async function checkReleasePrerequisites(input: { deployment?: boolean; s
     for (const [bin, args, label] of [
       ['gh', ['auth', 'status'], 'GitHub authentication'],
       ['aws', ['sts', 'get-caller-identity', '--query', 'Account', '--output', 'text'], 'AWS authentication'],
-      ['docker', ['info', '--format', '{{.OSType}}/{{.Architecture}}'], 'Docker daemon'],
-      ['docker', ['buildx', 'inspect'], 'Docker Buildx'],
+      ...(input.prebuilt ? [] : [
+        ['docker', ['info', '--format', '{{.OSType}}/{{.Architecture}}'], 'Docker daemon'],
+        ['docker', ['buildx', 'inspect'], 'Docker Buildx'],
+      ] as const),
     ] as const) {
       try { await exec(bin, [...args], { timeout: 30_000, maxBuffer: 1024 * 1024 }); }
       catch { throw new Error(`${label} prerequisite failed; command output omitted to protect credentials.`); }
