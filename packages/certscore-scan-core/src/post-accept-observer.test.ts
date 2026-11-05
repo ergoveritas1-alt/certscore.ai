@@ -217,7 +217,8 @@ test("post-Accept observer returns a limited confirmed packet before its result 
 test("post-Accept observer fails closed when more than one deterministic control matches", async () => {
   await withFixture({ ambiguous: true }, async ({ url, actionCount }) => {
     const packet = await runPostAcceptObserver({
-      actionSearchTimeoutMs: 100,
+      // Allow both live controls to be verified before asserting the ambiguity reason.
+      actionSearchTimeoutMs: 1_000,
       confirmationTimeoutMs: 200,
       interactionAuthorization: {
         authorizationId: "loopback_local_lab",

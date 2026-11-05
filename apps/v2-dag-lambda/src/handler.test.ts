@@ -3271,9 +3271,12 @@ test("handler keeps Lambda scan modules browser-isolated for runtime stability",
   assert.doesNotMatch(handlerSource, /browserReuseMode:\s*"single"/);
 });
 
-test("handler bundle imports without browser-only PDF globals", async () => {
+test("handler bundle imports without browser-only PDF globals", async (context) => {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-  const tempDir = await mkdtemp(path.join(repoRoot, "apps/v2-dag-lambda/tmp/bundle-import-"));
+  const tempRoot = path.join(repoRoot, "apps/v2-dag-lambda/tmp");
+  await mkdir(tempRoot, { recursive: true });
+  const tempDir = await mkdtemp(path.join(tempRoot, "bundle-import-"));
+  context.after(() => rm(tempDir, { recursive: true, force: true }));
   const outfile = path.join(tempDir, "handler.cjs");
   await build({
     bundle: true,

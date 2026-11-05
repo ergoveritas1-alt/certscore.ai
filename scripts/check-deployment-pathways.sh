@@ -59,7 +59,7 @@ echo
 origin_remote="$(git remote get-url origin 2>/dev/null || true)"
 if [[ -z "${origin_remote}" ]]; then
   fail "Git remote origin is not configured"
-elif [[ "${origin_remote}" == "${expected_remote}" ]]; then
+elif [[ "${origin_remote%.git}" == "${expected_remote%.git}" ]]; then
   pass "Git remote origin matches ${expected_remote}"
 else
   fail "Git remote origin points at ${origin_remote}, expected ${expected_remote}"
