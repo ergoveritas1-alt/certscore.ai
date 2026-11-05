@@ -26,7 +26,7 @@ Scanner ECR preparation overlaps consumer deployment while every Lambda mutation
 remains behind consumer success and artifact identity/parity verification.
 
 The web workflow separates compatibility/typecheck from owned browser checks;
-both gate image promotion. It restores only bounded webpack/SWC compiler caches
+both gate image promotion. Its opt-in benchmark path restores only bounded webpack/SWC compiler caches
 into fresh release output. Native ARM64, exact-SHA CI typecheck binding, exact-image
 migrations, ECS stabilization and existing runtime-base rules remain mandatory.
 Deployment skipping requires emitted runtime/dependency equivalence and installed
@@ -51,6 +51,21 @@ warm-build cache hits, export overhead, runner queue time, preparation wall time
 and total deployment savings are unmeasured until a separately authorized warm
 release. The 15–20 minute preparation and 12–15 minute deployment goals remain
 unverified.
+
+The actual web application exposed an uncompressed 1.5 GB cache, exceeding the
+512 MiB bound and producing a cache miss (84.912s cold, 86.654s second build).
+With native gzip enabled, the retained cache was 263,598,885 bytes: 88.908s cold,
+87.883s restored, plus 0.195s restoration. Both builds completed normal type
+validation, emitted distinct fresh build IDs and the correct real deployment SHA
+`ebf2bcd308bfd2f32ef73bb409c942e12b2d241a`. This single comparison's net 0.830s
+is not a meaningful demonstrated speedup; compression also adds cold-build CPU.
+Compiler restoration/compression therefore remains off by default, available
+only through an explicit manual workflow benchmark input. Optional cache export
+runs during ECS stabilization rather than before exact-image migrations.
+
+The existing 512 MiB cache bound, runner types, heaps and AWS runtime settings
+remain unchanged. The Docker named-context fallback override passed a local
+COPY-only scratch fixture without AWS access or image publication.
 
 ## Validation and costs
 

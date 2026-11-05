@@ -39,6 +39,11 @@ on:
       - "!apps/web/scripts/**"
   workflow_dispatch:
     inputs:
+      use_compiler_cache:
+        description: "Opt-in benchmark only: restore/save bounded compiler cache (local app timings did not demonstrate a material speedup)."
+        required: false
+        default: false
+        type: boolean
       push_runtime_base:
         description: "Rebuild the web runtime base intentionally (otherwise dependency changes or missing base only)."
         required: false
@@ -263,6 +268,7 @@ jobs:
       id-token: write
 
     env:
+      WEB_COMPILER_CACHE_ENABLED: ${{ inputs.use_compiler_cache && '1' || '0' }}
       EXPERIMENTAL_BUILDKIT_SOURCE_POLICY: ${{ github.workspace }}/scripts/docker-source-policy.json
       AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
@@ -375,6 +381,7 @@ jobs:
         run: pnpm exec tsx ./scripts/assert-forward-web-deploy.ts --target "${GITHUB_SHA}"
 
       - name: Restore bounded web compiler cache
+        if: inputs.use_compiler_cache == true
         id: compiler-cache
         uses: actions/cache/restore@v4
         with:
@@ -384,7 +391,12 @@ jobs:
             web-compiler-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('pnpm-lock.yaml', 'apps/web/next.config.mjs', 'apps/web/tsconfig.json') }}-
 
       - name: Prepare compiler cache input
-        run: node scripts/web-compiler-cache.mjs .release-cache/web/saved .release-cache/web/input/compiler-cache
+        run: |
+          if [[ "${WEB_COMPILER_CACHE_ENABLED}" == "1" ]]; then
+            node scripts/web-compiler-cache.mjs .release-cache/web/saved .release-cache/web/input/compiler-cache
+          else
+            mkdir -p .release-cache/web/input/compiler-cache
+          fi
 
       - name: Build and push public web image
         timeout-minutes: 60
@@ -458,6 +470,7 @@ jobs:
             --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
             --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
             --build-arg WEB_TYPECHECK_VERIFIED_SHA="${{ needs.verify-public-web.outputs.verified_sha }}" \
+            --build-arg WEB_COMPILER_CACHE_ENABLED="${WEB_COMPILER_CACHE_ENABLED}" \
             -t "${WEB_IMAGE}:${GITHUB_SHA}" \
             -t "${WEB_IMAGE}:latest" \
             --push \
@@ -467,36 +480,6 @@ jobs:
           wait "${heartbeat_pid}" 2>/dev/null || true
           trap - EXIT
           echo "TARGET_WEB_IMAGE=${WEB_IMAGE}:${GITHUB_SHA}" >> "${GITHUB_ENV}"
-
-      - name: Export successful compiler cache
-        id: compiler-export
-        continue-on-error: true
-        timeout-minutes: 5
-        env:
-          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-        run: |
-          set -euo pipefail
-          WEB_IMAGE="${REGISTRY}/${ECR_WEB_REPOSITORY}"
-          docker buildx build --platform linux/arm64 --progress=plain \
-            --provenance=false --sbom=false --target web-compiler-cache-export \
-            --cache-from "type=registry,ref=${WEB_IMAGE}:buildcache" \
-            --build-context web-compiler-cache-input=.release-cache/web/input \
-            --build-arg WEB_RUNTIME_BASE="${WEB_IMAGE}:runtime-base" \
-            --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
-            --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
-            --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
-            --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
-            --build-arg WEB_TYPECHECK_VERIFIED_SHA="${{ needs.verify-public-web.outputs.verified_sha }}" \
-            --output type=local,dest=.release-cache/web/export -f apps/web/Dockerfile .
-          node scripts/web-compiler-cache.mjs .release-cache/web/export/compiler-cache .release-cache/web/saved
-
-      - name: Save bounded compiler cache
-        if: steps.compiler-export.outcome == 'success' && steps.compiler-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: .release-cache/web/saved
-          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
 
       - name: Apply database migrations from target web image
         run: |
@@ -622,6 +605,38 @@ jobs:
             echo "Dedicated materializer service is not provisioned yet; public web deployment will continue."
             echo "MATERIALIZER_SERVICE_DEPLOYED=false" >> "${GITHUB_ENV}"
           fi
+
+      - name: Export successful compiler cache
+        if: inputs.use_compiler_cache == true
+        id: compiler-export
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          set -euo pipefail
+          WEB_IMAGE="${REGISTRY}/${ECR_WEB_REPOSITORY}"
+          docker buildx build --platform linux/arm64 --progress=plain \
+            --provenance=false --sbom=false --target web-compiler-cache-export \
+            --cache-from "type=registry,ref=${WEB_IMAGE}:buildcache" \
+            --build-context web-compiler-cache-input=.release-cache/web/input \
+            --build-arg WEB_RUNTIME_BASE="${WEB_IMAGE}:runtime-base" \
+            --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
+            --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
+            --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
+            --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
+            --build-arg WEB_TYPECHECK_VERIFIED_SHA="${{ needs.verify-public-web.outputs.verified_sha }}" \
+            --build-arg WEB_COMPILER_CACHE_ENABLED="${WEB_COMPILER_CACHE_ENABLED}" \
+            --output type=local,dest=.release-cache/web/export -f apps/web/Dockerfile .
+          node scripts/web-compiler-cache.mjs .release-cache/web/export/compiler-cache .release-cache/web/saved
+
+      - name: Save bounded compiler cache
+        if: inputs.use_compiler_cache == true && steps.compiler-export.outcome == 'success' && steps.compiler-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .release-cache/web/saved
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
 
       - name: Wait for ECS services to stabilize
         run: |

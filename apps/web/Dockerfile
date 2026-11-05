@@ -85,6 +85,7 @@ ARG BUILD_GIT_SHA=""
 ARG BUILD_IMAGE_TAG=""
 ARG BUILD_RUNTIME_TARGET="ecs-fargate"
 ARG WEB_TYPECHECK_VERIFIED_SHA=""
+ARG WEB_COMPILER_CACHE_ENABLED="0"
 
 COPY apps/web ./apps/web
 COPY scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
@@ -98,7 +99,8 @@ RUN printf 'export const generatedBuildInfo = {"gitRef":"%s","gitSha":"%s","imag
 
 RUN rm -rf ./apps/web/.next
 COPY --from=web-compiler-cache-input /compiler-cache /app/apps/web/.next/cache
-RUN WEB_TYPECHECK_VERIFIED_SHA="${WEB_TYPECHECK_VERIFIED_SHA}" \
+RUN WEB_COMPILER_CACHE_ENABLED="${WEB_COMPILER_CACHE_ENABLED}" \
+  WEB_TYPECHECK_VERIFIED_SHA="${WEB_TYPECHECK_VERIFIED_SHA}" \
   pnpm --filter @website-signal-risk-scanner/web build:container
 
 FROM scratch AS web-compiler-cache-export

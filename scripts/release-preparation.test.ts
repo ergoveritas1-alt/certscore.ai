@@ -103,15 +103,32 @@ test('automatic ECS workflows preserve compatibility checks while guarding every
   }
 });
 
-test('production compiler cache uses native compression without changing dev or non-filesystem caches', async () => {
+test('compiler cache is opt-in; native compression preserves dev and non-filesystem caches', async () => {
   const config = (await import('../apps/web/next.config.mjs')).default;
   const webpack = config.webpack;
   assert.ok(webpack);
   const options = (dev: boolean) => ({ dev } as Parameters<NonNullable<typeof config.webpack>>[1]);
-  const production = webpack({ resolve: {}, cache: { type: 'filesystem' } }, options(false));
-  assert.equal(production.cache.compression, 'gzip');
-  assert.deepEqual(production.resolve.extensionAlias['.js'], ['.ts', '.tsx', '.js']);
-  for (const cache of [false, { type: 'memory' }]) assert.equal(webpack({ resolve: {}, cache }, options(false)).cache, cache);
-  const development = webpack({ resolve: {}, cache: { type: 'filesystem' } }, options(true));
-  assert.equal(development.cache.compression, undefined);
+  const previous = process.env.WEB_COMPILER_CACHE_ENABLED;
+  try {
+    delete process.env.WEB_COMPILER_CACHE_ENABLED;
+    assert.equal(webpack({ resolve: {}, cache: { type: 'filesystem' } }, options(false)).cache.compression, undefined);
+    process.env.WEB_COMPILER_CACHE_ENABLED = '1';
+    const production = webpack({ resolve: {}, cache: { type: 'filesystem' } }, options(false));
+    assert.equal(production.cache.compression, 'gzip');
+    assert.deepEqual(production.resolve.extensionAlias['.js'], ['.ts', '.tsx', '.js']);
+    for (const cache of [false, { type: 'memory' }]) assert.equal(webpack({ resolve: {}, cache }, options(false)).cache, cache);
+    const development = webpack({ resolve: {}, cache: { type: 'filesystem' } }, options(true));
+    assert.equal(development.cache.compression, undefined);
+  } finally {
+    if (previous === undefined) delete process.env.WEB_COMPILER_CACHE_ENABLED; else process.env.WEB_COMPILER_CACHE_ENABLED = previous;
+  }
+});
+
+test('optional compiler-cache export overlaps stabilization and never delays target-image migrations', async () => {
+  const source = await readFile('.github/workflows/web-aws-ecs-deploy.yml', 'utf8');
+  assert.match(source, /use_compiler_cache:[\s\S]*?default: false/);
+  assert.ok(source.indexOf('Apply database migrations from target web image') < source.indexOf('Force ECS deployments'));
+  assert.ok(source.indexOf('Force ECS deployments') < source.indexOf('Export successful compiler cache'));
+  assert.ok(source.indexOf('Export successful compiler cache') < source.indexOf('Wait for ECS services to stabilize'));
+  assert.match(source, /WEB_COMPILER_CACHE_ENABLED: \$\{\{ inputs.use_compiler_cache && '1' \|\| '0' \}\}/);
 });

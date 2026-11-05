@@ -223,7 +223,7 @@ const nextConfig = {
   webpack(config, options) {
     // The uncompressed production cache exceeds the bounded persisted snapshot.
     // Use Webpack's native format; public output and dev caching are unchanged.
-    if (!options?.dev && config.cache && typeof config.cache === "object" && config.cache.type === "filesystem") {
+    if (process.env.WEB_COMPILER_CACHE_ENABLED === "1" && !options?.dev && config.cache && typeof config.cache === "object" && config.cache.type === "filesystem") {
       config.cache.compression = "gzip";
     }
     config.resolve.extensionAlias = {
