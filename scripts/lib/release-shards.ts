@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { globSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Check } from '../predeploy';
+import { verifiedSuiteCommand } from './release-suite-reuse';
 import { releaseEnvironmentFingerprint, type ReleaseInputs } from './release-receipts';
 
 export const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -198,7 +199,8 @@ export function aggregateShards(plan: ShardPlan, expectedChecks: Check[], result
   const seen = new Set<string>();
   for (const result of results) {
     const id = `${result.worker}:${result.key}`, match = expected.find(value => value.worker === result.worker && value.key === result.key);
-    const command = result.bootstrapSource ? sharedBootstrapCommand : match?.command;
+    const suite = match && result.reusedPackageExportsFingerprint !== undefined ? verifiedSuiteCommand(match.command) : null;
+    const command = result.bootstrapSource ? sharedBootstrapCommand : suite ?? match?.command;
     if (seen.has(id) || !match || (result.bootstrapSource && result.key !== bootstrap.key) || result.version !== 1 || result.planHash !== digest(plan) || JSON.stringify(result.command) !== JSON.stringify(command) || JSON.stringify(result.execution) !== JSON.stringify(plan.execution)) throw new Error('Shard result identity/configuration mismatch.');
     seen.add(id);
     const start = Date.parse(result.startedAt), end = Date.parse(result.completedAt);
@@ -217,8 +219,10 @@ export function aggregateShards(plan: ShardPlan, expectedChecks: Check[], result
     }
     for (const result of own) {
       if (['sha', 'fingerprint', 'environment', 'node', 'pnpm'].some(key => result.inputs[key as keyof ReleaseInputs] !== setup.inputs[key as keyof ReleaseInputs]) || (result !== setup && Date.parse(result.startedAt) < Date.parse(setup.completedAt))) throw new Error('Worker inputs changed or dependency order violated.');
+      const task = plan.workers[worker]!.find(candidate => candidate.key === result.key);
       if (result.reusedPackageExportsFingerprint !== undefined &&
-          (result.key !== build?.key || result.reusedPackageExportsFingerprint !== setup.outputsFingerprint)) throw new Error('Workspace build reused unverified package exports.');
+          ((result.key !== build?.key && !(task && verifiedSuiteCommand(task.command))) ||
+            result.reusedPackageExportsFingerprint !== setup.outputsFingerprint)) throw new Error('Verification reused unverified package exports.');
     }
   }
   const toolchain = results[0]!.inputs;

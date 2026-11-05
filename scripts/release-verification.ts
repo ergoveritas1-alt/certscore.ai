@@ -6,6 +6,7 @@ import { getPredeployPlan } from './predeploy';
 import { receiptMatches, releaseInputs } from './lib/release-receipts';
 import { checkReleasePrerequisites } from './lib/release-prerequisites';
 import { workspaceExportsFingerprint } from './lib/release-bootstrap';
+import { verifiedSuiteCommand } from './lib/release-suite-reuse';
 import { publishBootstrapArtifact, restoreBootstrapArtifact } from './lib/release-bootstrap-artifact';
 import { aggregateShards, digest, planShards, shardExecutionContext, sharedBootstrapCommand, validateShardPlan, type ShardPlan, type ShardResult } from './lib/release-shards';
 
@@ -87,7 +88,7 @@ async function main() {
       const before = await inputsForWorker();
       if (JSON.stringify(before) !== JSON.stringify(initial)) throw new Error('Worker inputs changed before execution.');
       const startedAt = new Date().toISOString(), start = performance.now(); let exitStatus = 1, outputsFingerprint: string | undefined;
-      const reusedPackageExportsFingerprint = task === build && process.env.CERTSCORE_VERIFICATION_COLD_BUILD === '1' ? verifiedExports : undefined;
+      let reusedPackageExportsFingerprint = task === build && process.env.CERTSCORE_VERIFICATION_COLD_BUILD === '1' ? verifiedExports : undefined;
       let bootstrapSource: ShardResult['bootstrapSource'];
       let command = task.command;
       try {
@@ -112,6 +113,11 @@ async function main() {
           } catch (error) {
             console.warn(`Shared bootstrap unavailable; compiling locally. ${error instanceof Error ? error.message : String(error)}`);
           }
+        }
+        const suite = verifiedExports ? verifiedSuiteCommand(command) : null;
+        if (suite && await workspaceExportsFingerprint().catch(() => undefined) === verifiedExports) {
+          command = suite;
+          reusedPackageExportsFingerprint = verifiedExports;
         }
         console.log(`Worker ${worker}: ${task.key}\n$ ${command.join(' ')}`);
         const buildEnv = task === build ? {

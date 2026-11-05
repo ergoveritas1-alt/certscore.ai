@@ -256,3 +256,25 @@ test('early web phase profiling reports durations without serializing trace payl
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('suite assertions can replace only reviewed builds with the same worker’s export proof', async () => {
+  const { verifiedSuiteCommand } = await import('./release-suite-reuse');
+  const all = getPredeployPlan([], { full: true }).checks;
+  const names = ['report-presentation', 'canonical-projection-parity', 'post-refusal-release'];
+  const gate = [checks[0]!, ...all.filter(check => names.includes(check.key))];
+  const { plan, results } = fixture(gate);
+  assert.equal(gate.length, 4);
+  for (const task of plan.workers.flat()) {
+    const receipt = results.find(result => result.key === task.key)!;
+    const assertions = verifiedSuiteCommand(task.command);
+    assert.ok(assertions);
+    receipt.command = assertions;
+    receipt.reusedPackageExportsFingerprint = 'c'.repeat(64);
+  }
+  assert.doesNotThrow(() => aggregateShards(plan, gate, results, now));
+  const receipt = results.find(result => result.reusedPackageExportsFingerprint)!;
+  receipt.reusedPackageExportsFingerprint = 'd'.repeat(64);
+  assert.throws(() => aggregateShards(plan, gate, results, now), /reused unverified package exports/);
+  receipt.reusedPackageExportsFingerprint = undefined;
+  assert.throws(() => aggregateShards(plan, gate, results, now), /identity\/configuration mismatch/);
+});
