@@ -36,6 +36,7 @@ type Args = {
   forceValidation: boolean;
   forceValidationRuntimeBase: boolean;
   forceWeb: boolean;
+  checkStaging: boolean;
   stagedRelease: { action: "stage" | "promote"; file: string } | null;
 };
 
@@ -111,16 +112,17 @@ async function executeDeployment(args: Args, startedAt: number, timing?: ReturnT
   assertScannerConfigurationScope(args);
   const sourceRef = args.ref ?? await git(["rev-parse", "--abbrev-ref", "HEAD"]);
   const sha = await git(["rev-parse", sourceRef]);
-  const workflowRef = args.stagedRelease ? "main" : await resolveWorkflowDispatchRef(sourceRef, sha);
+  const staged = args.checkStaging || !!args.stagedRelease;
+  const workflowRef = staged ? "main" : await resolveWorkflowDispatchRef(sourceRef, sha);
   const shortSha = sha.slice(0, 8);
   const changed = await classifyChanges(args.baseRef);
 
-  console.log(`Fast deploy mode: ${args.mode}`);
+  console.log(args.checkStaging ? "Checking staged release prerequisites" : `Fast deploy mode: ${args.mode}`);
   console.log(`Deploy SHA: ${sha}`);
   console.log(`Base ref: ${args.baseRef}`);
   console.log(`Changed files: ${changed.changedFiles.length}`);
   printTargets(changed);
-  printPlan(args, changed, sha);
+  if (!args.checkStaging) printPlan(args, changed, sha);
 
   if (args.stagedRelease) console.log(`Staged release operation: ${args.stagedRelease.action} ${args.stagedRelease.file}`);
   if (args.plan || args.dryRun) {
@@ -133,9 +135,21 @@ async function executeDeployment(args: Args, startedAt: number, timing?: ReturnT
   await requireCleanWorktree();
   if (await git(["rev-parse", "HEAD"]) !== sha) throw new Error("Deploy ref must match the isolated checkout HEAD.");
   if (args.noPredeploy && !args.preflightReceiptDir) throw new Error("--no-predeploy requires --preflight-receipts from the exact clean source gate.");
+  if (staged) {
+    const origin = await git(["remote", "get-url", "origin"]);
+    if (origin.replace(/\.git$/, "") !== `https://github.com/${RELEASE_REPOSITORY}`) {
+      throw new Error("Staged releases require the canonical HTTPS GitHub origin.");
+    }
+  }
   await checkReleasePrerequisites({ deployment: true, scanner: args.mode === "all" || args.mode === "scanners",
     prebuilt: args.stagedRelease?.action === "promote" });
   await confirmSkippedRuntimeInputs(changed, args);
+  if (args.checkStaging) {
+    await checkStagedReleasePrerequisites(args, changed, sha);
+    await run(["pnpm", "ops:check:deploy"]);
+    console.log("Staging prerequisites passed. No release was started.");
+    return;
+  }
   const runPreflight = () => timedLane("preflight", async () => {
     const target = { web: "web", validation: "validation-worker", scanners: "v2-dag-lambda", db: "db", all: "all" }[args.mode];
     const predeployArgs = args.mode === "all" ? ["--fast", "--all"] : ["--fast", "--target", target];
@@ -249,12 +263,17 @@ function parseArgs(argv: string[]): Args {
     preserveScannerConfiguration: false,
     preserveScannerOperationalSettings: false,
     ref: null,
+    checkStaging: false,
     stagedRelease: null
   };
 
   for (let index = 0; index < rest.length; index += 1) {
     const arg = rest[index]!;
     if (arg === "--") {
+      continue;
+    }
+    if (arg === "--check-staging") {
+      args.checkStaging = true;
       continue;
     }
     if (arg === "--stage-release" || arg === "--promote-release") {
@@ -332,6 +351,11 @@ function parseArgs(argv: string[]): Args {
     throw new Error(`Unknown argument: ${arg}`);
   }
 
+  if (args.checkStaging && (args.mode !== "all" || args.stagedRelease || args.plan || args.dryRun ||
+      !/^[a-f0-9]{40}$/.test(args.baseRef) || args.pushScannerRuntimeBase ||
+      args.forceDb || args.forceValidation || args.forceWeb)) {
+    throw new Error("--check-staging requires deploy:all and the full live-base SHA, without a deployment operation.");
+  }
   if (args.stagedRelease && (args.mode !== "all" || !args.noPush || !args.noPredeploy || !args.preflightReceiptDir ||
       !args.ref || !/^[a-f0-9]{40}$/.test(args.ref) || !/^[a-f0-9]{40}$/.test(args.baseRef) || args.ref === args.baseRef ||
       args.pushScannerRuntimeBase || args.forceDb || args.forceValidation || args.forceWeb || !args.preserveScannerOperationalSettings)) {
@@ -390,10 +414,8 @@ async function confirmSkippedRuntimeInputs(changed: ChangedTargets, args: Args) 
   const readAws = async (command: string[]) => JSON.parse((await run(["aws", ...command, "--output", "json"], { quiet: true })).stdout);
   if ((args.mode === "all" || args.mode === "web")) {
     try {
-      const topology = JSON.parse(await readFile("config/deployment-topology.json", "utf8"));
-      const response = await fetch(new URL("/api/version", process.env.LIVE_BASE_URL ?? topology.primaryHost), { cache: "no-store", signal: AbortSignal.timeout(10_000) });
-      const live = await response.json();
-      changed.web = !response.ok || live.runtimeTarget !== "ecs-fargate" || !await equivalent("web", live.gitSha);
+      const live = await readLiveWebVersion(args.checkStaging || !!args.stagedRelease);
+      changed.web = live.runtimeTarget !== "ecs-fargate" || !await equivalent("web", live.gitSha);
     } catch { changed.web = true; }
   }
   if ((args.mode === "all" || args.mode === "validation")) {
@@ -409,7 +431,7 @@ async function confirmSkippedRuntimeInputs(changed: ChangedTargets, args: Args) 
         resolveDigest: async (sha: string) => (await readAws(["ecr", "describe-images", "--region", region,
           "--repository-name", repository, "--image-ids", `imageTag=${sha}`])).imageDetails?.[0]?.imageDigest });
       changed.validation = !await equivalent("validation", revision);
-      if (args.stagedRelease && changed.validation) {
+      if ((args.checkStaging || args.stagedRelease) && changed.validation) {
         if (!await gitRefExists(revision)) throw new Error("Installed validation source is unavailable.");
         const files = (await git(["diff", "--name-only", "--no-renames", revision, "HEAD"])).split("\n").filter(Boolean);
         changed.validationRuntimeBase ||= await runtimeBaseInputsChanged("validation", files,
@@ -417,7 +439,7 @@ async function confirmSkippedRuntimeInputs(changed: ChangedTargets, args: Args) 
       }
     } catch {
       changed.validation = true;
-      if (args.stagedRelease) changed.validationRuntimeBase = true;
+      if (args.checkStaging || args.stagedRelease) changed.validationRuntimeBase = true;
     }
   }
   if ((args.mode === "all" || args.mode === "scanners")) {
@@ -469,25 +491,44 @@ function readStagedImage(kind: "web" | "validation", sha: string, runId: string)
   return readStagedEcsReceipt({ kind, sha, runId, repository: RELEASE_REPOSITORY });
 }
 
-async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha: string, operation: NonNullable<Args["stagedRelease"]>, timing: ReturnType<typeof stagedPromotionTiming>) {
-  const origin = await git(["remote", "get-url", "origin"]);
-  if (origin.replace(/\.git$/, "") !== `https://github.com/${RELEASE_REPOSITORY}`) throw new Error("Staged release requires the canonical GitHub origin.");
-  const [main, enabled] = await Promise.all([
+async function checkStagedReleasePrerequisites(args: Args, changed: ChangedTargets, sha: string) {
+  const [remoteMain, live] = await Promise.all([
     git(["ls-remote", "--exit-code", "origin", "refs/heads/main"]),
-    run(["gh", "variable", "get", "AWS_STAGED_COUPLED_RELEASES", "--repo", RELEASE_REPOSITORY], { quiet: true })
+    readLiveWebVersion(true)
   ]);
-  if (enabled.stdout.trim() !== "true") throw new Error("Staged releases are not enabled for the web workflow.");
-  if (main !== `${sha}\trefs/heads/main`) throw new Error("The staged release must match the current remote main SHA.");
-  const live = await readLiveWebVersion(true);
+  const main = /^([a-f0-9]{40})\trefs\/heads\/main$/.exec(remoteMain)?.[1];
+  if (!main) throw new Error("Could not resolve the canonical remote main SHA.");
+  if (args.checkStaging) {
+    await run(["git", "merge-base", "--is-ancestor", main, sha], { quiet: true });
+  } else {
+    if (main !== sha) throw new Error("The staged release must match the current remote main SHA.");
+    const enabled = await run(["gh", "variable", "get", "AWS_STAGED_COUPLED_RELEASES", "--repo", RELEASE_REPOSITORY], { quiet: true });
+    if (enabled.stdout.trim() !== "true") throw new Error("Staged releases are not enabled for the web workflow.");
+  }
+  if (args.baseRef === sha) throw new Error("Staging requires a revision newer than the live web SHA.");
+  await run(["git", "merge-base", "--is-ancestor", args.baseRef, sha], { quiet: true });
   // A retry can finish scanner promotion after the intended web revision is already live.
-  const expectedLive = operation.action === "promote" && live?.gitSha === sha ? sha : args.baseRef;
+  const expectedLive = args.stagedRelease?.action === "promote" && live?.gitSha === sha ? sha : args.baseRef;
   requireExpectedWebRevision(live, expectedLive);
   if (changed.lambdaRuntimeBase || changed.validationRuntimeBase) throw new Error("Staged promotion requires existing runtime bases.");
+  if (args.stagedRelease?.action === "promote") return;
+  if (!changed.web || !changed.scanners) throw new Error("Staging requires affected web and scanner runtimes.");
+  if (args.stagedRelease && existsSync(args.stagedRelease.file)) throw new Error("Choose a new staged release receipt path.");
+  await scannerRuntimeBaseMode({ buildRegion: SCANNER_BUILD_REGION, rebuild: false, available: hasScannerRuntimeBase });
+  if (changed.validation) {
+    const [repo, region] = await Promise.all([
+      run(["gh", "variable", "get", "AWS_VALIDATION_WORKER_ECR_REPOSITORY"], { quiet: true }),
+      run(["gh", "variable", "get", "AWS_REGION"], { quiet: true, reject: false })
+    ]);
+    await run(["aws", "ecr", "describe-images", "--region", region.stdout.trim() || "us-west-1",
+      "--repository-name", repo.stdout.trim(), "--image-ids", "imageTag=validation-worker-runtime-base"], { quiet: true });
+  }
+}
 
+async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha: string, operation: NonNullable<Args["stagedRelease"]>, timing: ReturnType<typeof stagedPromotionTiming>) {
+  await checkStagedReleasePrerequisites(args, changed, sha);
   const scannerInput = { ref: sha, preserveOperationalSettings: true } as const;
   if (operation.action === "stage") {
-    if (!changed.web || !changed.scanners) throw new Error("Staging requires affected web and scanner runtimes.");
-    if (existsSync(operation.file)) throw new Error("Choose a new staged release receipt path.");
     let web: { runId: string; image: string } | undefined;
     let scanner: PreparedScanner | undefined;
     let validation: StagedCoupledRelease["validation"];
@@ -619,6 +660,16 @@ async function deployDb(input: { ref: string; skip: boolean; workflowRef: string
 
 type PreparedScanner = ScannerArtifact & { preservedSettings: Map<string, ScannerOperationalSnapshot> | null };
 
+async function hasScannerRuntimeBase(region: string) {
+  const result = await run([
+    "aws", "ecr", "describe-images",
+    "--region", region,
+    "--repository-name", "certscore-v2-dag-local-lambda",
+    "--image-ids", "imageTag=runtime-base"
+  ], { quiet: true, reject: false });
+  return result.exitCode === 0;
+}
+
 /** Builds/replicates ECR artifacts only. No Lambda code, environment or settings writer is reachable here. */
 async function prepareScannerArtifact(input: { pushRuntimeBase: boolean; ref: string; preserveOperationalSettings: boolean }): Promise<PreparedScanner> {
     const baselineSettings = await readScannerOperationalSettings();
@@ -626,15 +677,7 @@ async function prepareScannerArtifact(input: { pushRuntimeBase: boolean; ref: st
     const runtimeBase = await scannerRuntimeBaseMode({
       buildRegion: SCANNER_BUILD_REGION,
       rebuild: input.pushRuntimeBase,
-      available: async (region) => {
-        const result = await run([
-          "aws", "ecr", "describe-images",
-          "--region", region,
-          "--repository-name", "certscore-v2-dag-local-lambda",
-          "--image-ids", "imageTag=runtime-base"
-        ], { quiet: true, reject: false });
-        return result.exitCode === 0;
-      }
+      available: hasScannerRuntimeBase
     });
     const dockerConfigRoot = path.join(tmpdir(), `certscore-lambda-deploy-${process.pid}-${input.ref.slice(0, 8)}`);
     const dockerConfigByRegion = Object.fromEntries(SCANNER_REGIONS.map((region) => [
@@ -985,7 +1028,8 @@ async function ensureWorkflowRun(
       const kind = workflow === WEB_WORKFLOW ? "public web" : workflow === VALIDATION_WORKFLOW ? "validation" : null;
       return kind ? runs.filter(run =>
         !(run.event === "workflow_dispatch" && run.displayTitle.startsWith(`Stage ${kind} `)) &&
-        !(run.event === "push" && run.displayTitle.startsWith(`Verify ${kind} `))) : runs;
+        !(run.event === "push" && (run.displayTitle.startsWith(`Verify ${kind} `) ||
+          run.displayTitle.startsWith(`Defer ${kind} `)))) : runs;
     },
     dispatch: async () => { await run(["gh", "workflow", "run", workflow, "--ref", workflowRef, ...extraArgs]); }
   });

@@ -309,12 +309,20 @@ commands, browser timing coverage, migrations and stability gates remain intact.
 
 Staged promotion is an opt-in path for a warm coupled release on the exact
 current remote `main` commit. Enabling the repository variable
-`AWS_STAGED_COUPLED_RELEASES=true` changes web and validation push runs to
-verification only. Review that switch separately before adopting it. Existing
-explicit manual deployments remain available.
+`AWS_STAGED_COUPLED_RELEASES=true` defers the web push run to the explicit
+staging dispatch and makes validation push runs verification only. The deferred
+web run starts no runners and shares no concurrency group with staging. Keep the
+flag enabled from before merge through promotion. Review that switch separately
+before adopting it. Existing explicit manual deployments remain available.
 
-From a clean isolated checkout, record the current production web SHA and run
-`pnpm preflight:all -- --base "$LIVE_SHA" --receipt-dir "$PREFLIGHT_RECEIPTS"`.
+From a clean isolated checkout with the canonical HTTPS GitHub origin, record the
+current production web SHA and run
+`pnpm preflight:all -- --staged --base "$LIVE_SHA" --receipt-dir "$PREFLIGHT_RECEIPTS"`.
+This checks local tools, auth, origin, the live base, candidate ancestry, affected
+services and warm runtime requirements before starting the test suite. After
+workspace bootstrap, the web source contract group runs first. A pre-merge
+candidate can pass while the staging flag is still unset. For a prerequisite-only
+check use `pnpm deploy:all -- --check-staging --base "$LIVE_SHA"`.
 Keep the receipt directories outside the checkout. Once the gate passes, stage
 the web, scanner, and any affected validation artifacts.
 

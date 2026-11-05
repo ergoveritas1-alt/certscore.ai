@@ -1,5 +1,5 @@
 name: Public Web AWS ECS Deploy
-run-name: ${{ inputs.stage_only && format('Stage public web {0}', github.sha) || inputs.staged_run_id != '' && format('Promote public web {0} from {1} {2}', github.sha, inputs.staged_run_id, inputs.staged_image) || github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' && format('Verify public web {0}', github.sha) || format('Deploy public web {0}', github.sha) }}
+run-name: ${{ inputs.stage_only && format('Stage public web {0}', github.sha) || inputs.staged_run_id != '' && format('Promote public web {0} from {1} {2}', github.sha, inputs.staged_run_id, inputs.staged_image) || github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' && format('Defer public web {0} to staging', github.sha) || format('Deploy public web {0}', github.sha) }}
 
 on:
   push:
@@ -90,12 +90,12 @@ on:
         type: boolean
 
 concurrency:
-  group: public-web-aws-production
+  group: ${{ github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' && format('public-web-staged-push-{0}', github.run_id) || 'public-web-aws-production' }}
   cancel-in-progress: false
 
 jobs:
   verify-public-web:
-    if: inputs.staged_run_id == ''
+    if: inputs.staged_run_id == '' && (github.event_name != 'push' || vars.AWS_STAGED_COUPLED_RELEASES != 'true')
     runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 30
     permissions:
@@ -242,7 +242,7 @@ jobs:
         run: node scripts/select-workflow-deployment.mjs web
 
   verify-post-accept-forms:
-    if: inputs.staged_run_id == ''
+    if: inputs.staged_run_id == '' && (github.event_name != 'push' || vars.AWS_STAGED_COUPLED_RELEASES != 'true')
     runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 20
     permissions:

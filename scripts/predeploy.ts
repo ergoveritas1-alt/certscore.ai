@@ -32,6 +32,7 @@ type Args = {
   receiptDir: string;
   reuseDir: string | null;
   requireReceipts: boolean;
+  staged: boolean;
   baseRef: string | null;
   mode: "fast" | "full";
 };
@@ -731,6 +732,10 @@ export function getPredeployPlan(changedFiles: string[], options: { full?: boole
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
+  if (args.staged && !args.inventory) {
+    await run(["node", "scripts/release-node.mjs", "scripts/deploy-fast.ts", "all", "--check-staging", "--base", args.baseRef!], { quiet: false });
+  }
+
   if (args.mode === "full") {
     await runChecks(getPredeployPlan([], { full: true }).checks, args);
     return;
@@ -766,7 +771,7 @@ function parseArgs(argv: string[]): Args {
   let baseRef: string | null = process.env.PREDEPLOY_BASE_REF ?? "origin/main";
   let mode: Args["mode"] = "fast";
   let allTargets = false;
-  let inventory = false, requireReceipts = false;
+  let inventory = false, requireReceipts = false, staged = false;
   const targetKeys: string[] = [];
   let receiptDir = process.env.PREDEPLOY_RECEIPT_DIR ?? path.join(tmpdir(), `certscore-preflight-${randomUUID()}`);
   let reuseDir: string | null = null;
@@ -783,6 +788,7 @@ function parseArgs(argv: string[]): Args {
     }
     if (arg === "--inventory") { inventory = true; continue; }
     if (arg === "--require-receipts") { requireReceipts = true; continue; }
+    if (arg === "--staged") { staged = true; continue; }
     if (arg === "--receipt-dir" || arg === "--reuse-receipts") {
       const value = argv[++index];
       if (!value || value.startsWith("--")) throw new Error(`${arg} requires a directory`);
@@ -818,7 +824,10 @@ function parseArgs(argv: string[]): Args {
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  return { allTargets, baseRef, mode, inventory, receiptDir, reuseDir, requireReceipts, targetKeys };
+  if (staged && (mode !== "fast" || !allTargets || !baseRef || !/^[a-f0-9]{40}$/.test(baseRef))) {
+    throw new Error("--staged requires preflight:all and the full live-base SHA.");
+  }
+  return { allTargets, baseRef, mode, inventory, receiptDir, reuseDir, requireReceipts, staged, targetKeys };
 }
 
 async function collectChangedFiles(baseRef: string | null) {
@@ -893,8 +902,13 @@ async function runChecks(checks: Check[], args: Args) {
   }
   const initial = await releaseInputs();
   const started = performance.now();
+  const stagingSmoke = "web-scan-source-contracts";
   const timings = await scheduleReleaseTasks(checks.map(check => ({
-    key: check.key, dependencies: check.key === BOOTSTRAP_CHECK.key ? [] : [BOOTSTRAP_CHECK.key],
+    key: check.key,
+    dependencies: check.key === BOOTSTRAP_CHECK.key ? [] : [
+      BOOTSTRAP_CHECK.key,
+      ...(args.staged && check.key !== stagingSmoke ? [stagingSmoke] : [])
+    ],
     ...checkResources(check),
     run: async () => {
       const inputs = await releaseInputs();

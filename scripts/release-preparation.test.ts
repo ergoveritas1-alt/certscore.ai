@@ -52,6 +52,18 @@ test('independent CI gates both precede image/migration promotion and exact-SHA 
   assert.match(docker, /BUILD_GIT_SHA/);
 });
 
+test('web staging owns both verification jobs when staged mode is enabled on push', async () => {
+  const workflow = await readFile('.github/workflows/web-aws-ecs-deploy.yml', 'utf8');
+  const [web, forms, image] = workflow.split(/^  (?:verify-public-web|verify-post-accept-forms|deploy-public-web-aws):$/m).slice(1);
+  for (const verification of [web, forms]) {
+    assert.match(verification ?? '', /^    if: inputs\.staged_run_id == '' && \(github\.event_name != 'push' \|\| vars\.AWS_STAGED_COUPLED_RELEASES != 'true'\)$/m);
+  }
+  assert.match(image ?? '', /needs\.verify-public-web\.result == 'success'\s*&&\s*needs\.verify-post-accept-forms\.result == 'success'/);
+  assert.match(workflow, /group: .*format\('public-web-staged-push-\{0\}', github\.run_id\) \|\| 'public-web-aws-production'/);
+  const deploy = await readFile('scripts/deploy-fast.ts', 'utf8');
+  assert.match(deploy, /run\.event === "push" && \(run\.displayTitle\.startsWith\(`Verify .*? `\) \|\|\s*run\.displayTitle\.startsWith\(`Defer .*? `\)/);
+});
+
 test('bootstrap compiles shared exports once and fails before dropping unknown build work', () => {
   const packages = [
     { directory: 'packages/a', manifest: { name: 'a', scripts: { build: 'tsc -p tsconfig.json' } } },

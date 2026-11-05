@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -93,6 +93,15 @@ test("the staged release planner reuses the scanner base for script-only manifes
   assert.match(plan(base, scriptOnly), /Lambda runtime base inputs changed: false/);
   const changedDependency = await commit("new", "2.0");
   assert.match(plan(base, changedDependency), /Lambda runtime base inputs changed: true/);
+
+  git("remote", "add", "origin", "https://example.test/wrong-repository.git");
+  const prerequisites = spawnSync(process.execPath, [
+    "--import", createRequire(path.resolve("package.json")).resolve("tsx"),
+    path.resolve("scripts/deploy-fast.ts"), "all", "--check-staging", "--base", base,
+  ], { cwd: checkout, encoding: "utf8", env: { ...process.env, TSX_TSCONFIG_PATH: path.resolve("tsconfig.base.json") } });
+  assert.equal(prerequisites.status, 1);
+  assert.match(prerequisites.stderr, /require the canonical HTTPS GitHub origin/);
+  assert.doesNotMatch(prerequisites.stdout, /authentication: verified|preflight completed/);
 });
 
 test("web base fingerprint detects source drift even if the previous deploy failed", async () => {
