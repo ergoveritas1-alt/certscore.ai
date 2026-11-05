@@ -78,3 +78,27 @@ test('bootstrap output binding detects stale or missing exports even at the same
     await assert.rejects(workspaceExportsFingerprint(root));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('forced or drifted service deployment cannot collapse into an empty preflight', () => {
+  for (const target of ['web', 'validation-worker', 'v2-dag-lambda', 'db']) {
+    const plan = getPredeployPlan([], { targetKeys: [target] });
+    assert.equal(plan.checks[0]?.key, 'workspace-package-build');
+    assert.ok(plan.targets.includes(target)); assert.ok(plan.checks.length > 2);
+  }
+  assert.throws(() => getPredeployPlan([], { targetKeys: ['unknown'] }), /Unknown preflight target/);
+});
+
+test('automatic ECS workflows preserve compatibility checks while guarding every promotion step', async () => {
+  for (const [file, start, build] of [
+    ['mcp-aws-ecs-deploy.yml', 'Select deployment from installed MCP runtime inputs', 'Build and push immutable MCP image'],
+    ['validation-aws-deploy.yml', 'Select deployment from installed validation runtime inputs', 'Build and push validation worker image'],
+  ]) {
+    const workflow = await readFile(`.github/workflows/${file}`, 'utf8');
+    const selected = workflow.indexOf(`      - name: ${start}`);
+    assert.ok(selected > workflow.indexOf('Install dependencies'));
+    assert.ok(selected < workflow.indexOf(`      - name: ${build}`));
+    const mutationSteps = workflow.slice(selected).split(/(?=      - name:)/).filter(value => /(?:aws ecs update-service|register-task-definition|docker buildx build)/.test(value));
+    assert.ok(mutationSteps.length > 0);
+    for (const step of mutationSteps) assert.match(step, /if:.*steps.runtime-selection.outputs.deploy == 'true'/);
+  }
+});

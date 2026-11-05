@@ -28,6 +28,7 @@ type Target = {
 type Args = {
   allTargets: boolean;
   inventory: boolean;
+  targetKeys: string[];
   receiptDir: string;
   reuseDir: string | null;
   requireReceipts: boolean;
@@ -719,9 +720,10 @@ function isGlobalBuildInput(file: string) {
 }
 
 /** The same plan is inspected by the calibration coverage review and executed below. */
-export function getPredeployPlan(changedFiles: string[], options: { full?: boolean; allTargets?: boolean } = {}) {
+export function getPredeployPlan(changedFiles: string[], options: { full?: boolean; allTargets?: boolean; targetKeys?: string[] } = {}) {
   if (options.full) return { targets: ["full"], checks: ROOT_FULL_CHECKS };
-  const targets = options.allTargets ? TARGETS : TARGETS.filter(target => changedFiles.some(target.matches));
+  if (options.targetKeys?.some(key => !TARGETS.some(target => target.key === key))) throw new Error("Unknown preflight target.");
+  const targets = options.allTargets ? TARGETS : TARGETS.filter(target => options.targetKeys?.includes(target.key) || changedFiles.some(target.matches));
   return { targets: targets.map(target => target.key), checks: targets.length
     ? dedupeChecks([BOOTSTRAP_CHECK, RELEASE_PERFORMANCE_CHECK, RELEASE_REGRESSION_REVIEW_CHECK, ...targets.flatMap(target => target.checks)]) : [] };
 }
@@ -735,7 +737,7 @@ async function main() {
   }
 
   const changedFiles = await collectChangedFiles(args.baseRef);
-  if (changedFiles.length === 0 && !args.allTargets) {
+  if (changedFiles.length === 0 && !args.allTargets && !args.targetKeys.length) {
     console.log("No changed files detected; fast predeploy has nothing to run.");
     return;
   }
@@ -747,7 +749,7 @@ async function main() {
 
   const selectedTargets = args.allTargets
     ? TARGETS
-    : TARGETS.filter((target) => changedFiles.some(target.matches));
+    : TARGETS.filter((target) => args.targetKeys.includes(target.key) || changedFiles.some(target.matches));
   if (selectedTargets.length === 0) {
     console.log("No deploy-targeted changes detected; fast predeploy has nothing to run.");
     return;
@@ -756,7 +758,7 @@ async function main() {
   console.log("");
   console.log(`${args.allTargets ? "Fast deploy-all" : "Fast predeploy"} targets: ${selectedTargets.map((target) => target.label).join(", ")}`);
 
-  const checks = getPredeployPlan(changedFiles, { allTargets: args.allTargets }).checks;
+  const checks = getPredeployPlan(changedFiles, { allTargets: args.allTargets, targetKeys: args.targetKeys }).checks;
   await runChecks(checks, args);
 }
 
@@ -765,6 +767,7 @@ function parseArgs(argv: string[]): Args {
   let mode: Args["mode"] = "fast";
   let allTargets = false;
   let inventory = false, requireReceipts = false;
+  const targetKeys: string[] = [];
   let receiptDir = process.env.PREDEPLOY_RECEIPT_DIR ?? path.join(tmpdir(), `certscore-preflight-${randomUUID()}`);
   let reuseDir: string | null = null;
 
@@ -772,6 +775,11 @@ function parseArgs(argv: string[]): Args {
     const arg = argv[index]!;
     if (arg === "--") {
       continue;
+    }
+    if (arg === "--target") {
+      const value = argv[++index];
+      if (!value || !TARGETS.some(target => target.key === value)) throw new Error("--target requires a known preflight target");
+      targetKeys.push(value); continue;
     }
     if (arg === "--inventory") { inventory = true; continue; }
     if (arg === "--require-receipts") { requireReceipts = true; continue; }
@@ -810,7 +818,7 @@ function parseArgs(argv: string[]): Args {
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  return { allTargets, baseRef, mode, inventory, receiptDir, reuseDir, requireReceipts };
+  return { allTargets, baseRef, mode, inventory, receiptDir, reuseDir, requireReceipts, targetKeys };
 }
 
 async function collectChangedFiles(baseRef: string | null) {
@@ -890,6 +898,9 @@ async function runChecks(checks: Check[], args: Args) {
     ...checkResources(check),
     run: async () => {
       const inputs = await releaseInputs();
+      if (inputs.sha !== initial.sha || inputs.fingerprint !== initial.fingerprint || inputs.environment !== initial.environment) {
+        throw new Error("Release inputs changed since gate start; remaining checks were not started.");
+      }
       const expected = { key: check.key, command: check.command, inputs };
       const matching = previous.filter(receipt => receiptMatches(receipt, expected));
       let outputsFingerprint: string | undefined;

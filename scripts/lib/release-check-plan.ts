@@ -41,7 +41,10 @@ export function inventoryChecks(checks: Check[]) {
     return { ...check, cwd, expandedScript: script ?? null,
       configuration: execution.match(/(?:--tsconfig(?:=|\s+)|-p\s+)([^\s]+)/g) ?? ['inherited TSX_TSCONFIG_PATH; package tsconfig'],
       filesGlobsAndFilters: execution.match(/[^\s]*\.(?:test|spec)\.(?:tsx?|mjs)|--test-(?:name-pattern|concurrency)(?:=|\s+)(?:'[^']*'|[^\s]+)/g) ?? [],
-      ...checkResources(check), dependencies: check.key === 'workspace-package-build' ? [] : ['workspace-package-build'],
+      ...checkResources(check), fixturePolicy: checkResources(check).exclusive
+        ? 'exclusive: browser timing, database/typegen/build outputs or unreviewed mutable fixtures'
+        : 'reviewed read-only source/retained fixtures; temporary writes use per-test mkdtemp',
+      dependencies: check.key === 'workspace-package-build' ? [] : ['workspace-package-build'],
       reuse: 'successful exact clean SHA, inputs, environment, toolchain and command only; local does not replace CI' };
   });
 }

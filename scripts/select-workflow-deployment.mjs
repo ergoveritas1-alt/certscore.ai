@@ -19,12 +19,15 @@ if (process.env.GITHUB_EVENT_NAME === 'push') {
       const aws = args => JSON.parse(exec('aws', [...args, '--output', 'json']));
       const observed = aws(['ecs', 'describe-services', '--cluster', process.env.ECS_CLUSTER_NAME, '--services', process.env.ECS_SERVICE_NAME]);
       const active = observed.services?.[0];
-      if (observed.failures?.length || !active || active.deployments?.length !== 1 || active.desiredCount < 1 || active.runningCount !== active.desiredCount || active.pendingCount !== 0) throw new Error('Runtime unsettled');
+      if (observed.failures?.length || !active || active.deployments?.length !== 1 || active.deployments[0].rolloutState !== 'COMPLETED' || active.desiredCount < 1 || active.runningCount !== active.desiredCount || active.pendingCount !== 0) throw new Error('Runtime unsettled');
       const definition = aws(['ecs', 'describe-task-definition', '--task-definition', active.taskDefinition]);
       const images = definition.taskDefinition?.containerDefinitions?.filter(value => value.name === process.env.ECS_CONTAINER_NAME);
       if (images?.length !== 1) throw new Error('Unknown runtime container');
-      const match = /^199536052647\.dkr\.ecr\.us-west-1\.amazonaws\.com\/certscore-web-mcp:([a-f0-9]{40})$/.exec(images[0].image);
-      base = match?.[1];
+      const match = /^199536052647\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com\/([^:]+):([a-f0-9]{40})$/.exec(images[0].image);
+      const repository = service === 'mcp' ? 'certscore-web-mcp' : process.env.ECR_WORKER_REPOSITORY;
+      const region = service === 'mcp' ? 'us-west-1' : process.env.AWS_REGION;
+      if (!repository || !region || match?.[1] !== region || match?.[2] !== repository) throw new Error('Runtime repository binding mismatch');
+      base = match[3];
     }
     if (!/^[a-f0-9]{40}$/.test(base ?? '') || !/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA ?? '')) throw new Error('Unknown revision');
     git(['cat-file', '-e', `${base}^{commit}`]);

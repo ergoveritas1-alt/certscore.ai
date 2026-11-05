@@ -121,7 +121,8 @@ async function main() {
   await checkReleasePrerequisites({ deployment: true, scanner: args.mode === "all" || args.mode === "scanners" });
   await confirmSkippedRuntimeInputs(changed, args);
   const preflight = await timedLane("preflight", async () => {
-    const predeployArgs = args.mode === "all" ? ["--fast", "--all"] : ["--fast"];
+    const target = { web: "web", validation: "validation-worker", scanners: "v2-dag-lambda", db: "db", all: "all" }[args.mode];
+    const predeployArgs = args.mode === "all" ? ["--fast", "--all"] : ["--fast", "--target", target];
     await run(["node", "scripts/release-node.mjs", "scripts/predeploy.ts", ...predeployArgs, "--base", args.baseRef,
       ...(args.noPredeploy ? ["--require-receipts", "--reuse-receipts", args.preflightReceiptDir!] : [])]);
   });
@@ -382,7 +383,7 @@ async function confirmSkippedRuntimeInputs(changed: ChangedTargets, args: Args) 
       const region = (await run(["gh", "variable", "get", "AWS_REGION"], { quiet: true, reject: false })).stdout.trim() || "us-west-1";
       const state = await readAws(["ecs", "describe-services", "--region", region, "--cluster", cluster, "--services", service]);
       const installed = state.services?.[0];
-      if (state.failures?.length || !installed || installed.deployments?.length !== 1 || installed.pendingCount !== 0 || installed.desiredCount < 1 || installed.runningCount !== installed.desiredCount) throw Error("Unsettled consumer");
+      if (state.failures?.length || !installed || installed.deployments?.length !== 1 || installed.deployments[0].rolloutState !== "COMPLETED" || installed.pendingCount !== 0 || installed.desiredCount < 1 || installed.runningCount !== installed.desiredCount) throw Error("Unsettled consumer");
       const definition = await readAws(["ecs", "describe-task-definition", "--region", region, "--task-definition", installed.taskDefinition]);
       const images = definition.taskDefinition.containerDefinitions.map((value: { image: string }) => value.image);
       const revisions = images.map((image: string) => /^199536052647\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com\/[^:]+:([a-f0-9]{40})$/.exec(image)?.[1]);
