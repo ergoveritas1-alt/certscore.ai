@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { hasVerifiedBuildTypecheck } from "../apps/web/build-typecheck.mjs";
 import { runtimeBaseDockerInputs, runtimeBaseInputsChanged, runtimeBaseSourceFingerprint } from "./lib/runtime-base-inputs.mjs";
@@ -108,4 +110,46 @@ test("local caches and nested environment files stay out of deployment contexts"
   for (const rule of ["**/.turbo","**/*.tsbuildinfo","**/.env","**/.env.*","!**/.env.example"]) {
     assert.ok(rules.includes(rule),`Missing recursive Docker exclusion: ${rule}`);
   }
+});
+
+test("web image strips only non-target Sharp packages before copying the standalone output", async () => {
+  const source = await readFile("apps/web/Dockerfile", "utf8");
+  const trim = source.match(/^RUN (case "\$\{TARGETARCH\}"[\s\S]*?)\n\n/m)?.[1];
+  assert.ok(trim);
+  const variants = ["linux-arm64", "linux-x64", "linuxmusl-arm64", "linuxmusl-x64"];
+  const names = ["colour", ...variants.flatMap(variant => [`sharp-${variant}`, `sharp-libvips-${variant}`])];
+  const temp = await mkdtemp(path.join(tmpdir(), "certscore-web-image-"));
+  try {
+    for (const [target, native] of [["arm64", "arm64"], ["amd64", "x64"], ["other", null]] as const) {
+      const img = path.join(temp, target);
+      await mkdir(img);
+      await Promise.all(names.map(name => mkdir(path.join(img, name))));
+      const command = trim.replace("img=/app/apps/web/.next/standalone/node_modules/@img", 'img="$1"');
+      execFileSync("sh", ["-c", command, "trim-test", img], { env: { ...process.env, TARGETARCH: target } });
+      const expected = native ? ["colour", `sharp-linux-${native}`, `sharp-libvips-linux-${native}`] : names;
+      assert.deepEqual((await readdir(img)).sort(), [...expected].sort());
+    }
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+  assert.ok(source.indexOf("RUN case") < source.indexOf("COPY --from=builder /app/apps/web/.next/standalone"));
+});
+
+test("scanner app packaging changes keep the same Chromium runtime base", async () => {
+  const file = "apps/v2-dag-lambda/Dockerfile";
+  const dockerfile = await readFile(file, "utf8");
+  const unchanged = dockerfile.replace("COPY --from=build /lambda/node_modules ./node_modules",
+    "COPY --from=build /lambda ./");
+  assert.equal(await runtimeBaseInputsChanged("scanners", [file], async () => unchanged, async () => dockerfile), false);
+  assert.equal(await runtimeBaseInputsChanged("scanners", [file], async () => dockerfile,
+    async () => dockerfile.replace("fonts-liberation", "fonts-dejavu-core")), true);
+  assert.equal(await runtimeBaseInputsChanged("scanners", [file], async () => dockerfile,
+    async () => dockerfile.replace("ARG CERTSCORE_LAMBDA_RUNTIME_BASE=lambda-runtime-base", "ARG CERTSCORE_LAMBDA_RUNTIME_BASE=another-base")), true);
+  assert.equal(await runtimeBaseInputsChanged("scanners", [file], async () => "",
+    async () => dockerfile), true);
+  const dependencies = dockerfile.indexOf("COPY --from=build /lambda/node_modules ./node_modules");
+  const handler = dockerfile.indexOf("COPY --from=build /workspace/apps/v2-dag-lambda/dist-bundle/src/handler.js ./src/handler.js");
+  const bootstrap = dockerfile.indexOf("COPY apps/v2-dag-lambda/runtime-bootstrap.mjs ./runtime-bootstrap.mjs", dependencies);
+  assert.ok(dependencies >= 0 && bootstrap > dependencies && handler > bootstrap);
+  assert.ok(dockerfile.indexOf("--prod deploy --legacy /lambda-deps") < dockerfile.indexOf("COPY apps/v2-dag-lambda/src"));
 });

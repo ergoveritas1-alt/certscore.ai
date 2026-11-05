@@ -103,6 +103,17 @@ RUN WEB_COMPILER_CACHE_ENABLED="${WEB_COMPILER_CACHE_ENABLED}" \
   WEB_TYPECHECK_VERIFIED_SHA="${WEB_TYPECHECK_VERIFIED_SHA}" \
   pnpm --filter @website-signal-risk-scanner/web build:container
 
+# Debian uses glibc. Next's trace includes Sharp binaries for other targets.
+ARG TARGETARCH
+RUN case "${TARGETARCH}" in \
+      arm64) other_arch=x64 ;; \
+      amd64) other_arch=arm64 ;; \
+      *) exit 0 ;; \
+    esac \
+  && img=/app/apps/web/.next/standalone/node_modules/@img \
+  && rm -rf "$img"/sharp-linuxmusl-* "$img"/sharp-libvips-linuxmusl-* \
+    "$img/sharp-linux-$other_arch" "$img/sharp-libvips-linux-$other_arch"
+
 FROM scratch AS web-compiler-cache-export
 COPY --from=builder /app/apps/web/.next/cache /compiler-cache
 
