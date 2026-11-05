@@ -749,7 +749,8 @@ async function promoteScannerArtifact(artifact: PreparedScanner, input: { ref: s
     await runScannerPromotions(async (region, inventory) => {
       const started = performance.now();
       try {
-        await synchronizeScannerImage(awsScannerImageControl(region, inventory), artifact.images[region]!, true);
+        await synchronizeScannerImage(awsScannerImageControl(region, inventory), artifact.images[region]!, true,
+          timing => console.log(JSON.stringify({ scannerRegion: region, inventory, ...timing })));
       } finally {
         if (input.parallelFunctions) console.log(`Scanner ${region} ${inventory ? "inventory" : "primary"} handoff: ${Math.round(performance.now() - started)}ms`);
       }
@@ -761,8 +762,12 @@ async function promoteScannerArtifact(artifact: PreparedScanner, input: { ref: s
       const after = await readScannerOperationalSettings();
       for (const [key, before] of artifact.preservedSettings) assertScannerOperationalSettingsPreserved(before, after.get(key)!);
     }
+    const parityStarted = performance.now();
     await run(["node", "scripts/release-node.mjs", "scripts/check-regional-scanner-parity.ts"]);
+    const authStarted = performance.now();
+    console.log(`Scanner regional parity: ${Math.round(authStarted - parityStarted)}ms`);
     await run(["node", "scripts/release-node.mjs", "scripts/check-regional-web-bot-auth.ts"], { env: { AWS_MAX_ATTEMPTS: "1" } });
+    console.log(`Scanner regional web-bot auth: ${Math.round(performance.now() - authStarted)}ms`);
     return { runtimeBase: artifact.runtimeBase, regionParity: "passed", webBotAuth: "verified in all scanner regions", ...artifact.images };
   });
 }
@@ -901,18 +906,30 @@ async function applyScannerRuntimeConfiguration(enableCoverage = false) {
 
 async function verifyScanners(expectedSha: string) {
   const reports = await Promise.all(SCANNER_REGIONS.map(async (region) => {
-    await run([
-      "aws", "lambda", "wait", "function-updated-v2",
-      "--region", region,
-      "--function-name", SCANNER_FUNCTION_NAME
-    ], { quiet: true });
-    const result = await run([
-      "aws", "lambda", "get-function",
-      "--region", region,
-      "--function-name", SCANNER_FUNCTION_NAME,
-      "--query", "{ImageUri:Code.ResolvedImageUri,RecordedImageDigest:Configuration.Environment.Variables.SCANNER_IMAGE_DIGEST,LastUpdateStatus:Configuration.LastUpdateStatus,State:Configuration.State,Updated:Configuration.LastModified,MemorySize:Configuration.MemorySize}",
-      "--output", "json"
-    ], { quiet: true });
+    const [result, expectedDigestResult] = await Promise.all([
+      (async () => {
+        await run([
+          "aws", "lambda", "wait", "function-updated-v2",
+          "--region", region,
+          "--function-name", SCANNER_FUNCTION_NAME
+        ], { quiet: true });
+        return run([
+          "aws", "lambda", "get-function",
+          "--region", region,
+          "--function-name", SCANNER_FUNCTION_NAME,
+          "--query", "{ImageUri:Code.ResolvedImageUri,RecordedImageDigest:Configuration.Environment.Variables.SCANNER_IMAGE_DIGEST,LastUpdateStatus:Configuration.LastUpdateStatus,State:Configuration.State,Updated:Configuration.LastModified,MemorySize:Configuration.MemorySize}",
+          "--output", "json"
+        ], { quiet: true });
+      })(),
+      run([
+        "aws", "ecr", "describe-images",
+        "--region", region,
+        "--repository-name", "certscore-v2-dag-local-lambda",
+        "--image-ids", `imageTag=${expectedSha}`,
+        "--query", "imageDetails[0].imageDigest",
+        "--output", "text"
+      ], { quiet: true }),
+    ]);
     const payload = JSON.parse(result.stdout) as {
       ImageUri?: string;
       RecordedImageDigest?: string;
@@ -920,14 +937,6 @@ async function verifyScanners(expectedSha: string) {
       MemorySize?: number;
       State?: string;
     };
-    const expectedDigestResult = await run([
-      "aws", "ecr", "describe-images",
-      "--region", region,
-      "--repository-name", "certscore-v2-dag-local-lambda",
-      "--image-ids", `imageTag=${expectedSha}`,
-      "--query", "imageDetails[0].imageDigest",
-      "--output", "text"
-    ], { quiet: true });
     const expectedDigest = expectedDigestResult.stdout.trim();
     if (!/^sha256:[a-f0-9]{64}$/.test(expectedDigest)) {
       throw new Error(`Could not resolve the expected scanner image digest in ${region}.`);

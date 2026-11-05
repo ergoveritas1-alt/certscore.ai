@@ -19,6 +19,7 @@ on:
       - "packages/ui/**"
       - "packages/validation-shared/**"
       - "scripts/apply-db-migrations.mjs"
+      - "scripts/wait-for-ecs-migration.mjs"
       - "scripts/assert-forward-web-deploy.ts"
       - "scripts/runtime-base-changes.mjs"
       - "scripts/lib/runtime-base-inputs.mjs"
@@ -671,11 +672,7 @@ jobs:
             --query 'tasks[0].taskArn' \
             --output text)"
           test -n "${TASK_ARN}" || (echo "Migration task did not start" && exit 1)
-          aws ecs wait tasks-stopped --cluster "${ECS_CLUSTER_NAME}" --tasks "${TASK_ARN}"
-          migration=$(aws ecs describe-tasks --cluster "${ECS_CLUSTER_NAME}" --tasks "${TASK_ARN}" --query 'tasks[0].{exitCode:containers[0].exitCode,createdAt:createdAt,pullStartedAt:pullStartedAt,pullStoppedAt:pullStoppedAt,startedAt:startedAt,stoppedAt:stoppedAt}' --output json)
-          echo "Exact-image migration task timing: $migration"
-          EXIT_CODE=$(jq -r '.exitCode // empty' <<< "$migration")
-          test "${EXIT_CODE}" = "0" || (echo "Migration task failed with exit code ${EXIT_CODE}" && exit 1)
+          node scripts/wait-for-ecs-migration.mjs "$ECS_CLUSTER_NAME" "$TASK_ARN" "$TARGET_TASK_DEFINITION" "$CONTAINER_NAME"
 
       - name: Force ECS deployments
         if: ${{ !inputs.stage_only }}

@@ -77,3 +77,55 @@ test('validation stages all existing checks and keeps ECS writes and boot checks
   }
   assert.ok(workflow.indexOf('Verify and select staged validation image') < workflow.indexOf('Register validation worker task definition'));
 });
+
+test('offline staged rehearsal preserves exact migration, ECS and scanner promotion ordering', async () => {
+  const { deployConsumersBeforeProducer } = await import('./deployment-consumer-barrier');
+  const { runScannerPromotions } = await import('./scanner-artifact');
+  const { waitForEcsMigration } = await import('../wait-for-ecs-migration.mjs');
+  const { waitForStagedEcs } = await import('../wait-for-staged-ecs.mjs');
+  const { synchronizeScannerImage } = await import('./scanner-image-provenance');
+  assertStagedCoupledRelease(staged, sha, baseSha, now);
+  for (const rollback of [false, true]) {
+    const transitions: string[] = [];
+    const service = async (name: string) => {
+      const task = `${name}:2`;
+      await waitForStagedEcs([{ name, task }], async () => ({ services: [{
+        serviceName: name, taskDefinition: task, status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0,
+        deployments: [{ status: 'PRIMARY', taskDefinition: task, runningCount: 1,
+          rolloutState: name === 'validation' && rollback ? 'FAILED' : 'COMPLETED' }],
+      }] }), { report() {} });
+      transitions.push(name);
+      return { status: 'succeeded' };
+    };
+    const result = await deployConsumersBeforeProducer({
+      consumers: [async () => {
+        await waitForEcsMigration({ arn: 'migration', definition: 'web:2', container: 'web' }, async () => ({
+          tasks: [{ taskArn: 'migration', taskDefinitionArn: 'web:2', lastStatus: 'STOPPED', containers: [{ name: 'web', exitCode: 0 }] }],
+        }), { report() {} });
+        transitions.push('migration');
+        return service('web');
+      }, () => service('validation').catch(() => ({ status: 'failed' }))],
+      async producer() {
+        assert.deepEqual([...transitions].sort(), ['migration', 'validation', 'web']);
+        await runScannerPromotions(async (region, inventory) => {
+          const image = staged.scanner.images[region]!;
+          let imageUri = image.replace(digest, `sha256:${'a'.repeat(64)}`);
+          let variables = { SCANNER_IMAGE_DIGEST: imageUri.split('@')[1]! };
+          let rev = 0;
+          await synchronizeScannerImage({
+            async read() { return { imageUri, variables, revisionId: String(rev), state: 'Active', updateStatus: 'Successful' }; },
+            async environment(next, revision) { assert.equal(revision, String(rev++)); variables = next as typeof variables; },
+            async code(next, revision) { assert.equal(revision, String(rev++)); imageUri = next; },
+            async wait() {},
+          }, image, true);
+          transitions.push(`${region}/${inventory ? 'inventory' : 'primary'}`);
+        }, true);
+        return { status: 'succeeded' };
+      },
+      skippedProducer: () => ({ status: 'skipped' }),
+    });
+    assert.ok(transitions.indexOf('migration') < transitions.indexOf('web'));
+    assert.equal(transitions.filter(value => value.includes('/')).length, rollback ? 0 : 6);
+    assert.equal(result.at(-1)?.status, rollback ? 'skipped' : 'succeeded');
+  }
+});

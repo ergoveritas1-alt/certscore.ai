@@ -61,7 +61,7 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(preparation, /assertScannerArtifact\(artifact, input.ref\)/);
   assert.doesNotMatch(preparation, /synchronizeScannerImage|applyScannerRuntimeConfiguration/);
   assert.match(promotion, /runScannerPromotions\(async \(region, inventory\)/);
-  assert.match(promotion, /synchronizeScannerImage\(awsScannerImageControl\(region, inventory\), artifact.images\[region\]!, true\)/);
+  assert.match(promotion, /synchronizeScannerImage\(awsScannerImageControl\(region, inventory\), artifact.images\[region\]!, true[,)]/);
   assert.match(deployScript, /payload\.RecordedImageDigest !== expectedDigest/);
   assert.match(deployScript, /RevisionId:RevisionId,EnvironmentError:Environment\.Error/);
   assert.match(deployScript, /!currentPayload\.RevisionId \|\| currentPayload\.EnvironmentError \|\| !currentPayload\.Variables/);

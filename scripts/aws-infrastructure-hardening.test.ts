@@ -289,7 +289,7 @@ test("routine scanner deploys promote immutable digests without recreating infra
   assert.doesNotMatch(preparation, /synchronizeScannerImage|applyScannerRuntimeConfiguration/);
   assert.match(deployFunction, /await applyScannerRuntimeConfiguration\(\)/);
   assert.match(deployFunction, /runScannerPromotions\(async \(region, inventory\)/);
-  assert.match(deployFunction, /synchronizeScannerImage\(awsScannerImageControl\(region, inventory\), artifact.images\[region\]!, true\)/);
+  assert.match(deployFunction, /synchronizeScannerImage\(awsScannerImageControl\(region, inventory\), artifact.images\[region\]!, true[,)]/);
   const artifact = await readFile("scripts/lib/scanner-artifact.ts", "utf8");
   assert.match(artifact, /SCANNER_PROVENANCE_REGIONS\.flatMap\(region => \[promote\(region, false\), promote\(region, true\)\]\)/);
   assert.match(artifact, /await promote\(region, false\);\s+await promote\(region, true\);/);
