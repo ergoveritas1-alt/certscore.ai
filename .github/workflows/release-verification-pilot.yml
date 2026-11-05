@@ -1,0 +1,132 @@
+name: CertScore.ai eight-worker cold verification pilot
+on:
+  push:
+    branches: [codex/verification-pilot-v2-20261104]
+    paths: [.github/workflows/release-verification-pilot.yml]
+permissions:
+  contents: read
+env:
+  EXPECTED_GIT_REMOTE: https://github.com/ergoveritas1-alt/certscore.ai.git
+  CERTSCORE_COLD_WEB_BUILD: '1'
+concurrency:
+  group: release-verification-pilot-v2-20261104
+  cancel-in-progress: false
+jobs:
+  plan:
+    if: github.repository == 'ergoveritas1-alt/certscore.ai' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      build_worker: ${{ steps.plan.outputs.build_worker }}
+    steps:
+      - uses: actions/checkout@v6
+        with: {persist-credentials: false}
+      - uses: pnpm/action-setup@v6
+        with: {version: 10.6.3}
+      - uses: actions/setup-node@v6
+        with: {node-version: 22.22.1, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - id: plan
+        run: |
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts plan --workers 8 --file-timings .github/pilot/release-verification-file-timings.json --out /tmp/release-plan.json
+          node -e '
+            const { workers } = require("/tmp/release-plan.json");
+            const buildWorker = workers.findIndex(tasks => tasks.some(task => task.parent === "workspace-build"));
+            if (buildWorker < 0) process.exit(1);
+            console.log("matrix=" + JSON.stringify({ worker: workers.map((_, index) => index) }));
+            console.log("build_worker=" + buildWorker);
+          ' >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with: {name: release-plan, path: /tmp/release-plan.json, retention-days: 1}
+  verify:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+        with: {persist-credentials: false}
+      - uses: pnpm/action-setup@v6
+        with: {version: 10.6.3}
+      - uses: actions/setup-node@v6
+        with: {node-version: 22.22.1, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: release-browser-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with: {name: release-plan, path: /tmp/release-plan}
+      - name: Run the cold workspace build
+        id: cold_build
+        if: ${{ matrix.worker == fromJSON(needs.plan.outputs.build_worker) }}
+        env:
+          WORKER_INDEX: ${{ matrix.worker }}
+        run: |
+          index="$WORKER_INDEX"
+          unset WORKER_INDEX
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts worker --phase build --plan /tmp/release-plan/release-plan.json --worker "$index" --out /tmp/release-results
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') }}
+        with:
+          name: cold-build-timing
+          path: /tmp/release-results/workspace-build.json
+          retention-days: 1
+          if-no-files-found: ignore
+      - name: Run the build worker's remaining checks
+        if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') }}
+        env:
+          WORKER_INDEX: ${{ matrix.worker }}
+        run: |
+          index="$WORKER_INDEX"
+          unset WORKER_INDEX
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts worker --phase remaining --plan /tmp/release-plan/release-plan.json --worker "$index" --out /tmp/release-results
+      - name: Run checks on other workers
+        if: ${{ matrix.worker != fromJSON(needs.plan.outputs.build_worker) }}
+        env:
+          WORKER_INDEX: ${{ matrix.worker }}
+        run: |
+          index="$WORKER_INDEX"
+          unset WORKER_INDEX
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts worker --plan /tmp/release-plan/release-plan.json --worker "$index" --out /tmp/release-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-results-${{ matrix.worker }}
+          path: /tmp/release-results
+          retention-days: 1
+          if-no-files-found: error
+  aggregate:
+    needs: [plan, verify]
+    if: always() && github.repository == 'ergoveritas1-alt/certscore.ai' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Require every verification worker
+        env: {WORKERS_RESULT: '${{ needs.verify.result }}', PLAN_RESULT: '${{ needs.plan.result }}'}
+        run: test "$WORKERS_RESULT" = success && test "$PLAN_RESULT" = success
+      - uses: actions/checkout@v6
+        with: {persist-credentials: false}
+      - uses: pnpm/action-setup@v6
+        with: {version: 10.6.3}
+      - uses: actions/setup-node@v6
+        with: {node-version: 22.22.1, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with: {name: release-plan, path: /tmp/release-plan}
+      - uses: actions/download-artifact@v4
+        with: {pattern: release-results-*, merge-multiple: true, path: /tmp/release-results}
+      - run: |
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts aggregate --plan /tmp/release-plan/release-plan.json --results /tmp/release-results --out /tmp/partition-proof.json
+      - uses: actions/upload-artifact@v4
+        with: {name: partition-proof, path: /tmp/partition-proof.json, retention-days: 1}

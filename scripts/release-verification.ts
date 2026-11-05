@@ -3,7 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { getPredeployPlan } from './predeploy';
-import { releaseInputs } from './lib/release-receipts';
+import { receiptMatches, releaseInputs } from './lib/release-receipts';
 import { checkReleasePrerequisites } from './lib/release-prerequisites';
 import { workspaceExportsFingerprint } from './lib/release-bootstrap';
 import { aggregateShards, digest, planShards, shardExecutionContext, validateShardPlan, type ShardPlan, type ShardResult } from './lib/release-shards';
@@ -12,9 +12,11 @@ const args = process.argv.slice(2), mode = args.shift();
 const values = new Map<string, string>();
 for (let index = 0; index < args.length; index += 2) {
   const key = args[index]!, value = args[index + 1];
-  if (!['--out', '--plan', '--workers', '--worker', '--timings', '--results', '--setup-ms', '--control-ms', '--file-timings'].includes(key) || !value || values.has(key)) throw new Error('Invalid verification arguments.');
+  if (!['--out', '--plan', '--workers', '--worker', '--timings', '--results', '--setup-ms', '--control-ms', '--file-timings', '--phase'].includes(key) || !value || values.has(key)) throw new Error('Invalid verification arguments.');
   values.set(key, value);
 }
+const phase = values.get('--phase');
+if (phase && (mode !== 'worker' || !['build', 'remaining'].includes(phase))) throw new Error('Use --phase build or --phase remaining with worker.');
 const required = (key: string) => { const value = values.get(key); if (!value) throw new Error(`Missing ${key}.`); return value; };
 const checks = getPredeployPlan([], { full: true }).checks;
 const inputsForWorker = () => releaseInputs(process.cwd(), { portableDependencies: true });
@@ -35,13 +37,15 @@ async function main() {
   if (mode === 'plan') {
     const retained = JSON.parse(await readFile('scripts/release-verification-timings.json', 'utf8'));
     const timings: Record<string, number> = { ...retained.timings };
+    if (process.env.CERTSCORE_COLD_WEB_BUILD === '1') Object.assign(timings, retained.coldBenchmark?.timings);
     if (values.has('--timings')) for (const file of await readdir(required('--timings'))) {
       if (!file.endsWith('.json')) continue;
       const value = JSON.parse(await readFile(path.join(required('--timings'), file), 'utf8'));
       if (value.exitStatus === 0 && value.durationMs > 0) timings[value.key] = value.durationMs;
     }
     const inputs = await inputsForWorker();
-    const fileTimings = values.has('--file-timings') ? JSON.parse(await readFile(required('--file-timings'), 'utf8')) : undefined;
+    const fileTimings: Record<string, number> = { ...retained.fileTimings };
+    if (values.has('--file-timings')) Object.assign(fileTimings, JSON.parse(await readFile(required('--file-timings'), 'utf8')));
     const plan = planShards(checks, inputs, { workers: Number(values.get('--workers') ?? 1), timings, fileTimings,
       setupMsPerWorker: Number(values.get('--setup-ms') ?? 60_000), controlPlaneMs: Number(values.get('--control-ms') ?? 60_000) });
     await immutable(required('--out'), plan);
@@ -58,8 +62,19 @@ async function main() {
     const assigned = plan.workers[worker]!;
     // Start the workspace build before other checks can warm its app outputs.
     const build = assigned.find(task => task.parent === 'workspace-build');
-    const ordered = build ? [build, ...assigned.filter(task => task !== build)] : assigned;
-    const tasks = [{ key: bootstrap.key, command: bootstrap.command }, ...ordered];
+    const remaining = assigned.filter(task => task !== build);
+    const out = required('--out'), planHash = digest(plan);
+    const first = [{ key: bootstrap.key, command: bootstrap.command }, ...(build ? [build] : [])];
+    if (phase && !build) throw new Error('Phased verification requires the worker assigned to the workspace build.');
+    if (phase === 'remaining') {
+      const setup: ShardResult = JSON.parse(await readFile(path.join(out, `${bootstrap.key}.json`), 'utf8'));
+      if (setup.worker !== worker || setup.planHash !== planHash || JSON.stringify(setup.execution) !== JSON.stringify(plan.execution) ||
+          !/^[a-f0-9]{64}$/.test(setup.outputsFingerprint ?? '') ||
+          !receiptMatches({ ...setup, cwd: '.' }, { key: bootstrap.key, command: bootstrap.command, inputs: initial })) {
+        throw new Error('The build phase did not complete workspace bootstrap for this worker.');
+      }
+    }
+    const tasks = phase === 'build' ? first : phase === 'remaining' ? remaining : [...first, ...remaining];
     const failed: string[] = [];
     for (const task of tasks) {
       const before = await inputsForWorker();
@@ -82,9 +97,10 @@ async function main() {
           console.error(`Check ${task.key} failed (${status}). Continuing with independent checks.`);
         }
       } finally {
-        const result: ShardResult = { version: 1, planHash: digest(plan), worker, key: task.key, command: task.command,
+        const result: ShardResult = { version: 1, planHash, worker, key: task.key, command: task.command,
           inputs: before, execution: shardExecutionContext(), outputsFingerprint, startedAt, completedAt: new Date().toISOString(), durationMs: performance.now() - start, exitStatus };
-        await immutable(path.join(required('--out'), `${worker}-${randomUUID()}.json`), result);
+        const filename = phase === 'build' ? `${task === build ? build.parent : bootstrap.key}.json` : `${worker}-${randomUUID()}.json`;
+        await immutable(path.join(out, filename), result);
       }
     }
     if (failed.length) throw new Error(`Verification failures (${failed.length}): ${failed.join(', ')}`);

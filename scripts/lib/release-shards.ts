@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { globSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { Check } from '../predeploy';
 import { releaseEnvironmentFingerprint, type ReleaseInputs } from './release-receipts';
 
@@ -40,6 +42,26 @@ export function directTestFiles(command: string[]) {
   return { prefix: command.slice(0, first), files };
 }
 
+function partitionableTestFiles(check: Check) {
+  if (check.key !== 'scan-core-policy-full') return directTestFiles(check.command);
+
+  // The package runs these fixtures from its own cwd. Preserve its loader,
+  // concurrency cap and entire glob, and require review if the wrapper changes.
+  const packageCommand = ['pnpm', '--filter', '@certscore/scan-core'];
+  const script = 'test:policy:full';
+  const runner = ['node', '--import', 'tsx', '--test', '--test-concurrency=2'];
+  const pattern = 'src/test-shards/policy-surface-scanner-*.test.ts';
+  const directory = new URL('../../packages/certscore-scan-core/', import.meta.url);
+  const { scripts } = JSON.parse(readFileSync(new URL('package.json', directory), 'utf8'));
+  if (JSON.stringify(check.command) !== JSON.stringify([...packageCommand, script]) ||
+      scripts?.[script] !== `${runner.join(' ')} '${pattern}'` || scripts?.[`pre${script}`] || scripts?.[`post${script}`]) {
+    throw new Error('Review the scan-core policy shard command before partitioning.');
+  }
+  const files = globSync(pattern, { cwd: fileURLToPath(directory) }).sort();
+  if (files.length === 0) throw new Error('No scan-core policy shards found.');
+  return { prefix: [...packageCommand, 'exec', ...runner], files };
+}
+
 export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 'fingerprint'>,
   options: { workers: number; timings?: Record<string, number>; fileTimings?: Record<string, number>; setupMsPerWorker?: number; controlPlaneMs?: number; execution?: ShardPlan['execution'] }) : ShardPlan {
   if (!Number.isInteger(options.workers) || options.workers < 1 || options.workers > 8) throw new Error('Use 1–8 isolated workers.');
@@ -47,7 +69,7 @@ export function planShards(checks: Check[], inputs: Pick<ReleaseInputs, 'sha' | 
   const timings = options.timings ?? {}, tasks: ShardTask[] = [];
   for (const check of checks) {
     if (check.key === 'workspace-package-build') continue;
-    const split = directTestFiles(check.command), estimate = timings[check.key] ?? 30_000;
+    const split = partitionableTestFiles(check), estimate = timings[check.key] ?? 30_000;
     if (!Number.isFinite(estimate) || estimate <= 0) throw new Error('Invalid timing profile.');
     if (!split) tasks.push({ key: check.key, parent: check.key, command: check.command, files: [], estimatedMs: estimate });
     else for (const file of split.files) {
@@ -86,7 +108,7 @@ export function validateShardPlan(plan: ShardPlan, expectedChecks: Check[]) {
   if (new Set(keys).size !== keys.length || all.some(task => !expectedChecks.some(check => check.key === task.parent && check.key !== 'workspace-package-build'))) throw new Error('Duplicate or unknown shard task.');
   for (const parent of expectedChecks) {
     if (parent.key === 'workspace-package-build') continue;
-    const tasks = all.filter(task => task.parent === parent.key), split = directTestFiles(parent.command);
+    const tasks = all.filter(task => task.parent === parent.key), split = partitionableTestFiles(parent);
     if (!tasks.length) throw new Error(`Missing check ${parent.key}.`);
     if (!split) {
       if (tasks.length !== 1 || tasks[0]!.files.length || JSON.stringify(tasks[0]!.command) !== JSON.stringify(parent.command)) throw new Error(`Opaque command changed: ${parent.key}.`);

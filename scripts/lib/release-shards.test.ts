@@ -23,12 +23,26 @@ const fixture = () => {
 
 test('all 38 canonical parent checks retain exact partition coverage at 1/2/4/6/8 workers', () => {
   const full = getPredeployPlan([], { full: true }).checks;
+  assert.equal(full.length, 38);
   for (const workers of [1, 2, 4, 6, 8]) {
     const plan = planShards(full, inputs, { workers });
     assert.equal(plan.checks.length, full.length); validateShardPlan(plan, full);
     assert.equal(plan.workers.length, workers);
     assert.equal(plan.estimates.kind, 'scheduling-model');
   }
+});
+test('scan-core policy keeps all eight fixture files and the package-scoped runner', () => {
+  const policy = getPredeployPlan([], { full: true }).checks.find(check => check.key === 'scan-core-policy-full')!;
+  const gate = [checks[0]!, policy];
+  const plan = planShards(gate, inputs, { workers: 8 });
+  for (const [index, [task]] of plan.workers.entries()) {
+    assert.ok(task);
+    const file = `src/test-shards/policy-surface-scanner-${index}.test.ts`;
+    assert.deepEqual(task.files, [file]);
+    assert.deepEqual(task.command, ['pnpm', '--filter', '@certscore/scan-core', 'exec', 'node', '--import', 'tsx', '--test', '--test-concurrency=2', file]);
+  }
+  plan.workers[0]!.length = 0;
+  assert.throws(() => validateShardPlan(plan, gate), /Missing\/duplicate files: scan-core-policy-full/);
 });
 test('splitting retains every option and opaque commands retain their exact execution', () => {
   const { plan } = fixture();

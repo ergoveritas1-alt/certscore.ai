@@ -14,6 +14,7 @@ permissions:
   contents: read
 env:
   EXPECTED_GIT_REMOTE: https://github.com/ergoveritas1-alt/certscore.ai.git
+  CERTSCORE_COLD_WEB_BUILD: '1'
 concurrency:
   group: release-verification-benchmark-${{ github.ref }}
   cancel-in-progress: false
@@ -22,6 +23,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
+      build_worker: ${{ steps.plan.outputs.build_worker }}
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
@@ -38,8 +40,15 @@ jobs:
           approved="$APPROVED_WORKERS"
           unset REQUESTED_WORKERS APPROVED_WORKERS
           node -e 'const n=Number(process.argv[1]), cap=Number(process.argv[2]); if(![1,2,4,6,8].includes(n)||!Number.isInteger(cap)||n>cap||cap>8)process.exit(1)' "$requested" "$approved"
-          node scripts/release-node.mjs scripts/release-verification.ts plan --workers "$requested" --out /tmp/release-plan.json
-          node -e 'console.log("matrix="+JSON.stringify({worker:Array.from({length:Number(process.argv[1])},(_,i)=>i)}))' "$requested" >> "$GITHUB_OUTPUT"
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts plan --workers "$requested" --out /tmp/release-plan.json
+          node -e '
+            const { workers } = require("/tmp/release-plan.json");
+            const buildWorker = workers.findIndex(tasks => tasks.some(task => task.parent === "workspace-build"));
+            if (buildWorker < 0) process.exit(1);
+            console.log("matrix=" + JSON.stringify({ worker: workers.map((_, index) => index) }));
+            console.log("build_worker=" + buildWorker);
+          ' >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with: {name: release-plan, path: /tmp/release-plan.json, retention-days: 1}
   verify:
@@ -63,12 +72,41 @@ jobs:
       - run: pnpm exec playwright install chromium
       - uses: actions/download-artifact@v4
         with: {name: release-plan, path: /tmp/release-plan}
-      - env:
+      - name: Run the cold workspace build
+        id: cold_build
+        if: ${{ matrix.worker == fromJSON(needs.plan.outputs.build_worker) }}
+        env:
           WORKER_INDEX: ${{ matrix.worker }}
         run: |
           index="$WORKER_INDEX"
           unset WORKER_INDEX
-          node scripts/release-node.mjs scripts/release-verification.ts worker --plan /tmp/release-plan/release-plan.json --worker "$index" --out /tmp/release-results
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts worker --phase build --plan /tmp/release-plan/release-plan.json --worker "$index" --out /tmp/release-results
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') }}
+        with:
+          name: cold-build-timing
+          path: /tmp/release-results/workspace-build.json
+          retention-days: 1
+          if-no-files-found: ignore
+      - name: Run the build worker's remaining checks
+        if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') }}
+        env:
+          WORKER_INDEX: ${{ matrix.worker }}
+        run: |
+          index="$WORKER_INDEX"
+          unset WORKER_INDEX
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts worker --phase remaining --plan /tmp/release-plan/release-plan.json --worker "$index" --out /tmp/release-results
+      - name: Run checks on other workers
+        if: ${{ matrix.worker != fromJSON(needs.plan.outputs.build_worker) }}
+        env:
+          WORKER_INDEX: ${{ matrix.worker }}
+        run: |
+          index="$WORKER_INDEX"
+          unset WORKER_INDEX
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts worker --plan /tmp/release-plan/release-plan.json --worker "$index" --out /tmp/release-results
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -94,6 +132,8 @@ jobs:
         with: {name: release-plan, path: /tmp/release-plan}
       - uses: actions/download-artifact@v4
         with: {pattern: release-results-*, merge-multiple: true, path: /tmp/release-results}
-      - run: node scripts/release-node.mjs scripts/release-verification.ts aggregate --plan /tmp/release-plan/release-plan.json --results /tmp/release-results --out /tmp/partition-proof.json
+      - run: |
+          env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" \
+            node scripts/release-node.mjs scripts/release-verification.ts aggregate --plan /tmp/release-plan/release-plan.json --results /tmp/release-results --out /tmp/partition-proof.json
       - uses: actions/upload-artifact@v4
         with: {name: partition-proof, path: /tmp/partition-proof.json, retention-days: 1}

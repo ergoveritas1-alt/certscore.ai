@@ -22,6 +22,21 @@ test("web typecheck reuse requires the successful exact-SHA CI receipt", async (
   assert.equal(evaluate(sha), "true");
 });
 
+test("fresh verification overlaps web tracing and skips unused cache writes only when opted in", () => {
+  const evaluate = (cold: string, compilerCache: string, dev: boolean) => JSON.parse(execFileSync(process.execPath,
+    ["--input-type=module", "-e", `
+      import config from './apps/web/next.config.mjs';
+      const { cache } = config.webpack({ cache: { type: 'filesystem' }, resolve: {} }, { dev: ${dev} });
+      console.log(JSON.stringify({ cache, parallelTracing: config.experimental.parallelServerBuildTraces === true,
+        typecheck: !config.typescript.ignoreBuildErrors }));
+    `], { encoding: "utf8", env: { ...process.env, CERTSCORE_COLD_WEB_BUILD: cold,
+      WEB_COMPILER_CACHE_ENABLED: compilerCache, WEB_TYPECHECK_VERIFIED_SHA: "" } }));
+  assert.deepEqual(evaluate("1", "", false), { cache: false, parallelTracing: true, typecheck: true });
+  assert.deepEqual(evaluate("", "", false), { cache: { type: "filesystem" }, parallelTracing: false, typecheck: true });
+  assert.deepEqual(evaluate("1", "1", false), { cache: { type: "filesystem", compression: "gzip" }, parallelTracing: false, typecheck: true });
+  assert.deepEqual(evaluate("1", "", true).cache, { type: "filesystem" });
+});
+
 test("application build optimization does not require a Chromium runtime-base rebuild", async () => {
   const dockerfile = await readFile("apps/validation-worker/Dockerfile", "utf8");
   const before = execFileSync("git", ["show", "HEAD:apps/validation-worker/Dockerfile"], {encoding:"utf8"});

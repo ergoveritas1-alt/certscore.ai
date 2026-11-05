@@ -28,11 +28,13 @@ path filter did not trigger. Do not assume a skipped workflow passed.
 ## Partition coverage and isolation
 
 `pnpm release:verification plan --workers 8 --out <new-plan.json>` inventories all
-38 canonical full-gate parents. Only reviewed direct `pnpm exec tsx --test` commands
-with literal final file lists can be partitioned. Every original option, filter
-and internal test-concurrency setting remains. Package aliases, shell scripts,
-globs and unknown commands execute intact. Identical filenames in different
-parents are retained. No browser clock, assertion or production deadline changes.
+38 canonical full-gate parents. The planner partitions reviewed direct
+`pnpm exec tsx --test` commands with literal final file lists. It also checks
+the exact scan-core policy package script and expands its fixture glob from
+the package directory. Both paths preserve the loader, filters and internal
+test concurrency. Other package aliases, shell scripts, globs and unknown
+commands execute intact. Identical filenames in different parents are retained.
+No browser clock, assertion or production deadline changes.
 
 Workers require separate clean checkouts with matching source/configuration,
 toolchain, platform and architecture. Each compiles shared exports once before
@@ -77,6 +79,12 @@ they must not be silently excluded from end-to-end results. Queue delays remain
 additional. Optional `--file-timings <json>` accepts measured `parent:file` timings.
 Parent elapsed time includes its original internal parallelism, so equal-share
 estimates can underestimate individual file cost. Calibrate against hosted runs.
+
+The cold benchmark profile uses measured build and typecheck durations from
+hosted run `41976958185`. The policy file weights come from a local four-lane
+run of all eight files. It passed the same 226 tests as the original command,
+in 143.072 seconds versus 283.597 seconds. These weights guide placement and
+do not predict runner speed or replace verification receipts.
 
 `pnpm release:benchmark-shards --out <new-directory>` measures four reviewed owned
 fixture files sequentially and with two process lanes on one host, retaining

@@ -12,6 +12,8 @@ jobs:
     timeout-minutes: 65
     env:
       EXPECTED_GIT_REMOTE: https://github.com/ergoveritas1-alt/certscore.ai.git
+      CERTSCORE_COLD_WEB_BUILD: '1'
+      BENCHMARK_EVIDENCE: /tmp/release-cold-build
     steps:
       - uses: actions/checkout@v6
         with: {persist-credentials: false}
@@ -21,19 +23,45 @@ jobs:
         with: {node-version: 22.22.1, cache: pnpm}
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
-      - name: Run the cold build and every planned verification check
+      - name: Run the cold workspace build
+        id: cold_build
         run: |
           release() {
-            env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" node scripts/release-node.mjs scripts/release-verification.ts "$@"
+            env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" node scripts/release-node.mjs scripts/release-verification.ts "$@"
           }
-          evidence=/tmp/release-cold-build
-          release plan --workers 1 --out "$evidence/plan.json"
-          release worker --plan "$evidence/plan.json" --worker 0 --out "$evidence/results"
-          release aggregate --plan "$evidence/plan.json" --results "$evidence/results" --out "$evidence/proof.json"
+          release plan --workers 1 --out "$BENCHMARK_EVIDENCE/plan.json"
+          release worker --phase build --plan "$BENCHMARK_EVIDENCE/plan.json" --worker 0 --out "$BENCHMARK_EVIDENCE/results"
+      - name: Report the cold-build timing
+        if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') }}
+        shell: bash
+        run: |
+          receipt="$BENCHMARK_EVIDENCE/results/workspace-build.json"
+          if [[ -f "$receipt" ]]; then
+            node -e '
+              const { durationMs, exitStatus } = require(process.argv[1]);
+              const status = exitStatus === 0 ? "passed" : `failed (exit ${exitStatus})`;
+              console.log(`CertScore.ai cold workspace build ${status} in ${(durationMs / 1000).toFixed(2)} s.`);
+            ' "$receipt" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') }}
+        with:
+          name: cold-build-timing
+          path: ${{ env.BENCHMARK_EVIDENCE }}/results/workspace-build.json
+          retention-days: 1
+          if-no-files-found: ignore
+      - name: Run remaining verification checks and verify coverage
+        if: ${{ !cancelled() && (steps.cold_build.outcome == 'success' || steps.cold_build.outcome == 'failure') }}
+        run: |
+          release() {
+            env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_COLD_WEB_BUILD="$CERTSCORE_COLD_WEB_BUILD" node scripts/release-node.mjs scripts/release-verification.ts "$@"
+          }
+          release worker --phase remaining --plan "$BENCHMARK_EVIDENCE/plan.json" --worker 0 --out "$BENCHMARK_EVIDENCE/results"
+          release aggregate --plan "$BENCHMARK_EVIDENCE/plan.json" --results "$BENCHMARK_EVIDENCE/results" --out "$BENCHMARK_EVIDENCE/proof.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: cold-build-verification-evidence
-          path: /tmp/release-cold-build
+          path: ${{ env.BENCHMARK_EVIDENCE }}
           retention-days: 1
           if-no-files-found: error
