@@ -229,3 +229,30 @@ test('consent quality partitions preserve the original selection once and keep t
   tasks[0]!.command = tasks[1]!.command;
   assert.throws(() => validateShardPlan(plan, gate), /partition coverage changed: scan-core-consent-quality/);
 });
+
+test('independently planned workers and aggregation agree on the complete manifest', () => {
+  const gate = getPredeployPlan([], { full: true }).checks;
+  const context = { environment: 'fixture', platform: 'linux', arch: 'x64' };
+  const first = planShards(gate, inputs, { workers: 8, execution: context });
+  const second = planShards(gate, inputs, { workers: 8, execution: context });
+  assert.equal(first.checks.length, 38);
+  assert.equal(first.workers.length, 8);
+  assert.equal(digest(first), digest(second));
+  assert.notEqual(digest(first), digest(planShards(gate, inputs, { workers: 6, execution: context })));
+});
+
+test('early web phase profiling reports durations without serializing trace payloads', async () => {
+  const { nextBuildPhases } = await import('./next-build-phases');
+  const dir = await mkdtemp(path.join(tmpdir(), 'next-build-phases-'));
+  const trace = path.join(dir, 'trace');
+  try {
+    await writeFile(trace, `${JSON.stringify([{ name: 'worker-main-server', duration: 4300, tags: { detail: 'private' } }])}\n${JSON.stringify([
+      { name: 'next-build', duration: 15000 }, { name: 'verify-typescript-setup', duration: 5000 }, { name: 'static-generation', duration: 1500 },
+    ])}\n`);
+    assert.deepEqual(await nextBuildPhases(trace), { serverCompileMs: 4, nextBuildMs: 15, typeValidationMs: 5, staticGenerationMs: 2 });
+    await writeFile(trace, JSON.stringify([{ name: 'next-build', duration: 1 }, { name: 'next-build', duration: 2 }]));
+    await assert.rejects(nextBuildPhases(trace), /ambiguous phase/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

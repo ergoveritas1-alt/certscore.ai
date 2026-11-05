@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { resolve as absolutePath } from 'node:path';
 import { planReleaseBootstrap, workspaceExportsFingerprint } from './lib/release-bootstrap';
 import { scheduleReleaseTasks } from './lib/release-scheduler';
+import { nextBuildPhases } from './lib/next-build-phases';
 async function main() {
   const started = performance.now();
   const [mode, ...extra] = process.argv.slice(2);
@@ -53,9 +54,13 @@ async function main() {
   })), { lanes: 2, memoryMb: 8192 });
   const wallMs = Math.round(performance.now() - started);
   if (fullWorkspace) {
-    const summary = JSON.stringify({ workspaceBuildWallMs: wallMs, reusedPackageTasks: plan.length - pending.length, tasks: timings });
-    console.log(summary);
     const timingFile = process.env.CERTSCORE_WORKSPACE_BUILD_TIMING_FILE;
+    const webPhases = timingFile ? await nextBuildPhases('apps/web/.next/trace').catch(() => {
+      console.warn('Next build phase trace is unavailable; workspace timing remains available.');
+      return undefined;
+    }) : undefined;
+    const summary = JSON.stringify({ workspaceBuildWallMs: wallMs, reusedPackageTasks: plan.length - pending.length, tasks: timings, webPhases });
+    console.log(summary);
     if (timingFile) await writeFile(timingFile, `${summary}\n`, { flag: 'wx', mode: 0o600 }).catch(() => {
       console.warn('Workspace build phase timing could not be written; total timing remains in the check receipt.');
     });
