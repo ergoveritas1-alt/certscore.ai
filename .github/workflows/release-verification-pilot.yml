@@ -1,7 +1,7 @@
 name: CertScore.ai eight-worker cold verification pilot
 on:
   push:
-    branches: [codex/verification-pilot-v3-20261104]
+    branches: [codex/verification-pilot-v4-20261104]
     paths: [.github/workflows/release-verification-pilot.yml]
 permissions:
   contents: read
@@ -9,7 +9,7 @@ env:
   EXPECTED_GIT_REMOTE: https://github.com/ergoveritas1-alt/certscore.ai.git
   CERTSCORE_VERIFICATION_COLD_BUILD: '1'
 concurrency:
-  group: release-verification-pilot-v3-20261104
+  group: release-verification-pilot-v4-20261104
   cancel-in-progress: false
 jobs:
   plan:
@@ -31,9 +31,30 @@ jobs:
       - id: plan
         run: |
           env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 CI=true GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" GITHUB_REF="$GITHUB_REF" EXPECTED_GIT_REMOTE="$EXPECTED_GIT_REMOTE" CERTSCORE_VERIFICATION_COLD_BUILD="$CERTSCORE_VERIFICATION_COLD_BUILD" \
-            node scripts/release-node.mjs scripts/release-verification.ts plan --workers 8 --file-timings .github/pilot/release-verification-file-timings.json --out /tmp/release-plan.json
+            node scripts/release-node.mjs scripts/release-verification.ts plan --workers 8 --file-timings .github/pilot/release-verification-file-timings.json --out /tmp/base-release-plan.json
           node -e '
-            const { workers } = require("/tmp/release-plan.json");
+            const assert = require("node:assert/strict");
+            const { createHash } = require("node:crypto");
+            const { writeFileSync } = require("node:fs");
+            const plan = require("/tmp/base-release-plan.json");
+            const { workers, estimates } = plan;
+            const hash = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+            // Pin the untouched assignments to the passing baseline run 41988575032.
+            assert.equal(plan.checks.length, 38);
+            assert.equal(workers.length, 8);
+            assert.equal(hash(workers.map(tasks => tasks.map(task => task.key))),
+              "7013da0310824da397973e8c6cf28e89a2aa9273a0525bfd5b26eddaf2d92f3f");
+            for (const [from, to, key] of [[4, 1, "scan-core-policy-full:1e5f97476117e84b"],
+                                           [6, 7, "post-accept-forms:d87590b6d7ebc148"]]) {
+              const index = workers[from].findIndex(task => task.key === key);
+              assert.ok(index >= 0);
+              workers[to].push(...workers[from].splice(index, 1));
+            }
+            estimates.workerMs = workers.map(tasks => tasks.reduce((total, task) => total + task.estimatedMs, 0));
+            estimates.estimatedWallMs = Math.max(...estimates.workerMs) + estimates.bootstrapMs +
+              estimates.setupMsPerWorker + estimates.controlPlaneMs;
+            writeFileSync("/tmp/release-plan.json", JSON.stringify(plan, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+            console.error("Placed verification plan hash " + hash(plan));
             const buildWorker = workers.findIndex(tasks => tasks.some(task => task.parent === "workspace-build"));
             if (buildWorker < 0) process.exit(1);
             console.log("matrix=" + JSON.stringify({ worker: workers.map((_, index) => index) }));
