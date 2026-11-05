@@ -288,13 +288,16 @@ test("routine scanner deploys promote immutable digests without recreating infra
   assert.match(preparation, /assertScannerArtifact\(artifact, input.ref\)/);
   assert.doesNotMatch(preparation, /synchronizeScannerImage|applyScannerRuntimeConfiguration/);
   assert.match(deployFunction, /await applyScannerRuntimeConfiguration\(\)/);
-  assert.match(deployFunction, /synchronizeScannerImage\(awsScannerImageControl\(region\), artifact.images\[region\]!, true\)/);
-  assert.match(deployFunction, /synchronizeScannerImage\(awsScannerImageControl\(region, true\), artifact.images\[region\]!, true\)/);
+  assert.match(deployFunction, /runScannerPromotions\(async \(region, inventory\)/);
+  assert.match(deployFunction, /synchronizeScannerImage\(awsScannerImageControl\(region, inventory\), artifact.images\[region\]!, true\)/);
+  const artifact = await readFile("scripts/lib/scanner-artifact.ts", "utf8");
+  assert.match(artifact, /SCANNER_PROVENANCE_REGIONS\.flatMap\(region => \[promote\(region, false\), promote\(region, true\)\]\)/);
+  assert.match(artifact, /await promote\(region, false\);\s+await promote\(region, true\);/);
   const imageControl = await readFile("scripts/lib/scanner-image-provenance.ts", "utf8");
   assert.match(imageControl, /"lambda", "update-function-code"/);
   assert.ok(
     deployFunction.indexOf("await applyScannerRuntimeConfiguration()") <
-      deployFunction.indexOf("await synchronizeScannerImage("),
+      deployFunction.indexOf("await runScannerPromotions("),
     "scanner runtime configuration must converge before image promotion"
   );
   assert.doesNotMatch(deployFunction, /setup-dev-aws-image\.sh/);
