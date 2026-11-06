@@ -1,5 +1,12 @@
+import type { ExternalScanNoGoProjection } from "@website-signal-risk-scanner/shared";
+
 /** Translate known execution failures without exposing internal error payloads. */
-export function scanFailureExplanation(error: string | null | undefined) {
+export function scanFailureExplanation(error: string | null | undefined, noGo?: ExternalScanNoGoProjection | null) {
+  if (noGo) return {
+    title: noGo.noGo.title,
+    detail: [noGo.noGo.explanation, noGo.noGo.evidenceExcerpt].filter(Boolean).join(" "),
+    nextStep: noGo.noGo.recommendedNextAction,
+  };
   if (error === "discovery_unavailable_or_blocked") {
     return {
       title: "Additional crawling unavailable",

@@ -284,7 +284,7 @@ test("MCP export preserves every supported no-go reason", () => {
     "site_not_ready", "captcha_or_challenge", "access_denied_or_forbidden_page", "rate_limited_429",
     "server_error_5xx", "configuration_error", "maintenance_or_unavailable", "tls_or_certificate_error",
     "unsupported_region", "target_unreachable_or_unsuitable", "navigation_transport_failure", "visual_capture_failed_or_placeholder",
-    "retained_visual_error_shell", "unknown"
+    "retained_visual_error_shell", "runtime_capture_unverified", "unknown"
   ] as const;
   for (const reasonCode of reasons) {
     const exported = exportFindings({
@@ -1942,7 +1942,7 @@ test("retained 401 is explicit in every MCP text surface, including the default 
   const texts = [scanStatusText(value), scanSiteText(value), scanBundleText(value), pulseReportText(value),
     (toToolResult(value).content[0] as { text: string }).text];
   for (const text of texts) {
-    assert.match(text, /^CertScore scan: Sign-in required/);
+    assert.match(text, /^CertScore\.ai scan: Sign-in required/);
     assert.match(text, /Not scored/);
     assert.ok(text.includes(value.noGo.explanation));
     assert.match(text, /HTTP 401/);
@@ -1958,7 +1958,7 @@ test("retained 401 is explicit in every MCP text surface, including the default 
 test("MCP text never promotes raw 401 hints or an inactive no-go object into a blocker", () => {
   const value = { ...retainedAuthenticationNoGo, resultDisposition: null, status: "completed", score: 92, mainDocumentStatus: 401 };
   for (const text of [scanStatusText(value), scanSiteText(value), scanBundleText(value), pulseReportText(value)]) {
-    assert.doesNotMatch(text, /CertScore scan: Sign-in required|Not scored/);
+    assert.doesNotMatch(text, /CertScore\.ai scan: Sign-in required|Not scored/);
   }
 });
 
@@ -2010,6 +2010,24 @@ test("no-go text preserves reason-specific retry guidance rather than hardcoding
   assert.match(text, /Access temporarily restricted/);
   assert.match(text, /Retry likely to help: yes/);
   assert.ok(text.includes(value.noGo.recommendedNextAction));
+  assert.doesNotMatch(text, /HTTP 401|Sign-in required/);
+});
+
+test("MCP reports an incomplete starting-page capture with the retained evidence and no score", () => {
+  const evidenceExcerpt = "The runtime capture retained a page title but no readable page text.";
+  const value = { ...retainedAuthenticationNoGo, noGo: {
+    ...retainedAuthenticationNoGo.noGo,
+    reasonCode: "runtime_capture_unverified",
+    title: "Starting-page capture incomplete",
+    explanation: "CertScore.ai could not verify a representative starting page.",
+    evidenceExcerpt,
+    retryLikelyToHelp: false,
+    recommendedNextAction: "Contact CertScore.ai with the scan ID for capture review.",
+  } };
+  const text = scanStatusText(value);
+  assert.match(text, /Starting-page capture incomplete/);
+  assert.match(text, /Not scored/);
+  assert.ok(text.includes(evidenceExcerpt));
   assert.doesNotMatch(text, /HTTP 401|Sign-in required/);
 });
 

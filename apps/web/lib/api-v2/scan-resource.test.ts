@@ -26,7 +26,7 @@ import {
 import { buildRuntimeInventoryProjectionFromScan } from "../scans/runtime-inventory-projection";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
-import { apiV2GpcResponseSchema, apiV2PreConsentCookiesTrackersSchema, projectCustomerRuntimeGraph } from "@certscore/api-contracts";
+import { apiV2GpcResponseSchema, apiV2PreConsentCookiesTrackersSchema, projectCustomerRuntimeGraph, pulseResponseSchema } from "@certscore/api-contracts";
 import { gpcRuntimeFixture } from "../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime";
 import servicePurposeFixtures from "../../../../packages/certscore-contracts/src/test-fixtures/vendor-service-purpose-v1.json";
 import { resolveCanonicalVendorLabel } from "@certscore/vendor-resolver";
@@ -97,6 +97,36 @@ function fixture(overrides: Partial<ScanDetailResponse["scan"]> = {}) {
     validationFindings: []
   } as unknown as ScanDetailResponse;
 }
+
+test("snapshot-only capture no-go is visible to API clients without promoting partial evidence", () => {
+  const record = fixture({ status: "failed", pagesScanned: 0 });
+  record.snapshot = { scan_no_go_assessment: {
+    status: "available", version: "scan-no-go-assessment-v1", decision: "no_go", scanNoGoConfidence: 1,
+    reasonCodes: ["runtime_capture_unverified"], corroboratorCodes: [], contradictorCodes: [], evidenceRefs: [],
+    supportingSignals: { assessmentPolicy: "runtime_visit_capture_limitation.v1",
+      cdpLoaderBound: true, capturedTitleObserved: true, capturedTextObserved: false },
+  } };
+  const result = buildApiV2ScanResource(record);
+  assert.equal(result.resultDisposition, "no_go");
+  assert.equal(result.noGo?.reasonCode, "runtime_capture_unverified");
+  assert.equal(result.noGo?.limitationKind, "scanner_capture_limitation");
+  assert.equal(result.score, null);
+  assert.equal(result.privacyAuditEvidence, null);
+  assert.equal(result.postureScores, undefined);
+  const status = buildApiV2ScanStatus(record);
+  assert.equal(status.status, "completed_limited");
+  assert.equal(status.resultDisposition, "no_go");
+  assert.equal(status.error, undefined);
+  assert.equal(status.retryAfterSeconds, null);
+  assert.equal(status.recommendedNextAction, result.noGo?.recommendedNextAction);
+  const { buildPulseProjection } = require("../pulse/projection") as typeof import("../pulse/projection");
+  const pulse = pulseResponseSchema.parse(buildPulseProjection({ scanRecord: record, detail: "full", format: "json", freshnessMode: "latest",
+    pulseRequestId: "capture-fixture", requestedUrl: null, resolutionMode: "reused_existing_scan", waitSeconds: 0 }));
+  assert.equal(pulse.scanStatus, "completed_limited");
+  assert.equal(pulse.noGo?.reasonCode, "runtime_capture_unverified");
+  assert.equal(pulse.summary?.score, null);
+  assert.deepEqual(projectedFindingsFromPulse(pulse), []);
+});
 
 test("accessibility status and concrete findings survive checksum-verified persistence and API retrieval", () => {
   const record = fixture();

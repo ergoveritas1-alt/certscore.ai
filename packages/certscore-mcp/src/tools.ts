@@ -1223,7 +1223,7 @@ function canonicalNoGoText(value: Record<string, any>) {
   const noGo = canonicalNoGo(value);
   if (!noGo) return null;
   return [
-    `CertScore scan: ${boundedText(noGo.title, 240) ?? "Scan access limitation"}; status=${value.status ?? "completed_limited"}; Not scored.`,
+    `CertScore.ai scan: ${boundedText(noGo.title, 240) ?? "Scan access limitation"}; status=${value.status ?? "completed_limited"}; Not scored.`,
     boundedText(noGo.explanation, 1_200),
     boundedText(noGo.summary, 600),
     noGo.evidenceExcerpt ? `Retained evidence: ${boundedText(noGo.evidenceExcerpt, 1_200)}` : null,

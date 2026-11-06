@@ -2,7 +2,7 @@ import { parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } fr
 import { buildGpcCmpStateComparison } from "@certscore/scan-core/gpc-cmp-state-comparison";
 import { isLoopbackPostRefusalTarget } from "@certscore/scan-core/post-refusal-target-authorization";
 import { runtimeEvidenceClockSchema } from "@certscore/contracts";
-import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
+import { boundRuntimeDocumentStatus, CALIFORNIA_COMBINED_OPT_OUT_POLICY } from "@certscore/contracts";
 import { assertPrivacyCaptureProfile, PRESENCE_ONLY_CAPTURE_PROFILE } from "@certscore/contracts";
 import { describeCaptureFailure } from "@certscore/contracts";
 import { saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, saleSharingOptOutMatchesDispatch, SALE_SHARING_OPT_OUT_POLICY, SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, SALE_SHARING_OPT_OUT_ARTIFACT_BUDGET_MS, type SaleSharingOptOutDispatch } from "@certscore/contracts";
@@ -1221,7 +1221,9 @@ export function buildLocalV2DagLambdaLaneRun(input: {
     requestDocumentUrl(terminalResponse.responseUrl ?? terminalResponse.url) === requestDocumentUrl(lastSnapshot.url) &&
     hasRepresentativeRuntimeEvidence(input.bundle) ? terminalResponse.status : undefined;
   const observedTerminalStatus = terminalResponse ? terminalDocumentStatus ?? null : firstHttpStatus;
-  const accessStatus = laneId === "policy_evidence" ? siteFacingNavigation?.terminalHttpStatus :
+  const usesBoundRuntimeCapture = laneId === "runtime_evidence" && lastSnapshot?.runtimeDocumentCapture;
+  const accessStatus = usesBoundRuntimeCapture ? boundRuntimeDocumentStatus(lastSnapshot) :
+    laneId === "policy_evidence" ? siteFacingNavigation?.terminalHttpStatus :
     siteFacingNavigation?.terminalHttpStatus ?? observedTerminalStatus;
   const accessOutcome: ScanLaneRun["accessOutcome"] = challengeDetected
     ? "bot_challenge"
@@ -1236,7 +1238,8 @@ export function buildLocalV2DagLambdaLaneRun(input: {
           ? "navigation_failed"
           : laneId === "policy_evidence"
             ? input.bundle.scanNoGoAssessment?.decision === "no_go" ? "unknown" : siteFacingNavigation?.terminalAccess ?? "unknown"
-          : input.bundle.scanNoGoAssessment?.decision !== "no_go" && accessStatus != null && accessStatus >= 200 && accessStatus < 400
+          : input.bundle.scanNoGoAssessment?.decision !== "no_go" && accessStatus != null && accessStatus >= 200 && accessStatus < 400 &&
+              (!usesBoundRuntimeCapture || hasRepresentativeRuntimeEvidence(input.bundle))
             ? "representative_page"
             : "unknown";
   const completedAt = moduleRun.completedAt ?? null;
@@ -4753,18 +4756,10 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     consentSurfaceInspection: consentProof.consentSurfaceInspection,
     policySurfaceInspection: policyEvidence.policySurfaceInspection,
     visualCapture: consentProof.visualCapture,
-    ...(scanNoGoAssessment
-      ? {
-          scanNoGoAssessment,
-          scan_no_go_assessment: scanNoGoAssessment,
-        }
-      : {}),
-    ...(visualAccessReview
-      ? {
-          visualAccessReview,
-          visual_access_review: visualAccessReview,
-        }
-      : {}),
+    scanNoGoAssessment: scanNoGoAssessment ?? undefined,
+    scan_no_go_assessment: scanNoGoAssessment ?? undefined,
+    visualAccessReview: visualAccessReview ?? undefined,
+    visual_access_review: visualAccessReview ?? undefined,
     scanEvidenceLaneAssessment,
     scan_evidence_lane_assessment: scanEvidenceLaneAssessment,
   };
@@ -4809,6 +4804,20 @@ function reconcileEvidenceLaneNoGoAssessment(input: {
   const runtimeRepresentative = input.runtimeEvidence.runtimeCoverage?.coverageStatus !== "limited_none" &&
     runtimeRun?.executionOutcome === "success" &&
     runtimeRun.accessOutcome === "representative_page" && hasRepresentativeRuntimeEvidence(input.runtimeEvidence);
+  const consentCaptureOnly = consentNoGo && !runtimeRepresentative &&
+    input.runtimeEvidence.domSnapshots.some(snapshot => Boolean(snapshot.runtimeDocumentCapture)) &&
+    ["blank_or_unusable_page", "loading_or_stalled"].includes(consentAssessment.reasonCodes[0] ?? "");
+  // An independent sparse consent visit cannot turn an unresolved runtime
+  // capture into a target-site state. A verified runtime access error can.
+  if (consentCaptureOnly) {
+    return {
+      disagreement: false,
+      noGoLane: null,
+      representativeLane: null,
+      scanNoGoAssessment: runtimeAssessment ?? null,
+      visualAccessReview: runtimeVisualReview ?? null,
+    };
+  }
   const noGoLane = consentNoGo && !runtimeNoGo && runtimeRepresentative
     ? "consent_proof" as const
     : runtimeNoGo && !consentNoGo && consentRepresentative

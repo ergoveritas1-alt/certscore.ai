@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { projectAdminNoGo, selectAdminActivityStatus, selectAdminScanOutcome } from "./admin-no-go";
+import { formatAdminScanOutcome, projectAdminNoGo, selectAdminActivityStatus, selectAdminScanOutcome } from "./admin-no-go";
+
+test("failed outcomes do not claim Go and typed capture limitations remain no-go", () => {
+  assert.equal(formatAdminScanOutcome("failed", false), "Failed");
+  assert.equal(formatAdminScanOutcome("completed_partial", false, "failed"), "Completed Partial");
+  assert.equal(formatAdminScanOutcome("completed", false, "completed"), "Completed (Go)");
+  assert.equal(formatAdminScanOutcome("homepage_runtime_capture_unverified", true, "failed"), "Homepage Runtime Capture Unverified (No-go)");
+  const projection = projectAdminNoGo({ snapshotOutcome: "homepage_runtime_capture_unverified" });
+  assert.equal(projection.isNoGo, true);
+  assert.equal(projection.limitationKind, "scanner_capture_limitation");
+  assert.equal(projection.reason, "Starting-page capture incomplete");
+});
 
 test("canonical snapshot outcomes take precedence", () => {
   assert.deepEqual(projectAdminNoGo({ snapshotOutcome: "homepage_security_challenge" }), {

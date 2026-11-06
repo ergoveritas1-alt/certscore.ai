@@ -23,7 +23,8 @@ import {
   type VerifiedPreConsentRuntimePreviewPacket,
   type VerifiedPolicyEvidencePacket,
 } from "@certscore/contracts";
-import { query, queryOne, withNonBlockingDatabaseLock } from "@website-signal-risk-scanner/db";
+import { query, queryOne, recordScanCaptureLimitation, withNonBlockingDatabaseLock } from "@website-signal-risk-scanner/db";
+import { projectRuntimeVisitCaptureLimitation } from "@website-signal-risk-scanner/shared";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -2231,6 +2232,14 @@ export async function recordLocalV2DagLambdaResult(
         PROCESSOR,
       ]
     );
+  }
+  const captureLimitation = projectRuntimeVisitCaptureLimitation(parsedMessage);
+  if (captureLimitation) {
+    await recordScanCaptureLimitation({
+      scanId: parsedMessage.scanId,
+      completedAt: parsedMessage.completedAt,
+      ...captureLimitation,
+    });
   }
   if (parsedMessage.scannerRuntimeProvenance) {
     await query(

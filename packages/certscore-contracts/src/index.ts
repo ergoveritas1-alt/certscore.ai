@@ -59,7 +59,7 @@ export * from "./gpc-cmp-state-comparison";
 const canonicalGpcCmpStateComparisonSchema: z.ZodType<GpcCmpStateComparison> = gpcCmpStateComparisonSchema;
 const canonicalGpcActivityComparisonSchema: z.ZodType<GpcActivityComparison> = gpcActivityComparisonSchema;
 import { gpcOptOutObservationSchema } from "./gpc-opt-out-prototype";
-export { terminalLaneEvidenceSchema, runtimeVisitEligibilityDiagnosticSchema, type TerminalLaneEvidence, type RuntimeVisitEligibilityDiagnostic } from "./terminal-lane-evidence";
+export { terminalLaneEvidenceSchema, runtimeVisitEligibilityDiagnosticSchema, retainedRuntimeNoGoReasonSchema, type TerminalLaneEvidence, type RuntimeVisitEligibilityDiagnostic } from "./terminal-lane-evidence";
 export { classifyRuntimeErrorPage } from "./runtime-error-page";
 export * from "./gpc-impact";
 export * from "./collection-field-review";
@@ -74,7 +74,7 @@ export * from "./accessibility-audit";
 const canonicalAccessibilityAuditSchema: z.ZodType<AccessibilityAuditObservation> = accessibilityAuditObservationSchema;
 export * from "./cms-version-evidence";
 import { z } from "zod";
-export { getUsableRuntimeVisitSnapshot, assessRuntimeVisitSnapshot, RUNTIME_VISIT_REJECTION_REASONS, type RuntimeVisitRejectionReason } from "./usable-runtime-visit";
+export { boundRuntimeDocumentStatus, hasBoundRuntimeVisualContent, hasRepresentativeRuntimeText, getUsableRuntimeVisitSnapshot, assessRuntimeVisitSnapshot, RUNTIME_VISIT_REJECTION_REASONS, type RuntimeVisitRejectionReason } from "./usable-runtime-visit";
 import { consentControlLinkDestinationSchema } from "./consent-control-link";
 import { vendorServicePurposeSchema } from "./vendor-service-purpose";
 import { vendorRegistryAttributionSchema } from "./vendor-registry-attribution";
@@ -1842,6 +1842,16 @@ export const blockingFrameChallengeSchema = z.object({
 });
 
 export const domSnapshotArtifactSchema = z.object({
+  runtimeDocumentCapture: z.object({
+    version: z.literal("runtime_document_capture.v1"),
+    response: z.object({
+      origin: z.string().url().max(300),
+      requestUrlSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      status: z.number().int().min(100).max(599),
+      documentToken: z.string().min(1).max(160),
+      route: z.enum(["committed", "same_document"]),
+    }).strict().optional(),
+  }).strict().optional(),
   optOutLabel: domOptOutLabelSchema.optional(),
   optOutSearch: domOptOutSearchSchema.optional(),
   blockingFrameChallenge: blockingFrameChallengeSchema.optional(),

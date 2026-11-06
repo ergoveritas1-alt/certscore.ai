@@ -5,7 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
 import { ShadowScanReport } from "../../../../components/scans/report-lab/shadow-scan-report";
-import { buildVerifiedTimelineReportModel } from "../../../../server/scans/verified-timeline-report-model";
+import { buildTerminalRuntimeVisitReport, buildVerifiedTimelineReportModel } from "../../../../server/scans/verified-timeline-report-model";
 import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
 import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
@@ -43,6 +43,8 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
       : getOrganizationScanStatusProjection({ organizationId: organization.id, scanId })
   );
   if (!statusProjection) notFound();
+  const terminalReport = buildTerminalRuntimeVisitReport(statusProjection);
+  if (terminalReport) return <ShadowScanReport mode="authenticated" report={terminalReport} variant="timeline" />;
   const reportCacheScope = `${organization.id}:${user.id}:${statusProjection.reportGeneration ?? ""}`;
 
   const fullSiteNotice = statusProjection.fullSite && (await readFullSiteOptions()).allowed

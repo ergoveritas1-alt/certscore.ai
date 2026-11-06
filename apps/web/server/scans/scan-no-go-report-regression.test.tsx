@@ -77,6 +77,39 @@ test("retained 401 stays unscored through persistence, checksum-verified read, t
   }
 });
 
+test("a failed runtime visit renders directly from its terminal snapshot without findings or scores", async () => {
+  const { buildTerminalRuntimeVisitReport } = await import("./verified-timeline-report-model");
+  const { ShadowScanReport } = await import("../../components/scans/report-lab/shadow-scan-report");
+  const projection = {
+    id: "capture-fixture", status: "failed", domainHostname: "example.test", pageUrl: "https://example.test/",
+    createdAt: "2026-11-06T00:57:20Z", startedAt: null, completedAt: null, scanFrom: "eu_de", scanNoGoAssessment: {
+      status: "available", version: "scan-no-go-assessment-v1", decision: "no_go", scanNoGoConfidence: 1,
+      reasonCodes: ["runtime_capture_unverified"], corroboratorCodes: [], contradictorCodes: [], evidenceRefs: [],
+      supportingSignals: { assessmentPolicy: "runtime_visit_capture_limitation.v1",
+        cdpLoaderBound: true, capturedTitleObserved: true, capturedTextObserved: false },
+    },
+  };
+  const report = buildTerminalRuntimeVisitReport(projection);
+  assert.ok(report);
+  assert.equal(report.score.value, null);
+  assert.equal(buildTerminalRuntimeVisitReport({ ...projection, status: "completed" }), null);
+  assert.equal(buildTerminalRuntimeVisitReport({ ...projection, publicationRequestStatus: "terminal_failure" }), null);
+  const router = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {} };
+  for (const mode of ["authenticated", "public"] as const) {
+    const html = renderToStaticMarkup(
+      <AppRouterContext.Provider value={router}>
+        <PathnameContext.Provider value="/scan/capture-fixture">
+          <ShadowScanReport mode={mode} variant="timeline" report={report} />
+        </PathnameContext.Provider>
+      </AppRouterContext.Provider>,
+    );
+    assert.match(html, /Starting-page capture incomplete/);
+    assert.match(html, /Not scored/);
+    assert.match(html, /retained a page title but no readable page text/);
+    assert.doesNotMatch(html, /Evidence index|Overall score|Top issues needing attention/);
+  }
+});
+
 test("previously saved numeric scores are withheld after verification, without mutating stored payloads", () => {
   const record = scan();
   // Reproduce the old writer: serialize the stale score without the new no-go write gate.
