@@ -1,0 +1,110 @@
+{
+  "canonicalRegistryUnchanged": true,
+  "manualLedgerBeforeSha256": "07984e2bcf385d44acb95865960bff58a837aa4c2649fa431a4e31eb916af653",
+  "changes": [
+    {
+      "url": "https://huntington.com",
+      "before": {
+        "consecutiveNoGoCount": 0,
+        "cooldownUntil": "2026-11-08T15:08:30.821Z",
+        "lastContactAt": "2026-10-11T15:08:30.821Z",
+        "lastContactSource": "calibration",
+        "lastNoGoReasons": [],
+        "lastOutcome": "completed",
+        "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen.",
+        "state": "cooldown",
+        "url": "https://huntington.com"
+      },
+      "after": {
+        "consecutiveNoGoCount": 0,
+        "cooldownUntil": "2026-12-04T00:14:18.371Z",
+        "lastContactAt": "2026-11-06T00:14:18.371Z",
+        "lastContactSource": "calibration",
+        "lastNoGoReasons": [],
+        "lastOutcome": "completed",
+        "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen.",
+        "state": "cooldown",
+        "url": "https://huntington.com"
+      }
+    },
+    {
+      "url": "https://usa.gov",
+      "before": {
+        "consecutiveNoGoCount": 0,
+        "cooldownUntil": "2026-11-06T18:35:15.413Z",
+        "lastContactAt": "2026-10-09T18:35:15.413Z",
+        "lastContactSource": "calibration",
+        "lastNoGoReasons": [],
+        "lastOutcome": "completed",
+        "state": "cooldown",
+        "url": "https://usa.gov"
+      },
+      "after": {
+        "consecutiveNoGoCount": 0,
+        "cooldownUntil": "2026-12-04T00:14:03.552Z",
+        "lastContactAt": "2026-11-06T00:14:03.552Z",
+        "lastContactSource": "calibration",
+        "lastNoGoReasons": [],
+        "lastOutcome": "completed",
+        "state": "cooldown",
+        "url": "https://usa.gov"
+      }
+    },
+    {
+      "url": "https://walmart.com",
+      "before": {
+        "consecutiveNoGoCount": 0,
+        "cooldownUntil": "2026-11-15T01:21:37.294Z",
+        "lastContactAt": "2026-10-18T01:21:37.294Z",
+        "lastContactSource": "calibration",
+        "lastNoGoReasons": [],
+        "lastOutcome": "completed",
+        "state": "cooldown",
+        "url": "https://walmart.com"
+      },
+      "after": {
+        "consecutiveNoGoCount": 0,
+        "cooldownUntil": "2026-12-04T00:13:53.317Z",
+        "lastContactAt": "2026-11-06T00:13:53.317Z",
+        "lastContactSource": "calibration",
+        "lastNoGoReasons": [],
+        "lastOutcome": "completed",
+        "state": "cooldown",
+        "url": "https://walmart.com"
+      }
+    },
+    {
+      "url": "https://www.docunlock.com",
+      "before": {
+        "consecutiveNoGoCount": 0,
+        "cooldownUntil": "2026-11-08T15:32:33.771Z",
+        "lastContactAt": "2026-10-11T15:32:33.771Z",
+        "lastContactSource": "calibration",
+        "lastNoGoReasons": [],
+        "lastOutcome": "completed",
+        "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required.",
+        "state": "cooldown",
+        "url": "https://www.docunlock.com"
+      },
+      "after": {
+        "consecutiveNoGoCount": 0,
+        "cooldownUntil": "2026-12-04T00:13:57.723Z",
+        "lastContactAt": "2026-11-06T00:13:57.723Z",
+        "lastContactSource": "calibration",
+        "lastNoGoReasons": [],
+        "lastOutcome": "completed",
+        "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required.",
+        "state": "cooldown",
+        "url": "https://www.docunlock.com"
+      }
+    }
+  ],
+  "targetedCandidateEntries": [
+    "https://inverse.com/",
+    "https://steamcharts.com/"
+  ],
+  "centralRunKeys": [
+    "gpc-timing-cmp-20261105",
+    "gpc-timing-cmp-targeted-20261105"
+  ]
+}

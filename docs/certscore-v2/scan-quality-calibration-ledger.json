@@ -190,8 +190,8 @@
     },
     "https://usa.gov": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T18:35:15.413Z",
-      "lastContactAt": "2026-10-09T18:35:15.413Z",
+      "cooldownUntil": "2026-12-04T00:14:03.552Z",
+      "lastContactAt": "2026-11-06T00:14:03.552Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -332,8 +332,8 @@
     },
     "https://walmart.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-15T01:21:37.294Z",
-      "lastContactAt": "2026-10-18T01:21:37.294Z",
+      "cooldownUntil": "2026-12-04T00:13:53.317Z",
+      "lastContactAt": "2026-11-06T00:13:53.317Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -838,8 +838,8 @@
     },
     "https://huntington.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-08T15:08:30.821Z",
-      "lastContactAt": "2026-10-11T15:08:30.821Z",
+      "cooldownUntil": "2026-12-04T00:14:18.371Z",
+      "lastContactAt": "2026-11-06T00:14:18.371Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1100,8 +1100,8 @@
     },
     "https://www.docunlock.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-08T15:32:33.771Z",
-      "lastContactAt": "2026-10-11T15:32:33.771Z",
+      "cooldownUntil": "2026-12-04T00:13:57.723Z",
+      "lastContactAt": "2026-11-06T00:13:57.723Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -2992,7 +2992,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-11-01T18:14:26.958Z",
+  "updatedAt": "2026-11-06T00:20:56.090Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
