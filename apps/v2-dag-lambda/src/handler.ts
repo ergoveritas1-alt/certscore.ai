@@ -1,3 +1,6 @@
+import { claimRedHatCanary, reserveDedicatedRedHatInvocation, type RedHatCanaryOptions } from "./redhat-opt-out-canary";
+import {redHatConditionalDispatch} from './redhat-opt-out-dispatch';
+import {REDHAT_OPT_OUT_POLICY, CONDITIONAL_OPT_OUT_CAPTURE_PROFILE, type PrivacyCaptureProfile, type ConditionalOptOutDecision} from "@certscore/contracts";
 import { parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { buildGpcCmpStateComparison } from "@certscore/scan-core/gpc-cmp-state-comparison";
 import { isLoopbackPostRefusalTarget } from "@certscore/scan-core/post-refusal-target-authorization";
@@ -145,7 +148,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   hostname: string;
   localCallbackUrl: string | null;
   orchestrationMode?: "single" | "sharded" | "worker";
-  privacyCaptureProfile?: typeof PRESENCE_ONLY_CAPTURE_PROFILE;
+  privacyCaptureProfile?: PrivacyCaptureProfile;
   productionFindingIntegration: false;
   profile: "standard" | "tiny";
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
@@ -817,7 +820,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   }
   const payload: LocalV2DagLambdaDispatchPayload = {
     ...(record.resourceInventoryCrawl === true ? {resourceInventoryCrawl:true,resourceInventoryDiscovery:record.resourceInventoryDiscovery === true} : {}),
-    ...(record.privacyCaptureProfile === PRESENCE_ONLY_CAPTURE_PROFILE ? {privacyCaptureProfile: PRESENCE_ONLY_CAPTURE_PROFILE} : {}),
+    ...([PRESENCE_ONLY_CAPTURE_PROFILE,CONDITIONAL_OPT_OUT_CAPTURE_PROFILE].includes(record.privacyCaptureProfile as never) ? {privacyCaptureProfile: record.privacyCaptureProfile as PrivacyCaptureProfile} : {}),
     artifactOnly: true,
     awsRegion: parseAwsRegion(record.awsRegion),
     callbackCorrelationId: requireString(record, "callbackCorrelationId"),
@@ -1488,6 +1491,8 @@ async function runLocalV2DagLambdaScanBundle(
 }
 
 export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
+  conditionalOptOutDecision?: ConditionalOptOutDecision;
+  executedSaleSharingOptOut?: SaleSharingOptOutDispatch;
   artifactRoot: string;
   bundle: CanonicalEvidenceBundle;
   joinedPostAcceptArtifact?: Pick<LocalV2DagLambdaShardResult, "artifactMetadata" | "artifactPointers">;
@@ -1556,6 +1561,7 @@ export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     signal: input.signal
   }));
   await timeLambdaPhase(phaseTimings, "manifest_write", () => writeManifest({
+    conditionalOptOutDecision:input.conditionalOptOutDecision,executedSaleSharingOptOut:input.executedSaleSharingOptOut,
     artifactRoot,
     auxiliaryArtifacts,
     bundle,
@@ -2482,9 +2488,16 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
 
 export async function authorizeSaleSharingCanaryStage(payload:LocalV2DagLambdaDispatchPayload,stage:"coordinator"|"worker",
   options:{signal?:AbortSignal;deadlineAtMs?:number;campaign?:SaleSharingCanaryCampaign|null;ledger?:SaleSharingCanaryLedger;
-    runtime?:{buildGitSha?:string;functionVersion?:string;region?:string;memoryMb?:number}}={}) {
+    runtime?:{buildGitSha?:string;functionVersion?:string;region?:string;memoryMb?:number};redHat?:RedHatCanaryOptions}={}) {
   const config=payload.saleSharingOptOut;
   if(!config||config.policyVersion===SALE_SHARING_OPT_OUT_POLICY)return;
+  if(config.policyVersion===REDHAT_OPT_OUT_POLICY){
+    if(payload.privacyCaptureProfile!==CONDITIONAL_OPT_OUT_CAPTURE_PROFILE)throw Error("redhat_canary_requires_conditional_profile");
+    await claimRedHatCanary({stage,scanId:payload.scanId,targetUrl:payload.targetUrl,region:payload.awsRegion,functionName:payload.functionName,
+      dispatch:config,parentDispatchSha256:stage==="coordinator"?postRefusalParentDispatchSha256(payload):payload.parentDispatchSha256},
+      {...options.redHat,signal:options.signal,deadlineAtMs:options.deadlineAtMs});
+    return;
+  }
   const campaign=options.campaign===undefined?activeSaleSharingCanaryCampaign():options.campaign;
   const runtime=options.runtime??{buildGitSha:process.env.BUILD_GIT_SHA,functionVersion:process.env.AWS_LAMBDA_FUNCTION_VERSION,region:process.env.AWS_REGION,memoryMb:Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE)};
   const validate=()=>assertSaleSharingCanary({authorization:config.canaryAuthorization,scanId:payload.scanId,targetUrl:payload.targetUrl,region:payload.awsRegion,functionName:payload.functionName,policyVersion:config.policyVersion,route:config.exactRouteAuthorization,runtime},campaign);
@@ -2567,6 +2580,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
     artifactSignal?: AbortSignal;
+    deadlineAtMs?: number;
     artifactRoot: string;
     lambdaClient?: LambdaInvokeClient;
     s3Client?: S3PutClient;
@@ -2583,6 +2597,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
 }> {
   assertPrivacyCaptureProfile(payload);
+  if(payload.saleSharingOptOut?.policyVersion===REDHAT_OPT_OUT_POLICY)throw Error("redhat_canary_requires_verified_consent");
   const coordinatorStartedAtMs = Date.now();
   await authorizeSaleSharingCanaryStage(payload,"coordinator",{...options.canary,signal:options.signal});
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
@@ -2596,14 +2611,18 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   ];
   // Independent action lane: join exactly once before canonical publication.
   // Its failure limits CMP coverage and cannot poison verified passive lanes.
-  const optOutStartedAt = Date.now();
+  let optOutStartedAt = Date.now();
   const optOutController = new AbortController();
-  const optOutOutcome = payload.saleSharingOptOut && process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED === "1"
-    ? (async () => {
+  const conditionalOptOut = payload.privacyCaptureProfile === CONDITIONAL_OPT_OUT_CAPTURE_PROFILE;
+  let conditionalOptOutDecision: ConditionalOptOutDecision | undefined = conditionalOptOut
+    ? {version:"conditional_opt_out_dispatch.v3",scanId:payload.scanId,status:"pending",reason:"awaiting_verified_consent"} : undefined;
+  let optOutClosed = false;
+  let optOutDispatchPayload=payload;
+  const runOptOut = async () => {
       const signal = AbortSignal.any([optOutController.signal, AbortSignal.timeout(SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS), ...(options.signal ? [options.signal] : [])]);
       let phase = "worker_invocation";
       try {
-        const result = await withHandlerSafetyTimeout(invokeLocalV2DagLambdaWorker({ parentPayload: payload, parentScanId: payload.scanId, workerLane: "sale_sharing_opt_out", lambdaClient: options.lambdaClient, signal }), SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS);
+        const result = await withHandlerSafetyTimeout(invokeLocalV2DagLambdaWorker({ parentPayload: optOutDispatchPayload, parentScanId: payload.scanId, workerLane: "sale_sharing_opt_out", lambdaClient: options.lambdaClient, signal }), SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS);
         phase = "packet_metadata";
         const uri = result.artifactPointers?.saleSharingOptOutPacketUri, metadata = result.artifactMetadata?.saleSharingOptOutPacketUri;
         if (!uri || !metadata || metadata.sizeBytes > 32_000) throw new Error("sale_sharing_packet_metadata_invalid");
@@ -2616,13 +2635,53 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         phase = "artifact_contract";
         const packet = saleSharingOptOutEvidenceSchema.parse(JSON.parse(body.toString("utf8")));
         phase = "artifact_binding";
-        if (!saleSharingOptOutMatchesDispatch(packet,payload.saleSharingOptOut!) || packet.scanId !== payload.scanId || packet.targetUrl !== payload.targetUrl || packet.parentDispatchSha256 !== postRefusalParentDispatchSha256(payload)) throw new Error("sale_sharing_packet_binding_mismatch");
+        if (!saleSharingOptOutMatchesDispatch(packet,optOutDispatchPayload.saleSharingOptOut!) || packet.scanId !== payload.scanId || packet.targetUrl !== payload.targetUrl || packet.parentDispatchSha256 !== postRefusalParentDispatchSha256(optOutDispatchPayload)) throw new Error("sale_sharing_packet_binding_mismatch");
         return { status: "joined" as const, packet, sha256: metadata.sha256, sizeBytes: metadata.sizeBytes, startedAt: new Date(optOutStartedAt).toISOString(), completedAt: new Date().toISOString() };
       } catch (error) { return { status: "limited" as const, diagnostic: describeCaptureFailure(error, phase),
         limitationCode: options.signal?.aborted ? "opt_out_inspection_cancelled" as const
           : signal.aborted || Date.now() - optOutStartedAt >= SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS ? "opt_out_budget_exhausted" as const : "opt_out_worker_failed" as const,
         startedAt: new Date(optOutStartedAt).toISOString(), completedAt: new Date().toISOString() }; }
-    })() : undefined;
+    };
+  let optOutOutcome: ReturnType<typeof runOptOut> | undefined = !conditionalOptOut && payload.saleSharingOptOut && process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED === "1"
+    ? runOptOut() : undefined;
+  // Reuse the ordinary verified download; only its scheduling moves earlier.
+  const earlyConsentReads = new Map<LocalV2DagLambdaShardResult, ReturnType<typeof readLocalV2DagLambdaWorkerBundle>>();
+  const considerConditionalOptOut = (result: LocalV2DagLambdaShardResult) => {
+    if (optOutClosed || !conditionalOptOut || result.workerLane !== "consent_proof" || earlyConsentReads.has(result)) return;
+    const read = readLocalV2DagLambdaWorkerBundle(result, {awsRegion:payload.awsRegion,s3GetClient:options.s3GetClient});
+    earlyConsentReads.set(result, read);
+    void read.then(async consent => {
+      if(optOutClosed || optOutOutcome) return;
+      const finish = (decision:ConditionalOptOutDecision) => {conditionalOptOutDecision={...decision,decidedAtMs:Math.min(600000,Date.now()-coordinatorStartedAtMs),remainingTimeMs:decision.remainingTimeMs??(options.deadlineAtMs===undefined?undefined:Math.min(600000,Math.max(0,options.deadlineAtMs-Date.now())))};};
+      const skip = (reason:ConditionalOptOutDecision["reason"]) => finish({version:"conditional_opt_out_dispatch.v3",scanId:payload.scanId,status:"skipped",reason});
+      if(options.signal?.aborted || optOutController.signal.aborted) return skip("cancelled");
+      if(process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED !== "1")return skip("worker_disabled");
+      if(!consent || !result.artifactMetadata?.scanArtifactUri?.sha256)return skip("source_unverified");
+      const redHat=redHatConditionalDispatch({bundle:consent,scanId:payload.scanId,targetUrl:payload.targetUrl,sourceSha256:result.artifactMetadata.scanArtifactUri.sha256,enabled:process.env.CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED==='1'});
+      if(!redHat)return skip("unsupported_or_unverified_control");
+      const candidate:ConditionalOptOutDecision=redHat.decision;
+      if(candidate.reason!=="supported_control")return finish(candidate);
+      const timeLeft=()=>options.deadlineAtMs===undefined?undefined:Math.min(600000,Math.max(0,options.deadlineAtMs-Date.now()));
+      let remainingTimeMs=timeLeft();
+      if(remainingTimeMs===undefined || remainingTimeMs<SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS)return finish({...candidate,status:"skipped",reason:"insufficient_remaining_time"});
+      if(redHat){
+        const authorizedPayload={...payload,saleSharingOptOut:redHat.dispatch};
+        const signal=options.signal?AbortSignal.any([options.signal,optOutController.signal]):optOutController.signal;
+        try {
+          await authorizeSaleSharingCanaryStage(authorizedPayload,"coordinator",{redHat:options.canary?.redHat,signal,
+            deadlineAtMs:options.deadlineAtMs!-SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS});
+        } catch {
+          if(!optOutClosed)finish({...candidate,status:"skipped",reason:signal.aborted?"cancelled":"authorization_not_granted"});
+          return;
+        }
+        if(optOutClosed || signal.aborted)return;
+        remainingTimeMs=timeLeft();
+        if(remainingTimeMs===undefined || remainingTimeMs<SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS)return finish({...candidate,status:"skipped",reason:"insufficient_remaining_time"});
+        optOutDispatchPayload=authorizedPayload;
+      }
+      finish({...candidate,status:"dispatched",remainingTimeMs});optOutStartedAt=Date.now();optOutOutcome=runOptOut();
+    }).catch(() => {if(!optOutClosed && !optOutOutcome)conditionalOptOutDecision={version:"conditional_opt_out_dispatch.v3",scanId:payload.scanId,status:"skipped",reason:"source_unverified",decidedAtMs:Math.min(600000,Date.now()-coordinatorStartedAtMs),remainingTimeMs:options.deadlineAtMs===undefined?undefined:Math.min(600000,Math.max(0,options.deadlineAtMs-Date.now()))};});
+  };
   const preferenceStartedAt = Date.now();
   const preferenceController = new AbortController();
   const preferenceOutcome = payload.cmpPreferenceInspection && process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED === "1"
@@ -2778,6 +2837,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     invokeLocalV2DagLambdaWorkers({
       lambdaClient: options.lambdaClient,
       onWorkerResult: (result) => {
+        considerConditionalOptOut(result);
         if (
           result.workerLane !== "consent_proof" ||
           !result.consentRejectAvailability
@@ -2870,7 +2930,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     postAcceptAbortController.abort(new Error("accept_path_incomplete_at_passive_barrier"));
   }
   const workerBundles = await timeLambdaPhase(phaseTimings, "worker_bundle_download", async () => {
-    const settled = await Promise.allSettled(workerResults.map((result) => readLocalV2DagLambdaWorkerBundle(result, {
+    const settled = await Promise.allSettled(workerResults.map((result) => earlyConsentReads.get(result) ?? readLocalV2DagLambdaWorkerBundle(result, {
       awsRegion: payload.awsRegion, s3GetClient: options.s3GetClient,
     })));
     const failed = settled.find(r => r.status === "rejected");
@@ -2932,6 +2992,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     postAcceptAbortController.abort(cause);
     postRefusalAbortController.abort(cause);
     preferenceController.abort(cause);
+    optOutClosed=true;
     optOutController.abort(cause);
     const error = new OriginalRuntimeVisitFailure("The starting page could not be verified, so a report could not be generated.", workerResults);
     // Reuse the already verified downloads. A non-reportable visit must not
@@ -3216,6 +3277,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     });
   }
   // No new tail wait or later publication for the California action lane.
+  optOutClosed = true;
+  if(conditionalOptOutDecision?.status === "pending")conditionalOptOutDecision={...conditionalOptOutDecision,status:"skipped",reason:"cancelled",decidedAtMs:Math.min(600000,Date.now()-coordinatorStartedAtMs),remainingTimeMs:options.deadlineAtMs===undefined?undefined:Math.min(600000,Math.max(0,options.deadlineAtMs-Date.now()))};
   const joinedOptOut = optOutOutcome ? await Promise.race([optOutOutcome, Promise.resolve(undefined)]) : undefined;
   optOutController.abort();
   const optOutLaneOutcome = optOutOutcome ? {
@@ -3315,6 +3378,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   });
 
   const artifacts = await writeAndUploadLocalV2DagLambdaArtifacts({
+    conditionalOptOutDecision,
+    ...(optOutOutcome&&conditionalOptOut?{executedSaleSharingOptOut:optOutDispatchPayload.saleSharingOptOut}:{}),
     artifactRoot,
     bundle,
     ...(postRefusalJoin === "joined" && postRefusalState.result
@@ -3547,7 +3612,7 @@ export async function invokeLocalV2DagLambdaWorkers(input: {
   workerLanes: readonly LocalV2DagLambdaWorkerLane[];
   signal?: AbortSignal;
 }): Promise<LocalV2DagLambdaShardResult[]> {
-  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion });
+  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion, ...(process.env.AWS_LAMBDA_FUNCTION_NAME==="certscore-v2-dag-local-redhat-canary"?{maxAttempts:1}:{}) });
   let primaryFailure: string | undefined;
   const results = await Promise.all(input.workerLanes.map(async (workerLane) => {
     const startedAtMs = Date.now();
@@ -3588,7 +3653,7 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   workerLane: LocalV2DagLambdaWorkerLane;
 }): Promise<LocalV2DagLambdaShardResult> {
   assertPrivacyCaptureProfile(input.parentPayload, input.workerLane);
-  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion,...(input.parentPayload.saleSharingOptOut?.canaryAuthorization?{maxAttempts:1}:{}) });
+  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion,...((input.parentPayload.saleSharingOptOut?.canaryAuthorization||process.env.AWS_LAMBDA_FUNCTION_NAME==="certscore-v2-dag-local-redhat-canary")?{maxAttempts:1}:{}) });
   const workerLane = input.workerLane;
   const { gpcObservation: parentGpcObservation, ...parentPayloadWithoutGpcObservation } = input.parentPayload;
   const workerPayload: LocalV2DagLambdaDispatchPayload = {
@@ -5565,6 +5630,8 @@ export async function uploadArtifactFiles(input: {
 }
 
 async function writeManifest(input: {
+  conditionalOptOutDecision?: ConditionalOptOutDecision;
+  executedSaleSharingOptOut?: SaleSharingOptOutDispatch;
   artifactRoot: string;
   artifactMetadata?: LocalV2DagLambdaArtifactMetadata;
   auxiliaryArtifacts: LocalV2DagLambdaAuxiliaryArtifact[];
@@ -5603,6 +5670,8 @@ async function writeManifest(input: {
     ...(input.payload.debugOverrides ? { debugOverrides: input.payload.debugOverrides } : {}),
     scanId: input.payload.scanId,
     ...(input.payload.privacyCaptureProfile ? {privacyCaptureProfile:input.payload.privacyCaptureProfile} : {}),
+    ...(input.conditionalOptOutDecision?{conditionalOptOutDecision:input.conditionalOptOutDecision}:{}),
+    ...(input.executedSaleSharingOptOut?{executedSaleSharingOptOut:input.executedSaleSharingOptOut}:{}),
     ...(input.payload.coordinatorPlanSummary ? { coordinatorPlanSummary: input.payload.coordinatorPlanSummary } : {}),
     ...(input.payload.strongEvidenceMode ? { strongEvidenceMode: input.payload.strongEvidenceMode } : {}),
     targetEnvironment: input.payload.targetEnvironment,
@@ -6158,6 +6227,12 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   let policyEvidenceHandoff: Promise<LocalV2DagLambdaPolicyEvidenceMessage | undefined> | undefined;
   let runtimePreviewHandoff: Promise<LocalV2DagLambdaRuntimePreviewMessage | undefined> | undefined;
   const dispatchEvent = unwrapLocalV2DagLambdaDispatchEvent(event);
+  if(process.env.AWS_LAMBDA_FUNCTION_NAME==="certscore-v2-dag-local-redhat-canary"){
+    const p = parseLocalV2DagLambdaDispatchPayload(dispatchEvent.payload);
+    await reserveDedicatedRedHatInvocation({transport:dispatchEvent.transport,scanId:p.scanId,targetUrl:p.targetUrl,region:p.awsRegion,
+      functionName:p.functionName,mode:p.orchestrationMode,lane:p.workerLane,profile:p.privacyCaptureProfile,purpose:p.resultPurpose,
+      queue:p.resultQueueUrl,callback:p.localCallbackUrl,policy:p.saleSharingOptOut?.policyVersion});
+  }
   if (asRecord(dispatchEvent.payload).contractVersion === FULL_SITE_PAGE_DISPATCH) {
     const { dispatchFullSitePage } = await import("./full-site-page.js");
     return dispatchFullSitePage(dispatchEvent.payload);
@@ -6232,6 +6307,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         ? runLocalV2DagLambdaShardedArtifactChain(dispatchPayload, {
             artifactRoot: runOptions.artifactRoot,
             artifactSignal: runOptions.artifactSignal,
+            deadlineAtMs: runOptions.deadlineAtMs,
             lambdaClient: options.lambdaClient,
             s3Client: options.s3Client,
             s3GetClient: options.s3GetClient,

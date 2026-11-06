@@ -1,3 +1,5 @@
+import {runRedHatOptOutObserver} from "./redhat-opt-out-observer.js";
+import {REDHAT_OPT_OUT_POLICY} from "@certscore/contracts";
 import {createHash} from "node:crypto";
 import { chromium, type Browser, type BrowserContext, type Locator } from "playwright";
 import { describeCaptureFailure, classifyConsentControlLabel, saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, SALE_SHARING_REDIRECT_POLICY, SALE_SHARING_EXACT_ROUTE_POLICY, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, type SaleSharingOptOutDispatch, type SaleSharingOptOutEvidence } from "@certscore/contracts";
@@ -20,6 +22,7 @@ export async function runSaleSharingOptOutObserver(input: {
   config: SaleSharingOptOutDispatch; parentDispatchSha256: string; signal?: AbortSignal; browser?: Browser; deadlineAtMs?: number;
 }): Promise<SaleSharingOptOutEvidence> {
   const config=saleSharingOptOutDispatchSchema.parse(input.config), started=Date.now();
+  if(config.policyVersion===REDHAT_OPT_OUT_POLICY)return runRedHatOptOutObserver({...input,config});
   const captureBudgetMs=Math.max(1,Math.min(SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS,(input.deadlineAtMs??Infinity)-started-250)),deadline=started+captureBudgetMs;
   const exactRoute=config.policyVersion===SALE_SHARING_EXACT_ROUTE_POLICY;
   const redirectedPolicy=exactRoute||config.policyVersion===SALE_SHARING_REDIRECT_POLICY;

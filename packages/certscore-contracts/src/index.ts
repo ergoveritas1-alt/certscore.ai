@@ -23,6 +23,7 @@ import {runtimeScriptEvidenceSchema} from "./runtime-storage-purpose";
 export * from "./runtime-storage-purpose";
 import { verifiedSaleSharingOptOutSchema, saleSharingOptOutLaneOutcomeSchema, type SaleSharingOptOutLaneOutcome, type VerifiedSaleSharingOptOut } from "./sale-sharing-opt-out";
 export * from "./sale-sharing-opt-out";
+export * from "./conditional-opt-out-decision";
 import { cookieClassificationSchema } from "./cookie-classification";
 import { privacyChoiceInspectionSchema, type PrivacyChoiceInspection } from "./california-privacy-review";
 export * from "./california-privacy-review";
