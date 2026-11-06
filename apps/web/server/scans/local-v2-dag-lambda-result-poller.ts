@@ -20,7 +20,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { resolveScanNoGoPresentation } from "@website-signal-risk-scanner/shared";
+import { projectRuntimeVisitCaptureLimitation, resolveScanNoGoPresentation } from "@website-signal-risk-scanner/shared";
 import {
   LOCAL_V2_DAG_LAMBDA_RESULT_FAILED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_RESULT_RECEIVED_EVENT_TYPE,
@@ -440,7 +440,7 @@ export async function recordLocalV2DagLambdaResultEvent(
     workspaceRoot?: string;
   } = {}
 ) {
-  const { query, queryOne } = await import("@website-signal-risk-scanner/db");
+  const { query, queryOne, recordScanCaptureLimitation } = await import("@website-signal-risk-scanner/db");
   const context = await queryOne<{
     domainId: string | null;
     organizationId: string | null;
@@ -684,6 +684,14 @@ export async function recordLocalV2DagLambdaResultEvent(
       }),
     ]
   );
+  const captureLimitation = projectRuntimeVisitCaptureLimitation(parsedMessage);
+  if (captureLimitation) {
+    await recordScanCaptureLimitation({
+      scanId: parsedMessage.scanId,
+      completedAt: parsedMessage.completedAt,
+      ...captureLimitation,
+    });
+  }
   if (parsedMessage.scannerRuntimeProvenance) {
     await query(
       `update scan_snapshots

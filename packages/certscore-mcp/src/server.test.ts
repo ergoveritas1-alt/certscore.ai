@@ -1996,7 +1996,7 @@ test("Light MCP returns retained authentication no-go text and typed remedies wi
         assert.ok(Buffer.byteLength(JSON.stringify(bundle)) <= maxBytes);
         assert.equal(bundle.fullReport, undefined, "a no-go result has no full report to serialize");
         const text = result.content?.find((item: any) => item.type === "text") as { text: string };
-        assert.match(text.text, /^CertScore scan: Sign-in required/);
+        assert.match(text.text, /^CertScore\.ai scan: Sign-in required/);
         assert.match(text.text, /HTTP 401/);
         assert.ok(text.text.includes(scan.noGo.recommendedNextAction));
         assert.doesNotMatch(text.text, /Canonical findings complete/);

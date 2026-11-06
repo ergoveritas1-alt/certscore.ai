@@ -1,4 +1,4 @@
-import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
+import { isRuntimeVisitCaptureAssessment, projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 
 export type ScanReportAccessContext = {
   runtimeArtifacts: Record<string, unknown> | null | undefined;
@@ -9,12 +9,19 @@ export type ScanReportAccessContext = {
 /** Consume the retained decision; never reconstruct access from page text or HTTP hints. */
 export function projectScanReportNoGo(input: ScanReportAccessContext) {
   const runtime = input.runtimeArtifacts;
+  if (hasTerminalRuntimeVisitAssessment(input)) {
+    return projectExternalScanNoGo({ scan_no_go_assessment: input.snapshot?.scan_no_go_assessment });
+  }
   return projectExternalScanNoGo({
     scan_no_go_assessment: runtime?.scan_no_go_assessment ?? runtime?.scanNoGoAssessment
       ?? input.snapshot?.scan_no_go_assessment,
     visual_access_review: runtime?.visual_access_review ?? runtime?.visualAccessReview
       ?? input.snapshot?.visual_access_review,
   });
+}
+
+export function hasTerminalRuntimeVisitAssessment(input: ScanReportAccessContext) {
+  return input.scan?.status === "failed" && isRuntimeVisitCaptureAssessment(input.snapshot?.scan_no_go_assessment);
 }
 
 export function hasTerminalScanReportFailure(input: ScanReportAccessContext) {

@@ -2,15 +2,15 @@ import {domOptOutSearchSchema,GATE_RUNTIME_TEXT_PAGE,GATE_RUNTIME_TEXT_TARGET} f
 import {captureDocumentBoundValue,type DocumentBoundCapture,type DocumentCaptureBinding} from './document-bound-capture';
 import {retainDomOptOutSearch} from './dom-opt-out-label';
 
-export type RuntimeTextCapture=DocumentBoundCapture<string>&{documentReadyState:string;documentLanguage?:string};
+export type RuntimeTextCapture=DocumentBoundCapture<string>&{documentReadyState:string;documentLanguage?:string;documentTitle?:string};
 /** Wrap the already scheduled renderer operation. Cached before/after bindings
  * are sampled when it resolves, not when a later Promise.all result is awaited. */
-export async function captureBoundRuntimeTextSnapshot<T extends {domText:string;pageUrl:string;documentReadyState:string;documentLanguage?:string}>(input:{
+export async function captureBoundRuntimeTextSnapshot<T extends {domText:string;pageUrl:string;documentReadyState:string;documentLanguage?:string;documentTitle?:string}>(input:{
  capture:()=>Promise<T>;readBinding:()=>DocumentCaptureBinding;scanStartedAtMs:number;now?:()=>number;
 }):Promise<T&{domTextCapture:RuntimeTextCapture}>{
  const bound=await captureDocumentBoundValue(input);
  return {...bound.value,domTextCapture:{value:bound.value.domText,url:bound.url,capturedAtMs:bound.capturedAtMs,
-  documentIdentity:bound.value.pageUrl===bound.url?bound.documentIdentity:undefined,documentReadyState:bound.value.documentReadyState,documentLanguage:bound.value.documentLanguage}};
+  documentIdentity:bound.value.pageUrl===bound.url?bound.documentIdentity:undefined,revision:bound.revision,documentReadyState:bound.value.documentReadyState,documentLanguage:bound.value.documentLanguage,documentTitle:bound.value.documentTitle}};
 }
 /** Only new, parsed, bound Gate baseline reads can produce this observation.
  * A later metadata token can invalidate this proof, never supply its binding. */

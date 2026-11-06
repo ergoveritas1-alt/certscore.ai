@@ -10,6 +10,7 @@ export * from "./request-source-ip";
 export * from "./scan-config";
 export * from "./scan-location";
 export * from "./scan-no-go-reasons";
+export * from "./runtime-visit-capture-limitation";
 export * from "./types/entities";
 export * from "./types/signals";
 export * from "./types/merged-signals";

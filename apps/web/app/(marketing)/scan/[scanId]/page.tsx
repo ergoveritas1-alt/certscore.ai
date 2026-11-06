@@ -10,7 +10,7 @@ import {
   SHADOW_REPORT,
   SHADOW_REPORT_SCAN_ID,
 } from "../../../../components/scans/report-lab/shadow-report-data";
-import { buildVerifiedTimelineReportModel } from "../../../../server/scans/verified-timeline-report-model";
+import { buildTerminalRuntimeVisitReport, buildVerifiedTimelineReportModel } from "../../../../server/scans/verified-timeline-report-model";
 import { absoluteUrl } from "../../../../lib/seo";
 import { loadPersistedScanReportProjection } from "../../../../server/scans/scan-report-projection";
 import {
@@ -126,6 +126,9 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   const statusProjection = await loadScanStatus(scanId);
   const statusLoadMs = Math.round(performance.now() - statusStartedAt);
   if (!statusProjection) notFound();
+
+  const terminalReport = buildTerminalRuntimeVisitReport(statusProjection);
+  if (terminalReport) return <ShadowScanReport report={terminalReport} variant="timeline" />;
 
   const waitingForReportProjection =
     isCompletedScanStatus(statusProjection.status) &&

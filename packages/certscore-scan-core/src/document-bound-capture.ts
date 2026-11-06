@@ -3,6 +3,7 @@ import type { BrowserDocumentIdentity } from "@certscore/contracts";
 export type DocumentCaptureBinding = {
   url: string;
   documentIdentity?: BrowserDocumentIdentity;
+  revision?: number;
 };
 export type DocumentBoundCapture<T> = DocumentCaptureBinding & {
   value: T;
@@ -10,7 +11,7 @@ export type DocumentBoundCapture<T> = DocumentCaptureBinding & {
 };
 
 export function sameDocumentCaptureBinding(left: DocumentCaptureBinding, right: DocumentCaptureBinding): boolean {
-  return Boolean(left.url === right.url && left.documentIdentity?.token &&
+  return Boolean(left.url === right.url && left.revision === right.revision && left.documentIdentity?.token &&
     left.documentIdentity.source === right.documentIdentity?.source &&
     left.documentIdentity.token === right.documentIdentity.token);
 }
@@ -31,6 +32,7 @@ export async function captureDocumentBoundValue<T>(input: {
   return {
     value,
     url: before.url,
+    ...(before.revision !== undefined ? { revision: before.revision } : {}),
     ...(stable ? { documentIdentity: { ...after.documentIdentity! } } : {}),
     capturedAtMs: Math.max(0, (input.now ?? Date.now)() - input.scanStartedAtMs),
   };

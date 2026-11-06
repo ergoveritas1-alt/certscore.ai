@@ -1,5 +1,6 @@
 import { AdminDataBoundary, AdminDataLoading } from "../../../../components/admin/admin-data-panel";
 import Link from "next/link";
+import { formatAdminScanOutcome } from "../../../../server/admin/admin-no-go";
 import { Suspense } from "react";
 import { SCAN_FROM_VALUES, formatScanFromLabel } from "@website-signal-risk-scanner/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
@@ -100,11 +101,6 @@ function snapshotDuration(value: number | null) {
 
 function formatFilterLabel(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatScanOutcome(value: string | null, noGo: boolean) {
-  if (!value) return "—";
-  return `${formatFilterLabel(value)} (${noGo ? "No-go" : "Go"})`;
 }
 
 function InventoryCountCell({ value, label }: { value: { count: number; limited: boolean } | null | undefined; label: string }) {
@@ -564,7 +560,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                     <td className="px-2.5 py-1.5 text-slate-700" title={scan.inventory?.cms ? `${scan.inventory.cms} · Passive starting-page detection; versions are page-declared, not confirmed runtime versions` : "CMS evidence unavailable"}><span className="line-clamp-2 break-words">{scan.inventory?.cms ?? "—"}</span></td>
                     <td className="px-2.5 py-1.5"><ScanSizeCell matrix={matrix} /></td>
                     <td className={`px-2.5 py-1.5 font-medium ${duration && (duration.includes("m") || Number.parseFloat(duration) > 60) ? "text-amber-700" : "text-slate-800"}`}>{duration ?? (scan.status === "running" ? "Running" : "—")}</td>
-                    <td className="truncate px-2.5 py-1.5 text-slate-700" title={scan.scanOutcome ?? undefined}>{formatScanOutcome(scan.scanOutcome, scan.noGoFlag)}</td>
+                    <td className="truncate px-2.5 py-1.5 text-slate-700" title={scan.scanOutcome ?? undefined}>{formatAdminScanOutcome(scan.scanOutcome, scan.noGoFlag, scan.status)}</td>
                     <td className="px-2.5 py-1.5" title={scan.scanFromLabel}><span aria-label={scan.scanFromLabel} className="inline-flex"><ScanFromMarker flag={"flag" in scanFromMarker ? scanFromMarker.flag : undefined} icon={"icon" in scanFromMarker ? scanFromMarker.icon : undefined} selected /></span></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${freshness.className}`}>{freshness.label}</span></td>
                     <td className="px-2.5 py-1.5 font-medium uppercase text-slate-700" title={scan.primaryLanguage ? `${scan.primaryLanguageConfidence ?? "unknown"} confidence · ${(scan.primaryLanguageSource ?? "unknown").replaceAll("_", " ")}` : "No reliable retained language evidence"}>{scan.primaryLanguage ?? "—"}</td>

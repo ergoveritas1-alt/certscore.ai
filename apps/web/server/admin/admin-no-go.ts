@@ -6,6 +6,15 @@ import {
 
 type JsonRecord = Record<string, unknown> | null | undefined;
 
+export function formatAdminScanOutcome(value: string | null, noGo: boolean, status?: string | null) {
+  if (!value) return "—";
+  const label = value.replaceAll("_", " ").replace(/\b\w/g, letter => letter.toUpperCase());
+  if (noGo) return `${label} (No-go)`;
+  // No recorded no-go decision is not positive verification of a failed visit.
+  if ([value, status].some(state => state && ["failed", "expired", "canceled", "cancelled"].includes(state))) return label;
+  return `${label} (Go)`;
+}
+
 export type AdminNoGoProjection = {
   isNoGo: boolean;
   limitationKind: ScanNoGoLimitationKind | null;

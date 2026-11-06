@@ -1,7 +1,7 @@
 import {retainGpcRecoveryLedger} from "./gpc-navigation-recovery";
 export { buildGpcCmpStateComparison } from "./gpc-cmp-state-comparison.js";
 import { serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
-import {CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage} from "@certscore/contracts";
+import { boundRuntimeDocumentStatus, CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage } from "@certscore/contracts";
 import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
 import { collectionRecipientPriorities } from "./collection-recipient-retention.js";
 import {gpcProofEventPriorities} from "./gpc-proof-retention.js";
@@ -2647,7 +2647,13 @@ export function buildScanNoGoAssessment(input: {
     observation.visibleChoiceLabels.length > 0 ||
     observation.controls.some((control) => control.visible)
   );
-  const mainDocumentStatus = getMainDocumentStatus(input.networkEvents, input.networkResponseEvents);
+  const terminalRuntimeSnapshot = [...input.domSnapshots]
+    .filter(snapshot => snapshot.artifactId !== "dom_blocking_frame_challenge" && !snapshot.blockingFrameChallenge)
+    .sort((a, b) => b.capturedAtMs - a.capturedAtMs)[0];
+  const usesBoundRuntimeCapture = Boolean(terminalRuntimeSnapshot?.runtimeDocumentCapture);
+  const mainDocumentStatus = terminalRuntimeSnapshot?.runtimeDocumentCapture
+    ? boundRuntimeDocumentStatus(terminalRuntimeSnapshot) ?? null
+    : getMainDocumentStatus(input.networkEvents, input.networkResponseEvents);
   const mainDocumentStatuses = getMainDocumentStatuses(input.networkEvents, input.networkResponseEvents);
   const successfulMainDocumentBeforeTerminal = mainDocumentStatuses.length > 1 &&
     mainDocumentStatuses.slice(0, -1).some((status) => status >= 200 && status < 400) &&
@@ -2666,13 +2672,13 @@ export function buildScanNoGoAssessment(input: {
   // visitor saw. Consent probes can contain large inline scripts whose source
   // mentions blocking or challenge behavior without representing page state.
   // Only fall back to consent-surface text when no settled DOM text survived.
-  const terminalDomText = [...input.domSnapshots]
-    .filter(snapshot => snapshot.artifactId !== "dom_blocking_frame_challenge" && !snapshot.blockingFrameChallenge)
-    .sort((a, b) => b.capturedAtMs - a.capturedAtMs)[0]?.textExcerpt;
+  const terminalDomText = terminalRuntimeSnapshot?.textExcerpt;
   const brandedErrorPageState = classifyBrandedRuntimeError(terminalDomText);
-  const textPageState = brandedErrorPageState ?? (longestDomText
+  const textPageCandidate = brandedErrorPageState ?? (longestDomText
     ? classifyScanNoGoText(longestDomText)
     : classifyScanNoGoText(longestText));
+  const textPageState = usesBoundRuntimeCapture && textPageCandidate?.reasonCode === "loading_or_stalled"
+    ? null : textPageCandidate;
   const consentSurfaceTextPageState = classifyScanNoGoText(longestConsentSurfaceText);
   const substantiveDomTextObserved =
     !brandedErrorPageState && !classifyScanNoGoText(longestDomText) &&
@@ -2748,7 +2754,9 @@ export function buildScanNoGoAssessment(input: {
         reasonCode: "captcha_or_challenge", visualPageState: "captcha_or_challenge" }
     : null;
   const pageState = blockingFramePageState ?? challengePageState ?? explicitTextChallenge ?? httpPageState ?? textPageState;
-  const visualBlankPageState: ClassifiedNoGoPageState | null = visuallyBlankSuccessfulPage
+  // Sparse new runtime captures are unresolved. Preserve positively classified
+  // terminal responses and page templates through the existing assessment.
+  const visualBlankPageState: ClassifiedNoGoPageState | null = !usesBoundRuntimeCapture && visuallyBlankSuccessfulPage
     ? {
         confidence: 0.94,
         evidenceText: "The retained public-page screenshot was visually blank after the page settled.",
@@ -2765,13 +2773,15 @@ export function buildScanNoGoAssessment(input: {
   const committedVisualPageRetained = representativeScreenshots.some((artifact) =>
     /^https?:\/\//i.test(artifact.url)
   );
+  const assessSparsePage = !usesBoundRuntimeCapture || visuallySubstantiveScreenshotObserved;
   const temporallyConfirmedSparsePage =
+    assessSparsePage &&
     ((mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400) || committedVisualPageRetained) &&
     longestDomText.length <= 60 &&
     substantiveDomWordCount <= 10 &&
     sparseSecondLookRetained;
   const sparseSuccessfulPage =
-    mainDocumentStatus !== null &&
+    assessSparsePage && mainDocumentStatus !== null &&
     mainDocumentStatus >= 200 &&
     mainDocumentStatus < 400 &&
     nearlyEmptyPage &&
@@ -2779,7 +2789,7 @@ export function buildScanNoGoAssessment(input: {
     successfulFirstPartyResponses <= 2 &&
     input.policySurfaceObservations.length === 0;
   const partialRuntimeWithoutPageEvidence =
-    input.modulesRun.some((moduleRun) =>
+    !usesBoundRuntimeCapture && input.modulesRun.some((moduleRun) =>
       moduleRun.moduleName === "preConsentRuntimeScanner" &&
       moduleRun.status === "partial" &&
       moduleRun.errors.some((error) => /(?:module budget|bounded partial evidence|runtime.*partial)/i.test(error))

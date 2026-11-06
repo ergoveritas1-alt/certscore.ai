@@ -64,8 +64,8 @@ export function projectCaliforniaObservedScoreBasis(bundle:CanonicalEvidenceBund
   const snapshots=bundle.runtimeMetadataSnapshots ?? [];
   const exactSnapshot=getUsableRuntimeVisitSnapshot(bundle,snapshots,exactFinalUrl);
   const snapshot=exactSnapshot ?? getUsableRuntimeVisitSnapshot(bundle,snapshots);
-  // The typed runtime snapshot (including page text or title) is retained in the
-  // verified bundle. A merged consent-lane DOM file must not stand in for it.
+  // The verified bundle must retain representative runtime content. The
+  // consent-lane DOM remains independent even when it uses the same URL.
   if(!snapshot)return undefined;
   let apexWwwRecovery = false;
   let responseRequestId: string | undefined;

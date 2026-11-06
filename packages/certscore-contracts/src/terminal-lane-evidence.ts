@@ -1,9 +1,17 @@
 import { z } from "zod";
 import { RUNTIME_VISIT_REJECTION_REASONS } from "./usable-runtime-visit";
 
+export const retainedRuntimeNoGoReasonSchema = z.enum([
+  "authentication_required", "access_denied_or_forbidden_page", "captcha_or_challenge",
+  "rate_limited_429", "unsupported_region", "redirect_only_page", "not_found_404",
+  "server_error_5xx", "configuration_error", "maintenance_or_unavailable", "tls_or_certificate_error",
+  "site_not_ready", "parked_or_placeholder", "target_unreachable_or_unsuitable", "navigation_transport_failure",
+]);
+
 export const runtimeVisitEligibilityDiagnosticSchema = z.object({
   policyVersion: z.literal("runtime_visit_eligibility.v1"),
   reasonCode: z.enum(RUNTIME_VISIT_REJECTION_REASONS),
+  retainedNoGoReason: retainedRuntimeNoGoReasonSchema.optional(),
   snapshotCount: z.number().int().min(0).max(10000),
   snapshotCountTruncated: z.boolean(),
   selectedSnapshot: z.object({

@@ -4568,6 +4568,22 @@ test("three-lane merge keeps lane-local access failures limited when the indepen
     assert.ok(!unresolved.scanNoGoAssessment?.contradictorCodes.includes("independent_runtime_evidence_representative_page"));
   }
 
+  const unresolvedCapture = mergeLocalV2DagLambdaEvidenceLaneBundles({
+    artifactRoot: "/tmp/runtime-capture-unresolved", scanId: "runtime-capture-unresolved",
+    consentProof: canonicalBundleFixture("runtime-capture-unresolved", {
+      scanNoGoAssessment: consentNoGo, visualAccessReview: consentVisualNoGo,
+    }),
+    runtimeEvidence: canonicalBundleFixture("runtime-capture-unresolved", {
+      runtimeCoverage: usableRuntimeCoverage,
+      scanLaneRuns: [{ ...laneRunFixture("runtime_evidence", "empty-runtime"), accessOutcome: "unknown" }],
+      domSnapshots: [{ ...runtimeSnapshotFixture(), textExcerpt: "",
+        runtimeDocumentCapture: { version: "runtime_document_capture.v1" } }],
+    }),
+    policyEvidence: canonicalBundleFixture("runtime-capture-unresolved"),
+  });
+  assert.equal(unresolvedCapture.scanNoGoAssessment, undefined);
+  assert.equal(unresolvedCapture.visualAccessReview, undefined);
+
   const bothLanesNoGo = mergeLocalV2DagLambdaEvidenceLaneBundles({
     artifactRoot: "/tmp/certscore-three-lane-both-no-go",
     scanId: "scan-both-no-go",

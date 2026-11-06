@@ -18,6 +18,7 @@ export const SCAN_NO_GO_REASON_CODES = [
   "navigation_transport_failure",
   "visual_capture_failed_or_placeholder",
   "retained_visual_error_shell",
+  "runtime_capture_unverified",
 ] as const;
 
 export type ScanNoGoReasonCode = typeof SCAN_NO_GO_REASON_CODES[number];
@@ -55,6 +56,22 @@ export type ScanNoGoReasonPresentation = {
 };
 
 export const SCAN_NO_GO_REASON_PRESENTATIONS: Record<ScanNoGoReasonCode, ScanNoGoReasonPresentation> = {
+  runtime_capture_unverified: {
+    code: "runtime_capture_unverified",
+    customerTitle: "Starting-page capture incomplete",
+    explanation: "CertScore.ai could not verify a representative starting page from the content retained during this scan.",
+    reportSummary: "The starting-page capture could not be verified, so no site assessment or scores were generated.",
+    recommendedNextAction: "Check the public page in a browser and scan its final public URL. If this repeats, contact CertScore.ai with the scan ID for capture review.",
+    pageState: "capture_failed",
+    retryLikelyToHelp: false,
+    limitationKind: "scanner_capture_limitation",
+    snapshotStopReasonCode: "homepage_runtime_capture_unverified",
+    snapshotStopReasonLabel: "Starting-page capture incomplete",
+    snapshotStopReasonDetail: "The original runtime visit did not retain verifiable representative page content within the scan window.",
+    snapshotBlockPageClassification: "capture_failed",
+    snapshotHomepageFetchStatus: "capture_failed",
+    snapshotScanOutcome: "homepage_runtime_capture_unverified",
+  },
   redirect_only_page: {
     code: "redirect_only_page",
     customerTitle: "A redirect notice was captured",
@@ -525,6 +542,25 @@ function boundedPublicEvidenceExcerpt(value: unknown) {
   return normalized.slice(0, 360);
 }
 
+function runtimeCaptureEvidenceExcerpt(signals: Record<string, unknown> | null) {
+  if (signals?.assessmentPolicy !== "runtime_visit_capture_limitation.v1") return null;
+  switch (signals.runtimeEligibilityReason) {
+    case "runtime_document_unverified":
+    case "runtime_document_conflict":
+      return "The scanner could not verify that the captured content belonged to the starting-page document.";
+    case "runtime_loading_placeholder":
+      return "The final verified text capture contained only a loading message.";
+    case "runtime_navigation_unverified":
+      return "The scanner could not verify a successful document response for the captured page.";
+    case "runtime_snapshot_unavailable":
+      return "The original runtime visit did not retain a page snapshot.";
+  }
+  if (signals.cdpLoaderBound !== true || signals.capturedTextObserved !== false) return null;
+  return signals.capturedTitleObserved === true
+    ? "The runtime capture retained a page title but no readable page text."
+    : "The runtime capture retained no readable text from the verified document.";
+}
+
 /** Public-safe projection of a retained, structured scan no-go assessment. */
 export function projectExternalScanNoGo(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
@@ -555,6 +591,8 @@ export function projectExternalScanNoGo(
     typeof visualReview?.shortExplanation === "string" ? visualReview.shortExplanation : null,
     typeof visualReview?.short_explanation === "string" ? visualReview.short_explanation : null,
   ].map(boundedPublicEvidenceExcerpt).find((value): value is string => Boolean(value));
+  const captureEvidence = presentation.code === "runtime_capture_unverified"
+    ? runtimeCaptureEvidenceExcerpt(plainRecord(assessment.supportingSignals)) : null;
   return {
     resultDisposition: "no_go",
     noGo: {
@@ -565,7 +603,7 @@ export function projectExternalScanNoGo(
       limitationKind: presentation.limitationKind,
       recommendedNextAction: presentation.recommendedNextAction,
       retryLikelyToHelp: presentation.retryLikelyToHelp,
-      ...(visualEvidence ? { evidenceExcerpt: visualEvidence } : {}),
+      ...(captureEvidence || visualEvidence ? { evidenceExcerpt: captureEvidence ?? visualEvidence } : {}),
     },
   };
 }

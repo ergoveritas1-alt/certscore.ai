@@ -2,7 +2,7 @@ import "server-only";
 
 import { apiV2PreConsentRuntimePreviewSchema, type ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
 import { queryOne } from "@website-signal-risk-scanner/db";
-import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
+import { isRuntimeVisitCaptureAssessment, projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 import { terminalReportPublicationError } from "./report-publication-read-state";
 import { readableReportProjectionSql, requiresPersistedReportPublicationSql } from "./scan-report-publication-sql";
 import {
@@ -352,8 +352,11 @@ export function buildLightweightScanStatusResponse(projection: ScanStatusProject
   };
 }
 
-function apiV2ProjectionStatus(projection: ScanStatusProjection, hasNoGo: boolean) {
+function apiV2ProjectionStatus(projection: ScanStatusProjection, noGo: ReturnType<typeof projectExternalScanNoGo>) {
   if (projection.publicationRequestStatus === "terminal_failure") return "failed" as const;
+  if (projection.status === "failed" && noGo && (noGo.noGo.reasonCode === "runtime_capture_unverified" ||
+      isRuntimeVisitCaptureAssessment(projection.scanNoGoAssessment))) return "completed_limited" as const;
+  const hasNoGo = Boolean(noGo);
   if ((hasNoGo || projection.accessibilityAuditStatus === "limited" && projection.reportReady) && (projection.status === "completed" || projection.status === "completed_limited")) {
     return "completed_limited" as const;
   }
@@ -397,7 +400,7 @@ export function buildLightweightApiV2ScanStatusInput(
       : {}),
   };
   const noGoProjection = projection.publicationRequestStatus === "terminal_failure" ? null : projectExternalScanNoGo(runtimeArtifacts);
-  const status = apiV2ProjectionStatus(projection, Boolean(noGoProjection));
+  const status = apiV2ProjectionStatus(projection, noGoProjection);
   const terminal = status === "completed" || status === "completed_limited" || status === "failed" || status === "expired" || status === "rate_limited";
   const score = (status === "completed" || status === "completed_limited") && projection.reportReady && !noGoProjection && typeof projection.score === "number"
     ? projection.score
@@ -433,7 +436,7 @@ export function buildLightweightApiV2ScanStatusInput(
       ? projection.scanFrom
       : undefined,
     score,
-    scoreStatus: (status === "completed" || status === "completed_limited") && projection.reportReady ? "final" as const : "provisional" as const,
+    scoreStatus: noGoProjection || (status === "completed" || status === "completed_limited") && projection.reportReady ? "final" as const : "provisional" as const,
     scoreVersion: score === null ? null : projection.scoreVersion ?? null,
     scoreUpdatedAt: score === null ? null : projection.scoreUpdatedAt ?? projection.completedAt,
     riskLevel: score === null
