@@ -6,6 +6,8 @@ import path from 'node:path';
 import { verifyMasterValueParity } from './lib/audit-master-parity';
 import { verifyProgressPins } from './lib/audit-progress-pins';
 import { renderProgressDashboard } from './lib/audit-progress-html';
+import { COVERAGE_MATRIX } from './lib/audit-progress-coverage-matrix';
+import { COVERAGE_MAP } from './lib/audit-progress-coverage';
 import { OPT_OUT_INPUT_VERSION } from './lib/audit-progress-opt-out';
 
 const [previous, manifest, output] = process.argv.slice(2);
@@ -44,6 +46,9 @@ assert.equal(inputs.retainedOnly, true);
 assert.deepEqual(inputs.sources, data.optOutExtracts, 'Retained-only refresh must preserve all original control extracts');
 assert.deepEqual(inputs.reportProjections, data.retainedReports, 'Retained-only refresh must preserve original report ancestry');
 data.toolSources = verifyProgressPins();
+// Recompute presentation contracts from the reviewed candidate source; retain all historical evidence bytes.
+data.coverageMatrix = COVERAGE_MATRIX;
+data.coverageMap = COVERAGE_MAP;
 if (inputs.privacyFormReceipts?.length) data.privacyFormReceipts = inputs.privacyFormReceipts;
 else delete data.privacyFormReceipts;
 data.masterValueParity = verifyMasterValueParity(data);
