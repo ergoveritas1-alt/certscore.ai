@@ -13,10 +13,10 @@ Connection:
 - Authentication: none
 - Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, `certscore_get_report_evidence_page`
 
-Validate the package from the repository root with:
+Validate the package from the repository root with Claude Code 2.1.281 or newer, which recognizes the directory listing fields:
 
 ```bash
-claude plugin validate ./integrations/claude-code/certscore-mcp-light
+claude plugin validate --strict ./integrations/claude-code/certscore-mcp-light
 ```
 
 For the scan lifecycle, quota, reuse behavior, troubleshooting, and boundaries, see [the MCP developer reference](https://certscore.ai/developers/mcp).
@@ -31,10 +31,10 @@ Terms: https://certscore.ai/terms
 
 For inventory, CCPA/CPRA workpapers or export requests, use the existing `scanId` with `certscore_get_report_evidence_page` and `workpaper="tracking"` when advertised by the server. Ordinary summaries use `privacyAuditSummary` and the returned GPC facts without an automatic extra read. The workpaper provides retained starting-page inventory, privacy-choice controls, notice passages, and GPC evidence. Preserve `workpaper="tracking"` with every `pagination.nextCursor`; use `download.url` for JSON and `download.csvUrl` for CSV. Keep private download links confidential; request a fresh link after expiry. Missing evidence in a bounded bundle is not evidence of absence: inspect `mcpMetadata.omittedSections` and retrieve the workpaper when needed. If the tool or selector is missing, refresh the existing connection's tool list or update the local MCP package; do not start a replacement scan.
 
-Report observed Do Not Sell/Share controls and notice passages as evidence. Control presence does not establish opt-out effectiveness, and notice passages do not assess adequacy. Preserve the actual scan origin and existing CertScore score; the regulatory focus does not change the evidence or produce a separate CCPA score.
+Report observed Do Not Sell/Share controls and notice passages as evidence. Control presence does not establish opt-out effectiveness, and notice passages do not assess adequacy. Preserve the actual scan origin and existing CertScore.ai score; the regulatory focus does not change the evidence or produce a separate CCPA score.
 
 ## First completed review
 
 The bundled skill checks canonical finding counts and response omissions, recovers missing findings with bounded reads of the same retained report, and states any remaining gaps. It groups overlapping findings and proposes three distinct evidence-linked actions when supported, or fewer when evidence is insufficient. Network timing, cookie snapshots, new writes and confirmed consent decisions remain separate observations. Fresh scans require an explicit user request.
 
-The manifest includes the existing privacy, documentation and support URLs and `./assets/icon.png`, copied unchanged from the approved `apps/web/public/certscore-mark-dark.png` brand asset (512 × 512 PNG). Package the entire plugin directory, including hidden configuration files and the asset. Repository metadata does not replace an existing portal listing icon automatically.
+Package the entire plugin directory, including hidden configuration files and listing assets. Manage the icon for an existing submission in the Claude directory portal.
