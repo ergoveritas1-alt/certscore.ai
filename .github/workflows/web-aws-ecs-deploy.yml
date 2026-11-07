@@ -1,5 +1,5 @@
 name: Public Web AWS ECS Deploy
-run-name: ${{ inputs.stage_only && format('Stage public web {0}', github.sha) || inputs.staged_run_id != '' && format('Promote public web {0} from {1} {2}', github.sha, inputs.staged_run_id, inputs.staged_image) || github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' && format('Defer public web {0} to staging', github.sha) || format('Deploy public web {0}', github.sha) }}
+run-name: ${{ inputs.settings_only && format('Apply public web settings {0}', github.sha) || inputs.stage_only && format('Stage public web {0}', github.sha) || inputs.staged_run_id != '' && format('Promote public web {0} from {1} {2}', github.sha, inputs.staged_run_id, inputs.staged_image) || github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' && format('Defer public web {0} to staging', github.sha) || format('Deploy public web {0}', github.sha) }}
 
 on:
   push:
@@ -41,6 +41,10 @@ on:
       - "!apps/web/scripts/**"
   workflow_dispatch:
     inputs:
+      settings_only:
+        description: Reuse the verified running image for receipt or reviewed opt-out settings
+        type: boolean
+        default: false
       reviewed_opt_out_rollout:
         description: "Owner-authorized reviewed opt-out recipes; preserve all execution safeguards"
         type: choice
@@ -105,8 +109,44 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  apply-verified-settings:
+    if: github.event_name == 'workflow_dispatch' && inputs.settings_only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
+      REVIEWED_OPT_OUT_MODE: ${{ inputs.reviewed_opt_out_rollout }}
+      ECS_CLUSTER_NAME: ${{ vars.AWS_WEB_ECS_CLUSTER }}
+      ECS_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
+      ECS_MATERIALIZER_SERVICE_NAME: ${{ vars.AWS_WEB_MATERIALIZER_SERVICE || 'certscore-web-materializer' }}
+      ECR_REPOSITORY: ${{ vars.AWS_WEB_ECR_REPOSITORY }}
+      ECS_CONTAINER_NAME: certscore-web
+      AUDIT_RECEIPTS_MODE: ${{ inputs.audit_privacy_form_receipts }}
+    steps:
+      - name: Require settings-only inputs on main
+        env:
+          VALID_INPUTS: ${{ !inputs.stage_only && inputs.staged_run_id == '' && inputs.staged_image == '' && !inputs.use_compiler_cache && !inputs.push_runtime_base && !inputs.use_x64_fallback && !inputs.allow_non_descendant_deploy && inputs.marketplace_light == 'preserve' && inputs.marketplace_browser == 'preserve' && inputs.staged_base_sha == '' }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$VALID_INPUTS" = true
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      - name: Apply settings to the verified running image
+        run: |
+          test "$(git ls-remote --exit-code origin refs/heads/main)" = "$GITHUB_SHA"$'\t'refs/heads/main
+          node --experimental-strip-types scripts/deploy-verified-ecs-settings.mjs web
+
   verify-public-web:
-    if: inputs.staged_run_id == '' && (github.event_name != 'push' || vars.AWS_STAGED_COUPLED_RELEASES != 'true')
+    if: ${{ !inputs.settings_only && inputs.staged_run_id == '' && (github.event_name != 'push' || vars.AWS_STAGED_COUPLED_RELEASES != 'true') }}
     runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 30
     permissions:
@@ -253,7 +293,7 @@ jobs:
         run: node scripts/select-workflow-deployment.mjs web
 
   verify-post-accept-forms:
-    if: inputs.staged_run_id == '' && (github.event_name != 'push' || vars.AWS_STAGED_COUPLED_RELEASES != 'true')
+    if: ${{ !inputs.settings_only && inputs.staged_run_id == '' && (github.event_name != 'push' || vars.AWS_STAGED_COUPLED_RELEASES != 'true') }}
     runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 20
     permissions:
@@ -294,7 +334,7 @@ jobs:
     timeout-minutes: 90
     needs: [verify-public-web, verify-post-accept-forms]
     if: >-
-      ${{ !cancelled() && (
+      ${{ !cancelled() && !inputs.settings_only && (
         (inputs.staged_run_id == '' && needs.verify-public-web.result == 'success' &&
           needs.verify-post-accept-forms.result == 'success' && needs.verify-public-web.outputs.deploy == 'true' &&
           (github.event_name != 'push' || vars.AWS_STAGED_COUPLED_RELEASES != 'true')) ||

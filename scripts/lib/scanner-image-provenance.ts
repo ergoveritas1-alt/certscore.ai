@@ -16,6 +16,62 @@ export type ScannerImageControl = {
   wait(): Promise<void>;
 };
 
+const SCANNER_ENVIRONMENT_LIMIT = 4096;
+const US_RESULT_QUEUE_ALIAS = "CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL";
+const SCANNER_RESULT_QUEUE = "CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL";
+const SCANNER_ASYNC_FAILURE_QUEUE = "CERTSCORE_V2_DAG_LAMBDA_ASYNC_FAILURE_QUEUE_URL";
+const PROSPECTIVE_IMAGE_DIGEST = `sha256:${"0".repeat(64)}`;
+
+/** Lambda sends results to the queue in the invocation payload. Its async
+ * failure destination is an AWS function setting. These legacy URL copies are
+ * used by external tooling and consumers, never by the scanner process. */
+export function compactUsScannerQueueMetadata(current: Record<string, string>, region?: ScannerRegion) {
+  const variables = { ...current };
+  const removed: string[] = [];
+  if (region !== "us-west-1") return { variables, removed };
+  const queue = variables[SCANNER_RESULT_QUEUE];
+  const alias = variables[US_RESULT_QUEUE_ALIAS];
+  const isUsQueue = (value: string | undefined) =>
+    typeof value === "string" && /^https:\/\/sqs\.us-west-1\.amazonaws\.com\/\d{12}\/[A-Za-z0-9_-]+(?:\.fifo)?$/.test(value);
+  if (isUsQueue(queue) && (alias === undefined || alias === queue)) {
+    removed.push(SCANNER_RESULT_QUEUE);
+    if (alias !== undefined) removed.push(US_RESULT_QUEUE_ALIAS);
+  }
+  if (isUsQueue(variables[SCANNER_ASYNC_FAILURE_QUEUE])) removed.push(SCANNER_ASYNC_FAILURE_QUEUE);
+  for (const key of removed) delete variables[key];
+  return { variables, removed };
+}
+
+export function serializeScannerEnvironment(variables: Record<string, string>, target = "Scanner"): string {
+  const body = JSON.stringify({ Variables: variables });
+  const bytes = Buffer.byteLength(body, "utf8");
+  if (bytes > SCANNER_ENVIRONMENT_LIMIT) {
+    throw new Error(`${target} environment exceeds the conservative 4 KiB bound (${bytes}/${SCANNER_ENVIRONMENT_LIMIT} bytes, ${bytes - SCANNER_ENVIRONMENT_LIMIT} over).`);
+  }
+  return body;
+}
+
+export function checkScannerEnvironmentBudget(current: Record<string, string>, beforePromotion: Record<string, string>,
+  afterPromotion: Record<string, string>, target: string, repairRegion?: ScannerRegion) {
+  const before = { ...current, ...beforePromotion };
+  const phases = () => {
+    // The digest is always stamped on promotion, even when absent on the current function.
+    const stamped = { ...before, SCANNER_IMAGE_DIGEST: PROSPECTIVE_IMAGE_DIGEST };
+    return [before, stamped, { ...stamped, ...afterPromotion }];
+  };
+  const queue = before[SCANNER_RESULT_QUEUE];
+  const exceedsBudget = phases().some(variables =>
+    Buffer.byteLength(JSON.stringify({ Variables: variables }), "utf8") > SCANNER_ENVIRONMENT_LIMIT);
+  // The regional alias is consumed by ECS. It is redundant on US scanner Lambda
+  // only when it exactly matches the canonical queue setting.
+  const removeDuplicateQueueAlias = exceedsBudget && repairRegion === "us-west-1" &&
+    typeof queue === "string" && queue.length > 0 && before[US_RESULT_QUEUE_ALIAS] === queue &&
+    !Object.hasOwn(afterPromotion, US_RESULT_QUEUE_ALIAS);
+  if (removeDuplicateQueueAlias) delete before[US_RESULT_QUEUE_ALIAS];
+  for (const variables of phases()) serializeScannerEnvironment(variables, target);
+  return { before, removeDuplicateQueueAlias };
+}
+
 export function scannerImageDigest(imageUri: string): string {
   const match = /^199536052647\.dkr\.ecr\.(eu-central-1|eu-west-1|us-west-1)\.amazonaws\.com\/certscore-v2-dag-local-lambda@(sha256:[a-f0-9]{64})$/.exec(imageUri);
   if (!match) throw new Error("Expected an immutable canonical regional scanner image.");
@@ -98,8 +154,7 @@ export function awsScannerImageControl(region: ScannerRegion, inventory = false)
       return value;
     },
     async environment(variables, revisionId) {
-      const body = JSON.stringify({Variables: variables});
-      if (Buffer.byteLength(body) > 4096) throw new Error("Scanner environment exceeds the conservative 4 KiB bound.");
+      const body = serializeScannerEnvironment(variables, `${region}/${functionName}`);
       const directory = await mkdtemp(path.join(tmpdir(), "certscore-scanner-provenance-"));
       try {
         const filename = path.join(directory, "environment.json");

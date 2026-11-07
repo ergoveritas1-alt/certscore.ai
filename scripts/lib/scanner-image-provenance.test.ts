@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { scannerImageDigest, synchronizeScannerImage, type ScannerImageControl, type ScannerImageState } from "./scanner-image-provenance";
+import { compactUsScannerQueueMetadata, checkScannerEnvironmentBudget, serializeScannerEnvironment, scannerImageDigest, synchronizeScannerImage, type ScannerImageControl, type ScannerImageState } from "./scanner-image-provenance";
 
 const digestA = `sha256:${"a".repeat(64)}`;
 const digestB = `sha256:${"b".repeat(64)}`;
@@ -68,4 +68,54 @@ test("incorrect final environment fails verification and unhealthy functions can
 });
 test("malformed existing digest can be safely repaired from the verified image",async()=>{
   const f=fixture({digest:"not-a-digest"}); await synchronizeScannerImage(f.control,image(digestA),false); assert.equal(f.state().variables.SCANNER_IMAGE_DIGEST,digestA);
+});
+
+test("release budget accounts for escaped UTF-8, the image stamp and post-promotion flags", () => {
+  const before = { WEB_BOT_AUTH_PRIVATE_KEY_PEM: "fixture\nfixture" };
+  const after = { CERTSCORE_REVIEWED_OPT_OUT_ROLLOUT_ENABLED: "1" };
+  const stamp = { SCANNER_IMAGE_DIGEST: `sha256:${"0".repeat(64)}` };
+  const fixedBytes = Buffer.byteLength(serializeScannerEnvironment({ ...before, ...after, ...stamp, PAD: "" }));
+  const current = { PAD: "é".repeat(Math.floor((4096 - fixedBytes) / 2)) + "x".repeat((4096 - fixedBytes) % 2) };
+  assert.doesNotThrow(() => checkScannerEnvironmentBudget(current, before, after, "us-west-1/inventory"));
+  assert.throws(() => checkScannerEnvironmentBudget({ PAD: current.PAD + "x" }, before, after, "us-west-1/inventory"),
+    /us-west-1\/inventory environment exceeds.*4097\/4096/);
+  assert.doesNotThrow(() => serializeScannerEnvironment({ ...current, ...before }));
+});
+
+test("US scanner budget repair removes only an exact duplicate queue alias when needed", () => {
+  const alias = "CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL";
+  const queueKey = "CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL";
+  const queue = "https://sqs.us-west-1.amazonaws.com/000000000000/scanner-results";
+  const before = { KEEP: "unchanged", [queueKey]: queue, [alias]: queue };
+  const after = { CERTSCORE_REVIEWED_OPT_OUT_ROLLOUT_ENABLED: "1" };
+  const stamp = { SCANNER_IMAGE_DIGEST: `sha256:${"0".repeat(64)}` };
+  const fixedBytes = Buffer.byteLength(serializeScannerEnvironment({ ...before, ...stamp, ...after, PAD: "" }));
+  const current = { ...before, PAD: "x".repeat(4189 - fixedBytes) };
+
+  const plan = checkScannerEnvironmentBudget(current, {}, after, "US inventory", "us-west-1");
+  assert.equal(plan.removeDuplicateQueueAlias, true);
+  assert.deepEqual(plan.before, { KEEP: "unchanged", [queueKey]: queue, PAD: current.PAD });
+  assert.equal(current[alias], queue);
+  assert.equal(checkScannerEnvironmentBudget(before, {}, after, "US inventory", "us-west-1").removeDuplicateQueueAlias, false);
+  assert.throws(() => checkScannerEnvironmentBudget(current, {}, after, "Preserve settings"), /4096 bytes, .* over/);
+  assert.throws(() => checkScannerEnvironmentBudget(current, {}, after, "Other region", "eu-west-1"), /4096 bytes, .* over/);
+  assert.throws(() => checkScannerEnvironmentBudget({ ...current, [alias]: queue + "-other" }, {}, after, "Different queue", "us-west-1"), /over/);
+  assert.throws(() => checkScannerEnvironmentBudget({ ...current, PAD: current.PAD + "x".repeat(700) }, {}, after, "Still oversized", "us-west-1"), /over/);
+});
+
+test("US scanner compaction strips only legacy queue metadata and keeps other regions untouched", () => {
+  const result = "CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL";
+  const alias = "CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL";
+  const failure = "CERTSCORE_V2_DAG_LAMBDA_ASYNC_FAILURE_QUEUE_URL";
+  const queue = "https://sqs.us-west-1.amazonaws.com/000000000000/results";
+  const current = { [result]: queue, [failure]: queue + "-failures", KEEP: "unchanged" };
+  const plan = compactUsScannerQueueMetadata(current, "us-west-1");
+  assert.deepEqual(plan.removed, [result, failure]);
+  assert.deepEqual(plan.variables, { KEEP: "unchanged" });
+  assert.equal(current[result], queue);
+  assert.deepEqual(compactUsScannerQueueMetadata(current).variables, current);
+  assert.deepEqual(compactUsScannerQueueMetadata(current, "eu-west-1").variables, current);
+  assert.deepEqual(compactUsScannerQueueMetadata({ ...current, [alias]: queue }, "us-west-1").removed, [result, alias, failure]);
+  assert.deepEqual(compactUsScannerQueueMetadata({ ...current, [alias]: queue + "-other" }, "us-west-1").removed, [failure]);
+  assert.deepEqual(compactUsScannerQueueMetadata({ [result]: "unexpected" }, "us-west-1").removed, []);
 });

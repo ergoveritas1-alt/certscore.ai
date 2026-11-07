@@ -11,7 +11,7 @@ import { existsSync } from "node:fs";
 import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { awsScannerImageControl, synchronizeScannerImage } from "./lib/scanner-image-provenance";
+import { awsScannerImageControl, checkScannerEnvironmentBudget, compactUsScannerQueueMetadata, scannerAws, serializeScannerEnvironment, synchronizeScannerImage } from "./lib/scanner-image-provenance";
 import { installedEcsRevision } from "./lib/deployed-image.mjs";
 import { deploymentInputDecision } from "./lib/deployment-inputs.mjs";
 import { runtimeBaseInputsChanged } from "./lib/runtime-base-inputs.mjs";
@@ -145,6 +145,11 @@ async function executeDeployment(args: Args, startedAt: number, timing?: ReturnT
   await checkReleasePrerequisites({ deployment: true, scanner: args.mode === "all" || args.mode === "scanners",
     prebuilt: args.stagedRelease?.action === "promote" });
   await confirmSkippedRuntimeInputs(changed, args);
+  const scannerSelected = (args.mode === "all" || args.mode === "scanners") &&
+    (changed.scanners || args.pushScannerRuntimeBase || args.stagedRelease || args.checkStaging ||
+      (args.mode === "all" && process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1"));
+  if (scannerSelected) await preflightScannerEnvironmentBudget(args.preserveScannerOperationalSettings);
+
   if (args.checkStaging) {
     await checkStagedReleasePrerequisites(args, changed, sha);
     await run(["pnpm", "ops:check:deploy"]);
@@ -206,8 +211,8 @@ async function executeDeployment(args: Args, startedAt: number, timing?: ReturnT
     if (process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1") {
       // Reader code and all producer regions are healthy before emitting the new dispatch profile.
       const activations=await activateReviewedOptOutAfterProducer(coupled,()=>verifyScanners(sha),[
-        ()=>deployWeb({ref:sha,workflowRef,force:true,reviewedRolloutMode:"enable"}),
-        ()=>deployValidation({ref:sha,workflowRef,skip:false,pushRuntimeBase:false,reviewedRolloutMode:"enable"}),
+        ()=>deployWeb({ref:sha,workflowRef,force:true,reviewedRolloutMode:"enable",settingsOnly:true}),
+        ()=>deployValidation({ref:sha,workflowRef,skip:false,pushRuntimeBase:false,reviewedRolloutMode:"enable",settingsOnly:true}),
       ]);
       lanes.push(...activations.map(result=>Promise.resolve(result)));
     }
@@ -619,7 +624,7 @@ async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha:
   return results;
 }
 
-async function deployWeb(input: { force: boolean; ref: string; workflowRef: string; registrationGraceMs?: number; stage?: { runId: string; image: string; baseSha: string }; reviewedRolloutMode?: "preserve"|"enable"|"disable" }): Promise<LaneResult> {
+async function deployWeb(input: { force: boolean; ref: string; workflowRef: string; registrationGraceMs?: number; stage?: { runId: string; image: string; baseSha: string }; reviewedRolloutMode?: "preserve"|"enable"|"disable"; settingsOnly?: boolean }): Promise<LaneResult> {
   if (!input.force) return skippedLane("web ECS deploy", "web runtime inputs are proven unchanged");
   return timedLane("web ECS deploy", async () => {
     await run([
@@ -632,16 +637,16 @@ async function deployWeb(input: { force: boolean; ref: string; workflowRef: stri
     const rolloutMode=input.reviewedRolloutMode ?? (process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1" ? "enable" : "preserve");
     if(rolloutMode==="enable")await verifyScanners(input.ref);
     const runId = await ensureWorkflowRun(WEB_WORKFLOW, input.workflowRef, input.ref,
-      [...(stage ? ["-f", `staged_run_id=${stage.runId}`, "-f", `staged_image=${stage.image}`, "-f", `staged_base_sha=${stage.baseSha}`] : []),
+      [...(input.settingsOnly ? ["-F", "settings_only=true"] : []), ...(stage ? ["-f", `staged_run_id=${stage.runId}`, "-f", `staged_image=${stage.image}`, "-f", `staged_base_sha=${stage.baseSha}`] : []),
        ...(receiptEnable ? ["-f", "audit_privacy_form_receipts=true"] : []),
        ...(rolloutMode!=="preserve" ? ["-f", `reviewed_opt_out_rollout=${rolloutMode}`] : [])], receiptEnable || rolloutMode!=="preserve", input.registrationGraceMs,
-      stage ? `Promote public web ${input.ref} from ${stage.runId} ${stage.image}` : undefined);
+      input.settingsOnly ? `Apply public web settings ${input.ref}` : stage ? `Promote public web ${input.ref} from ${stage.runId} ${stage.image}` : undefined);
     const workflowRun = await waitForRun(runId);
     return { workflow: WEB_WORKFLOW, url: workflowRun.url };
   });
 }
 
-async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; skip: boolean; workflowRef: string; registrationGraceMs?: number; stage?: StagedCoupledRelease["validation"]; reviewedRolloutMode?: "preserve"|"enable"|"disable" }): Promise<LaneResult> {
+async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; skip: boolean; workflowRef: string; registrationGraceMs?: number; stage?: StagedCoupledRelease["validation"]; reviewedRolloutMode?: "preserve"|"enable"|"disable"; settingsOnly?: boolean }): Promise<LaneResult> {
   if (input.skip) {
     return skippedLane("validation deploy", "no validation deploy inputs changed");
   }
@@ -650,13 +655,14 @@ async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; 
     const rolloutMode=input.reviewedRolloutMode ?? (process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1" ? "enable" : "preserve");
     if(rolloutMode==="enable")await verifyScanners(input.ref);
     const runId = await ensureWorkflowRun(VALIDATION_WORKFLOW, input.workflowRef, input.ref, [
+      ...(input.settingsOnly ? ["-F", "settings_only=true"] : []),
       "-f", "use_runtime_base=true",
       "-f", `push_runtime_base=${input.pushRuntimeBase ? "true" : "false"}`,
       "-f", "runtime_base_tag=validation-worker-runtime-base",
       ...(rolloutMode!=="preserve" ? ["-f", `reviewed_opt_out_rollout=${rolloutMode}`] : []),
       ...(stage ? ["-f", `expected_sha=${input.ref}`, "-f", `staged_run_id=${stage.runId}`, "-f", `staged_image=${stage.image}`] : []),
     ], input.pushRuntimeBase || rolloutMode!=="preserve", input.registrationGraceMs,
-    stage ? `Promote validation ${input.ref} from ${stage.runId} ${stage.image}` : undefined);
+    input.settingsOnly ? `Apply validation settings ${input.ref}` : stage ? `Promote validation ${input.ref} from ${stage.runId} ${stage.image}` : undefined);
     const workflowRun = await waitForRun(runId);
     return {
       runtimeBase: input.pushRuntimeBase ? "rebuilt" : "reused",
@@ -803,6 +809,7 @@ async function promoteScannerArtifact(artifact: PreparedScanner, input: { ref: s
     assertScannerArtifact(artifact, input.ref);
     await requireCleanWorktree();
     if (await git(["rev-parse", "HEAD"]) !== input.ref) throw new Error("Scanner checkout SHA changed during consumer deployment.");
+    await preflightScannerEnvironmentBudget(input.preserveOperationalSettings);
     // Recheck interrupted/concurrent operations in all six workers before any write.
     const current = await readScannerOperationalSettings();
     if (artifact.preservedSettings) for (const [key, before] of artifact.preservedSettings) {
@@ -879,56 +886,80 @@ async function readScannerWebBotAuthPrivateKey() {
   return privateKeyPem;
 }
 
-async function applyScannerRuntimeConfiguration(enableCoverage = false) {
-  console.log(`Applying ${SCANNER_MEMORY_SIZE} MB memory and verified ConsentCheck identity before image promotion.`);
-  const privateKeyPem = await readScannerWebBotAuthPrivateKey();
-  const requiredEnvironment = { ...SCANNER_IDENTITY_ENVIRONMENT, ...(enableCoverage ? SCANNER_COVERAGE_ENVIRONMENT : {}),
-    ...(enableCoverage && process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1" ? {CERTSCORE_REVIEWED_OPT_OUT_ROLLOUT_ENABLED:"1",CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED:"1"} : {}) };
-  const results = await Promise.all(SCANNER_REGIONS.flatMap(region => [SCANNER_FUNCTION_NAME, `${SCANNER_FUNCTION_NAME}-inventory`].map(async (functionName) => {
-    const current = await run([
-      "aws", "lambda", "get-function-configuration",
-      "--region", region,
-      "--function-name", functionName,
-      "--query", "{MemorySize:MemorySize,Variables:Environment.Variables,RevisionId:RevisionId,EnvironmentError:Environment.Error}",
-      "--output", "json"
-    ], { quiet: true });
-    const currentPayload = JSON.parse(current.stdout) as {
-      MemorySize?: number;
-      Variables?: Record<string, string>;
-      RevisionId?: string;
-      EnvironmentError?: unknown;
-    };
-    if (!currentPayload.RevisionId || currentPayload.EnvironmentError || !currentPayload.Variables) throw new Error(`${region} scanner environment is unavailable; refusing a replacement.`);
-    const currentVariables = currentPayload.Variables ?? {};
-    const nextVariables = {
-      ...currentVariables,
-      ...requiredEnvironment,
-      WEB_BOT_AUTH_PRIVATE_KEY_PEM: privateKeyPem,
-    };
-    const identityChanged = Object.entries({
-      ...requiredEnvironment,
-      WEB_BOT_AUTH_PRIVATE_KEY_PEM: privateKeyPem,
-    }).some(([key, value]) => currentVariables[key] !== value);
-    const memoryChanged = currentPayload.MemorySize !== SCANNER_MEMORY_SIZE;
-    const environmentDocument = JSON.stringify({ Variables: nextVariables });
-    if (Buffer.byteLength(environmentDocument, "utf8") > 4_096) {
-      throw new Error(`${region} scanner environment would exceed Lambda's 4 KiB limit.`);
+function scannerRuntimeEnvironment(privateKeyPem: string, enableCoverage: boolean): Record<string, string> {
+  return {
+    ...SCANNER_IDENTITY_ENVIRONMENT,
+    WEB_BOT_AUTH_PRIVATE_KEY_PEM: privateKeyPem,
+    ...(enableCoverage ? SCANNER_COVERAGE_ENVIRONMENT : {}),
+    ...(enableCoverage && process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1"
+      ? { CERTSCORE_REVIEWED_OPT_OUT_ROLLOUT_ENABLED: "1", CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED: "1" } : {}),
+  };
+}
+
+async function readScannerEnvironments() {
+  return Promise.all(SCANNER_REGIONS.flatMap(region =>
+    [SCANNER_FUNCTION_NAME, `${SCANNER_FUNCTION_NAME}-inventory`].map(async functionName => {
+      const current = await scannerAws(region, ["lambda", "get-function-configuration", "--function-name", functionName,
+        "--query", "{memory:MemorySize,variables:Environment.Variables,revision:RevisionId,error:Environment.Error}"]);
+      if (!current?.revision || current.error || !current.variables ||
+          Object.values(current.variables).some(value => typeof value !== "string")) {
+        throw new Error(`${region}/${functionName} environment is unavailable.`);
+      }
+      return { region, functionName, current: current as { memory: number; variables: Record<string, string>; revision: string } };
+    })));
+}
+
+async function preflightScannerEnvironmentBudget(preserveSettings: boolean) {
+  const privateKeyPem = preserveSettings ? "" : await readScannerWebBotAuthPrivateKey();
+  const before = preserveSettings ? {} : scannerRuntimeEnvironment(privateKeyPem, false);
+  const after = preserveSettings ? {} : scannerRuntimeEnvironment(privateKeyPem, true);
+  const functions = await readScannerEnvironments();
+  for (const { region, functionName, current } of functions) {
+    const repairRegion = preserveSettings ? undefined : region;
+    const compacted = compactUsScannerQueueMetadata(current.variables, repairRegion);
+    const plan = checkScannerEnvironmentBudget(compacted.variables, before, after, `${region}/${functionName}`, repairRegion);
+    if (compacted.removed.length || plan.removeDuplicateQueueAlias) {
+      console.log(`${region}/${functionName}: unused queue metadata will be removed during scanner configuration.`);
     }
-    if (identityChanged || memoryChanged) {
+  }
+  console.log(`Lambda environment budget verified for all ${functions.length} scanner functions before rollout.`);
+}
+
+async function applyScannerRuntimeConfiguration(enableCoverage = false) {
+  console.log(`Applying ${SCANNER_MEMORY_SIZE} MB memory and verified ConsentCheck identity.`);
+  const privateKeyPem = await readScannerWebBotAuthPrivateKey();
+  const requiredEnvironment = scannerRuntimeEnvironment(privateKeyPem, enableCoverage);
+  const finalEnvironment = scannerRuntimeEnvironment(privateKeyPem, true);
+  const plans = (await readScannerEnvironments()).map(({ region, functionName, current }) => {
+    const target = `${region}/${functionName}`;
+    const compacted = compactUsScannerQueueMetadata(current.variables, region);
+    const plan = checkScannerEnvironmentBudget(compacted.variables, requiredEnvironment, finalEnvironment, target, region);
+    const environmentChanged = compacted.removed.length > 0 || plan.removeDuplicateQueueAlias ||
+      Object.entries(requiredEnvironment).some(([key, value]) => current.variables[key] !== value);
+    return {
+      region, functionName, revision: current.revision, environmentChanged,
+      memoryChanged: current.memory !== SCANNER_MEMORY_SIZE,
+      expectedVariables: plan.before,
+      environmentDocument: serializeScannerEnvironment(plan.before, target),
+    };
+  });
+  const results = await Promise.all(plans.map(async ({
+    region, functionName, revision, environmentChanged, memoryChanged, expectedVariables, environmentDocument,
+  }) => {
+    if (environmentChanged || memoryChanged) {
       const environmentPath = path.join(
         tmpdir(),
         `certscore-scanner-identity-${process.pid}-${region}-${functionName}.json`,
       );
       await writeFile(environmentPath, `${environmentDocument}\n`, { encoding: "utf8", mode: 0o600 });
       try {
-        await run([
-          "aws", "lambda", "update-function-configuration",
-          "--region", region,
+        await scannerAws(region, [
+          "lambda", "update-function-configuration",
           "--function-name", functionName,
           "--memory-size", String(SCANNER_MEMORY_SIZE),
-          "--revision-id", currentPayload.RevisionId,
-          "--environment", `file://${environmentPath}`,
-        ], { quiet: true });
+          "--revision-id", revision,
+          "--environment", `file://${environmentPath}`, "--query", "RevisionId",
+        ]);
       } finally {
         await rm(environmentPath, { force: true });
       }
@@ -952,19 +983,18 @@ async function applyScannerRuntimeConfiguration(enableCoverage = false) {
       Variables?: Record<string, string>;
     };
     const verifiedVariables = payload.Variables ?? {};
-    const identityConverged = Object.entries(requiredEnvironment)
-      .every(([key, value]) => verifiedVariables[key] === value) &&
-      verifiedVariables.WEB_BOT_AUTH_PRIVATE_KEY_PEM === privateKeyPem;
+    const environmentConverged = Object.keys(verifiedVariables).length === Object.keys(expectedVariables).length &&
+      Object.entries(expectedVariables).every(([key, value]) => verifiedVariables[key] === value);
     if (
       payload.MemorySize !== SCANNER_MEMORY_SIZE ||
       payload.LastUpdateStatus !== "Successful" ||
       payload.State !== "Active" ||
-      !identityConverged
+      !environmentConverged
     ) {
       throw new Error(`${region} scanner runtime configuration did not converge.`);
     }
-    return { changed: identityChanged || memoryChanged, region, functionName };
-  })));
+    return { changed: environmentChanged || memoryChanged, region, functionName };
+  }));
   for (const result of results) {
     console.log(`${result.region} ${result.functionName}: ${SCANNER_MEMORY_SIZE} MB and verified identity (${result.changed ? "updated" : "already configured"})`);
   }
@@ -1050,7 +1080,8 @@ async function ensureWorkflowRun(
       if (exactTitle) return runs.filter(run => run.event === "workflow_dispatch" && run.displayTitle === exactTitle);
       const kind = workflow === WEB_WORKFLOW ? "public web" : workflow === VALIDATION_WORKFLOW ? "validation" : null;
       return kind ? runs.filter(run =>
-        !(run.event === "workflow_dispatch" && run.displayTitle.startsWith(`Stage ${kind} `)) &&
+        !(run.event === "workflow_dispatch" && (run.displayTitle.startsWith(`Stage ${kind} `) ||
+          run.displayTitle.startsWith(`Apply ${kind} settings `))) &&
         !(run.event === "push" && (run.displayTitle.startsWith(`Verify ${kind} `) ||
           run.displayTitle.startsWith(`Defer ${kind} `)))) : runs;
     },

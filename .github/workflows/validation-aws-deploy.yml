@@ -1,5 +1,5 @@
 name: Validation AWS Deploy
-run-name: ${{ inputs.stage_only && format('Stage validation {0}', github.sha) || inputs.staged_run_id != '' && format('Promote validation {0} from {1} {2}', github.sha, inputs.staged_run_id, inputs.staged_image) || github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' && format('Verify validation {0}', github.sha) || format('Deploy validation {0}', github.sha) }}
+run-name: ${{ inputs.settings_only && format('Apply validation settings {0}', github.sha) || inputs.stage_only && format('Stage validation {0}', github.sha) || inputs.staged_run_id != '' && format('Promote validation {0} from {1} {2}', github.sha, inputs.staged_run_id, inputs.staged_image) || github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' && format('Verify validation {0}', github.sha) || format('Deploy validation {0}', github.sha) }}
 
 on:
   push:
@@ -42,6 +42,10 @@ on:
       - "!apps/web/**/*.spec.tsx"
   workflow_dispatch:
     inputs:
+      settings_only:
+        description: Reuse the verified running image for receipt or reviewed opt-out settings
+        type: boolean
+        default: false
       reviewed_opt_out_rollout:
         description: "Owner-authorized reviewed opt-out recipes; preserve all execution safeguards"
         type: choice
@@ -89,7 +93,52 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  apply-verified-settings:
+    if: github.event_name == 'workflow_dispatch' && inputs.settings_only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
+      REVIEWED_OPT_OUT_MODE: ${{ inputs.reviewed_opt_out_rollout }}
+      ECS_CLUSTER_NAME: ${{ vars.AWS_VALIDATION_ECS_CLUSTER }}
+      ECS_SERVICE_NAME: ${{ vars.AWS_VALIDATION_ECS_WORKER_SERVICE }}
+      ECR_REPOSITORY: ${{ vars.AWS_VALIDATION_WORKER_ECR_REPOSITORY }}
+      ECS_CONTAINER_NAME: ${{ vars.AWS_VALIDATION_ECS_WORKER_CONTAINER || 'validation-worker' }}
+      AUDIT_RECEIPTS_MODE: preserve
+    steps:
+      - name: Require settings-only inputs on main
+        env:
+          VALID_INPUTS: ${{ !inputs.stage_only && inputs.staged_run_id == '' && inputs.staged_image == '' && inputs.push_runtime_base != 'true' && inputs.expected_sha == '' }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$VALID_INPUTS" = true
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_VALIDATION_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
+      - name: Apply settings to the verified running image
+        run: |
+          test "$(git ls-remote --exit-code origin refs/heads/main)" = "$GITHUB_SHA"$'\t'refs/heads/main
+          node --experimental-strip-types scripts/deploy-verified-ecs-settings.mjs validation
+      - name: Check validation worker ECS boot
+        if: vars.AWS_VALIDATION_ECS_WORKER_LOG_GROUP != ''
+        env:
+          ECS_LOG_GROUP: ${{ vars.AWS_VALIDATION_ECS_WORKER_LOG_GROUP }}
+          EXPECTED_GIT_SHA: ${{ github.sha }}
+          CHECK_NAME: validation-worker
+          ECS_HEALTH_REQUIRE_LOG_HEARTBEAT: "0"
+          ECS_HEALTH_LOG_PATTERN: validation-worker.*started|validation-worker.*heartbeat|heartbeat
+        run: bash scripts/check-ecs-service-deploy-health.sh
+
   deploy-validation-aws:
+    if: ${{ !inputs.settings_only }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read

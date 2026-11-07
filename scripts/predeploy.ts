@@ -525,8 +525,15 @@ const TARGETS: Target[] = [
   {
     key: "runtime-graph-operations",
     label: "runtime graph rollout controls",
-    matches: file => file === "scripts/runtime-graph-rollout.ts" || file === "scripts/runtime-graph-rollout.test.ts" || file.startsWith("scripts/lib/scanner-image-provenance") || file.startsWith("scripts/lib/scanner-configuration-scope") || file === "scripts/repair-scanner-image-provenance.ts" || file === "scripts/deploy-fast.ts" || file === "scripts/check-regional-scanner-parity.ts",
-    checks: [RUNTIME_GRAPH_RELEASE_CHECK],
+    matches: file => file === "scripts/runtime-graph-rollout.ts" || file === "scripts/runtime-graph-rollout.test.ts" || file.startsWith("scripts/lib/scanner-image-provenance") || file.startsWith("scripts/lib/scanner-configuration-scope") || file === "scripts/repair-scanner-image-provenance.ts" || file === "scripts/deploy-fast.ts" || file.startsWith("scripts/deploy-verified-ecs-settings.") || file === "scripts/check-regional-scanner-parity.ts",
+    checks: [
+      RUNTIME_GRAPH_RELEASE_CHECK,
+      {
+        key: "verified-ecs-settings",
+        label: "settings-only ECS image verification",
+        command: ["node", "--experimental-strip-types", "--test", "scripts/deploy-verified-ecs-settings.test.mjs"],
+      }
+    ],
   },
   {
     key: "web",
