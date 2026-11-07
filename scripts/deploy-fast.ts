@@ -617,8 +617,12 @@ async function deployWeb(input: { force: boolean; ref: string; workflowRef: stri
       "--target", input.ref
     ]);
     const { stage } = input;
+    const receiptEnable=process.env.CERTSCORE_DEPLOY_AUDIT_RECEIPTS === "1";
+    const rolloutEnable=process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1";
     const runId = await ensureWorkflowRun(WEB_WORKFLOW, input.workflowRef, input.ref,
-      stage ? ["-f", `staged_run_id=${stage.runId}`, "-f", `staged_image=${stage.image}`, "-f", `staged_base_sha=${stage.baseSha}`] : [], false, input.registrationGraceMs,
+      [...(stage ? ["-f", `staged_run_id=${stage.runId}`, "-f", `staged_image=${stage.image}`, "-f", `staged_base_sha=${stage.baseSha}`] : []),
+       ...(receiptEnable ? ["-f", "audit_privacy_form_receipts=true"] : []),
+       ...(rolloutEnable ? ["-f", "reviewed_opt_out_rollout=enable"] : [])], receiptEnable || rolloutEnable, input.registrationGraceMs,
       stage ? `Promote public web ${input.ref} from ${stage.runId} ${stage.image}` : undefined);
     const workflowRun = await waitForRun(runId);
     return { workflow: WEB_WORKFLOW, url: workflowRun.url };
@@ -635,8 +639,9 @@ async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; 
       "-f", "use_runtime_base=true",
       "-f", `push_runtime_base=${input.pushRuntimeBase ? "true" : "false"}`,
       "-f", "runtime_base_tag=validation-worker-runtime-base",
+      ...(process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1" ? ["-f", "reviewed_opt_out_rollout=enable"] : []),
       ...(stage ? ["-f", `expected_sha=${input.ref}`, "-f", `staged_run_id=${stage.runId}`, "-f", `staged_image=${stage.image}`] : []),
-    ], input.pushRuntimeBase, input.registrationGraceMs,
+    ], input.pushRuntimeBase || process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1", input.registrationGraceMs,
     stage ? `Promote validation ${input.ref} from ${stage.runId} ${stage.image}` : undefined);
     const workflowRun = await waitForRun(runId);
     return {
@@ -863,7 +868,8 @@ async function readScannerWebBotAuthPrivateKey() {
 async function applyScannerRuntimeConfiguration(enableCoverage = false) {
   console.log(`Applying ${SCANNER_MEMORY_SIZE} MB memory and verified ConsentCheck identity before image promotion.`);
   const privateKeyPem = await readScannerWebBotAuthPrivateKey();
-  const requiredEnvironment = { ...SCANNER_IDENTITY_ENVIRONMENT, ...(enableCoverage ? SCANNER_COVERAGE_ENVIRONMENT : {}) };
+  const requiredEnvironment = { ...SCANNER_IDENTITY_ENVIRONMENT, ...(enableCoverage ? SCANNER_COVERAGE_ENVIRONMENT : {}),
+    ...(enableCoverage && process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1" ? {CERTSCORE_REVIEWED_OPT_OUT_ROLLOUT_ENABLED:"1",CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED:"1"} : {}) };
   const results = await Promise.all(SCANNER_REGIONS.flatMap(region => [SCANNER_FUNCTION_NAME, `${SCANNER_FUNCTION_NAME}-inventory`].map(async (functionName) => {
     const current = await run([
       "aws", "lambda", "get-function-configuration",

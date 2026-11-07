@@ -22,7 +22,9 @@ export const saleSharingOptOutDispatchSchema = z.object({
   exactRouteAuthorization:saleSharingExactRouteAuthorizationSchema.optional(),
   canaryAuthorization:saleSharingCanaryAuthorizationSchema.optional(),
   redHatAuthorization:redHatOptOutAuthorizationSchema.optional(),
+  rolloutSource:z.object({version:z.literal("reviewed_opt_out_source.v1"),sourceSha256:hash,observationId:z.string().min(1).max(200),documentUrl:target,documentToken:z.string().min(1).max(300)}).strict().optional(),
 }).strict().superRefine((row,ctx)=>{
+  if(row.rolloutSource && (![SALE_SHARING_EXACT_ROUTE_POLICY,SALE_SHARING_REDIRECT_POLICY].includes(row.policyVersion as never) || row.canaryAuthorization))ctx.addIssue({code:"custom",message:"Production route source requires isolated reviewed v3 scope."});
   if(row.policyVersion===REDHAT_OPT_OUT_POLICY){
     if(row.exactTargetUrl!==REDHAT_OPT_OUT_TARGET||!row.redHatAuthorization||row.controlPolicy||row.canaryAuthorization||row.redirectAuthorization||row.exactRouteAuthorization)ctx.addIssue({code:'custom',message:'Red Hat requires its exact source authorization and isolated policy.'});
     return;

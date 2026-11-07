@@ -1,4 +1,4 @@
-import { saleSharingOptOutLaneOutcomeSchema, saleSharingOptOutDispatchSchema, SALE_SHARING_OPT_OUT_POLICY, REDHAT_OPT_OUT_POLICY } from "./sale-sharing-opt-out";
+import { saleSharingOptOutLaneOutcomeSchema, saleSharingOptOutDispatchSchema, SALE_SHARING_OPT_OUT_POLICY, REDHAT_OPT_OUT_POLICY, SALE_SHARING_EXACT_ROUTE_POLICY, SALE_SHARING_REDIRECT_POLICY } from "./sale-sharing-opt-out";
 
 /** Six evidence workers at most; the orchestration-only coordinator is separate. */
 export const PRESENCE_ONLY_CAPTURE_PROFILE = "presence_only_six_workers.v1" as const;
@@ -34,8 +34,8 @@ export function assertPrivacyCaptureProfile(payload: {
     if (!["sharded", "worker"].includes(String(payload.orchestrationMode)) || payload.cmpPreferenceInspection !== undefined)
       throw new Error("Conditional opt-out profile requires sharded orchestration and excludes preference workers.");
     const dispatch = saleSharingOptOutDispatchSchema.safeParse(payload.saleSharingOptOut);
-    if (!dispatch.success || ![SALE_SHARING_OPT_OUT_POLICY,REDHAT_OPT_OUT_POLICY].includes(dispatch.data.policyVersion as never) || dispatch.data.canaryAuthorization)
-      throw new Error("Conditional opt-out profile requires exact-target v1 or source-bound Red Hat v4 authorization; other redirect and Settings grants remain excluded.");
+    if (!dispatch.success || ![SALE_SHARING_OPT_OUT_POLICY,REDHAT_OPT_OUT_POLICY,SALE_SHARING_EXACT_ROUTE_POLICY,SALE_SHARING_REDIRECT_POLICY].includes(dispatch.data.policyVersion as never) || dispatch.data.canaryAuthorization || ([SALE_SHARING_EXACT_ROUTE_POLICY,SALE_SHARING_REDIRECT_POLICY].includes(dispatch.data.policyVersion as never) && !dispatch.data.rolloutSource))
+      throw new Error("Conditional opt-out profile requires exact-target v1, source-bound reviewed v3 or Red Hat v4 authorization.");
     if (payload.orchestrationMode === "sharded" && payload.gpcObservation?.enabled !== true)
       throw new Error("Conditional opt-out profile requires the independent GPC lane.");
     for (const lane of [payload.workerLane, requestedLane]) if (lane !== undefined && ![...PRESENCE_ONLY_WORKER_LANES, "sale_sharing_opt_out"].includes(lane as never))

@@ -41,6 +41,11 @@ on:
       - "!apps/web/scripts/**"
   workflow_dispatch:
     inputs:
+      reviewed_opt_out_rollout:
+        description: "Owner-authorized reviewed opt-out recipes; preserve all execution safeguards"
+        type: choice
+        default: preserve
+        options: [preserve, enable, disable]
       stage_only:
         description: Verify and stage the exact main image in ECR
         type: boolean
@@ -323,7 +328,7 @@ jobs:
         env:
           STAGING_ENABLED: ${{ vars.AWS_STAGED_COUPLED_RELEASES }}
           STAGE_ONLY: ${{ inputs.stage_only }}
-          STANDARD_SETTINGS: ${{ !inputs.use_compiler_cache && !inputs.push_runtime_base && !inputs.allow_non_descendant_deploy && !inputs.use_x64_fallback && inputs.marketplace_light == 'preserve' && inputs.marketplace_browser == 'preserve' }}
+          STANDARD_SETTINGS: ${{ !inputs.use_compiler_cache && !inputs.push_runtime_base && !inputs.allow_non_descendant_deploy && !inputs.use_x64_fallback && inputs.marketplace_light == 'preserve' && inputs.marketplace_browser == 'preserve' && !inputs.audit_privacy_form_receipts && inputs.reviewed_opt_out_rollout == 'preserve' }}
         run: |
           test "$STAGING_ENABLED" = true
           test "$GITHUB_EVENT_NAME" = workflow_dispatch
@@ -634,6 +639,8 @@ jobs:
           if [[ -n "$STAGED_RUN_ID" ]]; then node_types=(node --experimental-strip-types); fi
           "${node_types[@]}" scripts/configure-marketplace-light.ts target-task-definition.json "${{ inputs.marketplace_light || 'preserve' }}"
           "${node_types[@]}" scripts/configure-marketplace-browser.ts target-task-definition.json "${{ inputs.marketplace_browser || 'preserve' }}"
+
+          "${node_types[@]}" scripts/configure-reviewed-opt-out.ts target-task-definition.json "${{ inputs.reviewed_opt_out_rollout || 'preserve' }}" certscore-web
 
           TARGET_TASK_DEFINITION="$(aws ecs register-task-definition \
             --cli-input-json file://target-task-definition.json \

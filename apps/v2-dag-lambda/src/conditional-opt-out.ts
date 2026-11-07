@@ -4,15 +4,11 @@ import {KNOWN_CMP_REGISTRY} from '@website-signal-risk-scanner/shared';
 export type {ConditionalOptOutDecision} from '@certscore/contracts';
 import {type ConditionalOptOutDecision, explicitOptOutEntranceName, BOUND_OPT_OUT_RECIPE} from '@certscore/contracts';
 
-export function optOutTargetHeld(target:string) {
-  try { const host=new URL(target).hostname.toLowerCase(); return ['readcube.com','gimbal.com','infillion.com'].some(domain=>host===domain||host.endsWith('.'+domain)); } catch { return true; }
-}
 /** Scheduling eligibility only, from an already checksum-verified consent artifact.
  * The independent worker rechecks the live DOM, geometry, label, state and route.
  * No policy text, generic Settings, unreviewed links, or inferred CMP identities authorize dispatch. */
 export function conditionalOptOutCandidate(input:{bundle:CanonicalEvidenceBundle;scanId:string;targetUrl:string;sourceSha256:string;boundControls?:boolean}):ConditionalOptOutDecision {
   const no=(reason:ConditionalOptOutDecision['reason']):ConditionalOptOutDecision=>({version:'conditional_opt_out_dispatch.v3',scanId:input.scanId,status:'skipped',reason});
-  if(optOutTargetHeld(input.targetUrl))return no('held_target');
   if(input.bundle.scanId!==input.scanId||!/^[a-f0-9]{64}$/.test(input.sourceSha256))return no('source_unverified');
   if(input.bundle.url!==input.targetUrl||new URL(input.targetUrl).protocol!=='https:')return no('target_changed');
   let observedControlId:string|undefined;

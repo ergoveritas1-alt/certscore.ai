@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 export const MASTER_SOURCE_REVIEW={
   "version": "certscore.audit-master-source-review.v1",
-  "scope": "Local release reconciliation source review. Active audit activation and sealed historical receipts retain their original pins. No deployment or acquisition.",
+  "scope": "Owner-authorized production release review. Source changes reconciled with live ancestry; immutable historical receipts retain their original hashes.",
   "sources": [
     {
       "file": "apps/web/app/(marketing)/scan/[scanId]/page.tsx",

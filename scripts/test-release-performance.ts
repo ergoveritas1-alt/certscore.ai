@@ -3,7 +3,7 @@ const result = spawnSync(process.execPath, ['--import', 'tsx', '--test', '--test
   'scripts/lib/release-scheduler.test.ts', 'scripts/lib/release-receipts.test.ts', 'scripts/lib/release-shards.test.ts',
   'scripts/lib/deployed-image.test.mjs', 'apps/v2-dag-lambda/src/dev-scripts.test.ts',
   'scripts/lib/deployment-inputs.test.mjs', 'scripts/lib/scanner-artifact.test.ts', 'scripts/lib/staged-coupled-release.test.ts', 'scripts/wait-for-staged-ecs.test.mjs', 'scripts/wait-for-ecs-migration.test.mjs',
-  'scripts/release-preparation.test.ts', ...(process.argv.includes('--regressions') ? ['scripts/deploy-latency.test.ts',
+  'scripts/configure-reviewed-opt-out.test.ts', 'scripts/release-preparation.test.ts', ...(process.argv.includes('--regressions') ? ['scripts/deploy-latency.test.ts',
   'scripts/lib/deployment-consumer-barrier.test.ts', 'scripts/lib/scanner-runtime-base.test.ts',
   'scripts/lib/scanner-image-provenance.test.ts', 'scripts/lib/scanner-configuration-scope.test.ts',
   'scripts/deployment-workflow-runs.test.ts', 'scripts/web-deploy-migration-order.test.ts',

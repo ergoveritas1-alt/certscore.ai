@@ -13,7 +13,7 @@ test('conditional opt-out requires a joined supported label, locator and documen
  const missing=structuredClone(bundle);delete missing.consentUiObservations[0]!.documentIdentity;assert.equal(run(missing).status,'skipped');
  const ambiguous=structuredClone(bundle);ambiguous.consentUiObservations[0]!.controls.push({...ambiguous.consentUiObservations[0]!.controls[0]!,selectorHint:'button#second.ot-sdk-show-settings'});assert.equal(run(ambiguous).reason,'ambiguous_control');
  assert.equal(conditionalOptOutCandidate({bundle,scanId:'other',targetUrl:bundle.url,sourceSha256:'a'.repeat(64)}).reason,'source_unverified');
- assert.equal(conditionalOptOutCandidate({bundle,scanId:bundle.scanId,targetUrl:'https://gimbal.com/',sourceSha256:'a'.repeat(64)}).reason,'held_target');
+ assert.equal(conditionalOptOutCandidate({bundle,scanId:bundle.scanId,targetUrl:'https://gimbal.com/',sourceSha256:'a'.repeat(64)}).reason,'target_changed');
  assert.equal(conditionalOptOutCandidate({bundle,scanId:bundle.scanId,targetUrl:'https://www.example.com/',sourceSha256:'a'.repeat(64)}).reason,'target_changed');
 });
 
@@ -38,5 +38,5 @@ test('v3 presence rejects conflicting native document bindings and unbound sourc
  assert.equal(run().controlObserved,false);c.domBinding.documentIdentity=o.documentIdentity!;assert.equal(run().controlObserved,true);
  c.domBinding.documentUrl='https://other.example/';assert.equal(run().controlObserved,false);
  assert.equal(run({sourceSha256:'bad'}).controlObserved,undefined);assert.equal(run({scanId:'other'}).controlObserved,undefined);
- assert.equal(run({targetUrl:'https://gimbal.com/'}).reason,'held_target');
+ assert.equal(run({targetUrl:'https://gimbal.com/'}).reason,'target_changed');
 });

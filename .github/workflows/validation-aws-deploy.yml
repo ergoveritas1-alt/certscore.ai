@@ -42,6 +42,11 @@ on:
       - "!apps/web/**/*.spec.tsx"
   workflow_dispatch:
     inputs:
+      reviewed_opt_out_rollout:
+        description: "Owner-authorized reviewed opt-out recipes; preserve all execution safeguards"
+        type: choice
+        default: preserve
+        options: [preserve, enable, disable]
       stage_only:
         description: Verify and stage the exact validation worker image in ECR
         type: boolean
@@ -533,6 +538,8 @@ jobs:
                   else .
                   end
                 ))' > /tmp/validation-worker-task-definition.json
+
+          node --experimental-strip-types scripts/configure-reviewed-opt-out.ts /tmp/validation-worker-task-definition.json "${{ inputs.reviewed_opt_out_rollout || 'preserve' }}" "${ECS_WORKER_CONTAINER_NAME}"
 
           task_definition_arn="$(
             aws ecs register-task-definition \

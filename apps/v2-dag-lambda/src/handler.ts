@@ -4,9 +4,10 @@ import { isLoopbackPostRefusalTarget } from "@certscore/scan-core/post-refusal-t
 import { runtimeEvidenceClockSchema } from "@certscore/contracts";
 import { boundRuntimeDocumentStatus } from "@certscore/contracts";
 import { claimRedHatCanary, type RedHatCanaryOptions } from "./redhat-opt-out-canary";
+import {claimReviewedOptOutRollout, reviewedRouteDispatch} from "./reviewed-opt-out-rollout";
 import {redHatConditionalDispatch} from './redhat-opt-out-dispatch';
 import {REDHAT_OPT_OUT_POLICY} from '@certscore/contracts';
-import { conditionalOptOutCandidate, optOutTargetHeld, type ConditionalOptOutDecision } from "./conditional-opt-out";
+import { conditionalOptOutCandidate, type ConditionalOptOutDecision } from "./conditional-opt-out";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
 import { assertPrivacyCaptureProfile, PRESENCE_ONLY_CAPTURE_PROFILE, CONDITIONAL_OPT_OUT_CAPTURE_PROFILE, type PrivacyCaptureProfile } from "@certscore/contracts";
 import { describeCaptureFailure } from "@certscore/contracts";
@@ -2495,6 +2496,10 @@ export async function authorizeSaleSharingCanaryStage(payload:LocalV2DagLambdaDi
     runtime?:{buildGitSha?:string;functionVersion?:string;region?:string;memoryMb?:number};redHat?:RedHatCanaryOptions}={}) {
   const config=payload.saleSharingOptOut;
   if(!config||config.policyVersion===SALE_SHARING_OPT_OUT_POLICY)return;
+  if(process.env.CERTSCORE_REVIEWED_OPT_OUT_ROLLOUT_ENABLED==="1" && (config.policyVersion===REDHAT_OPT_OUT_POLICY || config.rolloutSource)){
+    await claimReviewedOptOutRollout({stage,scanId:payload.scanId,targetUrl:payload.targetUrl,region:payload.awsRegion,functionName:payload.functionName,dispatch:config,parentDispatchSha256:stage==="coordinator"?postRefusalParentDispatchSha256(payload):payload.parentDispatchSha256},options);
+    return;
+  }
   if(config.policyVersion===REDHAT_OPT_OUT_POLICY){
     if(payload.privacyCaptureProfile!==CONDITIONAL_OPT_OUT_CAPTURE_PROFILE)throw Error("redhat_canary_requires_conditional_profile");
     await claimRedHatCanary({stage,scanId:payload.scanId,targetUrl:payload.targetUrl,region:payload.awsRegion,functionName:payload.functionName,
@@ -2522,7 +2527,6 @@ export async function runSaleSharingOptOutArtifactChain(payload: LocalV2DagLambd
   options: { artifactRoot: string; s3Client?: S3PutClient; signal?: AbortSignal; artifactSignal?: AbortSignal; deadlineAtMs?: number;
     onScanCoreComplete?: () => void }): Promise<ArtifactChainResult> {
   assertPrivacyCaptureProfile(payload);
-  if(payload.privacyCaptureProfile===CONDITIONAL_OPT_OUT_CAPTURE_PROFILE && optOutTargetHeld(payload.targetUrl))throw new Error("Conditional opt-out preserves the held target exclusion.");
   if (payload.workerLane !== "sale_sharing_opt_out" || !payload.saleSharingOptOut ||
     process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED !== "1" || !payload.parentDispatchSha256) throw new Error("Sale/sharing opt-out is not authorized.");
   const memory = Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE ?? (process.env.AWS_LAMBDA_FUNCTION_NAME ? "NaN" : "4096"));
@@ -2663,13 +2667,15 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       if(process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED !== "1")return skip("worker_disabled");
       if(!consent || !result.artifactMetadata?.scanArtifactUri?.sha256)return skip("source_unverified");
       const redHat=redHatConditionalDispatch({bundle:consent,scanId:payload.scanId,targetUrl:payload.targetUrl,sourceSha256:result.artifactMetadata.scanArtifactUri.sha256,enabled:process.env.CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED==='1'});
-      const candidate=redHat?.decision??conditionalOptOutCandidate({bundle:consent,scanId:payload.scanId,targetUrl:payload.targetUrl,sourceSha256:result.artifactMetadata.scanArtifactUri.sha256,boundControls:payload.saleSharingOptOut?.controlPolicy==="explicit_opt_out_controls.v1"});
+      const reviewedRoute=process.env.CERTSCORE_REVIEWED_OPT_OUT_ROLLOUT_ENABLED==="1"?reviewedRouteDispatch({bundle:consent,scanId:payload.scanId,targetUrl:payload.targetUrl,sourceSha256:result.artifactMetadata.scanArtifactUri.sha256}):null;
+      const selected=redHat??reviewedRoute;
+      const candidate=selected?.decision??conditionalOptOutCandidate({bundle:consent,scanId:payload.scanId,targetUrl:payload.targetUrl,sourceSha256:result.artifactMetadata.scanArtifactUri.sha256,boundControls:payload.saleSharingOptOut?.controlPolicy==="explicit_opt_out_controls.v1"});
       if(candidate.reason!=="supported_control")return finish(candidate);
       const timeLeft=()=>options.deadlineAtMs===undefined?undefined:Math.min(600000,Math.max(0,options.deadlineAtMs-Date.now()));
       let remainingTimeMs=timeLeft();
       if(remainingTimeMs===undefined || remainingTimeMs<SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS)return finish({...candidate,status:"skipped",reason:"insufficient_remaining_time"});
-      if(redHat){
-        const authorizedPayload={...payload,saleSharingOptOut:redHat.dispatch};
+      if(selected){
+        const authorizedPayload={...payload,saleSharingOptOut:selected.dispatch};
         const signal=options.signal?AbortSignal.any([options.signal,optOutController.signal]):optOutController.signal;
         try {
           await authorizeSaleSharingCanaryStage(authorizedPayload,"coordinator",{redHat:options.canary?.redHat,signal,
