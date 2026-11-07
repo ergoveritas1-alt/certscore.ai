@@ -429,15 +429,19 @@ class SlotRotationTests(unittest.TestCase):
         pages = [{"key": f"page-{i}", "url": f"/page-{i}.html", "expectedSignals": []} for i in range(5)]
         for slot in range(3):
             job = handler.build_slot_job(pages, slot)
-            with mock.patch.object(handler, "scheduled_slot", return_value=slot), mock.patch.object(handler, "acquire_slot_lock", return_value=True), mock.patch.object(handler, "request", return_value={"sentinelCorpus": {"pages": pages}}), mock.patch.object(handler, "corpus_preflight", return_value=[]) as preflight, mock.patch.object(handler, "ssm") as ssm, mock.patch.object(handler, "get_secret", return_value="test") as secret, mock.patch.object(handler, "check_accessibility_evidence", return_value={"issue": False}) as accessibility, mock.patch.object(handler, "rest_scan", return_value=("scan", {"status": "completed"}, {}, {})) as rest, mock.patch.object(handler, "mcp_scan", return_value=("scan", {"status": "completed"}, {}, {})) as mcp, mock.patch.object(handler, "load_authoritative_scan", return_value={}), mock.patch.object(handler, "assess_authoritative_freshness", return_value={"freshnessIssue": False}), mock.patch.object(handler, "ddb"), mock.patch.object(handler, "ses") as ses, mock.patch("builtins.print"):
+            with mock.patch.object(handler, "scheduled_slot", return_value=slot), mock.patch.object(handler, "acquire_slot_lock", return_value=True), mock.patch.object(handler, "request", return_value={"sentinelCorpus": {"pages": pages}}), mock.patch.object(handler, "corpus_preflight", return_value=[]) as preflight, mock.patch.object(handler, "ssm") as ssm, mock.patch.object(handler, "get_secret", return_value="test") as secret, mock.patch.object(handler, "check_accessibility_evidence", return_value={"issue": False}) as accessibility, mock.patch.object(handler, "rest_scan", return_value=("scan", {"status": "completed"}, {}, {})) as rest, mock.patch.object(handler, "mcp_scan", return_value=("scan", {"status": "completed"}, {}, {})) as mcp, mock.patch.object(handler, "load_authoritative_scan", return_value={}) as authoritative, mock.patch.object(handler, "assess_authoritative_freshness", return_value={"freshnessIssue": False}), mock.patch.object(handler, "ddb"), mock.patch.object(handler, "ses") as ses, mock.patch("builtins.print"):
                 ssm.get_parameter.return_value = {"Parameter": {"Value": "test"}}
                 result = handler.handler({"scheduledTime": "2026-09-15T17:20:00Z"}, None)
             preflight.assert_called_once_with([job["page"]])
             self.assertEqual(rest.call_count + mcp.call_count, 1)
             self.assertEqual(mcp.call_count, int(job["transport"] == "mcp"))
             self.assertEqual(secret.call_count, mcp.call_count)
+            self.assertEqual(ssm.get_parameter.call_count, rest.call_count)
+            expected_key = None if mcp.called else "test"
+            authoritative.assert_called_once_with("scan", expected_key)
             self.assertEqual(result["jobs"], 1)
             accessibility.assert_called_once()
+            self.assertEqual(accessibility.call_args.args[2], expected_key)
             self.assertFalse(result["results"][0]["accessibility"]["issue"])
             self.assertEqual(result["cycleSlot"], slot)
             self.assertEqual(result["results"][0]["location"], job["location"])
@@ -448,6 +452,23 @@ class SlotRotationTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 handler.rest_scan("https://example.com", "eu_ie", "api", "test")
         self.assertEqual(request.call_count, 1)
+
+    def test_rest_credential_rejection_is_persisted_and_alerted_separately(self):
+        pages = [{"key": f"page-{i}", "url": f"/page-{i}.html", "expectedSignals": []} for i in range(5)]
+        error = handler.SentinelHttpError(401, handler.API + "/api/v2/scans", "unauthorized")
+        with mock.patch.object(handler, "scheduled_slot", return_value=0), \
+                mock.patch.object(handler, "acquire_slot_lock", return_value=True), \
+                mock.patch.object(handler, "request", side_effect=[{"sentinelCorpus": {"pages": pages}}, error]) as request, \
+                mock.patch.object(handler, "corpus_preflight", return_value=[]), \
+                mock.patch.object(handler, "ssm") as ssm, mock.patch.object(handler, "ddb"), \
+                mock.patch.object(handler, "ses") as ses, mock.patch("builtins.print"):
+            ssm.get_parameter.return_value = {"Parameter": {"Value": "test"}}
+            result = handler.handler({"scheduledTime": "2026-09-15T17:20:00Z"}, None)
+        self.assertEqual(request.call_count, 2)  # Manifest and one rejected submission.
+        self.assertEqual(result["scannerFailures"], 1)
+        self.assertEqual(result["results"][0]["issueCodes"], ["sentinel_rest_credential_rejected"])
+        body = ses.send_email.call_args.kwargs["Content"]["Simple"]["Body"]["Text"]["Data"]
+        self.assertIn("sentinel REST credential was rejected", body)
 
 
 class AccessibilityEvidenceTests(unittest.TestCase):
@@ -487,7 +508,9 @@ class AccessibilityEvidenceTests(unittest.TestCase):
         self.assertTrue(result["issue"])
         self.assertEqual(result["reasonCodes"], ["accessibility_canonical_finding_missing"])
         self.assertEqual(result["missingFindingIds"], ["keyboard_navigation_accessibility_issue"])
-        self.assertEqual(len(result["observedRuleIds"]), 5)
+        self.assertEqual(result["observedRuleIds"], [
+            "image-alt", "link-name", "label", "button-name", "color-contrast", "nested-interactive",
+        ])
         self.assertEqual(read.call_count, 1, "reuse findings already read through REST or MCP")
 
     def test_canonical_findings_require_typed_same_scan_complete_results(self):
@@ -509,10 +532,26 @@ class AccessibilityEvidenceTests(unittest.TestCase):
         self.assertEqual(read.call_count, 2)
         self.assertTrue(all(c.kwargs.get("method", "GET") == "GET" for c in read.call_args_list))
 
+    def test_public_mcp_evidence_reconciliation_omits_the_rest_bearer(self):
+        with mock.patch.object(handler, "request", side_effect=[self.page(), self.findings()]) as read:
+            result = handler.check_accessibility_evidence(self.url, "scan-123", None, handler.ACCESSIBILITY_EXPECTATIONS)
+        self.assertFalse(result["issue"])
+        self.assertEqual([call.kwargs["headers"] for call in read.call_args_list], [{}, {}])
+
+    def test_evidence_access_denial_is_not_reported_as_a_missing_rule(self):
+        error = handler.SentinelHttpError(403, handler.API, "forbidden")
+        with mock.patch.object(handler, "request", side_effect=error):
+            result = handler.check_accessibility_evidence(self.url, "scan-123", None, handler.ACCESSIBILITY_EXPECTATIONS)
+        self.assertTrue(result["issue"])
+        self.assertEqual(result["reasonCodes"], ["accessibility_evidence_access_denied"])
+        self.assertEqual(result["missingRuleIds"], [])
+
     def test_all_bound_required_violations_pass_even_with_unrelated_review_limits(self):
         result = self.assess(self.page())
         self.assertFalse(result["issue"])
-        self.assertEqual(len(result["observedRuleIds"]), 5)
+        self.assertEqual(result["observedRuleIds"], [
+            "image-alt", "link-name", "label", "button-name", "color-contrast", "nested-interactive",
+        ])
 
     def test_small_root_objects_and_expanded_violation_arrays_are_both_supported(self):
         page = self.page()

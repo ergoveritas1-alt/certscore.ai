@@ -12,14 +12,52 @@ MAX_DELIVERY_DELAY_SECONDS = 180
 ACTIVE_SCAN_STATUSES = {"queued", "running", "finalizing"}
 USABLE_SCAN_STATUSES = {"completed", "completed_limited", "complete", "limited"}
 ACCESSIBILITY_EXPECTATIONS = {
-    "contractVersion": "certscore.sentinel-accessibility.v1",
+    "contractVersion": "certscore.sentinel-accessibility.v2",
     "requiredRules": [
-        {"ruleId": "image-alt", "selector": "#sentinel-missing-alt"},
-        {"ruleId": "label", "selector": "#sentinel-unlabelled-input"},
-        {"ruleId": "button-name", "selector": "#sentinel-unnamed-button"},
-        {"ruleId": "color-contrast", "selector": "#sentinel-low-contrast"},
-        {"ruleId": "nested-interactive", "selector": "#sentinel-nested-control"},
+        {
+            "ruleId": "image-alt",
+            "selector": "#sentinel-missing-alt"
+        },
+        {
+            "ruleId": "link-name",
+            "selector": "#sentinel-shared-image-link"
+        },
+        {
+            "ruleId": "label",
+            "selector": "#sentinel-unlabelled-input"
+        },
+        {
+            "ruleId": "button-name",
+            "selector": "#sentinel-unnamed-button"
+        },
+        {
+            "ruleId": "color-contrast",
+            "selector": "#sentinel-low-contrast"
+        },
+        {
+            "ruleId": "nested-interactive",
+            "selector": "#sentinel-nested-control"
+        }
     ],
+    "imageLinkIdentity": {
+        "sharedImage": "#sentinel-shared-image",
+        "sharedLink": "#sentinel-shared-image-link",
+        "distinctImage": "#sentinel-missing-alt",
+        "distinctLink": "#sentinel-distinct-image-link"
+    },
+    "score": {
+        "scoreVersion": "overall-posture.v7",
+        "deductionPoints": 12,
+        "rules": {
+            "text_alternative_accessibility_issue": 3,
+            "semantic_labeling_accessibility_issue": 4,
+            "visual_contrast_accessibility_issue": 3
+        },
+        "cappedTailRules": [
+            "target_size_accessibility_issue",
+            "keyboard_navigation_accessibility_issue"
+        ]
+    }
 }
 ACCESSIBILITY_FINDING_IDS = (
     "text_alternative_accessibility_issue", "semantic_labeling_accessibility_issue",
@@ -42,6 +80,11 @@ def jwt(secret):
     sig = base64.urlsafe_b64encode(hmac.new(secret.encode(), body.encode(), hashlib.sha256).digest()).rstrip(b"=").decode()
     return body + "." + sig
 
+class SentinelHttpError(RuntimeError):
+    def __init__(self, status_code, url, detail):
+        self.status_code = status_code
+        super().__init__(f"{status_code} {url}: {detail}")
+
 def request(url, method="GET", headers=None, body=None, timeout=840):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method, headers={"accept": "application/json", "accept-language": "en-US,en;q=0.9", "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36", **(headers or {})})
@@ -50,7 +93,12 @@ def request(url, method="GET", headers=None, body=None, timeout=840):
             raw = r.read().decode()
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as e:
-        raise RuntimeError(f"{e.code} {url}: {e.read().decode()[:700]}")
+        with e:
+            raise SentinelHttpError(e.code, url, e.read(700).decode(errors="replace")) from e
+
+def retained_read_headers(api_key):
+    # MCP canary scans are public. A REST slot continues to authenticate its own reads.
+    return {"authorization": "Bearer " + api_key} if api_key is not None else {}
 
 def scan_id(x):
     if not isinstance(x, dict): return None
@@ -174,7 +222,7 @@ def assess_authoritative_freshness(requested_url, run_started_at, authoritative,
     }
 
 def load_authoritative_scan(scan_id, api_key):
-    headers = {"authorization": "Bearer " + api_key}
+    headers = retained_read_headers(api_key)
     last_error = None
     for attempt in range(6):
         try:
@@ -531,7 +579,8 @@ def assess_accessibility_evidence(url, sid, expected, page):
     """Check retained typed rule violations, never narrative keywords or review items."""
     result = {"contractVersion": "certscore.sentinel-accessibility-check.v1", "expected": expected,
               "issue": True, "reasonCodes": [], "observedRuleIds": [], "missingRuleIds": []}
-    if not isinstance(expected, dict) or expected.get("contractVersion") != "certscore.sentinel-accessibility.v1":
+    if not isinstance(expected, dict) or expected.get("contractVersion") not in (
+            "certscore.sentinel-accessibility.v1", "certscore.sentinel-accessibility.v2"):
         result["reasonCodes"] = ["accessibility_fixture_contract_unavailable"]
         return result
     required = expected.get("requiredRules")
@@ -605,14 +654,16 @@ def assess_accessibility_findings(sid, page):
 
 
 def check_accessibility_evidence(url, sid, api_key, expected, findings=None):
+    headers = retained_read_headers(api_key)
     try:
         page = request(API + "/api/v2/scans/" + sid + "/report-evidence?section=accessibility",
-                       headers={"authorization": "Bearer " + api_key}, timeout=30)
+                       headers=headers, timeout=30)
         result = assess_accessibility_evidence(url, sid, expected, page)
-    except Exception:
+    except Exception as error:
         # Operational coverage failure only; never invent a clean result or retry a scan.
+        reason = "accessibility_evidence_access_denied" if isinstance(error, SentinelHttpError) and error.status_code in (401, 403) else "accessibility_evidence_unavailable"
         return {"contractVersion": "certscore.sentinel-accessibility-check.v2", "expected": expected,
-                "issue": True, "reasonCodes": ["accessibility_evidence_unavailable"],
+                "issue": True, "reasonCodes": [reason],
                 "observedRuleIds": [], "missingRuleIds": [], "expectedFindingIds": list(ACCESSIBILITY_FINDING_IDS),
                 "observedFindingIds": [], "missingFindingIds": []}
     # REST reuses its existing findings read. MCP supplies its own typed list;
@@ -620,7 +671,7 @@ def check_accessibility_evidence(url, sid, api_key, expected, findings=None):
     if findings is None:
         try:
             findings = request(API + "/api/v2/scans/" + sid + "/findings",
-                               headers={"authorization": "Bearer " + api_key}, timeout=30)
+                               headers=headers, timeout=30)
         except Exception:
             findings = {}
     canonical = assess_accessibility_findings(sid, findings)
@@ -699,15 +750,17 @@ def handler(event, context):
     jobs = [build_slot_job(pages, slot)]
     selected_pages = [job["page"] for job in jobs]
     corpus_issues.extend(corpus_preflight(selected_pages))
-    key = ssm.get_parameter(Name="/certscore/sentinel/api-key", WithDecryption=True)["Parameter"]["Value"]
-    jwt_secret = get_secret("certscore/oauth-jwt-secret") if jobs[0]["transport"] == "mcp" else None
+    key = None
     results = []
     for job in jobs:
         throttle_seconds = 0
         t = time.time(); p, loc, transport = job["page"], job["location"], job["transport"]
         try:
-            fn = mcp_scan if transport == "mcp" else rest_scan
-            out = fn(ROOT + p["url"], loc, jwt_secret) if transport == "mcp" else fn(ROOT + p["url"], loc, transport, key)
+            if transport == "mcp":
+                out = mcp_scan(ROOT + p["url"], loc, get_secret("certscore/oauth-jwt-secret"))
+            else:
+                key = ssm.get_parameter(Name="/certscore/sentinel/api-key", WithDecryption=True)["Parameter"]["Value"]
+                out = rest_scan(ROOT + p["url"], loc, transport, key)
             sid, st, bundle, created = out; observed = signals(bundle)
             missing = [s for s in p.get("expectedSignals", []) if not observed.get(s)]
             requested_url = ROOT + p["url"]
@@ -730,7 +783,12 @@ def handler(event, context):
                 scanner_failures.append(incident)
         except Exception as e:
             row = {"page": p["key"], "location": loc, "transport": transport, "durationMs": int((time.time()-t)*1000), "throttleSeconds": throttle_seconds, "error": str(e)}
-            scanner_failures.append({**row, "issue": str(e)})
+            if transport != "mcp" and isinstance(e, SentinelHttpError) and e.status_code == 401:
+                row["issueCodes"] = ["sentinel_rest_credential_rejected"]
+                issue = "The sentinel REST credential was rejected with HTTP 401. Check the credential before retrying."
+            else:
+                issue = str(e)
+            scanner_failures.append({**row, "issue": issue})
         results.append(row)
     # Regional/transport variance is diagnostic only. It identifies signals that
     # appear on at least one fresh scan but disappear on another, without treating
@@ -748,7 +806,7 @@ def handler(event, context):
     run = {"runId": run_id, "startedAt": started, "slot": slot, "cycleSlot": slot % 45, "scheduledTime": event["scheduledTime"], "cadenceMinutes": 20, "jobs": len(results), "selectedPages": [p["key"] for p in selected_pages], "failures": len(failures), "scannerFailures": len(scanner_failures), "reconciledScannerIncidents": len(reconciled_incidents), "reconciledScannerIncidentIds": [row.get("scanId") for row in reconciled_incidents if row.get("scanId")], "corpusIssues": len(corpus_issues), "regionalVariance": variance, "results": results}
     ddb.put_item(Item={"pk": "run#" + run_id, **run, "expiresAt": int(time.time()) + 90 * 86400})
     if scanner_failures:
-        summary = f"{len(scanner_failures)} scanner execution or required WCAG detection issue(s) detected across {len(results)} sentinel scans. {len(corpus_issues)} keyword-based canary-signal mismatch(es) were recorded for diagnostics but are not alert conditions."
+        summary = f"{len(scanner_failures)} sentinel monitoring issue(s) detected across {len(results)} scheduled checks. {len(corpus_issues)} canary diagnostics were recorded separately."
         def failure_line(f):
             return "- page={page} location={location} transport={transport} scanId={sid} issue={issue}".format(
                 page=f.get("page", "n/a"), location=f.get("location", "n/a"), transport=f.get("transport", "n/a"),
@@ -778,7 +836,7 @@ def handler(event, context):
             FromEmailAddress=os.environ.get("ALERT_FROM", "support@certscore.ai"),
             Destination={"ToAddresses": ["support@certscore.ai"]},
             Content={"Simple": {
-                "Subject": {"Data": "[CertScore scanner alert] " + str(len(scanner_failures)) + " issue(s)"},
+                "Subject": {"Data": "[CertScore.ai sentinel alert] " + str(len(scanner_failures)) + " issue(s)"},
                 "Body": {"Text": {"Data": body}, "Html": {"Data": html}}
             }}
         )

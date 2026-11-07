@@ -43,4 +43,3 @@ test("generic profiling rights do not become a source practice through quality r
   const text = "You have the right to object to profiling and automated decisions concerning your personal data. " + "Please read this information carefully before making a request. ".repeat(14) + "Privacy Policy.";
   assert.notEqual(witness(text)?.signalObserved, "observed");
 });
-
