@@ -39,6 +39,11 @@ RUN --mount=type=cache,id=wc01-web-pnpm-store,target=/pnpm/store \
     --filter @website-signal-risk-scanner/web... \
     --filter @certscore/vendor-resolver...
 
+# A named build context overrides this empty fallback in CI. It contains only
+# previously successful compiler cache bytes, never .next release output.
+FROM scratch AS web-compiler-cache-input
+COPY scripts/empty-compiler-cache /compiler-cache
+
 FROM build-dependencies AS builder
 
 # Next's production compilation now exceeds V8's default ~4 GB old-space
@@ -80,6 +85,7 @@ ARG BUILD_GIT_SHA=""
 ARG BUILD_IMAGE_TAG=""
 ARG BUILD_RUNTIME_TARGET="ecs-fargate"
 ARG WEB_TYPECHECK_VERIFIED_SHA=""
+ARG WEB_COMPILER_CACHE_ENABLED="0"
 
 COPY apps/web ./apps/web
 COPY scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
@@ -92,8 +98,24 @@ RUN printf 'export const generatedBuildInfo = {"gitRef":"%s","gitSha":"%s","imag
   "${BUILD_RUNTIME_TARGET}" > /app/apps/web/server/generated-build-info.ts
 
 RUN rm -rf ./apps/web/.next
-RUN WEB_TYPECHECK_VERIFIED_SHA="${WEB_TYPECHECK_VERIFIED_SHA}" \
+COPY --from=web-compiler-cache-input /compiler-cache /app/apps/web/.next/cache
+RUN WEB_COMPILER_CACHE_ENABLED="${WEB_COMPILER_CACHE_ENABLED}" \
+  WEB_TYPECHECK_VERIFIED_SHA="${WEB_TYPECHECK_VERIFIED_SHA}" \
   pnpm --filter @website-signal-risk-scanner/web build:container
+
+# Debian uses glibc. Next's trace includes Sharp binaries for other targets.
+ARG TARGETARCH
+RUN case "${TARGETARCH}" in \
+      arm64) other_arch=x64 ;; \
+      amd64) other_arch=arm64 ;; \
+      *) exit 0 ;; \
+    esac \
+  && img=/app/apps/web/.next/standalone/node_modules/@img \
+  && rm -rf "$img"/sharp-linuxmusl-* "$img"/sharp-libvips-linuxmusl-* \
+    "$img/sharp-linux-$other_arch" "$img/sharp-libvips-linux-$other_arch"
+
+FROM scratch AS web-compiler-cache-export
+COPY --from=builder /app/apps/web/.next/cache /compiler-cache
 
 FROM node:22-bookworm-slim AS web-runtime-base
 

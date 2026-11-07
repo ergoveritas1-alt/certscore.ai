@@ -1,12 +1,18 @@
 import { spawn } from "node:child_process";
-import { deployConsumersBeforeProducer } from "./lib/deployment-consumer-barrier";
+import { deployConsumersBeforeProducer, deployConsumersWithPreparedProducer } from "./lib/deployment-consumer-barrier";
 import { assertScannerConfigurationScope, configureScannerSettingsUnlessPreserved, scannerOperationalSnapshot,
   assertScannerOperationalSettingsPreserved, type ScannerOperationalSnapshot } from "./lib/scanner-configuration-scope";
+import { checkReleasePrerequisites } from "./lib/release-prerequisites";
+import { assertScannerArtifact, assertScannerArtifactMetadata, settleScannerOperations, runScannerPromotions, type ScannerArtifact } from "./lib/scanner-artifact";
+import { readStagedEcsReceipt } from "./lib/staged-ecs-image.mjs";
+import { assertStagedCoupledRelease, stagedPromotionTiming, type StagedCoupledRelease } from "./lib/staged-coupled-release";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { awsScannerImageControl, synchronizeScannerImage } from "./lib/scanner-image-provenance";
+import { installedEcsRevision } from "./lib/deployed-image.mjs";
+import { deploymentInputDecision } from "./lib/deployment-inputs.mjs";
 import { runtimeBaseInputsChanged } from "./lib/runtime-base-inputs.mjs";
 import { scannerRuntimeBaseMode } from "./lib/scanner-runtime-base";
 import { requireExpectedWebRevision, resolveDeploymentWorkflowRun, type DeploymentWorkflowRun } from "./lib/deployment-workflow-runs";
@@ -19,6 +25,7 @@ type Args = {
   dryRun: boolean;
   mode: DeployMode;
   noPredeploy: boolean;
+  preflightReceiptDir: string | null;
   noPush: boolean;
   plan: boolean;
   pushScannerRuntimeBase: boolean;
@@ -29,6 +36,8 @@ type Args = {
   forceValidation: boolean;
   forceValidationRuntimeBase: boolean;
   forceWeb: boolean;
+  checkStaging: boolean;
+  stagedRelease: { action: "stage" | "promote"; file: string } | null;
 };
 
 type ChangedTargets = {
@@ -83,6 +92,7 @@ const SCANNER_COVERAGE_ENVIRONMENT = {
   CERTSCORE_CMP_PREFERENCE_COVERAGE_BUDGET_POLICY: "coverage_25_gb_seconds.v1",
   CERTSCORE_ACCESSIBILITY_MENU_INSPECTION_ENABLED: "1",
 } as const;
+const RELEASE_REPOSITORY = "ergoveritas1-alt/certscore.ai";
 const WEB_WORKFLOW = "web-aws-ecs-deploy.yml";
 const VALIDATION_WORKFLOW = "validation-aws-deploy.yml";
 const DB_WORKFLOW = "prod-db-migrate.yml";
@@ -90,42 +100,70 @@ const DB_WORKFLOW = "prod-db-migrate.yml";
 async function main() {
   const startedAt = Date.now();
   const args = parseArgs(process.argv.slice(2));
+  const timing = args.stagedRelease?.action === "promote" && !args.plan && !args.dryRun ? stagedPromotionTiming() : undefined;
+  try {
+    await executeDeployment(args, startedAt, timing);
+  } finally {
+    if (timing) console.log(JSON.stringify(timing.summary()));
+  }
+}
+
+async function executeDeployment(args: Args, startedAt: number, timing?: ReturnType<typeof stagedPromotionTiming>) {
   assertScannerConfigurationScope(args);
   const sourceRef = args.ref ?? await git(["rev-parse", "--abbrev-ref", "HEAD"]);
   const sha = await git(["rev-parse", sourceRef]);
-  const workflowRef = await resolveWorkflowDispatchRef(sourceRef, sha);
+  const staged = args.checkStaging || !!args.stagedRelease;
+  const workflowRef = staged ? "main" : await resolveWorkflowDispatchRef(sourceRef, sha);
   const shortSha = sha.slice(0, 8);
   const changed = await classifyChanges(args.baseRef);
 
-  console.log(`Fast deploy mode: ${args.mode}`);
+  console.log(args.checkStaging ? "Checking staged release prerequisites" : `Fast deploy mode: ${args.mode}`);
   console.log(`Deploy SHA: ${sha}`);
   console.log(`Base ref: ${args.baseRef}`);
   console.log(`Changed files: ${changed.changedFiles.length}`);
   printTargets(changed);
-  printPlan(args, changed, sha);
+  if (!args.checkStaging) printPlan(args, changed, sha);
 
+  if (args.stagedRelease) console.log(`Staged release operation: ${args.stagedRelease.action} ${args.stagedRelease.file}`);
   if (args.plan || args.dryRun) {
     console.log("");
     console.log(args.dryRun ? "Dry run complete; no deploy actions were started." : "Plan complete; no deploy actions were started.");
     return;
   }
 
-  if (!args.ref) {
-    await requireCleanWorktree();
-  }
-
-  if (args.mode === "all" || args.mode === "scanners") {
-    await run(["node", "scripts/verify-iplocate.mjs"]);
-  }
-
-  if (!args.noPredeploy && ["all", "web", "validation", "scanners", "db"].includes(args.mode)) {
-    const preflight = await timedLane("preflight", async () => {
-      const predeployArgs = args.mode === "all" ? ["preflight:all"] : ["preflight:fast"];
-      await run(["pnpm", ...predeployArgs]);
-    });
-    if (preflight.status === "failed") {
-      throw new Error("Deployment aborted because preflight failed.");
+  // Build context and checked-out source must match even for an explicit remote ref.
+  await requireCleanWorktree();
+  if (await git(["rev-parse", "HEAD"]) !== sha) throw new Error("Deploy ref must match the isolated checkout HEAD.");
+  if (args.noPredeploy && !args.preflightReceiptDir) throw new Error("--no-predeploy requires --preflight-receipts from the exact clean source gate.");
+  if (staged) {
+    const origin = await git(["remote", "get-url", "origin"]);
+    if (origin.replace(/\.git$/, "") !== `https://github.com/${RELEASE_REPOSITORY}`) {
+      throw new Error("Staged releases require the canonical HTTPS GitHub origin.");
     }
+  }
+  await checkReleasePrerequisites({ deployment: true, scanner: args.mode === "all" || args.mode === "scanners",
+    prebuilt: args.stagedRelease?.action === "promote" });
+  await confirmSkippedRuntimeInputs(changed, args);
+  if (args.checkStaging) {
+    await checkStagedReleasePrerequisites(args, changed, sha);
+    await run(["pnpm", "ops:check:deploy"]);
+    console.log("Staging prerequisites passed. No release was started.");
+    return;
+  }
+  const runPreflight = () => timedLane("preflight", async () => {
+    const target = { web: "web", validation: "validation-worker", scanners: "v2-dag-lambda", db: "db", all: "all" }[args.mode];
+    const predeployArgs = args.mode === "all" ? ["--fast", "--all"] : ["--fast", "--target", target];
+    await run(["node", "scripts/release-node.mjs", "scripts/predeploy.ts", ...predeployArgs, "--base", args.baseRef,
+      ...(args.noPredeploy ? ["--require-receipts", "--reuse-receipts", args.preflightReceiptDir!] : [])]);
+  });
+  const preflight = await (timing ? timing.measure("preflight-receipts", runPreflight) : runPreflight());
+  if (preflight.status === "failed") throw new Error("Deployment aborted because preflight failed.");
+
+  if (args.stagedRelease) {
+    const results = await runStagedCoupledRelease(args, changed, sha, args.stagedRelease, timing ?? stagedPromotionTiming());
+    printSummary(results, Date.now() - startedAt, shortSha);
+    if (results.some(result => result.status === "failed")) process.exitCode = 1;
+    return;
   }
 
   let workflowRegistrationGraceMs = 0;
@@ -143,14 +181,22 @@ async function main() {
 
   const lanes: Array<Promise<LaneResult>> = [];
   if (args.mode === "all") {
-    const coupled = await deployConsumersBeforeProducer({
+    let artifact: PreparedScanner | undefined;
+    const coupled = await deployConsumersWithPreparedProducer({
+      prepareProducer: () => timedLane("Lambda scanner artifact preparation", async () => {
+        if (!changed.scanners && !args.pushScannerRuntimeBase) return;
+        artifact = await prepareScannerArtifact({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase,
+          preserveOperationalSettings: args.preserveScannerOperationalSettings });
+        return { runtimeBase: artifact.runtimeBase };
+      }),
       consumers: [
-        () => deployWeb({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs, force: true }),
+        () => deployWeb({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs, force: args.forceWeb || changed.web }),
         () => deployValidation({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs,
           skip: !args.forceValidation && !changed.validation,
           pushRuntimeBase: args.forceValidationRuntimeBase || changed.validationRuntimeBase }),
       ],
-      producer: () => deployScanners({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase, preserveOperationalSettings: args.preserveScannerOperationalSettings }),
+      producer: () => artifact ? promoteScannerArtifact(artifact, { ref: sha, preserveOperationalSettings: args.preserveScannerOperationalSettings })
+        : Promise.resolve(skippedLane("Lambda scanner deploys", "scanner runtime inputs are proven unchanged")),
       skippedProducer: () => skippedLane("Lambda scanner deploys", "a consumer deployment failed; preserve the existing producer contract"),
     });
     lanes.push(...coupled.map(result => Promise.resolve(result)));
@@ -159,44 +205,30 @@ async function main() {
       "the web workflow applies migrations from the target image before ECS promotion"
     )));
   } else if (args.mode === "web") {
-    lanes.push(deployWeb({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs, force: args.forceWeb || true }));
+    lanes.push(deployWeb({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs, force: args.forceWeb || changed.web }));
   } else if (args.mode === "validation") {
     lanes.push(deployValidation({
       ref: sha,
       workflowRef,
       registrationGraceMs: workflowRegistrationGraceMs,
-      skip: false,
+      skip: !args.forceValidation && !changed.validation,
       pushRuntimeBase: args.forceValidationRuntimeBase || changed.validationRuntimeBase
     }));
   } else if (args.mode === "db") {
     lanes.push(deployDb({ ref: sha, workflowRef, skip: false }));
   } else {
-    lanes.push(deployScanners({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase, preserveOperationalSettings: args.preserveScannerOperationalSettings }));
+    lanes.push(changed.scanners || args.pushScannerRuntimeBase
+      ? deployScanners({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase, preserveOperationalSettings: args.preserveScannerOperationalSettings })
+      : Promise.resolve(skippedLane("Lambda scanner deploys", "scanner runtime inputs are proven unchanged")));
   }
 
   const results = await Promise.all(lanes);
 
-  if (args.mode === "all" || args.mode === "web") {
-    results.push(await timedLane("verify live web", async () => {
-      const topology = JSON.parse(await readFile("config/deployment-topology.json", "utf8")) as { primaryHost: string };
-      const response = await fetch(new URL("/api/version", process.env.LIVE_BASE_URL ?? topology.primaryHost), {
-        cache: "no-store", signal: AbortSignal.timeout(10_000)
-      });
-      if (!response.ok) throw new Error(`Live web revision request failed with HTTP ${response.status}`);
-      requireExpectedWebRevision(await response.json(), sha);
-      await run(["pnpm", "ops:check:live"], {
-        env: { EXPECTED_LIVE_GIT_SHA: sha }
-      });
-      await run(["pnpm", "ops:check:deploy"], {
-        env: {
-          EXPECTED_LIVE_GIT_SHA: sha,
-          SKIP_LIVE_DEPLOY_CHECK: "0"
-        }
-      });
-    }));
+  if ((args.mode === "all" || args.mode === "web") && (changed.web || args.forceWeb)) {
+    results.push(await verifyLiveWeb(sha));
   }
 
-  if (args.mode === "all" || args.mode === "scanners") {
+  if ((args.mode === "all" || args.mode === "scanners") && (changed.scanners || args.pushScannerRuntimeBase)) {
     results.push(await timedLane("verify Lambda scanners", async () => {
       await verifyScanners(sha);
     }));
@@ -224,18 +256,34 @@ function parseArgs(argv: string[]): Args {
     forceWeb: false,
     mode: modeArg,
     noPredeploy: false,
+    preflightReceiptDir: null,
     noPush: false,
     plan: false,
     pushScannerRuntimeBase: false,
     preserveScannerConfiguration: false,
     preserveScannerOperationalSettings: false,
-    ref: null
+    ref: null,
+    checkStaging: false,
+    stagedRelease: null
   };
 
   for (let index = 0; index < rest.length; index += 1) {
     const arg = rest[index]!;
     if (arg === "--") {
       continue;
+    }
+    if (arg === "--check-staging") {
+      args.checkStaging = true;
+      continue;
+    }
+    if (arg === "--stage-release" || arg === "--promote-release") {
+      if (args.stagedRelease) throw new Error("Select one staged release operation.");
+      args.stagedRelease = { action: arg === "--stage-release" ? "stage" : "promote", file: requireValue(rest, index, arg) };
+      index++;
+      continue;
+    }
+    if (arg === "--preflight-receipts") {
+      args.preflightReceiptDir = requireValue(rest, index, "--preflight-receipts"); index++; continue;
     }
     if (arg === "--base") {
       args.baseRef = requireValue(rest, index, "--base");
@@ -303,6 +351,16 @@ function parseArgs(argv: string[]): Args {
     throw new Error(`Unknown argument: ${arg}`);
   }
 
+  if (args.checkStaging && (args.mode !== "all" || args.stagedRelease || args.plan || args.dryRun ||
+      !/^[a-f0-9]{40}$/.test(args.baseRef) || args.pushScannerRuntimeBase ||
+      args.forceDb || args.forceValidation || args.forceWeb)) {
+    throw new Error("--check-staging requires deploy:all and the full live-base SHA, without a deployment operation.");
+  }
+  if (args.stagedRelease && (args.mode !== "all" || !args.noPush || !args.noPredeploy || !args.preflightReceiptDir ||
+      !args.ref || !/^[a-f0-9]{40}$/.test(args.ref) || !/^[a-f0-9]{40}$/.test(args.baseRef) || args.ref === args.baseRef ||
+      args.pushScannerRuntimeBase || args.forceDb || args.forceValidation || args.forceWeb || !args.preserveScannerOperationalSettings)) {
+    throw new Error("Staged releases require deploy:all, full target and live-base SHAs, --no-push, exact preflight receipts, and --preserve-scanner-operational-settings.");
+  }
   return args;
 }
 
@@ -320,6 +378,7 @@ function requireValue(args: string[], index: number, label: string) {
 
 async function classifyChanges(baseRef: string): Promise<ChangedTargets> {
   const files = new Set<string>();
+  if (!await gitRefExists(baseRef)) throw new Error(`Deployment base is unavailable: ${baseRef}`);
   if (await gitRefExists(baseRef)) {
     const mergeBase = await git(["merge-base", baseRef, "HEAD"]);
     addLines(files, await git(["diff", "--name-only", `${mergeBase.trim()}..HEAD`]));
@@ -329,59 +388,77 @@ async function classifyChanges(baseRef: string): Promise<ChangedTargets> {
   addLines(files, await git(["ls-files", "--others", "--exclude-standard"]));
 
   const changedFiles = [...files].sort();
+  const readBase = (file: string) => git(["show", `${baseRef}:${file}`]);
+  const readWorking = (file: string) => readFile(file, "utf8");
+  const select = async (service: string) => (await deploymentInputDecision(service, changedFiles, readBase, readWorking)).deploy;
   return {
     changedFiles,
     db: changedFiles.some(isDbDeployInput),
-    lambdaRuntimeBase: changedFiles.some(isLambdaRuntimeBaseInput),
-    scanners: changedFiles.some(isScannerDeployInput),
-    validation: changedFiles.some(isValidationDeployInput),
-    validationRuntimeBase: await runtimeBaseInputsChanged("validation", changedFiles,
-      (file: string) => git(["show", `${baseRef}:${file}`]), (file: string) => readFile(file, "utf8")),
-    web: changedFiles.some(isWebDeployInput)
+    lambdaRuntimeBase: await runtimeBaseInputsChanged("scanners", changedFiles, readBase, readWorking),
+    scanners: await select("scanners"),
+    validation: await select("validation"),
+    validationRuntimeBase: await runtimeBaseInputsChanged("validation", changedFiles, readBase, readWorking),
+    web: await select("web")
   };
 }
 
-function isGlobalBuildInput(file: string) {
-  return [
-    ".dockerignore",
-    "package.json",
-    "pnpm-lock.yaml",
-    "pnpm-workspace.yaml",
-    "tsconfig.base.json",
-    "turbo.json"
-  ].includes(file);
-}
-
-function isWebDeployInput(file: string) {
-  return isGlobalBuildInput(file) ||
-    file === ".npmrc" || file.startsWith("patches/") ||
-    file === "scripts/runtime-base-changes.mjs" || file === "scripts/lib/runtime-base-inputs.mjs" ||
-    file === ".github/workflows/web-aws-ecs-deploy.yml" ||
-    file === "scripts/assert-forward-web-deploy.ts" ||
-    file.startsWith("apps/web/") ||
-    file.startsWith("packages/certscore-contracts/") ||
-    file.startsWith("packages/certscore-vendor-resolver/") ||
-    file.startsWith("packages/db/") ||
-    file.startsWith("packages/shared/") ||
-    file.startsWith("packages/ui/") ||
-    file.startsWith("packages/validation-shared/") ||
-    file === "scripts/apply-db-migrations.mjs" ||
-    file === "scripts/insert-integration-api-key.mjs";
-}
-
-function isValidationDeployInput(file: string) {
-  return isGlobalBuildInput(file) ||
-    file === ".npmrc" || file.startsWith("patches/") ||
-    file === "scripts/runtime-base-changes.mjs" || file === "scripts/lib/runtime-base-inputs.mjs" ||
-    file === ".github/workflows/validation-aws-deploy.yml" ||
-    file.startsWith("apps/validation-worker/") ||
-    file.startsWith("apps/web/lib/scans/") ||
-    file.startsWith("apps/web/server/") ||
-    file.startsWith("infra/aws/validation/") ||
-    file.startsWith("packages/db/") ||
-    file.startsWith("packages/shared/") ||
-    file.startsWith("packages/validation-shared/") ||
-    file.startsWith("packages/web-bot-auth/");
+/** A diff against the web release is not proof that another service is current.
+ * Before skipping, bind unchanged source to that service's installed revision. */
+async function confirmSkippedRuntimeInputs(changed: ChangedTargets, args: Args) {
+  const equivalent = async (service: string, base: string) => {
+    if (!/^[a-f0-9]{40}$/.test(base) || !await gitRefExists(base)) return false;
+    const files = (await git(["diff", "--name-only", "--no-renames", base, "HEAD"])).split("\n").filter(Boolean);
+    return !(await deploymentInputDecision(service, files,
+      (file: string) => git(["show", `${base}:${file}`]), (file: string) => readFile(file, "utf8"))).deploy;
+  };
+  const readAws = async (command: string[]) => JSON.parse((await run(["aws", ...command, "--output", "json"], { quiet: true })).stdout);
+  if ((args.mode === "all" || args.mode === "web")) {
+    try {
+      const live = await readLiveWebVersion(args.checkStaging || !!args.stagedRelease);
+      changed.web = live.runtimeTarget !== "ecs-fargate" || !await equivalent("web", live.gitSha);
+    } catch { changed.web = true; }
+  }
+  if ((args.mode === "all" || args.mode === "validation")) {
+    try {
+      const variable = async (name: string) => (await run(["gh", "variable", "get", name], { quiet: true })).stdout.trim();
+      const cluster = await variable("AWS_VALIDATION_ECS_CLUSTER"), service = await variable("AWS_VALIDATION_ECS_WORKER_SERVICE");
+      const region = (await run(["gh", "variable", "get", "AWS_REGION"], { quiet: true, reject: false })).stdout.trim() || "us-west-1";
+      const state = await readAws(["ecs", "describe-services", "--region", region, "--cluster", cluster, "--services", service]);
+      const definition = await readAws(["ecs", "describe-task-definition", "--region", region, "--task-definition", state.services?.[0]?.taskDefinition ?? "unverified"]);
+      const repository = await variable("AWS_VALIDATION_WORKER_ECR_REPOSITORY");
+      const container = (await run(["gh", "variable", "get", "AWS_VALIDATION_ECS_WORKER_CONTAINER"], { quiet: true, reject: false })).stdout.trim() || "validation-worker";
+      const revision = await installedEcsRevision(state, definition, { repository, region, container,
+        resolveDigest: async (sha: string) => (await readAws(["ecr", "describe-images", "--region", region,
+          "--repository-name", repository, "--image-ids", `imageTag=${sha}`])).imageDetails?.[0]?.imageDigest });
+      changed.validation = !await equivalent("validation", revision);
+      if ((args.checkStaging || args.stagedRelease) && changed.validation) {
+        if (!await gitRefExists(revision)) throw new Error("Installed validation source is unavailable.");
+        const files = (await git(["diff", "--name-only", "--no-renames", revision, "HEAD"])).split("\n").filter(Boolean);
+        changed.validationRuntimeBase ||= await runtimeBaseInputsChanged("validation", files,
+          (file: string) => git(["show", `${revision}:${file}`]), (file: string) => readFile(file, "utf8"));
+      }
+    } catch {
+      changed.validation = true;
+      if (args.checkStaging || args.stagedRelease) changed.validationRuntimeBase = true;
+    }
+  }
+  if ((args.mode === "all" || args.mode === "scanners")) {
+    try {
+      const base = await git(["rev-parse", args.baseRef]);
+      if (!await equivalent("scanners", base)) throw Error("Scanner source differs");
+      for (const region of SCANNER_REGIONS) {
+        const image = await readAws(["ecr", "describe-images", "--region", region, "--repository-name", "certscore-v2-dag-local-lambda", "--image-ids", `imageTag=${base}`]);
+        const digest = image.imageDetails?.[0]?.imageDigest;
+        if (!/^sha256:[a-f0-9]{64}$/.test(digest ?? "")) throw Error("Unknown scanner artifact");
+        for (const name of [SCANNER_FUNCTION_NAME, `${SCANNER_FUNCTION_NAME}-inventory`]) {
+          const installed = await readAws(["lambda", "get-function", "--region", region, "--function-name", name, "--query", "{image:Code.ResolvedImageUri,state:Configuration.State,update:Configuration.LastUpdateStatus}"]);
+          if (installed.state !== "Active" || installed.update !== "Successful" || installed.image !== `199536052647.dkr.ecr.${region}.amazonaws.com/certscore-v2-dag-local-lambda@${digest}`) throw Error("Scanner artifact differs");
+        }
+      }
+    } catch { changed.scanners = true; }
+  }
+  console.log("Installed-runtime selection verified; unknown service revisions conservatively require deployment.");
+  printTargets(changed);
 }
 
 function isDbDeployInput(file: string) {
@@ -390,53 +467,177 @@ function isDbDeployInput(file: string) {
     file === ".github/workflows/prod-db-migrate.yml";
 }
 
-function isScannerDeployInput(file: string) {
-  return isGlobalBuildInput(file) ||
-    file.startsWith("apps/v2-dag-lambda/") ||
-    file.startsWith("infra/aws/v2-dag-lambda/") ||
-    file.startsWith("packages/certscore-contracts/") ||
-    file.startsWith("packages/certscore-report-adapter/") ||
-    file.startsWith("packages/certscore-review-engine/") ||
-    file.startsWith("packages/certscore-scan-core/") ||
-    file.startsWith("packages/certscore-vendor-resolver/") ||
-    file.startsWith("packages/db/") ||
-    file.startsWith("packages/shared/") ||
-    file.startsWith("packages/validation-shared/") ||
-    file.startsWith("packages/web-bot-auth/") ||
-    file.startsWith("scripts/local-v2-dag-lambda/");
+async function readLiveWebVersion(useConfiguredHost = false) {
+  const topology = JSON.parse(await readFile("config/deployment-topology.json", "utf8")) as { primaryHost: string };
+  const host = (useConfiguredHost ? undefined : process.env.LIVE_BASE_URL) ?? topology.primaryHost;
+  const response = await fetch(new URL("/api/version", host), {
+    cache: "no-store", signal: AbortSignal.timeout(10_000)
+  });
+  if (!response.ok) throw new Error(`Live web revision request failed with HTTP ${response.status}`);
+  return response.json();
 }
 
-function isLambdaRuntimeBaseInput(file: string) {
-  return file === "apps/v2-dag-lambda/Dockerfile" ||
-    file === "apps/v2-dag-lambda/package.json" ||
-    file === "package.json" ||
-    file === "pnpm-lock.yaml" ||
-    file === "pnpm-workspace.yaml";
+function verifyLiveWeb(sha: string, useConfiguredHost = false) {
+  return timedLane("verify live web", async () => {
+    requireExpectedWebRevision(await readLiveWebVersion(useConfiguredHost), sha);
+    await run(["pnpm", "ops:check:live"], { env: { EXPECTED_LIVE_GIT_SHA: sha } });
+    await run(["pnpm", "ops:check:deploy"], { env: {
+      EXPECTED_LIVE_GIT_SHA: sha, SKIP_LIVE_DEPLOY_CHECK: "0"
+    } });
+  });
 }
 
-async function deployWeb(input: { force: boolean; ref: string; workflowRef: string; registrationGraceMs?: number }): Promise<LaneResult> {
+function readStagedImage(kind: "web" | "validation", sha: string, runId: string) {
+  return readStagedEcsReceipt({ kind, sha, runId, repository: RELEASE_REPOSITORY });
+}
+
+async function checkStagedReleasePrerequisites(args: Args, changed: ChangedTargets, sha: string) {
+  const [remoteMain, live] = await Promise.all([
+    git(["ls-remote", "--exit-code", "origin", "refs/heads/main"]),
+    readLiveWebVersion(true)
+  ]);
+  const main = /^([a-f0-9]{40})\trefs\/heads\/main$/.exec(remoteMain)?.[1];
+  if (!main) throw new Error("Could not resolve the canonical remote main SHA.");
+  if (args.checkStaging) {
+    await run(["git", "merge-base", "--is-ancestor", main, sha], { quiet: true });
+  } else {
+    if (main !== sha) throw new Error("The staged release must match the current remote main SHA.");
+    const enabled = await run(["gh", "variable", "get", "AWS_STAGED_COUPLED_RELEASES", "--repo", RELEASE_REPOSITORY], { quiet: true });
+    if (enabled.stdout.trim() !== "true") throw new Error("Staged releases are not enabled for the web workflow.");
+  }
+  if (args.baseRef === sha) throw new Error("Staging requires a revision newer than the live web SHA.");
+  await run(["git", "merge-base", "--is-ancestor", args.baseRef, sha], { quiet: true });
+  // A retry can finish scanner promotion after the intended web revision is already live.
+  const expectedLive = args.stagedRelease?.action === "promote" && live?.gitSha === sha ? sha : args.baseRef;
+  requireExpectedWebRevision(live, expectedLive);
+  if (changed.lambdaRuntimeBase || changed.validationRuntimeBase) throw new Error("Staged promotion requires existing runtime bases.");
+  if (args.stagedRelease?.action === "promote") return;
+  if (!changed.web || !changed.scanners) throw new Error("Staging requires affected web and scanner runtimes.");
+  if (args.stagedRelease && existsSync(args.stagedRelease.file)) throw new Error("Choose a new staged release receipt path.");
+  await scannerRuntimeBaseMode({ buildRegion: SCANNER_BUILD_REGION, rebuild: false, available: hasScannerRuntimeBase });
+  if (changed.validation) {
+    const [repo, region] = await Promise.all([
+      run(["gh", "variable", "get", "AWS_VALIDATION_WORKER_ECR_REPOSITORY"], { quiet: true }),
+      run(["gh", "variable", "get", "AWS_REGION"], { quiet: true, reject: false })
+    ]);
+    await run(["aws", "ecr", "describe-images", "--region", region.stdout.trim() || "us-west-1",
+      "--repository-name", repo.stdout.trim(), "--image-ids", "imageTag=validation-worker-runtime-base"], { quiet: true });
+  }
+}
+
+async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha: string, operation: NonNullable<Args["stagedRelease"]>, timing: ReturnType<typeof stagedPromotionTiming>) {
+  await checkStagedReleasePrerequisites(args, changed, sha);
+  const scannerInput = { ref: sha, preserveOperationalSettings: true } as const;
+  if (operation.action === "stage") {
+    let web: { runId: string; image: string } | undefined;
+    let scanner: PreparedScanner | undefined;
+    let validation: StagedCoupledRelease["validation"];
+    const results = await Promise.all([
+      timedLane("Stage verified web image", async () => {
+        const runId = await ensureWorkflowRun(WEB_WORKFLOW, "main", sha, ["-f", "stage_only=true", "-f", `staged_base_sha=${args.baseRef}`],
+          true, 0, `Stage public web ${sha}`);
+        const workflow = await waitForRun(runId);
+        const { binding: image } = await readStagedImage("web", sha, runId);
+        web = { runId, image };
+        return { url: workflow.url, image };
+      }),
+      ...(changed.validation ? [timedLane("Stage verified validation image", async () => {
+        const runId = await ensureWorkflowRun(VALIDATION_WORKFLOW, "main", sha,
+          ["-f", "stage_only=true", "-f", `expected_sha=${sha}`], true, 0, `Stage validation ${sha}`);
+        const workflow = await waitForRun(runId);
+        const { binding: image } = await readStagedImage("validation", sha, runId);
+        validation = { runId, image };
+        return { url: workflow.url, image };
+      })] : []),
+      timedLane("Stage regional scanner image", async () => {
+        scanner = await prepareScannerArtifact({ ...scannerInput, pushRuntimeBase: false });
+        return { runtimeBase: scanner.runtimeBase };
+      }),
+    ]);
+    if (results.some(result => result.status === "failed")) return results;
+    if (!web || !scanner?.preservedSettings || (changed.validation && !validation)) throw new Error("Staging did not produce every required verified artifact.");
+    const { preservedSettings, ...artifact } = scanner;
+    const staged: StagedCoupledRelease = { version: 1, sha, baseSha: args.baseRef, stagedAt: new Date().toISOString(),
+      webRunId: web.runId, webImage: web.image, validation, scanner: artifact, scannerSettings: Object.fromEntries(preservedSettings) };
+    assertStagedCoupledRelease(staged, sha, args.baseRef);
+    await writeFile(operation.file, JSON.stringify(staged, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+    console.log(`Staged release receipt: ${operation.file}`);
+    return results;
+  }
+
+  const info = await lstat(operation.file);
+  if (!info.isFile() || info.size > 16_384) throw new Error("Invalid staged release receipt file.");
+  const receipt = JSON.parse(await readFile(operation.file, "utf8")) as StagedCoupledRelease;
+  assertStagedCoupledRelease(receipt, sha, args.baseRef);
+  const validation = receipt.validation;
+  if (changed.validation && !validation) throw new Error("Validation is affected and has no staged image. Prepare a new coupled release.");
+  // Verify the approved regional tags still resolve to the recorded immutable bytes.
+  await timing.measure("staged-artifact-readback", () => settleScannerOperations([
+    readStagedImage("web", sha, receipt.webRunId).then(({ binding }) => {
+      if (binding !== receipt.webImage) throw new Error("Staged web digest or run attempt changed.");
+    }),
+    ...(validation ? [readStagedImage("validation", sha, validation.runId).then(({ binding }) => {
+      if (binding !== validation.image) throw new Error("Staged validation digest or run attempt changed.");
+    })] : []),
+    ...SCANNER_REGIONS.map(async region => {
+      const result = await run(["aws", "ecr", "describe-images", "--region", region,
+        "--repository-name", "certscore-v2-dag-local-lambda", "--image-ids", `imageTag=${sha}`,
+        "--query", "imageDetails[0].imageDigest", "--output", "text"], { quiet: true });
+      if (receipt.scanner.images[region]?.split("@")[1] !== result.stdout.trim()) throw new Error(`Staged scanner image changed in ${region}.`);
+    }),
+  ]));
+  const artifact: PreparedScanner = { ...receipt.scanner, preservedSettings: new Map(Object.entries(receipt.scannerSettings)) };
+  const results = await deployConsumersBeforeProducer({
+    consumers: [
+      async () => {
+        const web = await timing.measure("web-migration-and-ecs", () => deployWeb({ force: true, ref: sha, workflowRef: "main", stage: { runId: receipt.webRunId, image: receipt.webImage, baseSha: receipt.baseSha } }));
+        if (web.status !== "succeeded") return web;
+        const verification = await timing.measure("live-web-revision", () => verifyLiveWeb(sha, true));
+        return verification.status === "succeeded" ? web : verification;
+      },
+      () => timing.measure("validation-ecs", () => deployValidation({ ref: sha, workflowRef: "main", skip: !changed.validation, pushRuntimeBase: false, stage: validation })),
+    ],
+    producer: () => timing.measure("scanner-promotion", () => promoteScannerArtifact(artifact, { ...scannerInput, parallelFunctions: true })),
+    skippedProducer: () => skippedLane("Lambda scanner deploys", "a consumer deployment failed; preserve the existing producer contract"),
+  });
+  if (results.at(-1)?.status === "succeeded") {
+    results.push(await timing.measure("scanner-final-readback", () => timedLane("verify Lambda scanners", async () => {
+      await verifyScanners(sha, { afterStagedPromotion: true });
+    })));
+  }
+  return results;
+}
+
+async function deployWeb(input: { force: boolean; ref: string; workflowRef: string; registrationGraceMs?: number; stage?: { runId: string; image: string; baseSha: string } }): Promise<LaneResult> {
+  if (!input.force) return skippedLane("web ECS deploy", "web runtime inputs are proven unchanged");
   return timedLane("web ECS deploy", async () => {
     await run([
       "node", "--import", "tsx",
       "scripts/assert-forward-web-deploy.ts",
       "--target", input.ref
     ]);
-    const runId = await ensureWorkflowRun(WEB_WORKFLOW, input.workflowRef, input.ref, [], false, input.registrationGraceMs);
+    const { stage } = input;
+    const runId = await ensureWorkflowRun(WEB_WORKFLOW, input.workflowRef, input.ref,
+      stage ? ["-f", `staged_run_id=${stage.runId}`, "-f", `staged_image=${stage.image}`, "-f", `staged_base_sha=${stage.baseSha}`] : [], false, input.registrationGraceMs,
+      stage ? `Promote public web ${input.ref} from ${stage.runId} ${stage.image}` : undefined);
     const workflowRun = await waitForRun(runId);
     return { workflow: WEB_WORKFLOW, url: workflowRun.url };
   });
 }
 
-async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; skip: boolean; workflowRef: string; registrationGraceMs?: number }): Promise<LaneResult> {
+async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; skip: boolean; workflowRef: string; registrationGraceMs?: number; stage?: StagedCoupledRelease["validation"] }): Promise<LaneResult> {
   if (input.skip) {
     return skippedLane("validation deploy", "no validation deploy inputs changed");
   }
   return timedLane("validation AWS deploy", async () => {
+    const { stage } = input;
     const runId = await ensureWorkflowRun(VALIDATION_WORKFLOW, input.workflowRef, input.ref, [
       "-f", "use_runtime_base=true",
       "-f", `push_runtime_base=${input.pushRuntimeBase ? "true" : "false"}`,
-      "-f", "runtime_base_tag=validation-worker-runtime-base"
-    ], input.pushRuntimeBase, input.registrationGraceMs);
+      "-f", "runtime_base_tag=validation-worker-runtime-base",
+      ...(stage ? ["-f", `expected_sha=${input.ref}`, "-f", `staged_run_id=${stage.runId}`, "-f", `staged_image=${stage.image}`] : []),
+    ], input.pushRuntimeBase, input.registrationGraceMs,
+    stage ? `Promote validation ${input.ref} from ${stage.runId} ${stage.image}` : undefined);
     const workflowRun = await waitForRun(runId);
     return {
       runtimeBase: input.pushRuntimeBase ? "rebuilt" : "reused",
@@ -457,28 +658,27 @@ async function deployDb(input: { ref: string; skip: boolean; workflowRef: string
   });
 }
 
-async function deployScanners(input: { pushRuntimeBase: boolean; ref: string; preserveOperationalSettings: boolean }): Promise<LaneResult> {
-  return timedLane("Lambda scanner deploys", async () => {
-    // Validate all existing workers before any build/promotion mutation. Never
-    // normalize disabled flags or capacity as part of the restricted release.
-    const preservedSettings = input.preserveOperationalSettings ? await readScannerOperationalSettings() : null;
+type PreparedScanner = ScannerArtifact & { preservedSettings: Map<string, ScannerOperationalSnapshot> | null };
+
+async function hasScannerRuntimeBase(region: string) {
+  const result = await run([
+    "aws", "ecr", "describe-images",
+    "--region", region,
+    "--repository-name", "certscore-v2-dag-local-lambda",
+    "--image-ids", "imageTag=runtime-base"
+  ], { quiet: true, reject: false });
+  return result.exitCode === 0;
+}
+
+/** Builds/replicates ECR artifacts only. No Lambda code, environment or settings writer is reachable here. */
+async function prepareScannerArtifact(input: { pushRuntimeBase: boolean; ref: string; preserveOperationalSettings: boolean }): Promise<PreparedScanner> {
+    const baselineSettings = await readScannerOperationalSettings();
+    const preservedSettings = input.preserveOperationalSettings ? baselineSettings : null;
     const runtimeBase = await scannerRuntimeBaseMode({
       buildRegion: SCANNER_BUILD_REGION,
       rebuild: input.pushRuntimeBase,
-      available: async (region) => {
-        const result = await run([
-          "aws", "ecr", "describe-images",
-          "--region", region,
-          "--repository-name", "certscore-v2-dag-local-lambda",
-          "--image-ids", "imageTag=runtime-base"
-        ], { quiet: true, reject: false });
-        return result.exitCode === 0;
-      }
+      available: hasScannerRuntimeBase
     });
-    await configureScannerSettingsUnlessPreserved(input.preserveOperationalSettings, async () => {
-      await applyScannerRuntimeConfiguration();
-    });
-
     const dockerConfigRoot = path.join(tmpdir(), `certscore-lambda-deploy-${process.pid}-${input.ref.slice(0, 8)}`);
     const dockerConfigByRegion = Object.fromEntries(SCANNER_REGIONS.map((region) => [
       region,
@@ -496,7 +696,7 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string; pr
     try {
       // Each region gets an isolated temporary Docker credential store. This
       // avoids macOS Keychain/helper contention without sharing auth state.
-      await Promise.all(SCANNER_REGIONS.map((region) => run([
+      await settleScannerOperations(SCANNER_REGIONS.map((region) => run([
         "bash",
         "scripts/local-v2-dag-lambda/build-push-dev-image.sh"
       ], {
@@ -526,7 +726,7 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string; pr
         }
       });
 
-      const results = await Promise.all(SCANNER_REGIONS.map(async (region) => {
+      const results = await settleScannerOperations(SCANNER_REGIONS.map(async (region) => {
         const regionStart = Date.now();
         const imageUri = `199536052647.dkr.ecr.${region}.amazonaws.com/certscore-v2-dag-local-lambda:${input.ref}`;
         if (region !== SCANNER_BUILD_REGION) {
@@ -555,8 +755,7 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string; pr
           throw new Error(`Could not resolve an immutable scanner image digest in ${region}.`);
         }
         const digestImageUri = `${imageUri.split(":")[0]}@${imageDigest}`;
-        await synchronizeScannerImage(awsScannerImageControl(region), digestImageUri, true);
-        await synchronizeScannerImage(awsScannerImageControl(region, true), digestImageUri, true);
+
         return {
           durationMs: Date.now() - regionStart,
           imageUri: digestImageUri,
@@ -565,38 +764,67 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string; pr
         };
       }));
 
-      await configureScannerSettingsUnlessPreserved(input.preserveOperationalSettings, async () => {
-        await applyScannerRuntimeConfiguration(true);
-      });
-      if (preservedSettings) {
-        const after = await readScannerOperationalSettings();
-        for (const [key, before] of preservedSettings) assertScannerOperationalSettingsPreserved(before, after.get(key)!);
-      }
-      const details: Record<string, string> = {
-        runtimeBase
-      };
-      for (const result of results) {
-        details[result.region] = `${formatDuration(result.durationMs)} ${result.imageUri}`;
-      }
-      await run([
-        "node",
-        "--import",
-        "tsx",
-        "scripts/check-regional-scanner-parity.ts",
-      ]);
-      details.regionParity = "passed";
-      await run([
-        "node",
-        "--import",
-        "tsx",
-        "scripts/check-regional-web-bot-auth.ts",
-      ]);
-      details.webBotAuth = "verified in all scanner regions";
-      return details;
+      const artifact: PreparedScanner = { sha: input.ref, runtimeBase, preservedSettings,
+        images: Object.fromEntries(results.map(result => [result.region, result.imageUri])) };
+      assertScannerArtifact(artifact, input.ref);
+      // Verify embedded release metadata, rather than trusting a mutable ECR SHA tag.
+      const metadata = await run(["docker", "buildx", "imagetools", "inspect", artifact.images[SCANNER_BUILD_REGION]!,
+        "--format", "{{json .Image.Config.Env}}"], { quiet: true, env: { DOCKER_CONFIG: dockerConfigByRegion[SCANNER_BUILD_REGION] } });
+      const environment: unknown = JSON.parse(metadata.stdout);
+      assertScannerArtifactMetadata(environment, input.ref);
+      return artifact;
     } finally {
       await rm(dockerConfigRoot, { force: true, recursive: true });
     }
+}
+
+/** Every runtime mutation is confined to this function, after consumer success. */
+async function promoteScannerArtifact(artifact: PreparedScanner, input: { ref: string; preserveOperationalSettings: boolean; parallelFunctions?: boolean }): Promise<LaneResult> {
+  return timedLane("Lambda scanner deploys", async () => {
+    assertScannerArtifact(artifact, input.ref);
+    await requireCleanWorktree();
+    if (await git(["rev-parse", "HEAD"]) !== input.ref) throw new Error("Scanner checkout SHA changed during consumer deployment.");
+    // Recheck interrupted/concurrent operations in all six workers before any write.
+    const current = await readScannerOperationalSettings();
+    if (artifact.preservedSettings) for (const [key, before] of artifact.preservedSettings) {
+      assertScannerOperationalSettingsPreserved(before, current.get(key)!);
+    }
+    await configureScannerSettingsUnlessPreserved(input.preserveOperationalSettings, async () => {
+      await applyScannerRuntimeConfiguration();
+    });
+    await runScannerPromotions(async (region, inventory) => {
+      const started = performance.now();
+      try {
+        await synchronizeScannerImage(awsScannerImageControl(region, inventory), artifact.images[region]!, true,
+          timing => console.log(JSON.stringify({ scannerRegion: region, inventory, ...timing })));
+      } finally {
+        if (input.parallelFunctions) console.log(`Scanner ${region} ${inventory ? "inventory" : "primary"} handoff: ${Math.round(performance.now() - started)}ms`);
+      }
+    }, input.parallelFunctions === true);
+    await configureScannerSettingsUnlessPreserved(input.preserveOperationalSettings, async () => {
+      await applyScannerRuntimeConfiguration(true);
+    });
+    if (artifact.preservedSettings) {
+      const after = await readScannerOperationalSettings();
+      for (const [key, before] of artifact.preservedSettings) assertScannerOperationalSettingsPreserved(before, after.get(key)!);
+    }
+    const parityStarted = performance.now();
+    await run(["node", "scripts/release-node.mjs", "scripts/check-regional-scanner-parity.ts"]);
+    const authStarted = performance.now();
+    console.log(`Scanner regional parity: ${Math.round(authStarted - parityStarted)}ms`);
+    await run(["node", "scripts/release-node.mjs", "scripts/check-regional-web-bot-auth.ts"], { env: { AWS_MAX_ATTEMPTS: "1" } });
+    console.log(`Scanner regional web-bot auth: ${Math.round(performance.now() - authStarted)}ms`);
+    return { runtimeBase: artifact.runtimeBase, regionParity: "passed", webBotAuth: "verified in all scanner regions", ...artifact.images };
   });
+}
+
+async function deployScanners(input: { pushRuntimeBase: boolean; ref: string; preserveOperationalSettings: boolean }): Promise<LaneResult> {
+  let artifact: PreparedScanner | undefined;
+  const preparation = await timedLane("Lambda scanner artifact preparation", async () => {
+    artifact = await prepareScannerArtifact(input); return { runtimeBase: artifact.runtimeBase };
+  });
+  if (preparation.status !== "succeeded") return preparation;
+  return promoteScannerArtifact(artifact!, input);
 }
 
 async function readScannerOperationalSettings() {
@@ -722,20 +950,34 @@ async function applyScannerRuntimeConfiguration(enableCoverage = false) {
   }
 }
 
-async function verifyScanners(expectedSha: string) {
+async function verifyScanners(expectedSha: string, { afterStagedPromotion = false } = {}) {
   const reports = await Promise.all(SCANNER_REGIONS.map(async (region) => {
-    await run([
-      "aws", "lambda", "wait", "function-updated-v2",
-      "--region", region,
-      "--function-name", SCANNER_FUNCTION_NAME
-    ], { quiet: true });
-    const result = await run([
-      "aws", "lambda", "get-function",
-      "--region", region,
-      "--function-name", SCANNER_FUNCTION_NAME,
-      "--query", "{ImageUri:Code.ResolvedImageUri,RecordedImageDigest:Configuration.Environment.Variables.SCANNER_IMAGE_DIGEST,LastUpdateStatus:Configuration.LastUpdateStatus,State:Configuration.State,Updated:Configuration.LastModified,MemorySize:Configuration.MemorySize}",
-      "--output", "json"
-    ], { quiet: true });
+    const [result, expectedDigestResult] = await Promise.all([
+      (async () => {
+        // Staged promotion has already waited for each update. A new in-flight
+        // mutation fails the fresh health read below rather than being waited out.
+        if (!afterStagedPromotion) await run([
+          "aws", "lambda", "wait", "function-updated-v2",
+          "--region", region,
+          "--function-name", SCANNER_FUNCTION_NAME
+        ], { quiet: true });
+        return run([
+          "aws", "lambda", "get-function",
+          "--region", region,
+          "--function-name", SCANNER_FUNCTION_NAME,
+          "--query", "{ImageUri:Code.ResolvedImageUri,RecordedImageDigest:Configuration.Environment.Variables.SCANNER_IMAGE_DIGEST,LastUpdateStatus:Configuration.LastUpdateStatus,State:Configuration.State,Updated:Configuration.LastModified,MemorySize:Configuration.MemorySize}",
+          "--output", "json"
+        ], { quiet: true });
+      })(),
+      run([
+        "aws", "ecr", "describe-images",
+        "--region", region,
+        "--repository-name", "certscore-v2-dag-local-lambda",
+        "--image-ids", `imageTag=${expectedSha}`,
+        "--query", "imageDetails[0].imageDigest",
+        "--output", "text"
+      ], { quiet: true }),
+    ]);
     const payload = JSON.parse(result.stdout) as {
       ImageUri?: string;
       RecordedImageDigest?: string;
@@ -743,14 +985,6 @@ async function verifyScanners(expectedSha: string) {
       MemorySize?: number;
       State?: string;
     };
-    const expectedDigestResult = await run([
-      "aws", "ecr", "describe-images",
-      "--region", region,
-      "--repository-name", "certscore-v2-dag-local-lambda",
-      "--image-ids", `imageTag=${expectedSha}`,
-      "--query", "imageDetails[0].imageDigest",
-      "--output", "text"
-    ], { quiet: true });
     const expectedDigest = expectedDigestResult.stdout.trim();
     if (!/^sha256:[a-f0-9]{64}$/.test(expectedDigest)) {
       throw new Error(`Could not resolve the expected scanner image digest in ${region}.`);
@@ -779,16 +1013,23 @@ async function ensureWorkflowRun(
   targetSha: string,
   extraArgs: string[] = [],
   forceDispatch = false,
-  registrationGraceMs = 0
+  registrationGraceMs = 0,
+  exactTitle?: string,
 ) {
   const runId = await resolveDeploymentWorkflowRun({
     targetSha, forceDispatch, registrationGraceMs, sleep,
     list: async () => {
       const result = await run([
         "gh", "run", "list", "--workflow", workflow, "--commit", targetSha,
-        "--limit", "10", "--json", "databaseId,headSha,status,conclusion,event"
+        "--limit", "10", "--json", "databaseId,headSha,status,conclusion,event,displayTitle"
       ], { quiet: true });
-      return JSON.parse(result.stdout) as DeploymentWorkflowRun[];
+      const runs = JSON.parse(result.stdout) as Array<DeploymentWorkflowRun & { displayTitle: string }>;
+      if (exactTitle) return runs.filter(run => run.event === "workflow_dispatch" && run.displayTitle === exactTitle);
+      const kind = workflow === WEB_WORKFLOW ? "public web" : workflow === VALIDATION_WORKFLOW ? "validation" : null;
+      return kind ? runs.filter(run =>
+        !(run.event === "workflow_dispatch" && run.displayTitle.startsWith(`Stage ${kind} `)) &&
+        !(run.event === "push" && (run.displayTitle.startsWith(`Verify ${kind} `) ||
+          run.displayTitle.startsWith(`Defer ${kind} `)))) : runs;
     },
     dispatch: async () => { await run(["gh", "workflow", "run", workflow, "--ref", workflowRef, ...extraArgs]); }
   });
@@ -842,7 +1083,7 @@ function skippedLane(label: string, reason: string): LaneResult {
 async function requireCleanWorktree() {
   const result = await run(["git", "status", "--porcelain"], { quiet: true });
   if (result.stdout.trim().length > 0) {
-    throw new Error("Refusing to deploy with uncommitted changes. Commit/stash first, or pass --ref to deploy an already-pushed SHA.");
+    throw new Error("Refusing to deploy with uncommitted changes. Use an isolated committed checkout matching the requested ref.");
   }
 }
 
@@ -859,10 +1100,10 @@ function printTargets(changed: ChangedTargets) {
 function printPlan(args: Args, changed: ChangedTargets, sha: string) {
   const lanes: string[] = [];
   if (args.mode === "all" || args.mode === "web") {
-    lanes.push("web ECS deploy");
+    lanes.push(args.forceWeb || changed.web ? "web ECS deploy" : "web ECS deploy skipped (runtime unchanged; installed revision proof required)");
   }
   if (args.mode === "all" || args.mode === "validation") {
-    const skip = args.mode === "all" && !args.forceValidation && !changed.validation;
+    const skip = !args.forceValidation && !changed.validation;
     lanes.push(skip
       ? "validation AWS deploy skipped (no validation deploy inputs changed)"
       : `validation AWS deploy (runtime base ${args.forceValidationRuntimeBase || changed.validationRuntimeBase ? "rebuild/push" : "reuse"})`);
@@ -871,7 +1112,7 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
     const settingsPlan = args.preserveScannerOperationalSettings
       ? `verify existing ${SCANNER_MEMORY_SIZE} MB, flags and timeouts; update image provenance only`
       : `apply/verify ${SCANNER_MEMORY_SIZE} MB before image promotion`;
-    lanes.push(`Lambda scanner deploys (${SCANNER_REGIONS.join(", ")}; ${settingsPlan}; runtime base ${args.pushScannerRuntimeBase ? "rebuild/push" : "reuse when available, cached full-image fallback otherwise"})`);
+    lanes.push(`Lambda scanner deploys (${SCANNER_REGIONS.join(", ")}; ${settingsPlan}; runtime base ${args.pushScannerRuntimeBase ? "rebuild/push" : "reuse verified build-region base; stop if missing"})`);
   }
   if (args.mode === "all" || args.mode === "db") {
     lanes.push(args.mode === "all"
@@ -882,7 +1123,7 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
   console.log("");
   console.log("Deploy plan:");
   console.log(`  ref: ${sha}`);
-  console.log(`  preflight: ${args.noPredeploy ? "skip" : args.mode === "all" ? "pnpm preflight:all" : "pnpm preflight:fast"}`);
+  console.log(`  preflight: ${args.noPredeploy ? "validate exact-source receipts" : args.mode === "all" ? "pnpm preflight:all" : "pnpm preflight:fast"}`);
   console.log(`  git push: ${args.noPush || args.ref ? "skip" : "push current branch to origin"}`);
   if (args.preserveScannerConfiguration && (args.mode === "all" || args.mode === "scanners")) {
     console.log("  blocked: scanner promotion requires configuration/provenance writes; this plan authorizes no remote action");
@@ -890,12 +1131,18 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
   if (args.preserveScannerOperationalSettings && (args.mode === "all" || args.mode === "scanners")) {
     console.log("  scanner operational settings: preserve existing flags, memory and timeouts; image provenance environment writes remain required");
   }
-  if (args.mode === "all") console.log("  order: finish web and affected validation consumers before scanner promotion");
+  if (args.stagedRelease) {
+    console.log(args.stagedRelease.action === "stage"
+      ? "  staged path: verify and build web, scanner, and affected validation artifacts; no ECS, database or Lambda updates"
+      : "  staged path: verify both immutable artifacts; promote web and affected validation before all six Lambda handoffs");
+  } else if (args.mode === "all") {
+    console.log("  order: prepare scanner artifacts alongside consumers; all Lambda writes wait for both affected consumers");
+  }
   for (const lane of lanes) {
     console.log(`  - ${lane}`);
   }
   if (changed.lambdaRuntimeBase && !args.pushScannerRuntimeBase && (args.mode === "all" || args.mode === "scanners")) {
-    console.log("  note: Lambda runtime-base inputs changed, but scanner deploys will reuse an existing base when available or use the cached full-image path.");
+    console.log("  note: Lambda runtime-base inputs changed; routine deployment requires a verified build-region base and never rebuilds Chromium implicitly.");
     console.log("        Pass --push-runtime-base to rebuild and push the scanner runtime base explicitly.");
   }
 }

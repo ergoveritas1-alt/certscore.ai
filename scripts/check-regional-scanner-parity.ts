@@ -1,8 +1,10 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import { createWebBotAuthKeyMaterial } from "../packages/web-bot-auth/src/index.js";
 
+const exec = promisify(execFile);
 const REGIONS = ["eu-west-1", "eu-central-1", "us-west-1"] as const;
 type Region = (typeof REGIONS)[number];
 
@@ -85,18 +87,14 @@ type Instance = {
   Tags?: Array<{ Key?: string; Value?: string }>;
 };
 
-function awsJson<T>(region: Region, args: string[]): T {
-  return JSON.parse(execFileSync("aws", [
-    ...args,
-    "--region",
-    region,
-    "--output",
-    "json",
-  ], { encoding: "utf8" })) as T;
+async function awsJson<T>(region: Region, args: string[]): Promise<T> {
+  const { stdout } = await exec("aws", [...args, "--region", region, "--output", "json"],
+    { encoding: "utf8", timeout: 30_000 });
+  return JSON.parse(stdout) as T;
 }
 
-function normalizedProxyUserData(region: Region, instanceId: string): string {
-  const response = awsJson<{ UserData?: { Value?: string } }>(region, [
+async function normalizedProxyUserData(region: Region, instanceId: string): Promise<string> {
+  const response = await awsJson<{ UserData?: { Value?: string } }>(region, [
     "ec2",
     "describe-instance-attribute",
     "--instance-id",
@@ -115,9 +113,10 @@ function normalizedProxyUserData(region: Region, instanceId: string): string {
     .trim();
 }
 
-const errors: string[] = [];
-const observed = REGIONS.map((region) => {
-  const fn = awsJson<LambdaFunction>(region, [
+async function checkRegion(region: Region) {
+  const started = performance.now();
+  const errors: string[] = [];
+  const fn = await awsJson<LambdaFunction>(region, [
     "lambda",
     "get-function",
     "--function-name",
@@ -185,7 +184,7 @@ const observed = REGIONS.map((region) => {
   if (!allocationId?.startsWith("eipalloc-")) {
     throw new Error(`${region}: EC2 proxy allocation ID is missing.`);
   }
-  const addresses = awsJson<{ Addresses?: Address[] }>(region, [
+  const addresses = await awsJson<{ Addresses?: Address[] }>(region, [
     "ec2",
     "describe-addresses",
     "--allocation-ids",
@@ -195,7 +194,7 @@ const observed = REGIONS.map((region) => {
   if (!address?.InstanceId) {
     throw new Error(`${region}: proxy Elastic IP is not associated with an instance.`);
   }
-  const reservations = awsJson<{ Reservations?: Array<{ Instances?: Instance[] }> }>(region, [
+  const reservations = await awsJson<{ Reservations?: Array<{ Instances?: Instance[] }> }>(region, [
     "ec2",
     "describe-instances",
     "--instance-ids",
@@ -219,7 +218,7 @@ const observed = REGIONS.map((region) => {
       errors.push(`${region}: ${label} expected ${expected}, received ${value ?? "missing"}.`);
     }
   }
-  const normalizedUserData = normalizedProxyUserData(region, address.InstanceId);
+  const normalizedUserData = await normalizedProxyUserData(region, address.InstanceId);
   if (normalizedUserData !== canonicalTemplate.trim()) {
     errors.push(`${region}: proxy user data differs from the canonical regional configuration.`);
   }
@@ -228,28 +227,45 @@ const observed = REGIONS.map((region) => {
     imageDigest: fn.Code?.ResolvedImageUri?.split("@")[1],
     postRefusalRejectWorkerEnabled,
     region,
+    errors,
+    durationMs: Math.round(performance.now() - started),
   };
+}
+
+async function main() {
+  const settled = await Promise.allSettled(REGIONS.map(checkRegion));
+  const observed = settled.flatMap(result => result.status === "fulfilled" ? [result.value] : []);
+  const errors = observed.flatMap(region => region.errors);
+  for (const [index, result] of settled.entries()) {
+    if (result.status === "rejected") errors.push(`${REGIONS[index]}: regional readback failed.`);
+    else console.log(`${result.value.region}: parity readback ${result.value.durationMs}ms`);
+  }
+  const ireland = observed.find(result => result.region === "eu-west-1");
+  const baselineDigest = ireland?.imageDigest;
+  for (const entry of observed) {
+    if (!baselineDigest || entry.imageDigest !== baselineDigest) {
+      errors.push(`${entry.region}: scanner image digest does not match the Ireland baseline.`);
+    }
+    if (entry.postRefusalRejectWorkerEnabled !== ireland?.postRefusalRejectWorkerEnabled) {
+      errors.push(`${entry.region}: Reject worker enable flag does not match the Ireland baseline.`);
+    }
+    if (entry.cmpActionRecipeDisabled !== ireland?.cmpActionRecipeDisabled) {
+      errors.push(`${entry.region}: CMP action recipe kill switch does not match the Ireland baseline.`);
+    }
+  }
+
+  if (errors.length > 0) {
+    console.error("Regional scanner parity check failed:");
+    for (const error of errors) {
+      console.error(`- ${error}`);
+    }
+    process.exit(1);
+  }
+
+  console.log(`Regional scanner parity passed for ${REGIONS.join(", ")}.`);
+}
+
+void main().catch(() => {
+  console.error("Regional scanner parity check could not complete.");
+  process.exitCode = 1;
 });
-
-const baselineDigest = observed[0]?.imageDigest;
-for (const entry of observed) {
-  if (!baselineDigest || entry.imageDigest !== baselineDigest) {
-    errors.push(`${entry.region}: scanner image digest does not match the Ireland baseline.`);
-  }
-  if (entry.postRefusalRejectWorkerEnabled !== observed[0]?.postRefusalRejectWorkerEnabled) {
-    errors.push(`${entry.region}: Reject worker enable flag does not match the Ireland baseline.`);
-  }
-  if (entry.cmpActionRecipeDisabled !== observed[0]?.cmpActionRecipeDisabled) {
-    errors.push(`${entry.region}: CMP action recipe kill switch does not match the Ireland baseline.`);
-  }
-}
-
-if (errors.length > 0) {
-  console.error("Regional scanner parity check failed:");
-  for (const error of errors) {
-    console.error(`- ${error}`);
-  }
-  process.exit(1);
-}
-
-console.log(`Regional scanner parity passed for ${REGIONS.join(", ")}.`);

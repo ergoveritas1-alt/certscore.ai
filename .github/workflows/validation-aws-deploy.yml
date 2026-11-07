@@ -1,4 +1,5 @@
 name: Validation AWS Deploy
+run-name: ${{ inputs.stage_only && format('Stage validation {0}', github.sha) || inputs.staged_run_id != '' && format('Promote validation {0} from {1} {2}', github.sha, inputs.staged_run_id, inputs.staged_image) || github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' && format('Verify validation {0}', github.sha) || format('Deploy validation {0}', github.sha) }}
 
 on:
   push:
@@ -23,7 +24,11 @@ on:
       - "patches/**"
       - "tsconfig.base.json"
       - "turbo.json"
+      - "scripts/select-workflow-deployment.mjs"
+      - "scripts/lib/deployment-inputs.mjs"
+      - "scripts/lib/deployed-image.mjs"
       - "scripts/runtime-base-changes.mjs"
+      - "scripts/validation-worker-ecs-healthcheck.json"
       - "scripts/lib/runtime-base-inputs.mjs"
       - "scripts/docker-source-policy.json"
       - "scripts/build-with-pinned-node-fallback.mjs"
@@ -37,6 +42,22 @@ on:
       - "!apps/web/**/*.spec.tsx"
   workflow_dispatch:
     inputs:
+      stage_only:
+        description: Verify and stage the exact validation worker image in ECR
+        type: boolean
+        default: false
+      staged_run_id:
+        description: Successful validation staging run ID
+        type: string
+        default: ''
+      staged_image:
+        description: Approved staging attempt and SHA-256 digest
+        type: string
+        default: ''
+      expected_sha:
+        description: Exact target for an approved staged coupled release
+        type: string
+        default: ''
       use_runtime_base:
         description: "Use the prebuilt validation worker runtime base image."
         required: false
@@ -67,9 +88,13 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      actions: read
       id-token: write
 
     env:
+      STAGE_ONLY: ${{ inputs.stage_only }}
+      STAGED_RUN_ID: ${{ inputs.staged_run_id }}
+      STAGED_IMAGE: ${{ inputs.staged_image }}
       EXPERIMENTAL_BUILDKIT_SOURCE_POLICY: ${{ github.workspace }}/scripts/docker-source-policy.json
       AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
       AWS_ROLE_TO_ASSUME: ${{ vars.AWS_VALIDATION_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
@@ -101,12 +126,35 @@ jobs:
       CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED: "1"
 
     steps:
+      - name: Verify requested staged revision
+        if: inputs.expected_sha != '' || inputs.stage_only || inputs.staged_run_id != '' || inputs.staged_image != ''
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_ENABLED: ${{ vars.AWS_STAGED_COUPLED_RELEASES }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          if [[ "$STAGE_ONLY" == true || -n "$STAGED_RUN_ID" || -n "$STAGED_IMAGE" ]]; then
+            test "$STAGING_ENABLED" = true || exit 1
+            test "$GITHUB_EVENT_NAME" = workflow_dispatch || exit 1
+            test "$VALIDATION_WORKER_USE_RUNTIME_BASE" = true || exit 1
+            test "$VALIDATION_WORKER_PUSH_RUNTIME_BASE" = false || exit 1
+            test "$VALIDATION_WORKER_RUNTIME_BASE_TAG" = validation-worker-runtime-base || exit 1
+            if [[ "$STAGE_ONLY" == true ]]; then
+              [[ -z "$STAGED_RUN_ID" && -z "$STAGED_IMAGE" ]] || exit 1
+            else
+              [[ "$STAGED_RUN_ID" =~ ^[1-9][0-9]{0,15}$ ]] || exit 1
+              [[ "$STAGED_IMAGE" =~ ^[1-9][0-9]{0,5}:sha256:[0-9a-f]{64}$ ]] || exit 1
+            fi
+          fi
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Report deploy-triggering changes
+        if: inputs.staged_run_id == ''
         run: |
           if [[ "${GITHUB_EVENT_NAME}" == "push" && -n "${{ github.event.before }}" ]]; then
             base_ref="${{ github.event.before }}"
@@ -168,15 +216,20 @@ jobs:
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          inline-session-policy: >-
+            ${{ inputs.stage_only && '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ecr:GetAuthorizationToken","ecr:DescribeImages","ecr:BatchGetImage","ecr:GetDownloadUrlForLayer","ecr:BatchCheckLayerAvailability","ecr:InitiateLayerUpload","ecr:UploadLayerPart","ecr:CompleteLayerUpload","ecr:PutImage"],"Resource":"*"}]}' || '' }}
 
       - name: Login to Amazon ECR
+        if: inputs.staged_run_id == ''
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
+        if: inputs.staged_run_id == ''
         uses: docker/setup-buildx-action@v3
 
       - name: Setup pnpm
+        if: inputs.staged_run_id == ''
         uses: pnpm/action-setup@v6
         with:
           version: 10.6.3
@@ -185,28 +238,51 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: pnpm
+          cache: ${{ inputs.staged_run_id == '' && 'pnpm' || '' }}
 
       - name: Install dependencies
+        if: inputs.staged_run_id == ''
         run: pnpm install --frozen-lockfile
 
+      - name: Bootstrap workspace exports before dependent verification
+        if: inputs.staged_run_id == ''
+        run: node scripts/release-node.mjs scripts/bootstrap-release.ts
+
       - name: Install Chromium for form lifecycle release check
+        if: inputs.staged_run_id == ''
         run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
 
       - name: Verify post-Accept forms and images reach the report
+        if: inputs.staged_run_id == ''
         run: pnpm test:post-accept-forms
 
 
       - name: Typecheck validation worker
+        if: inputs.staged_run_id == ''
         run: |
-          pnpm --filter @certscore/contracts build
-          pnpm --filter @website-signal-risk-scanner/shared build
           pnpm --filter @website-signal-risk-scanner/validation-worker typecheck
 
       - name: Run validation pipeline tests
+        if: inputs.staged_run_id == ''
         run: pnpm test:scan-pipeline
 
+      - name: Select deployment from installed validation runtime inputs
+        id: runtime-selection
+        env:
+          ECS_SERVICE_NAME: ${{ env.ECS_WORKER_SERVICE_NAME }}
+          ECS_CONTAINER_NAME: ${{ env.ECS_WORKER_CONTAINER_NAME }}
+          HOLD_AUTOMATIC_PROMOTION: ${{ github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' }}
+        run: |
+          if [[ -n "$STAGED_RUN_ID" ]]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$HOLD_AUTOMATIC_PROMOTION" == true ]]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            node scripts/select-workflow-deployment.mjs validation
+          fi
+
       - name: Resolve validation worker runtime base mode
+        if: steps.runtime-selection.outputs.deploy == 'true' && inputs.staged_run_id == ''
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
@@ -248,10 +324,11 @@ jobs:
           fi
 
       - name: Test pinned image-source recovery
+        if: steps.runtime-selection.outputs.deploy == 'true' && inputs.staged_run_id == ''
         run: node --test scripts/build-with-pinned-node-fallback.test.mjs
 
       - name: Build and push validation worker runtime base
-        if: ${{ env.VALIDATION_WORKER_PUSH_RUNTIME_BASE == 'true' }}
+        if: ${{ steps.runtime-selection.outputs.deploy == 'true' && inputs.staged_run_id == '' && !inputs.stage_only && (env.VALIDATION_WORKER_PUSH_RUNTIME_BASE == 'true') }}
         run: |
           node scripts/build-with-pinned-node-fallback.mjs -- docker buildx build \
             --provenance=false \
@@ -264,6 +341,7 @@ jobs:
             .
 
       - name: Build and push validation worker image
+        if: steps.runtime-selection.outputs.deploy == 'true' && inputs.staged_run_id == ''
         run: |
           WORKER_IMAGE="${VALIDATION_WORKER_IMAGE}"
           WORKER_CACHE="${WORKER_IMAGE}:buildcache"
@@ -275,6 +353,8 @@ jobs:
             echo "Building validation worker runtime base inside this image build."
           fi
 
+          tags=(-t "${WORKER_IMAGE}:${GITHUB_SHA}")
+          if [[ "$STAGE_ONLY" != true ]]; then tags+=(-t "${WORKER_IMAGE}:latest"); fi
           node scripts/build-with-pinned-node-fallback.mjs -- docker buildx build \
             --provenance=false \
             --sbom=false \
@@ -286,13 +366,40 @@ jobs:
             --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
             --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
             --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
-            -t "${WORKER_IMAGE}:${GITHUB_SHA}" \
-            -t "${WORKER_IMAGE}:latest" \
+            --metadata-file "$RUNNER_TEMP/validation-build-metadata.json" \
+            "${tags[@]}" \
             --push \
             .
 
-      - name: Register validation worker task definition
+          echo "TARGET_VALIDATION_IMAGE=${WORKER_IMAGE}:${GITHUB_SHA}" >> "$GITHUB_ENV"
+          if [[ "$STAGE_ONLY" == true ]]; then
+            digest=$(jq -er '."containerimage.digest" | select(test("^sha256:[0-9a-f]{64}$"))' "$RUNNER_TEMP/validation-build-metadata.json")
+            jq -n --arg sha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" --arg repo "$WORKER_IMAGE" --arg digest "$digest" \
+              '{version:1,sha:$sha,typecheckedSha:$sha,runId:$runId,attempt:$attempt,repository:$repo,digest:$digest}' > "$RUNNER_TEMP/staged-validation.json"
+          fi
+
+      - name: Publish staged validation image receipt
+        if: inputs.stage_only
+        uses: actions/upload-artifact@v4
+        with:
+          name: staged-validation-image-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/staged-validation.json
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Verify and select staged validation image
+        if: inputs.staged_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          test "$(git ls-remote --exit-code origin refs/heads/main)" = "$GITHUB_SHA"$'\t'refs/heads/main
+          image=$(node scripts/resolve-staged-ecs-image.mjs validation "$ECR_WORKER_REPOSITORY")
+          echo "TARGET_VALIDATION_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Register validation worker task definition
+        if: steps.runtime-selection.outputs.deploy == 'true' && !inputs.stage_only
+        run: |
+          test -n "$TARGET_VALIDATION_IMAGE"
           account_id="$(aws sts get-caller-identity --query Account --output text)"
           export VALIDATION_WORKER_LAMBDA_EU_DE_DISPATCH_QUEUE_URL="https://sqs.eu-central-1.amazonaws.com/${account_id}/certscore-v2-dag-local-production-dispatch.fifo"
           export VALIDATION_WORKER_LAMBDA_EU_IE_DISPATCH_QUEUE_URL="https://sqs.eu-west-1.amazonaws.com/${account_id}/certscore-v2-dag-local-production-dispatch.fifo"
@@ -307,13 +414,15 @@ jobs:
           )"
 
           aws ecs describe-task-definition --task-definition "${current_task_definition}" \
-            | jq '.taskDefinition
+            | jq --slurpfile healthcheck scripts/validation-worker-ecs-healthcheck.json '.taskDefinition
               | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
               | .cpu = env.ECS_WORKER_CPU
               | .memory = env.ECS_WORKER_MEMORY
               | .containerDefinitions = (.containerDefinitions | map(
                   if .name == env.ECS_WORKER_CONTAINER_NAME
-                  then .image = "\(env.VALIDATION_WORKER_IMAGE):\(env.GITHUB_SHA)"
+                  then .image = env.TARGET_VALIDATION_IMAGE
+                    | .healthCheck = $healthcheck[0]
+                    | .dockerLabels = ((.dockerLabels // {}) + {"org.opencontainers.image.revision":env.GITHUB_SHA})
                     | del(.command)
                     | .secrets = (
                         (.secrets // [])
@@ -436,19 +545,38 @@ jobs:
           echo "Registered ${task_definition_arn}"
 
       - name: Force ECS deployments
+        id: worker-rollout
+        if: steps.runtime-selection.outputs.deploy == 'true' && !inputs.stage_only
         run: |
+          # A diagnostic read must not block the rollout if ECS telemetry is unavailable.
+          if previous_tasks=$(timeout 5s aws ecs list-tasks \
+            --cluster "$ECS_CLUSTER_NAME" --service-name "$ECS_WORKER_SERVICE_NAME" \
+            --desired-status RUNNING --max-items 100 --output json \
+            | jq -ce '.taskArns | select(type == "array")'); then
+            echo "VALIDATION_PREVIOUS_TASKS=$previous_tasks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Could not snapshot the previous validation tasks for rollout timing."
+          fi
+
           aws ecs update-service \
             --cluster "${ECS_CLUSTER_NAME}" \
             --service "${ECS_WORKER_SERVICE_NAME}" \
             --task-definition "${VALIDATION_WORKER_TASK_DEFINITION_ARN}" \
-            --force-new-deployment >/dev/null
+            --force-new-deployment \
+            --query 'service.deployments[?status==`PRIMARY`].{id:id,createdAt:createdAt}' \
+            --output json
 
       - name: Wait for ECS services to stabilize
+        if: steps.runtime-selection.outputs.deploy == 'true' && !inputs.stage_only
         run: |
-          aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_WORKER_SERVICE_NAME}"
+          if [[ -z "$STAGED_RUN_ID" ]]; then
+            aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_WORKER_SERVICE_NAME}"
+          else
+            node scripts/wait-for-staged-ecs.mjs "$ECS_CLUSTER_NAME" "$ECS_WORKER_SERVICE_NAME" "$VALIDATION_WORKER_TASK_DEFINITION_ARN"
+          fi
 
       - name: Check validation worker ECS boot
-        if: ${{ env.ECS_WORKER_LOG_GROUP != '' }}
+        if: ${{ steps.runtime-selection.outputs.deploy == 'true' && !inputs.stage_only && (env.ECS_WORKER_LOG_GROUP != '') }}
         env:
           ECS_CLUSTER_NAME: ${{ env.ECS_CLUSTER_NAME }}
           ECS_SERVICE_NAME: ${{ env.ECS_WORKER_SERVICE_NAME }}
@@ -459,10 +587,25 @@ jobs:
           EXPECTED_GIT_SHA: ${{ github.sha }}
           ECS_HEALTH_REQUIRE_LOG_HEARTBEAT: "0"
           ECS_HEALTH_LOG_PATTERN: validation-worker.*started|validation-worker.*heartbeat|heartbeat
-        run: pnpm ops:check:ecs-service-deploy
+        run: |
+          if [[ -z "$STAGED_RUN_ID" ]]; then
+            pnpm ops:check:ecs-service-deploy
+          else
+            bash scripts/check-ecs-service-deploy-health.sh
+          fi
 
       - name: Skip validation worker ECS boot check
-        if: ${{ env.ECS_WORKER_LOG_GROUP == '' }}
+        if: ${{ steps.runtime-selection.outputs.deploy == 'true' && !inputs.stage_only && (env.ECS_WORKER_LOG_GROUP == '') }}
         run: |
           echo "Skipping validation worker ECS boot check because AWS_VALIDATION_ECS_WORKER_LOG_GROUP is not configured."
           echo "Set AWS_VALIDATION_ECS_WORKER_LOG_GROUP to enable post-deploy heartbeat/log validation."
+
+      - name: Report previous validation task stop timing
+        if: ${{ !cancelled() && steps.worker-rollout.outcome == 'success' && env.VALIDATION_PREVIOUS_TASKS != '' && env.VALIDATION_PREVIOUS_TASKS != '[]' }}
+        run: |
+          mapfile -t previous_tasks < <(jq -r '.[]' <<< "$VALIDATION_PREVIOUS_TASKS")
+          if ! timeout 5s aws ecs describe-tasks --cluster "$ECS_CLUSTER_NAME" --tasks "${previous_tasks[@]}" --output json \
+            | jq -ce '{previousTasks: [.tasks[] | {taskArn, taskDefinitionArn, lastStatus, stoppingAt, executionStoppedAt, stoppedAt}],
+                unavailableTasks: [.failures[]? | {arn, reason}]}'; then
+            echo "::warning::Could not read stop timing for the previous validation tasks."
+          fi

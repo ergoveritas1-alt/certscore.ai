@@ -56,6 +56,16 @@
     "../scripts/deploy-fast.ts",
     "../scripts/npm-release-runtime.test.ts",
     "../scripts/run-local-v2-dag-lambda-parity.test.ts",
-    "../apps/v2-dag-lambda/src/gpc-release-pipeline.test.ts"
+    "../apps/v2-dag-lambda/src/gpc-release-pipeline.test.ts",
+    "../scripts/predeploy.ts",
+    "../scripts/release-verification.ts",
+    "../scripts/release-prepare.ts",
+    "../scripts/lib/release-shards.test.ts",
+    "../scripts/bootstrap-release.ts",
+    "../scripts/release-preparation.test.ts",
+    "../scripts/lib/release-scheduler.test.ts",
+    "../scripts/lib/release-receipts.test.ts",
+    "../scripts/lib/scanner-artifact.test.ts",
+    "../scripts/benchmark-release-shards.ts"
   ]
 }

@@ -65,7 +65,11 @@ test("validation deployment classifiers include web server dependencies compiled
   const deploySource = await readFile("scripts/deploy-fast.ts", "utf8");
   const predeploySource = await readFile("scripts/predeploy.ts", "utf8");
 
-  assert.match(deploySource, /file\.startsWith\("apps\/web\/server\/"\)/);
+  const { deploymentInputDecision } = await import("./lib/deployment-inputs.mjs");
+  const decision = await deploymentInputDecision("validation", ["apps/web/server/validation-source.ts"],
+    async () => "export const value = 1;", async () => "export const value = 2;");
+  assert.equal(decision.deploy, true);
+  assert.match(deploySource, /deploymentInputDecision/);
   assert.match(predeploySource, /file\.startsWith\("apps\/web\/server\/"\)/);
 });
 
@@ -277,17 +281,23 @@ test("scanner NAT-free AWS service endpoints are private, scoped, and migration-
 
 test("routine scanner deploys promote immutable digests without recreating infrastructure", async () => {
   const source = await readFile("scripts/deploy-fast.ts", "utf8");
-  const deployFunction = source.match(/async function deployScanners[\s\S]*?\n}\n\nasync function readScannerWebBotAuthPrivateKey/)?.[0] ?? "";
+  const deployFunction = source.slice(source.indexOf("async function promoteScannerArtifact("), source.indexOf("async function deployScanners("));
+  const preparation = source.slice(source.indexOf("async function prepareScannerArtifact("), source.indexOf("async function promoteScannerArtifact("));
   const verifyFunction = source.match(/async function verifyScanners[\s\S]*?\n}\n\nasync function ensureWorkflowRun/)?.[0] ?? "";
-  assert.match(deployFunction, /imageDetails\[0\]\.imageDigest/);
+  assert.match(preparation, /imageDetails\[0\]\.imageDigest/);
+  assert.match(preparation, /assertScannerArtifact\(artifact, input.ref\)/);
+  assert.doesNotMatch(preparation, /synchronizeScannerImage|applyScannerRuntimeConfiguration/);
   assert.match(deployFunction, /await applyScannerRuntimeConfiguration\(\)/);
-  assert.match(deployFunction, /synchronizeScannerImage\(awsScannerImageControl\(region\), digestImageUri, true\)/);
-  assert.match(deployFunction, /synchronizeScannerImage\(awsScannerImageControl\(region, true\), digestImageUri, true\)/);
+  assert.match(deployFunction, /runScannerPromotions\(async \(region, inventory\)/);
+  assert.match(deployFunction, /synchronizeScannerImage\(awsScannerImageControl\(region, inventory\), artifact.images\[region\]!, true[,)]/);
+  const artifact = await readFile("scripts/lib/scanner-artifact.ts", "utf8");
+  assert.match(artifact, /SCANNER_PROVENANCE_REGIONS\.flatMap\(region => \[promote\(region, false\), promote\(region, true\)\]\)/);
+  assert.match(artifact, /await promote\(region, false\);\s+await promote\(region, true\);/);
   const imageControl = await readFile("scripts/lib/scanner-image-provenance.ts", "utf8");
   assert.match(imageControl, /"lambda", "update-function-code"/);
   assert.ok(
     deployFunction.indexOf("await applyScannerRuntimeConfiguration()") <
-      deployFunction.indexOf("await synchronizeScannerImage("),
+      deployFunction.indexOf("await runScannerPromotions("),
     "scanner runtime configuration must converge before image promotion"
   );
   assert.doesNotMatch(deployFunction, /setup-dev-aws-image\.sh/);

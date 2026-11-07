@@ -35,17 +35,30 @@ function sameEnvironment(actual: Record<string, string>, expected: Record<string
  * The same operation repairs a stale digest on the current image without changing code.
  * Every mutation uses Lambda optimistic revision guards; unrelated settings are preserved.
  */
-export async function synchronizeScannerImage(control: ScannerImageControl, expectedImage: string, allowCodePromotion: boolean) {
+export async function synchronizeScannerImage(control: ScannerImageControl, expectedImage: string, allowCodePromotion: boolean,
+  report?: (timing: { phase: string; ms: number; succeeded: boolean }) => void) {
+  async function measure<T>(phase: string, action: () => Promise<T>) {
+    const start = performance.now();
+    let succeeded = false;
+    try {
+      const result = await action();
+      succeeded = true;
+      return result;
+    } finally {
+      report?.({ phase, ms: Math.round(performance.now() - start), succeeded });
+    }
+  }
   const digest = scannerImageDigest(expectedImage);
-  let current = await control.read(); healthy(current);
+  let current = await measure("initial-read", () => control.read()); healthy(current);
   if (current.imageUri.split("@")[0] !== expectedImage.split("@")[0]) throw new Error("Scanner image promotion cannot cross regional repositories.");
   if (current.imageUri !== expectedImage && !allowCodePromotion) throw new Error("Repair must not change deployed scanner code.");
   let changed = false;
   async function setEnvironment(variables: Record<string, string>) {
     const imageBefore = current.imageUri;
-    await control.environment(variables, current.revisionId);
-    await control.wait();
-    current = await control.read(); healthy(current, imageBefore);
+    const phase = Object.hasOwn(variables, "SCANNER_IMAGE_DIGEST") ? "stamp-provenance" : "clear-provenance";
+    await measure(phase, () => control.environment(variables, current.revisionId));
+    await measure(`${phase}-wait`, () => control.wait());
+    current = await measure(`${phase}-readback`, () => control.read()); healthy(current, imageBefore);
     if (!sameEnvironment(current.variables, variables)) throw new Error("Scanner environment did not converge without unrelated changes.");
     changed = true;
   }
@@ -55,9 +68,9 @@ export async function synchronizeScannerImage(control: ScannerImageControl, expe
       await setEnvironment(cleared);
     }
     const expectedVariables = { ...current.variables };
-    await control.code(expectedImage, current.revisionId);
-    await control.wait();
-    current = await control.read(); healthy(current, expectedImage);
+    await measure("code-update", () => control.code(expectedImage, current.revisionId));
+    await measure("code-update-wait", () => control.wait());
+    current = await measure("code-update-readback", () => control.read()); healthy(current, expectedImage);
     if (!sameEnvironment(current.variables, expectedVariables)) throw new Error("Scanner environment changed during image promotion.");
     changed = true;
   }

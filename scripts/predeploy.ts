@@ -1,5 +1,15 @@
 import { spawn } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
+import { readFile, readdir } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { availableParallelism, freemem, tmpdir } from "node:os";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { checkReleasePrerequisites } from "./lib/release-prerequisites";
+import { scheduleReleaseTasks, releaseResourceLimits } from "./lib/release-scheduler";
+import { deduplicateExecutions, checkResources, inventoryChecks } from "./lib/release-check-plan";
+import { workspaceExportsFingerprint } from "./lib/release-bootstrap";
+import { releaseInputs, receiptMatches, writeCheckReceipt } from "./lib/release-receipts";
 import { fileURLToPath } from "node:url";
 
 export type Check = {
@@ -17,6 +27,12 @@ type Target = {
 
 type Args = {
   allTargets: boolean;
+  inventory: boolean;
+  targetKeys: string[];
+  receiptDir: string;
+  reuseDir: string | null;
+  requireReceipts: boolean;
+  staged: boolean;
   baseRef: string | null;
   mode: "fast" | "full";
 };
@@ -369,18 +385,23 @@ const CMP_RUNTIME_COORDINATOR_CHECK: Check = {
 
 const POST_ACCEPT_FORMS_CHECK: Check = {key:"post-accept-forms",label:"Delayed Accept forms, safe images and report delivery",
   command:["pnpm","test:post-accept-forms"]};
+const BOOTSTRAP_CHECK: Check = {
+    key: "workspace-package-build",
+    label: "bootstrap workspace package exports for clean-checkout tests and typechecks",
+    command: ["node", "scripts/release-node.mjs", "scripts/bootstrap-release.ts"]
+  };
+
+const RELEASE_PERFORMANCE_CHECK: Check = { key: "release-performance", label: "release scheduling, receipts, scanner barrier and deployment selection", command: ["pnpm", "test:release-performance"] };
+
 const ROOT_FULL_CHECKS: Check[] = [
+  BOOTSTRAP_CHECK,
+  RELEASE_PERFORMANCE_CHECK,
   POST_ACCEPT_FORMS_CHECK,
   REPORT_PRESENTATION_CHECK,
   ASSESSMENT_HIGHLIGHTS_CHECK,
   RELEASE_REGRESSION_REVIEW_CHECK,
   CMP_RUNTIME_VISITOR_CHECK,
   CMP_RUNTIME_COORDINATOR_CHECK,
-  {
-    key: "workspace-package-build",
-    label: "bootstrap workspace package exports for clean-checkout tests and typechecks",
-    command: ["pnpm", "turbo", "run", "build", "--filter=./packages/*"]
-  },
   MCP_RELEASE_ASSET_CHECK,
   MCP_RELEASE_GUARD_CHECK,
   {
@@ -412,12 +433,12 @@ const ROOT_FULL_CHECKS: Check[] = [
   {
     key: "workspace-typecheck",
     label: "workspace typecheck",
-    command: ["pnpm", "turbo", "run", "typecheck"]
+    command: ["pnpm", "turbo", "run", "typecheck", "--concurrency=2"]
   },
   {
     key: "workspace-build",
     label: "workspace build",
-    command: ["pnpm", "turbo", "run", "build"]
+    command: ["node", "scripts/release-node.mjs", "scripts/bootstrap-release.ts", "--workspace"]
   },
   {
     key: "validation-scan-pipeline",
@@ -683,7 +704,7 @@ const TARGETS: Target[] = [
 ];
 
 function isGlobalBuildInput(file: string) {
-  return [
+  return file.startsWith("scripts/lib/release-") || ["scripts/release-node.mjs", "scripts/lib/scanner-artifact.ts", "scripts/lib/deployment-inputs.mjs", "scripts/lib/deployed-image.mjs", "scripts/select-workflow-deployment.mjs", "scripts/web-compiler-cache.mjs"].includes(file) || [
     "package.json",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
@@ -700,23 +721,28 @@ function isGlobalBuildInput(file: string) {
 }
 
 /** The same plan is inspected by the calibration coverage review and executed below. */
-export function getPredeployPlan(changedFiles: string[], options: { full?: boolean; allTargets?: boolean } = {}) {
+export function getPredeployPlan(changedFiles: string[], options: { full?: boolean; allTargets?: boolean; targetKeys?: string[] } = {}) {
   if (options.full) return { targets: ["full"], checks: ROOT_FULL_CHECKS };
-  const targets = options.allTargets ? TARGETS : TARGETS.filter(target => changedFiles.some(target.matches));
+  if (options.targetKeys?.some(key => !TARGETS.some(target => target.key === key))) throw new Error("Unknown preflight target.");
+  const targets = options.allTargets ? TARGETS : TARGETS.filter(target => options.targetKeys?.includes(target.key) || changedFiles.some(target.matches));
   return { targets: targets.map(target => target.key), checks: targets.length
-    ? dedupeChecks([RELEASE_REGRESSION_REVIEW_CHECK, ...targets.flatMap(target => target.checks)]) : [] };
+    ? dedupeChecks([BOOTSTRAP_CHECK, RELEASE_PERFORMANCE_CHECK, RELEASE_REGRESSION_REVIEW_CHECK, ...targets.flatMap(target => target.checks)]) : [] };
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
+  if (args.staged && !args.inventory) {
+    await run(["node", "scripts/release-node.mjs", "scripts/deploy-fast.ts", "all", "--check-staging", "--base", args.baseRef!], { quiet: false });
+  }
+
   if (args.mode === "full") {
-    await runChecks(getPredeployPlan([], { full: true }).checks);
+    await runChecks(getPredeployPlan([], { full: true }).checks, args);
     return;
   }
 
   const changedFiles = await collectChangedFiles(args.baseRef);
-  if (changedFiles.length === 0) {
+  if (changedFiles.length === 0 && !args.allTargets && !args.targetKeys.length) {
     console.log("No changed files detected; fast predeploy has nothing to run.");
     return;
   }
@@ -728,7 +754,7 @@ async function main() {
 
   const selectedTargets = args.allTargets
     ? TARGETS
-    : TARGETS.filter((target) => changedFiles.some(target.matches));
+    : TARGETS.filter((target) => args.targetKeys.includes(target.key) || changedFiles.some(target.matches));
   if (selectedTargets.length === 0) {
     console.log("No deploy-targeted changes detected; fast predeploy has nothing to run.");
     return;
@@ -737,18 +763,36 @@ async function main() {
   console.log("");
   console.log(`${args.allTargets ? "Fast deploy-all" : "Fast predeploy"} targets: ${selectedTargets.map((target) => target.label).join(", ")}`);
 
-  const checks = getPredeployPlan(changedFiles, { allTargets: args.allTargets }).checks;
-  await runChecks(checks);
+  const checks = getPredeployPlan(changedFiles, { allTargets: args.allTargets, targetKeys: args.targetKeys }).checks;
+  await runChecks(checks, args);
 }
 
 function parseArgs(argv: string[]): Args {
   let baseRef: string | null = process.env.PREDEPLOY_BASE_REF ?? "origin/main";
   let mode: Args["mode"] = "fast";
   let allTargets = false;
+  let inventory = false, requireReceipts = false, staged = false;
+  const targetKeys: string[] = [];
+  let receiptDir = process.env.PREDEPLOY_RECEIPT_DIR ?? path.join(tmpdir(), `certscore-preflight-${randomUUID()}`);
+  let reuseDir: string | null = null;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]!;
     if (arg === "--") {
+      continue;
+    }
+    if (arg === "--target") {
+      const value = argv[++index];
+      if (!value || !TARGETS.some(target => target.key === value)) throw new Error("--target requires a known preflight target");
+      targetKeys.push(value); continue;
+    }
+    if (arg === "--inventory") { inventory = true; continue; }
+    if (arg === "--require-receipts") { requireReceipts = true; continue; }
+    if (arg === "--staged") { staged = true; continue; }
+    if (arg === "--receipt-dir" || arg === "--reuse-receipts") {
+      const value = argv[++index];
+      if (!value || value.startsWith("--")) throw new Error(`${arg} requires a directory`);
+      if (arg === "--receipt-dir") receiptDir = path.resolve(value); else reuseDir = path.resolve(value);
       continue;
     }
     if (arg === "--full") {
@@ -780,7 +824,10 @@ function parseArgs(argv: string[]): Args {
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  return { allTargets, baseRef, mode };
+  if (staged && (mode !== "fast" || !allTargets || !baseRef || !/^[a-f0-9]{40}$/.test(baseRef))) {
+    throw new Error("--staged requires preflight:all and the full live-base SHA.");
+  }
+  return { allTargets, baseRef, mode, inventory, receiptDir, reuseDir, requireReceipts, staged, targetKeys };
 }
 
 async function collectChangedFiles(baseRef: string | null) {
@@ -821,25 +868,93 @@ function addLines(target: Set<string>, text: string) {
 }
 
 function dedupeChecks(checks: Check[]) {
-  const seen = new Set<string>();
-  const deduped: Check[] = [];
-  for (const check of checks) {
-    if (seen.has(check.key)) {
-      continue;
-    }
-    seen.add(check.key);
-    deduped.push(check);
-  }
-  return deduped;
+  return deduplicateExecutions(checks);
 }
 
-async function runChecks(checks: Check[]) {
-  for (const check of checks) {
-    console.log("");
-    console.log(`> ${check.label}`);
-    console.log(`$ ${check.command.join(" ")}`);
-    await run(check.command, { quiet: false });
+async function runChecks(checks: Check[], args: Args) {
+  checks = deduplicateExecutions(checks);
+  if (args.inventory) { console.log(JSON.stringify(inventoryChecks(checks), null, 2)); return; }
+  await checkReleasePrerequisites();
+  let availableMb = freemem() / 1024 / 1024;
+  if (process.platform === "darwin") {
+    // macOS free pages exclude reclaimable/compressed memory; use its pressure probe.
+    const report = execFileSync("memory_pressure", ["-Q"], { encoding: "utf8" });
+    const percent = report.match(/System-wide memory free percentage: (\d+)%/);
+    if (!percent) throw new Error("Available release memory could not be verified.");
+    const { totalmem } = await import("node:os");
+    availableMb = totalmem() / 1024 / 1024 * Number(percent[1]) / 100;
+  } else if (process.platform === "linux") {
+    const report = await readFile("/proc/meminfo", "utf8");
+    const available = report.match(/^MemAvailable:\s+(\d+) kB/m);
+    if (available) availableMb = Number(available[1]) / 1024;
   }
+  const limits = releaseResourceLimits({ availableMb, cpus: availableParallelism(),
+    requestedLanes: process.env.PREDEPLOY_LANES ? Number(process.env.PREDEPLOY_LANES) : undefined,
+    requestedMemoryMb: process.env.PREDEPLOY_MEMORY_MB ? Number(process.env.PREDEPLOY_MEMORY_MB) : undefined });
+  console.log(`Release resources: ${limits.lanes} lanes; ${limits.memoryMb} MiB shared cap. Browser/build/unknown groups run exclusively.`);
+  console.log(`Immutable verification receipts: ${args.receiptDir}`);
+  const previous: unknown[] = [];
+  if (args.reuseDir) {
+    for (const file of await readdir(args.reuseDir)) {
+      if (!file.endsWith(".json")) continue;
+      try { previous.push(JSON.parse(await readFile(path.join(args.reuseDir, file), "utf8"))); } catch { /* Malformed attempts are never reusable. */ }
+    }
+  }
+  const initial = await releaseInputs();
+  const started = performance.now();
+  const stagingSmoke = "web-scan-source-contracts";
+  const timings = await scheduleReleaseTasks(checks.map(check => ({
+    key: check.key,
+    dependencies: check.key === BOOTSTRAP_CHECK.key ? [] : [
+      BOOTSTRAP_CHECK.key,
+      ...(args.staged && check.key !== stagingSmoke ? [stagingSmoke] : [])
+    ],
+    ...checkResources(check),
+    run: async () => {
+      const inputs = await releaseInputs();
+      if (inputs.sha !== initial.sha || inputs.fingerprint !== initial.fingerprint || inputs.environment !== initial.environment) {
+        throw new Error("Release inputs changed since gate start; remaining checks were not started.");
+      }
+      const expected = { key: check.key, command: check.command, inputs };
+      const matching = previous.filter(receipt => receiptMatches(receipt, expected));
+      let outputsFingerprint: string | undefined;
+      if (matching.length) {
+        let outputsMatch = true;
+        if (check.key === BOOTSTRAP_CHECK.key) {
+          try { outputsFingerprint = await workspaceExportsFingerprint(); }
+          catch { outputsMatch = false; }
+          outputsMatch &&= matching.some(receipt => receipt.outputsFingerprint === outputsFingerprint);
+        }
+        if (outputsMatch) {
+          if (check.key === BOOTSTRAP_CHECK.key) await run(["node", "scripts/release-node.mjs", "scripts/check-regional-web-bot-auth.ts", "--check-imports"]);
+          console.log(`Verified exact-source receipt reused: ${check.key}`); return;
+        }
+      }
+      if (args.requireReceipts) throw new Error(`No successful matching receipt for ${check.key}; rerun the applicable preflight.`);
+      const startedAt = new Date().toISOString(), start = performance.now();
+      let exitStatus = 1;
+      console.log(`\n> ${check.label}\n$ ${check.command.join(" ")}`);
+      try {
+        await run(check.command, { quiet: false });
+        if (check.key === BOOTSTRAP_CHECK.key) {
+          outputsFingerprint = await workspaceExportsFingerprint();
+          await run(["node", "scripts/release-node.mjs", "scripts/check-regional-web-bot-auth.ts", "--check-imports"]);
+        }
+        const after = await releaseInputs();
+        if (after.fingerprint !== inputs.fingerprint || after.sha !== inputs.sha) throw new Error("Release inputs changed during verification; result is invalid.");
+        exitStatus = 0;
+      } catch (error) {
+        exitStatus = typeof (error as { exitCode?: unknown }).exitCode === "number" ? (error as { exitCode: number }).exitCode : 1;
+        throw error;
+      } finally {
+        await writeCheckReceipt(args.receiptDir, { version: 1, ...expected, outputsFingerprint, cwd: ".", startedAt,
+          completedAt: new Date().toISOString(), exitStatus, durationMs: performance.now() - start });
+      }
+    },
+  })), limits);
+  const final = await releaseInputs();
+  if (initial.fingerprint !== final.fingerprint || initial.sha !== final.sha) throw new Error("Release inputs changed during the gate.");
+  console.log(`Preflight critical-path wall: ${((performance.now() - started) / 1000).toFixed(1)}s; parallel task total: ${(timings.reduce((sum, value) => sum + value.durationMs, 0) / 1000).toFixed(1)}s`);
 }
 
 function run(command: string[], options: { quiet?: boolean; reject?: boolean } = {}) {
@@ -870,7 +985,7 @@ function run(command: string[], options: { quiet?: boolean; reject?: boolean } =
     child.on("close", (exitCode) => {
       const code = exitCode ?? 1;
       if (code !== 0 && options.reject !== false) {
-        reject(new Error(`${command.join(" ")} failed with exit code ${code}${stderr ? `\n${stderr}` : ""}`));
+        reject(Object.assign(new Error(`${command.join(" ")} failed with exit code ${code}${stderr ? `\n${stderr}` : ""}`), { exitCode: code }));
         return;
       }
       resolve({ exitCode: code, stdout });

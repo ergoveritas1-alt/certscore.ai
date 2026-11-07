@@ -18,7 +18,9 @@ read_topology_value() {
   fi
 }
 
-expected_remote="${EXPECTED_GIT_REMOTE:-git@github.com:ergoveritas1-alt/certscore.ai.git}"
+expected_remote="${EXPECTED_GIT_REMOTE:-}"
+canonical_ssh="git@github.com:ergoveritas1-alt/certscore.ai"
+canonical_https="https://github.com/ergoveritas1-alt/certscore.ai"
 expected_web_platform="${EXPECTED_WEB_PLATFORM:-$(read_topology_value preferredWebPlatform)}"
 expected_web_platform="${expected_web_platform:-amplify}"
 accepted_aws_runtime="${ACCEPTED_AWS_RUNTIME:-$(read_topology_value acceptedAwsRuntime)}"
@@ -59,10 +61,12 @@ echo
 origin_remote="$(git remote get-url origin 2>/dev/null || true)"
 if [[ -z "${origin_remote}" ]]; then
   fail "Git remote origin is not configured"
-elif [[ "${origin_remote}" == "${expected_remote}" ]]; then
+elif [[ -n "${expected_remote}" && "${origin_remote%.git}" == "${expected_remote%.git}" ]]; then
   pass "Git remote origin matches ${expected_remote}"
+elif [[ -z "${expected_remote}" && ( "${origin_remote%.git}" == "${canonical_ssh}" || "${origin_remote%.git}" == "${canonical_https}" ) ]]; then
+  pass "Git remote origin matches the CertScore.ai repository"
 else
-  fail "Git remote origin points at ${origin_remote}, expected ${expected_remote}"
+  fail "Git remote origin does not match ${expected_remote:-the canonical CertScore.ai repository}"
 fi
 
 current_branch="$(git rev-parse --abbrev-ref HEAD)"

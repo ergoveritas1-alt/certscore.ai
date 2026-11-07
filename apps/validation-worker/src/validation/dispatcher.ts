@@ -174,7 +174,13 @@ async function claimAvailableNanoSignalLease(coordinator: NanoDispatchCoordinato
 export async function startValidationDispatcher(options: {
   browserCleanup?: { schedule(reason: string): Promise<unknown> | unknown } | null;
   concurrency: number;
+  onReady?: () => void;
 }) {
+  let onReady = options.onReady;
+  const reportReady = () => {
+    onReady?.();
+    onReady = undefined;
+  };
   const slots = Math.max(1, options.concurrency);
   const wakeups = new NanoSignalWakeupQueue();
   const coordinator: NanoDispatchCoordinator = {
@@ -187,18 +193,22 @@ export async function startValidationDispatcher(options: {
   });
 
   await Promise.all(
-    Array.from({ length: slots }, (_, index) => runDispatchLoop(index + 1, options.browserCleanup ?? null, coordinator))
+    Array.from({ length: slots }, (_, index) =>
+      runDispatchLoop(index + 1, options.browserCleanup ?? null, coordinator, reportReady)
+    )
   );
 }
 
 async function runDispatchLoop(
   slot: number,
   browserCleanup: { schedule(reason: string): Promise<unknown> | unknown } | null,
-  coordinator: NanoDispatchCoordinator
+  coordinator: NanoDispatchCoordinator,
+  reportReady: () => void
 ) {
   for (;;) {
     try {
       const { state } = await getValidationPipelineState();
+      reportReady();
       if (state !== "running") {
         await sleep(VALIDATION_DISPATCH_IDLE_POLL_MS);
         continue;

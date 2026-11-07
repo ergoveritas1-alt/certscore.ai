@@ -31,3 +31,5 @@ packages/*/dist
 !.env.example
 !**/.env.example
 supabase/.temp
+
+.release-cache/

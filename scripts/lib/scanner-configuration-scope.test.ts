@@ -104,11 +104,14 @@ test("restricted promotion uses the real provenance transaction while both broad
   await assert.rejects(configureScannerSettingsUnlessPreserved(false, forbidden), /must not run/);
 });
 
-test("both producer entry paths forward operational preservation and validate settings before build mutations", async () => {
+test("split artifact and promotion paths retain operational preservation and validate settings before mutations", async () => {
   const source = await readFile("scripts/deploy-fast.ts", "utf8");
-  assert.equal((source.match(/preserveOperationalSettings: args\.preserveScannerOperationalSettings/g) ?? []).length, 2);
-  const body = source.slice(source.indexOf("async function deployScanners("), source.indexOf("async function readScannerOperationalSettings("));
-  assert.ok(body.indexOf("await readScannerOperationalSettings()") < body.indexOf("await scannerRuntimeBaseMode("));
-  assert.equal((body.match(/configureScannerSettingsUnlessPreserved\(input.preserveOperationalSettings/g) ?? []).length, 2);
-  assert.match(body, /assertScannerOperationalSettingsPreserved\(before, after.get\(key\)!\)/);
+  assert.match(source, /prepareScannerArtifact\(\{ ref: sha,[\s\S]*?preserveOperationalSettings: args.preserveScannerOperationalSettings/);
+  assert.match(source, /promoteScannerArtifact\(artifact, \{ ref: sha, preserveOperationalSettings: args.preserveScannerOperationalSettings/);
+  const preparation = source.slice(source.indexOf("async function prepareScannerArtifact("), source.indexOf("async function promoteScannerArtifact("));
+  assert.ok(preparation.indexOf("await readScannerOperationalSettings()") < preparation.indexOf("await scannerRuntimeBaseMode("));
+  assert.doesNotMatch(preparation, /configureScannerSettingsUnlessPreserved|synchronizeScannerImage/);
+  const promotion = source.slice(source.indexOf("async function promoteScannerArtifact("), source.indexOf("async function deployScanners("));
+  assert.equal((promotion.match(/configureScannerSettingsUnlessPreserved\(input.preserveOperationalSettings/g) ?? []).length, 2);
+  assert.match(promotion, /assertScannerOperationalSettingsPreserved\(before, after.get\(key\)!\)/);
 });

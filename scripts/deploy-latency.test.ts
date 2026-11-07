@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { hasVerifiedBuildTypecheck } from "../apps/web/build-typecheck.mjs";
 import { runtimeBaseDockerInputs, runtimeBaseInputsChanged, runtimeBaseSourceFingerprint } from "./lib/runtime-base-inputs.mjs";
@@ -14,12 +17,27 @@ test("web typecheck reuse requires the successful exact-SHA CI receipt", async (
   const step = workflow.slice(workflow.indexOf("- name: Typecheck web"), workflow.indexOf("- name: Test Marketplace Light"));
   assert.ok(step.indexOf("set -euo pipefail") < step.indexOf("/web typecheck"));
   assert.ok(step.indexOf("/web typecheck") < step.indexOf('echo "verified_sha='));
-  assert.match(workflow, /WEB_TYPECHECK_VERIFIED_SHA="\$\{\{ steps.web-typecheck.outputs.verified_sha \}\}"/);
+  assert.match(workflow, /WEB_TYPECHECK_VERIFIED_SHA="\$\{\{ needs.verify-public-web.outputs.verified_sha \}\}"/);
   const evaluate = (receipt: string) => execFileSync(process.execPath, ["--input-type=module", "-e",
     "import config from './apps/web/next.config.mjs'; process.stdout.write(String(config.typescript.ignoreBuildErrors));"],
     {encoding:"utf8",env:{...process.env,BUILD_GIT_SHA:sha,WEB_TYPECHECK_VERIFIED_SHA:receipt}});
   assert.equal(evaluate(""), "false");
   assert.equal(evaluate(sha), "true");
+});
+
+test("fresh verification overlaps web tracing and skips unused cache writes only when opted in", () => {
+  const evaluate = (cold: string, compilerCache: string, dev: boolean) => JSON.parse(execFileSync(process.execPath,
+    ["--input-type=module", "-e", `
+      import config from './apps/web/next.config.mjs';
+      const { cache } = config.webpack({ cache: { type: 'filesystem' }, resolve: {} }, { dev: ${dev} });
+      console.log(JSON.stringify({ cache, parallelTracing: config.experimental.parallelServerBuildTraces === true,
+        typecheck: !config.typescript.ignoreBuildErrors }));
+    `], { encoding: "utf8", env: { ...process.env, CERTSCORE_COLD_WEB_BUILD: cold,
+      WEB_COMPILER_CACHE_ENABLED: compilerCache, WEB_TYPECHECK_VERIFIED_SHA: "" } }));
+  assert.deepEqual(evaluate("1", "", false), { cache: false, parallelTracing: true, typecheck: true });
+  assert.deepEqual(evaluate("", "", false), { cache: { type: "filesystem" }, parallelTracing: false, typecheck: true });
+  assert.deepEqual(evaluate("1", "1", false), { cache: { type: "filesystem", compression: "gzip" }, parallelTracing: false, typecheck: true });
+  assert.deepEqual(evaluate("1", "", true).cache, { type: "filesystem" });
 });
 
 test("application build optimization does not require a Chromium runtime-base rebuild", async () => {
@@ -51,6 +69,39 @@ test("runtime-base input selection detects real dependency changes and fails clo
   }
   assert.equal(await runtimeBaseInputsChanged("web",['apps/web/Dockerfile'],read({}),read({})),true);
   assert.equal(await runtimeBaseInputsChanged("validation",['apps/validation-worker/src/index.ts'],read({}),read({})),false);
+});
+
+test("the staged release planner reuses the scanner base for script-only manifest changes", async (t) => {
+  const checkout = await mkdtemp(path.join(tmpdir(), "certscore-staged-plan-"));
+  t.after(() => rm(checkout, { recursive: true, force: true }));
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: checkout, encoding: "utf8" }).trim();
+  const commit = async (script: string, dependency: string) => {
+    await writeFile(path.join(checkout, "package.json"), JSON.stringify({ scripts: { verify: script }, dependencies: { example: dependency } }));
+    git("add", "package.json");
+    git("-c", "user.name=Test", "-c", "user.email=test@example.test", "-c", "commit.gpgsign=false", "commit", "-qm", "Fixture");
+    return git("rev-parse", "HEAD");
+  };
+  const plan = (base: string, ref: string) => execFileSync(process.execPath, [
+    "--import", createRequire(path.resolve("package.json")).resolve("tsx"), path.resolve("scripts/deploy-fast.ts"), "all",
+    "--base", base, "--ref", ref, "--no-push", "--no-predeploy", "--preflight-receipts", path.join(checkout, "receipts"),
+    "--preserve-scanner-operational-settings", "--plan", "--stage-release", path.join(checkout, "staged.json"),
+  ], { cwd: checkout, encoding: "utf8", env: { ...process.env, TSX_TSCONFIG_PATH: path.resolve("tsconfig.base.json") } });
+
+  git("init", "-q");
+  const base = await commit("old", "1.0");
+  const scriptOnly = await commit("new", "1.0");
+  assert.match(plan(base, scriptOnly), /Lambda runtime base inputs changed: false/);
+  const changedDependency = await commit("new", "2.0");
+  assert.match(plan(base, changedDependency), /Lambda runtime base inputs changed: true/);
+
+  git("remote", "add", "origin", "https://example.test/wrong-repository.git");
+  const prerequisites = spawnSync(process.execPath, [
+    "--import", createRequire(path.resolve("package.json")).resolve("tsx"),
+    path.resolve("scripts/deploy-fast.ts"), "all", "--check-staging", "--base", base,
+  ], { cwd: checkout, encoding: "utf8", env: { ...process.env, TSX_TSCONFIG_PATH: path.resolve("tsconfig.base.json") } });
+  assert.equal(prerequisites.status, 1);
+  assert.match(prerequisites.stderr, /require the canonical HTTPS GitHub origin/);
+  assert.doesNotMatch(prerequisites.stdout, /authentication: verified|preflight completed/);
 });
 
 test("web base fingerprint detects source drift even if the previous deploy failed", async () => {
@@ -88,6 +139,24 @@ test("validation publishes its importable cache and web retains exact-image migr
   assert.match(validation,/aws ecs wait services-stable/);
 });
 
+test("stage-only web and validation builds pass immutable tags and receipt metadata to BuildKit", async () => {
+  for (const [workflow, component, image] of [
+    ["web-aws-ecs-deploy.yml", "web", "WEB_IMAGE"],
+    ["validation-aws-deploy.yml", "validation", "WORKER_IMAGE"],
+  ]) {
+    const source = await readFile(`.github/workflows/${workflow}`, "utf8");
+    const tags = source.indexOf(`tags=(-t "\${${image}}:\${GITHUB_SHA}")`);
+    const receipt = source.indexOf(`staged-${component}.json`, tags);
+    assert.ok(tags >= 0 && receipt > tags);
+    const stageBuild = source.slice(tags, receipt);
+    assert.ok(stageBuild.includes(`if [[ "$STAGE_ONLY" != true ]]; then tags+=(-t "\${${image}}:latest"); fi`));
+    const build = stageBuild.slice(stageBuild.indexOf("docker buildx build"));
+    assert.ok(build.includes('"${tags[@]}"'));
+    assert.ok(build.includes(`--metadata-file "$RUNNER_TEMP/${component}-build-metadata.json"`));
+    assert.ok(!build.includes(":latest"));
+  }
+});
+
 test("ECR release cleanup gives bounded mutable build artifacts higher priority", async () => {
   for (const file of ["infra/aws/web-ecs/main.tf", "infra/aws/validation/main.tf"]) {
     const source = await readFile(file,"utf8");
@@ -108,4 +177,46 @@ test("local caches and nested environment files stay out of deployment contexts"
   for (const rule of ["**/.turbo","**/*.tsbuildinfo","**/.env","**/.env.*","!**/.env.example"]) {
     assert.ok(rules.includes(rule),`Missing recursive Docker exclusion: ${rule}`);
   }
+});
+
+test("web image strips only non-target Sharp packages before copying the standalone output", async () => {
+  const source = await readFile("apps/web/Dockerfile", "utf8");
+  const trim = source.match(/^RUN (case "\$\{TARGETARCH\}"[\s\S]*?)\n\n/m)?.[1];
+  assert.ok(trim);
+  const variants = ["linux-arm64", "linux-x64", "linuxmusl-arm64", "linuxmusl-x64"];
+  const names = ["colour", ...variants.flatMap(variant => [`sharp-${variant}`, `sharp-libvips-${variant}`])];
+  const temp = await mkdtemp(path.join(tmpdir(), "certscore-web-image-"));
+  try {
+    for (const [target, native] of [["arm64", "arm64"], ["amd64", "x64"], ["other", null]] as const) {
+      const img = path.join(temp, target);
+      await mkdir(img);
+      await Promise.all(names.map(name => mkdir(path.join(img, name))));
+      const command = trim.replace("img=/app/apps/web/.next/standalone/node_modules/@img", 'img="$1"');
+      execFileSync("sh", ["-c", command, "trim-test", img], { env: { ...process.env, TARGETARCH: target } });
+      const expected = native ? ["colour", `sharp-linux-${native}`, `sharp-libvips-linux-${native}`] : names;
+      assert.deepEqual((await readdir(img)).sort(), [...expected].sort());
+    }
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+  assert.ok(source.indexOf("RUN case") < source.indexOf("COPY --from=builder /app/apps/web/.next/standalone"));
+});
+
+test("scanner app packaging changes keep the same Chromium runtime base", async () => {
+  const file = "apps/v2-dag-lambda/Dockerfile";
+  const dockerfile = await readFile(file, "utf8");
+  const unchanged = dockerfile.replace("COPY --from=build /lambda/node_modules ./node_modules",
+    "COPY --from=build /lambda ./");
+  assert.equal(await runtimeBaseInputsChanged("scanners", [file], async () => unchanged, async () => dockerfile), false);
+  assert.equal(await runtimeBaseInputsChanged("scanners", [file], async () => dockerfile,
+    async () => dockerfile.replace("fonts-liberation", "fonts-dejavu-core")), true);
+  assert.equal(await runtimeBaseInputsChanged("scanners", [file], async () => dockerfile,
+    async () => dockerfile.replace("ARG CERTSCORE_LAMBDA_RUNTIME_BASE=lambda-runtime-base", "ARG CERTSCORE_LAMBDA_RUNTIME_BASE=another-base")), true);
+  assert.equal(await runtimeBaseInputsChanged("scanners", [file], async () => "",
+    async () => dockerfile), true);
+  const dependencies = dockerfile.indexOf("COPY --from=build /lambda/node_modules ./node_modules");
+  const handler = dockerfile.indexOf("COPY --from=build /workspace/apps/v2-dag-lambda/dist-bundle/src/handler.js ./src/handler.js");
+  const bootstrap = dockerfile.indexOf("COPY apps/v2-dag-lambda/runtime-bootstrap.mjs ./runtime-bootstrap.mjs", dependencies);
+  assert.ok(dependencies >= 0 && bootstrap > dependencies && handler > bootstrap);
+  assert.ok(dockerfile.indexOf("--prod deploy --legacy /lambda-deps") < dockerfile.indexOf("COPY apps/v2-dag-lambda/src"));
 });

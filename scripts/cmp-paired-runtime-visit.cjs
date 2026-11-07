@@ -26,7 +26,22 @@ function navigationFailureReasons(row) {
   if(row.navigation?.finalUrlAuthorized===false||(row.limitations??[]).some(v=>/^(redirect_target_not_authorized|unsafe_target_blocked|target_navigation_failed:)/.test(v)))reasons.push('navigation_target_not_authorized');
   return reasons;
 }
-module.exports = { boundedDiagnosticBody, diagnosticWindowOpen, assertSerializedPacketMatches, canonicalEvidenceFailure, navigationFailureReasons };
+function saveExclusiveReceipt(out, name, value) {
+  const target = path.join(out, name);
+  const temp = path.join(out, `.${name}.${crypto.randomUUID()}`);
+  const fd = fs.openSync(temp, 'wx', 0o600);
+  try {
+    try { fs.writeFileSync(fd, JSON.stringify(value, null, 2) + '\n'); fs.fsyncSync(fd); }
+    finally { fs.closeSync(fd); }
+    fs.linkSync(temp, target);
+  } finally {
+    fs.unlinkSync(temp);
+  }
+  const directoryFd = fs.openSync(out, 'r');
+  try { fs.fsyncSync(directoryFd); }
+  finally { fs.closeSync(directoryFd); }
+}
+module.exports = { boundedDiagnosticBody, diagnosticWindowOpen, assertSerializedPacketMatches, canonicalEvidenceFailure, navigationFailureReasons, saveExclusiveReceipt };
 
 function modules(root) {
   const core = path.join(root, 'packages/certscore-scan-core/dist');
@@ -66,11 +81,7 @@ async function main() {
   assert.equal(claim.runtime.nodeVersion, process.version);
   assert.equal(claim.runtime.nodeSha256, hash(fs.readFileSync(process.execPath)));
   assert.deepEqual(claim.budgets, { searchMs: 14000, confirmationMs: 2000, resultMs: 20000, acceptObservationMs: 3000, rejectObservationMs: 8000 });
-  const save = (name, value) => {
-    const fd = fs.openSync(path.join(out, name), 'wx');
-    try { fs.writeFileSync(fd, JSON.stringify(value, null, 2) + '\n'); fs.fsyncSync(fd); }
-    finally { fs.closeSync(fd); }
-  };
+  const save = (name, value) => saveExclusiveReceipt(out, name, value);
   const { chromium, holds, contracts, accept, reject, runAccept, runReject } = modules(root);
   holds.assertPublicTestContactAllowed(targetUrl, 'owner-approved fixed local CMP comparison');
   process.env.CERTSCORE_HTTP_USER_AGENT = 'ConsentCheckBot/1.0 (+https://certscore.ai/crawler)';

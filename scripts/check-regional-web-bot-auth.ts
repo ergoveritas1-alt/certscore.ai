@@ -115,7 +115,9 @@ async function main() {
   console.log(`Cloudflare Web Bot Auth passed from ${results.length} production scanner regions.`);
 }
 
-void main().catch((error) => {
+if (process.argv.includes("--check-imports")) {
+  console.log("Regional verification workspace imports: verified (no AWS calls)");
+} else void main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });

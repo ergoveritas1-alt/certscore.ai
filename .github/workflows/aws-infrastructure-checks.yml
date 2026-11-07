@@ -9,6 +9,14 @@ on:
       - "apps/validation-worker/scripts/check-validation-runtime.ts"
       - "infra/aws/**"
       - "scripts/deploy-fast.ts"
+      - "scripts/lib/release-*"
+      - "scripts/release-*"
+      - "scripts/lib/deployment-inputs*"
+      - "scripts/lib/deployed-image*"
+      - "scripts/lib/scanner-artifact*"
+      - "scripts/web-compiler-cache.mjs"
+      - "apps/web/Dockerfile"
+      - ".github/workflows/web-aws-ecs-deploy.yml"
       - "packages/db/src/env.test.ts"
       - "packages/db/src/env.ts"
       - "packages/db/src/s3.ts"
@@ -22,6 +30,14 @@ on:
       - "apps/validation-worker/scripts/check-validation-runtime.ts"
       - "infra/aws/**"
       - "scripts/deploy-fast.ts"
+      - "scripts/lib/release-*"
+      - "scripts/release-*"
+      - "scripts/lib/deployment-inputs*"
+      - "scripts/lib/deployed-image*"
+      - "scripts/lib/scanner-artifact*"
+      - "scripts/web-compiler-cache.mjs"
+      - "apps/web/Dockerfile"
+      - ".github/workflows/web-aws-ecs-deploy.yml"
       - "packages/db/src/env.test.ts"
       - "packages/db/src/env.ts"
       - "packages/db/src/s3.ts"
@@ -29,7 +45,7 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: hashicorp/setup-terraform@v3
@@ -43,6 +59,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: node scripts/release-node.mjs scripts/bootstrap-release.ts
+      - run: pnpm test:release-performance
       - run: pnpm test:aws-infrastructure
       - run: terraform -chdir=infra/aws/web-ecs init -backend=false -input=false
       - run: terraform -chdir=infra/aws/web-ecs validate

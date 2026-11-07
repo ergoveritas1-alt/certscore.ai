@@ -29,29 +29,30 @@ RUN --mount=type=cache,id=wc01-v2-dag-lambda-pnpm-store,target=/pnpm/store \
   pnpm config set store-dir /pnpm/store \
   && pnpm install --frozen-lockfile
 
-COPY packages ./packages
-COPY apps/v2-dag-lambda/src ./apps/v2-dag-lambda/src
-COPY apps/v2-dag-lambda/tsconfig.json ./apps/v2-dag-lambda/tsconfig.json
-COPY apps/v2-dag-lambda/runtime-bootstrap.mjs ./apps/v2-dag-lambda/runtime-bootstrap.mjs
-
-RUN pnpm --filter @website-signal-risk-scanner/v2-dag-lambda bundle
+# Stage external runtime packages before copying code so code-only builds reuse the layer.
 RUN --mount=type=cache,id=wc01-v2-dag-lambda-pnpm-store,target=/pnpm/store \
   pnpm --filter @website-signal-risk-scanner/v2-dag-lambda --prod deploy --legacy /lambda-deps
 RUN node -e "const fs=require('fs');const p='/lambda-deps/node_modules/playwright-core/';if(require(p+'package.json').version!=='1.58.2'||!fs.readFileSync(p+'lib/server/chromium/crNetworkManager.js','utf8').includes('certscoreConnectionId'))process.exit(1)"
 RUN mkdir -p /lambda/node_modules \
   && cp -RL /lambda-deps/node_modules/sharp /lambda/node_modules/sharp \
   && cp -RL /lambda-deps/node_modules/@img /lambda/node_modules/@img \
+  && rm -rf /lambda/node_modules/@img/sharp-linuxmusl-* /lambda/node_modules/@img/sharp-libvips-linuxmusl-* \
   && cp -RL /lambda-deps/node_modules/detect-libc /lambda/node_modules/detect-libc \
   && cp -RL /lambda-deps/node_modules/semver /lambda/node_modules/semver \
   && mkdir -p /lambda/node_modules/@napi-rs \
-  && mkdir -p /lambda/src \
-  && cp /workspace/apps/v2-dag-lambda/dist-bundle/src/handler.js /lambda/src/handler.js \
   && cp -R /lambda-deps/node_modules/pdf-parse /lambda/node_modules/pdf-parse \
   && cp -R /lambda-deps/node_modules/pdfjs-dist /lambda/node_modules/pdfjs-dist \
   && cp -R /lambda-deps/node_modules/@napi-rs/canvas /lambda/node_modules/@napi-rs/canvas \
   && cp -R /lambda-deps/node_modules/@napi-rs/canvas-linux-x64-gnu /lambda/node_modules/@napi-rs/canvas-linux-x64-gnu \
   && cp -R /lambda-deps/node_modules/playwright /lambda/node_modules/playwright \
   && cp -R /lambda-deps/node_modules/playwright-core /lambda/node_modules/playwright-core
+
+COPY packages ./packages
+COPY apps/v2-dag-lambda/src ./apps/v2-dag-lambda/src
+COPY apps/v2-dag-lambda/tsconfig.json ./apps/v2-dag-lambda/tsconfig.json
+COPY apps/v2-dag-lambda/runtime-bootstrap.mjs ./apps/v2-dag-lambda/runtime-bootstrap.mjs
+
+RUN pnpm --filter @website-signal-risk-scanner/v2-dag-lambda bundle
 
 # Validate after bundling so a database refresh can reuse compiled application layers.
 COPY config/iplocate/*.mmdb ./config/iplocate/
@@ -76,17 +77,18 @@ RUN apt-get update \
 FROM ${CERTSCORE_LAMBDA_RUNTIME_BASE} AS runtime
 
 WORKDIR /var/task
+# Keep the database layer reusable across application-only releases.
+COPY --from=build /workspace/config/iplocate /opt/iplocate
+COPY --from=build /lambda/node_modules ./node_modules
+COPY apps/v2-dag-lambda/runtime-bootstrap.mjs ./runtime-bootstrap.mjs
+COPY --from=build /workspace/apps/v2-dag-lambda/dist-bundle/src/handler.js ./src/handler.js
+
 ARG BUILD_GIT_SHA=""
 ARG BUILD_IMAGE_TAG=""
 ARG SCANNER_RUNTIME_VERSION="certscore-v2-dag-parallel-path"
 ENV BUILD_GIT_SHA="${BUILD_GIT_SHA}" \
     BUILD_IMAGE_TAG="${BUILD_IMAGE_TAG}" \
     SCANNER_RUNTIME_VERSION="${SCANNER_RUNTIME_VERSION}"
-
-# Keep the database layer reusable across application-only releases.
-COPY --from=build /workspace/config/iplocate /opt/iplocate
-COPY --from=build /lambda ./
-COPY apps/v2-dag-lambda/runtime-bootstrap.mjs ./runtime-bootstrap.mjs
 
 ENTRYPOINT ["node", "runtime-bootstrap.mjs"]
 CMD ["src/handler.handler"]

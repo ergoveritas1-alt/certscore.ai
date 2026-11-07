@@ -6,6 +6,9 @@ on:
     paths:
       - ".dockerignore"
       - ".github/workflows/mcp-aws-ecs-deploy.yml"
+      - "scripts/select-workflow-deployment.mjs"
+      - "scripts/lib/deployment-inputs.mjs"
+      - "scripts/lib/deployed-image.mjs"
       - "apps/mcp/**"
       - "packages/certscore-api-contracts/**"
       - "packages/certscore-mcp-auth/**"
@@ -125,15 +128,22 @@ jobs:
           test -n "${target_group_arn}" && test "${target_group_arn}" != "None"
           echo "MCP_TARGET_GROUP_ARN=${target_group_arn}" >> "${GITHUB_ENV}"
 
+      - name: Select deployment from installed MCP runtime inputs
+        id: runtime-selection
+        run: node scripts/select-workflow-deployment.mjs mcp
+
       - name: Login to Amazon ECR
+        if: steps.runtime-selection.outputs.deploy == 'true'
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
+        if: steps.runtime-selection.outputs.deploy == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push immutable MCP image
         timeout-minutes: 45
+        if: steps.runtime-selection.outputs.deploy == 'true'
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
@@ -172,6 +182,7 @@ jobs:
           echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
 
       - name: Inspect ECR image scan
+        if: steps.runtime-selection.outputs.deploy == 'true'
         run: |
           aws ecr wait image-scan-complete --repository-name "${ECR_MCP_REPOSITORY}" --image-id "imageTag=${GITHUB_SHA}" || true
           scan="$(aws ecr describe-image-scan-findings --repository-name "${ECR_MCP_REPOSITORY}" --image-id "imageTag=${GITHUB_SHA}" --output json)"
@@ -183,10 +194,12 @@ jobs:
           test "${critical}" = "0" || (echo "MCP image has CRITICAL ECR findings" && exit 1)
 
       - name: Promote scanned release tag
+        if: steps.runtime-selection.outputs.deploy == 'true'
         run: |
           node scripts/promote-scanned-ecr-tag.mjs
 
       - name: Register MCP task definition
+        if: steps.runtime-selection.outputs.deploy == 'true'
         env:
           MICROSOFT_DELEGATED_PILOT: ${{ inputs.microsoft_delegated_pilot || 'preserve' }}
         run: |
@@ -197,11 +210,13 @@ jobs:
           echo "MCP_TASK_DEFINITION_ARN=${task_definition_arn}" >> "${GITHUB_ENV}"
 
       - name: Deploy MCP task definition
+        if: steps.runtime-selection.outputs.deploy == 'true'
         run: |
           aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_SERVICE_NAME}" --task-definition "${MCP_TASK_DEFINITION_ARN}" --force-new-deployment >/dev/null
           aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_SERVICE_NAME}"
 
       - name: Verify target and deployed image
+        if: steps.runtime-selection.outputs.deploy == 'true'
         run: |
           healthy_count="$(aws elbv2 describe-target-health --target-group-arn "${MCP_TARGET_GROUP_ARN}" --query 'length(TargetHealthDescriptions[?TargetHealth.State==`healthy`])' --output text)"
           test "${healthy_count}" -ge 1
@@ -211,6 +226,7 @@ jobs:
           test "${deployed_image}" = "${MCP_IMAGE}:${GITHUB_SHA}"
 
       - name: Verify public metadata and authenticated tools
+        if: steps.runtime-selection.outputs.deploy == 'true'
         run: |
           live_version=""
           for attempt in {1..30}; do
@@ -227,6 +243,7 @@ jobs:
           unset oauth_secret
 
       - name: Deployment summary
+        if: steps.runtime-selection.outputs.deploy == 'true'
         run: |
           echo "### CertScore MCP HTTP" >> "${GITHUB_STEP_SUMMARY}"
           echo "- Version: ${MCP_VERSION}" >> "${GITHUB_STEP_SUMMARY}"
@@ -237,13 +254,13 @@ jobs:
           echo "- Rollback: update ${ECS_SERVICE_NAME} to ${PREVIOUS_TASK_DEFINITION_ARN}" >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Roll back on failed verification
-        if: ${{ failure() && env.MCP_TASK_DEFINITION_ARN != '' && env.PREVIOUS_TASK_DEFINITION_ARN != '' }}
+        if: ${{ steps.runtime-selection.outputs.deploy == 'true' && (failure() && env.MCP_TASK_DEFINITION_ARN != '' && env.PREVIOUS_TASK_DEFINITION_ARN != '') }}
         run: |
           aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_SERVICE_NAME}" --task-definition "${PREVIOUS_TASK_DEFINITION_ARN}" --force-new-deployment >/dev/null
           aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_SERVICE_NAME}"
 
       - name: Print diagnostics on failure
-        if: ${{ failure() }}
+        if: ${{ steps.runtime-selection.outputs.deploy == 'true' && (failure()) }}
         run: |
           aws ecs describe-services --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_SERVICE_NAME}" || true
           if [[ -n "${MCP_TARGET_GROUP_ARN:-}" ]]; then aws elbv2 describe-target-health --target-group-arn "${MCP_TARGET_GROUP_ARN}" || true; fi
