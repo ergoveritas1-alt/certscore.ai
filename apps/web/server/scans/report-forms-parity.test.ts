@@ -26,13 +26,13 @@ test("web, canonical export, PDF, Word content and v2 keep both after-Accept for
   const visual = pdfSummaryTopics(report).find(topic => topic.id === "forms")!.visual;
   assert.ok(visual.kind === "flow"); assert.equal(visual.forms, 2); assert.equal(visual.fields, 9);
   const content = canonicalReportDocumentContent(report).lines.map(line => line.text).join("\n");
-  assert.match(content, /Inventory summary: 2 forms; 9 fields/); assert.match(content, /Initial page: 0; after Accept: 2/);
+  assert.match(content, /Inventory summary: 2 recorded forms; 9 recorded fields/); assert.match(content, /Initial page: 0; after Accept: 2/);
   assert.match(content, /capture was limited/); assert.match(content, /Contact field 8/); assert.match(content, /Search/);
   assert.doesNotMatch(content, /\nNo forms found\./);
   const v2 = buildReportPdfV2Model(report);
   assert.match(v2.topics.find(topic => topic.title === "Forms")!.summary, /2 form observations; 2 after Accept/);
   assert.match(JSON.stringify(v2.sections.find(section => section.id === "forms-security")), /Contact field 8/);
-  assert.match(renderCanonicalReportPdf(report).toString("latin1"), /2 forms/);
+  assert.match(renderCanonicalReportPdf(report).toString("latin1"), /2 recorded forms/);
   assert.equal(report.score.value, 80); assert.deepEqual(scan, before);
 });
 

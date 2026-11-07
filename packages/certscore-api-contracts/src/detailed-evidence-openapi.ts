@@ -1538,6 +1538,13 @@ export const detailedEvidenceOpenApiSchemas = {
                               "reject"
                             ]
                           },
+                          "clockOrigin": {
+                            "type": "string",
+                            "enum": [
+                              "action_click",
+                              "consent_confirmation"
+                            ]
+                          },
                           "windowMs": {
                             "type": "integer",
                             "minimum": 0,

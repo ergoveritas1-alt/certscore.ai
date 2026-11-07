@@ -47,7 +47,7 @@ test("persisted storage reaches canonical export and API without changing findin
   // Use a synthetic minimal persisted record rather than a network/DB dependency.
   const scanRecord = {
     scan: { id: "scan", domainHostname: "example.com", targetUrl: "https://example.com/", status: "completed", createdAt: "2026-09-12T00:00:00Z", completedAt: "2026-09-12T00:00:05Z", pagesScanned: 1 },
-    trackerVendors: [], signals: [], signalHits: [], validationFindings: [], runtimeArtifacts: {},
+    events: [], trackerVendors: [], signals: [], signalHits: [], validationFindings: [], runtimeArtifacts: {},
     canonicalReportProjection: {
       artifactVersion: "persisted-canonical-report-projection-v2", checklistRows: [], derivedContext: {},
       globalUnifiedFindings: [], legacyScoreAssessmentInput: { scanId: "scan" }, normalizedConcerns: [],
@@ -89,7 +89,7 @@ test("origin-bound storage identities reconcile across report, resources and API
   const { buildCanonicalReportExport } = await import("../../server/scans/report-export");
   const scanRecord = {
     scan: { id: "scan", domainHostname: "example.com", targetUrl: "https://example.com/", status: "completed", createdAt: "2026-09-12T00:00:00Z", completedAt: "2026-09-12T00:00:05Z", pagesScanned: 1 },
-    trackerVendors: [], signals: [], signalHits: [], validationFindings: [], runtimeArtifacts: {},
+    events: [], trackerVendors: [], signals: [], signalHits: [], validationFindings: [], runtimeArtifacts: {},
     canonicalReportProjection: { artifactVersion: "persisted-canonical-report-projection-v2", checklistRows: [], derivedContext: {}, globalUnifiedFindings: [], legacyScoreAssessmentInput: { scanId: "scan" }, normalizedConcerns: [], ownerUnifiedFindings: [], topFindingIds: [], preConsentBrowserStorageProjection: packet },
   } as unknown as Parameters<typeof buildApiV2PreConsentCookiesTrackers>[0];
   const api = buildApiV2PreConsentCookiesTrackers(scanRecord);

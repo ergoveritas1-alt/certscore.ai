@@ -38,6 +38,19 @@ function persist(review:NonNullable<ReturnType<typeof projectCaliforniaPrivacyRe
 function canonical(f=fixture()){
  const review=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,pageUrl)!;assert.ok(review?.contractVersion==='certscore.california-privacy-review.v10');return {review,...persist(review,f.bundle.gpcResponseAssessment as ReturnType<typeof californiaPriorityGpcFixture>|undefined)};
 }
+test('Gate runtime search binds its runtime offset independently of consent checkpoints',()=>{
+ const f=fixture(),b=f.bundle,runtimeStart=b.startedAt;
+ b.url=targetUrl;b.region='local';b.scanLaneRuns[0]!.region=b.region;
+ b.runtimeEvidenceClock={contractVersion:'certscore.runtime-evidence-clock.v1',laneId:'runtime_evidence',scanId:b.scanId,targetUrl:b.url,region:b.region,
+  startedAt:runtimeStart,completedAt:b.completedAt,source:{sha256:'e'.repeat(64),sizeBytes:123}};
+ b.startedAt=new Date(Date.parse(runtimeStart)+20000).toISOString();
+ b.completedAt=new Date(Date.parse(runtimeStart)+40000).toISOString();
+ const r=canonical(f);
+ assert.equal(r.presence.absenceScope,'Captured runtime main-document text only');
+ b.runtimeEvidenceClock.scanId='other';
+ const invalid=canonical(f);
+ assert.notEqual(invalid.presence.absenceScope,'Captured runtime main-document text only');
+});
 test('new Gate runtime-only absence survives canonical persistence and projection with unchanged scores and blocked consent evidence',t=>{
  const f=fixture(),original=structuredClone(f.bundle),r=canonical(f);
  assert.equal(r.presence.state,'not_observed');assert.equal(r.presence.absenceScope,'Captured runtime main-document text only');

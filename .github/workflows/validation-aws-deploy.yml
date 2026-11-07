@@ -64,7 +64,7 @@ concurrency:
 
 jobs:
   deploy-validation-aws:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
@@ -189,6 +189,13 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for form lifecycle release check
+        run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
+
+      - name: Verify post-Accept forms and images reach the report
+        run: pnpm test:post-accept-forms
+
 
       - name: Typecheck validation worker
         run: |

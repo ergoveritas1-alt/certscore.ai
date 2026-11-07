@@ -27,3 +27,12 @@ test('windowed capture requires terminal coverage and preserves legacy samples',
     assert.equal(postAcceptFormCaptureSchema.safeParse(invalid).success,false);
   }
 });
+
+test('form-only follow-up cannot exceed its original worker or eight-second tail bounds',()=>{
+ const value={...capture,version:'post_accept_form_capture.v4',window:{startedAtMs:100,endedAtMs:5100,terminalSampleCompleted:true},
+  followup:{reason:'retained_form_bootstrap',triggerRequestId:'request_1',originalWindowEndedAtMs:3100,workerDeadlineAtMs:6000}};
+ assert.equal(postAcceptFormCaptureSchema.safeParse(value).success,true);
+ for(const invalid of [{...value,followup:undefined},{...value,version:'post_accept_form_capture.v2'},
+  {...value,window:{...value.window,endedAtMs:11101}},{...value,followup:{...value.followup,workerDeadlineAtMs:5000}}])
+  assert.equal(postAcceptFormCaptureSchema.safeParse(invalid).success,false);
+});

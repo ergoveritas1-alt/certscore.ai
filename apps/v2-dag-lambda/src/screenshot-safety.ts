@@ -11,12 +11,12 @@ import { imageDigest, MAX_REVIEW_IMAGE_BYTES, readBoundedImage, verifiedPairedSc
 
 export const DEFAULT_SCREENSHOT_SAFETY_MODEL = "omni-moderation-latest";
 export const DEFAULT_SCREENSHOT_SAFETY_TIMEOUT_MS = 8_000;
-export const CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS = 2_000;
+export const CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS = 4_000;
 export const VERIFIED_PAIR_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS = 4_000;
 export const SCREENSHOT_SAFETY_MAX_ADDED_LATENCY_MS = 4_100;
-// General images receive 75 ms of finalization grace; representative consent
-// imagery receives 2 seconds. Owner-approved verified paired images may reuse
-// their existing review for 4 seconds, with 100 ms for fail-closed cleanup.
+// Representative consent images share the existing four-second finalization
+// ceiling, including partial inventories. Safety approval remains independent
+// of control/geometry completeness. Keep 100 ms for fail-closed cleanup.
 export const SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS = 75;
 
 type ScreenshotMimeType = "image/jpeg" | "image/png" | "image/webp";
@@ -343,6 +343,10 @@ export function createHomepageScreenshotSafetyReviewCoordinator(input: {
         if (entry?.job) entry.job.priority = 100;
       }
     },
+    completedReviewFor(screenshot: Pick<ScreenshotArtifact, "path">) {
+      const filePath = fileWithinArtifactRoot(input.artifactRoot, screenshot.path);
+      return !closed && Boolean(filePath && reviews.get(filePath)?.job?.finished);
+    },
     cancelPending() { close(); finalized = true; },
     async reviewFor(screenshot: Pick<ScreenshotArtifact, "captureMethod" | "path">, expectedSha256?: string) {
       schedule(screenshot);
@@ -457,20 +461,22 @@ function isPlaceholderScreenshot(
     screenshot.captureMethod === "fresh_context_placeholder";
 }
 
-function hasCompletedFirstLayerConsentInventory(bundle: CanonicalEvidenceBundle) {
+// Review grace concerns the image, not completeness of the control inventory.
+// A partial first-layer inventory can still contain representative consent imagery.
+// This grants no display permission: the same safety classifier must pass.
+function hasObservedFirstLayerConsentControls(bundle: CanonicalEvidenceBundle) {
   return bundle.consentUiObservations.some((observation) =>
     observation.captureStatus === "observed" &&
-    observation.inventoryOutcome === "complete_with_controls" &&
     observation.layerInspected === "first_layer" &&
-    observation.controls.length > 0
+    observation.controls.some(control => control.visible === true)
   );
 }
 
 function isRepresentativeConsentScreenshot(
   screenshot: ScreenshotArtifact,
-  completedFirstLayerInventory: boolean,
+  observedFirstLayerControls: boolean,
 ) {
-  return completedFirstLayerInventory &&
+  return observedFirstLayerControls &&
     screenshot.consentStateAtTime === "pre_consent" &&
     screenshot.pagePhase === "network_idle";
 }
@@ -641,12 +647,12 @@ export async function applyHomepageScreenshotSafetyGate(input: {
     (b.artifactId === "screenshot_pre_consent_geometry_proof" ? 2 : Number(b.artifactId === "screenshot_pre_consent_settled")) -
     (a.artifactId === "screenshot_pre_consent_geometry_proof" ? 2 : Number(a.artifactId === "screenshot_pre_consent_settled")));
   for (const screenshot of ordered) reviewCoordinator.schedule(screenshot);
-  const completedFirstLayerInventory = hasCompletedFirstLayerConsentInventory(input.bundle);
+  const observedFirstLayerControls = hasObservedFirstLayerConsentControls(input.bundle);
   // Start each existing deadline immediately. Local pair verification must not
   // consume another image's grace or discard a review that already completed.
   const reviews = pendingScreenshots.map(screenshot => {
     const review = reviewCoordinator.reviewFor(screenshot);
-    const budgetMs = isRepresentativeConsentScreenshot(screenshot, completedFirstLayerInventory)
+    const budgetMs = isRepresentativeConsentScreenshot(screenshot, observedFirstLayerControls)
       ? CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS : SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS;
     return { screenshot, review, budgetMs,
       outcome: reviewWithinFinalizationBudget(review, finalizationStartedAtMs + budgetMs) };
@@ -676,6 +682,20 @@ export async function applyHomepageScreenshotSafetyGate(input: {
     }
     reviewCoordinator.recordFinalization(screenshot.path, finalizationStartedAtMs, finalizationBudgetMs, result);
     return { screenshot, outcome: result };
+  }));
+  // A sibling's permitted review may keep finalization open after this image's
+  // grace expires. Keep a review that has now completed, rechecking exact bytes
+  // within the existing cleanup reserve. Never start another moderation call.
+  await Promise.all(reviewed.map(async row => {
+    if (row.outcome.status !== "unavailable" || row.outcome.failureCode !== "finalization_deadline_exceeded" ||
+        !reviewCoordinator.completedReviewFor(row.screenshot)) return;
+    const deadline = Math.min(Date.now() + 75, finalizationStartedAtMs + SCREENSHOT_SAFETY_MAX_ADDED_LATENCY_MS);
+    const outcome = await reviewWithinFinalizationBudget(reviewCoordinator.reviewFor(row.screenshot), deadline);
+    if (outcome.status === "safe" || outcome.status === "sensitive") {
+      row.outcome = outcome;
+      reviewCoordinator.recordFinalization(row.screenshot.path, finalizationStartedAtMs,
+        Math.max(0, deadline - finalizationStartedAtMs), outcome);
+    }
   }));
   reviewCoordinator.cancelPending();
   const outcomesByPath = new Map(reviewed.map(({ screenshot, outcome }) => [screenshot.path, outcome]));

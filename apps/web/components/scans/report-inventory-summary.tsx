@@ -96,7 +96,7 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
     <div className="grid grid-cols-3 items-stretch divide-x divide-slate-200 border-b border-slate-200 bg-white">
       <ServicesSignalSnapshot overview={overview} card />
       {formObservationCount > 0 ? <details className="group/forms min-w-0" onToggle={event => { if (event.currentTarget.open) onLoadDetails?.(); }}>
-        <summary className={inventoryTileDisclosure}><InventoryTileHeading label="Forms" value={formObservationCount} chevron={<DisclosureChevron className="group-open/forms:rotate-180" />} /></summary>
+        <summary className={inventoryTileDisclosure}><InventoryTileHeading label="Forms" value={<>{formObservationCount}{afterAcceptCount > 0 ? <sup aria-label="Includes forms observed after the Accept click" className="ml-0.5 text-xs font-normal text-slate-400">*</sup> : null}</>} detail={afterAcceptCount > 0 ? <span className="text-[10px] font-normal leading-4 text-slate-400">After consent: {afterAcceptCount}</span> : undefined} chevron={<DisclosureChevron className="group-open/forms:rotate-180" />} /></summary>
         <div className="border-t border-slate-100 px-3 pb-3 sm:px-4">
         {afterAcceptCount ? <p className="mt-3 text-xs text-slate-500">{preConsentCount} pre-consent · {afterAcceptCount} after Accept click</p> : null}
         {detailsLoading ? <p role="status" className="mt-3 text-xs text-slate-500">Loading form details…</p> : null}

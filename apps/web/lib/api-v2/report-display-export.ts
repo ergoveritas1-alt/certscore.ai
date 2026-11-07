@@ -6,10 +6,10 @@ import { scopeReportPresentation } from "../scans/report-framework-scope";
 /** Report content only: omit diagnostic downloads and encode repeated records once. */
 const REPORT_FIELDS = new Set([
   "scan", "reviewFocus", "score", "postureScores", "californiaScore", "formsSummary", "scoreExplanation", "verdict", "executiveHeadline", "findings", "nextStep", "metrics",
-  "gpcResponse", "gpcLaneStatus", "coverage", "controls", "consentControlsAvailable", "consentVendor", "consentRows", "gdprTransparencyRows", "detailedEvidence", "cmpAudit", "cmsSecurity",
+  "gpcResponse", "gpcLaneStatus", "gpcTimeline", "coverage", "controls", "consentControlsAvailable", "consentVendor", "consentRows", "gdprTransparencyRows", "detailedEvidence", "cmpAudit", "cmsSecurity",
   "preConsentRuntimeRows", "trackingExternalRows", "transportRows", "relatedRows",
   "privacyAuditEvidence", "californiaPrivacyReview", "policySurfaceCoverage", "acceptPath", "rejectPath", "accessibilityAudit", "accessibilityEvidence",
-  "choicePathComparison", "timeline", "inventory", "inventorySummary", "resourceInventory",
+  "choicePathComparison", "actionTimelines", "actionInventories", "gpcResourceInventory", "timeline", "inventory", "inventorySummary", "resourceInventory",
   "trackerVendors", "collectionFields", "collectionLimitations", "collectionStatus",
   "collectionSurfaces", "collectionTableRows", "siteMetadata", "fullSiteReport",
 ]);
@@ -23,7 +23,13 @@ export function buildReportDisplayExport(report: Record<string, unknown>, option
     if (!row?.snapshot || row.snapshot.status !== "available") return row;
     return { ...row, snapshot: apiFormSnapshotExport(scanId, row.snapshot) };
   }) : rows;
+  const phaseInventory = (value: unknown, path: string) => {
+    if (!value || typeof value !== "object" || !("inventory" in value) || !value.inventory || typeof value.inventory !== "object") return value;
+    return { ...value, inventory: visibleResourceInventory(value.inventory, `${path}/inventory/resources`) };
+  };
   report = { ...report,
+    ...(report.actionInventories ? {actionInventories:Object.fromEntries(Object.entries(report.actionInventories as Record<string,unknown>).map(([key,value])=>[key,phaseInventory(value, `/actionInventories/${pointer(key)}`)]))} : {}),
+    ...(report.gpcResourceInventory ? {gpcResourceInventory:phaseInventory(report.gpcResourceInventory, "/gpcResourceInventory")} : {}),
     ...(report.collectionTableRows ? { collectionTableRows: formRows(report.collectionTableRows) } : {}),
     ...(report.fullSiteReport ? { fullSiteReport: visibleFullSiteReport(report.fullSiteReport as Record<string, unknown>) } : {}),
     ...(report.resourceInventory ? { resourceInventory: visibleResourceInventory(report.resourceInventory as Record<string, unknown>) } : {}),
@@ -33,7 +39,7 @@ export function buildReportDisplayExport(report: Record<string, unknown>, option
     (gpc.data.observation?.status !== "unavailable" && gpc.data.observation?.delivery.httpHeaderRetained &&
       gpc.data.observation.delivery.mainNavigatorReadbackRetained));
   if (verifiedGpc && gpc.success) report.gpcResponse = gpc.data;
-  else { delete report.gpcResponse; delete report.gpcLaneStatus; }
+  else { delete report.gpcResponse; delete report.gpcLaneStatus; delete report.gpcResourceInventory; delete report.gpcTimeline; }
   for (const [key, schema] of [["detailedEvidence", detailedEvidenceReportSchema], ["cmpAudit", publicCmpAuditSchema], ["cmsSecurity", publicCmsSecuritySchema], ["privacyAuditEvidence", privacyAuditEvidenceSchema]] as const) {
     if (report[key] === undefined || report[key] === null) continue;
     const parsed = schema.safeParse(report[key]);

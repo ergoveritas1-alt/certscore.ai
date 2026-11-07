@@ -35,3 +35,14 @@ test("inaccessible, incomplete or cross-scan records cannot reach graph hydratio
   const response = await handleRuntimeGraphRead(request, "not-a-scan", { throttle: async () => { assert.fail("invalid identity"); }, loadAuthorized: async () => null, hydrate: async value => value });
   assert.equal(response.status, 400);
 });
+
+test("GPC inventory view returns only its resources under the same access and quota boundary", async () => {
+ const value=record();value.scan.domainHostname="fixture.test";
+ const projection=value.runtimeArtifacts!.runtimeEvidenceGraphProjection as ReturnType<typeof runtimeGraphUiFixture>;
+ const gpc=projection.graphs.find(g=>g.scenario==="gpc")!;gpc.captureId=`${scanId}:gpc_observation`;
+ const response=await handleRuntimeGraphRead(new Request(`${request.url}?view=gpc-inventory`),scanId,{throttle:async()=>null,loadAuthorized:async()=>value,hydrate:async r=>r});
+ assert.equal(response.status,200);const body=await response.json();
+ assert.ok(body.inventory.resources.length);assert.equal(body.clockLabel,"Times from GPC visit start");
+ assert.equal(body.graphs,undefined);assert.equal(body.stacks,undefined);
+ assert.ok(body.inventory.resources.every((r:any)=>r.occurrence.evidenceRefs.every((ref:string)=>ref.startsWith("gpc:"))));
+});

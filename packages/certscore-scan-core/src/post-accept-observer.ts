@@ -1,3 +1,5 @@
+import { isPendingFormBootstrap } from "./post-accept-form-load.js";
+import { installDeferredConsentReadiness, primeDeferredConsentReadiness, waitForDeferredConsentReadiness } from "./deferred-consent-readiness.js";
 import { createConsentActionFrameBinding } from "./consent-action-frame-binding.js";
 import type { CookieYesLegacyBaseline } from "./cookieyes-legacy-consent-state.js";
 import {installConsentReceiptCapture,receiptCaptureToken,retainReceiptCookies} from './consent-receipt-capture.js';
@@ -432,6 +434,8 @@ export async function runPostAcceptObserver(
   let observationCoverageSufficient = false;
   let selectedRecipe: PostAcceptActionRecipe | undefined;
   let actionControlProof: ConsentActionControlProof | undefined;
+  let extendFormLifecycle = () => {};
+  let sharedFormEndAtMs: number | undefined;
   let formSnapshotHandle: ReturnType<typeof startRegisteredPostAcceptFormSnapshots> | undefined;
   let formSnapshotCapture: PostAcceptEvidencePacket["formSnapshotCapture"];
   let formCaptureHandle: ReturnType<typeof startPostAcceptFormCapture> | undefined;
@@ -585,6 +589,7 @@ export async function runPostAcceptObserver(
         writesAfterAccept: fields.writesAfterAccept ?? [],
         itemsCreatedOrChangedAfterAccept: fields.itemsCreatedOrChangedAfterAccept ?? [],
       },
+      ...(formSnapshotHandle?.diagnostics() ? {formImageDiagnostics:formSnapshotHandle.diagnostics()} : {}),
       ...(fields.postAcceptTcfState ? { tcf: { postAcceptState: fields.postAcceptTcfState } } : {}),
       interactionDiagnostics: diagnostics,
       observations: fields.observations ?? [],
@@ -643,6 +648,7 @@ export async function runPostAcceptObserver(
     passiveCmpCapture = installCmpPassiveDiagnostics(page);
     receiptCapture = installConsentReceiptCapture(page,{scanId:input.scanId,action:'accept',clockOriginAtEpochMs:parentScanStartedAtMs,signal:effectiveSignal});
     oneTrustSdkCapture = installOneTrustSdkSourceCapture(page);
+    await installDeferredConsentReadiness(page);
     await installBorlabsDeferredDialogReveal(page, observationTargetUrl);
     originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl, undefined, {
       onSession: session => oneTrustSdkCapture?.bindNativeSession(session, {
@@ -689,6 +695,7 @@ export async function runPostAcceptObserver(
       } else bucket.push(captured);
       requestIds.set(request, requestId);
       activeRequestIds.add(requestId);
+      if (actionDispatched) extendFormLifecycle();
     });
     const markCompleted = (request: Request) => {
       const requestId = requestIds.get(request);
@@ -800,6 +807,7 @@ export async function runPostAcceptObserver(
     diagnostics.navigation.finalUrlAuthorized = true;
 
     const resolverStartedAtMs = Date.now();
+    await primeDeferredConsentReadiness(page).catch(() => undefined);
     let previousSnapshot: string | undefined;
     let resolverAttempt = 0;
     const recordResolverSnapshot: ResolverReporter = (snapshot) => {
@@ -1010,6 +1018,16 @@ export async function runPostAcceptObserver(
         preActionStorage,
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
       });
+    }
+
+    const deferredReady = await waitForDeferredConsentReadiness({page, control,
+      cmpId: selectedRecipe.cmpId, deadlineAtMs: Math.min(Math.max(actionReadinessDeadline, searchDeadline), resultBudgetDeadlineAtMs ?? Infinity),
+      signal: effectiveSignal}).catch(() => false);
+    if (!deferredReady) {
+      limitations.push("deferred_consent_handlers_not_ready");
+      return await finalize({resolverFound: true, resolverReason: "deferred_consent_handlers_not_ready",
+        registration: unconfirmedRegistration(cancellation() ? "aborted" : "not_attempted", "deferred_consent_handlers_not_ready"),
+        preActionCapturedAtMs, preActionStorage, requests: classifyRequests(retainedRequests(), parentScanStartedAtMs)});
     }
 
     let confirmationBaseline = await captureConfirmationBaseline(
@@ -1385,6 +1403,19 @@ export async function runPostAcceptObserver(
         onLateFormDetected: extendResultBudgetForLateForm,
         onDocumentBound: token => formCaptureHandle?.bindMainDocument(token) });
     }
+    extendFormLifecycle = () => {
+      if (sharedFormEndAtMs !== undefined || !resultBudgetDeadlineAtMs) return;
+      const bootstrap = postActionRequests.find(row=>isPendingFormBootstrap(row.request.url()));
+      const originalWindowEndedAtMs=acceptanceRegisteredAtMs+observationWindowMs;
+      const workerDeadlineAtMs=resultBudgetDeadlineAtMs-parentScanStartedAtMs;
+      const endAtMs=Math.min(originalWindowEndedAtMs+8000,workerDeadlineAtMs-250);
+      if (!bootstrap || Date.now()>=parentScanStartedAtMs+originalWindowEndedAtMs ||
+        !formCaptureHandle?.followThrough({originalWindowEndedAtMs,endAtMs,workerDeadlineAtMs,triggerRequestId:bootstrap.requestId})) return;
+      sharedFormEndAtMs=endAtMs;
+      formSnapshotHandle?.followThrough({reason:"retained_form_bootstrap",triggerRequestId:bootstrap.requestId,
+        originalWindowEndedAtMs,captureDeadlineAtMs:endAtMs,workerDeadlineAtMs});
+    };
+    extendFormLifecycle();
     const observationStartedAtMs = Date.now();
     const observationResult = await waitForPostAcceptObservation({
       confirmation: selectedRecipe.confirmation,
@@ -1394,20 +1425,20 @@ export async function runPostAcceptObserver(
       page,
       parentScanStartedAtMs,
       acceptanceRegisteredAtEpochMs,
-      canExitEarly: () => !input.requireFullConfiguredWindow && (!formSnapshotHandle || formSnapshotHandle.done()),
+      canExitEarly: () => !formCaptureHandle && !input.requireFullConfiguredWindow && (!formSnapshotHandle || formSnapshotHandle.done()),
       signal: effectiveSignal,
       targetUrl: observationTargetUrl,
     });
-    formCapture = formCaptureHandle?.finish();
     const observationEndedAtEpochMs = Date.now();
     timing.observationMs = Math.max(0, observationEndedAtEpochMs - observationStartedAtMs);
     timing.observationEndedAtMs = elapsed(parentScanStartedAtMs, observationEndedAtEpochMs);
     sourcePendingAtEnd = postActionRequests.filter(row => activeRequestIds.has(row.requestId)).length;
     originDomStorageCapture?.finish();
+    networkObservationClosed = true;
     // The storage read and optional masked-image completion are independent
     // same-session reads after the observation window. Overlap their browser
     // work so an image cannot spend the result's finalization allowance.
-    const [finishedSnapshot, storageRead, writeCapture] = await Promise.all([
+    const terminalReads = Promise.all([
       formSnapshotHandle?.finish() ?? Promise.resolve(undefined),
       captureStorage(context, page, observationTargetUrl, limitations, graphCapture?.cookies,
         (d) => { storageCollectionDiagnostics.postAction = d; }).then(storage => ({
@@ -1415,6 +1446,11 @@ export async function runPostAcceptObserver(
         })),
       readActionWriteCapture<InstrumentedStorageWrite>(page, "__certscoreReadPostAcceptWrites"),
     ]);
+    if (sharedFormEndAtMs !== undefined) {
+      await waitForDelay(Math.max(0,parentScanStartedAtMs+sharedFormEndAtMs-Date.now()),effectiveSignal).catch(()=>undefined);
+    }
+    formCapture = formCaptureHandle?.finish();
+    const [finishedSnapshot, storageRead, writeCapture] = await terminalReads;
     const instrumentedWrites = writeCapture.writes;
     sourceHookInstalledAtMs = writeCapture.metadata?.hookInstalledAtMs;
     const postActionStorage = storageRead.storage;

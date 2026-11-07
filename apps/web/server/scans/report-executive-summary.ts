@@ -74,5 +74,5 @@ export function reportExecutiveSummary(report: CanonicalReportExport): Executive
       return { title: topic.title, status, target: topic.id };
     });
   return { score, scoreScope: report.reviewFocus === "ccpa_cpra" || report.score.scope === "starting_page" ? "Starting-page score" : "Full-site score", rating: score === null ? "Unavailable" : report.reviewFocus === "ccpa_cpra" ? "California assessment" : getGdprEprivacyPostureTone(score).ratingLabel,
-    priorityCount: review.topIssues.length, metrics: metrics.map((metric, index) => ({ ...metric, attention: Boolean(v2 && index === 2 && Number(metric.value) > 0), note: v2 && index === 1 ? "Non-essential storage. Requests separate." : pdfPublicWords(metric.note) })), findings, topics };
+    priorityCount: review.topIssues.length, metrics: metrics.map((metric, index) => ({ ...metric, attention: Boolean(v2 && index === 2 && Number(metric.value) > 0), note: index === 0 ? `${findings.length} report findings` : v2 && index === 1 ? "Non-essential storage. Requests separate." : pdfPublicWords(metric.note) })), findings, topics };
 }

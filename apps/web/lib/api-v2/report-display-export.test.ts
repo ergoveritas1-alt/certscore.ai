@@ -48,3 +48,29 @@ test("nested repeated display records remain resolvable without duplicating thei
   assert.equal(result.resourceInventory.services[0].resources[0].reportContentRef, '/resourceInventory/resources/0');
   assert.equal(result.resourceInventory.resources[0].occurrence.kind, 'request');
 });
+
+test("phase service references resolve inside their own inventory without exposing raw occurrences", () => {
+  const inventory = (phase: string) => {
+    const row = {key: `${phase}-resource`,name:`${phase} request`,eventCount:2,
+      occurrence:{kind:'request',label:phase,firstSeenMs:50,identity:'private-identity',details:{rawPayload:'private-payload'}}};
+    return {inventory:{resources:[row],services:[{name:phase,resources:[row]}]},scope:'retained_capture',clockLabel:phase};
+  };
+  const source = {resourceInventory:inventory('pre').inventory,actionInventories:{accept:inventory('accept'),reject:inventory('reject')}};
+  const before=structuredClone(source),result:any=buildReportDisplayExport(source);
+  for(const phase of ['accept','reject']){
+    const ref=result.actionInventories[phase].inventory.services[0].resources[0].reportContentRef;
+    assert.equal(ref,`/actionInventories/${phase}/inventory/resources/0`);
+    const row=ref.slice(1).split('/').reduce((value:any,key:string)=>value[key],result);
+    assert.equal(row.name,`${phase} request`);assert.equal(row.eventCount,2);
+  }
+  assert.ok(!JSON.stringify(result).includes('private-'));
+  assert.deepEqual(source,before);
+});
+
+test("unverified GPC inventory cannot leak through report display or a GDPR view",()=>{
+ const inventory={inventory:{resources:[{key:'gpc-secret-row'}],services:[]},scope:'retained_capture'};
+ for(const report of [{reviewFocus:'gdpr_eprivacy',gpcResourceInventory:inventory},
+   {reviewFocus:'ccpa_cpra',gpcResourceInventory:inventory,gpcResponse:{status:'indeterminate'}}]){
+   assert.equal((buildReportDisplayExport(report) as any).gpcResourceInventory,undefined);
+ }
+});

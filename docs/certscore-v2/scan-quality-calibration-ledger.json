@@ -2989,10 +2989,21 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://ergoveritas.com/testar2.html"
+    },
+    "https://arstechnica.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-01T01:59:58.312Z",
+      "lastContactAt": "2026-11-03T01:59:58.312Z",
+      "lastContactSource": "owner_approved_local_diagnostic",
+      "lastNoGoReasons": [],
+      "lastOutcome": "failed",
+      "note": "One passive GPC diagnostic gpc-ars-passive-10859954-1967-46a4-a29e-a2d472817bc8; approval consumed. Full-profile policy assistance lacked its required key; not a site no-go. No action lanes, model calls, AWS access or retry. See docs/certscore-v2/gpc-followup-verification-2026-11-02.md.",
+      "state": "cooldown",
+      "url": "https://arstechnica.com/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-11-01T18:14:26.958Z",
+  "updatedAt": "2026-11-03T01:59:58.312Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -3167,6 +3178,7 @@
     "https://ae.com/",
     "https://airandspaceforces.com/",
     "https://routenote.com/",
-    "https://ergoveritas.com/testar2.html"
+    "https://ergoveritas.com/testar2.html",
+    "https://arstechnica.com/"
   ]
 }

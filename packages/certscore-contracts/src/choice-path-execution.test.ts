@@ -63,7 +63,7 @@ for (const action of ["accept", "reject"] as const) {
     const execution = assessChoicePathExecution(projection, action);
     assert.deepEqual(execution, { policyVersion: "choice_path_execution.v1", status: "succeeded",
       clickCompleted: true, observationCompleted: true, consentConfirmed: false });
-    assert.equal(choicePathExecutionLabel(execution), "Succeeded");
+    assert.equal(choicePathExecutionLabel(execution), "Consent unconfirmed");
     const persisted = schema.parse(JSON.parse(JSON.stringify({ ...projection, execution })));
     assert.equal(persisted.registrationStatus, "unconfirmed");
     assert.equal(persisted.productionProjectable, false);

@@ -67,7 +67,7 @@ export const publicCmpAuditSchema = z.object({
       requests: z.array(z.object({ hostname: ref, path: ref.refine(value => !/[?#]/.test(value), "Request evidence must omit query and fragment values"), vendor: text, category: text, msAfterReject: count }).strict()).max(100).optional(),
       inventory: z.object({
   consentStorage: z.array(z.object({ visit: z.enum(["Accept", "Reject"]), name: z.string().min(1).max(160), change: z.enum(["stored", "updated"]) }).strict()).max(8).optional(),
-  choiceActivity: z.array(z.object({ action: z.enum(["accept", "reject"]), windowMs: z.number().int().nonnegative().max(30000), requestCount: z.number().int().nonnegative(), nonEssentialRequestCount: z.number().int().nonnegative(),
+  choiceActivity: z.array(z.object({ action: z.enum(["accept", "reject"]), clockOrigin: z.enum(["action_click", "consent_confirmation"]).optional(), windowMs: z.number().int().nonnegative().max(30000), requestCount: z.number().int().nonnegative(), nonEssentialRequestCount: z.number().int().nonnegative(),
     requests: z.array(z.object({ hostname: z.string().max(255), path: z.string().max(2048).refine(value => !/[?#]/.test(value), "Request paths omit query and fragment"), vendor: z.string().max(160), purpose: z.string().max(100), msAfterClick: z.number().int().nonnegative(), nonEssential: z.boolean() }).strict()).max(100),
   }).strict().refine(value => value.requests.length <= value.requestCount && value.nonEssentialRequestCount <= value.requestCount && value.requests.filter(row => row.nonEssential).length <= value.nonEssentialRequestCount, "Activity counts must agree with retained requests")).max(2).refine(values => new Set(values.map(value => value.action)).size === values.length, "One activity window per action").optional(),
 

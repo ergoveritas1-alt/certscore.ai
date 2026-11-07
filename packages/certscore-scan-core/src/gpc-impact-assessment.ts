@@ -1,4 +1,5 @@
 import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
+import {selectGpcRecoveryCapture} from "./gpc-navigation-recovery";
 import { createHash } from "node:crypto";
 import { canonicalEvidenceBundleSchema, gpcImpactAssessmentSchema, type CanonicalEvidenceBundle, type GpcImpactCapture, type GpcImpactAssessment, type NetworkEvent } from "@certscore/contracts";
 import { gpcImpactRequestSetHash, gpcImpactIdentityHash } from "./gpc-impact-capture.js";
@@ -52,9 +53,14 @@ function inventory(bundle: CanonicalEvidenceBundle, events: NetworkEvent[], purp
 
 /** Internal bounded-window measurement, independent of legacy response eligibility
  * and scoring. Old captures cannot acquire stronger historical conclusions. */
-export function buildGpcImpactAssessment(input: { scanId: string; baseline?: GpcImpactSource; gpc?: GpcImpactSource; pageHttpOnly?: boolean }): GpcImpactAssessment {
+export function buildGpcImpactAssessment(input: { scanId: string; baseline?: GpcImpactSource; gpc?: GpcImpactSource; pageHttpOnly?: boolean; navigationRecovery?: boolean }): GpcImpactAssessment {
   const pageHttpOnly = input.pageHttpOnly === true;
-  const baseline = readVerifiedGpcImpactSource(input.baseline), gpc = readVerifiedGpcImpactSource(input.gpc);
+  // Verify original bytes first. The derived capture view is never persisted and
+  // every count/digest, delivery, context and source check below still applies.
+  const sourceBaseline = readVerifiedGpcImpactSource(input.baseline), sourceGpc = readVerifiedGpcImpactSource(input.gpc);
+  const select = (bundle:CanonicalEvidenceBundle|null) => !bundle || !input.navigationRecovery ? bundle :
+    {...bundle,gpcImpactCapture:selectGpcRecoveryCapture(bundle)};
+  const baseline = select(sourceBaseline), gpc = select(sourceGpc);
   const limits: string[] = [];
   for (const [label, bundle, enabled, lane] of [["baseline", baseline, false, "runtime_evidence"], ["gpc", gpc, true, "gpc_observation"]] as const) {
     if (!bundle) { limits.push(`${label}_source_unverified`); continue; }
@@ -134,6 +140,7 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
   const change = (b: string, g: string) => !cmpComparable || b === "unknown" || g === "unknown" ? "unknown" : b === g ? "unchanged" : g === "opted_out" ? "opt_out_appeared" : "opt_out_disappeared";
   const common = { contractVersion: "certscore.gpc-impact-assessment.v1" as const, mode: "internal_only" as const,
     productionProjectable: false as const, scoreEffect: "none" as const, causedByGpc: "not_established" as const,
+    ...(input.navigationRecovery ? {comparisonProtocol:"certscore.local-final-document-recovery.v1" as const} : {}),
     scanId: input.scanId, sourceHashes: { baseline: baseline ? input.baseline!.pointer.sha256 : null, gpc: gpc ? input.gpc!.pointer.sha256 : null },
     delivery: { baselineVerified: Boolean(baseline && validSignal(baseline, false, input.scanId, pageHttpOnly)), gpcVerified: Boolean(gpc && validSignal(gpc, true, input.scanId, pageHttpOnly)) },
     cmpRecordedState: { basis: "current_gpc_session_state", baselineState: baselineSemanticVerified ? "captured" : bs ? "unverified" : "not_captured",

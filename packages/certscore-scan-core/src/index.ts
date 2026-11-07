@@ -1,3 +1,4 @@
+import {retainGpcRecoveryLedger} from "./gpc-navigation-recovery";
 export { buildGpcCmpStateComparison } from "./gpc-cmp-state-comparison.js";
 import { serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage} from "@certscore/contracts";
@@ -264,6 +265,8 @@ export interface RunScanInput {
   /** Local diagnostic override; production callers retain the 10s default. */
   lateConsentGateMs?: number;
   gpcComparisonMinDurationMs?: 5000 | 15000;
+  /** Local research only; no production flag or caller enables recovery. */
+  localGpcNavigationRecovery?: boolean;
   localGpcAdaptiveParticipant?: LocalGpcAdaptiveParticipant;
   /** Diagnostic-only override that holds otherwise eligible partial consent packets through the 18s audit gate. */
   consentGateAuditHoldout?: boolean;
@@ -595,6 +598,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
         gpcOptOutPrototype: evidenceLane === "gpc_observation" && (input.retainGpcObservation === true || typeof input.onGpcObservationSession === "function") ? { scanId } : undefined,
         gpcImpactScanId: evidenceLane === "runtime_evidence" ? scanId : undefined,
+        localGpcNavigationRecovery: input.localGpcNavigationRecovery === true,
         onInventoryPage: input.resourceInventoryCrawl && evidenceLane === "runtime_evidence" ? async page => {
           const configuration = inventoryConfiguration(input.region ?? "local", input.profile === "tiny" ? "tiny" : "standard", leanPreConsent ? "fast" : "full");
           resourceInventoryContext = { finalUrl: page.url(), configuration, configurationHash: inventoryHash(configuration),
@@ -726,6 +730,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
         gpcOptOutPrototype: evidenceLane === "gpc_observation" && (input.retainGpcObservation === true || typeof input.onGpcObservationSession === "function") ? { scanId } : undefined,
         gpcImpactScanId: evidenceLane === "runtime_evidence" ? scanId : undefined,
+        localGpcNavigationRecovery: input.localGpcNavigationRecovery === true,
         accessibilityScanId: accessibilityRequired ? scanId : undefined,
         cmpBasicScanId: evidenceLane === "consent_proof" ? scanId : undefined,
         onInventoryPage: input.resourceInventoryCrawl && evidenceLane === "runtime_evidence" ? async page => {
@@ -1428,6 +1433,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     siteResourceSizeSummary: summarizeSiteResourceSizes(networkResponseEvents),
     gpcSignalObservation: preConsentResult.gpcSignalObservation,
     ...(preConsentResult.gpcImpactCapture ? { gpcImpactCapture: preConsentResult.gpcImpactCapture } : {}),
+    ...(preConsentResult.gpcNavigationRecovery ? { gpcNavigationRecovery: preConsentResult.gpcNavigationRecovery } : {}),
     ...(preConsentResult.gpcImpactSemanticObservation ? { gpcImpactSemanticObservation: preConsentResult.gpcImpactSemanticObservation } : {}),
     ...(input.retainGpcObservation && preConsentResult.gpcObservationSession ? { gpcObservationSession: preConsentResult.gpcObservationSession } : {}),
     ...(preConsentResult.gpcObservationSession ? { gpcPrototypeSessionBinding: {
@@ -1565,7 +1571,7 @@ export function compactCanonicalEvidenceBundleForRetention(
 ): CanonicalEvidenceBundle {
   // The new graph has a separate hard cap; its bytes must never displace existing retained evidence.
   const coreValue = (value: CanonicalEvidenceBundle) => {
-    const { runtimeEvidenceGraphs: _graphs, runtimeEvidenceGraphDiagnostics: _diagnostics, ...core } = value;
+    const { runtimeEvidenceGraphs: _graphs, runtimeEvidenceGraphDiagnostics: _diagnostics, gpcNavigationRecovery: _localRecovery, ...core } = value;
     if (core.gpcImpactCapture?.localRetention === "local_gpc_complete.v2") {
       const {requestLedger: _localLedger, ...capture} = core.gpcImpactCapture;
       core.gpcImpactCapture = capture;
@@ -1593,6 +1599,7 @@ export function compactCanonicalEvidenceBundleForRetention(
   let compacted = canonicalEvidenceBundleSchema.parse({
     ...bundle,
     gpcImpactCapture: retainGpcComparisonLedger(bundle),
+    ...(bundle.gpcNavigationRecovery ? { gpcNavigationRecovery: retainGpcRecoveryLedger(bundle) } : {}),
     modulesRun: bundle.modulesRun.map(boundModuleRunTimingBreakdown),
     runtimeTimeline: bundle.runtimeTimeline
       .filter((event) => !typedEventIds.has(event.eventId))

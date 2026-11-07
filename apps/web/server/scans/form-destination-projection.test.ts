@@ -22,6 +22,21 @@ function bundle(trace = capture()) {
   } as unknown as CanonicalEvidenceBundle;
 }
 const verified = {verificationStatus:"verified",sha256:"a".repeat(64)};
+test("runtime clock keeps positive form evidence and rejects evidence beyond its own window",()=>{
+  const b=bundle(); b.url=pageUrl; b.region="local";
+  b.scanLaneRuns=[{laneId:"runtime_evidence",region:"local"}] as CanonicalEvidenceBundle["scanLaneRuns"];
+  b.runtimeEvidenceClock={contractVersion:"certscore.runtime-evidence-clock.v1",laneId:"runtime_evidence",scanId:b.scanId,targetUrl:pageUrl,region:"local",
+    startedAt:b.startedAt,completedAt:b.completedAt,source:{sha256:"c".repeat(64),sizeBytes:123}};
+  b.startedAt=new Date(start+900).toISOString();
+  assert.equal(projectFormDestinations(b,verified)?.trace.requests.length,1);
+  const legacy={...b,runtimeEvidenceClock:undefined};
+  assert.equal(projectFormDestinations(legacy,verified),null);
+  b.runtimeEvidenceClock.completedAt=new Date(start+205).toISOString();
+  assert.equal(projectFormDestinations(b,verified),null,"response at 210 exceeds original worker window");
+  b.runtimeEvidenceClock.completedAt=new Date(start+1000).toISOString();
+  b.runtimeEvidenceClock.scanId="other";
+  assert.equal(projectFormDestinations(b,verified),null,"bad new clock must not use global fallback");
+});
 test("observed payload match flows through verified projection, policy, finding and priorities without retaining values",()=>{
   assert.equal(unexpectedFormRequests(capture({kind:"input"})).length, 1);
   const projection = projectFormDestinations(bundle(),verified)!;

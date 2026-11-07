@@ -20,6 +20,8 @@ test("executive Forms tally includes both captured and structured After Accept o
     const tile = html.slice(html.indexOf("group/forms"), html.indexOf("Observed forms"));
     assert.match(tile, />Forms</);
     assert.match(tile, />2</);
+    assert.match(tile, /aria-label="Includes forms observed after the Accept click"/);
+    assert.match(tile, /After consent: 2/);
     assert.match(tile, /0 pre-consent · 2 after Accept click/);
   }
 });

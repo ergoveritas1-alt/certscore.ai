@@ -288,6 +288,17 @@ const GENERIC_DATA_PROTECTION_LABELS = new Set([
   "protezione dei dati",
 ]);
 
+// Compile the fixed vocabulary once. Policy discovery classifies many links;
+// repeating Unicode normalization for every phrase/slug can block other local
+// capture lanes. No page text, classifications or evidence are cached here.
+const normalizedSurfacePhrases = new Map(PRIVACY_SURFACE_PHRASE_REGISTRY.map(term =>
+  [term.phrase, normalizePrivacySurfaceText(term.phrase)]));
+const canonicalLocaleSlugs = PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap(entry => [
+  ...entry.cookiePolicyPathSlugs.map(slug => ({entry, slug, surfaceType: "cookie_policy" as const})),
+  ...entry.privacyPolicyPathSlugs.map(slug => ({entry, slug, surfaceType: "privacy_policy" as const})),
+  ...entry.termsPathSlugs.map(slug => ({entry, slug, surfaceType: "terms" as const})),
+]).map(item => ({...item, normalizedSlug: normalizePrivacySurfaceText(item.slug.replace(/[-_/]+/g, " "))}));
+
 export function classifyPrivacySurface(
   input: PrivacySurfaceClassifierInput,
 ): PrivacySurfaceClassification {
@@ -445,16 +456,10 @@ function canonicalLocaleUrlMatch(
   matchedLocale: SupportedPrivacyEvidenceLocale;
   variant: string;
 } | undefined {
-  const entries = localeHints.size > 0
-    ? PRIVACY_EVIDENCE_LOCALE_REGISTRY.filter((entry) => localeHints.has(entry.locale))
-    : PRIVACY_EVIDENCE_LOCALE_REGISTRY;
-  return entries
-    .flatMap((entry) => [
-      ...entry.cookiePolicyPathSlugs.map((slug) => ({ entry, slug, surfaceType: "cookie_policy" as const })),
-      ...entry.privacyPolicyPathSlugs.map((slug) => ({ entry, slug, surfaceType: "privacy_policy" as const })),
-      ...entry.termsPathSlugs.map((slug) => ({ entry, slug, surfaceType: "terms" as const })),
-    ])
-    .filter(({ slug }) => canonicalSlugMatchesUrl(normalizedUrl, slug))
+  const urlText = ` ${normalizePrivacySurfaceText(normalizedUrl)} `;
+  return canonicalLocaleSlugs
+    .filter(({entry, normalizedSlug}) => (!localeHints.size || localeHints.has(entry.locale)) &&
+      normalizedSlug.length >= 4 && urlText.includes(` ${normalizedSlug} `))
     .sort((left, right) => right.slug.length - left.slug.length)
     .map(({ entry, surfaceType }) => ({
       surfaceType,
@@ -462,12 +467,6 @@ function canonicalLocaleUrlMatch(
       matchedLocale: entry.locale,
       variant: "canonical_locale_path",
     }))[0];
-}
-
-function canonicalSlugMatchesUrl(normalizedUrl: string, slug: string): boolean {
-  const normalizedSlug = normalizePrivacySurfaceText(slug.replace(/[-_/]+/g, " "));
-  if (!normalizedSlug || normalizedSlug.length < 4) return false;
-  return ` ${normalizePrivacySurfaceText(normalizedUrl)} `.includes(` ${normalizedSlug} `);
 }
 
 export function normalizePrivacySurfaceText(value: string | null | undefined): string {
@@ -519,7 +518,7 @@ function phraseScore(
   policyDocumentContextSatisfied: boolean,
   policyDocumentLabelContextSatisfied: boolean,
 ) {
-  const phrase = normalizePrivacySurfaceText(term.phrase);
+  const phrase = normalizedSurfacePhrases.get(term.phrase) ?? normalizePrivacySurfaceText(term.phrase);
   if (!phrase) {
     return 0;
   }
@@ -548,7 +547,7 @@ function phraseScore(
   if (
     term.requiresPolicyContext &&
     term.locale === "en" &&
-    normalizePrivacySurfaceText(term.phrase) === "data protection" &&
+    phrase === "data protection" &&
     !policyDocumentContextSatisfied
   ) {
     return 0;

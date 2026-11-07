@@ -1,3 +1,4 @@
+import { reportBrandDisplayName } from "../../lib/scans/report-brand-display-name";
 import { executiveDocxChildren, executiveBookmark, type ExecutiveDocxBranding } from "./report-executive-docx";
 import {
   AlignmentType, Bookmark, BorderStyle, Document, ExternalHyperlink, Footer, HeadingLevel,
@@ -58,7 +59,7 @@ export async function renderCanonicalReportDocx(source: CanonicalReportExport, o
   const timeZone = pdfTimeZone(options.timeZone) ?? "UTC";
   const url = pdfTestedUrl(report);
   const heading = `${report.scan.domainHostname ?? "Website"} privacy and accessibility report`;
-  const brandName = options.brandName?.trim().slice(0, 64) || "CertScore.ai";
+  const brandName = reportBrandDisplayName(options.brandName);
   const metadata = [heading, report.reviewFocusLabel, url ?? "", brandName, report.scan.id];
   assertPublicReportPdfContent(metadata);
   const summaryChildren = await executiveDocxChildren(report, timeZone, { ...options, brandName });

@@ -166,6 +166,8 @@ export type ShadowReportData = {
   cmsSecurity?: import("@certscore/contracts").CmsSecurityProjection | null;
   siteMetadata?: import("@certscore/contracts").SiteMetadataProjection | null;
   fullSite?: import("@website-signal-risk-scanner/shared").CrawlOptions;
+  gpcResourceInventory?: import("../../../lib/scans/action-resource-inventory").ActionResourceInventory | null;
+  actionInventories?: Partial<Record<"accept" | "reject", import("../../../lib/scans/action-resource-inventory").ActionResourceInventory | null>>;
   resourceInventory?: import("../../../lib/scans/single-page-resource-inventory").SinglePageResourceInventory;
   runtimeEvidenceGraph?: import("@certscore/api-contracts").ApiRuntimeEvidenceGraphProjection;
   inventorySummary?: import("../report-inventory-summary").ReportInventoryMetric[];

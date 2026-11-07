@@ -61,9 +61,13 @@ test('bounded Accept sample retains main and embedded forms, local disclosures, 
   const browser=await chromium.launch({headless:true});
   try {
     const page=await browser.newPage(); await page.goto(url);
-    const start=Date.now(); await page.click('#accept');
-    const capture=startPostAcceptFormCapture({page,exactTargetUrl:url,parentScanStartedAtMs:start,actionDispatchedAtMs:0,windowMs:200});
-    await new Promise(resolve=>setTimeout(resolve,250));
+    await page.click('#accept');
+    await page.frameLocator('iframe').locator('input').waitFor({state:'visible'});
+    // This case verifies sampled content and redaction, not click actionability
+    // or iframe loading latency. Dedicated deadline cases below cover expiry.
+    const start=Date.now();
+    const capture=startPostAcceptFormCapture({page,exactTargetUrl:url,parentScanStartedAtMs:start,actionDispatchedAtMs:0,windowMs:1000});
+    await new Promise(resolve=>setTimeout(resolve,1050));
     const result=capture.finish();
     assert.equal(result.status,'captured',JSON.stringify(result));
     assert.equal(result.frames.length,2);

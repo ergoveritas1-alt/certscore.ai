@@ -8,7 +8,7 @@ import { loadFullSiteReport } from "../../../../../../server/scans/full-site-rep
 import { fullSiteEvidenceExport } from "../../../../../../lib/api-v2/full-site-evidence-export";
 import { loadAuthorizedReportEvidence, ReportEvidenceAccessError } from "../../../../../../lib/api-v2/report-evidence-access";
 import { reportEvidencePageSchema } from "@certscore/api-contracts";
-import { API_V2_SCAN_ID_PATTERN, apiV2JsonResponse, buildApiV2Error } from "../../../../../../lib/api-v2/scan-resource";
+import { API_V2_SCAN_ID_PATTERN, apiV2JsonResponse, buildApiV2Error, deriveApiV2GpcResponse } from "../../../../../../lib/api-v2/scan-resource";
 import { buildReportEvidencePage, ReportPageCursorError } from "../../../../../../lib/api-v2/report-evidence-page";
 import { parseBearerToken, validateCertScoreBearerToken } from "../../../../../../server/integrations/api-keys";
 import { enforceApiV2ScanReadThrottle } from "../../../../../../server/pulse/api-v2-read-throttle";
@@ -65,7 +65,7 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
       } });
       displayReport = buildTrackingWorkpaper(report);
     } else {
-      const { fullSite: _privateConfiguration, ...baseReport } = await buildVerifiedTimelineReportModel(record);
+      const { fullSite: _privateConfiguration, ...baseReport } = await buildVerifiedTimelineReportModel(record, {includeGpcInventory:!section || section === "gpc" || section === "tracking"});
       const report = reviewFocus ? { ...baseReport, reviewFocus } : baseReport;
       const isFullSite = record.scan.scanConfigJson?.fullSite === true && (!section || section === "forms" || section === "tracking");
       const fullSite = isFullSite ? await loadFullSiteReport(scanId, new URLSearchParams({ kind: "all" }), true) : null;
@@ -76,7 +76,8 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
       const presented = report.resultDisposition === "no_go" ? report : { ...report,
         postureScores: buildApiV2PostureScores({ score: report.score.value,
           scoreExplanation: report.scoreExplanation, californiaScore: report.californiaScore }),
-        ...buildDetailedEvidenceExport(report) };
+        ...buildDetailedEvidenceExport(report),
+        gpcResponse: deriveApiV2GpcResponse(record) };
       const exportedReport = fullSite ? { ...presented, fullSiteReport: fullSiteEvidenceExport(scanId, fullSite) } : presented;
       const selected = section ? selectReportEvidenceSection(exportedReport, section) : null;
       sectionSelection = selected?.selection;

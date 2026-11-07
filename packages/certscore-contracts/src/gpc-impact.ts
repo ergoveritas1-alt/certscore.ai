@@ -78,6 +78,7 @@ const activity = z.object({
 });
 export const gpcImpactAssessmentSchema = z.object({
   contractVersion: z.literal("certscore.gpc-impact-assessment.v1"),
+  comparisonProtocol: z.literal("certscore.local-final-document-recovery.v1").optional(),
   mode: z.literal("internal_only"), productionProjectable: z.literal(false),
   scoreEffect: z.literal("none"), causedByGpc: z.literal("not_established"),
   scanId: z.string().min(1).max(200), status: z.enum(["measured", "insufficient_evidence"]),

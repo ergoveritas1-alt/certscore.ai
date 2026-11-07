@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolveRuntimeEvidenceClock } from "@certscore/contracts";
 import { crawlDisplayUrl, type CrawlObservation } from "@website-signal-risk-scanner/shared";
 import { createHash } from "node:crypto";
 import { siteIntegrityObservationSchema, siteIntegrityProjectionSchema, domSnapshotArtifactSchema, scanModuleRunSchema, type CanonicalEvidenceBundle, type DomSnapshotArtifact } from "@certscore/contracts";
@@ -27,14 +28,15 @@ export function projectSiteIntegrity(bundle: CanonicalEvidenceBundle, source: { 
   let document: URL;
   try { document = new URL(documentUrl); } catch { return null; }
   document.search = ""; document.hash = ""; document.username = ""; document.password = "";
-  if (![observation.capturedAt, bundle.startedAt, bundle.completedAt].every(value => Number.isFinite(Date.parse(value)))) return null;
+  const clock = resolveRuntimeEvidenceClock(bundle);
+  if (!clock || !Number.isFinite(Date.parse(observation.capturedAt))) return null;
   if (observation.documentUrl !== document.href ||
-      Date.parse(observation.capturedAt) < Date.parse(bundle.startedAt) ||
-      Date.parse(observation.capturedAt) > Date.parse(bundle.completedAt)) return null;
+      Date.parse(observation.capturedAt) < clock.startMs ||
+      Date.parse(observation.capturedAt) > clock.endMs) return null;
   // Earlier matching proof must not survive a later reload or navigation.
   // Runtime evidence remains independent of the consent lane.
   const matchingDocument = latestRuntimeDocumentMatches(bundle.runtimeMetadataSnapshots ?? bundle.domSnapshots,
-    documentUrl, observation.documentToken, Date.parse(bundle.completedAt) - Date.parse(bundle.startedAt));
+    documentUrl, observation.documentToken, clock.durationMs);
   if (!matchingDocument) return null;
   const projection = siteIntegrityProjectionSchema.safeParse({
     contractVersion: "certscore.site-integrity-projection.v1", scanId: bundle.scanId,

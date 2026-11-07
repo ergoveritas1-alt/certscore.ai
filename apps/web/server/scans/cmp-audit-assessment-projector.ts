@@ -1,3 +1,4 @@
+import { resolveRuntimeEvidenceClock } from "@certscore/contracts";
 import { hasBoundCmpPreferenceDocument } from "@certscore/contracts";
 import { ZodError } from "zod";
 import { projectVisibleCmpInventory, projectLoadedCmpInventory, completeConfiguredCmpNames, verifiedMainFrameVisualCapture } from "@certscore/contracts";
@@ -25,7 +26,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
       Object.assign(row, { status: "incomplete", detail: "This check depends on the incomplete preference inspection.", evidenceRefs: ["CanonicalEvidenceBundle.json"], limitation: { group: "preferences", code: outcome.limitationCode } });
     applyActionLimitations(bundle, fallback.rows);
     applyVisualLimitations(bundle, fallback.rows, geometry);
-    fallback.sourceSha256 = createHash("sha256").update(JSON.stringify({ version: fallback.version, targetUrl: bundle.url, startedAt: bundle.startedAt,
+    fallback.sourceSha256 = createHash("sha256").update(JSON.stringify({ version: fallback.version, targetUrl: bundle.url, startedAt: bundle.startedAt, runtimeEvidenceClock: bundle.runtimeEvidenceClock,
       outcome, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage,
       accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows: fallback.rows })).digest("hex");
     return cmpAuditAssessmentSchema.parse(fallback);
@@ -75,7 +76,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
   }
   const version = rows.some(row => row.cookieComparison?.unnamedCookieRefs?.length) ? "cmp_audit_assessment.v7" : "cmp_audit_assessment.v6";
   return cmpAuditAssessmentSchema.parse({ version, scanId: bundle.scanId,
-    sourceSha256: createHash("sha256").update(JSON.stringify({ version, cookieComparisonPolicy: "cookie_name_comparison_details.v4", inventoryEvidencePolicy: "cmp_inventory_tables.v14", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
+    sourceSha256: createHash("sha256").update(JSON.stringify({ version, cookieComparisonPolicy: "cookie_name_comparison_details.v4", inventoryEvidencePolicy: "cmp_inventory_tables.v14", targetUrl: bundle.url, startedAt: bundle.startedAt, runtimeEvidenceClock: bundle.runtimeEvidenceClock, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
 }
 
@@ -163,11 +164,14 @@ function applyClientFacts(bundle: CanonicalEvidenceBundle, set: AuditSet, rows: 
   const expiryCookies = observations.flatMap(({ action, packet }) => packet.storage.postAction.filter(item => item.storageType === "cookie" &&
     knownCookie(item.name) && item.identityHash && item.valueHash && Number.isFinite(item.expiresAtEpochSeconds) && item.expiresAtEpochSeconds! > 0 && Number.isFinite(item.capturedAtEpochSeconds))
     .slice(0, 2).map(item => ({ visit: action === "accept" ? "Accept" as const : "Reject" as const, item })));
-  const baseline = bundle.runtimeCoverage?.coverageStatus === "usable" && Number.isFinite(Date.parse(bundle.startedAt))
-    ? bundle.cookieSnapshots?.filter(snapshot => snapshot.consentStateAtTime === "pre_consent" && Number.isFinite(snapshot.capturedAtMs) && snapshot.capturedAtMs >= 0)
+  const runtimeClock = resolveRuntimeEvidenceClock(bundle);
+  const runtimeStart = bundle.runtimeEvidenceClock === undefined ? Date.parse(bundle.startedAt) : runtimeClock?.startMs ?? NaN;
+  const baseline = bundle.runtimeCoverage?.coverageStatus === "usable" && Number.isFinite(runtimeStart)
+    ? bundle.cookieSnapshots?.filter(snapshot => snapshot.consentStateAtTime === "pre_consent" && Number.isFinite(snapshot.capturedAtMs) && snapshot.capturedAtMs >= 0 &&
+      (bundle.runtimeEvidenceClock === undefined || snapshot.capturedAtMs <= runtimeClock!.durationMs))
       .reduce<NonNullable<CanonicalEvidenceBundle["cookieSnapshots"]>[number] | undefined>((latest, snapshot) => !latest || snapshot.capturedAtMs > latest.capturedAtMs ? snapshot : latest, undefined) : undefined;
   const capture = baseline?.captureCoverage;
-  const end=Date.parse(bundle.completedAt)-Date.parse(bundle.startedAt);
+  const end=resolveRuntimeEvidenceClock(bundle)?.durationMs ?? NaN;
   const boundFinalDocument=capture?.version==="bound_cookie_snapshot.v1" && capture.status==="completed" && capture.targetUrl===bundle.url &&
     (capture.documentUrl===capture.targetUrl || capture.documentBindingPolicy==="passive_final_document.v1") &&
     capture.startedAtMs>=0 && capture.completedAtMs>=capture.startedAtMs && capture.completedAtMs<=baseline!.capturedAtMs && baseline!.capturedAtMs<=end &&
@@ -181,7 +185,7 @@ function applyClientFacts(bundle: CanonicalEvidenceBundle, set: AuditSet, rows: 
     if (!knownCookie(cookie.name) || typeof cookie.domain !== "string" || typeof cookie.path !== "string" || typeof cookie.expires !== "number" || !Number.isFinite(cookie.expires)) return [];
     const domain = cookie.domain.replace(/^\./, "").toLowerCase();
     if (!domain || !host || !(host === domain || host.endsWith(`.${domain}`)) || !cookie.path.startsWith("/")) return [];
-    const capturedAtEpochSeconds = (Date.parse(bundle.startedAt) + baseline!.capturedAtMs) / 1000;
+    const capturedAtEpochSeconds = (runtimeStart + baseline!.capturedAtMs) / 1000;
     const parsed = cmpCookieExpiryEvidenceSchema.safeParse({ visit: "Before choice", name: cookie.name, domain: cookie.domain, path: cookie.path,
       capturedAtEpochSeconds, expiresAtEpochSeconds: cookie.expires, remainingSeconds: cookie.expires - capturedAtEpochSeconds });
     return parsed.success ? [parsed.data] : [];
@@ -211,16 +215,18 @@ function retainedChoiceCaptures(bundle: CanonicalEvidenceBundle) {
         : projectPostRefusalEvidenceForReport({ packet: bundle.postRefusalEvidence!, packetSha256 });
       if (!projection.execution?.clickCompleted) return [];
       const after = projection.afterActionCapture, registered = projection.registeredObservationCompletion;
-      const start = after?.actionDispatchedAtMs ?? registered?.startedAtMs;
+      const clickAt = after?.actionDispatchedAtMs ?? ("scoringEvidence" in projection ? projection.scoringEvidence?.actionDispatchedAtMs : undefined) ?? projection.retainedActionTiming?.actionDispatchedAtMs;
+      const start = clickAt ?? registered?.startedAtMs;
+      const clockOrigin = clickAt !== undefined ? "action_click" as const : "consent_confirmation" as const;
       const end = after?.captureEndedAtMs ?? registered?.completedAtMs;
-      const windowMs = after?.requestedWindowMs ?? (registered ? Math.min(registered.requiredWindowMs, registered.completedAtMs - registered.startedAtMs) : undefined);
+      const windowMs = start !== undefined && end !== undefined ? end - start : undefined;
       if (start === undefined || end === undefined || windowMs === undefined) return [];
       const requests = after ? projection.afterActionRequests ?? [] : packet.network.requests.filter(row => row.startedAtMs >= start && row.startedAtMs <= end);
       // A verified terminal snapshot is independent of network retention loss.
       // The validated projection binds dispatch, document, snapshot and end time.
       const storageCompleted = after ? after.activationStatus === "completed" && after.stopReason === "window_elapsed" && after.storageSnapshotRetained
         : projection.execution.observationCompleted;
-      return [{ action, packet, windowMs, requests, start, storageCompleted, networkCompleted: projection.execution.observationCompleted }];
+      return [{ action, packet, windowMs, requests, start, clockOrigin, storageCompleted, networkCompleted: projection.execution.observationCompleted }];
     } catch { return []; }
   });
 }
@@ -237,8 +243,8 @@ function applyChoiceActivity(bundle: CanonicalEvidenceBundle, set: AuditSet, row
   set("implementation", count === 2 ? "observed" : count === 1 ? "partially_assessed" : "not_assessed",
     count ? `${observations.map(item => `${item.action === "accept" ? "Accept" : "Reject"}: ${item.windowMs / 1000}-second activity check completed`).join(". ")}. ${description}`.trim()
       : "No completed activity check was retained after Accept or Reject.", count ? ["CanonicalEvidenceBundle.json"] : []);
-  if (count) rows.find(row => row.id === "implementation")!.inventory = { choiceActivity: observations.map(({ action, requests, windowMs, start }) => ({
-    action, windowMs, requestCount: requests.length, nonEssentialRequestCount: requests.filter(item => item.nonEssential).length,
+  if (count) rows.find(row => row.id === "implementation")!.inventory = { choiceActivity: observations.map(({ action, requests, windowMs, start, clockOrigin }) => ({
+    action, clockOrigin, windowMs, requestCount: requests.length, nonEssentialRequestCount: requests.filter(item => item.nonEssential).length,
     requests: requests.slice(0, 100).map(request => ({ hostname: request.hostname ?? new URL(request.sanitizedUrl).hostname, path: new URL(request.sanitizedUrl).pathname.slice(0, 2048),
       vendor: request.vendor ?? "Unidentified", purpose: request.purpose ?? "unknown", nonEssential: request.nonEssential, msAfterClick: request.startedAtMs - start })),
   })) };
@@ -357,7 +363,7 @@ function partialCookieSnapshot(bundle: CanonicalEvidenceBundle) {
       lane?.accessOutcome!=="representative_page" || lane.challengeDetected ||
       !["success","degraded"].includes(lane.executionOutcome) || lane.firstEffectiveUrl!==bundle.url ||
       typeof lane.firstHttpStatus!=="number" || lane.firstHttpStatus>=400 || lane.firstHttpStatus<200) return undefined;
-  const end=Date.parse(bundle.completedAt)-Date.parse(bundle.startedAt);
+  const end=resolveRuntimeEvidenceClock(bundle)?.durationMs ?? NaN;
   const snapshots=(bundle.cookieSnapshots??[]).filter(snapshot=>snapshot.consentStateAtTime==="pre_consent" &&
     Number.isFinite(snapshot.capturedAtMs) && snapshot.capturedAtMs>=0 && snapshot.capturedAtMs<=end);
   return snapshots.length ? snapshots : undefined;
@@ -374,7 +380,7 @@ function boundCookieSnapshot(bundle:CanonicalEvidenceBundle) {
   if((lane?.accessOutcome!=="representative_page" || lane.challengeDetected) && !diagnosticVisit || !lane ||
       !["success","degraded"].includes(lane.executionOutcome) || lane.firstEffectiveUrl!==bundle.url ||
       typeof lane.firstHttpStatus!=="number" || lane.firstHttpStatus<200 || lane.firstHttpStatus>=400) return undefined;
-  const duration=Date.parse(bundle.completedAt)-Date.parse(bundle.startedAt);
+  const duration=resolveRuntimeEvidenceClock(bundle)?.durationMs ?? NaN;
   return bundle.cookieSnapshots?.filter(snapshot=>{
     const proof=snapshot.captureCoverage;
     return proof?.version==="bound_cookie_snapshot.v1" && proof.status==="completed" && proof.scope==="browser_context_point_in_time" &&
@@ -627,7 +633,7 @@ function deriveIndependentAuditAssessment(bundle: CanonicalEvidenceBundle, geome
   return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
     support: { state: "partial", provider: null, recipeVersion: null, reason: "independent_core_facts" }, rows,
     sourceSha256: createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_core_facts.v1", scanId: bundle.scanId,
-      targetUrl: bundle.url, startedAt: bundle.startedAt, completedAt: bundle.completedAt, cookies: bundle.cookieSnapshots,
+      targetUrl: bundle.url, startedAt: bundle.startedAt, runtimeEvidenceClock: bundle.runtimeEvidenceClock, completedAt: bundle.completedAt, cookies: bundle.cookieSnapshots,
       coverage: bundle.runtimeCoverage, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence, rows })).digest("hex") });
 }
 

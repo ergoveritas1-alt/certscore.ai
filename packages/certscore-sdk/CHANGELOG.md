@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## 0.2.26
+
+- Preserve the optional clock origin on retained CMP choice-activity evidence, distinguishing click-relative and consent-confirmation-relative timing.
+- Keep legacy omitted anchors valid; no new capture, score, legal interpretation or request behavior.
+
 ## 0.2.25
 
 - Type and export optional retained GPC collection-comparison packets and structured CMP/GPC observation-availability details.

@@ -74,7 +74,7 @@ concurrency:
 
 jobs:
   deploy-public-web-aws:
-    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 90
     services:
       marketplace-test-db:
@@ -197,6 +197,13 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for form lifecycle release check
+        run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
+
+      - name: Verify post-Accept forms and images reach the report
+        run: pnpm test:post-accept-forms
+
 
       - name: Prevent non-descendant production rollback
         env:

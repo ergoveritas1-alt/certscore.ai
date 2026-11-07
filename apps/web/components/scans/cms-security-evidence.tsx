@@ -4,7 +4,7 @@ import { TECHNOLOGY_NAMES, TECHNOLOGY_CATEGORY_LABELS, TECHNOLOGY_SCOPE_LABELS, 
 import { DetailedEvidenceFinding } from "./detailed-evidence-finding";
 import { EvidenceTools } from "./report-finding-row";
 import { EvidenceSectionHeader } from "./evidence-section-header";
-import { EVIDENCE_SECTION_TITLES, CMS_CORRECTION_STEPS, cmsAdvisoryDisplayCopy, technologyEvidenceRecap, cmsEvidenceVersionLabel } from "../../lib/scans/detailed-evidence-presentation";
+import { EVIDENCE_SECTION_TITLES, CMS_CORRECTION_STEPS, cmsAdvisoryDisplayCopy, technologyEvidenceHeaderRecap, cmsEvidenceVersionLabel } from "../../lib/scans/detailed-evidence-presentation";
 
 const sourceLabels = { meta_generator: "Page metadata", asset_path: "Page asset", html_generator_comment: "Generator comment", core_asset_version: "Core asset version", feed_generator: "Linked feed generator" };
 const unknownVersion = <span aria-label="Version not detected">—</span>;
@@ -50,7 +50,7 @@ export function CmsSecurityEvidence({ projection }: { projection?: CmsSecurityPr
   const technologies = [...(inventory?.detections ?? [])].sort((a, b) => Number(a.confidence === "tentative") - Number(b.confidence === "tentative"));
   const flagged = assessment.matches.length > 0;
   return <details id="cms-security-evidence" className="group/cms-security border-b border-r border-zinc-200 bg-white p-5">
-    <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.cms} recap={technologyEvidenceRecap(projection)}
+    <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.cms} recap={technologyEvidenceHeaderRecap(projection)}
       badge={<EvidenceHeaderStatus rows={flagged ? [{ status: "Warning" }] : []} />} />
     <div className="mt-3 space-y-4 border-t border-zinc-200 pt-3 text-sm">
       <div className="relative overflow-x-auto" role="region" aria-label="Observed technology table" tabIndex={0}>

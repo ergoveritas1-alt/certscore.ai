@@ -144,8 +144,8 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
       rows={inventory.consentStorage.map(record => [record.visit, <CmpInventoryIdentity name={record.name} kind="cookie" />, record.change === "updated" ? "Updated after choice" : "Stored after choice"])} /> : null}
     {inventory?.choiceActivity?.map(activity => <React.Fragment key={activity.action}>
       <p className="font-semibold text-zinc-900">After {activity.action === "accept" ? "Accept" : "Reject"} · {activity.windowMs / 1000} seconds · {activity.requestCount} {activity.requestCount === 1 ? "request" : "requests"} · {activity.nonEssentialRequestCount} classified as non-essential</p>
-      {activity.requests.length ? <CmpInventoryTable label={`Requests after ${activity.action === "accept" ? "Accept" : "Reject"} click · ${activity.requests.length}`}
-        columns={["Service", "Purpose", "After click", "Request"]}
+      {activity.requests.length ? <CmpInventoryTable label={`Requests after ${activity.action === "accept" ? "Accept" : "Reject"} · ${activity.requests.length}`}
+        columns={["Service", "Purpose", activity.clockOrigin === "action_click" ? "After click" : activity.clockOrigin === "consent_confirmation" ? "After confirmation" : "Session offset", "Request"]}
         copyRows={activity.requests.map(request => [request.vendor, request.purpose.replaceAll("_", " "), `+${request.msAfterClick} ms`, `${request.hostname}${request.path}`])}
         rows={activity.requests.map(request => [<CmpInventoryIdentity name={request.vendor} kind="service" />, request.purpose.replaceAll("_", " "), `+${request.msAfterClick} ms`, <span className="block max-w-[18rem] whitespace-normal break-all font-mono text-[11px] leading-4">{request.hostname}{request.path}</span>])} /> : null}
       {activity.requests.length < activity.requestCount ? <p>Showing {activity.requests.length} of {activity.requestCount} retained requests.</p> : null}

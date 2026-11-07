@@ -1,3 +1,4 @@
+import { createGpcNavigationRecovery } from "../gpc-navigation-recovery";
 import { consentGeometryCheckpoint } from "../consent-geometry-checkpoint.js";
 import { reconcileConsentGeometryInventoryCoverage } from "../consent-geometry-inventory-coverage.js";
 import {createFinalConsentGeometryRefresh, finalConsentGeometryRefreshReason, prepareFinalConsentGeometryArtifact} from "../consent-final-geometry-refresh.js";
@@ -123,6 +124,7 @@ import {
   getRegistrableDomainFromUrl,
 } from "../domain-utils.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
+import { restoreSupplementalViewport } from "../supplemental-viewport-restore.js";
 import { captureResponseDestination, enrichNetworkDestination, freezeAndSnapshotResponseRows, retainDirectResponseWithOptionalEnrichment } from "../network-destination.js";
 import { normalizePublicIpAddress } from "../public-ip-address.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
@@ -269,6 +271,7 @@ export interface PreConsentRuntimeScannerInput {
   /** Local artifact-only evaluation. Not wired to any production dispatch. */
   gpcOptOutPrototype?: { scanId: string };
   gpcImpactScanId?: string;
+  localGpcNavigationRecovery?: boolean;
   gpcComparisonMinDurationMs?: 5000 | 15000;
   localGpcAdaptiveParticipant?: import("../local-gpc-adaptive.js").LocalGpcAdaptiveParticipant;
   browser?: Browser;
@@ -586,6 +589,7 @@ export interface PreConsentRuntimeScannerResult {
   gpcOptOutObservation?: GpcOptOutObservation;
   gpcObservationSession?: GpcObservationSession;
   gpcImpactCapture?: GpcImpactCapture;
+  gpcNavigationRecovery?: import("@certscore/contracts").GpcNavigationRecovery;
   gpcImpactSemanticObservation?: GpcOptOutObservation;
   runtimeEvidenceGraph?: RuntimeEvidenceGraph;
   runtimeScriptEvidence?: import("@certscore/contracts").RuntimeScriptEvidence[];
@@ -668,12 +672,16 @@ export async function preConsentRuntimeScanner(
   const requiredAccessibility = Boolean(input.accessibilityScanId && !input.globalPrivacyControlEnabled && input.executionProfile !== "inventory_only");
   const requiredTailReserveMs = requiredAccessibility ? ACCESSIBILITY_AUDIT_BUDGET_MS : 0;
   const passiveEvidenceActivity = createPassiveEvidenceActivityTracker();
-  const impactCapture = captureScope === "runtime_evidence" && input.executionProfile !== "inventory_only" ? createGpcImpactCapture({
+  const impactOptions = {
     diagnostic15Seconds: input.gpcComparisonMinDurationMs === 15000,
     adaptive: input.localGpcAdaptiveParticipant,
     expectedEnabled: input.globalPrivacyControlEnabled === true, now: () => elapsed(input.scanStartedAtMs),
     quietSnapshot: () => passiveEvidenceActivity.snapshot(),
-  }) : undefined;
+  };
+  const impactEnabled = captureScope === "runtime_evidence" && input.executionProfile !== "inventory_only";
+  const navigationRecovery = impactEnabled && input.localGpcNavigationRecovery === true
+    ? createGpcNavigationRecovery({...impactOptions, deadlineMs: moduleStartedAtMs - input.scanStartedAtMs + input.internalBudgetMs}) : undefined;
+  const impactCapture = navigationRecovery ?? (impactEnabled ? createGpcImpactCapture(impactOptions) : undefined);
   const screenshotMode = captureConsentEvidence
     ? input.screenshotMode ?? "always"
     : "never";
@@ -2504,6 +2512,9 @@ export async function preConsentRuntimeScanner(
     }
     retainedGpcSignalObservation = gpcSignalObservation;
     const frozenImpactCapture = impactCapture?.finish(gpcSignalObservation);
+    // Recovery shares the original checkpoint; later semantic work must not
+    // move either capture window or append post-freeze requests.
+    const frozenNavigationRecovery = navigationRecovery?.finishRecovery(gpcSignalObservation);
     // Read the GPC visit's CMP state after work this same session already owes
     // (including cookies and sparse-page confirmation). Do not add a wait or
     // repeat the read. Paired impact evidence remains frozen above; its document
@@ -4707,6 +4718,7 @@ export async function preConsentRuntimeScanner(
       storageSnapshots: [storageSnapshot],
       gpcSignalObservation: retainedGpcSignalObservation,
       ...(frozenImpactCapture ? { gpcImpactCapture: frozenImpactCapture } : {}),
+      ...(frozenNavigationRecovery ? { gpcNavigationRecovery: frozenNavigationRecovery } : {}),
       ...(retainedImpactSemanticObservation ? { gpcImpactSemanticObservation: retainedImpactSemanticObservation } : {}),
       scriptEvents,
       ...(retainedGpcOptOutObservation ? { gpcOptOutObservation: retainedGpcOptOutObservation } : {}),
@@ -4853,6 +4865,7 @@ export async function preConsentRuntimeScanner(
       storageSnapshots: retainedStorageSnapshot ? [retainedStorageSnapshot] : [],
       gpcSignalObservation: retainedGpcSignalObservation,
       ...(impactCapture ? { gpcImpactCapture: impactCapture.finish() } : {}),
+      ...(navigationRecovery ? { gpcNavigationRecovery: navigationRecovery.finishRecovery() } : {}),
       ...(retainedImpactSemanticObservation ? { gpcImpactSemanticObservation: retainedImpactSemanticObservation } : {}),
       scriptEvents,
       iframeEvents,
@@ -8529,10 +8542,33 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       }
       collectScopedControls(containers);
     }
-    const candidates = scopedCandidates.length > 0
+    const hasCanonicalControlLabel = (element, label) => {
+      const normalizedLabel = label.toLowerCase().replace(/\u0307/g, "");
+      return label.length > 0 && label.length <= 120 && (
+        canonicalLabels.has(normalizedLabel) ||
+        (normalizedLabel === "click here" && element.nextSibling?.nodeType === Node.TEXT_NODE && canonicalLabels.has(normalize(label + " " + element.nextSibling.textContent).toLowerCase().replace(/[.!]$/, ""))) ||
+        embeddedLabels.some((phrase) => normalizedLabel.length <= 80 && normalizedLabel.includes(phrase))
+      );
+    };
+    // A retained hidden CMP template is not a usable scoped inventory. Inspect
+    // controls, not wrapper boxes: zero-size roots may have visible children.
+    // Charge this selection check to the same candidate/time budgets as the
+    // existing fallback; it adds no capture window or extra candidate allowance.
+    let visitedCandidates = 0;
+    let hasVisibleScopedControl = false;
+    for (const element of scopedCandidates) {
+      if (probeBudgetExpired() || ++visitedCandidates > 5_000) break;
+      if (element.closest(input.nonFirstLayerSurfaceSelector) || isNonVisitorSurface(element, nonVisitorSurfaces)) continue;
+      const interactive = element.matches(semanticControlSelector) || element.hasAttribute("onclick") ||
+        element.hasAttribute("tabindex") && Number(element.getAttribute("tabindex")) >= 0;
+      if (interactive && hasCanonicalControlLabel(element, labelFor(element).slice(0, 120)) && visibleInFirstLayer(element)) {
+        hasVisibleScopedControl = true;
+        break;
+      }
+    }
+    const candidates = hasVisibleScopedControl
       ? scopedCandidates
       : document.querySelectorAll(semanticControlSelector);
-    let visitedCandidates = 0;
     for (const element of candidates) {
       if (element.closest(input.nonFirstLayerSurfaceSelector) || isNonVisitorSurface(element, nonVisitorSurfaces)) continue;
       if (probeBudgetExpired()) break;
@@ -8540,11 +8576,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       if (visitedCandidates > 5_000) break;
       const label = labelFor(element).slice(0, 120);
       const normalizedLabel = label.toLowerCase().replace(/\u0307/g, "");
-      if (!label || label.length > 120 || !(
-        canonicalLabels.has(normalizedLabel) ||
-        (normalizedLabel === "click here" && element.nextSibling?.nodeType === Node.TEXT_NODE && canonicalLabels.has(normalize(label + " " + element.nextSibling.textContent).toLowerCase().replace(/[.!]$/, ""))) ||
-        embeddedLabels.some((phrase) => normalizedLabel.length <= 80 && normalizedLabel.includes(phrase))
-      )) continue;
+      if (!hasCanonicalControlLabel(element, label)) continue;
       // CMPs are commonly appended after large navigation trees. Filter by
       // canonical labels before forcing expensive layout/style reads, and
       // bound total semantic candidates instead of truncating the first 800.
@@ -13069,7 +13101,7 @@ async function captureSupplementalFullPagePreConsentScreenshot(
   }
 }
 
-async function captureScaledFullPageScreenshotWithCdp(
+export async function captureScaledFullPageScreenshotWithCdp(
   page: Page,
   screenshotPath: string,
   timeoutMs: number,
@@ -13083,11 +13115,15 @@ async function captureScaledFullPageScreenshotWithCdp(
     "Supplemental full-page CDP session acquisition timed out",
   );
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let captureActive = true;
   try {
     const remainingMs = Math.max(1, deadlineAtMs - Date.now());
     const screenshot = await Promise.race([
       (async () => {
         const metrics = await client.send("Page.getLayoutMetrics");
+        // An expired layout read must not dispatch a late screenshot after
+        // viewport cleanup has already run.
+        if (!captureActive || Date.now() >= deadlineAtMs) throw new Error("Supplemental full-page screenshot timed out");
         const contentSize = metrics.cssContentSize ?? metrics.contentSize;
         const outputScale = Math.max(
           0.5,
@@ -13113,27 +13149,23 @@ async function captureScaledFullPageScreenshotWithCdp(
     ]);
     await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
   } finally {
+    captureActive = false;
     if (timer) {
       clearTimeout(timer);
     }
     await boundedCleanup(client.detach(), Math.min(250, Math.max(1, deadlineAtMs - Date.now())));
     const after = await readSupplementalScreenshotViewportSnapshot(page);
-    const shouldRestore = supplementalScreenshotChangedViewport(before, after);
-    let restoreAttempted = false;
-    if (shouldRestore) {
-      const configured = page.viewportSize();
-      if (configured) {
-        restoreAttempted = true;
-        await boundedCleanup(page.setViewportSize(configured), 250);
-      }
-    }
+    // Same-size page.setViewportSize can be a Playwright cache hit while
+    // Chromium still has full-page capture emulation. Also restore when the
+    // first diagnostic looks unchanged or times out: capture effects can lag.
+    const restoration = await restoreSupplementalViewport(page, chromiumContextOptions(), 250);
     const final = await readSupplementalScreenshotViewportSnapshot(page);
     onViewportDiagnostic?.({
       after,
       before,
       final,
-      restoreAttempted,
-      restored: restoreAttempted && supplementalScreenshotViewportMatchesConfigured(final),
+      restoreAttempted: restoration.attempted,
+      restored: restoration.completed && supplementalScreenshotViewportMatchesConfigured(final),
     });
   }
 }
@@ -13171,22 +13203,6 @@ async function readSupplementalScreenshotViewportSnapshot(
   } finally {
     if (timer) clearTimeout(timer);
   }
-}
-
-function supplementalScreenshotChangedViewport(
-  before: SupplementalScreenshotViewportSnapshot | null,
-  after: SupplementalScreenshotViewportSnapshot | null,
-): boolean {
-  if (!after || after.innerHeight === null || after.innerWidth === null) return false;
-  const configuredHeight = after.configuredHeight ?? before?.configuredHeight;
-  const configuredWidth = after.configuredWidth ?? before?.configuredWidth;
-  const changedFromBefore = before?.innerHeight !== null && before?.innerHeight !== undefined &&
-    before.innerWidth !== null && before.innerWidth !== undefined &&
-    (Math.abs(after.innerHeight - before.innerHeight) > 2 || Math.abs(after.innerWidth - before.innerWidth) > 25);
-  const implausibleForConfiguredViewport = configuredHeight !== null && configuredHeight !== undefined &&
-    configuredWidth !== null && configuredWidth !== undefined &&
-    (after.innerHeight > configuredHeight * 1.5 || after.innerWidth > configuredWidth * 1.5);
-  return changedFromBefore || implausibleForConfiguredViewport;
 }
 
 function supplementalScreenshotViewportMatchesConfigured(

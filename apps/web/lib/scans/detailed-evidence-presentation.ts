@@ -74,6 +74,16 @@ export function technologyEvidenceRecap(projection: CmsSecurityProjection) {
     plugins ? `${plugins} ${plugins === 1 ? "plugin" : "plugins"}` : null,
     tentative ? `${tentative} tentative` : null].filter(Boolean).join(" · ");
 }
+/** Compact navigation recap; versions and server details stay in the expanded table. */
+export function technologyEvidenceHeaderRecap(projection: CmsSecurityProjection) {
+  const platforms = projection.assessment.detections;
+  const technologies = projection.technologyInventory?.detections ?? [];
+  const plugins = projection.pluginInventory?.detections.length ?? 0;
+  const primary = platforms.length > 1 ? `${platforms.length} platforms`
+    : platforms[0]?.name ?? (technologies.find(row => row.confidence === "high") ? TECHNOLOGY_NAMES[technologies.find(row => row.confidence === "high")!.id] : null);
+  return [primary, plugins ? `${plugins} ${plugins === 1 ? "plugin" : "plugins"}` : null].filter(Boolean).join(" · ")
+    || (technologies.length ? `${technologies.length} technologies` : "No stack detected");
+}
 export const CMS_CORRECTION_STEPS = [
   "Confirm the deployed version against the retained declaration and vendor advisory.",
   "Apply the vendor's supported update or mitigation, then verify the deployed version and affected behavior.",

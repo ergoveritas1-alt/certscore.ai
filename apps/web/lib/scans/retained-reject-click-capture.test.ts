@@ -1,0 +1,31 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { afterRejectProjection } from "./test-fixtures/after-reject-scoring";
+import { buildPostRefusalRuntimeProjection } from "./post-refusal-runtime-projection";
+import { buildNormalizedConcerns } from "./normalized-concerns";
+import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
+import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
+import { preserveRetainedRejectClickCapture, retainedRejectClickCapture } from "./retained-reject-click-capture";
+
+test("confirmed Reject presence reviews preserve legacy registered timing through canonical policy and historical read", () => {
+  const projection=afterRejectProjection("advertising");
+  assert.equal(projection.afterActionCapture,undefined);
+  const runtimeArtifacts=buildPostRefusalRuntimeProjection(projection);
+  const normalizedConcerns=buildNormalizedConcerns({runtimeArtifacts,reviewFindingCandidates:[],validationFindings:[]});
+  const coverageOutcomes=deriveGdprEprivacyCoveragePolicyOutcomes({runtimeArtifacts,normalizedConcerns,scanCompleted:true,coverageLimited:false});
+  const rows=deriveGdprEprivacyCoverageChecklist({coverageOutcomes,projectedFindings:[],unifiedFindings:[],scanCompleted:true,coverageLimited:false});
+  const row=rows.find(row=>row.id==="post_reject_tracking_reduction")!;
+  assert.equal(row.criticalEvidence.retainedEvidence.observationWindowMs,500);
+  const historical=structuredClone(row);
+  for(const key of ['observationWindowMs','registeredObservationCompletion','execution','resolverMethod','sourcePacketSha256','reportEvidenceProjectionPolicy'])delete historical.criticalEvidence.retainedEvidence[key];
+  const before=structuredClone(historical);
+  const repaired=preserveRetainedRejectClickCapture([historical],projection)[0]!;
+  assert.equal(repaired.criticalEvidence.retainedEvidence.observationWindowMs,500);
+  assert.equal((repaired.criticalEvidence.retainedEvidence.execution as any)?.consentConfirmed,true);
+  assert.deepEqual({...repaired,criticalEvidence:historical.criticalEvidence},historical);
+  assert.deepEqual(historical,before);
+  const assessment=row.criticalEvidence.retainedEvidence.afterRejectScoringAssessment;
+  assert.equal(retainedRejectClickCapture(assessment,{...projection,packetSha256:'f'.repeat(64)}),null);
+  assert.equal(retainedRejectClickCapture(assessment,{...projection,registeredObservationCompletion:undefined}),null);
+  assert.equal(retainedRejectClickCapture({...assessment as object,deductionPoints:(assessment as {deductionPoints:number}).deductionPoints === 0 ? 15 : 0},projection),null);
+});

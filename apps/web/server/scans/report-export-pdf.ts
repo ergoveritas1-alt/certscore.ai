@@ -1,3 +1,4 @@
+import { reportBrandDisplayName } from "../../lib/scans/report-brand-display-name";
 import { describeGpcCmpStateComparison, describeGpcGuidance, readBoundGpcCmpStateComparison } from "@certscore/contracts";
 import { reportExecutiveSummary } from "./report-executive-summary";
 import { REPORT_EXPORT_DISCLAIMER } from "./report-export-footer";
@@ -27,7 +28,7 @@ import { projectConsentControlReport, consentControlReportLabels } from "../../l
 import type { CanonicalReportExport } from "./report-export";
 import { deflateSync, inflateSync } from "node:zlib";
 import { isGdprTransparencyReportRowId } from "../../lib/scans/gdpr-transparency-report-contract";
-import { PDF_REPORT_TOPICS, pdfTopicForRow, type PdfReportTopic } from "./report-pdf-topics";
+import { PDF_REPORT_TOPICS, pdfTopicForFinding, pdfTopicForRow, type PdfReportTopic } from "./report-pdf-topics";
 
 const TRANSPORT_SECURITY_ROW_IDS = new Set([
   "transport_security_https_delivery",
@@ -185,9 +186,9 @@ function decodePdfImage(
 
 function ascii(value: unknown) {
   return String(value ?? "")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\x20-\x7e]/g, "-")
+    .normalize("NFC")
+    .replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/[–—]/g, "-")
+    .replace(/[^\x20-\x7e\xa0-\xff]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -340,6 +341,17 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
   lines = sections.consent;
   if(reportSectionInFocus("gpc",report.reviewFocus)) {
   lines.push(sectionHeading("Other signals - GPC response"));
+  const gpcInventory = report.appendix.gpcResourceInventory;
+  if (gpcInventory) {
+    const serviceCount = gpcInventory.inventory.services.filter(service => service.context?.identity?.vendor || service.context?.identity?.product).length;
+    lines.push(sectionHeading("GPC Services & Resources"), ...wrappedLines(`${serviceCount} identified service${serviceCount === 1 ? "" : "s"}; ${gpcInventory.inventory.resources.length} distinct resources. ${gpcInventory.clockLabel}.`),
+      ...(gpcInventory.captureCoverage?.status === "limited" ? wrappedLines(`Partial retained capture; ${gpcInventory.captureCoverage.omittedNodes} graph records omitted. Counts describe this visit.`) : []),
+      ...pdfEvidenceTable("gpc-resource-inventory", ["Resource", "Service / purpose", "Count / first seen"],gpcInventory.inventory.resources.map(row=>[
+        row.name, `${row.context.identity?.product ?? row.context.identity?.vendor ?? "Unidentified"}; ${row.purposes.join(", ")}`,
+        `${row.eventCount}; ${row.occurrence.firstSeenMs === null ? "Not timed" : `+${row.occurrence.firstSeenMs} ms`}`,
+      ]),[270,142,100]));
+  }
+
   if (report.gpcResponse) {
     const gpc = report.gpcResponse;
     const facts = describeGpcObservedFacts(gpc.observation);
@@ -386,8 +398,8 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
   if (initialRequests) {
     lines.push(sectionHeading("Initial-page request inventory"),
       ...wrappedLines(`${initialRequests.metric!.value} request events; ${initialRequests.totalResources} distinct request resources before a choice. ${initialRequests.metric!.overview?.identifiedServices ?? "Unavailable"} identified ${initialRequests.metric!.overview?.identifiedServices === 1 ? "service" : "services"} in the initial-page resource inventory.`),
-      ...pdfEvidenceTable("initial-request-inventory", ["Method / resource", "Vendor / classification", "Events / first seen"], initialRequests.rows.map(row => [
-        `${row.method ?? "Not retained"} ${row.resource}`, `${row.vendor ?? "Unidentified"}; ${row.classification}`,
+      ...pdfEvidenceTable("initial-request-inventory", ["Request resource", "Vendor / classification", "Events / first seen"], initialRequests.rows.map(row => [
+        `${row.method ? `${row.method} ` : ""}${row.resource}`, `${row.vendor ?? "Unidentified"}; ${row.classification}`,
         `${row.eventCount} events; ${row.firstSeenMs === null ? "Timing unavailable" : `+${row.firstSeenMs} ms`}`,
       ]), [270, 142, 100]));
     if (initialRequests.omittedResources) lines.push(...wrappedLines(`${initialRequests.omittedResources} additional resource rows are available in the online inventory.`, { size: 9 }));
@@ -437,7 +449,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
   if (!review || mainChecklistRows.length === 0) {
     lines.push({ text: "No main-checklist presentation rows were retained." });
   } else {
-    mainChecklistRows.filter(row => !pdfReviewGroups(report).some(group => group.observations.some(observation => observation.id === row.id))).forEach((row, index) => {
+    mainChecklistRows.filter(row => !(controlReport && ["reject_all_path_availability", "accept_consent_control", "options_settings_preferences_control"].includes(row.id))).filter(row => !pdfReviewGroups(report).some(group => group.observations.some(observation => observation.id === row.id))).forEach((row, index) => {
       if (pdfTopicForRow(row.id) === "policy") return;
       const controlIds = ["consent_surface_observed", "cmp_framework_signal_observed", "reject_all_path_availability", "accept_consent_control", "options_settings_preferences_control"];
       lines = controlIds.includes(row.id) ? consentControls : sections[pdfTopicForRow(row.id) ?? "policy"];
@@ -603,7 +615,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
   }
 
   lines = sections.accessibility;
-  lines.push(...wrappedLines("Automated starting-page accessibility evidence supporting ADA/WCAG review. This is not an ADA compliance determination or a complete WCAG conformance audit. Inconclusive checks are listed separately.", { size: 9 }));
+  lines.push(...wrappedLines("Automated starting-page accessibility evidence supporting ADA/WCAG review. This is not an ADA compliance determination or a complete WCAG conformance audit. Results describe the captured page state, including any consent overlay; re-test separately after dismissing it when assessing underlying content. Inconclusive checks are listed separately.", { size: 9 }));
   const accessibility = report.accessibilityAudit;
   if (accessibility) lines.push(...wrappedLines(
     `Automated audit: ${accessibility.status}; engine ${accessibility.engine} ${accessibility.engineVersion ?? "version unavailable"}; failed rules ${accessibility.failedRuleCount ?? "unknown"}; affected nodes ${accessibility.affectedNodeCount ?? "unknown"}; rules needing review ${accessibility.reviewRuleCount ?? "unknown"}.`));
@@ -641,8 +653,9 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
   const appendixLines: PdfLine[] = PDF_REPORT_TOPICS.flatMap((topic, index) => {
     const letter = String.fromCharCode(65 + index);
     const topicActions = actions[topic.id];
-    const actionLines = wrappedLines(topicActions.length ? "Remediation and re-test steps: see Top issues and remediation." : "No corrective action is listed for this topic in the report.",
-      { size: 9, internalDestination: topicActions.length ? "findings" : undefined, destination: `${topic.id}-fixes`, gapAfter: 6 });
+    const hasNarrativeAction = topicActions.length > 0 && pdfNarrativeFindings(report).some(finding => pdfTopicForFinding(finding) === topic.id);
+    const actionLines = wrappedLines(hasNarrativeAction ? "Remediation and re-test steps: see Top issues and remediation." : topic.id === "accessibility" && report.accessibilityAudit?.reviewRuleCount ? "Review the inconclusive checks and affected elements below, then re-test the captured page state." : "No corrective action is listed for this topic in the report.",
+      { size: 9, internalDestination: hasNarrativeAction ? "findings" : undefined, destination: `${topic.id}-fixes`, gapAfter: 6 });
     const topicEvidence = [...evidenceSections[topic.id].filter(line => line.kind !== "topicOverview"), ...(topic.id === "policy" ? [] : sections[topic.id])];
 
     const chapter: PdfLine[] = [
@@ -1099,7 +1112,7 @@ export function renderCanonicalReportPdf(
   const palette = REPORT_HEADER_PALETTES[headerTheme];
   const image = decodePdfImage(options.visualEvidence);
   const brandLogo = decodePdfImage(options.brandLogo, options.brandName ? [255, 255, 255] : palette.matte);
-  const brandName = options.brandName ? ascii(options.brandName).slice(0, 64) : "CertScore.ai";
+  const brandName = reportBrandDisplayName(options.brandName);
   const visualFocus = image && options.visualEvidence ? pdfConsentVisualFocus(report, { width: image.width, height: image.height, sha256: createHash("sha256").update(options.visualEvidence.body).digest("hex") }) : null;
   const timeZone = pdfTimeZone(options.timeZone) ?? "UTC";
   const contentLines = reportLines(report, image, options.appUrl ?? "https://certscore.ai", visualFocus);
@@ -1114,8 +1127,8 @@ export function renderCanonicalReportPdf(
   };
   const catalogId = add("");
   const pagesId = add("");
-  const regularFontId = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-  const boldFontId = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
+  const regularFontId = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+  const boldFontId = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
   const imageId = image
     ? add(`<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace ${image.colorSpace} /BitsPerComponent ${image.bitsPerComponent} /Filter ${image.filter} /Length ${image.body.byteLength}${image.colorSpace === "/DeviceCMYK" ? " /Decode [1 0 1 0 1 0 1 0]" : ""} >>\nstream\n${image.body.toString("latin1")}\nendstream`)
     : null;

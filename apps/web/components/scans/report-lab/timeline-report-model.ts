@@ -1,3 +1,4 @@
+import { projectActionResourceInventory } from "../../../lib/scans/action-resource-inventory";
 import { CHECKLIST_GROUPS, projectReportPriorityFindings, reportPriorityEvidenceRow } from "../../../lib/scans/report-priority-projection";
 import { projectCaliforniaChoicePresence, projectCaliforniaPolicyChoiceMethods, projectCaliforniaFrictionlessGpcException, projectCaliforniaOptOutPresence } from "../../../lib/scans/california-choice-presence";
 import { retainedConsentVendor } from "../../../lib/scans/retained-consent-vendor";
@@ -759,6 +760,10 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     inventory,
     inventorySummary,
     resourceInventory,
+    actionInventories: {
+      accept: projectActionResourceInventory({ pageId: scanRecord.scan.id, action: "accept", projection: runtimeArtifacts?.postAcceptEvidenceProjection, assessment: retainedConsentAssessment(scanRecord), reviewedPolicies }),
+      reject: projectActionResourceInventory({ pageId: scanRecord.scan.id, action: "reject", projection: runtimeArtifacts?.postRefusalEvidenceProjection, assessment: retainedConsentAssessment(scanRecord), reviewedPolicies }),
+    },
     afterAcceptFormsLimited: formInventory.afterAcceptLimited,
     collectionTableRows: formInventory.rows,
     metrics: {

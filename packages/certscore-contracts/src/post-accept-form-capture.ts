@@ -3,7 +3,7 @@ import { collectionSurfaceFormSchema } from "./collection-surface-form";
 
 export const POST_ACCEPT_FORM_CAPTURE_MAX_BYTES = 8192;
 export interface PostAcceptFormCapture {
-  version: "post_accept_form_capture.v1" | "post_accept_form_capture.v2" | "post_accept_form_capture.v3";
+  version: "post_accept_form_capture.v1" | "post_accept_form_capture.v2" | "post_accept_form_capture.v3" | "post_accept_form_capture.v4";
   phase: "after_accept_click";
   sessionId: string;
   exactTargetSha256: string;
@@ -13,12 +13,13 @@ export interface PostAcceptFormCapture {
   inspectedFrameCount: number;
   candidateFrameCount: number;
   window?: { startedAtMs: number; endedAtMs: number; terminalSampleCompleted: boolean };
+  followup?: {reason: "retained_form_bootstrap"; triggerRequestId: string; originalWindowEndedAtMs: number; workerDeadlineAtMs: number};
   frames: Array<{frameRef: string; documentToken: string; documentUrl: string; capturedAtMs: number;
     documentBinding?: {source: "cdp_loader_id"; token: string; boundAtMs: number};
     forms: Array<z.output<typeof collectionSurfaceFormSchema>>}>;
 }
 export const postAcceptFormCaptureSchema: z.ZodType<PostAcceptFormCapture, z.ZodTypeDef, unknown> = z.object({
-  version: z.enum(["post_accept_form_capture.v1", "post_accept_form_capture.v2", "post_accept_form_capture.v3"]),
+  version: z.enum(["post_accept_form_capture.v1", "post_accept_form_capture.v2", "post_accept_form_capture.v3", "post_accept_form_capture.v4"]),
   phase: z.literal("after_accept_click"),
   sessionId: z.string().uuid(),
   exactTargetSha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -29,6 +30,8 @@ export const postAcceptFormCaptureSchema: z.ZodType<PostAcceptFormCapture, z.Zod
   candidateFrameCount: z.number().int().nonnegative(),
   window: z.object({ startedAtMs: z.number().int().nonnegative(), endedAtMs: z.number().int().nonnegative(),
     terminalSampleCompleted: z.boolean() }).strict().optional(),
+  followup: z.object({reason: z.literal("retained_form_bootstrap"), triggerRequestId: z.string().min(1).max(160),
+    originalWindowEndedAtMs: z.number().int().nonnegative(), workerDeadlineAtMs: z.number().int().nonnegative()}).strict().optional(),
   frames: z.array(z.object({
     frameRef: z.string().min(1).max(80),
     documentToken: z.string().uuid(),
@@ -39,6 +42,11 @@ export const postAcceptFormCaptureSchema: z.ZodType<PostAcceptFormCapture, z.Zod
     forms: z.array(collectionSurfaceFormSchema).max(2),
   }).strict()).max(3),
 }).strict().superRefine((value, ctx) => {
+  if (value.version === "post_accept_form_capture.v4" ? !value.followup || !value.window ||
+      value.followup.originalWindowEndedAtMs < value.window.startedAtMs ||
+      value.window.endedAtMs <= value.followup.originalWindowEndedAtMs ||
+      value.window.endedAtMs > Math.min(value.followup.originalWindowEndedAtMs + 8000, value.followup.workerDeadlineAtMs)
+      : value.followup !== undefined) ctx.addIssue({code:z.ZodIssueCode.custom,message:"Form-only follow-up requires an explicit bounded deadline"});
   if (value.version !== "post_accept_form_capture.v1" ? !value.window || value.window.startedAtMs < value.actionDispatchedAtMs ||
     value.window.endedAtMs <= value.window.startedAtMs || (value.status === "captured" && (!value.window.terminalSampleCompleted || !value.candidateFrameCount)) ||
     value.frames.some(frame => frame.capturedAtMs > value.window!.endedAtMs) : value.window !== undefined) {
@@ -49,10 +57,21 @@ export const postAcceptFormCaptureSchema: z.ZodType<PostAcceptFormCapture, z.Zod
     (value.status === "limited" && !value.reasonCodes.length)) ctx.addIssue({code:z.ZodIssueCode.custom, message:"Invalid form capture coverage"});
   if (value.status === "captured" && (value.reasonCodes.length || value.inspectedFrameCount !== value.candidateFrameCount)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Complete capture requires complete frame coverage" });
   if (value.frames.some(frame => frame.capturedAtMs < value.actionDispatchedAtMs || frame.forms.some(form => form.pageUrl !== frame.documentUrl))) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Form capture must be bound to its frame and action" });
-  if (value.frames.some(frame => frame.documentBinding && (value.version !== "post_accept_form_capture.v3" ||
+  if (value.frames.some(frame => frame.documentBinding && (!["post_accept_form_capture.v3", "post_accept_form_capture.v4"].includes(value.version) ||
     frame.frameRef !== "accept_frame_0" || frame.documentBinding.boundAtMs < value.actionDispatchedAtMs ||
     frame.documentBinding.boundAtMs > frame.capturedAtMs))) {
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"Loader binding requires a new main-document sample after document proof"});
   }
   if (new TextEncoder().encode(JSON.stringify(value)).byteLength > POST_ACCEPT_FORM_CAPTURE_MAX_BYTES) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Form capture exceeds byte limit" });
 });
+
+/** A retained form bootstrap is only a reason to finish bounded DOM inspection,
+ * never evidence that a form exists. Keep exact vendor endpoints, not substrings. */
+export function isPostAcceptFormBootstrapUrl(url: string): boolean {
+  try {
+    const value = new URL(url);
+    return value.protocol === "https:" && /^(?:js(?:-eu1)?\.hsforms\.net)$/.test(value.hostname) && value.pathname === "/forms/embed/v2.js" ||
+      value.protocol === "https:" && /^(?:forms(?:-eu1)?\.hsforms\.com)$/.test(value.hostname) &&
+      /^\/embed\/v3\/form\/\d+\/[a-f0-9-]{36}\/json$/.test(value.pathname);
+  } catch { return false; }
+}

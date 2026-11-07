@@ -85,14 +85,14 @@ export async function externalizeRuntimeGraphForPersistence(record: ScanDetailRe
 }
 
 /** Caller must establish scan access and claim the canonical read quota before loading bytes. */
-export async function hydrateRuntimeGraphForRead(record: ScanDetailResponse, dependencies: { read?: typeof readObject; environment?: Record<string, string | undefined> } = {}): Promise<ScanDetailResponse> {
+export async function hydrateRuntimeGraphForRead(record: ScanDetailResponse, dependencies: { read?: typeof readObject; environment?: Record<string, string | undefined>; includeGpcForInventory?: boolean } = {}): Promise<ScanDetailResponse> {
   if ((dependencies.environment ?? process.env).CERTSCORE_RUNTIME_GRAPH_PRESENTATION !== "on") {
     const artifacts = { ...record.runtimeArtifacts }; delete artifacts.runtimeEvidenceGraphProjection; delete artifacts.runtimeEvidenceGraphReference;
     return { ...record, runtimeArtifacts: artifacts };
   }
   const parsed = apiRuntimeEvidenceGraphProjectionSchema.safeParse(record.runtimeArtifacts?.runtimeEvidenceGraphProjection);
   if (!parsed.success) return record;
-  if (!parsed.data.details) return {...record,runtimeArtifacts:{...record.runtimeArtifacts,runtimeEvidenceGraphProjection:customerRuntimeGraph(parsed.data)}};
+  if (!parsed.data.details) return {...record,runtimeArtifacts:{...record.runtimeArtifacts,runtimeEvidenceGraphProjection:dependencies.includeGpcForInventory ? parsed.data : customerRuntimeGraph(parsed.data)}};
   const projection = parsed.data;
   const parsedReference = referenceSchema.safeParse(record.runtimeArtifacts?.runtimeEvidenceGraphReference);
   let resolved = unavailable(projection, "relationship_artifact_unverified");
@@ -108,5 +108,5 @@ export async function hydrateRuntimeGraphForRead(record: ScanDetailResponse, dep
       if (!dependencies.read) { cache.delete(key); cache.set(key, body); while (cache.size > 32) cache.delete(cache.keys().next().value!); }
     } catch { /* Fail closed without logging untrusted body, URLs, or secrets. No automatic rescan/republication. */ }
   }
-  return { ...record, runtimeArtifacts: { ...record.runtimeArtifacts, runtimeEvidenceGraphProjection: customerRuntimeGraph(resolved) } };
+  return { ...record, runtimeArtifacts: { ...record.runtimeArtifacts, runtimeEvidenceGraphProjection: dependencies.includeGpcForInventory ? resolved : customerRuntimeGraph(resolved) } };
 }

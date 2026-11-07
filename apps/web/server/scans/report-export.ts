@@ -333,7 +333,7 @@ function buildDataCollectionSurfacesAppendix(
   };
 }
 
-export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullSite?: FullSiteReportExport, requestedFocus?: unknown) {
+export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullSite?: FullSiteReportExport, requestedFocus?: unknown, gpcInventory?: import("../../lib/scans/action-resource-inventory").ActionResourceInventory | null) {
   const canonical = getPersistedCanonicalReportProjection(scanRecord);
   if (!canonical) return null;
   const noGo = projectScanReportNoGo(scanRecord);
@@ -434,6 +434,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
       })),
     ],
     appendix: {
+      ...(gpcInventory && focus === "ccpa_cpra" ? {gpcResourceInventory:gpcInventory} : {}),
       evidenceDossier: buildReportAppendixEvidence(scanRecord, canonical, assessment),
       ...(siteIntegrity ? { siteIntegrity } : {}),
       ...(fullSite?.score?.siteIntegrity ? { siteIntegritySite: fullSite.score.siteIntegrity } : {}),

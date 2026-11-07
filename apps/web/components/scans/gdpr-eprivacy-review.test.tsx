@@ -30,3 +30,23 @@ test("unresolved EU disclosure rows stay out of the captured wording summary",()
   assert.doesNotMatch(html.split("data-gdpr-eprivacy-review-details")[0]!,/Disclosures captured|Retention/);
   assert.match(html,/Not confirmed: retained analysis/);
 });
+
+
+test("unavailable policy retrieval is not presented as zero assessed topics", () => {
+  const html = renderToStaticMarkup(<GdprEprivacyCoverageSummary rows={[]} policyUrls={[]} policySurfaceCoverage="limited" policySurfaceLinkObserved />);
+  assert.match(html, /Not assessed/);
+  assert.match(html, /no verified policy document was available/);
+  assert.doesNotMatch(html, /0 topics captured|0 disclosure topics/);
+  const absent = renderToStaticMarkup(<GdprEprivacyCoverageSummary rows={[]} policyUrls={[]} policySurfaceCoverage="unavailable" />);
+  assert.match(absent, /incomplete or unavailable/);
+  assert.doesNotMatch(absent, /A policy link was found/);
+});
+
+test("usable topic observations survive partial policy coverage", () => {
+  const html = renderToStaticMarkup(<GdprEprivacyCoverageSummary rows={[{id:"legal_basis_disclosure_observed",status:"Observed"}]} policyUrls={[]} policySurfaceCoverage="limited" policySurfaceLinkObserved />);
+  assert.match(html.replace(/<[^>]*>/g,""), /1 topic captured/);
+  assert.doesNotMatch(html, /Not assessed/);
+  const complete = renderToStaticMarkup(<GdprEprivacyCoverageSummary rows={[]} policyUrls={["https://example.test/privacy"]} policySurfaceCoverage="complete" />);
+  assert.match(complete.replace(/<[^>]*>/g,""), /0 topics captured/);
+  assert.doesNotMatch(complete, /Not assessed/);
+});

@@ -20,12 +20,13 @@ test("document exports share workspace branding gates while public Word download
     object: `export async function loadVisualEvidenceObject(){return null;}`,
     options: `import {state} from 'test-state'; export async function readFullSiteOptions(){return {allowed:state.fullSite};}`,
     fullSite: `export async function loadFullSiteExport(){return {scope:'full-site'};}`,
+    gpcInventory: `export async function loadGpcResourceInventory(){return null;}`,
     workpaper: `export function buildTrackingWorkpaper(report){return report;} export function renderTrackingWorkpaperCsv(){return '';}`,
   };
   const output = await build({ stdin: { contents: `export {GET} from ${JSON.stringify(route)}; export {state} from 'test-state';`, resolveDir: process.cwd() },
     bundle: true, write: false, format: "esm", platform: "node", plugins: [{ name: "branding-isolation", setup(api) {
       const entries: Record<string, string> = { "next/server": "next", "test-state": "state" };
-      const suffixes: Record<string, string> = { "/server/auth": "auth", "/platform-admin": "admin", "/scan-status-projection": "status", "/scan-report-projection": "projection", "/report-export": "export", "/report-export-pdf": "pdf", "/report-export-docx": "docx", "/report-branding": "branding", "/visual-evidence": "visual", "/visual-evidence-object": "object", "/full-site-options": "options", "/full-site-report": "fullSite", "/tracking-workpaper": "workpaper" };
+      const suffixes: Record<string, string> = { "/gpc-resource-inventory": "gpcInventory", "/server/auth": "auth", "/platform-admin": "admin", "/scan-status-projection": "status", "/scan-report-projection": "projection", "/report-export": "export", "/report-export-pdf": "pdf", "/report-export-docx": "docx", "/report-branding": "branding", "/visual-evidence": "visual", "/visual-evidence-object": "object", "/full-site-options": "options", "/full-site-report": "fullSite", "/tracking-workpaper": "workpaper" };
       api.onResolve({ filter: /.*/ }, args => {
         const key = entries[args.path] ?? Object.entries(suffixes).find(([suffix]) => args.path.endsWith(suffix))?.[1];
         return key ? { path: key, namespace: "mock" } : undefined;

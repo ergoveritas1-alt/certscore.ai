@@ -3,26 +3,31 @@ import React, { useId, useState } from "react";
 import { RuntimeObservationTimeline, type RuntimeObservationTimelineEvent } from "./runtime-observation-sections";
 import type { ActionTimelineProjection } from "../../lib/scans/action-timeline-projection";
 
-type Mode = "pre-consent" | "accept" | "reject" | "gpc";
-const titles: Record<Mode, string> = {
+export type ReportEvidencePhase = "pre-consent" | "accept" | "reject" | "gpc";
+const titles: Record<ReportEvidencePhase, string> = {
   "pre-consent": "Pre-consent page event timeline",
   accept: "Post accept click page event timeline",
   reject: "Post reject click page event timeline",
   gpc: "GPC page event timeline",
 };
 
-export function ReportPageEventTimeline({ events, accept, reject, gpc }: {
+export function ReportPageEventTimeline({ events, accept, reject, gpc, selectedPhase, onPhaseChange, embedded = false }: {
+  selectedPhase?: ReportEvidencePhase;
+  onPhaseChange?: (phase: ReportEvidencePhase) => void;
+  embedded?: boolean;
   events: RuntimeObservationTimelineEvent[];
   accept?: ActionTimelineProjection | null;
   reject?: ActionTimelineProjection | null;
   gpc?: ActionTimelineProjection | null;
 }) {
-  const [selected, setSelected] = useState<Mode>("pre-consent");
+  const [localSelected, setLocalSelected] = useState<ReportEvidencePhase>("pre-consent");
+  const selected = selectedPhase ?? localSelected;
+  const setSelected = onPhaseChange ?? setLocalSelected;
   const mode = selected === "accept" && !accept || selected === "reject" && !reject || selected === "gpc" && !gpc ? "pre-consent" : selected;
   const path = mode === "accept" ? accept : mode === "reject" ? reject : mode === "gpc" ? gpc : null;
   const id = useId();
-  const modes: Mode[] = ["pre-consent", ...(accept ? ["accept" as const] : []), ...(reject ? ["reject" as const] : []), ...(gpc ? ["gpc" as const] : [])];
-  return <section id="page-event-timeline" aria-label={titles[mode]} className="my-3 border-y border-zinc-200 bg-white py-2">
+  const modes: ReportEvidencePhase[] = ["pre-consent", ...(accept ? ["accept" as const] : []), ...(reject ? ["reject" as const] : []), ...(gpc ? ["gpc" as const] : [])];
+  return <section id="page-event-timeline" aria-label={titles[mode]} className={embedded ? "border-b border-zinc-200 pb-4" : "my-3 border-y border-zinc-200 bg-white py-2"}>
     <div className="flex flex-wrap items-start justify-between gap-2">
       <h2 className="text-xl font-semibold">{titles[mode]}</h2>
       {modes.length > 1 ? <div role="group" aria-label="Page event timeline view" className="ml-auto flex shrink-0 gap-1">

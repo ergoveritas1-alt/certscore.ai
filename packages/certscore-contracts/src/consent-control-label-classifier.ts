@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v26";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v28";
 
 export type ConsentControlIntent =
   | "accept"
@@ -1151,6 +1151,7 @@ export function hasConsentControlSemanticVeto(classification: ConsentControlLabe
     "informational_consent_reference", "negated_accept_label", "negated_consent_choice",
     "conflicting_consent_decisions", "visible_accessible_intent_conflict",
     "non_decision_control_role", "notification_permission_control", "unproven_acknowledgment_consent",
+    "audience_or_location_selection_control",
   ].includes(reason));
 }
 
@@ -1207,6 +1208,21 @@ function classifyConsentControlLabelInternal(
   }
   const labelText = fields.join(" ");
   const normalizedLabel = normalizeConsentControlText(labelText);
+  // A visitor-selection dialog can coexist with a CMP. Bare English agreement
+  // labels in that dialog describe its audience/location choice, not the
+  // sibling CMP's cookies. Keep label-only legacy calls and explicit privacy
+  // labels unchanged; a mixed-purpose dialog needs its own consent proposition.
+  // This reviewed English exclusion does not claim multilingual purpose coverage.
+  if (input.scopeKind === "dialog" && /^(?:accept|i accept|agree|i agree|yes i agree)$/.test(normalizedLabel)) {
+    const localScope = (input.scopeText ?? "").normalize("NFKC").replace(/\s+/g, " ").toLowerCase().slice(0, 2_000);
+    const selectsVisitor = /\b(?:select|choose|change) (?:your )?(?:location|country|region|language|investor type|audience|role)\b/.test(localScope) ||
+      /\btell us a little about you\b/.test(localScope);
+    const localConsentProposition = /\b(?:we|this (?:site|website))\b[^.!?]{0,60}\b(?:use|uses|store|stores|access|accesses)\b[^.!?]{0,100}\b(?:cookies?|tracking|analytics|advertising|personal data|data processing)\b/.test(localScope) ||
+      /\b(?:consent|agree) to (?:the use of |our |all )?(?:cookies?|tracking|analytics|advertising|personal data|data processing)\b/.test(localScope);
+    if (selectsVisitor && !localConsentProposition) {
+      return unknown(["audience_or_location_selection_control"]);
+    }
+  }
   const normalizedContext = normalizeConsentControlText(input.contextText ?? "");
   const reasonCodes: string[] = [];
   const classifierProfile = input.classifierProfile ?? "production_default";
@@ -1257,7 +1273,8 @@ function classifyConsentControlLabelInternal(
   if (normalizedLabel === "learn more") {
     return unknown(["ambiguous_information_control"]);
   }
-  if (isUtiqScopedRejectLabel(normalizedLabel) ||
+  const paragraphBoundUtiqRefusal = isParagraphBoundUtiqConsentRefusal(input, normalizedLabel);
+  if (paragraphBoundUtiqRefusal || isUtiqScopedRejectLabel(normalizedLabel) ||
       (/^(?:jetzt )?ablehnen$/.test(normalizedLabel) && input.scopeKind === "paragraph" && /\butiq\b/i.test(input.scopeText ?? ""))) {
     return {
       intent: "privacy_opt_out",
@@ -1268,6 +1285,7 @@ function classifyConsentControlLabelInternal(
       matchStrength: "equivalent",
       variant: "vendor_specific_opt_out",
       reasonCodes: [
+        ...(paragraphBoundUtiqRefusal ? ["observation_only_label", "label_bound_vendor_refusal"] : []),
         "vendor_specific_privacy_opt_out",
         "matched_privacy_opt_out",
         "match_strength_equivalent",
@@ -1543,6 +1561,20 @@ function isUtiqScopedRejectLabel(normalizedLabel: string) {
     return false;
   }
   return !/\b(?:alle|all|cookies?|tracking|nicht erforderliche|optionale|optional|notwendige|necessary|essential)\b/i.test(normalizedLabel);
+}
+
+/** Recognize this longer observation label only when its own paragraph binds the purpose. */
+function isParagraphBoundUtiqConsentRefusal(input: ConsentControlLabelClassifierInput, normalizedLabel: string) {
+  if (input.usage === "action" || input.scopeKind !== "paragraph" || normalizedLabel !== "einwilligung jetzt ablehnen") {
+    return false;
+  }
+  const scope = normalizeConsentControlText(input.scopeText).replace(/["„]/g, "");
+  // Broad or negated consent wording is not a vendor-only refusal. A vendor
+  // mentioned in a dialog or sibling paragraph cannot supply this binding.
+  if (/\b(?:alle|all|sämtliche|gesamte|cookies?|tracking|nicht|keine?|ohne)\b/i.test(scope)) return false;
+  if (!scope.includes(normalizedLabel)) return false;
+  return /\beinwilligung für utiq können sie mit einwilligung jetzt ablehnen widerrufen\b/.test(scope) ||
+    /\beinwilligung jetzt ablehnen oder später über utiq verwalten\b/.test(scope);
 }
 
 function termScore(

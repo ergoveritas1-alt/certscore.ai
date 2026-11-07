@@ -56,3 +56,13 @@ test("GPC joins the right-aligned timeline switcher independently of action cont
     assert.match(html, /aria-pressed="true"[^>]*>Pre-consent/);
   }
 });
+
+test("a shared phase selection controls the displayed timeline and stale phases reset together", () => {
+  const html=renderToStaticMarkup(<ReportPageEventTimeline embedded selectedPhase="accept" onPhaseChange={()=>{}} events={[]} accept={path}/>);
+  assert.match(html,/Post accept click page event timeline/);
+  assert.match(html,/aria-pressed="true"[^>]*>Accept/);
+  assert.match(html,/Times from confirmed Accept/);
+  const unavailable=renderToStaticMarkup(<ReportPageEventTimeline selectedPhase="reject" events={[]} accept={path}/>);
+  assert.match(unavailable,/Pre-consent page event timeline/);
+  assert.doesNotMatch(unavailable,/Post reject click page event timeline/);
+});

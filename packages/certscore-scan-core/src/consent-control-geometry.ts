@@ -353,6 +353,7 @@ const CANDIDATE_ACTION_PRIORITY_PATTERN = canonicalPhrasePattern([
     ...(entry.contextualConsentControls?.necessaryOnly ?? []),
   ]),
 ]);
+const ADDITIONAL_CONTROL_LABEL_PATTERN = canonicalPhrasePattern(consentControlTerms.map((term) => term.phrase));
 const STATIC_TEXT_TAG_NAMES = new Set(["p", "span", "strong", "em", "small", "li", "h1", "h2", "h3", "h4", "h5", "h6"]);
 const INTERACTIVE_TAG_NAMES = new Set(["a", "button", "input", "select", "textarea"]);
 const INTERACTIVE_ROLE_PATTERN = /^(button|link|checkbox|radio|switch|tab|menuitem)$/i;
@@ -376,6 +377,7 @@ export async function captureConsentControlGeometry(
     containerLimit: options.containerLimit ?? DEFAULT_CONTAINER_LIMIT,
     consentPatternSource: CONSENT_CONTEXT_PATTERN.source,
     controlLabelPatternSource: CANDIDATE_ACTION_PRIORITY_PATTERN.source,
+    additionalControlLabelPatternSource: ADDITIONAL_CONTROL_LABEL_PATTERN.source,
     registrySelectors,
     // Names only: no property reads, SDK getters or protocol calls. Use the
     // canonical library in this same document snapshot as the control inventory.
@@ -1360,6 +1362,7 @@ function collectConsentGeometryInPage(input: {
   containerLimit: number;
   consentPatternSource: string;
   controlLabelPatternSource: string;
+  additionalControlLabelPatternSource: string;
   registrySelectors: string[];
   registryGlobals: string[];
   namedRejectRecipes: (NonNullable<(typeof KNOWN_CMP_REGISTRY)[number]["rejectLabelBoundNecessaryOnly"]> & { provider: string })[];
@@ -1401,6 +1404,7 @@ function collectConsentGeometryInPage(input: {
   };
   const consentPattern = new RegExp(input.consentPatternSource, "iu");
   const controlLabelPattern = new RegExp(input.controlLabelPatternSource, "iu");
+  const additionalControlLabelPattern = new RegExp(input.additionalControlLabelPatternSource, "iu");
   const containerSelector = [
     "[role='dialog']",
     "[aria-modal='true']",
@@ -1531,7 +1535,11 @@ function collectConsentGeometryInPage(input: {
         element.getAttribute("aria-label") || "",
         element.getAttribute("title") || "",
       ].join(" "));
-      return controlLabelPattern.test(attrs) || consentPattern.test(attrs);
+      // Include canonical labels omitted by the narrower discovery vocabulary,
+      // but only with independent readable consent prose. A localized account
+      // action must not gain consent meaning merely by entering the inventory.
+      return controlLabelPattern.test(attrs) || consentPattern.test(attrs) ||
+        (additionalControlLabelPattern.test(label) && Boolean(nearestTextContextRoot(element, consentPattern, label)));
     })
     .slice(0, 800);
   // Retain the same bounded, independent consent prose used by classification
@@ -1541,7 +1549,8 @@ function collectConsentGeometryInPage(input: {
   // canonical action, viewport hit testing and the existing authorization proof.
   for (const element of documentControls) {
     if (containers.length >= input.containerLimit) break;
-    if (!isSemanticallyInteractive(element) || !controlLabelPattern.test(labelFor(element)) ||
+    if (!isSemanticallyInteractive(element) ||
+      !(controlLabelPattern.test(labelFor(element)) || additionalControlLabelPattern.test(labelFor(element))) ||
       nearestContainerIndex(element, containers) !== undefined) continue;
     const root = nearestTextContextRoot(element, consentPattern, labelFor(element));
     if (root && selectorUniquelyTargetsElement(selectorHintFor(root, true), root)) {
@@ -1628,8 +1637,10 @@ function collectConsentGeometryInPage(input: {
     // the real actionable controls. Retaining that wrapper creates a composite
     // label (for example, "Manage settingsReject Accept") and can consume the
     // candidate budget before its child buttons are considered. Keep the
-    // actual interactive descendants and omit only non-interactive wrappers.
-    if (!isSemanticallyInteractive(element) && hasInteractiveDescendant(element)) {
+    // actual interactive descendants. A wrapper's tabindex supports keyboard
+    // focus, but does not make its composite prose an action. Preserve explicit
+    // custom actions and standalone focusable controls.
+    if (!hasExplicitActionSemantics(element) && hasInteractiveDescendant(element)) {
       return null;
     }
     const label = labelFor(element);
@@ -1789,7 +1800,7 @@ function collectConsentGeometryInPage(input: {
     );
   }
 
-  function isSemanticallyInteractive(element: Element): boolean {
+  function hasExplicitActionSemantics(element: Element): boolean {
     const tagName = element.tagName.toLowerCase();
     if (/^(?:a|button|input|select|textarea|summary)$/.test(tagName)) {
       return true;
@@ -1799,6 +1810,13 @@ function collectConsentGeometryInPage(input: {
       return true;
     }
     if (element.hasAttribute("onclick")) {
+      return true;
+    }
+    return false;
+  }
+
+  function isSemanticallyInteractive(element: Element): boolean {
+    if (hasExplicitActionSemantics(element)) {
       return true;
     }
     const tabindex = element.getAttribute("tabindex");
@@ -2192,7 +2210,13 @@ function collectConsentGeometryInPage(input: {
     if (hasFirstLayerAncestor(element)) {
       return "first_layer";
     }
-    if (element.closest("footer") || /\bfooter\b|legal-footer|functional-footer/.test(text)) {
+    const structuralScope = compactText([
+      element.getAttribute("id") || "",
+      element.getAttribute("class") || "",
+    ].join(" ")).toLowerCase();
+    // A notice can explain that preferences are available in the footer.
+    // That prose does not place this notice or its controls in the footer.
+    if (element.closest("footer,[role='contentinfo']") || /\bfooter\b|legal-footer|functional-footer/.test(structuralScope)) {
       return "footer";
     }
     if (/preference center|privacy choices|manage preferences|ot-pc|pc-sdk|settings-form|change-settings|paramètres des cookies/i.test(text)) {

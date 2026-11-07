@@ -1,12 +1,14 @@
 import { assessCmsPluginSignals, assessCmsSignals, cmsSafeUrl, cmsSecurityProjectionSchema, siteMetadataSchema, type CanonicalEvidenceBundle, type CmsSignal } from "@certscore/contracts";
 import { isDeepStrictEqual } from "node:util";
+import { resolveRuntimeEvidenceClock } from "@certscore/contracts";
 import { projectTechnologyInventory } from "./technology-inventory-projection";
 
 /** No fetches: only metadata in the already verified, document-bound runtime artifact. */
 export function projectCmsSecurity(bundle: CanonicalEvidenceBundle, source: { sha256?: string; verificationStatus?: string } | undefined, documentUrl: string | null) {
   if (!documentUrl || source?.verificationStatus !== "verified" || !/^[a-f0-9]{64}$/.test(source.sha256 ?? "")) return null;
   const url = cmsSafeUrl(documentUrl);
-  const start = Date.parse(bundle.startedAt), end = Date.parse(bundle.completedAt);
+  const clock = resolveRuntimeEvidenceClock(bundle);
+  const start = clock?.startMs ?? NaN, end = clock?.endMs ?? NaN;
   if (!url || !Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
   const snapshots = bundle.runtimeMetadataSnapshots ?? bundle.domSnapshots ?? [];
   const ordered = [...snapshots].filter(row => row.consentStateAtTime === "pre_consent")

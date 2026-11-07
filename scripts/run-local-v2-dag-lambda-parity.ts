@@ -7,6 +7,7 @@ import { runtimeGraphDispatchSchema, type RuntimeGraphDispatch } from "../packag
 import { saleSharingOptOutDispatchSchema, type SaleSharingOptOutDispatch } from "../packages/certscore-contracts/src/sale-sharing-opt-out";
 import { IncomingMessage } from "node:http";
 import { Socket } from "node:net";
+import { runLocalIsolatedLambdaWorker } from "./local-isolated-lambda-worker";
 import { GetObjectCommand, PutObjectCommand, type GetObjectCommandOutput, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { InvokeCommand, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
@@ -58,7 +59,7 @@ type S3Object = {
 export class LocalDiskS3Client {
   private readonly objects = new Map<string, S3Object>();
 
-  constructor(private readonly rootDir: string) {}
+  constructor(readonly rootDir: string) {}
 
   async send(command: PutObjectCommand): Promise<PutObjectCommandOutput>;
   async send(command: GetObjectCommand): Promise<GetObjectCommandOutput>;
@@ -171,7 +172,16 @@ export class LocalRecursiveLambdaClient {
     const adaptiveLane = payloadRecord.workerLane === "runtime_evidence" || payloadRecord.workerLane === "gpc_observation" ? payloadRecord.workerLane : undefined;
     const adaptiveRequested = asRecord(payloadRecord.debugOverrides).gpcComparisonAdaptive === true && payloadRecord.targetEnvironment === "local" && !payloadRecord.resourceInventoryCrawl && adaptiveLane;
     if (adaptiveRequested && !this.adaptivePair) this.adaptivePair = createLocalGpcAdaptivePair({scanId: String(payloadRecord.scanId)});
-    const result = await handler(payload, {
+    const result = payloadRecord.workerLane === "policy_evidence" && payloadRecord.targetEnvironment === "local"
+      ? await runLocalIsolatedLambdaWorker({
+          entrypoint: path.join(this.input.workspaceRoot, "scripts/local-policy-lambda-worker.ts"),
+          workspaceRoot: this.input.workspaceRoot,
+          payload: {payload, storageRoot: this.input.s3Client.rootDir, workspaceRoot: this.input.workspaceRoot},
+          signal: options?.abortSignal,
+          onMessage: body => this.input.sqsClient.send(new SendMessageCommand({
+            QueueUrl: "local://certscore-v2-dag-local-parity-results", MessageBody:body})),
+        })
+      : await handler(payload, {
       localGpcAdaptiveParticipant: adaptiveRequested ? this.adaptivePair!.participant(String(payloadRecord.scanId), adaptiveLane!) : undefined,
       lambdaClient: this,
       s3Client: this.input.s3Client,

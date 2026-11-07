@@ -24,6 +24,6 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
       status: (organizationId, scanId) => getOrganizationScanStatusProjection({ organizationId, scanId }),
       report: loadPersistedScanReportProjection,
     }),
-    hydrate: hydrateRuntimeGraphForRead,
+    hydrate: record => hydrateRuntimeGraphForRead(record, {includeGpcForInventory: new URL(request.url).searchParams.get("view") === "gpc-inventory"}),
   });
 }

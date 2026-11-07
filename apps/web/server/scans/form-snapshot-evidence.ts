@@ -10,7 +10,7 @@ export function verifiedPostAcceptFormSnapshots(value: unknown) {
   const inventoryHash = createHash("sha256").update(JSON.stringify(capture.inventory)).digest("hex");
   const images: Array<{ snapshot: CollectionSurfaceSnapshot; bytes: Buffer | null; capturedAtMs: number }> = [];
   const groups = [{snapshots:capture.snapshots,inventoryHash,capturedAtMs:capture.capturedAtMs},
-    ...(capture.contractVersion === "certscore.post_accept_form_snapshots.v6" ? [{
+    ...((capture.contractVersion === "certscore.post_accept_form_snapshots.v6" || capture.contractVersion === "certscore.post_accept_form_snapshots.v8") ? [{
       snapshots:capture.postCaptureSnapshots.snapshots,
       inventoryHash:createHash("sha256").update(JSON.stringify(capture.postCaptureInventory.inventory)).digest("hex"),
       capturedAtMs:capture.postCaptureSnapshots.capturedAtMs,
@@ -36,7 +36,7 @@ export function verifiedPostAcceptFormSnapshotForRow(packet: Pick<PostAcceptEvid
   const frame = reconciled.structuredFrame;
   const image = verified.images.find(item => item.snapshot.formRef === row.form.formRef);
   const later = verified.capture.contractVersion === "certscore.post_accept_form_snapshots.v5" ||
-    verified.capture.contractVersion === "certscore.post_accept_form_snapshots.v6"
+    (verified.capture.contractVersion === "certscore.post_accept_form_snapshots.v6" || verified.capture.contractVersion === "certscore.post_accept_form_snapshots.v8")
     ? verified.capture.postCaptureInventory : undefined;
   if (provenance.sessionId !== (frame ? packet.formCapture!.sessionId : verified.capture.sessionId) ||
     provenance.frameRef !== (frame?.frameRef ?? "main") ||

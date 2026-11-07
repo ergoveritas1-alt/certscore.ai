@@ -1,3 +1,4 @@
+import { postAcceptFormImageDiagnosticsSchema } from "./post-accept-form-snapshots";
 import { validateCookieYesLegacyReceiptEnvelope, validateCookieYesLegacyProjectionProof } from "./cookieyes-legacy-consent-state";
 import {consentReceiptAvailabilitySchema,summarizeConsentReceiptAvailability} from "./consent-receipt-availability";
 import {consentReceiptCaptureSchema,validateConsentReceiptCapture} from './consent-receipt-capture';
@@ -9,7 +10,7 @@ import { consentConfirmationDiagnosticsSchema } from "./consent-confirmation-dia
 import { observedActionSourceProofSchema, validateObservedActionSourceProof } from "./observed-action-source-proof";
 import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionTiming } from "./retained-action-timing";
 import { postAcceptFormSnapshotCaptureSchema, postAcceptFormSnapshotProjectionSchema, postAcceptFormSnapshotDeadline } from "./post-accept-form-snapshots";
-import { postAcceptFormCaptureSchema } from "./post-accept-form-capture";
+import { isPostAcceptFormBootstrapUrl, postAcceptFormCaptureSchema } from "./post-accept-form-capture";
 import { terminalConsentDecisionSchema, validateTerminalConsentDecision } from "./terminal-consent-decision";
 import { assessChoicePathExecution, choicePathExecutionSchema, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
 import { z } from "zod";
@@ -168,6 +169,7 @@ export const postAcceptStorageWriteSchema = postRefusalStorageWriteBaseSchema.om
 
 const postAcceptEvidencePacketBaseSchema = z.object({
   notificationAcknowledgment: notificationAcknowledgmentSchema.optional(),
+  formImageDiagnostics: postAcceptFormImageDiagnosticsSchema.optional(),
   formSnapshotCapture: postAcceptFormSnapshotCaptureSchema.optional(),
   formCapture: postAcceptFormCaptureSchema.optional(),
   afterActionCapture: afterActionCaptureSchema.optional(),
@@ -248,6 +250,14 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   )) context.addIssue({code:z.ZodIssueCode.custom,path:["timing","observationEndedAtMs"],message:"Observation end must retain the action and result clock binding."});
   const images = packet.formSnapshotCapture;
   if (images) {
+    if (images.contractVersion === "certscore.post_accept_form_snapshots.v8" && (
+      packet.formCapture?.version !== "post_accept_form_capture.v4" ||
+      images.followup.triggerRequestId !== packet.formCapture.followup?.triggerRequestId ||
+      images.followup.originalWindowEndedAtMs !== packet.formCapture.followup?.originalWindowEndedAtMs ||
+      images.followup.workerDeadlineAtMs !== packet.formCapture.followup?.workerDeadlineAtMs ||
+      images.followup.captureDeadlineAtMs !== packet.formCapture.window?.endedAtMs)) {
+      context.addIssue({code:z.ZodIssueCode.custom,path:["formSnapshotCapture"],message:"Image and structured capture must share the proven form lifecycle"});
+    }
     const afterClick = images.contractVersion === "certscore.post_accept_form_snapshots.v7";
     const imageCaptureDeadlineAtMs = postAcceptFormSnapshotDeadline(images, packet.observationWindowMs);
     const invalidPhaseBinding = afterClick
@@ -259,16 +269,23 @@ const postAcceptEvidencePacketBaseSchema = z.object({
         packet.interactionDiagnostics?.navigation.finalUrlAuthorized !== true
       : packet.acceptanceRegistration.status !== "confirmed" || !packet.acceptanceRegistration.acceptanceExercised ||
         images.acceptanceRegisteredAtMs !== packet.acceptanceRegistration.acceptanceRegisteredAtMs ||
-        (images.contractVersion !== "certscore.post_accept_form_snapshots.v1" &&
+        (images.contractVersion !== "certscore.post_accept_form_snapshots.v1" && images.contractVersion !== "certscore.post_accept_form_snapshots.v8" &&
           images.lateForm.baseCaptureDeadlineAtMs > images.acceptanceRegisteredAtMs + packet.observationWindowMs);
     if (invalidPhaseBinding ||
       images.exactTargetSha256 !== packet.actionControlProof?.authorizedTargetSha256 || images.exactTargetSha256 !== packet.exactTargetSha256 ||
       images.actionDispatchedAtMs !== packet.acceptanceRegistration.actionDispatchedAtMs ||
       images.capturedAtMs > imageCaptureDeadlineAtMs || images.capturedAtMs > packet.timing.readyAtMs ||
-      ((images.contractVersion === "certscore.post_accept_form_snapshots.v5" || images.contractVersion === "certscore.post_accept_form_snapshots.v6") &&
+      ((images.contractVersion === "certscore.post_accept_form_snapshots.v5" || (images.contractVersion === "certscore.post_accept_form_snapshots.v6" || images.contractVersion === "certscore.post_accept_form_snapshots.v8")) &&
         images.postCaptureInventory.capturedAtMs > packet.timing.readyAtMs) ||
-      (images.contractVersion === "certscore.post_accept_form_snapshots.v6" && images.postCaptureSnapshots.capturedAtMs > packet.timing.readyAtMs) ||
+      ((images.contractVersion === "certscore.post_accept_form_snapshots.v6" || images.contractVersion === "certscore.post_accept_form_snapshots.v8") && images.postCaptureSnapshots.capturedAtMs > packet.timing.readyAtMs) ||
       packet.interactionDiagnostics?.click.outcome !== "completed") context.addIssue({code:z.ZodIssueCode.custom,path:["formSnapshotCapture"],message:"Form snapshots require verified same-target completed Accept and their original capture clock"});
+  }
+  if (packet.formCapture?.followup && !packet.network.requests.some(request =>
+    request.requestId === packet.formCapture!.followup!.triggerRequestId &&
+    isPostAcceptFormBootstrapUrl(request.sanitizedUrl) &&
+    request.startedAtMs >= packet.formCapture!.actionDispatchedAtMs &&
+    request.startedAtMs <= packet.formCapture!.followup!.originalWindowEndedAtMs)) {
+    context.addIssue({code:z.ZodIssueCode.custom,path:["formCapture"],message:"Form follow-up requires a retained in-window bootstrap request"});
   }
   if (packet.formCapture && (packet.formCapture.exactTargetSha256 !== packet.actionControlProof?.authorizedTargetSha256 ||
     packet.formCapture.exactTargetSha256 !== packet.exactTargetSha256 ||
@@ -279,7 +296,9 @@ const postAcceptEvidencePacketBaseSchema = z.object({
     (packet.formCapture.version !== "post_accept_form_capture.v1" &&
       (packet.formCapture.window!.startedAtMs !== (packet.acceptanceRegistration.status === "confirmed"
         ? packet.acceptanceRegistration.acceptanceRegisteredAtMs : packet.formCapture.actionDispatchedAtMs) ||
-      packet.formCapture.window!.endedAtMs > packet.formCapture.window!.startedAtMs + packet.observationWindowMs)) ||
+      (packet.formCapture.version === "post_accept_form_capture.v4"
+        ? packet.acceptanceRegistration.status !== "confirmed" || packet.formCapture.followup!.originalWindowEndedAtMs !== packet.formCapture.window!.startedAtMs + packet.observationWindowMs
+        : packet.formCapture.window!.endedAtMs > packet.formCapture.window!.startedAtMs + packet.observationWindowMs))) ||
     packet.formCapture.frames.some(frame => frame.capturedAtMs > packet.timing.readyAtMs || frame.capturedAtMs >
       (packet.formCapture!.version !== "post_accept_form_capture.v1" ? packet.formCapture!.window!.endedAtMs
         : packet.formCapture!.actionDispatchedAtMs + packet.observationWindowMs)))) {
@@ -654,6 +673,7 @@ export const postAcceptReportProjectionSchema = z.object({
   passiveCmpDiagnostics: cmpPassiveDiagnosticsSchema.optional(),
   notificationAcknowledgment: notificationAcknowledgmentSchema.optional(),
   retainedActionTiming: retainedActionTimingSchema.optional(),
+  formImageDiagnostics: postAcceptFormImageDiagnosticsSchema.optional(),
   formSnapshotCapture: postAcceptFormSnapshotProjectionSchema.optional(),
   storageCollectionDiagnostics: actionStoragePhaseDiagnosticsSchema.optional(),
   execution: choicePathExecutionSchema.optional(),
@@ -700,6 +720,14 @@ export const postAcceptReportProjectionSchema = z.object({
   }
   const images = projection.formSnapshotCapture;
   if (images) {
+    if (images.contractVersion === "certscore.post_accept_form_snapshots.v8" && (
+      projection.formCapture?.version !== "post_accept_form_capture.v4" ||
+      images.followup.triggerRequestId !== projection.formCapture.followup?.triggerRequestId ||
+      images.followup.originalWindowEndedAtMs !== projection.formCapture.followup?.originalWindowEndedAtMs ||
+      images.followup.workerDeadlineAtMs !== projection.formCapture.followup?.workerDeadlineAtMs ||
+      images.followup.captureDeadlineAtMs !== projection.formCapture.window?.endedAtMs)) {
+      context.addIssue({code:z.ZodIssueCode.custom,path:["formSnapshotCapture"],message:"Image and structured capture must share the proven form lifecycle"});
+    }
     const afterClick = images.contractVersion === "certscore.post_accept_form_snapshots.v7";
     const invalidPhaseBinding = afterClick
       ? !projection.afterActionCapture || projection.afterActionCapture.activationStatus !== "completed" ||
@@ -710,7 +738,7 @@ export const postAcceptReportProjectionSchema = z.object({
         projection.interactionDiagnostics?.navigation.finalUrlAuthorized !== true
       : !projection.acceptanceExercised || projection.registrationStatus !== "confirmed" ||
         images.acceptanceRegisteredAtMs !== projection.acceptanceRegisteredAtMs ||
-        (images.contractVersion !== "certscore.post_accept_form_snapshots.v1" &&
+        (images.contractVersion !== "certscore.post_accept_form_snapshots.v1" && images.contractVersion !== "certscore.post_accept_form_snapshots.v8" &&
           images.lateForm.baseCaptureDeadlineAtMs > images.acceptanceRegisteredAtMs + projection.observationWindowMs);
     if (!projection.packetSha256 || invalidPhaseBinding ||
       images.exactTargetSha256 !== projection.actionControlProof?.authorizedTargetSha256 ||
@@ -731,7 +759,9 @@ export const postAcceptReportProjectionSchema = z.object({
     (projection.formCapture.version !== "post_accept_form_capture.v1" &&
       (projection.formCapture.window!.startedAtMs !== (projection.registrationStatus === "confirmed"
         ? projection.acceptanceRegisteredAtMs : projection.formCapture.actionDispatchedAtMs) ||
-      projection.formCapture.window!.endedAtMs > projection.formCapture.window!.startedAtMs + projection.observationWindowMs)))) {
+      (projection.formCapture.version === "post_accept_form_capture.v4"
+        ? projection.registrationStatus !== "confirmed" || projection.formCapture.followup!.originalWindowEndedAtMs !== projection.formCapture.window!.startedAtMs + projection.observationWindowMs
+        : projection.formCapture.window!.endedAtMs > projection.formCapture.window!.startedAtMs + projection.observationWindowMs))))) {
     context.addIssue({code:z.ZodIssueCode.custom, path:["formCapture"], message:"Form capture requires retained packet provenance and completed action proof"});
   }
   validateNotificationAcknowledgment(projection.notificationAcknowledgment, {
@@ -849,10 +879,11 @@ export function projectPostAcceptEvidenceForReport(input: {
       readyAtMs: packet.timing.observationEndedAtMs ?? packet.timing.readyAtMs, exitReason: packet.timing.observationExitReason,
       observationCount: packet.observations.length,
     }),
+    ...(packet.formImageDiagnostics && input.packetSha256 ? {formImageDiagnostics:packet.formImageDiagnostics} : {}),
     ...(packet.formCapture && input.packetSha256 ? {formCapture: packet.formCapture} : {}),
     ...(packet.formSnapshotCapture && input.packetSha256 ? { formSnapshotCapture: {
       ...packet.formSnapshotCapture, snapshots: packet.formSnapshotCapture.snapshots.map(({ data: _data, ...metadata }) => metadata),
-      ...(packet.formSnapshotCapture.contractVersion === "certscore.post_accept_form_snapshots.v6" ? {
+      ...((packet.formSnapshotCapture.contractVersion === "certscore.post_accept_form_snapshots.v6" || packet.formSnapshotCapture.contractVersion === "certscore.post_accept_form_snapshots.v8") ? {
         postCaptureSnapshots: {...packet.formSnapshotCapture.postCaptureSnapshots,
           snapshots: packet.formSnapshotCapture.postCaptureSnapshots.snapshots.map(({data:_data,...metadata})=>metadata)},
       } : {}),

@@ -300,6 +300,59 @@ test("a completed first-layer inventory gives its representative screenshot time
   }
 });
 
+test("a partial first-layer inventory still gives its representative screenshot time to finish safety review", async () => {
+  const directory = await testDirectory("partial-consent-finalization");
+  try {
+    const screenshotPath = path.join(directory, "screenshot-pre-consent-settled.png");
+    await writeFile(screenshotPath, Buffer.from("safe representative consent screenshot bytes"));
+    const source = bundleFixture(screenshotPath);
+    source.screenshots[0] = {
+      ...source.screenshots[0]!,
+      artifactId: "screenshot_pre_consent_settled",
+      pagePhase: "network_idle",
+    };
+    source.consentUiObservations = [{
+      observationId: "consent-ui-pre-consent",
+      observedAtMs: 500,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      captureStatus: "observed",
+      inventoryOutcome: "partial",
+      controls: [{
+        actionType: "accept_all",
+        label: "Accept",
+        layer: "first_layer",
+        visible: true,
+      }],
+      evidenceRefs: [],
+    }];
+    const coordinator = createHomepageScreenshotSafetyReviewCoordinator({
+      artifactRoot: directory,
+      classifier: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return { safeForDisplay: true };
+      },
+    });
+    coordinator.schedule(source.screenshots[0]!);
+
+    const startedAt = Date.now();
+    const result = await applyHomepageScreenshotSafetyGate({
+      artifactRoot: directory,
+      bundle: source,
+      reviewCoordinator: coordinator,
+    });
+    const durationMs = Date.now() - startedAt;
+
+    assert.equal(result.screenshots[0]?.retentionStatus, "available");
+    assert.equal(result.screenshots[0]?.displayStatus, "available");
+    assert.ok(durationMs > SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS);
+    assert.ok(durationMs < CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS);
+    assert.equal((await stat(screenshotPath)).isFile(), true);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("a late unresolved screenshot does not prevent an earlier verified-safe screenshot from display", async () => {
   const directory = await testDirectory("partial-retention");
   try {
@@ -646,7 +699,7 @@ for (const drift of ["missing", "tag", "document", "node", "visibility"] as cons
       if (drift === "node") control.domBinding!.axNodeId = "another-node";
       if (drift === "visibility") control.visibilityEvidence = "unverified";
       await applyHomepageScreenshotSafetyGate({artifactRoot: directory, bundle: source, classifier: async () => new Promise(() => undefined)});
-      assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, 75);
+      assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS);
     } finally { await rm(directory, {recursive: true, force: true}); }
   });
 }
@@ -667,7 +720,7 @@ test("a verified A/R pair gets the existing allowance while unrelated inventory 
 });
 
 for (const drift of ["document", "image_hash", "candidate", "bounds", "frame", "inspection", "missing_observation", "dimensions", "capture_time"] as const) {
-  test(`partial inventory does not gain review time from ${drift} drift`, async () => {
+  test(`partial inventory does not gain paired-image review time from ${drift} drift`, async () => {
     const directory = await testDirectory(`pair-drift-${drift}`);
     try {
       const { source, geometry, saveGeometry } = await pairedFixture(directory);
@@ -684,7 +737,7 @@ for (const drift of ["document", "image_hash", "candidate", "bounds", "frame", "
       const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source,
         classifier: async () => new Promise(() => undefined) });
       assert.equal(result.screenshots[0]?.displayStatus, "withheld");
-      assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, 75);
+      assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, drift === "missing_observation" ? SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS : CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS);
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
 }
@@ -940,7 +993,8 @@ test("versioned main-frame proof preserves image review while the whole-frame in
       const result = await applyHomepageScreenshotSafetyGate({artifactRoot: directory, bundle: source,
         classifier: async () => {calls++; await new Promise(resolve => setTimeout(resolve, 180)); return {safeForDisplay: true};}});
       assert.equal(calls, 1);
-      assert.equal(result.screenshots[0]?.displayStatus, invalid ? "withheld" : "available");
+      assert.equal(result.screenshots[0]?.displayStatus, "available");
+      assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, invalid ? CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS : VERIFIED_PAIR_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS);
       assert.equal((await diagnostics(directory)).pairEligibility?.status, invalid ? "unverified" : "verified");
       assert.equal(g.controlInspection.structuralCoverage, "limited");
     } finally {await rm(directory, {recursive: true, force: true});}
@@ -985,7 +1039,7 @@ for (const drift of ["document", "dimensions", "stale", "duplicate_accept", "unb
         classifier: async () => new Promise(() => undefined) });
       assert.equal(result.screenshots[0]?.displayStatus, "withheld");
       const review = (await diagnostics(directory)).reviews[0];
-      if (review) assert.equal(review.finalization!.budgetMs, 75, "Unverified proof cannot gain review grace");
+      if (review) assert.equal(review.finalization!.budgetMs, drift === "missing_observation" ? SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS : CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS, "Unverified proof cannot gain paired-image review grace");
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
 }
@@ -1057,4 +1111,22 @@ test("capture-time pair metadata is immutable and a replaced reviewed file still
     assert.equal(coordinator.diagnostics().reviews[0]!.byteBindingFailure, "reviewed_image_bytes_changed");
     await assert.rejects(stat(screenshotPath), /ENOENT/);
   } finally { await rm(directory, {recursive:true,force:true}); }
+});
+
+test("an earlier safe review completed while a paired sibling ran is retained after byte revalidation", async () => {
+  const directory = await testDirectory("completed-sibling");
+  try {
+    const {source} = await pairedFixture(directory);
+    const earlyPath = path.join(directory,"earlier.png");
+    await writeFile(earlyPath,Buffer.from("earlier-safe-image"));
+    source.screenshots.unshift({...source.screenshots[0]!,artifactId:"screenshot_pre_consent",path:earlyPath,pagePhase:"dom_content_loaded"});
+    let calls=0;
+    const result=await applyHomepageScreenshotSafetyGate({artifactRoot:directory,bundle:source,classifier:async({bytes})=>{
+      calls++;await new Promise(resolve=>setTimeout(resolve,bytes.toString()==="earlier-safe-image"?150:300));return {safeForDisplay:true};
+    }});
+    assert.equal(calls,2);
+    assert.equal(result.screenshots[0]?.displayStatus,"available");
+    assert.equal(result.screenshots[1]?.displayStatus,"available");
+    assert.ok((await diagnostics(directory)).reviews.find(row=>row.artifactId==="screenshot_pre_consent")?.bytesVerifiedAtMs);
+  } finally {await rm(directory,{recursive:true,force:true});}
 });
