@@ -4,6 +4,8 @@ The owner authorized moving the reconciled release to production with private se
 
 ## Authorization and execution
 
+- Preserve the materializer receipt setting on ordinary future deployments; explicit true/false overrides remain available.
+- Publish SDK 0.2.27 and MCP npm 0.2.35 because their source differs from the already-published versions. Keep the existing 0.2.34 Homebrew artifact and Claude submission pin unchanged.
 - Enable conditional sale/sharing execution for eligible ordinary sharded scans. Preserve independent Accept/Reject/GPC lanes and the existing join barrier, five-second worker cap and three-second action capture.
 - Red Hat production authorization uses its exact source-bound v4 dispatch with durable coordinator and worker claims. Its legacy single-scan canary remains available when production rollout is disabled.
 - Reviewed v2 apex/www and v3 exact-route grants require a same-scan hash-verified consent source with a joined visible reviewed control and exact document binding. ReadCube/Gimbal Settings are restricted to their checked-in source/route/locator/label recipes. The worker independently retains native-TLS redirect ancestry and rechecks readiness before any action.

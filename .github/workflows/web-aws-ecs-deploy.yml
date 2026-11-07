@@ -84,10 +84,11 @@ on:
         default: preserve
         options: [preserve, enable, disable]
       audit_privacy_form_receipts:
-        description: "Enable private seven-field audit receipts on the report materializer"
+        description: "Preserve, enable (true), or disable (false) private seven-field materializer receipts"
         required: false
-        default: false
-        type: boolean
+        default: preserve
+        type: choice
+        options: [preserve, "true", "false"]
       allow_non_descendant_deploy:
         description: "Emergency only: permit a web revision that does not contain the currently live revision"
         required: false
@@ -317,7 +318,7 @@ jobs:
       ECS_CERTSCORE_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
       ECS_MATERIALIZER_SERVICE_NAME: ${{ vars.AWS_WEB_MATERIALIZER_SERVICE || 'certscore-web-materializer' }}
       MATERIALIZER_TASK_CPU: ${{ vars.AWS_WEB_MATERIALIZER_TASK_CPU || '1024' }}
-      AUDIT_PRIVACY_FORM_RECEIPTS: ${{ github.event_name == 'workflow_dispatch' && inputs.audit_privacy_form_receipts && '1' || '0' }}
+      AUDIT_PRIVACY_FORM_RECEIPTS_MODE: ${{ inputs.audit_privacy_form_receipts || 'preserve' }}
       MATERIALIZER_TASK_MEMORY: ${{ vars.AWS_WEB_MATERIALIZER_TASK_MEMORY || '2048' }}
       CERTSCORE_BASE_URL: ${{ vars.AWS_WEB_CERTSCORE_BASE_URL }}
       CERTSCORE_CHROME_EXTENSION_STORE_URL: ${{ vars.CERTSCORE_CHROME_EXTENSION_STORE_URL || 'https://chromewebstore.google.com/detail/certscore-ai/mjeaagdiegpaeokkdaghkndmkjhlbhbp' }}
@@ -328,7 +329,7 @@ jobs:
         env:
           STAGING_ENABLED: ${{ vars.AWS_STAGED_COUPLED_RELEASES }}
           STAGE_ONLY: ${{ inputs.stage_only }}
-          STANDARD_SETTINGS: ${{ !inputs.use_compiler_cache && !inputs.push_runtime_base && !inputs.allow_non_descendant_deploy && !inputs.use_x64_fallback && inputs.marketplace_light == 'preserve' && inputs.marketplace_browser == 'preserve' && !inputs.audit_privacy_form_receipts && inputs.reviewed_opt_out_rollout == 'preserve' }}
+          STANDARD_SETTINGS: ${{ !inputs.use_compiler_cache && !inputs.push_runtime_base && !inputs.allow_non_descendant_deploy && !inputs.use_x64_fallback && inputs.marketplace_light == 'preserve' && inputs.marketplace_browser == 'preserve' && inputs.audit_privacy_form_receipts == 'preserve' && inputs.reviewed_opt_out_rollout == 'preserve' }}
         run: |
           test "$STAGING_ENABLED" = true
           test "$GITHUB_EVENT_NAME" = workflow_dispatch
@@ -641,6 +642,20 @@ jobs:
           "${node_types[@]}" scripts/configure-marketplace-browser.ts target-task-definition.json "${{ inputs.marketplace_browser || 'preserve' }}"
 
           "${node_types[@]}" scripts/configure-reviewed-opt-out.ts target-task-definition.json "${{ inputs.reviewed_opt_out_rollout || 'preserve' }}" certscore-web
+
+          aws ecs describe-services --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_MATERIALIZER_SERVICE_NAME}" > current-materializer-service.json
+          materializer_status="$(jq -r '.services[0].status // "MISSING"' current-materializer-service.json)"
+          if [[ "${AUDIT_PRIVACY_FORM_RECEIPTS_MODE}" == "true" && "$materializer_status" != ACTIVE ]]; then
+            echo "::error::Receipt enablement requires an active materializer service."
+            exit 1
+          fi
+          printf '%s\n' '{}' > current-materializer-task-definition.json
+          if [[ "$materializer_status" == ACTIVE ]]; then
+            current_materializer_task="$(jq -er '.services[0].taskDefinition' current-materializer-service.json)"
+            aws ecs describe-task-definition --task-definition "$current_materializer_task" > current-materializer-task-definition.json
+          fi
+          AUDIT_PRIVACY_FORM_RECEIPTS="$(node --experimental-strip-types scripts/configure-audit-receipts.ts "$AUDIT_PRIVACY_FORM_RECEIPTS_MODE" current-materializer-task-definition.json)"
+          echo "AUDIT_PRIVACY_FORM_RECEIPTS=$AUDIT_PRIVACY_FORM_RECEIPTS" >> "$GITHUB_ENV"
 
           TARGET_TASK_DEFINITION="$(aws ecs register-task-definition \
             --cli-input-json file://target-task-definition.json \

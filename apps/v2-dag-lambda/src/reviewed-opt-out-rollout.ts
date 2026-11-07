@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {S3Client} from '@aws-sdk/client-s3';
 import {isConsentControlInteractionEligible, classifyConsentControlLabel, saleSharingExactRouteAuthorization, saleSharingApexWwwCounterpart, SALE_SHARING_REDIRECT_POLICY, SALE_SHARING_EXACT_ROUTE_POLICY, REDHAT_OPT_OUT_POLICY, saleSharingOptOutDispatchSchema, type CanonicalEvidenceBundle, type SaleSharingCanaryLedger} from '@certscore/contracts';
 import {KNOWN_CMP_REGISTRY} from '@website-signal-risk-scanner/shared';
 import {createSaleSharingCanaryStore} from './sale-sharing-canary-store';
@@ -61,7 +62,7 @@ export async function claimReviewedOptOutRollout(input:{stage:'coordinator'|'wor
   const signal=AbortSignal.any([AbortSignal.timeout(Math.max(1,Math.floor(remaining))),...(options.signal?[options.signal]:[])]);
   const bucket=process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   assert.ok(options.ledger || bucket,'reviewed_opt_out_store_unavailable');
-  const ledger=options.ledger??createSaleSharingCanaryStore({bucket:bucket!},signal);
+  const ledger=options.ledger??createSaleSharingCanaryStore({bucket:bucket!},signal,new S3Client({region:input.region,maxAttempts:1}));
   const key=`v2-dag-lambda/local/reviewed-opt-out-rollout/${input.scanId}`;
   const claim={version:'reviewed_opt_out_claim.v1',scanId:input.scanId,targetUrl:input.targetUrl,region:input.region,functionName:input.functionName,buildGitSha:runtime.buildGitSha,functionVersion:runtime.functionVersion,source,parentDispatchSha256:input.parentDispatchSha256,policyVersion:config.policyVersion};
   let listener:()=>void=()=>{};

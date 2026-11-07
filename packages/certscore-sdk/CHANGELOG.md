@@ -1,5 +1,9 @@
 # @certscore/sdk
 
+## 0.2.27
+
+- Keep unavailable paired CMP measurements nullable in the public SDK types and state comparison.
+
 ## 0.2.26
 
 - Preserve the optional clock origin on retained CMP choice-activity evidence, distinguishing click-relative and consent-confirmation-relative timing.

@@ -2245,6 +2245,7 @@ async function runCoordinatorFixture(input: {
   conditionalOptOut?: boolean;
   redHatOptOut?: boolean;
   redHatGate?: ReturnType<typeof redHatCanaryFixture> | null;
+  productionGate?: Parameters<typeof authorizeSaleSharingCanaryStage>[2];
   boundOptOutControls?: boolean;
   conditionalDeadlineMs?: number;
   bothActions?: boolean;
@@ -2516,6 +2517,7 @@ async function runCoordinatorFixture(input: {
       s3Client,
       s3GetClient,
       ...(input.redHatOptOut?{canary:{redHat:input.redHatGate??{grant:null}}}:{}),
+      ...(input.productionGate?{canary:input.productionGate}:{}),
       ...(canaryCampaign?{canary:{campaign:canaryCampaign,runtime:{buildGitSha:canaryAuthorization!.buildGitSha,functionVersion:"42",region:"us-west-1",memoryMb:3008},ledger:{
         async read(key:string){return key.endsWith("/dispatch.json")?{authorization:canaryAuthorization}:null;},async create(){},
       }}}:{}),
@@ -5918,4 +5920,26 @@ test('Red Hat worker gate and retained packet reject inactive or mismatched sour
   }
   assert.equal(uploads,1);
  }finally{keys.forEach((k,i)=>{if(prior[i]===undefined)delete process.env[k];else process.env[k]=prior[i];});await rm(root,{recursive:true,force:true});}
+});
+
+
+test('ordinary Red Hat scans flow from verified consent through production claims without operator slots',async()=>{
+ const keys=['CERTSCORE_REVIEWED_OPT_OUT_ROLLOUT_ENABLED','CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED','CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED',POST_ACCEPT_WORKER_FEATURE_FLAG,POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG,'CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET'];
+ const old=keys.map(k=>process.env[k]);for(const k of keys)process.env[k]=k.endsWith('ARTIFACT_BUCKET')?'test-bucket':'1';
+ try {
+  const scanId='redhat-production-integration',consent=conditionalConsentFixture(scanId);consent.consentUiObservations[0]!.documentUrl='https://www.redhat.com/en';
+  const baseline=gpcRuntimeFixture({enabled:false,url:'https://redhat.com/'}),gpc=gpcRuntimeFixture({enabled:true,url:'https://redhat.com/'});baseline.scanId=gpc.scanId=scanId;baseline.domSnapshots=[{...runtimeSnapshotFixture(),url:baseline.url}];
+  const gate=redHatCanaryFixture(scanId);gate.approval.value=null;
+  const productionGate={ledger:gate.ledger,runtime:gate.runtime};
+  const result=await runCoordinatorFixture({scanId,gpcPair:{baseline,gpc},redHatOptOut:true,redHatGate:null,productionGate,conditionalOptOut:true,optOut:'complete',bothActions:true,action:'completed',dispatchDelayMs:0,consentBundle:consent});
+  try {
+   assert.equal(result.workerCalls.filter(l=>l==='sale_sharing_opt_out').length,1);assert.deepEqual(result.actionCalls.sort(),['accept_observation','reject_observation']);
+   const worker=result.workerPayloads.find(p=>p.workerLane==='sale_sharing_opt_out')!;
+   assert.ok(gate.claims.has(`v2-dag-lambda/local/reviewed-opt-out-rollout/${scanId}/coordinator.json`));
+   await authorizeSaleSharingCanaryStage(worker as never,'worker',productionGate);
+   await assert.rejects(authorizeSaleSharingCanaryStage(worker as never,'worker',productionGate),/already_claimed/);
+   assert.equal(result.bundle.saleSharingOptOut.evidence.registration,'unconfirmed');
+   assert.equal(result.uploads.filter(p=>p.endsWith('/LocalV2DagLambdaManifest.json')).length,1);
+  } finally {await rm(result.artifactRoot,{recursive:true,force:true});}
+ } finally {keys.forEach((k,i)=>{if(old[i]===undefined)delete process.env[k];else process.env[k]=old[i];});}
 });

@@ -2493,7 +2493,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
 
 export async function authorizeSaleSharingCanaryStage(payload:LocalV2DagLambdaDispatchPayload,stage:"coordinator"|"worker",
   options:{signal?:AbortSignal;deadlineAtMs?:number;campaign?:SaleSharingCanaryCampaign|null;ledger?:SaleSharingCanaryLedger;
-    runtime?:{buildGitSha?:string;functionVersion?:string;region?:string;memoryMb?:number};redHat?:RedHatCanaryOptions}={}) {
+    runtime?:{buildGitSha?:string;functionVersion?:string;region?:string;memoryMb?:number;functionName?:string};redHat?:RedHatCanaryOptions}={}) {
   const config=payload.saleSharingOptOut;
   if(!config||config.policyVersion===SALE_SHARING_OPT_OUT_POLICY)return;
   if(process.env.CERTSCORE_REVIEWED_OPT_OUT_ROLLOUT_ENABLED==="1" && (config.policyVersion===REDHAT_OPT_OUT_POLICY || config.rolloutSource)){
@@ -2607,6 +2607,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
 }> {
   assertPrivacyCaptureProfile(payload);
   if(payload.saleSharingOptOut?.policyVersion===REDHAT_OPT_OUT_POLICY)throw Error("redhat_canary_requires_verified_consent");
+  if(payload.saleSharingOptOut?.rolloutSource)throw Error("reviewed_rollout_requires_verified_consent");
   const coordinatorStartedAtMs = Date.now();
   await authorizeSaleSharingCanaryStage(payload,"coordinator",{...options.canary,signal:options.signal});
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
@@ -2678,7 +2679,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         const authorizedPayload={...payload,saleSharingOptOut:selected.dispatch};
         const signal=options.signal?AbortSignal.any([options.signal,optOutController.signal]):optOutController.signal;
         try {
-          await authorizeSaleSharingCanaryStage(authorizedPayload,"coordinator",{redHat:options.canary?.redHat,signal,
+          await authorizeSaleSharingCanaryStage(authorizedPayload,"coordinator",{...options.canary,signal,
             deadlineAtMs:options.deadlineAtMs!-SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS});
         } catch {
           if(!optOutClosed)finish({...candidate,status:"skipped",reason:signal.aborted?"cancelled":"authorization_not_granted"});

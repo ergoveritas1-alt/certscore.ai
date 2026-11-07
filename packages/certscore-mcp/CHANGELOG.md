@@ -1,5 +1,9 @@
 # certscore-mcp
 
+## 0.2.35
+
+- Align Light adoption and review actions with retained report availability and canonical null measurement values.
+
 ## 0.2.34
 
 - Publish the retained GPC comparison and availability improvements through an OIDC-capable pinned npm CLI while retaining source provenance and existing credential fallback.
