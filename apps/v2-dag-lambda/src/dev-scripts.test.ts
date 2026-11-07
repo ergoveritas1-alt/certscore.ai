@@ -64,8 +64,12 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(promotion, /synchronizeScannerImage\(awsScannerImageControl\(region, inventory\), artifact.images\[region\]!, true[,)]/);
   assert.match(deployScript, /payload\.RecordedImageDigest !== expectedDigest/);
   assert.match(deployScript, /RevisionId:RevisionId,EnvironmentError:Environment\.Error/);
-  assert.match(deployScript, /!currentPayload\.RevisionId \|\| currentPayload\.EnvironmentError \|\| !currentPayload\.Variables/);
-  assert.match(deployScript, /"--revision-id", currentPayload\.RevisionId/);
+  const environmentRead = deployScript.slice(deployScript.indexOf("async function readScannerEnvironments("), deployScript.indexOf("async function preflightScannerEnvironmentBudget("));
+  assert.match(environmentRead, /revision:RevisionId,error:Environment\.Error/);
+  assert.match(environmentRead, /!current\?\.revision \|\| current\.error \|\| !current\.variables/);
+  assert.match(environmentRead, /Object\.values\(current\.variables\)\.some/);
+  assert.match(deployScript, /revision: current\.revision/);
+  assert.match(deployScript, /"--revision-id", revision/);
   assert.match(setupScript, /region="\$\{AWS_REGION:-eu-central-1\}"/);
   assert.match(setupScript, /eu-central-1\) location_env_prefix="EU_DE"/);
   assert.match(setupScript, /eu-west-1\) location_env_prefix="EU_IE"/);

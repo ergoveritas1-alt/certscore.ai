@@ -67,7 +67,10 @@ test('validation staging cannot be substituted by a web run and requires its own
 
 test('validation stages all existing checks and keeps ECS writes and boot checks behind promotion', async () => {
   const workflow = await readFile('.github/workflows/validation-aws-deploy.yml', 'utf8');
-  const step = (name: string) => workflow.split(/(?=      - name:)/).find(value => value.startsWith(`      - name: ${name}\n`)) ?? '';
+  const [settingsJob, buildJob] = workflow.split(/^  deploy-validation-aws:$/m);
+  assert.match(settingsJob ?? '', /apply-verified-settings:[\s\S]*?inputs\.settings_only/);
+  assert.match(buildJob ?? '', /^    if: .*?!inputs\.settings_only/m);
+  const step = (name: string) => (buildJob ?? '').split(/(?=      - name:)/).find(value => value.startsWith(`      - name: ${name}\n`)) ?? '';
   for (const name of ['Verify post-Accept forms and images reach the report', 'Typecheck validation worker', 'Run validation pipeline tests']) {
     assert.match(step(name), /if: inputs.staged_run_id == ''/);
     assert.ok(workflow.indexOf(name) < workflow.indexOf('Build and push validation worker image'));

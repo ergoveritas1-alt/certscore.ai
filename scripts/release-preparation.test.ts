@@ -56,7 +56,7 @@ test('web staging owns both verification jobs when staged mode is enabled on pus
   const workflow = await readFile('.github/workflows/web-aws-ecs-deploy.yml', 'utf8');
   const [web, forms, image] = workflow.split(/^  (?:verify-public-web|verify-post-accept-forms|deploy-public-web-aws):$/m).slice(1);
   for (const verification of [web, forms]) {
-    assert.match(verification ?? '', /^    if: inputs\.staged_run_id == '' && \(github\.event_name != 'push' \|\| vars\.AWS_STAGED_COUPLED_RELEASES != 'true'\)$/m);
+    assert.match(verification ?? '', /^    if: \$\{\{ !inputs\.settings_only && inputs\.staged_run_id == '' && \(github\.event_name != 'push' \|\| vars\.AWS_STAGED_COUPLED_RELEASES != 'true'\) \}\}$/m);
   }
   assert.match(image ?? '', /needs\.verify-public-web\.result == 'success'\s*&&\s*needs\.verify-post-accept-forms\.result == 'success'/);
   assert.match(workflow, /group: .*format\('public-web-staged-push-\{0\}', github\.run_id\) \|\| 'public-web-aws-production'/);
