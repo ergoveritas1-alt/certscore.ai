@@ -2,7 +2,7 @@
 
 ## 0.2.35
 
-- Align Light adoption and review actions with retained report availability and canonical null measurement values.
+- Align Light adoption and review actions with current onboarding, and use CertScore.ai in no-go responses.
 
 ## 0.2.34
 

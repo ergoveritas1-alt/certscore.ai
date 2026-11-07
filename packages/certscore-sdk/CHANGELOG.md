@@ -2,7 +2,7 @@
 
 ## 0.2.27
 
-- Keep unavailable paired CMP measurements nullable in the public SDK types and state comparison.
+- Add main-document GPC/CMP comparison v2 types while preserving v1, and expose runtime-capture limitations in no-go reason types.
 
 ## 0.2.26
 
