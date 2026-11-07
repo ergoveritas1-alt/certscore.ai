@@ -49,8 +49,14 @@ test("sample service reads the writer for exact public target/region reuse and p
     assert.equal(state.queries[0].params[6], target);
     assert.match(state.queries[0].sql, /normalized_url\) = \$7/);
 
+    state.candidates[0].completedAt = new Date(Date.now() - 24 * 60 * 60 * 1000 - 1000).toISOString();
+    assert.deepEqual(await openVisitorSampleReport(input), { kind: "fresh", scanId: "fresh-scan" });
+    assert.equal(state.creations.length, 1);
+    state.creations.length = 0;
+
     // A query variant is not this exact sample, even though ordinary reuse
     // intentionally matches paths across scheme/query variants.
+    state.candidates[0].completedAt = new Date(Date.now() - 1_000).toISOString();
     state.candidates[0].normalizedUrl = target + "?variant=other";
     assert.deepEqual(await openVisitorSampleReport(input), { kind: "fresh", scanId: "fresh-scan" });
     const attemptQuery = state.queries.at(-1);

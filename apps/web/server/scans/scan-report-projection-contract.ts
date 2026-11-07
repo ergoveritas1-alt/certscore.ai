@@ -193,7 +193,7 @@ function omitOptionalCollectionSamples(value: unknown): boolean {
 
 export function buildPersistedScanReportProjection(
   scanRecord: ScanDetailResponse,
-  options: { canonicalReportProjection?: PersistedCanonicalReportProjection } = {},
+  options: { canonicalReportProjection?: PersistedCanonicalReportProjection; auditPrivacyForm?: string } = {},
 ) {
   scanRecord = withScanReportDisposition(scanRecord);
   const snapshot = isRecord(scanRecord.snapshot)
@@ -207,6 +207,7 @@ export function buildPersistedScanReportProjection(
     : null;
   const payload = {
     ...scanRecord,
+    auditPrivacyForm: options.auditPrivacyForm,
     // Request state belongs to the live read, never the immutable report bytes.
     reportPublication: undefined,
     ...(options.canonicalReportProjection
@@ -215,10 +216,15 @@ export function buildPersistedScanReportProjection(
     previousSnapshot,
     runtimeArtifacts,
     snapshot
-  } satisfies ScanDetailResponse;
-  const normalizedPayload = normalizeProjectionJson(payload) as ScanDetailResponse;
+  } satisfies ScanDetailResponse & { auditPrivacyForm?: string };
+  const normalizedPayload = normalizeProjectionJson(payload) as ScanDetailResponse & { auditPrivacyForm?: string };
   let serialized = JSON.stringify(normalizedPayload);
   let sizeBytes = Buffer.byteLength(serialized);
+  if (sizeBytes > MAX_SCAN_REPORT_PROJECTION_BYTES && normalizedPayload.auditPrivacyForm !== undefined) {
+    delete normalizedPayload.auditPrivacyForm;
+    serialized = JSON.stringify(normalizedPayload);
+    sizeBytes = Buffer.byteLength(serialized);
+  }
   if (sizeBytes > MAX_SCAN_REPORT_PROJECTION_BYTES && omitOptionalCollectionSamples(normalizedPayload)) {
     serialized = JSON.stringify(normalizedPayload);
     sizeBytes = Buffer.byteLength(serialized);
@@ -230,8 +236,10 @@ export function buildPersistedScanReportProjection(
       sizeBytes,
     });
   }
+  const { auditPrivacyForm: _privateAudit, ...report } = normalizedPayload;
   return {
     payload: normalizedPayload,
+    report,
     serialized,
     sha256: createHash("sha256").update(serialized).digest("hex"),
     sizeBytes
@@ -273,8 +281,9 @@ export function readPersistedScanReportProjection(
   ) {
     return null;
   }
+  const { auditPrivacyForm: _privateAudit, ...report } = payload;
   return withScanReportDisposition({
-    ...(payload as ScanDetailResponse),
+    ...(report as ScanDetailResponse),
     // Set only after the immutable payload passes byte, hash and identity checks.
     reportPublication: { requestStatus: scanRecord.reportPublication?.requestStatus ?? null, snapshotPersisted: true, projectionVerified: true },
     snapshot: {

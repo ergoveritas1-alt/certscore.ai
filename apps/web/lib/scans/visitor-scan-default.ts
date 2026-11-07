@@ -1,12 +1,15 @@
 export type VisitorScanFrom = "california" | "eu_ie";
 
+export function visitorCountryScanFrom(headers: Pick<Headers, "get">): VisitorScanFrom {
+  const country = headers.get("cf-ipcountry") ?? headers.get("cloudfront-viewer-country");
+  return country === "US" ? "california" : "eu_ie";
+}
+
 /** A coarse functional default, never an authentication or residency decision.
  * Session-cookie presence conservatively preserves the existing selection even
  * if a cookie has expired. No IP, country or preference is persisted. */
 export function anonymousVisitorScanFrom(headers: Pick<Headers, "get">, hasSessionCookie: boolean): VisitorScanFrom | null {
-  if (hasSessionCookie) return null;
-  const country = headers.get("cf-ipcountry") ?? headers.get("cloudfront-viewer-country");
-  return country === "US" ? "california" : "eu_ie";
+  return hasSessionCookie ? null : visitorCountryScanFrom(headers);
 }
 
 /** A late response must not replace a manual choice or change an active scan. */

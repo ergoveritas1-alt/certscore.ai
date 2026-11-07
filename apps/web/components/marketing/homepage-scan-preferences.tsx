@@ -35,10 +35,11 @@ export function HomepageScanPreferencesProvider({ children }: { children: ReactN
     const controller = new AbortController();
     let active = true;
     let countryDefault: "california" | "eu_ie" = "eu_ie";
+    let countryLocation: HomepageLocation = "EU";
     function applyLocation() {
       const override = parseHomepageLocation(new URLSearchParams(window.location.search).get("loc"));
       setLocationOverride(override);
-      setLocation(override ?? (countryDefault === "california" ? "US" : "EU"));
+      setLocation(override ?? countryLocation);
       if (!manuallySelected.current) {
         setScanFrom(resolveSampleScanFrom({ locationOverride: override, countryDefault }));
       }
@@ -54,11 +55,13 @@ export function HomepageScanPreferencesProvider({ children }: { children: ReactN
       }).then(async response => {
         if (!response.ok) return;
         const payload: unknown = await response.json();
-        if (!active || !payload || typeof payload !== "object" || !("scanFrom" in payload)) return;
-        if (payload.scanFrom === "california" || payload.scanFrom === "eu_ie") {
-          countryDefault = payload.scanFrom;
-          applyLocation();
-        }
+        if (!active || !payload || typeof payload !== "object") return;
+        const suggested = "scanFrom" in payload ? payload.scanFrom : null;
+        const locationHint = parseHomepageLocation("homepageLocation" in payload ? payload.homepageLocation : null);
+        if (suggested === "california" || suggested === "eu_ie") countryDefault = suggested;
+        // Older endpoint responses supply only scanFrom during a rolling deploy.
+        countryLocation = locationHint ?? (countryDefault === "california" ? "US" : "EU");
+        applyLocation();
       }).catch(() => { /* An unavailable hint keeps Ireland. */ })
         .finally(() => window.clearTimeout(timeout));
     }

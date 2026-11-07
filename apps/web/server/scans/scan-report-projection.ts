@@ -5,6 +5,7 @@ import { retainedConsentAssessment } from "../../lib/scans/after-action-report-e
 import "server-only";
 import { projectScanReportNoGo, resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 import { getLocalV2DagReportInput } from "./local-v2-dag-report";
+import { maybePublishLocalPrivacyFormAuditReceipt } from "./local-privacy-form-audit";
 import { boundedPublicationSchemaIssues, ReportPublicationInvariantError, assertReportablePostureScores } from "./report-publication-invariant";
 
 import { createHash } from "node:crypto";
@@ -948,10 +949,20 @@ export async function persistScanReportProjection(
   const persistedProjection = await measureReportProjectionPhase(
     scanRecord.scan.id,
     "payload_normalize_and_serialize",
-    async () => buildPersistedScanReportProjection(await externalizeRuntimeGraphForPersistence({
-      ...scanRecord,
-      snapshot: projectedSnapshot
-    }), { canonicalReportProjection })
+    async () => {
+      const record = await externalizeRuntimeGraphForPersistence({ ...scanRecord, snapshot: projectedSnapshot });
+      let auditPrivacyForm: string | undefined;
+      if (process.env.CERTSCORE_AUDIT_PRIVACY_FORM_PROJECTION_ENABLED === "1" && !projectScanReportNoGo(record)) {
+        try {
+          const { buildPrivacyFormProjection } = await import("./privacy-form-audit-receipt");
+          auditPrivacyForm = buildPrivacyFormProjection({ ...record, canonicalReportProjection });
+        } catch (error) {
+          console.warn(JSON.stringify({ event: "scan.audit_privacy_form_projection.failed", scanId: record.scan.id,
+            reason: error instanceof Error ? error.name : "UnknownError" }));
+        }
+      }
+      return buildPersistedScanReportProjection(record, { canonicalReportProjection, auditPrivacyForm });
+    }
   );
   const generation = getScanReportProjectionGeneration(scanRecord);
 
@@ -1121,7 +1132,7 @@ export async function persistScanReportProjection(
   primeCompletedReportProjectionCache({
     generation: hash,
     scanId: scanRecord.scan.id,
-    value: persistedProjection.payload,
+    value: persistedProjection.report,
   });
 
   if (!projectionWasAlreadyReady) {
@@ -1142,6 +1153,15 @@ export async function persistScanReportProjection(
       console.info(JSON.stringify(event));
     }
   }
+
+  await maybePublishLocalPrivacyFormAuditReceipt(scanRecord.scan, {
+    report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+    report_projection_status: "ready",
+    report_projection_source_hash: hash,
+    report_projection_payload: persistedProjection.payload,
+    report_projection_payload_sha256: persistedProjection.sha256,
+    report_projection_payload_size_bytes: persistedProjection.sizeBytes,
+  });
 
   return value;
 }

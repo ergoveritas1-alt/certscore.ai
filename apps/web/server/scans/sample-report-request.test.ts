@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../lib/marketing/sample-report";
 import { handleSampleReportRequest } from "./sample-report-request";
 import type { SampleScanFrom } from "../../lib/marketing/homepage-location";
 
-function harness(user: unknown = null) {
+function harness() {
   const regions: SampleScanFrom[] = [];
   return { regions, dependencies: {
-    getCurrentUser: async () => user,
     classifyQuotaError: () => null,
     resolve: async (region: SampleScanFrom) => { regions.push(region); return { kind: "recent" as const, scanId: "public-scan" }; },
   } };
@@ -36,11 +34,24 @@ test("anonymous sample clicks follow actual country, forced loc, then a manual s
   }
 });
 
-test("signed-in sample behavior is preserved, while loc provides an explicit public preview", async () => {
-  const { regions, dependencies } = harness({ id: "signed-in" });
-  assert.equal((await (await handleSampleReportRequest(request({}, "US"), dependencies)).json()).scanUrl, AUTHENTIC_SAMPLE_REPORT_URL);
-  assert.equal(regions.length, 0);
-  assert.equal((await (await handleSampleReportRequest(request({ loc: "US" }, "GB"), dependencies)).json()).scanFrom, "california");
+test("session cookies do not bypass the regional sample lookup or refresh", async () => {
+  for (const [country, scanFrom] of [["US", "california"], ["GB", "eu_ie"]] as const) {
+    for (const [kind, status] of [["recent", 200], ["fresh", 202]] as const) {
+      const signedInRequest = request({}, country);
+      signedInRequest.headers.set("cookie", "certscore.session_token=fixture-session");
+      const response = await handleSampleReportRequest(signedInRequest, {
+        classifyQuotaError: () => null,
+        resolve: async region => {
+          assert.equal(region, scanFrom);
+          return { kind, scanId: "regional-sample" };
+        },
+      });
+      assert.equal(response.status, status);
+      assert.deepEqual(await response.json(), {
+        scanFrom, resolution: kind, scanId: "regional-sample", scanUrl: "/scan/regional-sample",
+      });
+    }
+  }
 });
 
 test("GET, malformed input, arbitrary targets, restricted regions and force-new flags cannot launch scans", async () => {

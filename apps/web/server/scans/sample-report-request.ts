@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../lib/marketing/sample-report";
 import { isSampleScanFrom, parseHomepageLocation, resolveSampleScanFrom, type SampleScanFrom } from "../../lib/marketing/homepage-location";
-import { anonymousVisitorScanFrom } from "../../lib/scans/visitor-scan-default";
+import { visitorCountryScanFrom } from "../../lib/scans/visitor-scan-default";
 import type { SampleReportResolution } from "./sample-report-resolution";
 
 type Dependencies = {
-  getCurrentUser: () => Promise<unknown>;
   resolve: (scanFrom: SampleScanFrom) => Promise<SampleReportResolution>;
   classifyQuotaError: (error: unknown) => { retryAfterSeconds: number } | null;
 };
@@ -30,15 +28,10 @@ export async function handleSampleReportRequest(request: Request, dependencies: 
     return json({ error: "Choose a supported sample scan location." }, 400);
   }
   try {
-    const locationOverride = parseHomepageLocation(body.loc);
-    // A loc preview changes the public homepage experience, never authentication.
-    if (await dependencies.getCurrentUser() && !locationOverride) {
-      return json({ resolution: "signed_in", scanUrl: AUTHENTIC_SAMPLE_REPORT_URL });
-    }
     const scanFrom = resolveSampleScanFrom({
       manualScanFrom: body.scanFrom,
-      locationOverride,
-      countryDefault: anonymousVisitorScanFrom(request.headers, false) ?? "eu_ie",
+      locationOverride: parseHomepageLocation(body.loc),
+      countryDefault: visitorCountryScanFrom(request.headers),
     });
     const result = await dependencies.resolve(scanFrom);
     if ("retryAfterSeconds" in result) {

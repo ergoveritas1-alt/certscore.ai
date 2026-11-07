@@ -9,17 +9,18 @@ function request(headers: Record<string,string>={}) {
 
 test("country defaults are private uncached hints without retained location data", async () => {
   const response=GET(request({"cf-ipcountry":"US","x-forwarded-for":"192.0.2.1",cookie:"analytics=denied"}));
-  assert.deepEqual(await response.json(),{scanFrom:"california"});
+  assert.deepEqual(await response.json(),{homepageLocation:"US",scanFrom:"california"});
   assert.equal(response.headers.get("Cache-Control"),"private, no-store, max-age=0");
   assert.equal(response.headers.get("Set-Cookie"),null);
   assert.match(response.headers.get("Vary")!,/Cookie/);
-  assert.deepEqual(await GET(request()).json(),{scanFrom:"eu_ie"});
-  assert.deepEqual(await GET(request({"cf-ipcountry":"CA"})).json(),{scanFrom:"eu_ie"});
+  assert.deepEqual(await GET(request()).json(),{homepageLocation:"EU",scanFrom:"eu_ie"});
+  assert.deepEqual(await GET(request({"cf-ipcountry":"CA"})).json(),{homepageLocation:"EU",scanFrom:"eu_ie"});
 });
 
-test("every recognized session-cookie shape preserves logged-in defaults", async () => {
+test("recognized session cookies preserve scan defaults and still receive regional homepage copy", async () => {
   for (const name of ["session_token","__Secure-session_token","certscore.session_token","__Secure-certscore.session_token","certscore_session"]) {
-    assert.deepEqual(await GET(request({"cf-ipcountry":"US",cookie:`${name}=fixture`})).json(),{scanFrom:null},name);
+    assert.deepEqual(await GET(request({"cf-ipcountry":"US",cookie:`${name}=fixture`})).json(),{homepageLocation:"US",scanFrom:null},name);
   }
-  assert.deepEqual(await GET(request({"cf-ipcountry":"US",cookie:"session_data=fixture"})).json(),{scanFrom:"california"});
+  assert.deepEqual(await GET(request({"cloudfront-viewer-country":"GB",cookie:"certscore_session=fixture"})).json(),{homepageLocation:"EU",scanFrom:null});
+  assert.deepEqual(await GET(request({"cf-ipcountry":"US",cookie:"session_data=fixture"})).json(),{homepageLocation:"US",scanFrom:"california"});
 });

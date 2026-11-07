@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@website-signal-risk-scanner/ui";
-import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../lib/marketing/sample-report";
 import { parseHomepageLocation } from "../../lib/marketing/homepage-location";
 import { useHomepageScanPreferences } from "./homepage-scan-preferences";
 
@@ -46,8 +45,7 @@ export function SampleReportButton({
             ? payload.error : "The sample report could not be opened. Please try again.");
         }
         const destination = "scanUrl" in payload ? payload.scanUrl : null;
-        if (typeof destination !== "string" || !(destination === AUTHENTIC_SAMPLE_REPORT_URL
-          || /^\/scan\/[0-9a-f-]{36}$/i.test(destination))) {
+        if (typeof destination !== "string" || !/^\/scan\/[0-9a-f-]{36}$/i.test(destination)) {
           throw new Error("The report link was unavailable. Please try again.");
         }
         router.push(destination);
@@ -68,6 +66,6 @@ export function SampleReportButton({
       onClick={() => void openSampleReport()}>
       {pending ? "Opening..." : label}
     </Button>
-    {error ? <span role="alert" className="max-w-sm text-sm text-rose-200">{error}</span> : null}
+    {error ? <span role="alert" className="max-w-sm rounded bg-rose-50 px-2 py-1 text-sm text-rose-800">{error}</span> : null}
   </span>;
 }

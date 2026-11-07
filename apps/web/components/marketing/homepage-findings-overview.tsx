@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useRef, useState } from "react";
 import { HOMEPAGE_SHOWCASE } from "../../lib/marketing/homepage-showcase";
-import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../lib/marketing/sample-report";
+import { SampleReportButton } from "./sample-report-button";
 
 const focus = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-700";
 
@@ -26,10 +26,14 @@ export function HomepageFindingsOverview() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Findings overview</p>
             <h2 id="showcase-heading" className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">See what’s inside a scan.</h2>
           </div>
-          <a href={AUTHENTIC_SAMPLE_REPORT_URL} className={`inline-flex min-h-11 shrink-0 items-center gap-2 font-semibold text-sky-700 hover:underline ${focus}`}>Open sample report <span aria-hidden="true">↗</span></a>
+          <SampleReportButton
+            className="min-h-11 shrink-0 border-sky-200 bg-white font-semibold text-sky-700 hover:bg-sky-50"
+            label="Open sample report"
+            variant="secondary"
+          />
         </div>
 
-        <div id="showcase-slide" role="region" aria-roledescription="carousel" aria-label="CertScore feature tour" onKeyDown={(event) => {
+        <div id="showcase-slide" role="region" aria-roledescription="carousel" aria-label="CertScore.ai feature tour" onKeyDown={(event) => {
           if (dialog.current?.open || (event.target as HTMLElement).closest("pre") || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
           event.preventDefault();
           select(active + (event.key === "ArrowRight" ? 1 : -1));

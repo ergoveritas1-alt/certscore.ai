@@ -20,6 +20,7 @@ import {
 import { getPublicScanStatusProjection } from "./scan-status-projection";
 import { withServerTiming } from "../performance/log-server-timing";
 import { getReadTriggeredPublicationDeferral } from "./report-publication-ownership";
+import { maybePublishLocalPrivacyFormAuditReceipt } from "./local-privacy-form-audit";
 
 export type CanonicalScanReportPublicationResult = {
   eventCount: number | null;
@@ -113,6 +114,7 @@ async function publishCanonicalScanReportProjectionUncached(input: {
     if (persisted && isSameScanReportProjectionGeneration(
       generation, getScanReportProjectionGeneration(persisted)
     )) {
+      await maybePublishLocalPrivacyFormAuditReceipt(rawRecord.scan, rawRecord.snapshot);
       return { ...generation, projectionVersion: SCAN_REPORT_PROJECTION_VERSION,
         reason: "already_published", scanId: input.scanId, status: "ready" };
     }
