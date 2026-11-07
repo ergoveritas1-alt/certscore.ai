@@ -8,7 +8,7 @@ def digest(p):
         for b in iter(lambda:f.read(4*1024*1024),b''):h.update(b)
     return h.hexdigest()
 def read(p):
-    if p.stat().st_size>(160_000_000 if p.name=='dashboard.json' else 80_000_000):raise ValueError('Input exceeds bound')
+    if p.stat().st_size>(200_000_000 if p.name=='dashboard.json' else 100_000_000 if p.name=='dashboard.html' else 80_000_000):raise ValueError('Input exceeds bound')
     return json.loads(p.read_text())
 def end(data):
     return max(datetime.datetime.fromisoformat(w['end'].replace('Z','+00:00')) for w in data['windows'])
@@ -18,7 +18,7 @@ def publish(run,root):
     seal=read(run/'dashboard-seal.json');required={'dashboard.html','dashboard.json','daily-metrics.csv','daily-volumes.csv','daily-findings.csv','metric-contracts.json','exclusions.json'};verified={}
     for entry in seal['files']:
         p=pathlib.Path(entry['file']).resolve()
-        if p.parent!=run or not p.is_file() or p.stat().st_size>(160_000_000 if p.name=='dashboard.json' else 80_000_000):raise ValueError('Output escapes snapshot or exceeds bound')
+        if p.parent!=run or not p.is_file() or p.stat().st_size>(200_000_000 if p.name=='dashboard.json' else 100_000_000 if p.name=='dashboard.html' else 80_000_000):raise ValueError('Output escapes snapshot or exceeds bound')
         if digest(p)!=entry['sha256'] or entry.get('bytes',p.stat().st_size)!=p.stat().st_size:raise ValueError('Output hash/size mismatch')
         verified[p.name]=entry['sha256']
     if not required.issubset(verified):raise ValueError('Required sealed outputs missing')
@@ -26,7 +26,8 @@ def publish(run,root):
     if data.get('errors') or data.get('timezone')!='America/Los_Angeles' or 'Mac mini' not in data.get('cohort',''):raise ValueError('Dashboard cohort/source validation failed')
     validation=read(run/'dashboard-validation.json')
     if data.get('metricContractVersion')!='certscore.audit-metrics.v1' or validation.get('status')!='passed':raise ValueError('Metric contract validation missing')
-    if any(validation.get('checks',{}).get(k) is not True for k in ['contracts','aggregation','csvParity','sourceBoundaries','focusedTests','desktop','mobile','filters','chartTooltips','quantityTotals']):raise ValueError('Required dashboard checks incomplete')
+    if validation.get('masterValueParity',{}).get('status')!='passed' or validation.get('masterValueParity',{}).get('mismatches')!=0:raise ValueError('Master value parity gate missing or failed')
+    if any(validation.get('checks',{}).get(k) is not True for k in ['contracts','aggregation','csvParity','sourceBoundaries','focusedTests','desktop','mobile','filters','chartTooltips','quantityTotals','choiceEvidence','masterValueParity','optOutDispatch']):raise ValueError('Required dashboard checks incomplete')
     if validation.get('snapshotHashes')!=verified:raise ValueError('Validation does not bind sealed snapshot')
     activation=read(root/'progress-dashboard-activation.json')
     if data.get('toolSources')!=activation.get('toolSources') or not data.get('toolSources'):raise ValueError('Snapshot source pins differ from active procedure')

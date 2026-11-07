@@ -1,3 +1,7 @@
+import { redHatCanaryFixture } from "./test-fixtures/redhat-canary";
+import redHatPacketFixture from '../../../packages/certscore-contracts/src/test-fixtures/redhat-terminal-choice.json';
+import {CONDITIONAL_OPT_OUT_CAPTURE_PROFILE} from "@certscore/contracts";
+import {conditionalConsentFixture} from "./test-fixtures/conditional-opt-out";
 import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import {derivePolicySurfaceInspectionOutcome} from "@certscore/contracts";
 import { PRESENCE_ONLY_CAPTURE_PROFILE, PRESENCE_ONLY_WORKER_LANES } from "@certscore/contracts";
@@ -95,6 +99,7 @@ import {
   runCmpPreferencesArtifactChain,
   retainCmpPreferencesPacket,
   retainSaleSharingOptOutPacket,
+  authorizeSaleSharingCanaryStage,
   sendLocalV2DagLambdaResultMessage,
   serializeCanonicalEvidenceBundle,
   unwrapLocalV2DagLambdaDispatchEvent,
@@ -2237,8 +2242,13 @@ async function runCoordinatorFixture(input: {
   preferences?: "complete" | "partial" | "hang" | "wrong_hash" | "wrong_target";
   explicitPreferences?: boolean;
   presenceOnly?: boolean;
+  conditionalOptOut?: boolean;
+  redHatOptOut?: boolean;
+  redHatGate?: ReturnType<typeof redHatCanaryFixture> | null;
+  boundOptOutControls?: boolean;
+  conditionalDeadlineMs?: number;
   bothActions?: boolean;
-  optOut?: "complete" | "hang" | "wrong_hash" | "wrong_target" | "redirected" | "policy_downgrade" | "bad_redirect";
+  optOut?: "confirmed" | "complete" | "hang" | "wrong_hash" | "wrong_target" | "redirected" | "policy_downgrade" | "bad_redirect";
   routeCase?: "valid" | "downgrade" | "bad_ancestry" | "wrong_parent" | "wrong_hash";
   invalidActionHash?: boolean;
   runtimeBundle?: CanonicalEvidenceBundle;
@@ -2248,6 +2258,7 @@ async function runCoordinatorFixture(input: {
   const artifactRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-coordinator-cutoff-"));
   const actionCalls: string[] = [];
   const workerCalls: string[] = [];
+  const workerPayloads: Record<string, any>[] = [];
   const uploads: string[] = [];
   let finalizationStarted!: () => void;
   const finalizationRead = new Promise<void>(resolve => { finalizationStarted = resolve; });
@@ -2288,6 +2299,7 @@ async function runCoordinatorFixture(input: {
   if(canaryCampaign)canaryCampaign.slots[1].scanId=input.scanId;
   const canaryAuthorization=canaryCampaign?.slots[1];
   if(routeOriginal)for(const [lane,bundle] of passiveBundles)passiveBundles.set(lane,JSON.parse(JSON.stringify(bundle).replaceAll("https://example.com/",routeOriginal)));
+  if(input.redHatOptOut)for(const [lane,bundle] of passiveBundles)passiveBundles.set(lane,JSON.parse(JSON.stringify(bundle).replaceAll("https://example.com/","https://redhat.com/")));
   const pointers = new Map<string, { uri: string; body: Buffer; sha256: string; sizeBytes: number }>();
   for (const [lane, bundle] of passiveBundles) {
     const body = Buffer.from(input.encodedCanonicalArtifacts ? serializeCanonicalEvidenceBundle(bundle) : JSON.stringify(bundle));
@@ -2302,15 +2314,17 @@ async function runCoordinatorFixture(input: {
     scanId: input.scanId,
     callbackCorrelationId: input.scanId,
     ...(input.presenceOnly?{privacyCaptureProfile:PRESENCE_ONLY_CAPTURE_PROFILE}:{}),
+    ...(input.conditionalOptOut?{privacyCaptureProfile:CONDITIONAL_OPT_OUT_CAPTURE_PROFILE}:{}),
     ...(input.bothActions?{postRefusalObservation:coordinatorPostRefusalConfig(500)}:{}),
     ...(routeOriginal?{targetUrl:routeOriginal,hostname:"readcube.com",awsRegion:"us-west-1",functionName:canaryAuthorization!.functionName}:{}),
-    ...(input.optOut ? {saleSharingOptOut:routeOriginal?{policyVersion:SALE_SHARING_EXACT_ROUTE_POLICY,enabled:true,scanId:input.scanId,exactTargetUrl:routeOriginal,exactRouteAuthorization:saleSharingExactRouteAuthorization(routeOriginal),canaryAuthorization}:{policyVersion:["redirected","policy_downgrade","bad_redirect"].includes(input.optOut)?"bounded_sale_sharing_opt_out.v2-apex-www":"bounded_sale_sharing_opt_out.v1",enabled:true,scanId:input.scanId,exactTargetUrl:"https://example.com/",
+    ...(input.optOut ? {saleSharingOptOut:routeOriginal?{policyVersion:SALE_SHARING_EXACT_ROUTE_POLICY,enabled:true,scanId:input.scanId,exactTargetUrl:routeOriginal,exactRouteAuthorization:saleSharingExactRouteAuthorization(routeOriginal),canaryAuthorization}:{policyVersion:["redirected","policy_downgrade","bad_redirect"].includes(input.optOut)?"bounded_sale_sharing_opt_out.v2-apex-www":"bounded_sale_sharing_opt_out.v1",enabled:true,scanId:input.scanId,exactTargetUrl:"https://example.com/",...(input.boundOptOutControls?{controlPolicy:"explicit_opt_out_controls.v1"}:{}),
       ...(["redirected","policy_downgrade","bad_redirect"].includes(input.optOut)?{redirectAuthorization:{version:"sale_sharing_apex_www.v1",alternateTargetUrl:"https://www.example.com/"}}:{})}}:{}),
     ...(input.explicitPreferences ? { cmpPreferenceInspection: {
       policyVersion: "bounded_cmp_preferences.v1", enabled: true,
       scanId: input.scanId, exactTargetUrl: "https://example.com/",
     } } : {}),
     ...(input.gpcPair ? { targetUrl: input.gpcPair.baseline.url, hostname: new URL(input.gpcPair.baseline.url).hostname, gpcObservation: { contractVersion: "certscore.gpc-observation-dispatch.v1", enabled: true, pairWithLane: "runtime_evidence", protocol: "passive_baseline_with_sec_gpc" } } : {}),
+    ...(input.redHatOptOut?{targetUrl:"https://redhat.com/",hostname:"redhat.com",awsRegion:"us-west-1",functionName:"certscore-redhat-fixture:42",saleSharingOptOut:{policyVersion:"bounded_sale_sharing_opt_out.v1",enabled:true,scanId:input.scanId,exactTargetUrl:"https://redhat.com/"}}:{}),
     ...(actionLane === "accept"
       ? { postAcceptObservation: coordinatorPostAcceptConfig(input.dispatchDelayMs) }
       : { postRefusalObservation: coordinatorPostRefusalConfig(input.dispatchDelayMs) }),
@@ -2331,12 +2345,14 @@ async function runCoordinatorFixture(input: {
       const workerPayload = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8")) as Record<string, any>;
       const lane = String(workerPayload.workerLane);
       workerCalls.push(lane);
+      workerPayloads.push(workerPayload);
       if(input.presenceOnly)assert.equal(workerPayload.privacyCaptureProfile,PRESENCE_ONLY_CAPTURE_PROFILE);
       if(input.bothActions && lane === "reject_observation") {actionCalls.push(lane);throw new Error("offline fixture: neutral Reject terminal failure");}
       if(input.bothActions && lane === "policy_evidence")await new Promise(resolve=>setTimeout(resolve,700));
       if(lane === "sale_sharing_opt_out") {
         if(input.optOut === "hang")return new Promise<never>((_resolve,reject)=>{options?.abortSignal?.addEventListener("abort",()=>reject(new Error("aborted")),{once:true});});
-        const packet={contractVersion:"certscore.sale-sharing-opt-out-evidence.v1",policyVersion:"bounded_sale_sharing_opt_out.v1",scanId:input.scanId,parentDispatchSha256:postRefusalParentDispatchSha256(payload),targetUrl:input.optOut === "wrong_target"?"https://other.example/":payload.targetUrl,documentToken:null,startedAt:new Date().toISOString(),completedAt:new Date().toISOString(),status:"unsupported",recipeVersion:null,provider:null,actionCount:0,submitted:false,registration:"not_attempted",confirmedAt:null,before:null,after:null,observationWindowMs:0,captureComplete:false,truncated:false,requests:[],limitations:["no_unique_registered_recipe"]};
+        const packet={...(input.boundOptOutControls?{controlPolicy:"explicit_opt_out_controls.v1"}:{}),contractVersion:"certscore.sale-sharing-opt-out-evidence.v1",policyVersion:"bounded_sale_sharing_opt_out.v1",scanId:input.scanId,parentDispatchSha256:postRefusalParentDispatchSha256(payload),targetUrl:input.optOut === "wrong_target"?"https://other.example/":payload.targetUrl,documentToken:null,startedAt:new Date().toISOString(),completedAt:new Date().toISOString(),status:"unsupported",recipeVersion:null,provider:null,actionCount:0,submitted:false,registration:"not_attempted",confirmedAt:null,before:null,after:null,observationWindowMs:0,captureComplete:false,truncated:false,requests:[],limitations:["no_unique_registered_recipe"]};
+        if(input.optOut==="confirmed")Object.assign(packet,{startedAt:new Date(Date.now()-1500).toISOString(),completedAt:new Date().toISOString(),documentToken:"verified-choice-document",status:"complete",recipeVersion:"onetrust.explicit_sale_share.v2",provider:"OneTrust",actionCount:2,submitted:true,registration:"confirmed",confirmedAt:new Date(Date.now()-1000).toISOString(),before:{sectionId:8,sale:2,sharing:2},after:{sectionId:8,sale:1,sharing:1},observationWindowMs:500,captureComplete:true,limitations:[]});
         if(input.optOut==="redirected"||input.optOut==="bad_redirect")Object.assign(packet,{contractVersion:"certscore.sale-sharing-opt-out-evidence.v2",policyVersion:"bounded_sale_sharing_opt_out.v2-apex-www",
           redirectAuthorization:{version:"sale_sharing_apex_www.v1",alternateTargetUrl:"https://www.example.com/"},actionTargetUrl:"https://www.example.com/",tlsValidated:true,
           redirectProof:{version:"sale_sharing_redirect_proof.v1",fromUrl:input.optOut==="bad_redirect"?"https://other.com/":"https://example.com/",toUrl:"https://www.example.com/",status:301,sourceRequestId:"first",targetRequestId:"second",tlsValidated:true}});
@@ -2346,9 +2362,11 @@ async function runCoordinatorFixture(input: {
           Object.assign(packet,{contractVersion:fixture.contractVersion,policyVersion:fixture.policyVersion,exactRouteAuthorization:fixture.exactRouteAuthorization,exactRouteProof:fixture.exactRouteProof,actionTargetUrl:fixture.actionTargetUrl,tlsValidated:true});
           if(input.routeCase==="wrong_parent")packet.parentDispatchSha256="f".repeat(64);
         }
+        if(input.redHatOptOut)Object.assign(packet,structuredClone(redHatPacketFixture),{scanId:input.scanId,parentDispatchSha256:workerPayload.parentDispatchSha256,
+          redHatChoice:{...structuredClone(redHatPacketFixture.redHatChoice),source:workerPayload.saleSharingOptOut.redHatAuthorization}});
         const body=Buffer.from(JSON.stringify(packet)),uri=`s3://test-bucket/workers/${input.scanId}/sale_sharing_opt_out/SaleSharingOptOutEvidencePacket.json`;
         const entry={uri,body,sizeBytes:body.byteLength,sha256:createHash("sha256").update(body).digest("hex")};pointers.set(uri,entry);
-        return {StatusCode:200,Payload:Buffer.from(JSON.stringify({scanId:input.scanId,workerLane:lane,status:"completed",parentDispatchSha256:postRefusalParentDispatchSha256(payload),artifactPointers:{saleSharingOptOutPacketUri:uri},artifactMetadata:{saleSharingOptOutPacketUri:{sizeBytes:entry.sizeBytes,sha256:input.optOut === "wrong_hash"||input.routeCase==="wrong_hash"?"0".repeat(64):entry.sha256}}}))};
+        return {StatusCode:200,Payload:Buffer.from(JSON.stringify({scanId:input.scanId,workerLane:lane,status:"completed",parentDispatchSha256:input.redHatOptOut?workerPayload.parentDispatchSha256:postRefusalParentDispatchSha256(payload),artifactPointers:{saleSharingOptOutPacketUri:uri},artifactMetadata:{saleSharingOptOutPacketUri:{sizeBytes:entry.sizeBytes,sha256:input.optOut === "wrong_hash"||input.routeCase==="wrong_hash"?"0".repeat(64):entry.sha256}}}))};
       }
       if (lane === "cmp_preferences") {
         if (input.preferences === "hang") return new Promise<never>((_resolve, reject) => {
@@ -2492,16 +2510,18 @@ async function runCoordinatorFixture(input: {
   const s3Client = { async send(command: any) { uploads.push(String(command.input.Key)); return {}; } };
   try {
     const result = await runLocalV2DagLambdaShardedArtifactChain(payload, {
+      ...(input.conditionalOptOut?{deadlineAtMs:Date.now()+(input.conditionalDeadlineMs??60_000)}:{}),
       artifactRoot,
       lambdaClient,
       s3Client,
       s3GetClient,
+      ...(input.redHatOptOut?{canary:{redHat:input.redHatGate??{grant:null}}}:{}),
       ...(canaryCampaign?{canary:{campaign:canaryCampaign,runtime:{buildGitSha:canaryAuthorization!.buildGitSha,functionVersion:"42",region:"us-west-1",memoryMb:3008},ledger:{
         async read(key:string){return key.endsWith("/dispatch.json")?{authorization:canaryAuthorization}:null;},async create(){},
       }}}:{}),
     });
     const bundle = parseCanonicalEvidenceArtifact(await readFile(path.join(artifactRoot, "CanonicalEvidenceBundle.json"))) as Record<string, any>;
-    return { actionCalls, workerCalls, artifactRoot, bundle, result, uploads };
+    return { actionCalls, workerCalls, workerPayloads, payload, artifactRoot, bundle, result, uploads };
   } catch (error) {
     await rm(artifactRoot, { recursive: true, force: true });
     throw error;
@@ -4565,6 +4585,22 @@ test("three-lane merge keeps lane-local access failures limited when the indepen
     assert.ok(!unresolved.scanNoGoAssessment?.contradictorCodes.includes("independent_runtime_evidence_representative_page"));
   }
 
+  const unresolvedCapture = mergeLocalV2DagLambdaEvidenceLaneBundles({
+    artifactRoot: "/tmp/runtime-capture-unresolved", scanId: "runtime-capture-unresolved",
+    consentProof: canonicalBundleFixture("runtime-capture-unresolved", {
+      scanNoGoAssessment: consentNoGo, visualAccessReview: consentVisualNoGo,
+    }),
+    runtimeEvidence: canonicalBundleFixture("runtime-capture-unresolved", {
+      runtimeCoverage: usableRuntimeCoverage,
+      scanLaneRuns: [{ ...laneRunFixture("runtime_evidence", "empty-runtime"), accessOutcome: "unknown" }],
+      domSnapshots: [{ ...runtimeSnapshotFixture(), textExcerpt: "",
+        runtimeDocumentCapture: { version: "runtime_document_capture.v1" } }],
+    }),
+    policyEvidence: canonicalBundleFixture("runtime-capture-unresolved"),
+  });
+  assert.equal(unresolvedCapture.scanNoGoAssessment, undefined);
+  assert.equal(unresolvedCapture.visualAccessReview, undefined);
+
   const bothLanesNoGo = mergeLocalV2DagLambdaEvidenceLaneBundles({
     artifactRoot: "/tmp/certscore-three-lane-both-no-go",
     scanId: "scan-both-no-go",
@@ -5610,10 +5646,11 @@ test("sale/sharing retention rejects an oversized valid v2 packet before filesys
 
 test("sale/sharing worker retains a terminal packet through cleanup within its existing five-second cap",{timeout:7000},async()=>{
   const root=await mkdtemp(path.join(os.tmpdir(),"optout-artifact-reserve-"));
+  // Public literal avoids DNS in this injected, no-network timing fixture.
   let publications=0;
   try {
-    const result=await handler(validPayload({orchestrationMode:"worker",workerLane:"sale_sharing_opt_out",parentDispatchSha256:"e".repeat(64),
-      saleSharingOptOut:{policyVersion:"bounded_sale_sharing_opt_out.v1",enabled:true,scanId:"scan-local-1",exactTargetUrl:"https://example.com/"}}),{
+    const result=await handler(validPayload({orchestrationMode:"worker",workerLane:"sale_sharing_opt_out",targetUrl:"https://8.8.8.8/",hostname:"8.8.8.8",parentDispatchSha256:"e".repeat(64),
+      saleSharingOptOut:{policyVersion:"bounded_sale_sharing_opt_out.v1",enabled:true,scanId:"scan-local-1",exactTargetUrl:"https://8.8.8.8/"}}),{
       workspaceRoot:root,
       runArtifactChain:async(_payload,options)=>{
         await new Promise(resolve=>setTimeout(resolve,2800));
@@ -5787,4 +5824,95 @@ test("GPC product coordinator derives one packet from existing original-byte rea
     if(root)await rm(root,{recursive:true,force:true});
   }
   }
+});
+
+test('conditional opt-out preserves both actions, shares one verified source read and never waits at publication',async()=>{
+ const keys=['CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED',POST_ACCEPT_WORKER_FEATURE_FLAG,POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG,'CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET'];const previous=keys.map(k=>process.env[k]);keys.forEach(k=>{process.env[k]=k.endsWith('ARTIFACT_BUCKET')?'test-bucket':'1';});
+ try{for(const mode of ['confirmed','complete','wrong_hash','wrong_target','hang','unsupported','deadline'] as const){
+  const scanId=`conditional-${mode}`,baseline=gpcRuntimeFixture({enabled:false,url:'https://example.com/'}),gpc=gpcRuntimeFixture({enabled:true,url:'https://example.com/'});baseline.scanId=gpc.scanId=scanId;baseline.domSnapshots=[{...runtimeSnapshotFixture(),url:baseline.url}];
+  const consent=conditionalConsentFixture(scanId);if(mode==='unsupported')consent.consentUiObservations[0]!.controls[0]!.tagName='a';
+  const reads:string[]=[];
+  const result=await runCoordinatorFixture({scanId,conditionalOptOut:true,boundOptOutControls:mode==='confirmed',conditionalDeadlineMs:mode==='deadline'?1:60_000,optOut:mode==='unsupported'||mode==='deadline'?'complete':mode,bothActions:true,action:'completed',dispatchDelayMs:0,consentBundle:consent,gpcPair:{baseline,gpc},onRead:key=>reads.push(key)});
+  try{
+   const dispatched=!['unsupported','deadline'].includes(mode);
+   assert.deepEqual([...result.workerCalls].sort(),[...PRESENCE_ONLY_WORKER_LANES,...(dispatched?['sale_sharing_opt_out']:[])].sort());
+   assert.ok(result.bundle.postAcceptEvidence);assert.ok(result.bundle.postRefusalLaneOutcome);assert.ok(result.bundle.gpcResponseAssessment);
+   assert.equal(reads.filter(key=>key.endsWith('/consent_proof/CanonicalEvidenceBundle.json')).length,1);
+   const manifest=JSON.parse(await readFile(path.join(result.artifactRoot,'LocalV2DagLambdaManifest.json'),'utf8'));
+   assert.equal(manifest.conditionalOptOutDecision.version,'conditional_opt_out_dispatch.v3');
+   assert.equal(manifest.conditionalOptOutDecision.status,dispatched?'dispatched':'skipped');
+   assert.equal(manifest.conditionalOptOutDecision.reason,mode==='deadline'?'insufficient_remaining_time':mode==='unsupported'?'unsupported_or_unverified_control':'supported_control');
+   if(mode==='confirmed'){assert.equal(result.bundle.saleSharingOptOut.evidence.registration,'confirmed');assert.equal(result.bundle.saleSharingOptOut.evidence.controlPolicy,'explicit_opt_out_controls.v1');}
+   assert.equal(manifest.conditionalOptOutDecision.controlObserved,true);
+   assert.equal(manifest.conditionalOptOutDecision.supportedRoute,mode!=='unsupported');
+   if(dispatched)assert.ok(manifest.conditionalOptOutDecision.remainingTimeMs>=5000);
+   if(mode==='complete')assert.equal(result.bundle.saleSharingOptOut.evidence.status,'unsupported');
+   else if(mode!=='confirmed')assert.equal(result.bundle.saleSharingOptOut,undefined);
+   assert.equal(result.uploads.filter(p=>p.endsWith('/LocalV2DagLambdaManifest.json')).length,1);
+  }finally{await rm(result.artifactRoot,{recursive:true,force:true});}
+ }}finally{keys.forEach((k,i)=>{if(previous[i]===undefined)delete process.env[k];else process.env[k]=previous[i];});}
+});
+
+
+test('Red Hat conditional integration preserves Accept/Reject dispatch and verifies its separate source-bound packet',async()=>{
+ const keys=['CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED','CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED',POST_ACCEPT_WORKER_FEATURE_FLAG,POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG,'CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET'];
+ const previous=keys.map(k=>process.env[k]);keys.forEach(k=>{process.env[k]=k.endsWith('ARTIFACT_BUCKET')?'test-bucket':'1';});
+ try{for(const mode of ['disabled','no-grant','approved','stalled'] as const){
+  const enabled=mode==='approved';
+  process.env.CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED=mode==='disabled'?'0':'1';
+  const scanId=`redhat-coordinator-${mode}`,consent=conditionalConsentFixture(scanId);consent.consentUiObservations[0]!.documentUrl='https://www.redhat.com/en';
+  const baseline=gpcRuntimeFixture({enabled:false,url:'https://redhat.com/'}),gpc=gpcRuntimeFixture({enabled:true,url:'https://redhat.com/'});baseline.scanId=gpc.scanId=scanId;baseline.domSnapshots=[{...runtimeSnapshotFixture(),url:baseline.url}];
+  const reads:string[]=[];
+  const gate=redHatCanaryFixture(scanId);
+  if(mode==='stalled')gate.ledger.read=()=>new Promise(()=>{});
+  const result=await runCoordinatorFixture({scanId,gpcPair:{baseline,gpc},redHatOptOut:true,redHatGate:mode==='no-grant'?null:gate,conditionalOptOut:true,optOut:'complete',bothActions:true,action:'completed',dispatchDelayMs:0,consentBundle:consent,onRead:key=>reads.push(key)});
+  try{
+   assert.equal(result.workerCalls.filter(l=>l==='sale_sharing_opt_out').length,enabled?1:0);
+   assert.deepEqual(result.actionCalls.sort(),['accept_observation','reject_observation']);
+   for(const p of result.workerPayloads.filter(p=>['accept_observation','reject_observation'].includes(p.workerLane)))assert.equal(p.parentDispatchSha256,postRefusalParentDispatchSha256(result.payload));
+   assert.equal(reads.filter(k=>k.endsWith('/consent_proof/CanonicalEvidenceBundle.json')).length,1);
+   const manifest=JSON.parse(await readFile(path.join(result.artifactRoot,'LocalV2DagLambdaManifest.json'),'utf8'));
+   if(enabled){
+    const worker=result.workerPayloads.find(p=>p.workerLane==='sale_sharing_opt_out')!;
+    assert.equal(worker.saleSharingOptOut.policyVersion,'bounded_sale_sharing_opt_out.v4-redhat-reload');
+    assert.notEqual(worker.parentDispatchSha256,postRefusalParentDispatchSha256(result.payload));
+    assert.equal(worker.saleSharingOptOut.redHatAuthorization.sourceSha256,manifest.conditionalOptOutDecision.sourceSha256);
+    assert.deepEqual(gate.claims.get(`v2-dag-lambda/local/redhat-opt-out-canary/${scanId}/coordinator.json`),{grant:gate.grant,parentDispatchSha256:worker.parentDispatchSha256,source:worker.saleSharingOptOut.redHatAuthorization});
+    assert.deepEqual(manifest.executedSaleSharingOptOut,worker.saleSharingOptOut);
+    assert.equal(result.bundle.saleSharingOptOut.evidence.contractVersion,'certscore.sale-sharing-opt-out-evidence.v4');
+    assert.equal(result.bundle.saleSharingOptOut.evidence.registration,'unconfirmed');
+   }else{
+    assert.equal(result.bundle.saleSharingOptOut,undefined);
+    assert.equal(result.bundle.saleSharingOptOutLaneOutcome,undefined);
+    assert.equal(manifest.executedSaleSharingOptOut,undefined);
+    assert.equal(manifest.conditionalOptOutDecision.status,'skipped');
+    if(mode!=='disabled')assert.equal(manifest.conditionalOptOutDecision.reason,'authorization_not_granted');
+    assert.equal(gate.claims.size,0);
+   }
+   assert.equal(result.uploads.filter(p=>p.endsWith('/LocalV2DagLambdaManifest.json')).length,1);
+  }finally{await rm(result.artifactRoot,{recursive:true,force:true});}
+ }}finally{keys.forEach((k,i)=>{if(previous[i]===undefined)delete process.env[k];else process.env[k]=previous[i];});}
+});
+
+
+test('Red Hat worker gate and retained packet reject inactive or mismatched source and parent',async()=>{
+ const packet=structuredClone(redHatPacketFixture),root=await mkdtemp(path.join(os.tmpdir(),'redhat-retention-'));
+ const keys=['CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED','CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET'],prior=keys.map(k=>process.env[k]);let uploads=0;
+ const payload=parseLocalV2DagLambdaDispatchPayload(validPayload({scanId:packet.scanId,callbackCorrelationId:packet.scanId,targetUrl:packet.targetUrl,hostname:'redhat.com',awsRegion:'us-west-1',functionName:'certscore-redhat-fixture:42',privacyCaptureProfile:CONDITIONAL_OPT_OUT_CAPTURE_PROFILE,orchestrationMode:'worker',workerLane:'sale_sharing_opt_out',parentDispatchSha256:packet.parentDispatchSha256,
+  saleSharingOptOut:{policyVersion:packet.policyVersion,enabled:true,scanId:packet.scanId,exactTargetUrl:packet.targetUrl,redHatAuthorization:packet.redHatChoice.source}}));
+ try{
+  delete process.env.CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED;
+  await assert.rejects(authorizeSaleSharingCanaryStage(payload,'worker'),/redhat_opt_out_reload_inactive/);
+  process.env.CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED='1';process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET='test-bucket';
+  const gate=redHatCanaryFixture(packet.scanId);
+  await assert.rejects(authorizeSaleSharingCanaryStage(payload,'worker',{redHat:gate}),/prior_claim_missing/);
+  await gate.ledger.create(`v2-dag-lambda/local/redhat-opt-out-canary/${packet.scanId}/coordinator.json`,{grant:gate.grant,parentDispatchSha256:packet.parentDispatchSha256,source:packet.redHatChoice.source});
+  await authorizeSaleSharingCanaryStage(payload,'worker',{redHat:gate});
+  const s3Client={async send(){uploads++;return {};}};
+  await retainSaleSharingOptOutPacket(payload,packet,{artifactRoot:root,s3Client});
+  for(const changed of [{...packet,parentDispatchSha256:'f'.repeat(64)},{...packet,redHatChoice:{...packet.redHatChoice,source:{...packet.redHatChoice.source,sourceSha256:'f'.repeat(64)}}}]){
+   await assert.rejects(retainSaleSharingOptOutPacket(payload,changed,{artifactRoot:root,s3Client}),/sale_sharing_packet_binding_mismatch/);
+  }
+  assert.equal(uploads,1);
+ }finally{keys.forEach((k,i)=>{if(prior[i]===undefined)delete process.env[k];else process.env[k]=prior[i];});await rm(root,{recursive:true,force:true});}
 });

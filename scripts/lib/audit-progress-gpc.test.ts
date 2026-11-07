@@ -70,3 +70,36 @@ test("daily audit counts only source-bound CMP snapshots and preserves availabil
   const changed = structuredClone(r); changed.gpcResponse.cmpStateComparison!.sourceHashes.baseline = "0".repeat(64);
   assert.equal(pairedGpcAudit(changed).states["detail.gpc.paired_cmp"], "invalid_or_unbound");
 });
+
+test('audit exposes informative request pairs, qualified activity facts and independent CMP receipt',()=>{
+ const r=fixture();const a=pairedGpcAudit(r);
+ assert.equal(a.states['detail.gpc.paired_advertising_opportunity'],'baseline_activity_retained');
+ assert.equal(a.measurements['gpc.session.supported_activity_requests'],1);
+ assert.equal(a.measurements['gpc.session.unresolved_activity_requests'],0);
+ assert.equal(a.states['detail.gpc.semantic_readiness'],'reason_not_retained');
+ assert.equal(a.measurements['gpc.session.semantic_read_ms'],undefined);
+ const late=pairedGpcAudit(fixture(5500));assert.equal(late.states['detail.gpc.early_zero_later_collection'],'early_zero_full_visit_positive');
+});
+test('bound CMP snapshots expose per-axis transitions without inferring causation',async()=>{
+ const {gpcProductFixture}=await import('../../apps/web/lib/scans/test-fixtures/gpc-product');const f=gpcProductFixture();
+ const a=pairedGpcAudit({scanId:f.assessment.observation.scanId,gpcResponse:{...f.assessment,cmpStateComparison:f.cmpStateComparison}});
+ assert.equal(a.states['detail.gpc.paired_sale_transition'],`${f.cmpStateComparison!.baseline.sale}_to_${f.cmpStateComparison!.gpc.sale}`);
+ assert.equal(a.states['detail.gpc.cmp_receipt'],f.assessment.observation.registration.cmpGpcSignal);
+ const bad=structuredClone(f);bad.cmpStateComparison!.sourceHashes.gpc='0'.repeat(64);
+ assert.equal(pairedGpcAudit({scanId:f.assessment.observation.scanId,gpcResponse:{...f.assessment,cmpStateComparison:bad.cmpStateComparison}}).states['detail.gpc.paired_sale_transition'],'unavailable');
+});
+
+
+test("daily CMP scope distinguishes main-document snapshots without changing legacy availability", async () => {
+  const {gpcProductFixture} = await import("../../apps/web/lib/scans/test-fixtures/gpc-product");
+  const f = gpcProductFixture();
+  const r:any = {scanId:f.assessment.observation.scanId,gpcResponse:{...f.assessment,cmpStateComparison:f.cmpStateComparison}};
+  assert.equal(pairedGpcAudit(r).states["detail.gpc.paired_cmp_scope"],"full_context");
+  r.gpcResponse.observation.delivery.fullContextVerified=false;
+  assert.equal(pairedGpcAudit(r).states["detail.gpc.paired_cmp"],"invalid_or_unbound");
+  r.gpcResponse.cmpStateComparison={...f.cmpStateComparison,contractVersion:"certscore.gpc-cmp-state-comparison.v2",scope:"main_document"};
+  const audit=pairedGpcAudit(r);
+  assert.equal(audit.states["detail.gpc.paired_cmp"],"available");
+  assert.equal(audit.states["detail.gpc.paired_cmp_scope"],"main_document");
+  assert.equal(audit.cmpScope,"certscore.gpc-cmp-state-comparison.v2/main_document");
+});

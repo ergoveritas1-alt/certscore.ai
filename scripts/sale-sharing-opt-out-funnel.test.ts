@@ -1,3 +1,4 @@
+import redHat from '../packages/certscore-contracts/src/test-fixtures/redhat-terminal-choice.json';
 import assert from "node:assert/strict";
 import test from "node:test";
 import {optOutFunnelRow,summarizeOptOutFunnel} from "./lib/sale-sharing-opt-out-funnel";
@@ -29,4 +30,12 @@ test("diagnostics reject duplicate/out-of-order stages, over-budget timestamps a
   const base={version:"sale_sharing_execution_diagnostics.v1",milestones:[],decisionReads:[]};
   for(const milestones of [[{stage:"submitted",elapsedMs:5},{stage:"recipe_selected",elapsedMs:6}],[{stage:"usable_document",elapsedMs:1},{stage:"usable_document",elapsedMs:2}],[{stage:"usable_document",elapsedMs:3001}]])assert.equal(saleSharingOptOutDiagnosticsSchema.safeParse({...base,milestones}).success,false);
   assert.equal(saleSharingOptOutDiagnosticsSchema.safeParse({...base,rawGpp:"secret"}).success,false);
+});
+
+test('terminal Red Hat recording is counted independently from semantic confirmation and follow-up coverage',()=>{
+ const input={scanId:redHat.scanId,evidence:redHat,evidenceVerified:true};
+ const summary=summarizeOptOutFunnel([input,{scanId:'absent',configured:true}]);
+ assert.equal(summary.stages.choice_recorded.observed,1);assert.equal(summary.stages.choice_recorded.unknown,1);
+ assert.equal(summary.stages.confirmed.not_reached,1);assert.equal(summary.stages.observation_completed.not_reached,1);
+ assert.equal(optOutFunnelRow({...input,evidenceVerified:false}).stages.choice_recorded,'unknown');
 });

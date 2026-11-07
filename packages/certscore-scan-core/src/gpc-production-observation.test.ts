@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {canonicalEvidenceBundleSchema,gpcObservationSessionSchema} from "@certscore/contracts";
+import {canonicalEvidenceBundleSchema,gpcObservationSessionSchema,GPC_OPT_OUT_ADAPTER_VERSION} from "@certscore/contracts";
 import test from "node:test";
 import { createHash } from "node:crypto";
 import { gpcProductionRuntimeFixture } from "../../certscore-contracts/src/test-fixtures/gpc-production";
@@ -25,6 +25,13 @@ test("API availability preserves the original absent-function reason without cre
   assert.deepEqual(result.semanticReadiness,{contractVersion:"certscore.gpc-semantic-readiness.v1",reason:"api_unavailable",
     cmpStatusLoaded:null,signalStatusReady:null,observedAfterDocumentCommitMs:899});
   assert.deepEqual(result.registration,{basis:"current_recorded_state",sale:"unknown",sharing:"unknown",cmpGpcSignal:"unknown",causedByGpc:"not_established"});
+  const current=fixture(), semantic=current.gpcObservationSession!.semanticObservation!;
+  semantic.adapterVersion=GPC_OPT_OUT_ADAPTER_VERSION;
+  semantic.acknowledgment=[{cmp:"OneTrust",scopeSelector:"#onetrust-banner-sdk",message:"Opt-Out Signal Honored",source:"visible_cmp_live_status"}];
+  const currentResult=run(current);
+  assert.equal(currentResult.acknowledgment.observed,true);
+  assert.deepEqual(currentResult.semanticReadiness,result.semanticReadiness);
+  assert.deepEqual(currentResult.registration,result.registration);
   for(const mutate of [
     (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.gppDiagnostics!.callbackCount=1;},
     (b:typeof good)=>{b.gpcObservationSession!.semanticObservation!.gppDiagnostics!.reason="unreviewed reason";},

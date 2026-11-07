@@ -9,7 +9,7 @@ class PublishTests(unittest.TestCase):
         for name in ['dashboard.html','daily-metrics.csv','daily-volumes.csv','daily-findings.csv','metric-contracts.json','exclusions.json']:(run/name).write_text('fixture')
         (run/'dashboard-seal.json').write_text(json.dumps({'files':[{'file':str(run/name),'sha256':publisher.digest(run/name),'bytes':(run/name).stat().st_size} for name in ['dashboard.json','dashboard.html','daily-metrics.csv','daily-volumes.csv','daily-findings.csv','metric-contracts.json','exclusions.json']]}));self.validate(run);return run
     def validate(self,run):
-        seal=json.loads((run/'dashboard-seal.json').read_text());(run/'dashboard-validation.json').write_text(json.dumps({'status':'passed','checks':{k:True for k in ['contracts','aggregation','csvParity','sourceBoundaries','focusedTests','desktop','mobile','filters','chartTooltips','quantityTotals']},'snapshotHashes':{pathlib.Path(r['file']).name:r['sha256'] for r in seal['files']}}))
+        seal=json.loads((run/'dashboard-seal.json').read_text());(run/'dashboard-validation.json').write_text(json.dumps({'status':'passed','masterValueParity':{'status':'passed','mismatches':0},'checks':{k:True for k in ['contracts','aggregation','csvParity','sourceBoundaries','focusedTests','desktop','mobile','filters','chartTooltips','quantityTotals','choiceEvidence','masterValueParity','optOutDispatch']},'snapshotHashes':{pathlib.Path(r['file']).name:r['sha256'] for r in seal['files']}}))
     def test_missing_or_failed_quantity_totals_cannot_replace_latest(self):
         with tempfile.TemporaryDirectory() as t:
             root=pathlib.Path(t);a=self.fixture(root,'first','2026-10-26T12:00:00Z');publisher.publish(a,root)
@@ -25,6 +25,21 @@ class PublishTests(unittest.TestCase):
                     self.assertEqual((root/'latest').resolve(),a.resolve())
                     self.assertEqual((root/'progress-dashboard-latest.json').read_bytes(),before)
                     self.assertFalse((b/'dashboard-publication.json').exists())
+    def test_missing_choice_reconciliation_cannot_publish(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=pathlib.Path(t);a=self.fixture(root,'first','2026-10-27T12:00:00Z');p=a/'dashboard-validation.json';value=json.loads(p.read_text());del value['checks']['choiceEvidence'];p.write_text(json.dumps(value))
+            with self.assertRaisesRegex(ValueError,'Required dashboard checks incomplete'):publisher.publish(a,root)
+            self.assertFalse((root/'latest').exists())
+    def test_missing_or_failed_master_value_parity_cannot_publish(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=pathlib.Path(t);a=self.fixture(root,'first','2026-10-27T12:00:00Z')
+            for gate in [None,{'status':'failed','mismatches':0},{'status':'passed','mismatches':1}]:
+                self.validate(a);p=a/'dashboard-validation.json';value=json.loads(p.read_text())
+                if gate is None:del value['masterValueParity']
+                else:value['masterValueParity']=gate
+                p.write_text(json.dumps(value))
+                with self.assertRaisesRegex(ValueError,'Master value parity gate'):publisher.publish(a,root)
+                self.assertFalse((root/'latest').exists())
     def test_missing_semantic_validation_and_changed_pins_cannot_publish(self):
         with tempfile.TemporaryDirectory() as t:
             root=pathlib.Path(t);a=self.fixture(root,'first','2026-10-27T12:00:00Z');(a/'dashboard-validation.json').unlink()

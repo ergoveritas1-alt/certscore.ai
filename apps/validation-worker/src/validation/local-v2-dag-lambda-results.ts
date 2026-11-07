@@ -16,14 +16,19 @@ import {
   VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION,
   VERIFIED_POLICY_EVIDENCE_PACKET_VERSION,
   classifyV2DagLambdaResultDisposition,
+  retainedOptOutDispatch,
+  retainedConditionalOptOutDecision,
+  type ConditionalOptOutDecision,
   verifiedPreConsentRuntimePreviewPacketSchema,
   verifiedPolicyEvidencePacketSchema,
   terminalLaneEvidenceSchema,
   type TerminalLaneEvidence,
+  type OptOutDispatchState,
   type VerifiedPreConsentRuntimePreviewPacket,
   type VerifiedPolicyEvidencePacket,
 } from "@certscore/contracts";
-import { query, queryOne, withNonBlockingDatabaseLock } from "@website-signal-risk-scanner/db";
+import { query, queryOne, recordScanCaptureLimitation, withNonBlockingDatabaseLock } from "@website-signal-risk-scanner/db";
+import { projectRuntimeVisitCaptureLimitation } from "@website-signal-risk-scanner/shared";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -208,6 +213,8 @@ export type VerifiedProductionArtifactChain = {
   manifest: { sha256: string; sizeBytes: number };
   scanArtifact: { sha256: string; sizeBytes: number };
   verifiedAt: string;
+  optOutDispatch?: OptOutDispatchState;
+  conditionalOptOutDecision?: ConditionalOptOutDecision;
 };
 
 export type LocalV2DagLambdaResultPollerOptions = {
@@ -1688,10 +1695,14 @@ export async function verifyProductionArtifactChain(
   reportArtifactTransfers.retain(buildReportArtifactTransfer({
     scanId: parsedMessage.scanId, bundle: scanArtifact.body, manifest: manifest.body,
   }));
+  const conditionalOptOutDecision = retainedConditionalOptOutDecision(manifestJson, parsedMessage.scanId, scanArtifactJson.saleSharingOptOutLaneOutcome);
+  const optOutDispatch = retainedOptOutDispatch(manifestJson.privacyCaptureProfile, scanArtifactJson.saleSharingOptOutLaneOutcome);
   return {
     manifest: { sha256: manifest.sha256, sizeBytes: manifest.sizeBytes },
     scanArtifact: { sha256: scanArtifact.sha256, sizeBytes: scanArtifact.sizeBytes },
     verifiedAt: new Date().toISOString(),
+    ...(optOutDispatch ? { optOutDispatch } : {}),
+    ...(conditionalOptOutDecision ? {conditionalOptOutDecision} : {}),
   };
 }
 
@@ -2231,6 +2242,14 @@ export async function recordLocalV2DagLambdaResult(
         PROCESSOR,
       ]
     );
+  }
+  const captureLimitation = projectRuntimeVisitCaptureLimitation(parsedMessage);
+  if (captureLimitation) {
+    await recordScanCaptureLimitation({
+      scanId: parsedMessage.scanId,
+      completedAt: parsedMessage.completedAt,
+      ...captureLimitation,
+    });
   }
   if (parsedMessage.scannerRuntimeProvenance) {
     await query(

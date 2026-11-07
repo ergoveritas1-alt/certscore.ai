@@ -68,7 +68,7 @@ const supportedNoGoReasons: ScanNoGoReasonCode[] = [
   "site_not_ready", "captcha_or_challenge", "access_denied_or_forbidden_page", "rate_limited_429",
   "server_error_5xx", "configuration_error", "maintenance_or_unavailable", "tls_or_certificate_error",
   "unsupported_region", "target_unreachable_or_unsuitable", "navigation_transport_failure", "visual_capture_failed_or_placeholder",
-  "retained_visual_error_shell", "unknown"
+  "retained_visual_error_shell", "runtime_capture_unverified", "unknown"
 ];
 
 test("scan returns immediate 200 JSON", async () => {

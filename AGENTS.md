@@ -208,6 +208,37 @@ by the current two-target schema and requires separate local scope/tests and
 deployment/run approval. Preserve current budgets and external-form exclusion.
 See `docs/certscore-v2/readcube-gimbal-rollout-review-2026-10-23.md`.
 
+## Local Red Hat scanner integration — November 5, 2026
+
+The owner authorized local `bounded_sale_sharing_opt_out.v4-redhat-reload`
+integration and one bounded live verification. That visit is consumed: one click,
+one exact same-page reload, terminal TrustArc asserted `[1]` at 2,414 ms,
+cleanup at 2,421 ms. This is explicit CMP choice recording, not semantic
+sale/sharing proof or post-confirmation activity measurement. Persist the separate
+execution assessment and audit confirmation/coverage fields; preserve historical
+versions, scoring, Accept/Reject dispatches, current memory and all capture caps.
+The new `CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED` gate remains off by default;
+no deployment or production activation occurred. Two unintended no-action fixture
+contacts were recorded centrally/manually; fixtures now block external access.
+Local recurring cost is $0; possible bounded metadata is below $0.10/month at
+100,000 scans. See `docs/certscore-v2/redhat-scanner-integration-2026-11-05.md`.
+
+Local rollout preparation adds a single-scan Red Hat gate. A recipe flag alone
+does not authorize an opt-out dispatch: require a matching operator grant and
+positive approval record, the exact immutable build/version in us-west-1 at
+3,008 MB, and durable coordinator/worker claims under the verified consent
+source and parent dispatch. No new visit, deployment or activation was made.
+See `docs/certscore-v2/redhat-canary-readiness-2026-11-05.md`.
+
+The owner-authorized dedicated `us-west-1` canary has been consumed on version
+1. It verified the exact route and v4 dispatch/retention/audit chain. The opt-out
+worker stopped for readiness at 1,819 ms with no click, SDK read or reload.
+The isolated replay correctly reports no action/confirmation/activity window;
+the synthetic visit is excluded from normal daily audit totals. Approval was
+revoked. No retry, production rollout, shared consumer change, Accept/Reject
+change or budget increase is authorized by this run.
+See `docs/certscore-v2/redhat-dedicated-aws-canary-2026-11-05.md`.
+
 ## Absolute prohibition: Vercel
 
 WC01 and WS01 are AWS-only. Never use, inspect, load, recommend, or invoke any Vercel skill, plugin, documentation, CLI, API, integration, deployment, hosting, or build workflow for these repositories.
@@ -1043,6 +1074,14 @@ If WC01 starts consuming a new WS01 field, add or update a runtime contract fixt
 For CertScore.ai v2, artifact contracts must stay typed, bounded, display-safe where projected, and covered by focused fixtures/tests. Do not carry raw cookies, raw request/response bodies, sensitive query values, unbounded DOM/policy text, or raw Nano reasoning into reviewer, report-adapter, or web-facing artifacts.
 
 Production v2 Lambda policy-semantic review must consume retained policy evidence from the checksum- and size-verified `CanonicalEvidenceBundle.json` S3 pointer recorded on `v2_lambda_result.received`. `scan_document_sources` is a legacy/fallback input and must not be assumed to contain v2 Lambda policy surfaces. Keep this handoff typed, bounded, restricted to approved scanner regions, and fail closed when retained artifact metadata does not verify.
+
+### Canonical evidence items and output coverage
+
+Use the v2 master catalog as the shared inventory of evidence items. Define each useful fact once with a stable record, field, and any meaningful dimensions. Reuse that identity across views and normalize equivalent labels, summaries, and aliases. Keep distinct evidence scopes and preserve legacy mappings when changing the catalog. [Master catalog](scripts/lib/audit-evidence-master-catalog.ts)
+
+- Map items explicitly across the scan report, standard JSON evidence, full evidence, and daily audit. Treat Web, PDF, and DOCX as formats of the scan report. Align coverage rows with the report's evidence boxes and label audit-only items separately. [Coverage matrix](scripts/lib/audit-progress-coverage-matrix.ts)
+- For `certscore.full-evidence.v2`, preserve the exact standard JSON and both report views after resolving references. Apply each historical export's own contract. [Value mappings](scripts/lib/audit-master-value-mappings.ts)
+- For a forward gap, establish the item's utility and identify where its value stops flowing before changing capture or delivery. Verify parity using the same scan, original source, report generation, and applicable scope. Keep intentional omissions, unknowns, and unavailable or incompatible evidence explicit. Preserve audit-only evidence boundaries and run the relevant parity checks when changing a view or mapping. [Forward gap triage](docs/certscore-v2/mac-mini-audit-progress-procedure.md#forward-looking-gap-triage--november-6-owner-direction)
 
 ### Scan reliability and evidence quality
 

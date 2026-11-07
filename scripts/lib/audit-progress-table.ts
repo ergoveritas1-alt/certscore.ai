@@ -1,7 +1,8 @@
 /** Presentation order only: preserves every returned measure and finding ID. */
 type Entry={kind:"metric"|"quantity"|"finding";id:string;label:string;group:string;[key:string]:any};
-export function mixedRateHeading(value:{source:string}):string|null {
-  return value.source==='mixed_sources'?'Rates by version':null;
+export function measuredRateSeries(value:{source:string;series?:Record<string,any>}):[string,any][] {
+  if(value.source!=='mixed_sources')return [];
+  return Object.entries(value.series??{}).filter(([,part])=>Number.isFinite(part.rate));
 }
 /** Select an observed latest-version sample; never extrapolate to the full day. */
 export function latestVersionSample(value:{source:string;series?:Record<string,any>}):{source:string;version:string;value:any}|null {
@@ -21,7 +22,18 @@ export function controlPresenceUnavailableLabel(id:string,value:{denominator:num
   const sources=value.series?Object.keys(value.series):[value.source];
   return sources.length&&sources.every(s=>/^public_export\/pulse-public-v(?:4|5|10)\//.test(s))?"Not exported":null;
 }
+export function unavailableMetricDetail(id:string):string {
+  if(id==='control.privacyOptOut')return 'First-layer opt-out evidence was absent from the selected source.';
+  if(id==='sealed.control.privacyOptOut')return 'No retained assessment matched the scan and report generation.';
+  if(id.startsWith('sealed.opt_out.'))return 'No matching choice summary established this outcome.';
+  if(id.startsWith('sealed.cmp_check.'))return 'No retained CMP assessment returned this check.';
+  if(id.startsWith('sealed.')||id.startsWith('detail.sealed.'))return 'No matching retained evidence returned this value.';
+  if(id.startsWith('detail.gpc.paired_'))return 'No verified paired evidence returned this field.';
+  if(id.startsWith('terminal.'))return 'No source-bound terminal verification was retained for the eligible clicks.';
+  return 'The selected source did not return this value.';
+}
 export function quantityMeasureGroup(id:string):string{
+  if(id.startsWith("sealed.opt_out."))return "Opt-out";
   if(id.startsWith("gpc.paired.")||id.startsWith("gpc.session."))return "GPC details";
   if(/^(accept|reject)\./.test(id))return "A/R verdicts";
   if(id.startsWith("storage.")||id==="inventory.cookies")return "Storage classification";
@@ -42,4 +54,9 @@ export function groupedProgressEntries(metrics:any[],quantities:any[],findings:a
   for(const e of entries)if(!groups.includes(e.group))groups.push(e.group);
   return entries.sort((a,b)=>groups.indexOf(a.group)-groups.indexOf(b.group)||
     ["metric","quantity","finding"].indexOf(a.kind)-["metric","quantity","finding"].indexOf(b.kind));
+}
+
+/** Missing aggregation is distinct from missing measurements. */
+export function quantityAvailabilityLabel(value:{source:string;measured:number;total:number|null}):string|null {
+  return value.total===null&&value.source==='mixed_sources'&&value.measured>0?'Separate measurement groups':null;
 }

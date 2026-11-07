@@ -1,3 +1,6 @@
+import {verifyMasterValueParity} from './lib/audit-master-parity';
+import {COVERAGE_MATRIX} from "./lib/audit-progress-coverage-matrix";
+import {applyChoiceSummary,choiceSummaryFromRecord,choiceMetricRegistry} from './lib/audit-progress-choice';
 import { progressEngine } from './lib/audit-progress-engine';
 import { evidenceMetricRegistry, QUANTITIES, COVERAGE_MAP, quantityCsv } from "./lib/audit-progress-evidence";
 /** Local-only CertScore.ai dashboard over retained bot exports and sealed audits. */
@@ -77,6 +80,7 @@ export async function buildDashboard(input:{runsFile:string;originsFile:string;e
         refs.push({file:botFile,sha256:hash(bytes),role:exportState});
       }catch(error:any){if(error?.code!=="ENOENT"){exportState="invalid";errors.push({scanId:i.id,kind:"bot_export",reason:String(error)});}}
       const progress=extractProgressRow({inventory:i,origin:origin!,record,report,bundle,sourceFacts,refs,exportState});
+      if(record)applyChoiceSummary(progress,choiceSummaryFromRecord(record,{manifest,bundle}),`persisted_report_choice_summary/${progress.projectionVersion}`);
       if(bundle){
         const policy=inspectPolicyCapture({root,scanId:i.id,site:i.hostname,region:i.scan_from,status:i.status,bundle,receipts});
         const privacy=policy.documents.filter(d=>d.surfaceType==="privacy_policy");
@@ -91,7 +95,7 @@ export async function buildDashboard(input:{runsFile:string;originsFile:string;e
   }
   const dynamicMetrics=[...new Set(rows.flatMap(row=>Object.keys(row.states).filter(k=>k.startsWith("cmp_check."))))].sort().map(id=>({id,label:id.slice(10).replaceAll("_"," "),group:"CMP details",denominator:"Readable reportable scans; not assessed is distinct from failure",success:["observed"]}));
   for(const row of rows)if(row.reportable)for(const metric of dynamicMetrics)row.states[metric.id]??="unavailable";
-  const metrics=[...METRICS,...evidenceMetricRegistry(rows),...dynamicMetrics];
+  const metrics=[...METRICS,...evidenceMetricRegistry(rows),...dynamicMetrics,...choiceMetricRegistry(rows)];
   for(const row of rows)if(row.reportable)for(const metric of metrics.filter(m=>m.id.startsWith("checklist.")))row.states[metric.id]??="unavailable";
   const days=summarizeDays(rows,windows,metrics),exclusionCounts:Record<string,number>={};for(const a of accounting)exclusionCounts[a.reason]=(exclusionCounts[a.reason]??0)+1;
   const issues:any[]=[];
@@ -100,7 +104,8 @@ export async function buildDashboard(input:{runsFile:string;originsFile:string;e
   const releaseMarkers:any[]=[];
   function collectReleases(x:any){if(Array.isArray(x)){x.forEach(collectReleases);return;}if(!x||typeof x!=="object")return;const revision=x.revision??x.deploymentRevision??x.deployedRevision;const at=x.verifiedAt??x.recordedAtUtc??x.deployedAtUtc??x.recordedAt;if(typeof revision==="string"&&/^[a-f0-9]{40}$/.test(revision)&&typeof at==="string"&&Number.isFinite(Date.parse(at)))releaseMarkers.push({revision,at,status:String(x.status??(x.productionVerified?"production verified":"recorded; verification status unspecified"))});Object.values(x).forEach(collectReleases);}
   if(input.releaseWatchFile){collectReleases(read(input.releaseWatchFile));sources.push(fingerprint(input.releaseWatchFile));}
-  const data={version:PROGRESS_VERSION,generatedAtUtc:new Date().toISOString(),timezone:TIMEZONE,cohort:"Original-request credential-bound Mac mini scan bot; canary/synthetic targets excluded",inputRows:seen.size,includedRows:rows.length,exclusionCounts,windows,metrics,quantities:QUANTITIES,coverageMap:COVERAGE_MAP,days,rows,issues,releaseMarkers:[...new Map(releaseMarkers.map(v=>[v.revision+v.at,v])).values()],errors,sources:[fingerprint(input.runsFile),fingerprint(input.originsFile),...sources],limitations:["Day-over-day percentage-point changes are descriptive, not accuracy or causal claims.","Partial calendar days show descriptive deltas with counts and coverage labels.","Independent action sessions do not form a strict funnel; registration is separate from execution.","Missing evidence remains not checked; intentionally omitted CMP workers remain separate.","Bot exports are fingerprinted and generation-joined; canonical findings require checksum-verified retained projections.","No source scans, findings or audit checkpoints were rewritten."]};
+  const data={version:PROGRESS_VERSION,generatedAtUtc:new Date().toISOString(),timezone:TIMEZONE,cohort:"Original-request credential-bound Mac mini scan bot; canary/synthetic targets excluded",inputRows:seen.size,includedRows:rows.length,exclusionCounts,windows,metrics,quantities:QUANTITIES,coverageMap:COVERAGE_MAP,coverageMatrix:COVERAGE_MATRIX,masterValueParity:null as unknown as ReturnType<typeof verifyMasterValueParity>,days,rows,issues,releaseMarkers:[...new Map(releaseMarkers.map(v=>[v.revision+v.at,v])).values()],errors,sources:[fingerprint(input.runsFile),fingerprint(input.originsFile),...sources],limitations:["Day-over-day percentage-point changes are descriptive, not accuracy or causal claims.","Partial calendar days show descriptive deltas with counts and coverage labels.","Independent action sessions do not form a strict funnel; registration is separate from execution.","Missing evidence remains not checked; intentionally omitted CMP workers remain separate.","Bot exports are fingerprinted and generation-joined; canonical findings require checksum-verified retained projections.","No source scans, findings or audit checkpoints were rewritten."]};
+  data.masterValueParity=verifyMasterValueParity(data);
   writeFileSync(path.join(input.out,"dashboard.json"),JSON.stringify(data,null,2)+"\n",{flag:"wx"});
   writeFileSync(path.join(input.out,"dashboard.html"),renderProgressDashboard(data),{flag:"wx"});
   writeFileSync(path.join(input.out,"daily-metrics.csv"),progressEngine().stateCsv(days,metrics),{flag:"wx"});

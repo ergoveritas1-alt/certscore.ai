@@ -1,6 +1,7 @@
+import {redHatTerminalChoiceConfirmed} from '../../packages/certscore-contracts/src/sale-sharing-opt-out';
 import { saleSharingOptOutEvidenceSchema, saleSharingOptOutLaneOutcomeSchema } from "../../packages/certscore-contracts/src/sale-sharing-opt-out";
 
-export const OPT_OUT_FUNNEL_STAGES = ["eligible","dispatched","usable_document","recipe_selected","control_actionable","submitted","confirmed","observation_completed","evidence_persisted","finding_persisted"] as const;
+export const OPT_OUT_FUNNEL_STAGES = ["eligible","dispatched","usable_document","recipe_selected","control_actionable","submitted","confirmed","choice_recorded","observation_completed","evidence_persisted","finding_persisted"] as const;
 type Stage = typeof OPT_OUT_FUNNEL_STAGES[number];
 type State = "observed" | "not_reached" | "unknown" | "not_applicable";
 export type OptOutFunnelInput = {
@@ -34,6 +35,7 @@ export function optOutFunnelRow(input:OptOutFunnelInput) {
     stages.recipe_selected=Boolean(packet.provider&&packet.recipeVersion)?"observed":"not_reached";
     stages.control_actionable=marks.has("control_actionable")||submitted?"observed":packet.executionDiagnostics||stages.recipe_selected==="not_reached"?"not_reached":"unknown";
     stages.submitted=submitted?"observed":"not_reached";
+    stages.choice_recorded=(packet.redHatChoice?packet.submitted&&redHatTerminalChoiceConfirmed(packet.redHatChoice):packet.registration==='confirmed')?'observed':'not_reached';
     stages.confirmed=packet.registration==="confirmed"?"observed":"not_reached";
     stages.observation_completed=packet.status==="complete"&&packet.captureComplete?"observed":"not_reached";
     stages.evidence_persisted="observed"; // Includes verified limited/unsupported packets.
@@ -48,6 +50,7 @@ export function optOutFunnelRow(input:OptOutFunnelInput) {
     lastCheckpoint:progress??null,milestones:packet?.executionDiagnostics?.milestones??[],
     decisionReads:packet?.executionDiagnostics?.decisionReads??[],limitations:reasons,
     navigation:packet?.executionDiagnostics?.navigation??null,
+    boundControlReadiness:packet?.executionDiagnostics?.boundControlReadiness??null,
     diagnostic:packet?.executionDiagnostic??lane.diagnostic??null,
     durationMs:packet?Date.parse(packet.completedAt)-Date.parse(packet.startedAt):null};
 }

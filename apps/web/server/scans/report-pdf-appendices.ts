@@ -1,4 +1,5 @@
 import { readAfterRejectScoringAssessment } from "../../lib/scans/after-reject-scoring-contract";
+import {documentChoiceDetails} from './report-document-choice-details';
 import { reportRequestInventory } from "./report-request-inventory";
 import {describeCmpAuditAvailability} from "../../../../packages/certscore-api-contracts/src/cmp-audit-availability";
 import { REPORT_TRANSPORT_CHECKS } from "../../lib/scans/report-runtime-inventory";
@@ -250,6 +251,9 @@ export function pdfChoicePathEvidence(report: CanonicalReportExport, layout: Lay
           window ? `${window.requestCount} total; ${window.nonEssentialRequestCount} non-essential; ${window.requests.length} detailed records` : "Not captured",
           records.filter(record => record.visit.toLowerCase() === action).map(record => `${record.name}: ${record.change}`).join("; ") || "Not captured"];
       }), [48, 115, 70, 139, 140]));
+  const decisions=documentChoiceDetails(report);
+  if(decisions.length)lines.push(...pdfEvidenceTable("choice-verification-stages", ["Choice", "Execution status", "Initial registration", "Initial verification", "Terminal verification"], decisions, [48,116,116,116,116]),
+    ...layout.text("Initial registration and terminal verification are separate stored assessments. Unknown is not failure; decision verification does not establish downstream effectiveness.",9));
   lines.push(...layout.text("Zero requests means none were observed in that bounded session; it is not a vendor-by-vendor pass or proof of future behavior. Different window lengths are not directly comparable rates. Instrumented request/write events and consent-cookie snapshots are separate measurements.", 9));
   const requests = windows.flatMap(window => window.requests.map(request => [label(window.action), `${request.vendor}; ${label(request.purpose)}`,
     `${request.hostname}${request.path}`, `+${request.msAfterClick} ms ${window.clockOrigin === "action_click" ? "after click" : window.clockOrigin === "consent_confirmation" ? "after confirmation" : "from saved session anchor"}; ${request.nonEssential ? "Non-essential" : "Other activity"}`]));

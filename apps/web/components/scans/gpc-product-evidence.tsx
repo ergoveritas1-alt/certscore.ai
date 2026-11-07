@@ -12,9 +12,11 @@ export function GpcProductEvidence({ comparison, guidance }: { comparison?: GpcC
           <th scope="row" className="p-2 font-medium">{label}</th><td className="p-2">{onOff(comparison.baseline[axis])}</td><td className="p-2">{onOff(comparison.gpc[axis])}</td>
         </tr>)}</tbody>
       </table>
+      {comparison.contractVersion === "certscore.gpc-cmp-state-comparison.v2" ?
+        <p className="mt-2">Main-document CMP snapshots. Worker and child-frame signal delivery is not established.</p> : null}
       <details className="mt-2"><summary className="cursor-pointer font-medium">Snapshot evidence and timing</summary><p className="mt-2">{describeGpcCmpStateComparison(comparison)}</p></details>
     </div> : null}
-    {guidance?.items.map(item => <details key={item.code} className="border-t border-zinc-200 pt-3">
+    {guidance?.items.map(item => <details key={item.code} open={item.kind === "adverse"} className="border-t border-zinc-200 pt-3">
       <summary className="cursor-pointer font-medium text-zinc-800">{item.observation}</summary>
       <div className="mt-2 space-y-2">
         {item.evidence.length ? <ul className="space-y-1">{item.evidence.map(e => <li key={e.evidenceId}>{e.recipient} · Request evidence <code className="break-all">{e.evidenceId}</code>{e.observedAtMs === undefined ? '' : ` · +${e.observedAtMs} ms from GPC visit start`}{e.priorCmpObservedAtMs === undefined ? '' : `; prior same-document CMP state +${e.priorCmpObservedAtMs} ms`}</li>)}</ul> : null}

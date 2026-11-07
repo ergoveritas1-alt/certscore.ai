@@ -24,3 +24,20 @@ test("standalone public packet enforces strict shape, bounds, section versions a
     assert.equal(readBoundGpcCmpStateComparison(p,{...a,contractVersion}),undefined);
   assert.equal(readBoundGpcCmpStateComparison(undefined,a),undefined);
 });
+
+
+test("main-document v2 has explicit scope while legacy v1 retains full-context requirements", async () => {
+  const {gpcProductFixture}=await import("../../../apps/web/lib/scans/test-fixtures/gpc-product");
+  const {cmpStateComparison:original, assessment:a} = gpcProductFixture();
+  assert.ok(original);
+  const packet = {...original, contractVersion:"certscore.gpc-cmp-state-comparison.v2", scope:"main_document"};
+  const response = structuredClone(a);
+  response.observation.delivery.fullContextVerified = false;
+  assert.deepEqual(readBoundGpcCmpStateComparison(packet, response), packet);
+  assert.equal(readBoundGpcCmpStateComparison(original, response), undefined);
+  for (const scope of [undefined, "full_context", "all_frames"]) {
+    assert.equal(gpcCmpStateComparisonSchema.safeParse({...packet, scope}).success, false);
+  }
+  response.observation.delivery.mainNavigatorReadbackRetained = false;
+  assert.equal(readBoundGpcCmpStateComparison(packet, response), undefined);
+});

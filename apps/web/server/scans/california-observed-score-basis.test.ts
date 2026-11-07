@@ -130,13 +130,13 @@ test("score availability requires the original usable runtime visit; failed, blo
  assert.equal(projectCaliforniaObservedScoreBasis(f.bundle,{...CA_FIXTURE_SOURCE,sha256:"invalid"},CA_FIXTURE_URL),undefined);
 });
 
-test("verified runtime title supplies visit proof when the bounded text excerpt is empty", () => {
+test("a title alone does not establish a usable starting page for a score", () => {
   const f=fixture();const snapshot=f.bundle.runtimeMetadataSnapshots![0]!;
   snapshot.textExcerpt="";
   snapshot.siteMetadata={contractVersion:"certscore.site-metadata.v1",title:"Statistikmyndigheten SCB"} as NonNullable<typeof snapshot.siteMetadata>;
-  assert.ok(projectCaliforniaObservedScoreBasis(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL));
-  snapshot.siteMetadata.title=" ";
   assert.equal(projectCaliforniaObservedScoreBasis(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL),undefined);
+  snapshot.textExcerpt="Statistik och analys";
+  assert.ok(projectCaliforniaObservedScoreBasis(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL));
 });
 
 test("partial inventory does not erase positively verified original navigation and runtime document", () => {

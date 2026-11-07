@@ -1,12 +1,12 @@
 import type { CDPSession } from "playwright";
-import { consentAccessibilityDomBindingSchema, type BrowserDocumentIdentity, type ConsentAccessibilityDomBinding } from "@certscore/contracts";
+import { consentAccessibilityDomBindingSchema, boundOptOutControlFromAttributes, type BrowserDocumentIdentity, type ConsentAccessibilityDomBinding } from "@certscore/contracts";
 import type { ConsentAccessibilityTreeNode } from "./scanners/pre-consent-runtime-scanner.js";
 
 export const AX_DOM_BINDING_BUDGET_MS = 50;
 export const AX_DOM_BINDING_MAX_NODES = 12;
 
 /** Optional corroboration, inside the existing AX capture deadline. Missing or
- * slow native reads leave the original AX record unchanged. No text/value read,
+ * slow native reads leave the original AX record unchanged. No extra text/value read,
  * DOM execution, guessed tag, or cross-document backend-node reuse. */
 export async function bindAccessibilityNodesToDom(client: CDPSession, nodes: ConsentAccessibilityTreeNode[], document: {
   url: string; identity?: BrowserDocumentIdentity;
@@ -27,7 +27,9 @@ export async function bindAccessibilityNodesToDom(client: CDPSession, nodes: Con
         try {
           const result = await client.send("DOM.describeNode", {backendNodeId: node.backendDOMNodeId!, depth: 0, pierce: false});
           if (Date.now() > deadline || result.node.backendNodeId !== node.backendDOMNodeId || result.node.nodeType !== 1) return undefined;
-          const parsed = consentAccessibilityDomBindingSchema.safeParse({version: "ax_backend_dom_binding.v1",
+          const optOutControl=boundOptOutControlFromAttributes(result.node.localName,result.node.attributes,node.name?.value);
+          const parsed = consentAccessibilityDomBindingSchema.safeParse({version: optOutControl ? "ax_backend_dom_binding.v2" : "ax_backend_dom_binding.v1",
+            ...(optOutControl ? {optOutControl} : {}),
             axNodeId: node.nodeId, backendNodeId: result.node.backendNodeId, nodeType: result.node.nodeType,
             tagName: result.node.localName, documentUrl: document.url, documentIdentity: identity});
           if (parsed.success) bindings.set(node.nodeId, parsed.data);

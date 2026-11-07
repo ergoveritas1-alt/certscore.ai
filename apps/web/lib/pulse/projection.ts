@@ -1,3 +1,4 @@
+import {buildCustomerConsentEvidence} from '../api-v2/customer-consent-evidence';
 import { hasTerminalReportPublicationFailure, reportPublicationResultState, terminalReportPublicationError } from "../../server/scans/report-publication-read-state";
 import { projectScanPostureScores } from "../api-v2/posture-scores";
 import { hasSuspendedGpcScoreEffect } from "../scans/gpc-customer-policy";
@@ -7,7 +8,7 @@ import { projectAccessibilityAuditSummary, withAccessibilityAuditCoverage } from
 import { SPLIT_ACCESSIBILITY_FINDING_IDS } from "../scans/accessibility-evidence";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../scans/after-action-report-eligibility";
 import { projectPublicFirstLayerConsentEvidence } from "../scans/public-first-layer-consent-evidence";
-import { projectScanReportNoGo, resolveScanReportScore } from "../scans/scan-report-disposition";
+import { hasTerminalRuntimeVisitAssessment, projectScanReportNoGo, resolveScanReportScore } from "../scans/scan-report-disposition";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../scans/executive-findings-projection";
 import { deriveCertScoreFindings } from "../scans/derive-findings";
 import { deriveGdprEprivacyCoverageChecklist } from "../scans/gdpr-eprivacy-coverage-checklist";
@@ -97,6 +98,8 @@ import {
 } from "../api-v2/scan-resource";
 
 type PulseProjectionInput = {
+  /** Fixed projection time for immutable customer-evidence pagination; does not change scan timestamps. */
+  generatedAtIso?: string;
   detail: PulseDetail;
   format: PulseFormat;
   freshnessMode: PulseFreshnessMode;
@@ -1915,6 +1918,7 @@ function buildEvidenceArtifact(input: {
 
   return {
     type: "certscore_pulse_evidence",
+    customerConsentEvidence: buildCustomerConsentEvidence(scanRecord),
     meta: {
       ...(asRecord(input.base.meta) ?? {}),
       projectionVersion: PULSE_PROJECTION_VERSION,
@@ -2253,18 +2257,18 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       asRecord(input.scanRecord.snapshot)
     ) as ScanDetailResponse["runtimeArtifacts"]
   } as ScanDetailResponse;
-  const generated = generatedAt();
+  const generated = input.generatedAtIso ?? generatedAt();
+  if (!Number.isFinite(Date.parse(generated))) throw new Error("Invalid evidence projection time");
   const scan = hydratedScanRecord.scan;
   const domain = scan.domainHostname ?? safeHostname(input.requestedUrl) ?? "unknown";
   const publicationState = reportPublicationResultState(hydratedScanRecord);
   const publicationFailed = hasTerminalReportPublicationFailure(hydratedScanRecord);
-  const pulseNoGoState = publicationFailed ? null : buildPulseNoGoState(hydratedScanRecord.runtimeArtifacts);
-  const noGoProjection = pulseNoGoState
-    ? { resultDisposition: pulseNoGoState.resultDisposition, noGo: pulseNoGoState.noGo }
-    : null;
-  const effectiveScanStatus = publicationState === "failed" ? "failed" :
-    !pulseNoGoState && publicationState === "finalizing" && ["completed", "completed_limited"].includes(scan.status) ? "finalizing" :
-    pulseNoGoState?.scanStatus ?? (scan.status === "completed" &&
+  const noGoProjection = publicationFailed ? null : projectScanReportNoGo(hydratedScanRecord);
+  const terminalCapture = Boolean(noGoProjection) && hasTerminalRuntimeVisitAssessment(hydratedScanRecord);
+  const effectiveScanStatus = noGoProjection ? "completed_limited" :
+    publicationState === "failed" ? "failed" :
+    publicationState === "finalizing" && ["completed", "completed_limited"].includes(scan.status) ? "finalizing" :
+    (scan.status === "completed" &&
     isAccessibilityAuditLimited(hydratedScanRecord.runtimeArtifacts?.accessibilityAudit, scan.id) ? "completed_limited" : scan.status);
   const coverage = deriveCoverage(hydratedScanRecord);
   const publicCoverage = withAccessibilityAuditCoverage(coverage, hydratedScanRecord.runtimeArtifacts?.accessibilityAudit, scan.id);
@@ -2273,7 +2277,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const postAcceptObservation = deriveApiV2PostAcceptObservation(hydratedScanRecord) ?? null;
   const postRefusalObservation = deriveApiV2PostRefusalObservation(hydratedScanRecord) ?? null;
   const persistedCanonicalProjection = getPersistedCanonicalReportProjection(hydratedScanRecord);
-  const packets = (persistedCanonicalProjection
+  const packets = terminalCapture ? [] : (persistedCanonicalProjection
     ? filterContradictoryPositiveSurfaceFindings(persistedCanonicalProjection.ownerUnifiedFindings)
     : null) ??
     buildScanReportUnifiedFindings(hydratedScanRecord);
@@ -2283,10 +2287,10 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     unifiedFindingPackets: packets
   });
   const executive = reportSurface.executive;
-  const allFindings = reportSurface.allFindings;
+  const allFindings = terminalCapture ? [] : reportSurface.allFindings;
   const score = noGoProjection || publicationState !== "final" ? null : reportSurface.score;
   const coverageLimitedByNoGo = allFindings.some((finding) => finding.id === "scan_quality_visual_no_go");
-  const topFindings = reportSurface.topFindings.map((finding) => toPulseFinding(finding, scan.id, {
+  const topFindings = terminalCapture ? [] : reportSurface.topFindings.map((finding) => toPulseFinding(finding, scan.id, {
     coverageLimitedByNoGo,
     noGo: noGoProjection?.noGo,
     runtimeCookieRows: reportSurface.runtimeCookieRows,
@@ -2587,7 +2591,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     resultQuality: {
       level: quality.usable ? (publicCoverage.status === "complete" ? "usable" : "usable_with_limitations") : "unavailable",
       summary: quality.usable ? publicCoverage.summary : quality.message,
-      reason: pulseNoGoState?.resultQuality.reason ?? quality.reason
+      reason: noGoProjection ? "scan_no_go" : quality.reason
     },
     usageGuidance: PULSE_USAGE_GUIDANCE
   };

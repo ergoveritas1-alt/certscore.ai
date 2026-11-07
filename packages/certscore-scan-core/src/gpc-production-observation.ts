@@ -5,7 +5,7 @@ import {isCanonicalAdvertisingCollectionCandidate, resolveCanonicalVendor, CANON
 import { extractPropertySaleSharingSource, matchPropertySaleSharingRequest } from "@certscore/vendor-resolver/property-sale-sharing";
 import { createHash } from "node:crypto";
 import {
-  isQualifyingSaleSharingRequest, canonicalEvidenceBundleSchema, gpcBoundedObservationSchema, gpcResponseAssessmentV3Schema,
+  GPC_OPT_OUT_ADAPTER_VERSION, isQualifyingSaleSharingRequest, canonicalEvidenceBundleSchema, gpcBoundedObservationSchema, gpcResponseAssessmentV3Schema,
   type CanonicalEvidenceBundle, type GpcBoundedObservation, type GpcResponseAssessmentV2,
 } from "@certscore/contracts";
 import { gpcDocumentHash } from "./gpc-signal-capture.js";
@@ -63,7 +63,7 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
     codes.length > 0 && new Set(codes).size === codes.length &&
     codes.every(code => code === "cmp_status_not_loaded" || code === "signal_status_not_ready");
   const semanticReadiness: GpcBoundedObservation["semanticReadiness"] = semantic &&
-    semantic.adapterVersion === "gpc_usca_usnat_and_live_status.v4" &&
+    (semantic.adapterVersion === "gpc_usca_usnat_and_live_status.v4" || semantic.adapterVersion === GPC_OPT_OUT_ADAPTER_VERSION) &&
     semantic.usca === null && !semantic.usnat && semantic.stateSha256 === null &&
     semantic.limitationKeys.every(key => key === "acknowledgment_capture_truncated") &&
     Number.isInteger(afterCommit) && afterCommit >= 0 && afterCommit <= 120_000 &&

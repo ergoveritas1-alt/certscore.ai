@@ -26,7 +26,7 @@ export const METRICS: Metric[] = [
   ...["controller_contact","processing_purposes","legal_basis","recipients_or_vendor_categories","data_retention","data_subject_rights","international_transfers","dpo_contact","supervisory_authority","automated_decision_making_or_profiling"].map(id=>({id:`topic.${id}`,label:id.replaceAll("_"," "),group:"GDPR transparency",denominator:"Readable reportable scans; canonical retained topic states",success:["observed"]})),
   {id:"gpc_path",label:"GPC observation",group:"GPC",denominator:"Readable reportable scans; GPC absence remains unavailable",success:["complete"]},
   {id:"gpc_delivery",label:"GPC header and navigator retained",group:"GPC",denominator:"Readable reportable scans; GPC absence remains unavailable",success:["verified"]},
-  {id:"gpc_finding",label:"Canonical GPC finding · public export",group:"GPC",denominator:"Readable reportable scans; sufficient observation required for no finding",success:["observed"]},
+  {id:"gpc_finding",label:"GPC-tagged records · public finding list",group:"GPC",denominator:"Readable reportable scans; list omits GPC result records; no returned ID is not absence of a canonical result",success:[]},
   {id:"accessibility",label:"Accessibility assessment",group:"Accessibility",denominator:"Required accessibility audits on readable reportable scans",success:["completed"]},
   {id:"accessibility.results",label:"Accessibility rule results retained",group:"Accessibility",denominator:"Required audits on readable reports; zero findings is a measured result",success:["rule_results_retained"]},
   {id:"accessibility.review",label:"Accessibility manual-review items",group:"Accessibility",denominator:"Readable reportable scans except explicitly nonrequired audits; missing counts remain unavailable",success:["review_items_present"]},
@@ -52,7 +52,7 @@ export function mergeVerifiedProgress(archive:ProgressRow,verified:ProgressRow):
   if(archive.scanId!==verified.scanId||verified.states.evidence!=="generation_matched")throw Error("Generation-matched identical scan required");
   const sealed=namespaceSealed(verified);
   // Preserve both interpretations. Never overwrite even a missing public value.
-  return {...archive,states:{...archive.states,...sealed.states},metricSources:{...archive.metricSources,...sealed.metricSources},measurements:{...archive.measurements,...sealed.measurements}};
+  return {...archive,retainedMetricLabels:{...archive.retainedMetricLabels,...sealed.retainedMetricLabels},states:{...archive.states,...sealed.states},metricSources:{...archive.metricSources,...sealed.metricSources},measurements:{...archive.measurements,...sealed.measurements}};
 }
 export function cohortDecision(origin:BotOrigin|undefined, inventory:Obj, bundle?:Obj):string {
   const target = String(bundle?.url??inventory.url??"");

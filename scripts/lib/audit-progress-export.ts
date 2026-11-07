@@ -77,6 +77,12 @@ export function extractExportRow(report:Obj,ref:ProgressRow["refs"][number]):Pro
   }
   for(const {id:q} of QUANTITIES)metricSources[q]=source+(q.startsWith('accessibility.')?'/'+String(report.accessibilityAudit?.engine??'unknown')+'/'+String(report.accessibilityAudit?.engineVersion??'unknown')+'/'+String(report.accessibilityAudit?.scope??'unknown'):'');
   const gpcScopes = pairedGpcAudit(report), pairedScope = gpcScopes.scope;
+  // Keep newly scoped snapshots out of the legacy full-context trend series.
+  if (gpcScopes.cmpScope.startsWith("certscore.gpc-cmp-state-comparison.v2/")) {
+    for (const key of ["detail.gpc.paired_cmp", "detail.gpc.paired_cmp_scope", "detail.gpc.paired_sale_transition", "detail.gpc.paired_sharing_transition"])
+      metricSources[key] = `${metricSources[key]}/${gpcScopes.cmpScope}`;
+  }
+  for(const side of ["baseline","gpc"])for(const axis of ["sale","sharing"]){const key=`detail.gpc.paired_${side}_${axis}`;metricSources[key]=`${metricSources[key]}/${gpcScopes.cmpScope}`+(gpcScopes.cmpScope==='unavailable'?'':`/section_${gpc.cmpStateComparison.sectionId}_v${gpc.cmpStateComparison.sectionVersion}`);}
   for (const q of QUANTITIES.filter(q => q.id.startsWith('gpc.paired.'))) metricSources[q.id] = source + '/' + pairedScope;
   for (const q of QUANTITIES.filter(q => q.id.startsWith('gpc.session.'))) metricSources[q.id] = source + '/' + gpcScopes.sessionScope;
   for(const key of Object.keys(metricSources))if(metricSources[key]===source)delete metricSources[key];

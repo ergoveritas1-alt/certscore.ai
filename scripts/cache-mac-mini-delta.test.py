@@ -66,4 +66,36 @@ class DeltaTests(unittest.TestCase):
             m=delta.refresh(source,root.resolve()/'out',delta.utc('2026-09-28T14:00:00Z'),delta.utc('2026-10-28T14:00:00Z'),prior,inv)
             self.assertEqual(m['counts']['invalid'],1)
 
+    def test_pending_queue_keeps_deferred_ids_even_if_returned_by_overlap(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=pathlib.Path(t)
+            ids=[f'33333333-3333-4333-8333-{i:012d}' for i in range(108)]
+            rows=[self.row(scan_id, status='failed', originalRequestId='original-request') for scan_id in ids]
+            source,prior,inv=self.fixture(root,rows)
+            prior_manifest=prior/'cache-manifest.json'
+            previous=delta.read(prior_manifest)
+            old_inventory={**delta.read(inv),'end':previous['end']}
+            original=prior/'delta-inventory.json'
+            old_bytes=json.dumps(old_inventory).encode()
+            original.write_bytes(old_bytes)
+            old_ref={'file':str(original),'bytes':len(old_bytes),'sha256':delta.digest(old_bytes)}
+            previous['directInventory']=old_ref
+            previous['receipts'] += [{'scanId':scan_id,'state':'source_unavailable','productionStatus':'failed'} for scan_id in ids]
+            prior_manifest.write_text(json.dumps(previous))
+            start=delta.utc('2026-09-28T14:00:00Z')
+            end=delta.utc('2026-10-28T14:00:00Z')
+            plan=delta.pending_plan(delta.pending_exports(previous),start,end)
+            self.assertEqual(plan['pendingRefreshIds'],ids[:100])
+            inv.write_text(json.dumps({**delta.read(inv),'pendingRefreshIds':plan['pendingRefreshIds']}))
+            manifest=self.run_refresh(root,source,prior,inv)
+            missing={r['scanId']:r for r in manifest['receipts'] if r['state']=='source_unavailable'}
+            self.assertEqual(set(missing),set(ids))
+            self.assertEqual(manifest['pendingRechecks']['recheckedCount'],100)
+            self.assertEqual(manifest['transferCounts']['remoteMetadataChecks'],100)
+            for scan_id in ids[100:]:
+                self.assertEqual(missing[scan_id]['selectionInventory'],old_ref)
+                self.assertFalse(missing[scan_id]['remoteMetadataChecked'])
+            next_plan=delta.pending_plan(delta.pending_exports(manifest),start,end)
+            self.assertEqual(next_plan['pendingRefreshIds'][:8],ids[100:])
+
 if __name__=='__main__':unittest.main()

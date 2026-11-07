@@ -1,4 +1,7 @@
+import {REDHAT_OPT_OUT_POLICY,REDHAT_OPT_OUT_RECIPE,REDHAT_OPT_OUT_TARGET,REDHAT_OPT_OUT_DOCUMENT,redHatOptOutAuthorizationSchema,redHatOptOutProofSchema,redHatTerminalChoiceConfirmed,optOutExecutionAssessmentSchema} from './redhat-opt-out';
+export * from './redhat-opt-out';
 import {captureFailureDiagnosticSchema} from "./capture-failure-diagnostic";
+import { EXPLICIT_OPT_OUT_CONTROL_POLICY, explicitOptOutEntranceName } from "./explicit-opt-out-control";
 import { z } from "zod";
 import {saleSharingCanaryAuthorizationSchema} from "./sale-sharing-canary";
 export * from "./sale-sharing-canary";
@@ -12,12 +15,20 @@ export const SALE_SHARING_OPT_OUT_ARTIFACT_BUDGET_MS = 4_500;
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const target = z.string().url().max(2000).refine(value => { const u=new URL(value); return !u.username && !u.password && !u.hash && (u.protocol==="https:" || (u.protocol==="http:" && ["localhost","127.0.0.1","[::1]"].includes(u.hostname))); });
 export const saleSharingOptOutDispatchSchema = z.object({
-  policyVersion: z.enum([SALE_SHARING_OPT_OUT_POLICY,SALE_SHARING_REDIRECT_POLICY,SALE_SHARING_EXACT_ROUTE_POLICY]), enabled: z.literal(true),
+  controlPolicy:z.literal(EXPLICIT_OPT_OUT_CONTROL_POLICY).optional(),
+  policyVersion: z.enum([SALE_SHARING_OPT_OUT_POLICY,SALE_SHARING_REDIRECT_POLICY,SALE_SHARING_EXACT_ROUTE_POLICY,REDHAT_OPT_OUT_POLICY]), enabled: z.literal(true),
   scanId: z.string().min(1).max(160), exactTargetUrl: target,
   redirectAuthorization:saleSharingRedirectAuthorizationSchema.optional(),
   exactRouteAuthorization:saleSharingExactRouteAuthorizationSchema.optional(),
   canaryAuthorization:saleSharingCanaryAuthorizationSchema.optional(),
+  redHatAuthorization:redHatOptOutAuthorizationSchema.optional(),
 }).strict().superRefine((row,ctx)=>{
+  if(row.policyVersion===REDHAT_OPT_OUT_POLICY){
+    if(row.exactTargetUrl!==REDHAT_OPT_OUT_TARGET||!row.redHatAuthorization||row.controlPolicy||row.canaryAuthorization||row.redirectAuthorization||row.exactRouteAuthorization)ctx.addIssue({code:'custom',message:'Red Hat requires its exact source authorization and isolated policy.'});
+    return;
+  }
+  if(row.redHatAuthorization)ctx.addIssue({code:'custom',message:'Historical dispatch cannot acquire Red Hat reload authority.'});
+  if(row.controlPolicy && (row.policyVersion!==SALE_SHARING_OPT_OUT_POLICY||row.canaryAuthorization))ctx.addIssue({code:"custom",message:"Bound control policy requires direct v1 scope."});
   if(row.canaryAuthorization&&(row.policyVersion!==SALE_SHARING_EXACT_ROUTE_POLICY||row.scanId!==row.canaryAuthorization.scanId||row.exactTargetUrl!==row.canaryAuthorization.targetUrl))ctx.addIssue({code:"custom",message:"Canary must bind its exact v3 dispatch."});
   if(row.policyVersion===SALE_SHARING_EXACT_ROUTE_POLICY){
     if(row.redirectAuthorization||!saleSharingExactRouteMatches(row.exactTargetUrl,row.exactRouteAuthorization))ctx.addIssue({code:"custom",message:"Exact route must match its approved source-specific ordered grant."});
@@ -51,6 +62,15 @@ export const saleSharingTimingSchema = z.object({
 export const saleSharingOptOutDiagnosticsSchema = z.object({
   version: z.literal("sale_sharing_execution_diagnostics.v1"),
   timing:saleSharingTimingSchema.optional(),
+  boundControlReadiness:z.object({
+    version:z.literal("explicit_opt_out_readiness.v1"),
+    reason:z.enum(["ready","cutoff","probe_budget","check_limit","document_changed","ambiguous_recipe"]),
+    trigger:z.enum(["initial","mutation","document_state","domcontentloaded","cutoff","pagehide"]),
+    checks:z.number().int().min(0).max(32),probeMs:elapsedMs,elapsedMs,
+    remainingCaptureMs:elapsedMs,
+    documentReadyState:z.enum(["loading","interactive","complete"]),
+    matchedRecipes:z.number().int().min(0).max(2).nullable(),
+  }).strict().optional(),
   milestones: z.array(z.object({stage:z.enum(SALE_SHARING_OPT_OUT_MILESTONES),elapsedMs:z.number().int().min(0).max(SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS)}).strict()).max(6),
   decisionReads: z.array(z.object({phase:z.enum(["before","after","terminal"]),status:z.enum(["observed","unavailable","timeout","invalid","duplicate","failed"]),elapsedMs:z.number().int().min(0).max(SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS)}).strict()).max(3),
   navigation: z.object({
@@ -68,7 +88,7 @@ export const saleSharingOptOutDiagnosticsSchema = z.object({
     ctx.addIssue({code:"custom",message:"Execution checkpoints must be unique and ordered."});
 });
 export const saleSharingOptOutEvidenceSchema = z.object({
-  contractVersion:z.enum(["certscore.sale-sharing-opt-out-evidence.v1","certscore.sale-sharing-opt-out-evidence.v2","certscore.sale-sharing-opt-out-evidence.v3"]),policyVersion:z.enum([SALE_SHARING_OPT_OUT_POLICY,SALE_SHARING_REDIRECT_POLICY,SALE_SHARING_EXACT_ROUTE_POLICY]),
+  contractVersion:z.enum(["certscore.sale-sharing-opt-out-evidence.v1","certscore.sale-sharing-opt-out-evidence.v2","certscore.sale-sharing-opt-out-evidence.v3","certscore.sale-sharing-opt-out-evidence.v4"]),policyVersion:z.enum([SALE_SHARING_OPT_OUT_POLICY,SALE_SHARING_REDIRECT_POLICY,SALE_SHARING_EXACT_ROUTE_POLICY,REDHAT_OPT_OUT_POLICY]),
   scanId:z.string().min(1).max(160),parentDispatchSha256:hash,targetUrl:target,documentToken:z.string().min(1).max(200).nullable(),
   redirectAuthorization:saleSharingRedirectAuthorizationSchema.optional(),
   exactRouteAuthorization:saleSharingExactRouteAuthorizationSchema.optional(),
@@ -77,6 +97,13 @@ export const saleSharingOptOutEvidenceSchema = z.object({
   exactRouteProof:saleSharingExactRouteProofSchema.nullable().optional(),
   startedAt:z.string().datetime(),completedAt:z.string().datetime(),status:z.enum(["complete","limited","unsupported"]),
   recipeVersion:z.string().min(1).max(100).nullable(),provider:z.string().max(100).nullable(),
+  controlPolicy:z.literal(EXPLICIT_OPT_OUT_CONTROL_POLICY).optional(),
+  entranceControl:z.object({
+    tagName:z.enum(["button","a"]),selector:z.enum(["button.ot-sdk-show-settings","a.ot-sdk-show-settings","button#onetrust-pc-btn-handler"]),
+    accessibleLabel:z.string().min(1).max(300),visibleText:z.string().max(300),
+    labelSource:z.enum(["aria_labelledby","aria_label","visible_text"]),href:z.literal("#").optional(),
+    observedAtMs:z.number().int().min(0).max(SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS),
+  }).strict().optional(),
   actionCount:z.number().int().min(0).max(2),submitted:z.boolean(),
   registration:z.enum(["confirmed","unconfirmed","not_attempted"]),confirmedAt:z.string().datetime().nullable(),
   before:decision.nullable(),after:decision.nullable(),
@@ -84,10 +111,28 @@ export const saleSharingOptOutEvidenceSchema = z.object({
   requests:z.array(z.object({hostname:z.string().min(1).max(255).regex(/^[a-z0-9.-]+$/i), vendor:z.string().min(1).max(160),purpose:z.enum(["advertising","marketing"]), httpStatus:z.number().int().min(200).max(599), msAfterConfirmation:z.number().int().min(250).max(750),
     collectionEvidence:z.object({contractVersion:z.literal("canonical_advertising_collection.v1"),endpointSha256:hash,
       registryVersion:z.string().min(1).max(200),ruleIds:z.array(z.string().min(1).max(200)).min(1).max(16)}).strict().optional()}).strict()).max(32),
+  redHatChoice:redHatOptOutProofSchema.optional(),
   executionDiagnostic:captureFailureDiagnosticSchema.optional(),
   executionDiagnostics:saleSharingOptOutDiagnosticsSchema.optional(),
   limitations:z.array(z.string().min(1).max(100)).max(12),
 }).strict().superRefine((p,ctx)=>{
+  if(p.contractVersion==='certscore.sale-sharing-opt-out-evidence.v4'){
+    if(p.policyVersion!==REDHAT_OPT_OUT_POLICY||p.targetUrl!==REDHAT_OPT_OUT_TARGET||!p.redHatChoice||p.controlPolicy||p.entranceControl||p.redirectAuthorization||p.redirectProof||p.exactRouteAuthorization||p.exactRouteProof||p.actionTargetUrl!==(p.redHatChoice?.initialDocumentSha256?REDHAT_OPT_OUT_DOCUMENT:null)||p.tlsValidated!==Boolean(p.redHatChoice?.initialDocumentSha256)||p.provider!=='TrustArc'||p.recipeVersion!==REDHAT_OPT_OUT_RECIPE)ctx.addIssue({code:'custom',message:'v4 requires its exact Red Hat proof and recipe.'});
+    if(p.status==='complete'||p.registration==='confirmed'||p.before||p.after||p.confirmedAt||p.captureComplete||p.observationWindowMs!==0||p.requests.length||p.actionCount>1||p.truncated)ctx.addIssue({code:'custom',message:'CMP category confirmation cannot establish semantic sale/sharing state or post-confirmation collection.'});
+    const r=p.redHatChoice;
+    if(r&&(p.documentToken!==r.initialDocumentSha256||p.submitted&&(p.actionCount!==1||r.clickAtMs===null||!r.control)||!p.submitted&&p.registration!=='not_attempted'||p.submitted&&p.registration!=='unconfirmed'||Date.parse(p.completedAt)-Date.parse(p.startedAt)<r.captureFinishedMs))ctx.addIssue({code:'custom',message:'Action and source proof must agree with packet outcome.'});
+    if(Date.parse(p.completedAt)<Date.parse(p.startedAt))ctx.addIssue({code:'custom',message:'Invalid observation interval.'});
+    return;
+  }
+  if(p.redHatChoice||p.policyVersion===REDHAT_OPT_OUT_POLICY)ctx.addIssue({code:'custom',message:'Historical evidence cannot acquire Red Hat proof.'});
+  if(p.controlPolicy && p.policyVersion!==SALE_SHARING_OPT_OUT_POLICY)ctx.addIssue({code:"custom",message:"Bound controls require direct v1 evidence."});
+  if(p.executionDiagnostics?.boundControlReadiness&&!p.controlPolicy)ctx.addIssue({code:"custom",message:"Bound-control readiness requires its explicit control policy."});
+  if(p.entranceControl){
+    const e=p.entranceControl,base=explicitOptOutEntranceName(e.accessibleLabel);
+    if(!p.controlPolicy||!p.documentToken||!base||e.visibleText.trim()&&explicitOptOutEntranceName(e.visibleText)!==base||
+      !(e.selector===`${e.tagName}.ot-sdk-show-settings`||e.tagName==="button"&&e.selector==="button#onetrust-pc-btn-handler")||(e.tagName==="a"?e.href!=="#":e.href!==undefined))
+      ctx.addIssue({code:"custom",message:"Entrance names and route must agree on the bound explicit choice."});
+  }
   const v2=p.contractVersion==="certscore.sale-sharing-opt-out-evidence.v2";
   const v3=p.contractVersion==="certscore.sale-sharing-opt-out-evidence.v3";
   if(v3){
@@ -129,9 +174,10 @@ export function saleSharingOptOutBindsDocument(packet:SaleSharingOptOutEvidence,
   return packet.targetUrl===documentUrl||packet.contractVersion!=="certscore.sale-sharing-opt-out-evidence.v1"&&saleSharingOptOutActionTarget(packet)===documentUrl;
 }
 export function saleSharingOptOutMatchesDispatch(packet:SaleSharingOptOutEvidence,dispatch:SaleSharingOptOutDispatch):boolean {
-  return packet.scanId===dispatch.scanId&&packet.targetUrl===dispatch.exactTargetUrl&&packet.policyVersion===dispatch.policyVersion&&
+  return packet.controlPolicy===dispatch.controlPolicy&&packet.scanId===dispatch.scanId&&packet.targetUrl===dispatch.exactTargetUrl&&packet.policyVersion===dispatch.policyVersion&&
     packet.redirectAuthorization?.alternateTargetUrl===dispatch.redirectAuthorization?.alternateTargetUrl&&
-    JSON.stringify(packet.exactRouteAuthorization)===JSON.stringify(dispatch.exactRouteAuthorization);
+    JSON.stringify(packet.exactRouteAuthorization)===JSON.stringify(dispatch.exactRouteAuthorization)&&
+    JSON.stringify(packet.redHatChoice?.source)===JSON.stringify(dispatch.redHatAuthorization);
 }
 export const verifiedSaleSharingOptOutSchema=z.object({
   evidence:saleSharingOptOutEvidenceSchema,sha256:hash,sizeBytes:z.number().int().positive().max(32000),verificationStatus:z.literal("verified"),
@@ -140,3 +186,14 @@ export type VerifiedSaleSharingOptOut=z.infer<typeof verifiedSaleSharingOptOutSc
 
 export const saleSharingOptOutLaneOutcomeSchema=z.object({diagnostic:captureFailureDiagnosticSchema.optional(),status:z.enum(["joined","limited"]),startedAt:z.string().datetime(),completedAt:z.string().datetime(),limitationCode:z.enum(["opt_out_budget_exhausted","opt_out_worker_failed","opt_out_inspection_cancelled"]).optional()}).strict();
 export type SaleSharingOptOutLaneOutcome=z.infer<typeof saleSharingOptOutLaneOutcomeSchema>;
+
+/** Derived only after the original packet checksum and target binding are verified. */
+export function deriveOptOutExecutionAssessment(packet:SaleSharingOptOutEvidence,packetSha256:string){
+  const proof=packet.redHatChoice,terminal=proof?.reads.find(r=>r.phase==='terminal');
+  const confirmed=proof?packet.submitted&&redHatTerminalChoiceConfirmed(proof):packet.registration==='confirmed';
+  const readAt=confirmed?(proof?terminal!.atMs:Date.parse(packet.confirmedAt!)-Date.parse(packet.startedAt)):null;
+  return optOutExecutionAssessmentSchema.parse({version:'opt_out_execution_assessment.v1',scanId:packet.scanId,packetSha256,
+    actionCompleted:packet.submitted,choiceConfirmation:confirmed?(proof?'confirmed_terminal':'confirmed_initial'):packet.submitted?'unconfirmed':'not_attempted',
+    confirmationBasis:proof?'cmp_explicit_choice':'gpp_sale_sharing',confirmationReadAtMs:readAt!==null&&readAt>=0&&readAt<=SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS?readAt:null,
+    postConfirmationObservation:packet.status==='complete'&&packet.captureComplete?'complete':packet.registration==='confirmed'?'limited':'not_measured',observationWindowMs:packet.observationWindowMs});
+}

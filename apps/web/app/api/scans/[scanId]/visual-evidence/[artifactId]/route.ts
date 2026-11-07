@@ -1,3 +1,4 @@
+import {matchesReportVisualReference} from '../../../../../../server/scans/report-visual-references';
 import { NextResponse } from "next/server";
 import { getVisualEvidenceArtifacts } from "../../../../../../lib/scans/visual-evidence";
 import { getPublicScanById } from "../../../../../../server/scans/get-scan-by-id";
@@ -28,6 +29,8 @@ export async function GET(_request: Request, context: RouteContext) {
   const decodedArtifactId = decodeURIComponent(artifactId);
   const storedArtifact = getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts)
     .find((candidate) => candidate.id === decodedArtifactId) ?? null;
+  const params=new URL(_request.url).searchParams;
+  if(!matchesReportVisualReference(params,scanRecord,storedArtifact))return NextResponse.json({error:"The saved screenshot reference is unavailable or its report generation has changed."},{status:409});
   const artifact = storedArtifact ?? (getLocalV2DagReportInput(scanRecord)
     ? await resolveLocalV2DagVisualEvidencePointer(scanRecord, decodedArtifactId)
     : null);

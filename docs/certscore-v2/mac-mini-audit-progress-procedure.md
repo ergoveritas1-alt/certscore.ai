@@ -1,6 +1,6 @@
 # CertScore.ai Mac mini audit progress
 
-Procedure version: 2026-11-02.v9. Module: `certscore.mac-mini-daily-progress.v5`. Acquisition: `certscore.mac-mini-direct-delta.v1`.
+Procedure version: 2026-11-06.v15. Module: `certscore.mac-mini-daily-progress.v5`. Acquisition: `certscore.mac-mini-direct-delta.v1`.
 
 This audit-only supplement is owner-authorized for the existing daily audit. It
 uses the preceding calendar month, grouped by America/Los_Angeles date. Partial
@@ -535,3 +535,235 @@ compliance. The same query, schedule, model, project, budget and audit window
 remain unchanged. Run the new audit-progress-gpc tests with existing audit tests,
 review source pins, and activate the reviewed candidate only after local checks.
 No audit checkpoint, latest snapshot or historical output is rewritten here.
+
+
+## GPC and opt-out measurement correction — November 5
+
+The owner authorized missing dashboard measures, clearer labels and future daily
+collection without changing capture budgets. This section supersedes the
+control-only daily extract restriction. On November 6 the owner approved
+`certscore.audit-choice-summary.v2` for new daily exports and intake.
+The fixed projection adds execution and confirmation evidence, the bound
+packet hash, and conditional dispatch from the same persisted generation.
+Historical v1 receipts retain their original source and coverage. Check the
+active source pins before submitting the ECS task.
+Use the exact-ID cache tool's `--plan-pending` mode against the prior verified
+manifest and the new month window. Copy its `pendingRefreshIds` into
+`begin.json`. It prioritizes least recently checked entries and targets up to
+100 in the existing SELECT. Deferred in-window entries keep their original
+selection receipts and last check date, even when the recent overlap returns
+the ID. They receive no archive lookup and remain ID-only gaps. The cache
+records the targeted, actually rechecked, deferred and aged-out counts.
+The existing one bounded SELECT now also returns at most 8,192 bytes per row of
+persisted broader opt-out assessment, scope, configured enablement, returned
+opt-out action summary and exact canonical GPC/opt-out IDs with surfaced state.
+No policy excerpts, request payloads, cookies, raw worker packets or new findings
+are collected. Preserve the existing eight-day/5,000-row/45-second query limits,
+32 MB extract cap and 64-receipt history cap. Oversized summaries stay unavailable.
+
+The optional `priorityEvidence` section in v2 carries compact terminal
+Accept/Reject and paired GPC/CMP facts from the same ready report generation.
+Terminal rows require a completed click and recheck the authorized control,
+decision and capture times. Paired snapshots recheck independent source hashes,
+scope and section version before displaying sale and sharing transitions.
+These rows use separate audit IDs and preserve public evidence. If the combined
+summary exceeds 8,192 bytes, the query retains the existing v2 summary and
+omits the optional section. Missing original facts remain unavailable.
+
+The lower-priority optional `operationsEvidence` section uses compact states
+from the same v2 query. It matches the retained policy projection's scan and
+original bundle SHA-256/size to the unique verified result event. Candidate
+fetch states cover only the returned, target-relevant candidates. Ownership and
+document role are producer declarations; they do not establish independent
+governing-policy attribution. Text receipt states preserve complete and limited
+producer verification separately from `sealed.policy_full_text`, which still
+requires the original text bytes and their verified ancestry. The query never
+returns policy text, URLs, entity names or worker packets. The CMP coordinator
+series distinguishes an explicit joined result from a limited attempt. A flag,
+missing receipt, or recognized CMP does not establish worker dispatch; original
+profile omissions keep their existing sealed series. Report missing receipt
+coverage by date. Under the 8,192-byte cap, keep the v2 core first, then the
+Accept/Reject and paired GPC/CMP section, then operations. Historical gaps stay
+unavailable. No extra task, archive read or cloud retention is needed.
+
+The ECS launch override has a separate 8,192-byte limit. Pack each pending UUID
+as its exact 16 bytes, resolve origin once for the union of overlap and pending
+IDs, and transport the priority facts as fixed scalar tuples. Keep support for
+older structured priority receipts. Record the exact launch sizes and the
+optional operations decision in delta-query-transport.json. If operations cannot
+fit the launch override, omit only that section; retain the v2 core, priority
+facts and every planned UUID in the same query. Fail before the AWS task if that
+required payload does not fit. Apply existing verified local policy receipts
+regardless of optional query coverage.
+
+`sealed.opt_out.*` distinguishes summary coverage, broad presence/basis/scope,
+signal kind/scope, policy methods, configured enablement, retained worker outcome,
+evidence availability, recipe, action, submission, registration, observation,
+effectiveness and limitations. Configuration is not dispatch proof. No packet is
+not failure. Broader presence is not first-layer control presence. Unretained
+worker outcomes remain unavailable; no runtime instrumentation is introduced.
+
+The effective opt-out dispatch row reads the existing verified original
+manifest and bundle, or the compact result verification receipt carried by the
+same persisted projection. A presence-only profile establishes exclusion. A
+valid opt-out lane outcome records dispatch; simultaneous exclusion and lane
+proof are a conflict. Missing proof stays unavailable, even if enablement is
+configured. The validation worker derives the receipt from bytes it already
+checks. The daily SELECT returns the dispatch enum and bounded conditional
+decision from one result event, within the same summary cap. Keep old summaries
+readable and never backfill dispatch from
+the currently deployed profile. The browser and source gates verify this row.
+Incremental processing and metadata are estimated below $0.05/month at
+100,000 scans; no extra queries, object reads, or browser capture are added.
+For the daily v2 projection, reserve up to another $0.10/month for processing
+and log volume inside the existing $5/month audit allowance. The same single
+query and byte, row, and time limits apply.
+`sealed.choice_finding.*` counts exact persisted canonical records separately
+from public finding lists. A neutral GPC result is not a risk/failure count.
+Only a complete retained canonical subset supports not_returned for an exact ID.
+Keep full-report and compact-extract provenance in separate comparison series.
+
+GPC public evidence additionally records CMP receipt, semantic-readiness reason
+and checkpoint, independently bound paired sale/sharing settings, baseline
+advertising opportunity, both-zero pairs, early-zero/full-visit positives,
+request sample cap, supported/unresolved activity-role counts, processing-context
+counts and distinct retained recipients. Processing counts may overlap role
+counts and are not new legal qualification. Quantities preserve request-window,
+qualification, resolver and coverage boundaries. Mixed measured totals display
+**Separate measurement groups**, with source values available below, rather than
+Unavailable. The returned CMP-provider filter applies to tables, charts and CSVs.
+
+`prepare-audit-opt-out-inputs.ts` rejects a current inventory without the summary
+version or a completed row without its summary. Legacy sources remain readable
+and are carried forward. Local full retained reports can supply the same summary;
+missing historical fields are never reconstructed or retrieved through new scans.
+Every daily summary reports per-date new-summary coverage, latest original
+retained-report date, missing data and source limits.
+
+Run the focused GPC, choice, opt-out, extraction, table, contract and acquisition
+tests, strict tooling types, and file-only browser checks. The data gate re-reads
+hash-verified original exports and generation-matched persisted summaries,
+recomputes GPC/choice rows and reconciles every aggregate/CSV. Its `choiceEvidence`
+check is mandatory at publication. Do not silently update pins during daily runs.
+
+Current local implementation/replay adds $0 AWS spend. Extra bounded processing
+and compressed transport in the existing daily query is conservatively estimated
+below $0.10/month, pre-approved below $1 and inside the existing $5 allowance;
+the existing v2 reserve covers the compact operations fields; the current
+planning total remains $1.13 per 31 days. No extra recurring query, capture, model/API call,
+paid retention, service or capacity is added. Schedule/model/project, production
+configuration and protected checkpoint/issue/release/model ledgers stay unchanged.
+
+The expanded local dashboard permits up to 200,000,000 bytes for dashboard.json and 100,000,000 bytes for dashboard.html (previously 160,000,000 / 80,000,000). These local output/read limits retain the added measures; source-query, capture, evidence and cloud-retention budgets are unchanged. Incremental recurring infrastructure cost from the local file limit is $0.
+
+## Scoped paired CMP states — November 5
+
+New `certscore.gpc-cmp-state-comparison.v2` packets explicitly describe
+`main_document` snapshots. Historical v1 retains its full-context requirements.
+Record `detail.gpc.paired_cmp_scope` independently of availability. Separate v2
+availability and sale/sharing transition series by contract and scope; never
+merge their trend rates into historical full-context series. Missing or invalid
+packets stay unavailable or invalid, never a pass. A ready current state is not
+proof of persistence, downstream enforcement, GPC causation or compliance.
+
+The scanner now takes its sole paired signal read after already-required page
+inventory and before the existing cookie read; both semantic snapshots use the
+terminal passive checkpoint. Fixed request horizons remain 250/500/1000/3000/5000
+ms. Show the verified shared horizon and each semantic timestamp separately.
+Do not imply that all scans now observe five seconds. Existing caps, scoring,
+source verification and historical evidence remain unchanged. This is a local
+implementation; audit actual producer artifacts, not assumed deployment state.
+
+Verification and authorization receipt:
+`outputs/gpc-timing-cmp-2026-11-05/README.md`.
+
+
+## Forward-looking gap triage — November 6 owner direction
+
+Review new eligible scans only; historical backfill is not requested. For every
+potential gap, answer these questions in order:
+
+1. **Utility:** Which concrete audit question or decision does this item support?
+   Link its v2 canonical record/field, scope, applicable population and consumer.
+   Distinguish independent information from a duplicate label, receipt or display
+   variant. Missing values do not themselves make a useful item unnecessary.
+2. **Disposition:** Keep a distinct useful item; normalize genuinely equivalent
+   representations under one canonical item; or remove an obsolete/no-utility
+   row from the current audit. Do not add a hidden-row toggle. Do not destroy
+   historical evidence or merge different windows, sources or denominators.
+3. **Resolution for future scans:** Trace capture, persistence, bounded summary
+   or export, audit mapping and display. Identify the failing stage using exact
+   source/schema/generation bindings. Prefer wiring already-retained evidence or
+   fixing a local mapping over new capture. Define an offline test and a measurable
+   acceptance criterion for new eligible scans, with explicit non-applicability.
+4. **Action and limits:** Complete authorized local fixes and tests. Record the
+   remaining producer/release/acquisition dependency, cost and expected benefit.
+   Deployment, new acquisition, extra queries and capture/budget expansion remain
+   on hold. Ask for guidance only for a real unresolved product choice or an action
+   outside existing authorization; never invent evidence to close a badge.
+
+Required review outcomes: keep / normalize / remove, utility statement, canonical
+binding, eligibility, missing stage (or unresolved cause), proposed fix, validation,
+forward coverage by date/source/version, and remaining authorization dependencies.
+A useful observation may legitimately be unavailable; the acceptance condition is
+truthful supported evidence or an explicit reason, not 100% successful outcomes.
+
+Current priorities and utility:
+
+- Accept/Reject terminal verification: **keep**. It answers whether the matching
+  choice was still verified at the terminal checkpoint, independently of click
+  completion and initial registration. Use only the authorized completed-action
+  population and exact control/action/time/source witness. Preserve unavailable,
+  unverified and verified separately.
+- Paired GPC/CMP snapshots and transitions: **keep**. They show the independently
+  observed settings in each arm and any descriptive difference. Preserve both
+  checkpoint times, scopes, delivery and source bindings. They do not establish
+  GPC causation or downstream effectiveness. Do not infer a transition from one
+  snapshot or equate inapplicability with failed capture.
+- Exact CMP banner/Reject/privacy-link display criteria: **normalize** into the
+  already-existing consent-surface, first-layer Reject and privacy-notice evidence.
+  Source review of cmp-audit-projection.ts confirms these report rows are derived
+  presentation. They are no longer standalone audit acquisition gaps. Keep report
+  fields and original scopes; no exact display-value parity is asserted.
+- California review plus coverage, three distinct disclosure families, passive
+  field semantic categories and destination relationships: **keep**, grouped under
+  their canonical records. Existing receipt readers are validated locally; their
+  ongoing future delivery still needs compatible source receipts. No extra full-file
+  download or broader query is authorized to close that delivery dependency.
+- Field input type, required and disabled/readOnly: **record context**, with existing
+  values preserved. Remove independent daily gap-closure priorities, without
+  merging the flags or treating inferred categories as HTML input types.
+
+Local forward hardening now shares one compact scalar projection between full
+persisted-report replay and the existing v2 query. Priority delivery diagnostics
+separate source_missing, no_completed_click, eligibility_unknown, included,
+summary_size_bound and invalid/unbound evidence. These are not action outcomes.
+Historical summaries lacking coverage metadata stay unavailable. Local full-report
+replay does not produce query-delivery counts. Current completed query rows must
+include valid diagnostic metadata, a compact size-bound hint, or core size_bound.
+If even the hint cannot fit, preserve the core unchanged and leave diagnostics
+unavailable; the current-query guard checks this exact near-cap exception.
+Optional metadata must never evict otherwise fitting core evidence.
+
+Priority content is retained before optional operations under the unchanged
+8,192-byte row cap. The query builder compacts only whitespace outside SQL quoted
+literals/identifiers. The 100-ID high-entropy envelope test remains below 8,192
+bytes; runtime preflight still fails closed if actual configuration cannot fit.
+Eight days, 5,000 rows, 45 seconds, one task and all pending-export continuity
+remain unchanged. No production/AWS query is run by the offline builder or tests.
+
+Report/full source receipts must match the current row's scan, timestamp,
+original creator, generation and source hash before supplying audit values.
+Changed binding is an integrity error, not a comparable or recovered value.
+
+Offline producer-fixture flow, adversarial binding, missing-eligibility and
+size-bound cases verify the local path. Production new-scan verification is still
+pending authorization to acquire the next data. No deployment, new acquisition,
+raw bundle download, scan, action or historical report rewrite is authorized.
+Added bounded diagnostic transport is estimated below $0.01/month inside the
+existing v2 reserve and unchanged $1.13/31-day planning total. Current work costs $0.
+
+The four baseline/GPC sale/sharing scalar audit rows now use the same strict paired
+packet reader as transitions. Public export and persisted-summary series stay
+separate, with unavailable values for missing/unbound pairs. No new query fields,
+capture or acquisition are needed for these mappings. Verify with audit-forward-gap.test.ts.

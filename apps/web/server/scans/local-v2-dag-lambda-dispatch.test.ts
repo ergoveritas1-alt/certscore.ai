@@ -744,3 +744,23 @@ test("web reservation burns one attempt and rechecks expiry before allowing invo
     await assert.rejects(reserveSaleSharingCanaryDispatch(payload,{signal:controller.signal,campaign,ledger}));assert.equal(writes,2);
   }finally{if(previous===undefined)delete process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;else process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED=previous;}
 });
+
+test('conditional opt-out opt-in preserves the exact Accept and Reject dispatch configurations',()=>{
+ const keys=['CERTSCORE_CONDITIONAL_SALE_SHARING_OPT_OUT_ENABLED','CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED'];const previous=keys.map(k=>process.env[k]);
+ try{
+  delete process.env.CERTSCORE_CONDITIONAL_SALE_SHARING_OPT_OUT_ENABLED;process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED='1';
+  const config=buildLambdaScanConfig({orchestrationMode:'sharded',saleSharingEnabled:true,scanFrom:'california'});
+  Object.assign(config.execution!.v2DagLambda!,{postAcceptWorkerEnabled:true,postAcceptWorkerRolloutMode:'all_eligible',postRefusalRejectWorkerEnabled:true,postRefusalRejectWorkerRolloutMode:'all_eligible'});
+  const original=buildLocalV2DagLambdaDispatchPayload({scanConfig:config,scanId:'conditional-scan'});
+  assert.ok(original.postAcceptObservation);assert.ok(original.postRefusalObservation);
+  process.env.CERTSCORE_CONDITIONAL_SALE_SHARING_OPT_OUT_ENABLED='1';
+  const conditional=buildLocalV2DagLambdaDispatchPayload({scanConfig:config,scanId:'conditional-scan'});
+  assert.equal(conditional.privacyCaptureProfile,'conditional_opt_out_seven_workers.v1');
+  assert.deepEqual(conditional.postAcceptObservation,original.postAcceptObservation);
+  assert.deepEqual(conditional.postRefusalObservation,original.postRefusalObservation);
+  assert.deepEqual(conditional.gpcObservation,original.gpcObservation);
+  assert.equal(conditional.saleSharingOptOut?.exactTargetUrl,original.targetUrl);
+  process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED='0';
+  assert.equal(buildLocalV2DagLambdaDispatchPayload({scanConfig:config,scanId:'conditional-scan'}).privacyCaptureProfile,'presence_only_six_workers.v1');
+ }finally{keys.forEach((k,i)=>{if(previous[i]===undefined)delete process.env[k];else process.env[k]=previous[i];});}
+});

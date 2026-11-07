@@ -1,6 +1,8 @@
+import {REDHAT_OPT_OUT_POLICY} from '@certscore/contracts';
+import {runRedHatOptOutObserver} from './redhat-opt-out-observer.js';
 import {createHash} from "node:crypto";
 import { chromium, type Browser, type BrowserContext, type Locator } from "playwright";
-import { describeCaptureFailure, classifyConsentControlLabel, saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, SALE_SHARING_REDIRECT_POLICY, SALE_SHARING_EXACT_ROUTE_POLICY, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, type SaleSharingOptOutDispatch, type SaleSharingOptOutEvidence } from "@certscore/contracts";
+import { describeCaptureFailure, classifyConsentControlLabel, explicitOptOutEntranceName, BOUND_OPT_OUT_RECIPE, EXPLICIT_OPT_OUT_CONTROL_POLICY, saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, SALE_SHARING_REDIRECT_POLICY, SALE_SHARING_EXACT_ROUTE_POLICY, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, type SaleSharingOptOutDispatch, type SaleSharingOptOutEvidence } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { CANONICAL_VENDOR_RESOLVER_VERSION, resolveCanonicalVendor, isCanonicalAdvertisingCollectionCandidate } from "@certscore/vendor-resolver";
 import { chromiumContextOptions, chromiumLaunchOptions } from "./playwright-runtime.js";
@@ -9,6 +11,7 @@ import { installWebBotAuthRoute } from "./web-bot-auth-routing.js";
 import { dispatchLocatorClickWithVerifiedGeometry, inspectLocatorActionability, locatorActionabilitySupportsVerifiedDispatch } from "./cmp-control-actionability.js";
 import { readSaleSharingDecision, SALE_SHARING_DECISION_READ_MS } from "./sale-sharing-decision-read.js";
 import { waitForSaleSharingDocument } from "./sale-sharing-navigation.js";
+import { waitForExplicitOptOutControl } from "./explicit-opt-out-readiness.js";
 import { installSaleSharingRedirectGuard } from "./sale-sharing-redirect.js";
 import { safeSaleSharingSettingsEntrance } from "./sale-sharing-settings-entrance.js";
 import { waitForSaleSharingSettingsDocument } from "./sale-sharing-settings-readiness.js";
@@ -19,14 +22,18 @@ import { createGimbalPageWithGuards, usesGimbalSetupOverlap } from "./gimbal-set
 export async function runSaleSharingOptOutObserver(input: {
   config: SaleSharingOptOutDispatch; parentDispatchSha256: string; signal?: AbortSignal; browser?: Browser; deadlineAtMs?: number;
 }): Promise<SaleSharingOptOutEvidence> {
-  const config=saleSharingOptOutDispatchSchema.parse(input.config), started=Date.now();
+  const config=saleSharingOptOutDispatchSchema.parse(input.config);
+  if(config.policyVersion===REDHAT_OPT_OUT_POLICY)return runRedHatOptOutObserver({...input,config});
+  const started=Date.now();
   const captureBudgetMs=Math.max(1,Math.min(SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS,(input.deadlineAtMs??Infinity)-started-250)),deadline=started+captureBudgetMs;
+  const boundControls=config.controlPolicy===EXPLICIT_OPT_OUT_CONTROL_POLICY;
   const exactRoute=config.policyVersion===SALE_SHARING_EXACT_ROUTE_POLICY;
   const redirectedPolicy=exactRoute||config.policyVersion===SALE_SHARING_REDIRECT_POLICY;
   const packet:SaleSharingOptOutEvidence={contractVersion:exactRoute?"certscore.sale-sharing-opt-out-evidence.v3":redirectedPolicy?"certscore.sale-sharing-opt-out-evidence.v2":"certscore.sale-sharing-opt-out-evidence.v1",policyVersion:config.policyVersion,
     scanId:config.scanId,parentDispatchSha256:input.parentDispatchSha256,targetUrl:config.exactTargetUrl,documentToken:null,
     ...(redirectedPolicy?{actionTargetUrl:null,tlsValidated:false,...(exactRoute?{exactRouteAuthorization:config.exactRouteAuthorization,exactRouteProof:null}:{redirectAuthorization:config.redirectAuthorization,redirectProof:null})}:{}),
     startedAt:new Date(started).toISOString(),completedAt:new Date(started).toISOString(),status:"unsupported",recipeVersion:null,provider:null,
+    ...(config.controlPolicy?{controlPolicy:config.controlPolicy}:{}),
     actionCount:0,submitted:false,registration:"not_attempted",confirmedAt:null,before:null,after:null,
     observationWindowMs:0,captureComplete:false,truncated:false,requests:[],limitations:[],
     executionDiagnostics:{version:"sale_sharing_execution_diagnostics.v1",milestones:[],decisionReads:[],
@@ -95,7 +102,9 @@ export async function runSaleSharingOptOutObserver(input: {
     // Inspect the committed response before waiting for page scripts. HTTP errors
     // and changed targets must not consume the remainder of the action budget.
     if(timing)timing.navigationMs=offset();
-    const response=await page.goto(config.exactTargetUrl,{waitUntil:"commit",timeout:remaining()});
+    const navigationAllowance=boundControls?remaining()-submissionReserveMs-250-100:remaining();
+    if(navigationAllowance<=0)throw new Error("insufficient_capture_budget");
+    const response=await page.goto(config.exactTargetUrl,{waitUntil:"commit",timeout:navigationAllowance});
     if(timing)timing.commitMs=offset();
     if(!response)throw new Error("document_response_missing");
     navigation.responseStatus=response.status();
@@ -120,7 +129,7 @@ export async function runSaleSharingOptOutObserver(input: {
       const settings=exactRoute && packet.exactRouteProof?.hops.length
         ? recipe.settingsEntrances?.find(entry=>entry.originalTargetUrl===config.exactTargetUrl && entry.actionTargetUrl===expectedTarget())
         : undefined;
-      return {...recipe,settings,entranceSelector:[recipe.entranceSelector,settings?.buttonSelector,settings?.anchorSelector].filter(Boolean).join(", ")};
+      return {...recipe,settings,entranceSelector:[recipe.entranceSelector,boundControls&&recipe.entranceSelector==="button.ot-sdk-show-settings"?"a.ot-sdk-show-settings, button#onetrust-pc-btn-handler":undefined,settings?.buttonSelector,settings?.anchorSelector].filter(Boolean).join(", ")};
     });
     stage="navigation";
     if(recipes.some(recipe=>recipe.settings)){
@@ -130,6 +139,15 @@ export async function runSaleSharingOptOutObserver(input: {
         await bound();
         throw new Error(ready.diagnostics.reason==="cutoff"?"settings_readiness_cutoff":"settings_readiness_incomplete");
       }
+      navigation.readiness=ready.state;
+    }else if(boundControls){
+      // Preserve all existing action/post-confirmation reserves. Readiness may
+      // finish before unrelated deferred scripts, or after DCL for a late CMP.
+      const cutoff=deadline-submissionReserveMs-250-100;
+      const ready=await waitForExplicitOptOutControl(page,recipes,cutoff,deadline,expectedTarget());
+      packet.executionDiagnostics!.boundControlReadiness=ready.diagnostics;
+      await bound();
+      if(!ready.state)throw new Error(`explicit_readiness_${ready.diagnostics.reason}`);
       navigation.readiness=ready.state;
     }else{
       navigation.readiness=await waitForSaleSharingDocument(page,recipes,remaining());
@@ -152,12 +170,18 @@ export async function runSaleSharingOptOutObserver(input: {
     await bound();
     if(indexes.length!==1){packet.limitations.push(indexes.length?"ambiguous_registered_recipe":"no_unique_registered_recipe");return finish();}
     const definition=definitions[indexes[0]!]!,recipe=recipes[indexes[0]!]!;
-    packet.provider=definition.canonicalName;packet.recipeVersion=recipe.version;mark("recipe_selected");
+    packet.provider=definition.canonicalName;packet.recipeVersion=boundControls?BOUND_OPT_OUT_RECIPE:recipe.version;mark("recipe_selected");
     const safeControl=async(control:Locator,submit:boolean)=>{
       if(await control.count()!==1 || !await control.isVisible() || !await control.isEnabled({timeout:remaining()}))return false;
-      const label=await control.evaluate(node=>{
+      const names=await control.evaluate((node,options)=>{
         const el=node as HTMLElement;
-        if(el.tagName!=="BUTTON" || el.closest("form") || el.hasAttribute("form") || el.getAttribute("type")==="submit")return null;
+        if((options.boundControls&&el.getRootNode()!==document) || (el.tagName!=="BUTTON" && !(options.allowAnchor && el.tagName==="A")) || el.closest("form") || el.hasAttribute("form") || el.getAttribute("type")==="submit")return null;
+        const banner=options.boundControls&&!options.submit&&el.id==="onetrust-pc-btn-handler";
+        if(banner&&!el.closest('#onetrust-banner-sdk'))return null;
+        if(el.tagName==="A" && (el.getAttribute("href")!=="#" || el.hasAttribute("target") || el.hasAttribute("download") ||
+          !el.matches('a.ot-sdk-show-settings') || new URL((el as HTMLAnchorElement).href).href!==`${options.targetUrl}#`))return null;
+        const visible=el.innerText;
+        if(visible.length>300)return null;
         // Use the browser-accessible naming precedence; missing referenced IDs
         // fail closed rather than borrowing unrelated nearby text.
         const labelledBy=el.getAttribute("aria-labelledby")?.trim();
@@ -165,14 +189,21 @@ export async function runSaleSharingOptOutObserver(input: {
           const ids=labelledBy.split(/\s+/);
           if(ids.length>4 || ids.some(id=>document.querySelectorAll(`[id="${CSS.escape(id)}"]`).length!==1))return null;
           const name=ids.map(id=>document.getElementById(id)!.textContent??"").join(" ");
-          return name.length<=300?name:null;
+          return name.length<=300?{label:name,visible,banner,tag:el.tagName.toLowerCase(),source:"aria_labelledby" as const}:null;
         }
         const name=el.getAttribute("aria-label")||el.innerText;
-        return name.length<=300?name:null;
-      });
-      if(!label)return false;
+        return name.length<=300?{label:name,visible,banner,tag:el.tagName.toLowerCase(),source:el.getAttribute("aria-label")?"aria_label" as const:"visible_text" as const}:null;
+      },{allowAnchor:boundControls&&!submit,boundControls,submit,targetUrl:expectedTarget()});
+      if(!names)return false;
+      const {label,visible:visibleText}=names;
+      if(boundControls&&!submit){
+        const base=explicitOptOutEntranceName(label);
+        const safe=Boolean(base&&(!visibleText.trim()||explicitOptOutEntranceName(visibleText)===base));
+        if(safe)packet.entranceControl={tagName:names.tag as "button"|"a",selector:names.banner?"button#onetrust-pc-btn-handler":`${names.tag}.ot-sdk-show-settings` as "button.ot-sdk-show-settings"|"a.ot-sdk-show-settings",
+          accessibleLabel:label,visibleText,labelSource:names.source,...(names.tag==="a"?{href:"#" as const}:{}),observedAtMs:offset()};
+        return safe;
+      }
       // An accessible opt-out name cannot authorize a visibly different action.
-      const visibleText=await control.innerText({timeout:remaining()});
       if(visibleText.trim()){
         const visible=classifyConsentControlLabel({label:visibleText,usage:"action",hasConsentContext:true,hasPreferenceContext:true});
         if(visible.intent!=="privacy_opt_out" || visible.matchStrength!=="direct")return false;
@@ -185,7 +216,13 @@ export async function runSaleSharingOptOutObserver(input: {
     stage="choice_action";
     const dialog=page.locator(recipe.dialogSelector);
     if(await dialog.count()!==1 || !await dialog.isVisible()){
-      let entrance=page.locator(definition.saleSharingOptOut!.entranceSelector),settingsSelected=false;
+      let entrance=page.locator(boundControls?recipe.entranceSelector:definition.saleSharingOptOut!.entranceSelector),settingsSelected=false;
+      // Select the explicit banner path once. An unsafe or generic banner
+      // control must never trigger a fallback click on a footer control.
+      if(boundControls&&definition.saleSharingOptOut!.entranceSelector==="button.ot-sdk-show-settings"){
+        const bannerEntrance=page.locator('button#onetrust-pc-btn-handler');
+        if(await bannerEntrance.count()>0)entrance=bannerEntrance;
+      }
       if(timing)timing.entrance="explicit";
       if(recipe.settings){
         const primary=page.locator(recipe.settings.buttonSelector);
@@ -204,8 +241,8 @@ export async function runSaleSharingOptOutObserver(input: {
       await bound();if(remaining()<submissionReserveMs+250)throw new Error("insufficient_capture_budget");
       await dispatchLocatorClickWithVerifiedGeometry(entrance,remaining()-submissionReserveMs,()=>{
         if(remaining()<=submissionReserveMs)throw new Error("insufficient_capture_budget");
-        if(changed||page.url()!==expectedTarget())throw new Error("document_changed");packet.actionCount++;
-      });await bound();
+        if(changed||page.url()!==expectedTarget())throw new Error("document_changed");
+      },{onDispatchCommitted:()=>{packet.actionCount++;}});await bound();
     }else if(timing){timing.entrance="visible_dialog";timing.entranceMs=offset();}
     if(await dialog.count()!==1 || !await dialog.isVisible() || await dialog.locator('input:not([type="hidden"]), textarea, select, form').count()){
       packet.limitations.push("unsupported_preference_fields_or_dialog");return finish();
@@ -222,8 +259,7 @@ export async function runSaleSharingOptOutObserver(input: {
     await dispatchLocatorClickWithVerifiedGeometry(submit,remaining()-submissionReserveMs,()=>{
       if(remaining()<=submissionReserveMs)throw new Error("insufficient_capture_budget");
       if(changed||page.url()!==expectedTarget())throw new Error("document_changed");
-      packet.actionCount++;packet.registration="unconfirmed";
-    });packet.submitted=true;mark("submitted");await bound();
+    },{onDispatchCommitted:()=>{packet.actionCount++;packet.registration="unconfirmed";}});packet.submitted=true;mark("submitted");await bound();
     packet.after=await readDecision("after");
     if(!packet.after || packet.after.sectionId!==packet.before.sectionId || packet.after.sale!==1 || packet.after.sharing!==1){packet.status="limited";packet.limitations.push("sale_sharing_registration_unconfirmed");return finish();}
     stage="post_choice_capture";
@@ -259,15 +295,15 @@ export async function runSaleSharingOptOutObserver(input: {
     if(stage==="navigation" || stage==="document_binding"){
       const message=error instanceof Error?error.message:"";
       navigation.failure=message==="document_http_error"?"http_error":message==="document_response_missing"?"response_missing":message==="document_target_mismatch"?"target_mismatch":
-        input.signal?.aborted?"cancelled":expired||Date.now()>=deadline||message==="settings_readiness_cutoff"||/deadline|Timeout/.test(message)||error instanceof Error&&error.name==="TimeoutError"?"deadline":
+        input.signal?.aborted?"cancelled":expired||Date.now()>=deadline||message==="settings_readiness_cutoff"||message==="explicit_readiness_cutoff"||/deadline|Timeout/.test(message)||error instanceof Error&&error.name==="TimeoutError"?"deadline":
         changed||message==="document_changed"?"document_changed":/net::|dns/i.test(message)?"network_failure":"other";
     }
     packet.executionDiagnostic=describeCaptureFailure(error,stage);
     packet.status="limited";packet.captureComplete=false;packet.requests=[];
     const budgetExpired=expired || Date.now()>=deadline || (error instanceof Error && (error.name === "TimeoutError" || error.message==="navigation_readiness_deadline"));
-    const failureCode=error instanceof Error && ["insufficient_capture_budget","document_response_missing","document_http_error","document_target_mismatch","settings_readiness_cutoff","settings_readiness_incomplete"].includes(error.message)?error.message:`${stage}_failed`;
+    const failureCode=error instanceof Error && (["insufficient_capture_budget","document_response_missing","document_http_error","document_target_mismatch","settings_readiness_cutoff","settings_readiness_incomplete"].includes(error.message)||/^explicit_readiness_(cutoff|probe_budget|check_limit|document_changed|ambiguous_recipe)$/.test(error.message))?error.message:`${stage}_failed`;
     packet.limitations.push(changed?"document_changed":input.signal?.aborted?"observation_cancelled":budgetExpired?`${stage}_budget_exhausted`:failureCode);
-    if(changed){packet.registration=packet.submitted?"unconfirmed":"not_attempted";packet.confirmedAt=null;packet.before=null;packet.after=null;packet.documentToken=null;}
+    if(changed){packet.registration=packet.submitted?"unconfirmed":"not_attempted";packet.confirmedAt=null;packet.before=null;packet.after=null;packet.documentToken=null;delete packet.entranceControl;}
   }finally{clearTimeout(timer);networkAbort.abort();input.signal?.removeEventListener("abort",cancel);let cleanupTimer:ReturnType<typeof setTimeout>|undefined;
     await Promise.race([Promise.all([context?.close().catch(()=>undefined),!input.browser?browser?.close().catch(()=>undefined):undefined]),new Promise<void>(resolve=>{cleanupTimer=setTimeout(resolve,250);})]);
     if(cleanupTimer)clearTimeout(cleanupTimer);}

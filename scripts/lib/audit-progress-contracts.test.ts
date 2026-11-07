@@ -35,6 +35,14 @@ test('sealed overrides and quantity supplements cannot silently replace public o
  const m=mergeVerifiedProgress(a,b);assert.equal(m.states[metric.id],'not_observed');assert.equal(m.states['sealed.control.reject'],'observed');assert.equal(m.measurements?.['forms.observed'],0);assert.equal(m.measurements?.['graph.nodes'],10);
  const deferred=namespaceSealed({...b,states:{...b.states,'detail.sealed.relationships':'deferred_reference_metadata'}}),inline=namespaceSealed({...b,states:{...b.states,'detail.sealed.relationships':'inline_projection'}});assert.notEqual(deferred.metricSources?.['graph.nodes'],inline.metricSources?.['graph.nodes']);
 });
+test('matched original audits preserve already-qualified operations evidence and its source',()=>{
+ const pub=row(),key='sealed.operations.policy_fetch',source='persisted_report_choice_summary/scan-report-projection-v27/certscore.audit-choice-summary.v2/target_policy_surfaces.v1';
+ const sealed={...row(),states:{evidence:'generation_matched',[key]:'recorded_fetch_failure'},metricSources:{[key]:source}};
+ const merged=mergeVerifiedProgress(pub,sealed);
+ assert.equal(merged.states[key],'recorded_fetch_failure');
+ assert.equal(merged.metricSources?.[key],source);
+ assert.equal(merged.states.policy_fetch,pub.states.policy_fetch);
+});
 test('quantity medians keep zero, missing denominator and invalid/non-reportable rows separate',()=>{
  const rows=[0,null,-1,4].map((n,i)=>row({scanId:`11111111-1111-4111-8111-11111111111${i}`,formsSummary:{totalObserved:n}}));rows.push({...row(),reportable:false,measurements:{'forms.observed':100}});
  const q=QUANTITIES.find(q=>q.id==='forms.observed')!,d=aggregate(rows,[],[q])[0].quantities[q.id];assert.equal(d.median,2);assert.equal(d.eligible,4);assert.equal(d.measured,2);assert.equal(d.missing,2);assert.equal(d.total,4);
@@ -60,7 +68,7 @@ test('explicit nonrequired accessibility is excluded from states and quantities,
  assert.equal(row().states.accessibility,'unavailable');
 });
 test('every state, quantity and finding has a contract; unreviewed schemas fail closed',()=>{
- const metrics=[...METRICS,...evidenceMetricRegistry([row()])],c=makeContracts(metrics,QUANTITIES);assert.equal(c.metrics.length,metrics.length);assert.equal(c.quantities.length,33);for(const m of [...c.metrics,...c.quantities])for(const k of ['meaning','eligiblePopulation','numerator','denominator','source','field','stateMapping','supportedVersions','comparison'])assert.ok(k in m);
+ const metrics=[...METRICS,...evidenceMetricRegistry([row()])],c=makeContracts(metrics,QUANTITIES);assert.equal(c.metrics.length,metrics.length);assert.equal(c.quantities.length,40);for(const m of [...c.metrics,...c.quantities])for(const k of ['meaning','eligiblePopulation','numerator','denominator','source','field','stateMapping','supportedVersions','comparison'])assert.ok(k in m);
  assert.match(publicSource({}),/historical_unversioned/);assert.throws(()=>publicSource({meta:{projectionVersion:'pulse-public-v99'}}),/Unreviewed/);
 });
 test('CSV uses the same per-source denominators, state deltas and null values as charts',()=>{

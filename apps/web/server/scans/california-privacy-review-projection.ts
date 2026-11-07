@@ -1,3 +1,4 @@
+import {deriveOptOutExecutionAssessment} from '@certscore/contracts';
 import {deriveCombinedOptOutRisk} from "../../lib/scans/california-combined-opt-out-policy";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
 import {projectScopedOptOutSearch} from "./scoped-opt-out-search";
@@ -276,7 +277,7 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
     ...(policyChoiceMethods ? {policyChoiceMethods} : {}),
     ...(presenceLinks.length ? {choicePresence:{version:"privacy_choice_presence.v2",effectiveness:"not_verified",links:presenceLinks}} : {}),
     inspection, choiceSurface, controls, controlsTruncated: workpaper.truncated, failedNoticeLinks,
-    ...(verifiedOptOut ? {optOutObservation: verifiedOptOut} : {}),
+    ...(verifiedOptOut ? {optOutObservation: verifiedOptOut,optOutExecution:deriveOptOutExecutionAssessment(verifiedOptOut.evidence,verifiedOptOut.sha256)} : {}),
     optOutEffectiveness: verifiedOptOut?.evidence.status === "complete" ? "bounded_observation" : "not_assessed", noticeAdequacy: "not_assessed",
     noticeTopics: [...new Set(workpaper.notices.flatMap(notice => notice.passages.map(passage => passage.topic)))],
     noticeEvidenceRefs: workpaper.notices.map(notice => notice.evidenceRef),

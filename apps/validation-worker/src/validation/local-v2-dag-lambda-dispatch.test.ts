@@ -88,6 +88,29 @@ test("durable publisher fails closed for malformed committed dispatch intent", (
   }), /unsupported AWS region/);
 });
 
+test("durable publisher uses the conditional opt-in without replacing Accept or Reject", () => {
+  const keys=['CERTSCORE_CONDITIONAL_SALE_SHARING_OPT_OUT_ENABLED','CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED'];
+  const before=keys.map(key=>process.env[key]);
+  const scanConfig={hostname:'example.com',normalizedUrl:'https://example.com/',execution:{v2DagLambda:{
+    awsRegion:'us-west-1',contractVersion:'certscore.v2.lambda-dag-dispatch.v1',functionName:'fixture',orchestrationMode:'sharded',
+    saleSharingOptOutEnabled:true,saleSharingOptOutRolloutMode:'all_eligible',processor:'local-certscore-v2-dag-parallel-v1',
+    resultHandoff:'sqs',resultQueueUrl:'https://sqs.us-west-1.amazonaws.com/123/results',scannerRuntime:'certscore-v2-dag-parallel-path',vpcMode:'vpc',
+    postAcceptWorkerEnabled:true,postAcceptWorkerRolloutMode:"all_eligible",postRefusalRejectWorkerEnabled:true,postRefusalRejectWorkerRolloutMode:"all_eligible",
+  }}};
+  const build=()=>buildDurableLocalV2DagLambdaDispatchPayload({scanId:'conditional-durable',scanConfig});
+  try {
+    delete process.env[keys[0]!];process.env[keys[1]!]='1';const baseline=build();
+    process.env[keys[0]!]='1';const conditional=build();
+    assert.equal(conditional.privacyCaptureProfile,'conditional_opt_out_seven_workers.v1');
+    assert.deepEqual(conditional.saleSharingOptOut,{controlPolicy:'explicit_opt_out_controls.v1',enabled:true,policyVersion:'bounded_sale_sharing_opt_out.v1',scanId:'conditional-durable',exactTargetUrl:'https://example.com/'});
+    assert.ok(baseline.postAcceptObservation);assert.ok(baseline.postRefusalObservation);
+    assert.deepEqual(conditional.postAcceptObservation,baseline.postAcceptObservation);
+    assert.deepEqual(conditional.postRefusalObservation,baseline.postRefusalObservation);
+    assert.deepEqual(conditional.gpcObservation,baseline.gpcObservation);
+    delete process.env[keys[1]!];assert.equal(build().privacyCaptureProfile,'presence_only_six_workers.v1');
+  } finally {keys.forEach((key,i)=>{if(before[i]===undefined)delete process.env[key];else process.env[key]=before[i];});}
+});
+
 test("durable publisher forwards the owned-canary Reject observation contract", () => {
   for (let number = 1; number <= 4; number += 1) {
     const scanId = `4f75b34a-9755-468d-b8f9-bec6042e94d${number}`;

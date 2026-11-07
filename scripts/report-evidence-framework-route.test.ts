@@ -10,20 +10,21 @@ import { buildTimelineReportModel } from "../apps/web/components/scans/report-la
 
 test("actual evidence route preserves framework in pages/downloads and rejects cross-framework cursors", async t => {
   const mocks: Record<string, string> = {
-    state: "export const state={record:null,model:null};",
+    package: "import {state} from 'test-state'; export function buildFullEvidencePackage(record,report){state.fullCalls++;if(record.scan.id!==report.scan.id)throw Error('Mixed scans');return {scan:report.scan,reviewFocus:report.reviewFocus,exportContent:{version:'certscore.full-evidence.v2',scope:'full_customer_evidence',exclusions:['raw_cookie_values']},standardEvidence:{scanId:record.scan.id},reportViews:{gdpr_eprivacy:{scan:report.scan},ccpa_cpra:{scan:report.scan}}};}",
+    state: "export const state={record:null,model:null,fullCalls:0};",
     export: "export function buildCanonicalReportExport(){throw Error('Unexpected tracking export');}",
     workpaper: "export function buildTrackingWorkpaper(){throw Error('Unexpected workpaper');} export function renderTrackingWorkpaperCsv(){throw Error('Unexpected CSV');}",
     ticket: "export function issueReportDownloadTicket(){throw Error('Unexpected ticket');} export function verifyReportDownloadTicket(){return null;}",
     fullsite: "export async function loadFullSiteReport(){throw Error('Unexpected full-site read');}",
     access: "import {state} from 'test-state'; export class ReportEvidenceAccessError extends Error{} export async function loadAuthorizedReportEvidence(){return state.record;}",
-    resource: "export const API_V2_SCAN_ID_PATTERN=/^[a-f0-9-]{36}$/; export function apiV2JsonResponse({body,status,headers}){return Response.json(body,{status,headers});} export function buildApiV2Error(value){return value;} export function deriveApiV2GpcResponse(){return null;}",
+    resource: "export function deriveApiV2GpcResponse(){return null;} export function deriveApiV2PostAcceptObservation(){return null;} export function deriveApiV2PostRefusalObservation(){return null;} export const API_V2_SCAN_ID_PATTERN=/^[a-f0-9-]{36}$/; export function apiV2JsonResponse({body,status,headers}){return Response.json(body,{status,headers});} export function buildApiV2Error(value){return value;}",
     keys: "export function parseBearerToken(){return 'owned';} export async function validateCertScoreBearerToken(){throw Error('Unexpected credential lookup');}",
     throttle: "export async function enforceApiV2ScanReadThrottle(){return null;}",
     projection: "export async function loadPersistedScanReportProjection(){throw Error('Unexpected DB read');} export async function loadAnonymousPersistedScanReportProjection(){throw Error('Unexpected DB read');}",
     details: "export function buildDetailedEvidenceExport(){return {};}",
     model: "import {state} from 'test-state'; export async function buildVerifiedTimelineReportModel(){return state.model;}",
   };
-  const suffixes: Record<string, string> = { "/detailed-evidence-report": "details", "/report-export": "export", "/tracking-workpaper": "workpaper", "/report-download-ticket": "ticket", "/full-site-report": "fullsite", "/report-evidence-access": "access", "/scan-resource": "resource", "/integrations/api-keys": "keys", "/api-v2-read-throttle": "throttle", "/scan-report-projection": "projection", "/verified-timeline-report-model": "model" };
+  const suffixes: Record<string, string> = { "/full-evidence-package": "package", "/detailed-evidence-report": "details", "/report-export": "export", "/tracking-workpaper": "workpaper", "/report-download-ticket": "ticket", "/full-site-report": "fullsite", "/report-evidence-access": "access", "/scan-resource": "resource", "/integrations/api-keys": "keys", "/api-v2-read-throttle": "throttle", "/scan-report-projection": "projection", "/verified-timeline-report-model": "model" };
   const output = await build({ tsconfig: process.env.TSX_TSCONFIG_PATH ?? "apps/web/tsconfig.test.json", stdin: { contents: `export {GET} from './apps/web/app/api/v2/scans/[scanId]/report-evidence/route.ts'; export {state} from 'test-state';`, resolveDir: process.cwd() }, bundle: true, write: false, format: "esm", platform: "node", plugins: [{ name: "owned-route", setup(api) {
     api.onResolve({ filter: /.*/ }, args => {
       const key = args.path === "test-state" ? "state" : Object.entries(suffixes).find(([suffix]) => args.path.endsWith(suffix))?.[1];
@@ -54,5 +55,8 @@ test("actual evidence route preserves framework in pages/downloads and rejects c
   assert.equal(drift.status, 409);
   assert.equal((await get("reviewFocus=invalid")).status, 400);
   assert.equal((await get("workpaper=tracking&reviewFocus=ccpa_cpra")).status, 400);
+  assert.equal(state.fullCalls,0,'Section exports must not compose a full package');
+  const complete=await get('format=download&reviewFocus=ccpa_cpra');assert.equal(complete.status,200);
+  const full=await complete.json();assert.equal(full.exportContent.version,'certscore.full-evidence.v2');assert.equal(full.standardEvidence.scanId,scanId);assert.ok(full.reportViews.gdpr_eprivacy&&full.reportViews.ccpa_cpra);assert.equal(state.fullCalls,1);
   assert.equal(JSON.stringify(state.model), original);
 });

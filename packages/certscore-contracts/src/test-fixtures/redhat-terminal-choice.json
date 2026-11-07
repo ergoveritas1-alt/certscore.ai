@@ -1,0 +1,122 @@
+{
+  "contractVersion": "certscore.sale-sharing-opt-out-evidence.v4",
+  "policyVersion": "bounded_sale_sharing_opt_out.v4-redhat-reload",
+  "scanId": "redhat-reload-verification-20261105-1",
+  "parentDispatchSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "targetUrl": "https://redhat.com/",
+  "documentToken": "678b4c07319795015fa88ac91b4813404e8a240e036629939d4f7085eec82b52",
+  "actionTargetUrl": "https://www.redhat.com/en",
+  "tlsValidated": true,
+  "startedAt": "2026-11-06T04:15:18.192Z",
+  "completedAt": "2026-11-06T04:15:20.437Z",
+  "status": "limited",
+  "recipeVersion": "trustarc.redhat_explicit_choice.v1",
+  "provider": "TrustArc",
+  "actionCount": 1,
+  "submitted": true,
+  "registration": "unconfirmed",
+  "confirmedAt": null,
+  "before": null,
+  "after": null,
+  "observationWindowMs": 0,
+  "captureComplete": false,
+  "truncated": false,
+  "requests": [],
+  "redHatChoice": {
+    "version": "redhat.opt-out-proof.v1",
+    "source": {
+      "version": "redhat.opt-out-source.v1",
+      "sourceSha256": "a5b3cb7d74d2863fa04970c72facaf0055bf129225d27d7313741415b6ee5b73",
+      "observationId": "consent_ui_pre_consent",
+      "documentUrl": "https://www.redhat.com/en",
+      "documentToken": "AC6D9977D54B9E27A4C1E1C86CA9F160"
+    },
+    "initialDocumentSha256": "678b4c07319795015fa88ac91b4813404e8a240e036629939d4f7085eec82b52",
+    "bindingVerified": true,
+    "captureFinishedMs": 2241,
+    "route": [
+      {
+        "url": "https://redhat.com/",
+        "requestId": "interception-job-1.0",
+        "redirectedRequestId": null,
+        "status": 301
+      },
+      {
+        "url": "https://www.redhat.com/en",
+        "requestId": "interception-job-1.1",
+        "redirectedRequestId": "interception-job-1.0",
+        "status": 200
+      },
+      {
+        "url": "https://www.redhat.com/en",
+        "requestId": "interception-job-227.0",
+        "redirectedRequestId": null,
+        "status": 200
+      }
+    ],
+    "control": {
+      "visibleLabel": "Do Not Sell or Share My Personal Information",
+      "accessibleLabel": "Do Not Sell or Share My Personal Information",
+      "dialogId": "pop-div3008894184878042755",
+      "portalId": "pop-frame0034860507289476206",
+      "openShadow": true,
+      "hitTargetVerified": true
+    },
+    "clickAtMs": 1479,
+    "reads": [
+      {
+        "phase": "before",
+        "atMs": 1473,
+        "documentSha256": "678b4c07319795015fa88ac91b4813404e8a240e036629939d4f7085eec82b52",
+        "status": "observed",
+        "decision": {
+          "source": "implied",
+          "selectedCategoryIndices": [
+            0
+          ]
+        }
+      },
+      {
+        "phase": "after",
+        "atMs": 1487,
+        "documentSha256": "678b4c07319795015fa88ac91b4813404e8a240e036629939d4f7085eec82b52",
+        "status": "observed",
+        "decision": {
+          "source": "implied",
+          "selectedCategoryIndices": [
+            0
+          ]
+        }
+      },
+      {
+        "phase": "terminal",
+        "atMs": 2239,
+        "documentSha256": "a542ab249226604a5d4f15715059d3717d7a9fd5382cf95c881555245556b73e",
+        "status": "observed",
+        "decision": {
+          "source": "asserted",
+          "selectedCategoryIndices": [
+            1
+          ]
+        }
+      }
+    ],
+    "followUpMs": 753,
+    "reload": {
+      "requestId": "interception-job-227.0",
+      "networkId": "6EF9535B124C3CA0E2DAEF2841CCBEA8",
+      "sourceDocumentSha256": "678b4c07319795015fa88ac91b4813404e8a240e036629939d4f7085eec82b52",
+      "replacementDocumentSha256": "a542ab249226604a5d4f15715059d3717d7a9fd5382cf95c881555245556b73e",
+      "requestedAtMs": 1911,
+      "actionAtMs": 1479,
+      "reason": "reload",
+      "targetUrl": "https://www.redhat.com/en",
+      "method": "GET",
+      "responseStatus": 200,
+      "committed": true
+    }
+  },
+  "limitations": [
+    "post_confirmation_activity_not_measured"
+  ]
+}

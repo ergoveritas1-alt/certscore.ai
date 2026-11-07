@@ -41,7 +41,7 @@ test("no-go reports do not enter added evidence-check or numeric denominators",(
 test("numeric summaries retain zero, exclude null and reject negative/nonfinite counts",()=>{
   const rows=[0,4,null,-1,Infinity].map((value,i)=>extractExportRow({...packet(),scanId:`11111111-1111-4111-8111-11111111111${i}`,formsSummary:{totalObserved:value}},source));
   const q=summarizeQuantities(rows)["forms.observed"];assert.deepEqual(q,{measured:2,eligible:5,total:4,median:2});
-  assert.equal(summarizeQuantities([])["forms.observed"]!.median,null);assert.equal(QUANTITIES.length,33);
+  assert.equal(summarizeQuantities([])["forms.observed"]!.median,null);assert.equal(QUANTITIES.length,40);
 });
 test("detailed projections require the original scan and bundle hash before contributing counts",()=>{
   const p=siteIntegrityProjectionFixture;
@@ -63,9 +63,9 @@ test("numeric CSV leaves unavailable days blank and retains an explicitly measur
   assert.ok(csv[0]?.endsWith('"1","1","0","0"'));assert.ok(csv[1]?.endsWith('"0","0","",""'));
 });
 test("viewer preserves absent versus unknown fields without inventing observations",()=>{
-  const html=renderProgressDashboard({metrics:[{id:"first"},{id:"second"},{id:"third"}],rows:[{scanId:"fixture",states:{first:"unknown",third:"observed"}}]});
+  const html=renderProgressDashboard({metrics:[{id:"control.accept"},{id:"control.reject"},{id:"control.options"}],rows:[{scanId:"fixture",states:{"control.accept":"unknown","control.options":"observed"}}]});
   const embedded=JSON.parse(html.match(/<script id="dashboard-data" type="application\/json">(.*?)<\/script>/s)![1]!);
-  assert.deepEqual(Object.fromEntries(Object.entries(embedded.rows[0].stateCodes).map(([k,i])=>[k,embedded.stateValues[i as number]])),{first:"unknown",third:"observed"});
+  assert.deepEqual(Object.fromEntries(Object.entries(embedded.rows[0].stateCodes).map(([k,i])=>[k,embedded.stateValues[i as number]])),{"control.accept":"unknown","control.options":"observed"});
 });
 
 test('after Accept capture uses the returned retained vocabulary, without treating limited as retained',()=>{

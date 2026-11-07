@@ -2,13 +2,15 @@ import { z } from "zod";
 import { gpcArtifactPointerSchema, gpcResponseAssessmentV2Schema, gpcPrototypeCaptureBindingSchema } from "./gpc-observation";
 
 export const GPC_OPT_OUT_PROTOTYPE_VERSION = "certscore.gpc-opt-out-assessment.prototype.v1" as const;
-export const GPC_OPT_OUT_ADAPTER_VERSION = "gpc_usca_usnat_and_live_status.v4" as const;
+export const GPC_OPT_OUT_ADAPTER_VERSION = "gpc_usca_usnat_and_live_status.v5" as const;
 // Exact current-visitor status messages only, in visible live-status elements
 // inside a registered CMP scope. Policy promises and receipt wording are excluded.
 export const GPC_STATUS_MESSAGES = [
   "Opt-Out Request Honored",
   "Your Global Privacy Control signal is honored.",
   "Your opt-out preference signal has been honored.",
+  "The GPC signal is honored",
+  "Opt-Out Signal Honored",
 ] as const;
 export const GPC_DIAGNOSTIC_CODES = [
   "ping_not_object", "gpp_version_unsupported", "cmp_status_not_loaded", "signal_status_not_ready",
@@ -37,7 +39,7 @@ export const gpcUsNationalStateSchema = gpcUscaStateSchema.extend({
 }).strict();
 export const gpcOptOutObservationSchema = z.object({
   contractVersion: z.literal("certscore.gpc-opt-out-observation.prototype.v1"),
-  adapterVersion: z.union([z.literal("gpc_usca_and_live_status.v1"), z.literal("gpc_usca_usnat_and_live_status.v2"), z.literal("gpc_usca_usnat_and_live_status.v3"), z.literal(GPC_OPT_OUT_ADAPTER_VERSION)]),
+  adapterVersion: z.union([z.literal("gpc_usca_and_live_status.v1"), z.literal("gpc_usca_usnat_and_live_status.v2"), z.literal("gpc_usca_usnat_and_live_status.v3"), z.literal("gpc_usca_usnat_and_live_status.v4"), z.literal(GPC_OPT_OUT_ADAPTER_VERSION)]),
   scanId: z.string().min(1).max(160), documentUrlSha256: hash,
   captureBinding: gpcPrototypeCaptureBindingSchema.nullable(),
   documentStartedAtMs: time, capturedAtMs: time, navigatorGpc: z.boolean().nullable(),

@@ -1,5 +1,6 @@
 import { signalSnapshotValueClass } from "../signal-snapshot-styles";
 import { GpcProductEvidence } from "../gpc-product-evidence";
+import { PrivacyChoiceOverview } from "../privacy-choice-overview";
 import { GdprEprivacyCoverageSummary, GdprEprivacyReview } from "../gdpr-eprivacy-review";
 import { GPC_CUSTOMER_RESULTS_ENABLED } from "../../../lib/scans/gpc-customer-policy";
 import { EVIDENCE_SECTION_TITLES } from "../../../lib/scans/detailed-evidence-presentation";
@@ -1536,6 +1537,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
           </div>
           <RatingMix report={report} homepage={compact} />
         </div>
+        {GPC_CUSTOMER_RESULTS_ENABLED && reportSectionInFocus("gpc", report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) ? <PrivacyChoiceOverview report={report} /> : null}
         <div className={`${compact ? "mt-3 gap-3" : "mt-6 gap-6"} evidence-directory-grid grid items-start sm:grid-cols-2`}>
           <EvidenceColumns siteIntegrity={<SiteIntegrityEvidence finding={report.siteIntegrity} />} hasSiteIntegrity={Boolean(report.siteIntegrity)}>
             {additionalEvidence}

@@ -1,7 +1,7 @@
 import {GetObjectCommand,PutObjectCommand,S3Client} from "@aws-sdk/client-s3";
 import {saleSharingCanaryLedger,type SaleSharingCanaryCampaign} from "@certscore/contracts";
 
-export function createSaleSharingCanaryStore(campaign:SaleSharingCanaryCampaign,signal:AbortSignal,client:Pick<S3Client,"send">=new S3Client({region:"us-west-1",maxAttempts:1})) {
+export function createSaleSharingCanaryStore(campaign:Pick<SaleSharingCanaryCampaign,"bucket">,signal:AbortSignal,client:Pick<S3Client,"send">=new S3Client({region:"us-west-1",maxAttempts:1})) {
   return saleSharingCanaryLedger({
     async readText(Key){
       try{

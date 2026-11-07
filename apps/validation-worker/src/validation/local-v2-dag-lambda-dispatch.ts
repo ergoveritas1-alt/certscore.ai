@@ -2,6 +2,8 @@ import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import {
   GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
   PRESENCE_ONLY_CAPTURE_PROFILE,
+  CONDITIONAL_OPT_OUT_CAPTURE_PROFILE,
+  conditionalOptOutRequested,
   buildPostActionObservationDispatchConfigs,
   readPersistedRuntimeGraphDispatch,
 } from "@certscore/contracts";
@@ -126,6 +128,7 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
         protocol: "passive_baseline_with_sec_gpc" as const,
       }
     : undefined;
+  const conditionalOptOut = conditionalOptOutRequested(intent, process.env);
   const runtimeGraph = readPersistedRuntimeGraphDispatch(input.scanId, intent);
   if (intent.contractVersion !== DISPATCH_CONTRACT_VERSION || intent.processor !== PROCESSOR) {
     throw new Error("Durable Lambda dispatch intent has an unsupported contract or processor.");
@@ -152,8 +155,8 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
     processor: PROCESSOR,
     ...(seeds.length > 0 ? { policySurfaceSeeds: seeds } : {}),
     ...postActionObservation,
-    saleSharingOptOut: undefined,
-    ...(intent.orchestrationMode === "sharded" ? {privacyCaptureProfile:PRESENCE_ONLY_CAPTURE_PROFILE} : {}),
+    saleSharingOptOut: conditionalOptOut ? {controlPolicy:"explicit_opt_out_controls.v1" as const,enabled:true as const,policyVersion:"bounded_sale_sharing_opt_out.v1" as const,scanId:input.scanId,exactTargetUrl:targetUrl} : undefined,
+    ...(intent.orchestrationMode === "sharded" ? {privacyCaptureProfile:conditionalOptOut ? CONDITIONAL_OPT_OUT_CAPTURE_PROFILE : PRESENCE_ONLY_CAPTURE_PROFILE} : {}),
     ...(gpcObservation ? { gpcObservation } : {}),
     ...(runtimeGraph ? { runtimeGraph } : {}),
     productionFindingIntegration: false as const,

@@ -1,4 +1,4 @@
-import { pairedGpcAudit, GPC_PAIR_METRICS, GPC_PAIR_QUANTITIES, GPC_SESSION_METRICS, GPC_SESSION_QUANTITIES } from "./audit-progress-gpc";
+import { pairedGpcAudit, GPC_PAIR_METRICS, GPC_PAIR_QUANTITIES, GPC_SESSION_METRICS, GPC_SESSION_QUANTITIES, GPC_DETAIL_METRICS, GPC_DETAIL_QUANTITIES } from "./audit-progress-gpc";
 import { checklistEvidence, returnedState } from './audit-progress-contracts';
 /** Audit-only summaries of returned evidence. Never generates findings or rescoring. */
 import type {Metric, ProgressRow} from "./audit-progress";
@@ -12,7 +12,7 @@ const count=(v:any):number|undefined=>Number.isSafeInteger(v)&&v>=0?v:undefined;
 const state=returnedState;
 const denominator="Readable reportable scans; missing historical fields stay not checked";
 export const EVIDENCE_METRICS:Metric[]=[
-  ...GPC_PAIR_METRICS, ...GPC_SESSION_METRICS,
+  ...GPC_PAIR_METRICS, ...GPC_SESSION_METRICS, ...GPC_DETAIL_METRICS,
   ...["accept","reject"].flatMap(action=>[
     {id:`detail.${action}.verdict`,label:`${action} returned verdict`,group:"A/R verdicts",denominator,success:[]},
     {id:`detail.${action}.projectable`,label:`${action} evidence projectable`,group:"A/R verdicts",denominator,success:["projectable"]},
@@ -27,7 +27,9 @@ export const EVIDENCE_METRICS:Metric[]=[
   ...["site_integrity","technology","form_destinations","relationships"].map(id=>({id:`detail.sealed.${id}`,label:`Retained ${id.replaceAll("_"," ")} projection`,group:"Detailed capture availability",denominator:"Readable reportable scans; requires sealed generation-matched projection and original bundle binding",success:[]})),
 ];
 export const QUANTITIES=[
-  ...GPC_PAIR_QUANTITIES, ...GPC_SESSION_QUANTITIES,
+  {id:"sealed.opt_out.decision_remaining_ms",label:"Time remaining at conditional opt-out decision",unit:"ms",path:"verified conditionalOptOutDecision.remainingTimeMs"},
+  {id:"sealed.opt_out.dispatch_elapsed_ms",label:"Conditional opt-out dispatch time from coordinator start",unit:"ms",path:"verified conditionalOptOutDecision.decidedAtMs"},
+  ...GPC_PAIR_QUANTITIES, ...GPC_SESSION_QUANTITIES, ...GPC_DETAIL_QUANTITIES,
   {id:"storage.unclassified",label:"Unclassified pre-consent storage records",unit:"records",path:"executiveSummary.preConsentStorageAssessment.unclassifiedCount"},
   {id:"storage.proven_writes",label:"Timestamped pre-consent cookie writes",unit:"writes",path:"storageEvidenceSummary.provenTimestampedPreConsentCookieWriteCount"},
   {id:"storage.snapshot_only",label:"Late/initial cookie snapshot records",unit:"records",path:"storageEvidenceSummary.lateOrInitialSnapshotCookieCount"},
@@ -141,22 +143,7 @@ export function quantityCsv(days:any[]):string{
   for(const day of days)for(const q of QUANTITIES){const v=day.quantities[q.id];lines.push([day.date,q.id,q.unit,v.measured,v.eligible,v.median,v.total].map(quote).join(","));}
   return lines.join("\n")+"\n";
 }
-export const COVERAGE_MAP=[
-  {box:"CMP details",before:"Partial",now:"Provider, dispatch, individual CMP checks, framework signal, optional defaults",gap:"SDK/category/state detail remains limited to returned canonical CMP fields; provider recognition does not establish action support."},
-  {box:"Consent choices",before:"Partial",now:"Four controls, click/execution/registration, returned A/R verdicts, projectability, stop and indeterminate reasons",gap:"Opt-out action execution and confirmation are not consistently exported; do not infer them from the control."},
-  {box:"Tracking & embeds",before:"Missing individual checks",now:"All additional returned canonical checks: tracking, storage, iframes, social embeds, replay/fingerprinting",gap:"Finding prevalence and unknown evidence remain separate; no new activity qualification."},
-  {box:"Policies & disclosures",before:"Partial",now:"Ten topics plus cookie notice and stale-framework checks, fetch, retained text and declared ownership",gap:"Entity attribution (including NOZ DPO), completeness and semantic correctness require independent source review."},
-  {box:"Accessibility (WCAG)",before:"Coverage and findings",now:"Existing coverage/findings plus failed-rule, affected-node and manual-review counts",gap:"Node counts depend on scope and engine; fewer reported findings alone do not verify a fix."},
-  {box:"Cookies & tracking inventories",before:"Missing quality/volume measures",now:"Storage classification, unknown record counts, proven writes versus snapshot records, vendor/cookie counts and inventory truncation",gap:"No proof of use or sale/sharing is inferred from a cookie or vendor name."},
-  {box:"California privacy review",before:"Canonical findings only",now:"Canonical finding IDs remain separately tabulated; GPC recorded sale/sharing states are added",gap:"Typed recipient qualification, deduplication and protocol/processing reasons are not consistently in historical public exports. C2 protocol coverage remains open."},
-  {box:"Connection security",before:"Only surfaced findings",now:"Five individual canonical checks, including positive, concern and unavailable states",gap:"No HSTS, cipher or broader TLS posture inferred beyond returned checks."},
-  {box:"Global Privacy Control",before:"Path, delivery and finding",now:"Response, semantic probe, acknowledgment, recorded sale/sharing states, bound paired request availability/duration/counts and retained successful collection/identifier samples",gap:"Recorded state or measured traffic does not establish that GPC caused a change."},
-  {box:"Tech stack observed",before:"Not tabulated",now:"Recent source-bound projection availability, detection and advisory counts",gap:"Recent verified projections add detection/advisory counts. Older public exports lack the technology inventory; no versions or absent technology are inferred."},
-  {box:"Site integrity / concealed links",before:"Surfaced canonical finding IDs",now:"Canonical findings plus recent verified capture coverage, inspected-link and retained link-evidence counts",gap:"Detailed inspection counts require recent sealed projections. Retained link evidence count is not a new concealed-link qualification or unique-destination count."},
-  {box:"Forms and destinations",before:"Not tabulated",now:"Observed form counts, pre-consent/after-Accept capture states, recent verified destination-trace availability and event counts",gap:"Exact destination/recipient bindings are not consistently exported; no submissions or new trace work."},
-  {box:"Coverage, navigation and publication",before:"Partial",now:"Existing outcomes/publication plus final-host change and missing/truncated evidence inventories",gap:"Historical attempts missing from the archive remain unknown; navigation status alone does not override no-go."},
-  {box:"Relationship graphs / request ancestry",before:"Not tabulated",now:"Recent verified projection/reference availability and node/edge reference counts",gap:"Deferred counts describe retained reference metadata. Full graph bytes and causal ancestry are not verified here; older exports lack the projection. No protected graph endpoint is requested."},
-];
+export { COVERAGE_MAP } from "./audit-progress-coverage";
 
 /** Register every verified canonical checklist ID even when an older audit/export omitted it. */
 export function retainedEvidenceMetricRegistry(rows:ProgressRow[]):Metric[]{

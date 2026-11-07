@@ -1,3 +1,4 @@
+import {deriveOptOutExecutionAssessment,optOutExecutionAssessmentSchema} from './sale-sharing-opt-out';
 import { californiaAgentRegistrationProjectionSchema, californiaAgentRegistrationSchema, CALIFORNIA_AGENT_REGISTRATION_ID } from "./california-agent-registration";
 export * from "./california-agent-registration";
 import {scopedOptOutSearchSchema,scopedOptOutSearchLimitations,scopedBodySearchLimitations,scopedBodyInspectionEligible,scopedRuntimeTextLimitations,GATE_RUNTIME_TEXT_PAGE} from "./scoped-opt-out-search";
@@ -255,6 +256,7 @@ const californiaPrivacyReviewFields = {
   controlsTruncated: z.boolean(),
   failedNoticeLinks: noticeLinkSchema.array().max(8).optional(),
   optOutObservation: verifiedSaleSharingOptOutSchema.optional(),
+  optOutExecution: optOutExecutionAssessmentSchema.optional(),
   optOutEffectiveness: z.enum(["not_assessed", "bounded_observation"]),
   noticeAdequacy: z.literal("not_assessed"),
   noticeTopics: z.enum(["sale_sharing", "collection_purposes", "retention", "privacy_rights", "opt_out_methods"]).array().max(5),
@@ -483,6 +485,7 @@ const californiaPrivacyReviewValidatedSchema: z.ZodType<CaliforniaPrivacyReviewS
       !row.controls.some(control => control.evidenceRef === link.evidenceRef && control.label === link.label && control.kind === link.kind)))
     ctx.addIssue({code:"custom",message:"Presence proof must bind a retained control and the exact report document."});
   if (row.optOutObservation && (row.optOutObservation.evidence.scanId !== row.scanId || !saleSharingOptOutBindsDocument(row.optOutObservation.evidence,row.documentUrl))) ctx.addIssue({code: "custom", message: "Opt-out observation binding mismatch."});
+  if(row.optOutExecution&&(!row.optOutObservation||JSON.stringify(row.optOutExecution)!==JSON.stringify(deriveOptOutExecutionAssessment(row.optOutObservation.evidence,row.optOutObservation.sha256))))ctx.addIssue({code:'custom',message:'Choice execution must derive from the same verified retained packet.'});
   if (row.optOutEffectiveness === "bounded_observation" && row.optOutObservation?.evidence.status !== "complete") ctx.addIssue({code: "custom", message: "Bounded assessment requires completed verified capture."});
   if (row.inspection && row.inspection.documentUrl !== row.documentUrl) ctx.addIssue({code: "custom", message: "Inspection document mismatch."});
   if (row.choiceSurface === "observed" && !row.controls.length) ctx.addIssue({code: "custom", message: "Observed choice requires retained control proof."});

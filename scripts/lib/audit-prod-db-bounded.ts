@@ -25,36 +25,51 @@ const DEFAULT_SECURITY_GROUPS = ["sg-0503154fb5532cb04"];
 const DEFAULT_SUBNETS = ["subnet-000adac289b27c3ac", "subnet-053d0eaa45152d300"];
 const DEFAULT_TASK_DEFINITION = "certscore-prod-psql-oneoff:1";
 const DEFAULT_CONTAINER_NAME = "psql";
+const ECS_OVERRIDE_MAX_BYTES = 8192;
 
-export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
+function prepareSqlOverride(input: Pick<RunProdDbSqlInput, 'marker'|'readOnly'|'sql'|'logChunkThrottle'>) {
   const marker = input.marker.replace(/[^A-Z0-9_]/g, "_");
   if (!marker) throw new Error("A bounded output marker is required");
-  const region = env("CALIBRATION_DB_ECS_REGION", "us-west-1");
-  const cluster = env("CALIBRATION_DB_ECS_CLUSTER", DEFAULT_CLUSTER);
-  const taskDefinition = env("CALIBRATION_DB_ECS_TASK_DEFINITION", DEFAULT_TASK_DEFINITION);
   const containerName = env("CALIBRATION_DB_ECS_CONTAINER", DEFAULT_CONTAINER_NAME);
-  const securityGroups = csvEnv("CALIBRATION_DB_ECS_SECURITY_GROUPS", DEFAULT_SECURITY_GROUPS);
-  const subnets = csvEnv("CALIBRATION_DB_ECS_SUBNETS", DEFAULT_SUBNETS);
   const sql = input.readOnly
     ? `begin transaction read only;\n${input.sql.replace(/;?\s*$/, ";")}\ncommit;`
     : input.sql.replace(/;?\s*$/, ";");
-  const queryGzipB64 = gzipSync(Buffer.from(sql, "utf8"), { level: 9 }).toString("base64");
-  const networkConfiguration = {
-    awsvpcConfiguration: {
-      assignPublicIp: "ENABLED",
-      securityGroups,
-      subnets,
-    },
-  };
+  const sqlBytes = Buffer.from(sql, "utf8");
+  const defaultGzip = gzipSync(sqlBytes, { level: 9 });
+  // A smaller deflate buffer separates the high-entropy pending UUIDs from
+  // repetitive SQL more effectively. Keep the smaller standard gzip stream.
+  const compactGzip = gzipSync(sqlBytes, { level: 9, memLevel: 5 });
+  const queryGzipB64 = (compactGzip.length < defaultGzip.length ? compactGzip : defaultGzip).toString("base64");
   const command = [
     `set -eu; test "\${PGSSLMODE:-}" = require; printf %s "$QUERY_B64" | base64 -d | gzip -dc > /tmp/query.sql; echo __${marker}_START__; psql -X --no-password -v ON_ERROR_STOP=1 -P pager=off -P footer=off -t -A "$DATABASE_URL" -f /tmp/query.sql > /tmp/audit-output.txt; gzip -c /tmp/audit-output.txt > /tmp/audit-output.gz; sha256sum /tmp/audit-output.gz; base64 /tmp/audit-output.gz | tr -d '\\n' | fold -w 8192 | awk '{printf "__CHUNK_%08d__%s\\n", NR, $0;${input.logChunkThrottle ? ' if (NR % 64 == 0) system("sleep 0.5");' : ''}}'; echo __${marker}_END__`,
   ];
-  const overrides = {
+  const overrides = JSON.stringify({
     containerOverrides: [{
       command,
       environment: [{ name: "QUERY_B64", value: queryGzipB64 }],
       name: containerName,
     }],
+  });
+  return {marker,containerName,overrides,bytes:Buffer.byteLength(overrides)};
+}
+
+export function auditSqlOverrideFits(input: Pick<RunProdDbSqlInput, 'marker'|'readOnly'|'sql'|'logChunkThrottle'>) {
+  const {bytes}=prepareSqlOverride(input);
+  return {bytes,limitBytes:ECS_OVERRIDE_MAX_BYTES,fits:bytes<=ECS_OVERRIDE_MAX_BYTES};
+}
+
+export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
+  const {marker,containerName,overrides,bytes}=prepareSqlOverride(input);
+  if(bytes>ECS_OVERRIDE_MAX_BYTES)throw Error(`ECS SQL launch override exceeds ${ECS_OVERRIDE_MAX_BYTES} bytes (${bytes}); no task started`);
+  const region = env("CALIBRATION_DB_ECS_REGION", "us-west-1");
+  const cluster = env("CALIBRATION_DB_ECS_CLUSTER", DEFAULT_CLUSTER);
+  const taskDefinition = env("CALIBRATION_DB_ECS_TASK_DEFINITION", DEFAULT_TASK_DEFINITION);
+  const networkConfiguration = {
+    awsvpcConfiguration: {
+      assignPublicIp: "ENABLED",
+      securityGroups: csvEnv("CALIBRATION_DB_ECS_SECURITY_GROUPS", DEFAULT_SECURITY_GROUPS),
+      subnets: csvEnv("CALIBRATION_DB_ECS_SUBNETS", DEFAULT_SUBNETS),
+    },
   };
   const runPayload = parseJson<{ failures?: unknown[]; tasks?: Array<{ taskArn?: string }> }>(await aws([
     "ecs", "run-task",
@@ -63,7 +78,7 @@ export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
     "--task-definition", taskDefinition,
     "--launch-type", "FARGATE",
     "--network-configuration", JSON.stringify(networkConfiguration),
-    "--overrides", JSON.stringify(overrides),
+    "--overrides", overrides,
     "--output", "json",
   ]));
   if (runPayload.failures?.length) {

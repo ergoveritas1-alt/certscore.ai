@@ -1,5 +1,5 @@
 import { choicePathExecutionSchema } from "@certscore/contracts";
-import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
+import { projectScanReportNoGo, resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 
 import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
 import type { ReactNode } from "react";
@@ -7880,6 +7880,7 @@ export async function SharedScanDetailView({
   });
   const isScanInFlight = scanRecord.scan.status === "queued" || scanRecord.scan.status === "running";
   const isScanFailed = scanRecord.scan.status === "failed";
+  const scanFailure = scanFailureExplanation(scanRecord.scan.errorMessage, projectScanReportNoGo(scanRecord));
   const accessibilityAudit = projectAccessibilityAuditSummary(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id);
   const isIncompleteScanCoverage = hasIncompleteScanCoverage(scanRecord) || isAccessibilityAuditLimited(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id);
   const executiveAccessNoticeCardProps = executiveAccessLimitationNotice
@@ -8201,11 +8202,11 @@ export async function SharedScanDetailView({
                   <path d="M8 8l8 8M16 8l-8 8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-rose-900">{scanFailureExplanation(scanRecord.scan.errorMessage).title}</p>
+                  <p className="text-sm font-semibold text-rose-900">{scanFailure.title}</p>
                   <p className="text-sm leading-6 text-rose-800">
-                    {scanFailureExplanation(scanRecord.scan.errorMessage).detail}
+                    {scanFailure.detail}
                   </p>
-                  <p className="text-sm leading-6 text-slate-600">{scanFailureExplanation(scanRecord.scan.errorMessage).nextStep}</p>
+                  <p className="text-sm leading-6 text-slate-600">{scanFailure.nextStep}</p>
                   <a href="/app" className="inline-block pt-2 text-sm font-medium text-sky-700 underline">Back to Overview</a>
                 </div>
               </div>

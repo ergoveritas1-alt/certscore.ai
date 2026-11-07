@@ -8,7 +8,6 @@ const snapshot = z.object({
   observedAfterDocumentCommitMs: z.number().int().min(0).max(120_000),
 }).strict();
 const common = {
-  contractVersion: z.literal("certscore.gpc-cmp-state-comparison.v1"),
   scanId: z.string().min(1).max(200),
   sourceHashes: z.object({ baseline: z.string().regex(/^[a-f0-9]{64}$/), gpc: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
   baseline: snapshot,
@@ -17,9 +16,15 @@ const common = {
   causedByGpc: z.literal("not_established"),
   legalInterpretation: z.literal("not_assessed"),
 };
-const packet = z.discriminatedUnion("sectionId", [
-  z.object({...common, sectionId: z.literal(7), sectionVersion: z.union([z.literal(1), z.literal(2)])}).strict(),
-  z.object({...common, sectionId: z.literal(8), sectionVersion: z.literal(1)}).strict(),
+const sections = (version: { contractVersion: z.ZodLiteral<"certscore.gpc-cmp-state-comparison.v1"> } |
+  { contractVersion: z.ZodLiteral<"certscore.gpc-cmp-state-comparison.v2">; scope: z.ZodLiteral<"main_document"> }) =>
+  z.discriminatedUnion("sectionId", [
+    z.object({...common, ...version, sectionId: z.literal(7), sectionVersion: z.union([z.literal(1), z.literal(2)])}).strict(),
+    z.object({...common, ...version, sectionId: z.literal(8), sectionVersion: z.literal(1)}).strict(),
+  ]);
+const packet = z.union([
+  sections({contractVersion: z.literal("certscore.gpc-cmp-state-comparison.v1")}),
+  sections({contractVersion: z.literal("certscore.gpc-cmp-state-comparison.v2"), scope: z.literal("main_document")}),
 ]);
 // Named public type avoids declaration serialization of the canonical bundle.
 export type GpcCmpStateComparison = z.infer<typeof packet>;
@@ -44,7 +49,7 @@ export function readBoundGpcCmpStateComparison(value: unknown, response: {
     parsed.data.sourceHashes.baseline !== response.comparison.baselineArtifact?.sha256 ||
     parsed.data.sourceHashes.gpc !== response.comparison.gpcArtifact?.sha256 || o.sourceSha256 !== parsed.data.sourceHashes.gpc ||
     !o.sessionSha256 || !o.documentUrlSha256 || o.status !== "complete" || o.semanticProbe !== "observed" ||
-    !o.positiveEvidence?.representativeDocument || !o.delivery.fullContextVerified || !o.delivery.httpHeaderRetained || !o.delivery.mainNavigatorReadbackRetained ||
+    !o.positiveEvidence?.representativeDocument || (parsed.data.contractVersion === "certscore.gpc-cmp-state-comparison.v1" && !o.delivery.fullContextVerified) || !o.delivery.httpHeaderRetained || !o.delivery.mainNavigatorReadbackRetained ||
     o.requests?.documentCommittedAtMs == null || o.requests?.throughMs == null ||
     parsed.data.gpc.observedAfterDocumentCommitMs > o.requests.throughMs - o.requests.documentCommittedAtMs ||
     parsed.data.gpc.sale !== o.registration.sale || parsed.data.gpc.sharing !== o.registration.sharing ||
@@ -55,5 +60,5 @@ export function readBoundGpcCmpStateComparison(value: unknown, response: {
 export const GPC_CMP_SNAPSHOT_CONTEXT = "Independent current-state snapshots from fresh visits. A difference does not establish that GPC caused it, saved-choice persistence, account-wide fulfillment, downstream processing or a legal result.";
 export function describeGpcCmpStateComparison(p: GpcCmpStateComparison): string {
   const state = (s: string) => s === "opted_out" ? "On" : "Off";
-  return `Site-recorded opt-out settings — Without GPC: sale ${state(p.baseline.sale)}, sharing ${state(p.baseline.sharing)}; With GPC: sale ${state(p.gpc.sale)}, sharing ${state(p.gpc.sharing)}. ${GPC_CMP_SNAPSHOT_CONTEXT} Semantic observations: +${p.baseline.observedAfterDocumentCommitMs} ms and +${p.gpc.observedAfterDocumentCommitMs} ms after each visit's own document commit, respectively; separate from the matched request-count window.`;
+  return `${p.contractVersion === "certscore.gpc-cmp-state-comparison.v2" ? "Main-document CMP snapshots; worker and child-frame delivery is not established. " : ""}Site-recorded opt-out settings — Without GPC: sale ${state(p.baseline.sale)}, sharing ${state(p.baseline.sharing)}; With GPC: sale ${state(p.gpc.sale)}, sharing ${state(p.gpc.sharing)}. ${GPC_CMP_SNAPSHOT_CONTEXT} Semantic observations: +${p.baseline.observedAfterDocumentCommitMs} ms and +${p.gpc.observedAfterDocumentCommitMs} ms after each visit's own document commit, respectively; separate from the matched request-count window.`;
 }

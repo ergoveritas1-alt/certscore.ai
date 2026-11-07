@@ -3000,10 +3000,87 @@
       "note": "One passive GPC diagnostic gpc-ars-passive-10859954-1967-46a4-a29e-a2d472817bc8; approval consumed. Full-profile policy assistance lacked its required key; not a site no-go. No action lanes, model calls, AWS access or retry. See docs/certscore-v2/gpc-followup-verification-2026-11-02.md.",
       "state": "cooldown",
       "url": "https://arstechnica.com/"
+    },
+    "https://www.webcrawler.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-04T02:04:57.631Z",
+      "lastContactAt": "2026-11-06T02:04:57.631Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized conditional opt-out diagnostic, 2026-11-05; cooldown waived; no production scan or population coverage inference.",
+      "state": "cooldown",
+      "url": "https://www.webcrawler.com/"
+    },
+    "https://evernote.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-04T02:58:13.378Z",
+      "lastContactAt": "2026-11-06T02:58:13.378Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized conditional opt-out diagnostic, 2026-11-05; cooldown waived; no production scan or population coverage inference. | Owner-authorized bound-control opt-out diagnostic and post-fix verification, 2026-11-05; cooldown waived; no production scan or population coverage inference. | Owner-authorized bounded opt-out readiness diagnostic, 2026-11-05; cooldown waived; no production scan or population coverage inference.",
+      "state": "cooldown",
+      "url": "https://evernote.com/"
+    },
+    "https://www.taboola.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-04T02:05:49.636Z",
+      "lastContactAt": "2026-11-06T02:05:49.636Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized conditional opt-out diagnostic, 2026-11-05; cooldown waived; no production scan or population coverage inference.",
+      "state": "cooldown",
+      "url": "https://www.taboola.com/"
+    },
+    "https://www.colocrossing.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-04T02:55:49.789Z",
+      "lastContactAt": "2026-11-06T02:55:49.789Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized bound-control opt-out diagnostic and post-fix verification, 2026-11-05; cooldown waived; no production scan or population coverage inference. | Owner-authorized bounded opt-out readiness diagnostic, 2026-11-05; cooldown waived; no production scan or population coverage inference.",
+      "state": "cooldown",
+      "url": "https://www.colocrossing.com/"
+    },
+    "https://identity.digital/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-04T02:40:22.513Z",
+      "lastContactAt": "2026-11-06T02:40:22.513Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized bound-control opt-out diagnostic and post-fix verification, 2026-11-05; cooldown waived; no production scan or population coverage inference.",
+      "state": "cooldown",
+      "url": "https://identity.digital/"
+    },
+    "https://ustream.tv/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-04T03:31:32.496Z",
+      "lastContactAt": "2026-11-06T03:31:32.496Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized bounded read-only TrustArc state diagnostic, 2026-11-05; cooldown waived; no production scan or population coverage inference.",
+      "state": "cooldown",
+      "url": "https://ustream.tv/"
+    },
+    "https://redhat.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-04T05:20:31.236Z",
+      "lastContactAt": "2026-11-06T05:20:31.236Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-authorized bounded read-only TrustArc state diagnostic, 2026-11-05; cooldown waived; no production scan or population coverage inference. | Owner-authorized bounded Red Hat explicit opt-out verification, 2026-11-05; cooldown waived; no production scan or population coverage inference. | Owner-authorized bounded Red Hat explicit opt-out verification, 2026-11-05; cooldown waived; no production scan or population coverage inference. | Owner-authorized bounded Red Hat explicit opt-out verification, 2026-11-05; cooldown waived; no production scan or population coverage inference. | Owner-authorized bounded Red Hat explicit opt-out verification, 2026-11-05; cooldown waived; no production scan or population coverage inference. | Owner-authorized bounded Red Hat explicit opt-out verification, 2026-11-05; cooldown waived; no production scan or population coverage inference. | Owner-authorized bounded Red Hat explicit opt-out verification, 2026-11-05; cooldown waived; no production scan or population coverage inference. | Recorded two unintended public contacts from fixture routing; zero actions; owner-authorized Red Hat verification, 2026-11-05; cooldown waived; no production scan or population coverage inference. | Owner-authorized integrated Red Hat opt-out verification, 2026-11-05; one click and one verified reload; cooldown waived; no production scan or population coverage inference. | Owner-authorized dedicated numbered AWS Red Hat canary, 2026-11-05; one completed synthetic scan; verified opt-out route, readiness cutoff, no opt-out click; cooldown waived.",
+      "state": "cooldown",
+      "url": "https://redhat.com/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-11-06T00:20:56.090Z",
+  "updatedAt": "2026-11-06T05:21:29.027Z",
   "contactOnlyUrls": [
     "https://aacsb.edu/",
     "https://abc.xyz/",
@@ -3179,6 +3256,13 @@
     "https://airandspaceforces.com/",
     "https://routenote.com/",
     "https://ergoveritas.com/testar2.html",
-    "https://arstechnica.com/"
+    "https://arstechnica.com/",
+    "https://evernote.com/",
+    "https://identity.digital/",
+    "https://redhat.com/",
+    "https://ustream.tv/",
+    "https://www.colocrossing.com/",
+    "https://www.taboola.com/",
+    "https://www.webcrawler.com/"
   ]
 }

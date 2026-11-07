@@ -1,4 +1,5 @@
 import { reportBrandDisplayName } from "../../lib/scans/report-brand-display-name";
+import {documentGpcDetails,readDocumentGpc} from './report-document-choice-details';
 import { describeGpcCmpStateComparison, describeGpcGuidance, readBoundGpcCmpStateComparison } from "@certscore/contracts";
 import { reportExecutiveSummary } from "./report-executive-summary";
 import { REPORT_EXPORT_DISCLAIMER } from "./report-export-footer";
@@ -352,8 +353,8 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
       ]),[270,142,100]));
   }
 
-  if (report.gpcResponse) {
-    const gpc = report.gpcResponse;
+  const gpc=readDocumentGpc(report);
+  if (gpc) {
     const facts = describeGpcObservedFacts(gpc.observation);
     for (const fact of facts) lines.push(...wrappedLines(`${fact.label}: ${fact.value}`));
     if (gpc.activityComparison) lines.push(...wrappedLines(describeGpcActivityComparison(gpc.activityComparison)));
@@ -365,6 +366,8 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
         ? "GPC comparison: No qualifying tracking activity observed in either completed matched visit."
         : `Comparison: ${gpc.status.replaceAll("_", " ")}. ${gpcReaderSummary(gpc.summary)}`, { size: facts.length ? 9 : 10 }));
     }
+    lines.push(...pdfEvidenceTable("gpc-retained-scopes", ["Retained measurement", "Value"], documentGpcDetails(report), [256,256]),
+      ...wrappedLines("Paired request counts, CMP snapshots and the full visit use separate windows. An early zero does not replace later positive collection. Differences do not establish GPC causation, honoring or a legal result.", {size:9}));
     lines.push(...wrappedLines("Signal-delivery proof and comparison deltas are available in the JSON workpaper.", { size: 9 }));
   } else lines.push(...wrappedLines("No verified GPC assessment available; response remains unknown."));
   }
@@ -571,10 +574,18 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
       `Action: ${titleCase(form.actionRelationship)}${form.actionHostname ? ` (${form.actionHostname})` : ""} | Fields retained: ${form.retainedFieldCount} of ${form.candidateFieldCount} | Truncated: ${yesNo(form.fieldsTruncated)} | Confidence: ${formatConfidence(form.confidence)} | Basis: ${titleCase(form.directVsInferred)}`,
       { indent: 10, size: 9, gapAfter: 2 },
     ));
+    lines.push(...wrappedLines(`Form snapshot: ${row.snapshot.status}. Image bytes are separate from this document.`, {indent:10,size:9}));
+    if(row.snapshot.status==='available'&&'url' in row.snapshot&&row.snapshot.url){
+      const base=publicReportPdfBaseUrl(appUrl),relative=row.snapshot.url;
+      if(base&&relative.startsWith(`/api/scans/${encodeURIComponent(report.scan.id)}/form-snapshot?`)){
+        const href=new URL(relative,base).href;
+        lines.push(...wrappedLines(`Form snapshot reference: ${href}`,{indent:10,size:8}).map(line=>({...line,href})));
+      }
+    }
     form.fields.forEach((field, fieldIndex) => {
       const state = field.disabled ? "disabled" : field.readOnly ? "read-only" : "available";
       lines.push(...wrappedLines(
-        `Field ${fieldIndex + 1}: ${field.label ?? "Label not retained"}; element ${titleCase(field.elementType)}; input type ${titleCase(field.inputType)}; category ${titleCase(field.semanticCategory)}; required ${yesNo(field.required)}; state ${state}; autocomplete ${field.autocompleteToken ?? "not retained"}; confidence ${formatConfidence(field.confidence)}; basis ${titleCase(field.directVsInferred)}.`,
+        `Field ${fieldIndex + 1}: ${field.label ?? "Label not retained"}; element ${titleCase(field.elementType)}; input type ${titleCase(field.inputType)}; category ${titleCase(field.semanticCategory)}; required ${yesNo(field.required)}; state ${state}; disabled ${yesNo(field.disabled)}; read-only ${yesNo(field.readOnly)}; autocomplete ${field.autocompleteToken ?? "not retained"}; confidence ${formatConfidence(field.confidence)}; basis ${titleCase(field.directVsInferred)}.`,
         { indent: 18, size: 8, gapAfter: 1 },
       ));
     });
@@ -643,6 +654,15 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
     if (accessibility?.exampleCoverage) lines.push(...wrappedLines(`${accessibility.exampleCoverage.retainedNodeCount} examples retained; ${accessibility.exampleCoverage.omittedNodeCount} omitted. Example limits do not imply complete coverage.`, { size: 9 }));
   }
   const publicBaseUrl = publicReportPdfBaseUrl(appUrl);
+  if(report.visualReferences?.length&&publicBaseUrl){
+    sections.consent.push(sectionHeading("Screenshot references"));
+    for(const ref of report.visualReferences){
+      const href=new URL(ref.href,publicBaseUrl).href;
+      sections.consent.push(...wrappedLines(`${titleCase(ref.kind)} screenshot reference`,{size:9,href}));
+    }
+    sections.consent.push(...wrappedLines("Links refer to the saved screenshot and report generation. Changed or unavailable references do not resolve. Images are not embedded by these links.",{size:9}));
+  }
+
   const workpaper = publicBaseUrl ? new URL(`/api/scans/${encodeURIComponent(report.scan.id)}/report-export?format=json&reviewFocus=${report.reviewFocus}${report.fullSite ? "&scope=full-site" : ""}`, publicBaseUrl).href : undefined;
   const evidenceSections = appendixEvidenceLines(report, { text: (value, size = 9) => wrappedLines(String(value), { size }), heading: sectionHeading });
   const choiceIndex = evidenceSections.consent.findIndex(line => line.flowGroup === "consent-choice-results");
@@ -684,6 +704,10 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
   const methodology: PdfLine[] = [
     { text: "Methodology and limitations", chapterTitle: "Methodology and limitations", destination: "methodology", size: 18, bold: true, gapBefore: 20, gapAfter: 16, keepWithNextHeight: 100 },
     ...wrappedLines(report.notice, { size: 9 }), ...wrappedLines(report.reviewScope, { size: 9 }),
+    ...(report.pageInformation?[
+      ...wrappedLines(`Page title: ${report.pageInformation.title||"Unknown"}. Page language: ${report.pageInformation.language||"Unknown"}.`,{size:9}),
+      ...wrappedLines(`Declared platform: ${report.pageInformation.platform}. Declared version: ${report.pageInformation.version}.`,{size:9}),
+    ]:[]),
     ...report.limitations.map(limitation => limitation.detail).filter((detail): detail is string => Boolean(detail)).flatMap(detail => wrappedLines(detail, { size: 9 })),
     ...wrappedLines("Hashes, classifier versions, original evidence references, and full technical packets are available in the JSON workpaper. Source excerpts are quoted only when their policy-document provenance is available.", { size: 9 }),
     { ...sectionHeading("Sources and workpaper"), destination: "workpaper", keepWithNextHeight: 45 },

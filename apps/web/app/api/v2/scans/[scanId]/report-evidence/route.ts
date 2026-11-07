@@ -1,3 +1,4 @@
+import { buildFullEvidencePackage } from "../../../../../../lib/api-v2/full-evidence-package";
 import { buildCanonicalReportExport } from "../../../../../../server/scans/report-export";
 import { buildTrackingWorkpaper, renderTrackingWorkpaperCsv } from "../../../../../../server/scans/tracking-workpaper";
 import { parseReportEvidenceRequest } from "../../../../../../lib/api-v2/report-evidence-request";
@@ -73,16 +74,20 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
       if (fullSite && ["waiting_homepage", "running"].includes(fullSite.summary.state.status)) {
         return reply(buildApiV2Error({ code: "invalid_url", message: "Full-site capture is still in progress. Wait for the full-site report to finish before starting its export." }), 409);
       }
-      const presented = report.resultDisposition === "no_go" ? report : { ...report,
-        postureScores: buildApiV2PostureScores({ score: report.score.value,
-          scoreExplanation: report.scoreExplanation, californiaScore: report.californiaScore }),
-        ...buildDetailedEvidenceExport(report),
-        gpcResponse: deriveApiV2GpcResponse(record) };
-      const exportedReport = fullSite ? { ...presented, fullSiteReport: fullSiteEvidenceExport(scanId, fullSite) } : presented;
-      const selected = section ? selectReportEvidenceSection(exportedReport, section) : null;
-      sectionSelection = selected?.selection;
-      const projected = buildReportDisplayExport(selected?.report ?? exportedReport, { scanId });
-      displayReport = selected ? { ...projected, exportContent: { ...projected.exportContent, section, selection: selected.selection } } : projected;
+      if (!section && report.resultDisposition !== "no_go") {
+        displayReport = buildFullEvidencePackage(record, report, fullSite ? fullSiteEvidenceExport(scanId, fullSite) : undefined);
+      } else {
+        const presented = report.resultDisposition === "no_go" ? report : { ...report,
+          postureScores: buildApiV2PostureScores({ score: report.score.value,
+            scoreExplanation: report.scoreExplanation, californiaScore: report.californiaScore }),
+          ...buildDetailedEvidenceExport(report),
+          gpcResponse: deriveApiV2GpcResponse(record) };
+        const exportedReport = fullSite ? { ...presented, fullSiteReport: fullSiteEvidenceExport(scanId, fullSite) } : presented;
+        const selected = section ? selectReportEvidenceSection(exportedReport, section) : null;
+        sectionSelection = selected?.selection;
+        const projected = buildReportDisplayExport(selected?.report ?? exportedReport, { scanId });
+        displayReport = selected ? { ...projected, exportContent: { ...projected.exportContent, section, selection: selected.selection } } : projected;
+      }
     }
     const serialized = JSON.stringify(displayReport);
     if (download) return new Response(serialized, { headers: {
@@ -111,7 +116,7 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
       ...(expiresAt ? { expiresAt } : {}),
       mediaType: "application/json", bytes: Buffer.byteLength(serialized, "utf8"),
       authentication: expiresAt ? "short_lived_report_link" : "public",
-      instructions: (tracking ? "One HTTP download returns the starting-page tracking workpaper JSON; csvUrl downloads its inventory CSV. " : section ? `One HTTP download returns the selected ${section} report sections and shared context; unselected sections are excluded. Preserve section=${section} with every cursor. ` : "One HTTP download returns the full report display JSON. ") + " Open the returned URL directly with your HTTP/file download tool; do not attach or request OAuth credentials. Private-report links carry a report-only capability valid for five minutes; treat them as confidential and do not publish or log them. On expiry, call this MCP tool for a fresh link. If your host blocks file downloads, continue with this MCP tool and nextCursor. Resolve reportContentRef pointers within the downloaded document. Snapshot images remain separate links.",
+      instructions: (tracking ? "One HTTP download returns the starting-page tracking workpaper JSON; csvUrl downloads its inventory CSV. " : section ? `One HTTP download returns the selected ${section} report sections and shared context; unselected sections are excluded. Preserve section=${section} with every cursor. ` : (displayReport as Record<string, any>)?.exportContent?.version === "certscore.full-evidence.v2" ? "One HTTP download returns the versioned full customer evidence package: standard SDK evidence plus both regulatory report evidence views. Source caps and unavailable observations remain explicit. " : "One HTTP download returns the limited no-go report projection. This is not a full evidence superset. ") + " Open the returned URL directly with your HTTP/file download tool; do not attach or request OAuth credentials. Private-report links carry a report-only capability valid for five minutes; treat them as confidential and do not publish or log them. On expiry, call this MCP tool for a fresh link. If your host blocks file downloads, continue with this MCP tool and nextCursor. Resolve reportContentRef pointers within the downloaded document. Snapshot images remain separate links.",
     } }), 200);
   } catch (error) {
     if (error instanceof ReportEvidenceAccessError) return reply(buildApiV2Error({ code: "forbidden", message: error.message }), 403);

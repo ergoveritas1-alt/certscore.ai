@@ -1,3 +1,5 @@
+import {buildReportVisualReferences} from './report-visual-references';
+import {siteMetadataProjectionSchema,describeSiteTechnology} from '@certscore/contracts';
 import { redactGpcProducerBindings } from "../../lib/scans/gpc-public-evidence";
 import { buildReportAppendixEvidence } from "./report-export-evidence";
 import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
@@ -353,6 +355,9 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
   const normalizedConcerns = canonical.normalizedConcerns as Array<Record<string, unknown>>;
   const focus = resolveReportReviewFocus(requestedFocus, scanRecord.scan.scanFromValue);
   const privacyAuditEvidence = readPrivacyAuditEvidence(scanRecord.runtimeArtifacts, scanRecord.scan.id);
+  const metadata=siteMetadataProjectionSchema.safeParse(scanRecord.runtimeArtifacts?.siteMetadata);
+  const pageInformation=metadata.success&&metadata.data.documentUrl===(assessment?.scan.finalUrl??assessment?.scan.requestedUrl)
+    ? {title:metadata.data.observation.title,language:metadata.data.observation.language,...describeSiteTechnology(metadata.data.observation)}:undefined;
   const postAcceptObservation = deriveApiV2PostAcceptObservation(scanRecord);
   const postRefusalObservation = deriveApiV2PostRefusalObservation(scanRecord);
   const gpcResponse = deriveApiV2GpcResponse(scanRecord);
@@ -399,6 +404,8 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
       pagesScanned: scanRecord.scan.pagesScanned,
     },
     executiveSummary,
+    visualReferences:buildReportVisualReferences(scanRecord,assessment?.scan.finalUrl??assessment?.scan.requestedUrl),
+    ...(pageInformation?{pageInformation}:{}),
     gdprEprivacyReview: canonical.checklistPresentation
       ? {
           checklistScore: canonical.checklistPresentation.checklistScore,

@@ -38,3 +38,29 @@ test("runtime rejection reasons preserve evidence eligibility and do not mutate 
   assert.deepEqual(assessRuntimeVisitSnapshot(good, good.domSnapshots, "https://user:secret@example.test/"),
     { status: "unavailable", reasonCode: "invalid_final_url" });
 });
+
+test("a non-text runtime document qualifies only with existing positive visual proof on its loader", () => {
+  const bundle = fixture();
+  bundle.completedAt = new Date(Date.parse(bundle.startedAt) + 1_000).toISOString();
+  const snapshot = bundle.domSnapshots[0]!;
+  snapshot.textExcerpt = "";
+  snapshot.runtimeDocumentCapture = { version: "runtime_document_capture.v1", response: {
+    origin: new URL(snapshot.url).origin, requestUrlSha256: "a".repeat(64),
+    documentToken: "runtime-loader", status: 200, route: "committed",
+  } };
+  bundle.scanNoGoAssessment = {
+    status: "available", version: "scan-no-go-assessment-v1",
+    decision: "continue_with_diagnostics", scanNoGoConfidence: 0.72,
+    reasonCodes: [], corroboratorCodes: [], contradictorCodes: [], evidenceRefs: [],
+    supportingSignals: {
+      visuallySubstantiveScreenshotObserved: true, visualNoGo: false, visualHardNoGoPageState: false,
+    },
+  };
+  bundle.screenshots = [{
+    ...snapshot, artifactId: "visual", capturedAtMs: 101, retentionStatus: "available",
+    captureMethod: "primary_full_page",
+  }] as CanonicalEvidenceBundle["screenshots"];
+  assert.equal(getUsableRuntimeVisitSnapshot(bundle, bundle.domSnapshots), snapshot);
+  bundle.screenshots[0]!.documentIdentity = { source: "cdp_loader_id", token: "other-lane" };
+  assert.equal(getUsableRuntimeVisitSnapshot(bundle, bundle.domSnapshots), undefined);
+});

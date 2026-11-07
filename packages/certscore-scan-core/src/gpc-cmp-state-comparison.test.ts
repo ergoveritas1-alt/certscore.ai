@@ -102,3 +102,53 @@ test("paired target must match the original coordinator dispatch",()=>{
   const p=cmpStatePairFixture();
   assert.equal(buildGpcCmpStateComparison({scanId:p.gpc.scanId,targetUrl:'https://foreign.test/',baseline:originalFixtureSource(p.baseline),gpc:originalFixtureSource(p.gpc)}),undefined);
 });
+
+
+test("main-document v2 retains ready CMP states when worker delivery is unknown, without upgrading v1", () => {
+  const p = cmpStatePairFixture();
+  for (const bundle of [p.baseline, p.gpc]) {
+    bundle.gpcSignalObservation!.workerCount = 1;
+    bundle.gpcSignalObservation!.limitationKeys = ["worker_navigator_delivery_unverified"];
+  }
+  const input = {scanId:p.gpc.scanId, targetUrl:p.baseline.url,
+    baseline:originalFixtureSource(p.baseline), gpc:originalFixtureSource(p.gpc)};
+  assert.equal(buildGpcImpactAssessment(input).cmpComparison?.comparable, false);
+  const packet = buildGpcCmpStateComparison(input);
+  assert.equal(packet?.contractVersion, "certscore.gpc-cmp-state-comparison.v2");
+  assert.equal(packet && "scope" in packet ? packet.scope : undefined, "main_document");
+  assert.equal(packet?.baseline.sale, "not_opted_out");
+  assert.equal(packet?.gpc.sale, "opted_out");
+  assert.equal(packet?.causedByGpc, "not_established");
+});
+
+test("page scope tolerates child-frame uncertainty but never main-frame, source or semantic defects", () => {
+  for (const defect of ["none", "main", "loader", "header", "hash", "not_ready", "frame_churn"] as const) {
+    const p = cmpStatePairFixture(), signal = p.gpc.gpcSignalObservation!;
+    signal.frameCount = 2;
+    signal.limitationKeys = ["frame_signal_readback_incomplete"];
+    if (defect === "main") signal.frames[0]!.navigatorValue = false;
+    if (defect === "loader") p.gpc.gpcImpactCapture!.readbackDocumentToken = "other";
+    if (defect === "header") p.gpc.networkEvents[0]!.requestHeaders = {};
+    if (defect === "hash") p.gpc.gpcPrototypeSessionBinding!.sessionSha256 = "f".repeat(64);
+    if (defect === "not_ready") {
+      p.gpc.gpcObservationSession!.semanticObservation!.gppStatus = "not_ready";
+      p.gpc.gpcPrototypeSessionBinding!.sessionSha256 = fixtureHash(JSON.stringify(p.gpc.gpcObservationSession));
+    }
+    if (defect === "frame_churn") signal.limitationKeys.push("frames_changed_during_readback");
+    const packet = project(p);
+    assert.equal(Boolean(packet), defect === "none" || defect === "frame_churn", defect);
+    if (packet) assert.equal(packet.contractVersion, "certscore.gpc-cmp-state-comparison.v2");
+  }
+});
+
+test("scoped CMP requires verified page windows despite incomplete full-context retention", () => {
+  const p = cmpStatePairFixture();
+  for (const bundle of [p.baseline, p.gpc]) {
+    bundle.gpcSignalObservation!.workerCount = 1;
+    bundle.gpcSignalObservation!.limitationKeys = ["worker_navigator_delivery_unverified"];
+    bundle.gpcImpactCapture!.retentionStatus = "incomplete";
+  }
+  assert.equal(project(p)?.contractVersion, "certscore.gpc-cmp-state-comparison.v2");
+  p.gpc.gpcImpactCapture!.readbackDocumentToken = "foreign-loader";
+  assert.equal(project(p), undefined);
+});

@@ -428,6 +428,7 @@ test("production result handoff verifies retained bytes and scan identity before
   const scanId = "fca91cbb-cb56-4d8b-8056-a94d5472bf86";
   const manifest = Buffer.from(JSON.stringify({
     processor: "local-certscore-v2-dag-parallel-v1",
+    privacyCaptureProfile: "presence_only_six_workers.v1",
     scanId,
     targetEnvironment: "production",
   }));
@@ -464,6 +465,7 @@ test("production result handoff verifies retained bytes and scan identity before
 
   assert.equal(verified?.manifest.sizeBytes, manifest.byteLength);
   assert.equal(verified?.scanArtifact.sizeBytes, bundle.byteLength);
+  assert.equal(verified?.optOutDispatch, "excluded_by_profile");
   assert.deepEqual(verifiedCanonicalBundleBytes.get({
     uri: "s3://certscore-artifacts/scan/CanonicalEvidenceBundle.json",
     expectedSha256: createHash("sha256").update(bundle).digest("hex"),
@@ -483,6 +485,25 @@ test("production result handoff verifies retained bytes and scan identity before
     }),
     /content length|checksum or size/,
   );
+});
+
+test("verified handoff retains only coherent scan-bound conditional opt-out diagnostics",async()=>{
+ const scanId='fca91cbb-cb56-4d8b-8056-a94d5472bf86';
+ for(const mode of ['valid','v3','redirected_presence','wrong_scan','missing_lane','historical'] as const){
+  const lane={status:'limited',startedAt:'2026-11-05T00:00:00.000Z',completedAt:'2026-11-05T00:00:01.000Z'};
+  const conditional={version:mode==='historical'?'conditional_opt_out_dispatch.v1':mode==='v3'||mode==='redirected_presence'?'conditional_opt_out_dispatch.v3':'conditional_opt_out_dispatch.v2',scanId:mode==='wrong_scan'?'other':scanId,status:'dispatched',reason:'supported_control',sourceSha256:'a'.repeat(64),observationId:'control',recipeVersion:'onetrust.explicit_sale_share.v3-bound-controls',controlObserved:true,supportedRoute:true,remainingTimeMs:9000,decidedAtMs:18000};
+  if(mode==='redirected_presence')Object.assign(conditional,{status:'skipped',reason:'unsupported_or_unverified_control',supportedRoute:false});
+  const manifest=Buffer.from(JSON.stringify({scanId,processor:'local-certscore-v2-dag-parallel-v1',targetEnvironment:'production',privacyCaptureProfile:'conditional_opt_out_seven_workers.v1',conditionalOptOutDecision:conditional}));
+  const bundle=Buffer.from(JSON.stringify({scanId,schemaVersion:'certscore.v2.alpha.1',...(mode==='missing_lane'||mode==='redirected_presence'?{}:{saleSharingOptOutLaneOutcome:lane})}));
+  const parsed=parseLambdaResultMessage(JSON.stringify({artifactOnly:true,
+   artifactMetadata:{manifestUri:{sha256:createHash('sha256').update(manifest).digest('hex'),sizeBytes:manifest.length},scanArtifactUri:{sha256:createHash('sha256').update(bundle).digest('hex'),sizeBytes:bundle.length}},
+   artifactPointers:{manifestUri:'s3://certscore-artifacts/scan/manifest.json',scanArtifactUri:'s3://certscore-artifacts/scan/bundle.json'},
+   completedAt:'2026-11-05T00:00:01.000Z',contractVersion:'certscore.v2.lambda-dag-result.v1',processor:'local-certscore-v2-dag-parallel-v1',productionFindingIntegration:false,scanId,status:'completed',targetEnvironment:'production'}),'production');
+  const verified=await verifyProductionArtifactChain(parsed,{async send(command:GetObjectCommand){const body=command.input.Key?.endsWith('manifest.json')?manifest:bundle;return {$metadata:{},Body:Readable.from([body]) as never,ContentLength:body.length};}});
+  const supported=['valid','v3','redirected_presence'].includes(mode);
+  assert.equal(Boolean(verified?.conditionalOptOutDecision),supported,mode);
+  if(supported)assert.deepEqual(verified!.conditionalOptOutDecision,conditional);
+ }
 });
 
 test("lossless encoded production handoff keeps outer receipts, identity and original byte caches", async () => {

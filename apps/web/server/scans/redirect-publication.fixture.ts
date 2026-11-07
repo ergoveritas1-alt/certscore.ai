@@ -11,11 +11,17 @@ export async function redirectPublicationHarness(options: {materializationRoute?
   const output = path.join(directory, "pipeline.cjs");
   const webRequire = createRequire(path.resolve("apps/web/package.json"));
   await writeFile(infrastructure, `
-    const state = {record:null,writes:[],objects:new Map(),databaseQuery:null,sourceReadError:null};
+    const state = {record:null,writes:[],objects:new Map(),databaseQuery:null,sourceReadError:null,localPrivacyFormOrigin:null,localPrivacyFormLookups:0};
     module.exports = {state,
       getAnonymousScanById:async()=>state.record,getScanById:async()=>state.record,
       withNonBlockingDatabaseLock:async(key,run)=>({acquired:true,value:await run()}),
       queryOne:async (sql,params)=>{
+        if(sql.includes('as original_request_id')&&sql.includes('p.report_projection_payload_sha256=$4')){
+          state.localPrivacyFormLookups++;
+          const saved=state.writes.findLast(row=>row.sql.includes('insert into public.scan_snapshots')&&row.params[0]===params[0]);
+          return saved&&saved.params[28]===params[1]&&saved.params[29]===params[2]&&saved.params[38]===params[3]
+            ? state.localPrivacyFormOrigin:null;
+        }
         if(sql.includes('join public.scan_snapshots projection')){
           const saved=state.writes.findLast(row=>row.sql.includes('insert into public.scan_snapshots')&&row.params[0]===params[0]);
           if(!saved)return null;const p=saved.params;

@@ -1,4 +1,4 @@
-import { PRESENCE_ONLY_CAPTURE_PROFILE } from "@certscore/contracts";
+import { PRESENCE_ONLY_CAPTURE_PROFILE, CONDITIONAL_OPT_OUT_CAPTURE_PROFILE, type PrivacyCaptureProfile, conditionalOptOutRequested } from "@certscore/contracts";
 import { SALE_SHARING_OPT_OUT_POLICY, type SaleSharingOptOutDispatch } from "@certscore/contracts";
 import {activeSaleSharingCanaryCampaign,assertSaleSharingCanary,consumeSaleSharingCanary,type SaleSharingCanaryCampaign,type SaleSharingCanaryLedger} from "@certscore/contracts";
 import {createSaleSharingCanaryStore} from "./sale-sharing-canary-store";
@@ -65,7 +65,7 @@ export type LocalV2DagLambdaDispatchPayload = {
     SharedCrawlSeedHint,
     "confidence" | "hintType" | "source" | "sourceCompletedAt" | "sourceScanId" | "url"
   >>;
-  privacyCaptureProfile?: typeof PRESENCE_ONLY_CAPTURE_PROFILE;
+  privacyCaptureProfile?: PrivacyCaptureProfile;
   saleSharingOptOut?: SaleSharingOptOutDispatch;
   postAcceptObservation?: PostAcceptLambdaDispatchConfig;
   postRefusalObservation?: PostRefusalLambdaDispatchConfig;
@@ -455,6 +455,8 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
         protocol: "passive_baseline_with_sec_gpc",
       } satisfies GpcObservationDispatchConfig
     : undefined;
+  // Separate opt-in; legacy flags alone must not expand the presence profile.
+  const conditionalOptOut = conditionalOptOutRequested(intent, process.env);
   const runtimeGraph = intent.runtimeGraphSelection !== undefined
     ? readPersistedRuntimeGraphDispatch(input.scanId, intent)
     : intent.orchestrationMode === "sharded" ? selectRuntimeGraphDispatch(input.scanId, process.env, targetUrl) : undefined;
@@ -474,7 +476,8 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     ...(policySurfaceSeeds.length > 0 ? { policySurfaceSeeds } : {}),
     ...postActionObservation,
-    ...(intent.orchestrationMode === "sharded" ? { privacyCaptureProfile: PRESENCE_ONLY_CAPTURE_PROFILE } : {}),
+    ...(intent.orchestrationMode === "sharded" ? { privacyCaptureProfile: conditionalOptOut ? CONDITIONAL_OPT_OUT_CAPTURE_PROFILE : PRESENCE_ONLY_CAPTURE_PROFILE } : {}),
+    ...(conditionalOptOut ? {saleSharingOptOut:{controlPolicy:"explicit_opt_out_controls.v1" as const,policyVersion:"bounded_sale_sharing_opt_out.v1" as const,enabled:true as const,scanId:input.scanId,exactTargetUrl:targetUrl}} : {}),
     ...(gpcObservation ? { gpcObservation } : {}),
     ...(runtimeGraph ? { runtimeGraph } : {}),
     productionFindingIntegration: false,

@@ -1,3 +1,4 @@
+import {applyChoiceSummary, CHOICE_AUDIT_VERSION, LEGACY_CHOICE_AUDIT_VERSION} from './audit-progress-choice';
 /** Audit-only projection of already-persisted control states. No findings or re-assessment. */
 import {readFileSync,realpathSync,statSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -48,13 +49,18 @@ select row_to_json(r) from (
 ) r;`;
 }
 
-export function retainedOptOutState(extract:any,row:ProgressRow):{state:string;source:string}|null {
-  if(!row.reportable||extract.scanId!==row.scanId||extract.isMacMini!==true||extract.isCanary!==false||!extract.originalRequestId||extract.publicationRequestStatus==='terminal_failure')return null;
+export function retainedGenerationMatches(extract:any,row:ProgressRow):boolean {
+  if(!row.reportable||extract.scanId!==row.scanId||extract.isMacMini!==true||extract.isCanary!==false||!extract.originalRequestId||extract.publicationRequestStatus==='terminal_failure')return false;
   if(!['completed','completed_limited'].includes(extract.status)||extract.projection_status!=='ready'||
     !['scan-report-projection-v26','scan-report-projection-v27'].includes(extract.projection_version)||extract.projection_version!==row.projectionVersion||
     !/^[a-f0-9]{64}$/.test(extract.projection_payload_sha256??'')||
-    !/^[a-f0-9]{64}$/.test(row.publicProjectionSourceHash??'')||extract.projection_source_hash!==row.publicProjectionSourceHash)return null;
-  if(!Number.isFinite(Date.parse(extract.created_at))||Math.abs(Date.parse(extract.created_at)-Date.parse(row.createdAt))>=1)return null;
+    !/^[a-f0-9]{64}$/.test(row.publicProjectionSourceHash??'')||extract.projection_source_hash!==row.publicProjectionSourceHash)return false;
+  if(!Number.isFinite(Date.parse(extract.created_at))||Math.abs(Date.parse(extract.created_at)-Date.parse(row.createdAt))>=1)return false;
+  return true;
+}
+
+export function retainedOptOutState(extract:any,row:ProgressRow):{state:string;source:string}|null {
+  if(!retainedGenerationMatches(extract,row))return null;
   const parsed=assessmentSchema.safeParse(extract.control_assessment);if(!parsed.success)return null;
   const a=parsed.data,c=a.controls.privacyOptOut;
   if(a.scan.scanId!==row.scanId||a.scan.noGo||a.artifactVersion!==a.provenance.contractVersion)return null;
@@ -78,6 +84,11 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
     for(const extract of input.rows){
       summary.inspected++;if(seen.has(extract.scanId))throw Error('Duplicate control-extract scan');seen.add(extract.scanId);
       const row=byId.get(extract.scanId),result=row?retainedOptOutState(extract,row):null;
+      if(row&&retainedGenerationMatches(extract,row)&&[CHOICE_AUDIT_VERSION,LEGACY_CHOICE_AUDIT_VERSION].includes(extract.choice_audit?.version)){
+        applyChoiceSummary(row,extract.choice_audit,`persisted_choice_extract/${row.projectionVersion}`);
+        if(row.states['sealed.opt_out.coverage']==='available'&&!row.refs.some(r=>r.file===file&&r.role==='generation_matched_choice_extract'))
+          row.refs.push({file,sha256:receipt.sha256,role:'generation_matched_choice_extract'});
+      }
       if(!row||!result){summary.unmatchedOrUnavailable++;continue;}
       const prior=matched.get(row.scanId);if(prior&&(prior.state!==result.state||prior.source!==result.source))throw Error('Conflicting same-generation control extracts');matched.set(row.scanId,result);
       const old=row.states['sealed.control.privacyOptOut'];

@@ -101,7 +101,7 @@ import { isPairedConsentGeometryReady } from "../consent-paired-geometry-readine
 import { bindConsentGeometryScreenshot, preferredPreConsentScreenshotRef } from "../consent-geometry-screenshot-binding.js";
 import { bindAccessibilityNodesToDom } from "../consent-accessibility-dom-binding.js";
 import { createConsentVisualComparisonCollector, preCaptureConsentPairObserved } from "../consent-control-visual-comparison.js";
-import { captureDocumentBoundValue, sameDocumentCaptureBinding, type DocumentBoundCapture } from "../document-bound-capture.js";
+import { captureDocumentBoundValue, sameDocumentCaptureBinding, type DocumentBoundCapture, type DocumentCaptureBinding } from "../document-bound-capture.js";
 import { retainCommittedConsentHttpStatus, type CommittedConsentResponse } from "../consent-committed-response.js";
 import { connectTlsThroughConfiguredProxy, proxyFetch } from "../proxy-fetch.js";
 import {
@@ -168,7 +168,14 @@ export const PRE_CONSENT_RUNTIME_PREVIEW_CHECKPOINT_MS = 6_000;
 export const RUNTIME_PAGE_INVENTORY_LOADING = "Runtime page inventory captured while the document was loading; later DOM content may be missing.";
 export const RUNTIME_PAGE_INVENTORY_UNSETTLED = "Runtime page inventory captured without a completed loading-document settle window; later DOM content may be missing.";
 export const RUNTIME_PAGE_INVENTORY_UNAVAILABLE = "Runtime page inventory unavailable after bounded capture; empty fallback rows do not establish absence.";
-type BrowserDocumentIdentityState = { current?: BrowserDocumentIdentity; mainDocumentRevision?: number };
+type BrowserDocumentIdentityState = {
+  current?: BrowserDocumentIdentity;
+  mainDocumentRevision?: number;
+  routeRevision?: number;
+  committedUrl?: string;
+  sameDocumentUrl?: string;
+  mainResponse?: { url: string; status: number; documentToken: string };
+};
 const browserDocumentIdentityByPage = new WeakMap<Page, BrowserDocumentIdentity>();
 
 function currentBrowserDocumentIdentity(page: Page): BrowserDocumentIdentity | undefined {
@@ -667,8 +674,9 @@ export async function preConsentRuntimeScanner(
   const captureRuntimeEvidence = captureScope !== "consent_proof";
   const captureConsentEvidence = captureScope !== "runtime_evidence";
   const captureRenderedPolicyEvidence = captureScope === "combined";
-  const captureGateRuntimeText=captureScope==='runtime_evidence'&&!input.globalPrivacyControlEnabled&&
-    input.executionProfile!=='inventory_only'&&isGateRuntimeTextTarget(input.normalizedUrl);
+  const bindStartingPageText = captureScope === "runtime_evidence" && !input.globalPrivacyControlEnabled &&
+    input.executionProfile !== "inventory_only";
+  const captureGateRuntimeText = bindStartingPageText && isGateRuntimeTextTarget(input.normalizedUrl);
   const requiredAccessibility = Boolean(input.accessibilityScanId && !input.globalPrivacyControlEnabled && input.executionProfile !== "inventory_only");
   const requiredTailReserveMs = requiredAccessibility ? ACCESSIBILITY_AUDIT_BUDGET_MS : 0;
   const passiveEvidenceActivity = createPassiveEvidenceActivityTracker();
@@ -713,6 +721,11 @@ export async function preConsentRuntimeScanner(
   });
   const cdpInitiatorsByUrl = new Map<string, string[][]>();
   const browserDocumentIdentityState: BrowserDocumentIdentityState = { mainDocumentRevision: 0 };
+  const readRuntimeTextBinding = () => ({
+    url: page.url(),
+    documentIdentity: currentBrowserDocumentIdentity(page),
+    revision: browserDocumentIdentityState.routeRevision,
+  });
   let networkMetadataSession: CDPSession | null = null;
   let termlyNetworkInventory:ReturnType<typeof installPassiveTermlyInventoryCapture>|undefined;
   let visualCapture: VisualCaptureSummary = {
@@ -834,6 +847,7 @@ export async function preConsentRuntimeScanner(
   networkMetadataSession = await installCdpNetworkMetadataCapture(page, {
     initiatorsByUrl: cdpInitiatorsByUrl,
     documentIdentityState: browserDocumentIdentityState,
+    trackRuntimeDocument: bindStartingPageText,
     onSessionReady:(session,mainFrameId)=>{
       if(input.captureScope!=="consent_proof" || !input.cmpBasicScanId || !mainFrameId)return;
       termlyNetworkInventory=installPassiveTermlyInventoryCapture({session,mainFrameId,targetUrl:input.normalizedUrl,
@@ -2446,13 +2460,40 @@ export async function preConsentRuntimeScanner(
         "Existing module budget leaves no loading-document allowance after reserving the atomic inventory capture.");
     }
 
+    // Both production passive lanes use their sole read after page inventory
+    // and consent recapture, immediately before the existing cookie snapshot. Local minimum/adaptive experiments retain their own protocol.
+    const deferPairedReadback = Boolean(impactCapture && captureScope === "runtime_evidence" &&
+      !input.gpcComparisonMinDurationMs && !input.localGpcAdaptiveParticipant);
+    const readGpcSignal = () => {
+      if (!gpcSignalCapture || input.signal?.aborted || remainingModuleBudgetMs() <= 0) return Promise.resolve(undefined);
+      return recordBoundedTiming(timingBreakdown,
+          "GPC signal readback", input.gpcComparisonMinDurationMs && impactCapture
+            ? "Read actual main/frame values after the local matched observation minimum, while preserving the initial page snapshot."
+            : "Read actual main/frame values at the bounded passive checkpoint; no extra settling.",
+          Math.min(2_500 + (impactCapture ? input.gpcComparisonMinDurationMs ?? 0 : 0), Math.max(1, remainingModuleBudgetMs())), async () => {
+            if (input.localGpcAdaptiveParticipant && impactCapture) {
+              await recordTiming(timingBreakdown,"GPC adaptive paired observation","Local matched five-second minimum, two-second request-start quiet, fifteen-second cap.",()=>impactCapture.waitForAdaptive(input.signal));
+            } else if (input.gpcComparisonMinDurationMs && impactCapture) {
+              await recordTiming(timingBreakdown, "GPC matched observation minimum",
+                `Local ${input.gpcComparisonMinDurationMs / 1000}-second matched capture after document commit; initial page inventory runs concurrently and existing checks retain their budgets.`, async () => {
+                  let remainingMs = impactCapture.remainingObservationMs(input.gpcComparisonMinDurationMs!);
+                  while (remainingMs > 0 && remainingModuleBudgetMs() > 2_500) {
+                    await delay(Math.min(remainingMs, remainingModuleBudgetMs() - 2_500), undefined, {signal: input.signal});
+                    remainingMs = impactCapture.remainingObservationMs(input.gpcComparisonMinDurationMs!);
+                  }
+                });
+            }
+            return gpcSignalCapture.snapshot({budgetMs: Math.min(2_500, Math.max(1, remainingModuleBudgetMs()))});
+          }, () => undefined);
+    };
+
     const [pageEvidence, initialConsentObservation, lateAccessibilityObservation, gpcSignalObservation] = await recordTiming(
       timingBreakdown,
       "page evidence capture",
       "Atomic read-only storage, scripts, iframes, browser API, collection surface, and DOM text snapshot after the first structured consent inventory is retained.",
       () => Promise.all([captureRuntimeEvidence
         ? capturePostSettlePageEvidence({
-            bindRuntimeText:captureGateRuntimeText,
+            readRuntimeTextBinding: bindStartingPageText ? readRuntimeTextBinding : undefined,
             captureSiteIntegrity: !input.globalPrivacyControlEnabled ? (input.executionProfile === "inventory_only" ? "additional_page_main_document" : "starting_page_main_document") : false,
             captureRenderedPolicyLinks: captureRenderedPolicyEvidence,
             firstPartyHostname,
@@ -2476,26 +2517,7 @@ export async function preConsentRuntimeScanner(
           ? Promise.resolve(preScreenshotConsentObservation)
           : consentUiObservationPromise,
         lateAccessibilityObservationPromise,
-        gpcSignalCapture ? recordBoundedTiming(timingBreakdown,
-          "GPC signal readback", input.gpcComparisonMinDurationMs && impactCapture
-            ? "Read actual main/frame values after the local matched observation minimum, while preserving the initial page snapshot."
-            : "Read actual main/frame values alongside the existing bounded page snapshot; no extra settling.",
-          Math.min(2_500 + (impactCapture ? input.gpcComparisonMinDurationMs ?? 0 : 0), Math.max(1, remainingModuleBudgetMs())), async () => {
-            if (input.localGpcAdaptiveParticipant && impactCapture) {
-              await recordTiming(timingBreakdown,"GPC adaptive paired observation","Local matched five-second minimum, two-second request-start quiet, fifteen-second cap.",()=>impactCapture.waitForAdaptive(input.signal));
-            } else if (input.gpcComparisonMinDurationMs && impactCapture) {
-              await recordTiming(timingBreakdown, "GPC matched observation minimum",
-                `Local ${input.gpcComparisonMinDurationMs / 1000}-second matched capture after document commit; initial page inventory runs concurrently and existing checks retain their budgets.`, async () => {
-                  let remainingMs = impactCapture.remainingObservationMs(input.gpcComparisonMinDurationMs!);
-                  while (remainingMs > 0 && remainingModuleBudgetMs() > 2_500) {
-                    await delay(Math.min(remainingMs, remainingModuleBudgetMs() - 2_500), undefined, {signal: input.signal});
-                    remainingMs = impactCapture.remainingObservationMs(input.gpcComparisonMinDurationMs!);
-                  }
-                });
-            }
-            return gpcSignalCapture.snapshot({budgetMs: Math.min(2_500, Math.max(1, remainingModuleBudgetMs()))});
-          }, () => undefined)
-          : Promise.resolve(undefined),
+        deferPairedReadback ? Promise.resolve(undefined) : readGpcSignal(),
       ]),
     );
     if (runtimeDocumentSettle && !["already_ready", "settled"].includes(runtimeDocumentSettle.status)) {
@@ -2511,15 +2533,11 @@ export async function preConsentRuntimeScanner(
       }
     }
     retainedGpcSignalObservation = gpcSignalObservation;
-    const frozenImpactCapture = impactCapture?.finish(gpcSignalObservation);
-    // Recovery shares the original checkpoint; later semantic work must not
-    // move either capture window or append post-freeze requests.
+    let frozenImpactCapture = deferPairedReadback ? undefined : impactCapture?.finish(gpcSignalObservation);
     const frozenNavigationRecovery = navigationRecovery?.finishRecovery(gpcSignalObservation);
-    // Read the GPC visit's CMP state after work this same session already owes
-    // (including cookies and sparse-page confirmation). Do not add a wait or
-    // repeat the read. Paired impact evidence remains frozen above; its document
-    // anchor is not rebound, and navigation still invalidates terminal proof.
-    const deferGpcFinalization = Boolean(gpcObservationSession);
+    // Baseline and GPC semantic reads share the terminal checkpoint, after
+    // already-owed work. Original loader anchors remain immutable throughout.
+    const deferGpcFinalization = Boolean(gpcObservationSession) || deferPairedReadback;
     let gpcFinalizationStarted = false;
     const finalizeGpcEvidence = async () => {
       if (gpcFinalizationStarted) return;
@@ -2568,20 +2586,21 @@ export async function preConsentRuntimeScanner(
     retainedConsentUiObservation = consentObservation;
     startCmpBasicCapture();
     let domText = initialDomText;
-    let domTextCapture: (DocumentBoundCapture<string>&{documentReadyState?:string;documentLanguage?:string}) | undefined = "domTextCapture" in pageEvidence
-      ? pageEvidence.domTextCapture as (DocumentBoundCapture<string>&{documentReadyState?:string;documentLanguage?:string}) | undefined
+    let domTextCapture: (DocumentBoundCapture<string> & {
+      documentReadyState?: string;
+      documentLanguage?: string;
+      documentTitle?: string;
+    }) | undefined = "domTextCapture" in pageEvidence
+      ? pageEvidence.domTextCapture as typeof domTextCapture
       : undefined;
-    const readDomTextCapture=async()=>{
-      if(captureGateRuntimeText){
-        if(remainingModuleBudgetMs()<=0)return null;
-        const snapshot=await captureBoundRuntimeTextSnapshot({
-          capture:()=>recordBoundedTiming(timingBreakdown,'runtime text binding read',
-            'The existing body refresh retains readiness and its original cached document binding.',Math.min(2000,remainingModuleBudgetMs()),
-            ()=>page.evaluate(()=>({domText:document.body?.innerText??'',pageUrl:location.href,documentReadyState:document.readyState,documentLanguage:document.documentElement?.lang??''})),
-            ()=>({domText:'',pageUrl:'',documentReadyState:'loading'})),
-          readBinding:()=>({url:page.url(),documentIdentity:currentBrowserDocumentIdentity(page)}),scanStartedAtMs:input.scanStartedAtMs,
-        }).catch(()=>null);
-        return snapshot?.domTextCapture??null;
+    const initialRuntimeText = domTextCapture;
+    const readDomTextCapture = async (runtimeAllowanceMs = Math.min(2_000, remainingModuleBudgetMs())) => {
+      if (bindStartingPageText) {
+        if (runtimeAllowanceMs <= 0 || effectiveSignal?.aborted) return null;
+        return recordBoundedTiming(timingBreakdown, "runtime text binding read",
+          "The existing body refresh retains readiness and its original cached document binding.", runtimeAllowanceMs,
+          () => captureStartingPageText(page, readRuntimeTextBinding, input.scanStartedAtMs),
+          () => null);
       }
       return captureDocumentBoundValue({capture:()=>page.locator('body').innerText({timeout:2000}),
         readBinding:()=>({url:page.url(),documentIdentity:currentBrowserDocumentIdentity(page)}),scanStartedAtMs:input.scanStartedAtMs}).catch(()=>null);
@@ -2724,6 +2743,13 @@ export async function preConsentRuntimeScanner(
       }
     }
 
+    // Preserve the existing cookie proof's signal-before-snapshot ordering.
+    // This is the only signal read, delayed through already-required inventory;
+    // no extra read, minimum wait, or wider request horizon is introduced.
+    if (deferPairedReadback) {
+      retainedGpcSignalObservation = await readGpcSignal();
+      frozenImpactCapture = impactCapture?.finish(retainedGpcSignalObservation);
+    }
     const cookieCaptureBefore={url:page.url(),documentIdentity:currentBrowserDocumentIdentity(page)};
     const cookieCaptureStartedAtMs=elapsed(input.scanStartedAtMs);
     let cookieCaptureSucceeded=true;
@@ -4333,10 +4359,11 @@ export async function preConsentRuntimeScanner(
     }
 
     const initialNoGoCandidateText = domText.replace(/\s+/g, " ").trim();
-    if (shouldConfirmSparsePageCandidate({
+    const confirmSparsePage = shouldConfirmSparsePageCandidate({
       bodyText: initialNoGoCandidateText,
       hasSufficientFirstLayerControls: hasSufficientFirstLayerConsentControls(consentObservation),
-    })) {
+    });
+    if (confirmSparsePage) {
       const confirmationWaitMs = fastWait ? 750 : 1_250;
       if (!earlySparseConfirmation) await measureRecovery("sparse_page_confirmation", () => recordTiming(
         timingBreakdown,
@@ -4344,15 +4371,15 @@ export async function preConsentRuntimeScanner(
         "Short, read-only second-look window for initially blank or loading pages.",
         () => page.waitForTimeout(confirmationWaitMs).catch(() => undefined),
       ));
-      const confirmedDomTextCapture = await readDomTextCapture();
-      const confirmedDomText = confirmedDomTextCapture?.value ?? domText;
-      if (confirmedDomText.trim().length > domText.trim().length ||
-          (captureScope === "consent_proof" && confirmedDomTextCapture && domTextCapture &&
-            !sameDocumentCaptureBinding(domTextCapture, confirmedDomTextCapture))) {
-        domText = confirmedDomText;
-        domTextCapture = confirmedDomTextCapture ?? domTextCapture;
+      if (!bindStartingPageText) {
+        const confirmed = await readDomTextCapture();
+        if (confirmed && (confirmed.value.trim().length > domText.trim().length ||
+            (captureScope === "consent_proof" && domTextCapture &&
+              !sameDocumentCaptureBinding(domTextCapture, confirmed)))) {
+          domText = confirmed.value;
+          domTextCapture = confirmed;
+        }
       }
-      else if(captureGateRuntimeText)domTextCapture=undefined;
       const confirmedNoGoCandidateText = domText.replace(/\s+/g, " ").trim();
       if (
         captureConsentEvidence &&
@@ -4391,12 +4418,12 @@ export async function preConsentRuntimeScanner(
     // work below. Retain its listener through that work without adding a wait,
     // readback, or budget. Other capture modes keep their earlier boundary.
     const finalizeGpcAfterPassiveMetadata = deferGpcFinalization &&
-      captureScope === "runtime_evidence" && input.globalPrivacyControlEnabled === true;
+      captureScope === "runtime_evidence" && (deferPairedReadback || input.globalPrivacyControlEnabled === true);
     // Dispatch the one terminal loader read only after already-required page
     // and sparse-document recovery. Starting it before that work makes a real
     // recovery commit invalidate the independent observation unnecessarily.
     // This is the first read, never a refresh/rebind of dispatched proof. The
-    // paired impact/signal snapshot remains frozen at its original boundary.
+    // paired impact/signal snapshot retains its original document anchor.
     gpcObservationSession?.prepareFinalization();
     if (deferGpcFinalization && !finalizeGpcAfterPassiveMetadata) await finalizeGpcEvidence();
 
@@ -4414,7 +4441,7 @@ export async function preConsentRuntimeScanner(
       if (privacyPacket && !effectiveSignal?.aborted && Date.now()<privacyDeadline) retainedCmpBasicEvidence=privacyPacket;
     }
 
-    const domPath = await recordTiming(
+    const writeDomText = () => recordTiming(
       timingBreakdown,
       "DOM artifact write",
       "Bounded pre-consent DOM text artifact write.",
@@ -4423,6 +4450,8 @@ export async function preConsentRuntimeScanner(
         domText.slice(0, 100_000),
       ),
     );
+    const earlyDomPath = bindStartingPageText ? undefined : await writeDomText();
+    const metadataBinding = readRuntimeTextBinding();
     const metadataDocumentUrl = page.url();
     const metadataDocumentToken = currentBrowserDocumentIdentity(page)?.token;
     const gpcMetadataAllowanceMs = finalizeGpcAfterPassiveMetadata ? optionalEvidenceAllowance({
@@ -4451,26 +4480,37 @@ export async function preConsentRuntimeScanner(
       if (page.url() !== metadataDocumentUrl || currentBrowserDocumentIdentity(page)?.token !== metadataDocumentToken) siteMetadata = null;
       else if (feedEvidence) siteMetadata = { ...siteMetadata, versionEvidence: [...(siteMetadata.versionEvidence ?? []), feedEvidence].slice(0, 8) };
     }
-    const documentLanguage = captureRuntimeEvidence ? siteMetadata?.language : await readDeclaredDocumentLanguage(page);
-    const domSnapshot: DomSnapshotArtifact = {
-      ...(captureGateRuntimeText?{optOutSearch:retainRuntimeOptOutSearch(domTextCapture as RuntimeTextCapture|undefined,input.normalizedUrl,domText)}:{}),
-      ...(captureScope === "consent_proof" && domTextCapture ? {optOutLabel:retainDomOptOutLabel(domTextCapture,"dom_text_pre_consent"),optOutSearch:retainDomOptOutSearch(domTextCapture,"dom_text_pre_consent")} : {}),
-      ...(siteMetadata ? { siteMetadata } : {}),
-      artifactId: "dom_text_pre_consent",
-      capturedAtMs: captureScope === "consent_proof" && domTextCapture ? domTextCapture.capturedAtMs : elapsed(input.scanStartedAtMs),
-      path: domPath,
-      url: captureScope === "consent_proof" && domTextCapture ? domTextCapture.url : page.url(),
-      documentIdentity: captureScope === "consent_proof" ? domTextCapture?.documentIdentity : currentBrowserDocumentIdentity(page),
-      ...(documentLanguage ? { documentLanguage } : {}),
-      textExcerpt: domText.slice(0, 2_000),
-      pagePhase: "network_idle",
-      consentStateAtTime: "pre_consent",
+    const finishDomSnapshot = async (
+      runtimeDocumentCapture?: DomSnapshotArtifact["runtimeDocumentCapture"],
+      runtimeUrl?: string,
+    ): Promise<DomSnapshotArtifact> => {
+      const domPath = earlyDomPath ?? await writeDomText();
+      const documentLanguage = captureRuntimeEvidence ? siteMetadata?.language : await readDeclaredDocumentLanguage(page);
+      const textBinding = captureScope === "consent_proof" || bindStartingPageText ? domTextCapture : undefined;
+      const domSnapshot: DomSnapshotArtifact = {
+        ...(captureGateRuntimeText?{optOutSearch:retainRuntimeOptOutSearch(domTextCapture as RuntimeTextCapture|undefined,input.normalizedUrl,domText)}:{}),
+        ...(captureScope === "consent_proof" && domTextCapture ? {optOutLabel:retainDomOptOutLabel(domTextCapture,"dom_text_pre_consent"),optOutSearch:retainDomOptOutSearch(domTextCapture,"dom_text_pre_consent")} : {}),
+        ...(siteMetadata ? { siteMetadata } : {}),
+        ...(runtimeDocumentCapture ? { runtimeDocumentCapture } : {}),
+        artifactId: "dom_text_pre_consent",
+        capturedAtMs: textBinding?.capturedAtMs ?? elapsed(input.scanStartedAtMs),
+        path: domPath,
+        url: textBinding?.url ?? runtimeUrl ?? page.url(),
+        documentIdentity: captureScope === "consent_proof" || bindStartingPageText ? textBinding?.documentIdentity : currentBrowserDocumentIdentity(page),
+        ...(documentLanguage ? { documentLanguage } : {}),
+        textExcerpt: domText.slice(0, 2_000),
+        pagePhase: "network_idle",
+        consentStateAtTime: "pre_consent",
+      };
+      if (captureConsentEvidence) {
+        consentObservation.evidenceRefs = [
+          { refId: "dom_text_pre_consent", artifactId: domSnapshot.artifactId, path: domPath },
+        ];
+      }
+
+      return domSnapshot;
     };
-    if (captureConsentEvidence) {
-      consentObservation.evidenceRefs = [
-        { refId: "dom_text_pre_consent", artifactId: domSnapshot.artifactId, path: domPath },
-      ];
-    }
+    const earlyDomSnapshot = bindStartingPageText ? undefined : await finishDomSnapshot();
 
     const fallbackTransportSecurityObservation = () => ({
       observation: emptyTransportSecurityObservation({
@@ -4532,7 +4572,49 @@ export async function preConsentRuntimeScanner(
     retainedTransportSecurityObservation = transportSecurityObservation ?? undefined;
     retainedTransportSecurityArtifactRef = transportSecurityArtifactRef;
 
-    // Keep the post-recovery loader anchor and original paired-impact freeze.
+    if (bindStartingPageText && confirmSparsePage) {
+      // Reuse the one confirmation read at the end of already-scheduled passive
+      // work. A new route can update this loader's text. A replacement cannot
+      // borrow storage, forms or other inventory collected on the old loader.
+      const allowance = optionalEvidenceAllowance({ remainingMs: remainingModuleBudgetMs(),
+        maximumMs: 2_000, requiredReserveMs: requiredTailReserveMs });
+      const confirmed = await readDomTextCapture(allowance);
+      if (confirmed?.documentIdentity?.token && initialRuntimeText?.documentIdentity?.token === confirmed.documentIdentity.token) {
+        domText = confirmed.value;
+        domTextCapture = confirmed;
+      }
+    }
+    const liveBinding = readRuntimeTextBinding();
+    const boundStartingPage = bindStartingPageText && domTextCapture &&
+      initialRuntimeText?.documentIdentity?.token === domTextCapture.documentIdentity?.token &&
+      sameDocumentCaptureBinding(domTextCapture, liveBinding) ? domTextCapture : undefined;
+    if (bindStartingPageText && !boundStartingPage) {
+      domText = "";
+      domTextCapture = undefined;
+      siteMetadata = null;
+    } else if (boundStartingPage) {
+      const title = boundStartingPage.documentTitle;
+      if (siteMetadata && sameDocumentCaptureBinding(metadataBinding, boundStartingPage)) {
+        if (title !== undefined) siteMetadata = { ...siteMetadata, title };
+      } else {
+        // Earlier-route CMS metadata is not transferable. A late body read can
+        // still supply the title and language it sampled with that text.
+        siteMetadata = title === undefined ? null : {
+          contractVersion: "certscore.site-metadata.v1",
+          title,
+          language: boundStartingPage.documentLanguage?.slice(0, 35) ?? "",
+          generators: [],
+          wordpressAssetObserved: false,
+        };
+      }
+    }
+    const runtimeDocumentCapture = bindStartingPageText ? {
+      version: "runtime_document_capture.v1" as const,
+      response: boundStartingPage ? boundRuntimeDocumentResponse(browserDocumentIdentityState, liveBinding) : undefined,
+    } : undefined;
+    const domSnapshot = earlyDomSnapshot ?? await finishDomSnapshot(runtimeDocumentCapture, liveBinding.url);
+
+    // Keep the original loader anchor; take each terminal read exactly once.
     // A page change after the single loader read invalidates proof; no refresh.
     // Stop before geometry, inventory hooks, accessibility or form pixel work.
     if (finalizeGpcAfterPassiveMetadata) await finalizeGpcEvidence();
@@ -5900,8 +5982,23 @@ async function captureConsentProofPageEvidence(input: {
   };
 }
 
+async function captureStartingPageText(page: Page, readBinding: () => DocumentCaptureBinding, scanStartedAtMs: number) {
+  const snapshot = await captureBoundRuntimeTextSnapshot({
+    capture: () => page.evaluate(() => ({
+      domText: (document.body?.innerText ?? "").slice(0, 100_000),
+      pageUrl: location.href,
+      documentReadyState: document.readyState,
+      documentLanguage: document.documentElement.lang,
+      documentTitle: document.title.slice(0, 240),
+    })),
+    readBinding,
+    scanStartedAtMs,
+  });
+  return snapshot.domTextCapture;
+}
+
 async function capturePostSettlePageEvidence(input: {
-  bindRuntimeText?:boolean;
+  readRuntimeTextBinding?: () => DocumentCaptureBinding;
   captureRenderedPolicyLinks: boolean;
   firstPartyHostname: string | undefined;
   captureSiteIntegrity?: false | "starting_page_main_document" | "additional_page_main_document";
@@ -5924,9 +6021,9 @@ async function capturePostSettlePageEvidence(input: {
   storageSnapshot: StorageSnapshot;
   renderedPolicyLinks: RetainedRenderedPolicyLink[];
 }> {
-  const readSnapshot=()=>input.bindRuntimeText?captureBoundRuntimeTextSnapshot({
+  const readSnapshot=()=>input.readRuntimeTextBinding?captureBoundRuntimeTextSnapshot({
     capture:()=>captureConsolidatedPageEvidenceSnapshot(input.page,input.captureSiteIntegrity,input.captureRenderedPolicyLinks),
-    readBinding:()=>({url:input.page.url(),documentIdentity:currentBrowserDocumentIdentity(input.page)}),scanStartedAtMs:input.scanStartedAtMs,
+    readBinding:input.readRuntimeTextBinding, scanStartedAtMs:input.scanStartedAtMs,
   }):captureConsolidatedPageEvidenceSnapshot(input.page,input.captureSiteIntegrity,input.captureRenderedPolicyLinks);
   const snapshot = await recordBoundedTiming(
     input.timingBreakdown,
@@ -6041,7 +6138,9 @@ async function capturePostSettlePageEvidence(input: {
     };
   }
 
-  const [storageSnapshot, scripts, frames, apiAccesses, collectionSurfaceInventory, domText, renderedPolicyLinks] = await Promise.all([
+  const readBinding = input.readRuntimeTextBinding;
+  const fallbackBinding = readBinding?.();
+  const [storageSnapshot, scripts, frames, apiAccesses, collectionSurfaceInventory, text, renderedPolicyLinks] = await Promise.all([
     recordBoundedTiming(
       input.timingBreakdown,
       "page evidence: storage snapshot",
@@ -6082,12 +6181,13 @@ async function capturePostSettlePageEvidence(input: {
       () => captureCollectionSurfaceInventory(input.page, input.scanStartedAtMs, input.normalizedUrl),
       () => undefined,
     ),
-    recordBoundedTiming(
+    recordBoundedTiming<string | RuntimeTextCapture>(
       input.timingBreakdown,
       "page evidence: body text",
       "Legacy bounded visible-text capture retained after the consolidated snapshot was unavailable.",
-      2_500,
-      () => input.page.locator("body").innerText({ timeout: 2_000 }),
+      readBinding ? 2_000 : 2_500,
+      () => readBinding ? captureStartingPageText(input.page, readBinding, input.scanStartedAtMs)
+        : input.page.locator("body").innerText({ timeout: 2_000 }),
       () => "",
     ),
     input.captureRenderedPolicyLinks
@@ -6106,13 +6206,16 @@ async function capturePostSettlePageEvidence(input: {
     "page evidence: consolidated fallback",
     "The atomic snapshot was unavailable; legacy read-only evidence collectors retained coverage.",
   );
+  const domTextCapture = typeof text !== "string" && fallbackBinding && readBinding &&
+    sameDocumentCaptureBinding(fallbackBinding, text) && sameDocumentCaptureBinding(text, readBinding()) ? text : undefined;
   return {
     apiAccesses,
     collectionSurfaceInventory,
     collectionSurfaceObservations: collectionSurfaceInventory
       ? legacyCollectionSurfaceObservationsFromInventory(collectionSurfaceInventory)
       : [],
-    domText,
+    domText: typeof text === "string" ? text : text.value,
+    domTextCapture,
     frames,
     scripts,
     storageSnapshot,
@@ -10847,7 +10950,7 @@ function consentInventoryDiagnosticSources(
   return unique(sources) as typeof sources;
 }
 
-function consentUiControlActionTypeFromClassification(
+export function consentUiControlActionTypeFromClassification(
   classification: ReturnType<typeof classifyConsentControlLabel>,
 ): ConsentUiObservation["controls"][number]["actionType"] | null {
   switch (classification.intent) {
@@ -12512,6 +12615,7 @@ async function installCdpNetworkMetadataCapture(
   stores: {
     initiatorsByUrl: Map<string, string[][]>;
     documentIdentityState: BrowserDocumentIdentityState;
+    trackRuntimeDocument?: boolean;
     onSessionReady?:(session:CDPSession,mainFrameId:string|undefined)=>void;
     impactCapture?: ReturnType<typeof createGpcImpactCapture>;
   },
@@ -12525,10 +12629,16 @@ async function installCdpNetworkMetadataCapture(
     id?: string;
     loaderId?: string;
     parentId?: string;
+    url?: string;
   } | undefined) => {
     if (!frame || frame.parentId || !frame.loaderId || frame.loaderId.length > 160) return;
     if (stores.documentIdentityState.current?.token !== frame.loaderId)
       stores.documentIdentityState.mainDocumentRevision = (stores.documentIdentityState.mainDocumentRevision ?? 0) + 1;
+    if (stores.trackRuntimeDocument) {
+      stores.documentIdentityState.routeRevision = (stores.documentIdentityState.routeRevision ?? 0) + 1;
+      stores.documentIdentityState.committedUrl = frame.url;
+      stores.documentIdentityState.sameDocumentUrl = undefined;
+    }
     stores.documentIdentityState.current = {
       source: "cdp_loader_id",
       token: frame.loaderId,
@@ -12541,13 +12651,29 @@ async function installCdpNetworkMetadataCapture(
     if (frame) stores.impactCapture?.documentCommitted(frame);
   });
   const initialFrameTree = await session.send("Page.getFrameTree").catch(() => null) as {
-    frameTree?: { frame?: { id?: string; loaderId?: string; parentId?: string } };
+    frameTree?: { frame?: { id?: string; loaderId?: string; parentId?: string; url?: string } };
   } | null;
   retainMainFrameDocumentIdentity(initialFrameTree?.frameTree?.frame);
   const mainFrameId = initialFrameTree?.frameTree?.frame?.id;
   session.on("Page.navigatedWithinDocument", (p: { frameId?: string; url?: string; navigationType?: string }) => {
-    if (p.frameId === mainFrameId) stores.impactCapture?.navigatedWithinDocument(p, stores.documentIdentityState.current?.token);
+    if (!mainFrameId || p.frameId !== mainFrameId) return;
+    stores.impactCapture?.navigatedWithinDocument(p, stores.documentIdentityState.current?.token);
+    if (stores.trackRuntimeDocument) {
+      stores.documentIdentityState.routeRevision = (stores.documentIdentityState.routeRevision ?? 0) + 1;
+      stores.documentIdentityState.sameDocumentUrl = p.url;
+    }
   });
+  if (stores.trackRuntimeDocument && mainFrameId) {
+    session.on("Network.responseReceived", (event: {
+      frameId?: string; loaderId?: string; type?: string; response?: { url?: string; status?: number };
+    }) => {
+      const { url, status } = event.response ?? {};
+      if (event.frameId !== mainFrameId || event.type !== "Document" || !event.loaderId ||
+          event.loaderId.length > 160 || !url || url.length > 2048 ||
+          typeof status !== "number" || !Number.isInteger(status) || status < 100 || status > 599) return;
+      stores.documentIdentityState.mainResponse = { url, status, documentToken: event.loaderId };
+    });
+  }
   session.on("Network.requestWillBeSent", (raw: unknown) => {
     const params = raw as {
       type?: string; frameId?: string; loaderId?: string;
@@ -12565,6 +12691,25 @@ async function installCdpNetworkMetadataCapture(
   });
   stores.onSessionReady?.(session,mainFrameId);
   return session;
+}
+
+function boundRuntimeDocumentResponse(state: BrowserDocumentIdentityState, binding: DocumentCaptureBinding) {
+  const response = state.mainResponse;
+  if (!response || response.documentToken !== binding.documentIdentity?.token || !state.committedUrl) return;
+  try {
+    const committed = new URL(state.committedUrl);
+    const observed = new URL(response.url);
+    const current = new URL(binding.url);
+    if (![committed, observed, current].every(url => ["http:", "https:"].includes(url.protocol) && !url.username && !url.password)) return;
+    committed.hash = "";
+    observed.hash = "";
+    if (observed.href !== committed.href || current.origin !== committed.origin) return;
+    const route: "committed" | "same_document" | undefined = current.pathname === observed.pathname && current.search === observed.search ? "committed" :
+      state.sameDocumentUrl === current.href ? "same_document" : undefined;
+    if (!route) return;
+    return { origin: observed.origin, requestUrlSha256: createHash("sha256").update(observed.href).digest("hex"),
+      status: response.status, documentToken: response.documentToken, route };
+  } catch { return; }
 }
 
 function flattenCdpInitiatorStack(
@@ -14161,7 +14306,8 @@ export function consentUiObservationFromConfirmedGeometryControls(input: {
     .flatMap((candidate): ConsentUiObservation["controls"] => {
       const actionType = candidate.actionType;
       if (
-        !isAroGeometryAction(actionType) ||
+        (!isAroGeometryAction(actionType) && actionType !== "do_not_sell_share") ||
+        (actionType === "do_not_sell_share" && !["button", "a"].includes(candidate.tagName.toLowerCase())) ||
         !isConsentControlInteractionEligible(candidate) ||
         // The bundle's simple control row cannot retain category-state proof.
         // Composite selected-only observations stay in the verified geometry

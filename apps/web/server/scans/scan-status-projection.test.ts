@@ -51,6 +51,19 @@ function projection(overrides: Partial<ScanStatusProjection> = {}): ScanStatusPr
   };
 }
 
+test("failed starting-page capture exposes a terminal no-go without a report or score", async () => {
+  const build = await getBuildLightweightApiV2ScanStatusInput();
+  const response = build(projection({ status: "failed", pagesScanned: 0,
+    scanNoGoAssessment: { decision: "no_go", reasonCodes: ["runtime_capture_unverified"] } }));
+  assert.equal(response.status, "completed_limited");
+  assert.equal(response.resultDisposition, "no_go");
+  assert.equal(response.noGo?.reasonCode, "runtime_capture_unverified");
+  assert.equal(response.coverage.status, "scanner_capture_limitation");
+  assert.equal(response.score, null);
+  assert.equal(response.scoreStatus, "final");
+  assert.equal(response.retryAfterSeconds, null);
+});
+
 test("lightweight API status cannot call a required limited accessibility audit completed", async () => {
   const build = await getBuildLightweightApiV2ScanStatusInput();
   assert.equal(build(projection({ reportReady: true, accessibilityAuditStatus: "limited" })).status, "completed_limited");

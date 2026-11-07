@@ -75,6 +75,34 @@ test("fresh acknowledgment capture requires visible current-status wording insid
   } finally { await browser.close(); }
 });
 
+test("exact acknowledgment text from the Saab and Wyze review is captured only as visible CMP status", async t => {
+  const browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
+  try {
+    for (const [text, id] of [
+      ["The GPC signal is honored", "CybotCookiebotDialog"],
+      ["Opt-Out Signal Honored", "onetrust-banner-sdk"],
+    ] as const) await t.test(text, async () => {
+      const context = await browser.newContext();
+      try {
+        await installGpcNavigatorSignal(context, true);
+        await context.route("**/*", route => route.fulfill({ contentType: "text/html", body:
+          `<p role="status">${text}</p><div id="${id}">
+            <div role="status" hidden>${text}</div><p>${text}</p>
+            <div role="status" style="position:absolute;top:10000px">${text}</div>
+            <div role="status">${text} in our policy</div>
+            <div aria-live="polite">${text}</div></div>` }));
+        const page = await context.newPage(); const started = Date.now(); await page.goto("https://gpc-prototype.test/");
+        const result = await captureGpcOptOutObservation(page, { scanId: "review-fixture", scanStartedAtMs: started });
+        assert.equal(result.acknowledgment.length, 1);
+        assert.equal(result.acknowledgment[0]?.scopeSelector, `#${id}`);
+        assert.equal(result.acknowledgment[0]?.message, text);
+        assert.equal(result.gppStatus, "unavailable");
+        assert.equal(result.usca, null);
+      } finally { await context.close(); }
+    });
+  } finally { await browser.close(); }
+});
+
 test("same-URL document replacement during readback invalidates the browser-native binding", async () => {
   const browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
   try {

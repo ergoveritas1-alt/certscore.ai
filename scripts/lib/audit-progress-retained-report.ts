@@ -1,3 +1,4 @@
+import {applyChoiceSummary,choiceSummaryFromRecord} from './audit-progress-choice';
 /** Full persisted projections remain separate from original runtime-bundle audits. */
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -50,6 +51,7 @@ export function applyRetainedReports(rows:ProgressRow[],receipts:(OptOutReceipt&
   const e=readEnvelope(ref);if(inputDisposition(row,e)!=='matched')throw Error('Retained projection changed during import');
   const p=e.snapshot,record={...p.report_projection_payload,snapshot:{...p.report_projection_payload.snapshot,report_projection_version:p.report_projection_version,report_projection_source_hash:p.report_projection_source_hash}};
   const context=retainedArtifactContext(p.report_projection_payload,row.scanId,ref.artifacts);
+  applyChoiceSummary(row,choiceSummaryFromRecord(record,context??undefined),`persisted_report_choice_summary/${row.projectionVersion}`);
   const raw=extractProgressRow({inventory:{id:row.scanId,hostname:row.site,created_at:row.createdAt,status:e.status,scan_from:row.region,lambda_config:p.report_projection_payload.scan.scanConfigJson?.execution?.v2DagLambda},origin:e,record,report:record,bundle:context?.bundle,sourceFacts:context?.sourceFacts,refs:context?.refs??[],exportState:context?'generation_matched':'persisted_generation_matched'});
   if(context){
    const policy=context.policy,privacy=policy.documents.filter(d=>d.surfaceType==='privacy_policy');

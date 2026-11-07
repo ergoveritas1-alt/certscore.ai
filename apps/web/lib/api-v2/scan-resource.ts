@@ -38,7 +38,7 @@ import { deriveChoicePathEvidenceDisposition } from "@certscore/contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { hasTerminalReportPublicationFailure, reportPublicationResultState, terminalReportPublicationError } from "../../server/scans/report-publication-read-state";
 import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
-import { projectScanReportNoGo } from "../scans/scan-report-disposition";
+import { hasTerminalRuntimeVisitAssessment, projectScanReportNoGo } from "../scans/scan-report-disposition";
 import { derivePulseReportScore } from "../pulse/projection";
 import {
   buildRuntimeInventoryProjectionFromScan,
@@ -1218,7 +1218,9 @@ export function buildApiV2ScanStatus(
   const normalizedScanStatus = normalizeScanStatus(scan.status);
   const canonicalResultState = apiV2CanonicalResultState(scanRecord);
   const noGoProjection = canonicalResultState === "final" ? projectScanReportNoGo(scanRecord) : null;
-  const status = (noGoProjection || canonicalResultState === "final" && isAccessibilityAuditLimited(scanRecord.runtimeArtifacts?.accessibilityAudit, scan.id)) && scan.status === "completed"
+  const captureNoGo = Boolean(noGoProjection) && scan.status === "failed" &&
+    (noGoProjection?.noGo.reasonCode === "runtime_capture_unverified" || hasTerminalRuntimeVisitAssessment(scanRecord));
+  const status = captureNoGo || (noGoProjection || canonicalResultState === "final" && isAccessibilityAuditLimited(scanRecord.runtimeArtifacts?.accessibilityAudit, scan.id)) && scan.status === "completed"
     ? "completed_limited"
     : canonicalResultState === "failed"
       ? "failed"
