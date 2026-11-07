@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 import { chromium } from "playwright";
-import { projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport } from "@certscore/contracts";
+import { assessConsentActionStages, postAcceptReportProjectionSchema, postRefusalReportProjectionSchema, projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport } from "@certscore/contracts";
 import { runPostAcceptObserver } from "./post-accept-observer.js";
 import { runPostRefusalObserver } from "./post-refusal-observer.js";
 import { buildCanonicalPostAcceptActionRecipes } from "./post-accept-cmp-recipes.js";
@@ -218,3 +218,75 @@ test("Accept captures after a late Agree control on a busy page without semantic
     assert.notEqual(packet.acceptanceRegistration.status, "confirmed");
   } finally { await browser.close(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
+
+for (const action of ["accept", "reject"] as const) {
+  test(`${action}: terminal read verifies current state after initial registration within the original window`, async () => {
+    const browser = await chromium.launch({ headless: true });
+    const decision = action === "accept" ? "granted" : "denied";
+    let mode: "stable" | "changed" | "reloaded" = "stable";
+    const server = createServer((request, response) => {
+      response.setHeader("Content-Type", "text/html");
+      response.end(`<section id="banner"><p>Choose optional cookies.</p>
+        <button id="choice">${action === "accept" ? "Accept all" : "Reject all"}</button></section>
+        <script>document.querySelector('button').onclick=()=>{
+          localStorage.setItem('consent','${decision}');document.querySelector('section').hidden=true;
+          ${mode === "changed" ? "setTimeout(()=>localStorage.removeItem('consent'),450);" : ""}
+          ${mode === "reloaded" ? "setTimeout(()=>location.reload(),450);" : ""}
+        };</script>`);
+    });
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const url = `http://127.0.0.1:${address.port}/`;
+    const newContext = browser.newContext.bind(browser);
+    browser.newContext = async options => {
+      const context = await newContext({ ...options, serviceWorkers: "block" });
+      await context.route("**/*", route => new URL(route.request().url()).origin === new URL(url).origin
+        ? route.continue() : route.abort());
+      return context;
+    };
+    const run = () => {
+      const common = { browser, url, scanId: `registered-terminal-${action}`,
+        actionSearchTimeoutMs: 2000, confirmationTimeoutMs: 350, observationWindowMs: 800,
+        productionProjectable: true, interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" as const } };
+      const recipe = { recipeId: "fixture:registered-terminal", resolverMethod: "local_fixture_recipe" as const,
+        controlSelector: "#choice", bannerSelector: "#banner", confirmation: {
+          kind: "local_storage_equals" as const, key: "consent", expectedValue: decision,
+        } };
+      return action === "accept"
+        ? runPostAcceptObserver({ ...common, recipe: { ...recipe, artifactVersion: "certscore.post_accept_action_recipe.v1" } })
+        : runPostRefusalObserver({ ...common, recipe: { ...recipe, artifactVersion: "certscore.post_refusal_action_recipe.v1" } });
+    };
+    try {
+      const packet = await run();
+      const registration = "acceptanceRegistration" in packet ? packet.acceptanceRegistration : packet.refusalRegistration;
+      assert.equal(registration.status, "confirmed");
+      assert.equal(packet.afterActionCapture, undefined);
+      const witness = packet.terminalDecisionEvidence;
+      assert.ok(witness, JSON.stringify(packet.confirmationDiagnostics));
+      assert.equal(witness.policyVersion, "bounded_registered_terminal_consent_decision.v1");
+      assert.equal(witness.evidence.decision, decision);
+      const projection = "acceptanceRegistration" in packet
+        ? projectPostAcceptEvidenceForReport({ packet, packetSha256: "a".repeat(64) })
+        : projectPostRefusalEvidenceForReport({ packet, packetSha256: "a".repeat(64) });
+      assert.equal(projection.execution?.status, "succeeded_with_confirmation");
+      assert.equal(projection.registeredObservationCompletion?.termination, "window_elapsed");
+      assert.deepEqual(projection.terminalDecisionEvidence, witness);
+      assert.equal(assessConsentActionStages(projection).evidenceStages.terminalChoiceStateVerified, true);
+      const schema = action === "accept" ? postAcceptReportProjectionSchema : postRefusalReportProjectionSchema;
+      assert.equal(schema.safeParse({ ...projection, registeredObservationCompletion: undefined }).success, false);
+      assert.equal(schema.safeParse({ ...projection, terminalDecisionEvidence: {
+        ...witness, authorizedTargetSha256: "b".repeat(64),
+      } }).success, false);
+      assert.equal(packet.confirmationDiagnostics?.terminalPasses, 1);
+      const deadline = projection.registeredObservationCompletion!.startedAtMs + 800;
+      assert.ok(witness.readStartedAtMs >= deadline - 250 && witness.readCompletedAtMs <= deadline);
+      mode = "changed";
+      const changed = await run();
+      assert.equal("acceptanceRegistration" in changed ? changed.acceptanceRegistration.status : changed.refusalRegistration.status, "confirmed");
+      assert.equal(changed.terminalDecisionEvidence, undefined);
+      mode = "reloaded";
+      assert.equal((await run()).terminalDecisionEvidence, undefined);
+    } finally { await browser.close(); await new Promise<void>(resolve => server.close(() => resolve())); }
+  });
+}

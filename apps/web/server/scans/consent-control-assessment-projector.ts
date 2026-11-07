@@ -586,6 +586,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       : observation.layerInspected;
     return {
       observationId: observation.observationId,
+      ...(observation.captureDiagnostic ? {captureDiagnostic: observation.captureDiagnostic} : {}),
       observedAtMs: observationTimestamp(observation),
       likelyPresent: observation.likelyPresent,
       layerInspected: retainedLayer,

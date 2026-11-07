@@ -1471,3 +1471,16 @@ test("retained necessary-only and Portuguese category labels preserve their cons
   }
   assert.equal(classifyConsentControlLabel({label:"Rejeitar todos os cookies não-necessários",ariaLabel:"Aceitar todos",usage:"action",classifierProfile:"multilingual_v1",hasConsentContext:true}).intent,"unknown");
 });
+
+test("notice fixture labels stay distinct from explicit consent decisions", () => {
+  // Expectations are specified from the wording of each fixture before running the classifier.
+  const fixtures = [
+    {label: "Okay", contextText: "We use cookies to improve your experience. Learn more.", expected: "unknown"},
+    {label: "OK", contextText: "Click OK to close this notice about cookies.", expected: "unknown"},
+    {label: "OK", contextText: "By clicking OK, you consent to analytics cookies.", expected: "accept"},
+    {label: "Reject all cookies", contextText: "We use cookies to improve your experience.", expected: "reject"},
+    {label: "Cookie settings", contextText: "We use cookies to improve your experience.", expected: "options"},
+  ];
+  for (const {expected, ...fixture} of fixtures)
+    assert.equal(classifyConsentControlLabel({...fixture, hasConsentContext: true, usage: "observation"}).intent, expected, fixture.contextText);
+});

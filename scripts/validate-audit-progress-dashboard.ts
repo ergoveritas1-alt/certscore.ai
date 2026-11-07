@@ -1,4 +1,4 @@
-import {buildAuditMeasureView} from './lib/audit-measure-catalog';
+import {auditQuantityCsvMetrics,auditStateCsvMetrics,buildAuditMeasureView} from './lib/audit-measure-catalog';
 import {verifyMasterValueParity} from './lib/audit-master-parity';
 import {COVERAGE_MATRIX} from "./lib/audit-progress-coverage-matrix";
 import {COVERAGE_MAP} from "./lib/audit-progress-coverage";
@@ -26,8 +26,8 @@ const proofRows=structuredClone(data.rows);applyRetainedOptOutExtracts(proofRows
 for(const row of proofRows)delete row.retainedMetricLabels;
 assert.deepEqual(proofRows,data.rows,'Unapplied or conflicting retained control evidence');
 assert.deepEqual(actual,data.days,'Stored daily aggregates differ from canonical audit engine');
-assert.equal(progressEngine().stateCsv(actual,data.metrics),readFileSync(path.join(root,'daily-metrics.csv'),'utf8'));
-assert.equal(progressEngine().quantityCsv(actual,data.quantities),readFileSync(path.join(root,'daily-volumes.csv'),'utf8'));
+assert.equal(progressEngine().stateCsv(actual,auditStateCsvMetrics({...data,days:actual})),readFileSync(path.join(root,'daily-metrics.csv'),'utf8'));
+assert.equal(progressEngine().quantityCsv(actual,auditQuantityCsvMetrics(data)),readFileSync(path.join(root,'daily-volumes.csv'),'utf8'));
 assert.equal(progressEngine().findingCsv(actual,data.findingIds),readFileSync(path.join(root,'daily-findings.csv'),'utf8'));
 for(const d of actual){for(const v of Object.values(d.metrics) as any[]){assert.equal(Object.values(v.counts).reduce((a:any,b:any)=>a+b,0),v.denominator);assert.equal(Object.values(v.series).reduce((a:number,b:any)=>a+b.denominator,0),v.denominator);if(v.source==='mixed_sources'){assert.equal(v.rate,null);assert.equal(v.deltaPp,null);}}for(const v of Object.values(d.quantities) as any[]){assert.equal(v.measured+v.missing,v.eligible);if(v.source==='mixed_sources'){assert.equal(v.median,null);assert.equal(v.delta,null);}}}
 for(const r of data.rows){if(r.originProof==='production_id_selection_only'){assert.equal(r.reportable,false);assert.equal(r.findingInventory,false);assert.equal(r.states.evidence,'unavailable');}for(const [id,s] of Object.entries(r.metricSources??{}))if(!id.startsWith('sealed.')&&!/^(site|technology|graph|form)\./.test(id))assert.ok(!String(s).startsWith('sealed_assessment/'),'Incompatible public fallback');}

@@ -1,5 +1,7 @@
+import { gpcCmpPairBlockerSchema } from '../../packages/certscore-contracts/src/gpc-cmp-pair-coverage';
 /** Audit-only projection of compact facts from a ready persisted generation. */
 import { z } from "zod";
+import { terminalConsentDecisionBound } from "../../packages/certscore-contracts/src/terminal-consent-decision";
 import { choicePathExecutionSchema } from "../../packages/certscore-contracts/src/choice-path-execution";
 import { CONSENT_ACTION_CONFIRMATION_POLICY } from "../../packages/certscore-contracts/src/consent-action-evidence-policy";
 import { readBoundGpcCmpStateComparison } from "../../packages/certscore-api-contracts/src/gpc-cmp-state-comparison";
@@ -9,7 +11,7 @@ const clock = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 const actionSchema = z.enum(["accept", "reject"]);
 const state = z.enum(["opted_out", "not_opted_out"]);
 const terminal = z.object({
-  policyVersion: z.literal("bounded_terminal_consent_decision.v1"),
+  policyVersion: z.enum(["bounded_terminal_consent_decision.v1","bounded_registered_terminal_consent_decision.v1"]),
   action: actionSchema,
   authorizedTargetSha256: hash,
   readStartedAtMs: clock,
@@ -60,17 +62,25 @@ const response = z.object({
     }).strict(),
   }).strict(),
 }).strict();
+const registeredCompletion = z.object({
+  action: actionSchema, startedAtMs: clock, requiredWindowMs: clock,
+  completedAtMs: clock, termination: z.literal("window_elapsed"),
+}).strict();
+const registeredTiming = z.object({
+  actionDispatchedAtMs: clock,
+}).strict();
 const actionReceipt = z.object({
   contractVersion: z.enum(["certscore.post_accept_report_projection.v1", "certscore.post_refusal_report_projection.v1"]),
   packetSha256: hash,
   execution: choicePathExecutionSchema,
   witness: z.unknown(), capture: z.unknown(), control: z.unknown(),
+  registeredCompletion: z.unknown().optional(), registeredTiming: z.unknown().optional(),
 }).strict();
 const pairReceipt = z.object({ packet: z.unknown(), response: z.unknown() }).strict();
 const receipt = z.object({
   version: z.literal("certscore.audit-priority-evidence.v1"),
   accept: z.unknown(), reject: z.unknown(), cmp: z.unknown(),
-  coverage: z.tuple([z.enum(["eligible_source","no_completed_click","eligibility_unknown","source_missing"]),z.enum(["eligible_source","no_completed_click","eligibility_unknown","source_missing"]),z.enum(["source_present","source_missing"])]).optional(),
+  coverage: z.tuple([z.enum(["eligible_source","no_completed_click","eligibility_unknown","source_missing"]),z.enum(["eligible_source","no_completed_click","eligibility_unknown","source_missing"]),z.string().min(1).max(64)]).optional(),
   transport: z.enum(["included","size_bound"]).optional(),
 }).strict();
 
@@ -109,7 +119,21 @@ export function priorityEvidenceStates(value: unknown, scanId: string) {
     const p = control.safeParse(entry.data.control);
     // The persisted report supplies the validated source packet. Recheck the
     // action, control, and timing joins from its compact scalar projection.
-    const bound = witness.success && c.success && p.success &&
+    const completion = registeredCompletion.safeParse(entry.data.registeredCompletion);
+    const timing = registeredTiming.safeParse(entry.data.registeredTiming);
+    const registered = completion.success && timing.success ? {
+      action: completion.data.action, dispatchedAtMs: timing.data.actionDispatchedAtMs,
+      startedAtMs: completion.data.startedAtMs, requiredWindowMs: completion.data.requiredWindowMs,
+      endedAtMs: completion.data.completedAtMs,
+    } : undefined;
+    const registeredBound = witness.success && witness.data.policyVersion === "bounded_registered_terminal_consent_decision.v1" &&
+      entry.data.execution.observationCompleted && entry.data.execution.consentConfirmed &&
+      p.success && registered && p.data.observedAtMs <= registered.dispatchedAtMs &&
+      witness.data.evidence.decision === (action === "accept" ? "granted" : "denied") &&
+      witness.data.readCompletedAtMs >= witness.data.readStartedAtMs &&
+      witness.data.evidence.observedAtMs <= witness.data.readCompletedAtMs &&
+      terminalConsentDecisionBound(witness.data, undefined, p.data, action, registered);
+    const bound = witness.success && witness.data.policyVersion === "bounded_terminal_consent_decision.v1" && c.success && p.success &&
       witness.data.action === action && c.data.action === action && p.data.action === action &&
       witness.data.authorizedTargetSha256 === p.data.authorizedTargetSha256 &&
       witness.data.evidence.decision === (action === "accept" ? "granted" : "denied") &&
@@ -121,8 +145,8 @@ export function priorityEvidenceStates(value: unknown, scanId: string) {
       c.data.captureEndedAtMs >= c.data.actionDispatchedAtMs + c.data.requestedWindowMs &&
       witness.data.readCompletedAtMs <= c.data.actionDispatchedAtMs + c.data.requestedWindowMs;
     states[`sealed.terminal.audit_${action}`] = {
-      value: entry.data.witness == null ? "unavailable" : bound ? "verified" : "unverified",
-      scope: bound ? `${witness.data.policyVersion}/${c.data.policyVersion}` : parsed.data.version,
+      value: entry.data.witness == null ? "unavailable" : (bound || registeredBound) ? "verified" : "unverified",
+      scope: registeredBound ? witness.data.policyVersion : bound ? `${witness.data.policyVersion}/${c.data.policyVersion}` : parsed.data.version,
     };
   }
   const cmp = pairReceipt.safeParse(unpackPair(parsed.data.cmp));
@@ -151,19 +175,23 @@ export function priorityCoverageStates(value:unknown,scanId:string){
  if(!p.success||!p.data.coverage||!p.data.transport)return states;
  const evidence=priorityEvidenceStates(value,scanId);
  for(const [i,lane] of (['accept','reject','cmp'] as const).entries()){
-  const source=p.data.coverage[i]!,eligible=source==='eligible_source'||source==='source_present';
+  const observedSource=p.data.coverage[i]!;
+  const source=lane==='cmp'&&observedSource!=='source_present'&&!gpcCmpPairBlockerSchema.safeParse(observedSource).success
+   ? 'source_missing' : observedSource;
+  const eligible=source==='eligible_source'||source==='source_present';
   const payload=p.data[lane],present=payload!==null&&payload!==undefined;
   const key=lane==='cmp'?'sealed.choice_evidence.paired_cmp':'sealed.terminal.audit_'+lane;
   const inconsistent=p.data.transport==='size_bound'&&present||!eligible&&present||eligible&&p.data.transport==='included'&&!present;
   const status=inconsistent?'invalid_coverage_receipt':!eligible?source:p.data.transport==='size_bound'?'summary_size_bound':!evidence[key]||evidence[key]!.value==='invalid_or_unbound'?'invalid_or_unbound':'included';
-  states['sealed.priority_evidence.'+lane]={value:status,scope:'certscore.audit-priority-coverage.v1'};
+  states['sealed.priority_evidence.'+lane]={value:status,scope:lane==='cmp'&&gpcCmpPairBlockerSchema.safeParse(status).success
+   ? 'certscore.gpc-cmp-pair-blocker.v1' : 'certscore.audit-priority-coverage.v1'};
  }
  return states;
 }
 
 // Fixed scalar field lists serve both the SQL transport and its strict reader.
 // Null fields are omitted during reconstruction; the typed validators decide availability.
-export const actionFields=[
+const legacyActionFields=[
   'contractVersion','packetSha256',
   'execution.policyVersion','execution.status','execution.clickCompleted','execution.observationCompleted','execution.consentConfirmed',
   'terminalDecisionEvidence.policyVersion','terminalDecisionEvidence.action','terminalDecisionEvidence.authorizedTargetSha256',
@@ -174,6 +202,11 @@ export const actionFields=[
   'afterActionCapture.captureEndedAtMs','afterActionCapture.requestedWindowMs','afterActionCapture.stopReason',
   'afterActionCapture.requestsDropped','afterActionCapture.storageSnapshotRetained',
   'actionControlProof.action','actionControlProof.authorizedTargetSha256','actionControlProof.observedAtMs',
+];
+export const actionFields=[
+  ...legacyActionFields,
+  ...['action','startedAtMs','requiredWindowMs','completedAtMs','termination'].map(key=>'registeredObservationCompletion.'+key),
+  'retainedActionTiming.actionDispatchedAtMs',
 ];
 export const cmpFields=[
   'contractVersion','scope','scanId','sectionId','sectionVersion','sourceHashes.baseline','sourceHashes.gpc',
@@ -200,9 +233,10 @@ function unpack(value:unknown,fields:string[]):Record<string,any>|undefined{
 }
 function unpackAction(value:unknown){
  if(!Array.isArray(value))return value;
- const record=unpack(value,actionFields);if(!record)return undefined;
+ const record=unpack(value,value.length===legacyActionFields.length?legacyActionFields:actionFields);if(!record)return undefined;
  return {contractVersion:record.contractVersion,packetSha256:record.packetSha256,execution:record.execution,
-  witness:record.terminalDecisionEvidence,capture:record.afterActionCapture,control:record.actionControlProof};
+  witness:record.terminalDecisionEvidence,capture:record.afterActionCapture,control:record.actionControlProof,
+  registeredCompletion:record.registeredObservationCompletion,registeredTiming:record.retainedActionTiming};
 }
 function unpackPair(value:unknown){
  if(!Array.isArray(value))return value;
@@ -211,27 +245,32 @@ function unpackPair(value:unknown){
  return packet&&response?{packet,response}:undefined;
 }
 const path=(root:string,...keys:string[])=>`(${root}#>'{${keys.join(',')}}')`;
-const runtime=path('p.report_projection_payload','runtimeArtifacts');
-const tuple=(root:string,keys:string[])=>`(select jsonb_agg(case when jsonb_typeof(v) in ('string','number','boolean') and octet_length(v::text)<=256 then v end order by n)
- from unnest(array[${keys.map(k=>"'"+k+"'").join(',')}]) with ordinality f(k,n)
- cross join lateral (select ${root}#>string_to_array(k,'.') v) x)`;
+const runtimePath=(...keys:string[])=>path('p.report_projection_payload','runtimeArtifacts',...keys);
+const tuple=(root:string,keys:string[])=>`(select jsonb_agg(case when jsonb_typeof(v) not in ('array','object') and octet_length(v::text)<=256 then v end order by n)
+ from unnest(string_to_array('${keys.join('|')}','|')) with ordinality f(k,n),lateral (select ${root}#>string_to_array(k,'.') v) x)`;
 const terminalSql=(key:string)=>{
- const root=path(runtime,key);
+ const root=runtimePath(key);
  return `case when ${path(root,'execution','clickCompleted')}='true'::jsonb then ${tuple(root,actionFields)} end`;
 };
-const cmp=path(runtime,'gpcCmpStateComparison');
-const sourceStateSql=(key:string)=>{const root=path(runtime,key);return `case when jsonb_typeof(${root})='object' then case ${path(root,'execution','clickCompleted')} when 'true'::jsonb then 'eligible_source' when 'false'::jsonb then 'no_completed_click' else 'eligibility_unknown' end else 'source_missing' end`;};
-export const PRIORITY_EVIDENCE_SQL=`jsonb_build_object('version','certscore.audit-priority-evidence.v1',
+const cmp=runtimePath('gpcCmpStateComparison');
+const sourceStateSql=(key:string)=>{const root=runtimePath(key);return `case when jsonb_typeof(${root})='object' then case ${path(root,'execution','clickCompleted')} when 'true'::jsonb then 'eligible_source' when 'false'::jsonb then 'no_completed_click' else 'eligibility_unknown' end else 'source_missing' end`;};
+export function priorityEvidenceSql(includeCmpBlocker=false) {
+ const missingCmp=includeCmpBlocker
+  ? `coalesce(left(${runtimePath()}->>'gpcCmpPairBlocker',64),'source_missing')`
+  : "'source_missing'";
+ return `jsonb_build_object('version','certscore.audit-priority-evidence.v1',
  'accept',${terminalSql('postAcceptEvidenceProjection')},'reject',${terminalSql('postRefusalEvidenceProjection')},
- 'cmp',case when jsonb_typeof(${cmp})='object' then jsonb_build_array(${tuple(cmp,cmpFields)},${tuple(path(runtime,'gpcResponseAssessment'),gpcFields)}) end,
- 'coverage',jsonb_build_array(${sourceStateSql('postAcceptEvidenceProjection')},${sourceStateSql('postRefusalEvidenceProjection')},case when jsonb_typeof(${cmp})='object' then 'source_present' else 'source_missing' end),'transport','included')`;
+ 'cmp',case when jsonb_typeof(${cmp})='object' then jsonb_build_array(${tuple(cmp,cmpFields)},${tuple(runtimePath('gpcResponseAssessment'),gpcFields)}) end,
+ 'coverage',jsonb_build_array(${sourceStateSql('postAcceptEvidenceProjection')},${sourceStateSql('postRefusalEvidenceProjection')},case when jsonb_typeof(${cmp})='object' then 'source_present' else ${missingCmp} end),'transport','included')`;
+}
+export const PRIORITY_EVIDENCE_SQL=priorityEvidenceSql();
 const get=(v:any,p:string)=>p.split('.').reduce((a,k)=>a&&typeof a==='object'?a[k]:undefined,v);
 const compact=(v:any,keys:string[])=>keys.map(k=>{const x=get(v,k);return ['string','number','boolean'].includes(typeof x)&&Buffer.byteLength(JSON.stringify(x))<=256?x:null;});
 const sourceState=(v:any)=>v&&typeof v==='object'&&!Array.isArray(v)?v.execution?.clickCompleted===true?'eligible_source':v.execution?.clickCompleted===false?'no_completed_click':'eligibility_unknown':'source_missing';
 export function priorityEvidenceFromRecord(record:any){
  const r=record.runtimeArtifacts??{},accept=r.postAcceptEvidenceProjection,reject=r.postRefusalEvidenceProjection,pair=r.gpcCmpStateComparison;
  const hasPair=pair&&typeof pair==='object'&&!Array.isArray(pair);
- return {version:'certscore.audit-priority-evidence.v1',accept:accept?.execution?.clickCompleted===true?compact(accept,actionFields):null,reject:reject?.execution?.clickCompleted===true?compact(reject,actionFields):null,cmp:hasPair?[compact(pair,cmpFields),compact(r.gpcResponseAssessment,gpcFields)]:null,coverage:[sourceState(accept),sourceState(reject),hasPair?'source_present':'source_missing'],transport:'included'};
+ return {version:'certscore.audit-priority-evidence.v1',accept:accept?.execution?.clickCompleted===true?compact(accept,actionFields):null,reject:reject?.execution?.clickCompleted===true?compact(reject,actionFields):null,cmp:hasPair?[compact(pair,cmpFields),compact(r.gpcResponseAssessment,gpcFields)]:null,coverage:[sourceState(accept),sourceState(reject),hasPair?'source_present':gpcCmpPairBlockerSchema.safeParse(r.gpcCmpPairBlocker).data??'source_missing'],transport:'included'};
 }
 /** PostgreSQL jsonb textual spacing is larger than JSON.stringify; budget for both transports. */
 export function jsonbBytes(value:any):number{

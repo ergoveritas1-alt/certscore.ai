@@ -33,5 +33,5 @@ export function retainedArtifactContext(payload:any,scanId:string,ref?:OptOutRec
   else throw Error('Unexpected retained artifact kind');
  }
  const policy=inspectPolicyCapture({root:input.root,scanId,site:'retained',region:'retained',status:'completed',bundle,receipts:policyReceipts});
- return {bundle,manifest,sourceFacts:{profile:manifest.privacyCaptureProfile,facets:sourceFacets(bundle,manifest,support)},policy,refs:receipts.map((r:any)=>({file:r.file,sha256:r.sha256,role:r.kind})),receipt:ref};
+ return {bundle,manifest,bundleSource:{sha256:bundleRef.receipt.sha256,sizeBytes:bundleRef.bytes.length},sourceFacts:{profile:manifest.privacyCaptureProfile,facets:sourceFacets(bundle,manifest,support)},policy,refs:receipts.map((r:any)=>({file:r.file,sha256:r.sha256,role:r.kind})),receipt:ref};
 }

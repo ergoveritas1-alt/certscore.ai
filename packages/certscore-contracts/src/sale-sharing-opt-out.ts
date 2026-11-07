@@ -186,16 +186,31 @@ export const verifiedSaleSharingOptOutSchema=z.object({
 }).strict();
 export type VerifiedSaleSharingOptOut=z.infer<typeof verifiedSaleSharingOptOutSchema>;
 
-export const saleSharingOptOutLaneOutcomeSchema=z.object({diagnostic:captureFailureDiagnosticSchema.optional(),status:z.enum(["joined","limited"]),startedAt:z.string().datetime(),completedAt:z.string().datetime(),limitationCode:z.enum(["opt_out_budget_exhausted","opt_out_worker_failed","opt_out_inspection_cancelled"]).optional()}).strict();
+export const optOutPreActionStopSchema=z.enum(["navigation_failed","navigation_budget_exhausted","document_binding_budget_exhausted"]);
+export const saleSharingOptOutLaneOutcomeSchema=z.object({diagnostic:captureFailureDiagnosticSchema.optional(),status:z.enum(["joined","limited"]),startedAt:z.string().datetime(),completedAt:z.string().datetime(),limitationCode:z.enum(["opt_out_budget_exhausted","opt_out_worker_failed","opt_out_inspection_cancelled"]).optional(),preActionStop:optOutPreActionStopSchema.optional()}).strict();
 export type SaleSharingOptOutLaneOutcome=z.infer<typeof saleSharingOptOutLaneOutcomeSchema>;
+
+/** Outcome facts retained by the GPP packet, including in the compact audit view. */
+export function legacyOptOutExecutionOutcome(packet: Pick<SaleSharingOptOutEvidence,
+  "submitted" | "registration" | "status" | "captureComplete" | "observationWindowMs">) {
+  const confirmed=packet.registration==="confirmed";
+  return {
+    actionCompleted:packet.submitted,
+    choiceConfirmation:confirmed?"confirmed_initial":packet.submitted?"unconfirmed":"not_attempted",
+    confirmationBasis:"gpp_sale_sharing",
+    postConfirmationObservation:packet.status==="complete"&&packet.captureComplete?"complete":confirmed?"limited":"not_measured",
+    observationWindowMs:packet.observationWindowMs,
+  } as const;
+}
 
 /** Derived only after the original packet checksum and target binding are verified. */
 export function deriveOptOutExecutionAssessment(packet:SaleSharingOptOutEvidence,packetSha256:string){
+  const legacy=legacyOptOutExecutionOutcome(packet);
   const proof=packet.redHatChoice,terminal=proof?.reads.find(r=>r.phase==='terminal');
   const confirmed=proof?packet.submitted&&redHatTerminalChoiceConfirmed(proof):packet.registration==='confirmed';
   const readAt=confirmed?(proof?terminal!.atMs:Date.parse(packet.confirmedAt!)-Date.parse(packet.startedAt)):null;
   return optOutExecutionAssessmentSchema.parse({version:'opt_out_execution_assessment.v1',scanId:packet.scanId,packetSha256,
-    actionCompleted:packet.submitted,choiceConfirmation:confirmed?(proof?'confirmed_terminal':'confirmed_initial'):packet.submitted?'unconfirmed':'not_attempted',
-    confirmationBasis:proof?'cmp_explicit_choice':'gpp_sale_sharing',confirmationReadAtMs:readAt!==null&&readAt>=0&&readAt<=SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS?readAt:null,
-    postConfirmationObservation:packet.status==='complete'&&packet.captureComplete?'complete':packet.registration==='confirmed'?'limited':'not_measured',observationWindowMs:packet.observationWindowMs});
+    ...legacy,
+    ...(proof?{confirmationBasis:'cmp_explicit_choice',choiceConfirmation:confirmed?'confirmed_terminal':packet.submitted?'unconfirmed':'not_attempted'}:{}),
+    confirmationReadAtMs:readAt!==null&&readAt>=0&&readAt<=SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS?readAt:null});
 }

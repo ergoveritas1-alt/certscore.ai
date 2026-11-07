@@ -20,6 +20,22 @@ test('paired producer packets survive compact transport with original scope and 
  const s=choiceSummaryAudit(choiceSummaryFromRecord(r),id).states;assert.equal(s['sealed.choice_evidence.paired_cmp'],'available');assert.equal(s['sealed.priority_evidence.cmp'],'included');
  const bad=structuredClone(r);bad.runtimeArtifacts.gpcCmpStateComparison.sourceHashes.gpc='f'.repeat(64);const b=choiceSummaryAudit(choiceSummaryFromRecord(bad),id).states;assert.equal(b['sealed.choice_evidence.paired_cmp'],'invalid_or_unbound');assert.equal(b['sealed.priority_evidence.cmp'],'invalid_or_unbound');
 });
+test('paired CMP coverage explains a missing witness without creating a pair',()=>{
+ const p=priorityEvidenceFromRecord(record({gpcCmpPairBlocker:'baseline_checkpoint_missing'}));
+ const cmp='sealed.priority_evidence.cmp';
+ assert.deepEqual(priorityCoverageStates(p,id)[cmp],{
+  value:'baseline_checkpoint_missing',scope:'certscore.gpc-cmp-pair-blocker.v1',
+ });
+ assert.deepEqual(priorityEvidenceStates(p,id),{});
+ const summary=choiceSummaryFromRecord(record({gpcCmpPairBlocker:'baseline_checkpoint_missing'}));
+ assert.equal(choiceSummaryAudit(summary,id).states[cmp],'baseline_checkpoint_missing');
+ assert.equal(choiceSummaryAudit(summary,id).states['sealed.choice_evidence.paired_cmp'],undefined);
+ const unknown={...p,coverage:[p.coverage![0],p.coverage![1],'future_reason']};
+ assert.equal(priorityCoverageStates(unknown,id)[cmp]?.value,'source_missing');
+ const f=gpcProductFixture({scanId:id,priorCmpState:true});
+ const included=priorityEvidenceFromRecord(record({gpcResponseAssessment:f.assessment,gpcCmpStateComparison:f.cmpStateComparison}));
+ assert.equal(priorityCoverageStates({...included,coverage:p.coverage},id)[cmp]?.value,'invalid_coverage_receipt');
+});
 test('source missing, explicit no completed click, unresolved eligibility and malformed evidence remain distinct',()=>{
  const p=priorityEvidenceFromRecord(record({postAcceptEvidenceProjection:{execution:{clickCompleted:false}},postRefusalEvidenceProjection:{execution:{}}}));const s=priorityCoverageStates(p,id);
  assert.equal(s['sealed.priority_evidence.accept']?.value,'no_completed_click');assert.equal(s['sealed.priority_evidence.reject']?.value,'eligibility_unknown');assert.equal(s['sealed.priority_evidence.cmp']?.value,'source_missing');assert.deepEqual(priorityEvidenceStates(p,id),{});
@@ -43,7 +59,7 @@ test('100 high-entropy pending UUIDs fit one bounded query; 101 and over-eight-d
  const q=buildAuditDeltaQuery(b,false),fit=auditSqlOverrideFits({marker:'MACMINI_DELTA_IDS',readOnly:true,sql:q});assert.ok(fit.fits,JSON.stringify(fit));assert.match(q,/statement_timeout='45s'/);assert.match(q,/limit 5001/);assert.match(q,/priorityEvidence/);assert.match(q,/size_bound/);assert.doesNotMatch(q,/\b(?:INSERT|UPDATE|DELETE)\b/i);assert.throws(()=>buildAuditDeltaQuery({...b,pendingRefreshIds:[...ids,'11111111-1111-4111-8111-111111111111']},false),/100/);assert.throws(()=>buildAuditDeltaQuery({...b,overlapStartUtc:'2026-10-01T00:00:00.000Z'},false),/eight|8|window/i);
 });
 
-test('seven-field v2 delivery leaves launch headroom with 100 high-entropy pending UUIDs', () => {
+test('both optional assessments fit with 100 high-entropy pending UUIDs and required receipts', () => {
  const originalContainer = process.env.CALIBRATION_DB_ECS_CONTAINER;
  delete process.env.CALIBRATION_DB_ECS_CONTAINER;
  try {
@@ -53,14 +69,21 @@ test('seven-field v2 delivery leaves launch headroom with 100 high-entropy pendi
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
    });
    const start = Date.UTC(2026, 0, 1) + sample * 87_524_688;
-   const sql = buildAuditDeltaQuery({
+   const plan = {
     overlapStartUtc: new Date(start).toISOString(),
     windowEndUtc: new Date(start + 8 * 86_400_000).toISOString(),
     pendingRefreshIds,
-   }, false, true);
+   };
+   const sql = buildAuditDeltaQuery(plan, false, true);
    const fit = auditSqlOverrideFits({ marker: 'MACMINI_DELTA_IDS', readOnly: true, sql });
    assert.match(sql, /->>'auditPrivacyForm'/);
    assert.ok(fit.limitBytes - fit.bytes >= 256, JSON.stringify({ sample, ...fit }));
+   const full = buildAuditDeltaQuery(plan, true, true, true);
+   const combined = auditSqlOverrideFits({ marker: 'MACMINI_DELTA_IDS', readOnly: true, sql: full });
+   assert.match(full, /->>'auditPrivacyForm'/);
+   assert.match(full, /"controlAccessibility"/);
+   assert.match(full, /'operationsEvidence'/);
+   assert.ok(combined.fits, JSON.stringify({ sample, ...combined }));
   }
  } finally {
   if (originalContainer === undefined) delete process.env.CALIBRATION_DB_ECS_CONTAINER;
@@ -107,4 +130,28 @@ test('all four CMP arm states have bound public and persisted audit routes witho
  }
  const bad=structuredClone(report);bad.gpcResponse.cmpStateComparison!.sourceHashes.baseline='f'.repeat(64);
  for(const side of ['baseline','gpc'])for(const axis of ['sale','sharing'])assert.equal(pairedGpcAudit(bad).states[`detail.gpc.paired_${side}_${axis}`],'unavailable');
+});
+
+test('registered terminal witnesses survive compact delivery and require full matching window evidence',()=>{
+ for(const fixture of fixtures){
+  const action=fixture.action as 'accept'|'reject';
+  const key=action==='accept'?'postAcceptEvidenceProjection':'postRefusalEvidenceProjection';
+  const original=fixture.projection;
+  const target=original.terminalDecisionEvidence.authorizedTargetSha256;
+  const start=original.terminalDecisionEvidence.evidence.observedAtMs;
+  const projection={
+   ...original,afterActionCapture:undefined,
+   terminalDecisionEvidence:{...original.terminalDecisionEvidence,policyVersion:'bounded_registered_terminal_consent_decision.v1',
+    readStartedAtMs:start+560,readCompletedAtMs:start+610},
+   retainedActionTiming:{action,actionDispatchedAtMs:start-1},
+   registeredObservationCompletion:{action,startedAtMs:start,requiredWindowMs:800,completedAtMs:start+800,termination:'window_elapsed'},
+  };
+  const state=(p:unknown)=>priorityEvidenceStates(priorityEvidenceFromRecord(record({[key]:p})),id)['sealed.terminal.audit_'+action];
+  assert.deepEqual(state(projection),{value:'verified',scope:'bounded_registered_terminal_consent_decision.v1'});
+  assert.equal(state({...projection,registeredObservationCompletion:undefined})?.value,'unverified');
+  assert.equal(state({...projection,registeredObservationCompletion:{...projection.registeredObservationCompletion,termination:'evidence_satisfied'}})?.value,'unverified');
+  assert.equal(state({...projection,terminalDecisionEvidence:{...projection.terminalDecisionEvidence,readCompletedAtMs:start+801}})?.value,'unverified');
+  assert.equal(state({...projection,terminalDecisionEvidence:{...projection.terminalDecisionEvidence,readStartedAtMs:start+549}})?.value,'unverified');
+  assert.equal(state({...projection,actionControlProof:{...projection.actionControlProof,authorizedTargetSha256:target==='f'.repeat(64)?'e'.repeat(64):'f'.repeat(64)}})?.value,'unverified');
+ }
 });

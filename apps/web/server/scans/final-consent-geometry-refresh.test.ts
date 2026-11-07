@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, {mock} from "node:test";
 import {mkdtemp, writeFile, readFile, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -17,8 +17,20 @@ import {deriveMaterializedConsentControlAssessment} from "./consent-control-asse
 import {projectPublicFirstLayerConsentEvidence} from "../../lib/scans/public-first-layer-consent-evidence";
 
 let browser: Browser;
-test.before(async()=>{browser=await chromium.launch({headless:true});});
-test.after(async()=>{await browser?.close();});
+test.before(async()=>{
+  // All scanner-created contexts are local-only, including fallback requests.
+  const launch=chromium.launch.bind(chromium);
+  mock.method(chromium,"launch",async(options:Parameters<typeof chromium.launch>[0])=>{
+    const instance=await launch(options),newContext=instance.newContext.bind(instance);
+    mock.method(instance,"newContext",async(options:Parameters<typeof instance.newContext>[0])=>{
+      const context=await newContext({...options,serviceWorkers:"block"});
+      await context.route("**/*",route=>new URL(route.request().url()).hostname==="127.0.0.1"?route.continue():route.abort());
+      return context;
+    });return instance;
+  });
+  browser=await chromium.launch({headless:true});
+});
+test.after(async()=>{await browser?.close();mock.restoreAll();});
 async function fixture() {
   const root=await mkdtemp(join(tmpdir(),"certscore-late-geometry-fixture-"));
   const context=await browser.newContext({viewport:{width:1366,height:900},serviceWorkers:"block"});
@@ -125,6 +137,11 @@ test("scanner final scheduling refreshes stale proof once without entering legac
     assert.equal(timings.some(t=>t.label==="late consent control screenshot"),false);
     const geometry=JSON.parse(await readFile(join(root,"ConsentControlGeometryEvidence.json"),"utf8"));
     const observation=result.consentUiObservations.at(-1)!;
+    assert.equal(observation.captureDiagnostic?.outcome, "retained");
+    assert.equal(observation.captureDiagnostic.attempted, true);
+    assert.equal(observation.captureDiagnostic.documentToken, observation.documentIdentity?.token);
+    assert.equal(observation.captureDiagnostic.inventoryObservedAtMs, observation.observedAtMs);
+    assert.ok(observation.captureDiagnostic.geometryMinusInventoryMs! >= 0);
     assert.ok(Date.parse(geometry.capturedAt)>=scanStartedAtMs+observation.observedAtMs);
     assert.ok(observation.captureDiagnostics?.completedChannels.includes("geometry"));
     assert.equal(geometry.refresh.policyVersion,"final_consent_geometry_refresh.v3");
@@ -193,9 +210,92 @@ for (const semanticPartial of [false, true]) test(`scanner substitutes one geome
         modulesRun:[result.moduleRun],runtimeTimeline:[],networkEvents:[],cookieEvents:[],cookieSnapshots:[],storageSnapshots:[],scriptEvents:[],iframeEvents:[],consentUiObservations:result.consentUiObservations,
         screenshots:result.screenshots,domSnapshots:result.domSnapshots,normalizedVendorObservations:[],derivedRuntimeSignals:{},artifactRefs:result.artifactRefs,scannerVersion:"owned-fixture",schemaVersion:"2.0"});
       const assessment = deriveMaterializedConsentControlAssessment({bundle,consentControlGeometryEvidence:geometry,finalUrl:url,noGo:false});
+      assert.deepEqual(assessment.coverage.captureDiagnostic, observation.captureDiagnostic);
+      assert.equal(assessment.coverage.captureDiagnostic?.outcome, "retained");
       assert.equal(assessment.controls.reject.state, "unknown");
       assert.equal(projectPublicFirstLayerConsentEvidence(assessment,bundle.scanId)?.rejectControlObserved, null);
     }
     if(process.env.CERTSCORE_FINAL_GEOMETRY_REFRESH_OUT)await writeFile(join(process.env.CERTSCORE_FINAL_GEOMETRY_REFRESH_OUT,semanticPartial ? "scanner-partial-frame-refresh.json" : "scanner-frame-refresh.json"),JSON.stringify({scope:"Owned 12-frame scanner fixture, two injected initial read failures; not original AE frame replay",semanticPartial,initialReadiness,epochs,failedFrames:failedFrames.size,refresh:refresh[0],geometry,timings},null,2)+"\n",{flag:"wx"});
   }finally{releasePending?.();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
+});
+
+test("late CMP frame outranks query-only hints while omitted frames keep absence unproved", async () => {
+  const f = await fixture();
+  try {
+    const cmpUrl = "https://fundingchoicesmessages.google.com/fixture";
+    await f.page.route("https://frame-decoy.test/**", route => route.fulfill({
+      contentType: "text/html", body: "<!doctype html><p>Unrelated content</p>",
+    }));
+    await f.page.route(cmpUrl, route => route.fulfill({contentType: "text/html", body: `
+      <!doctype html><section id="fundingchoices-notice" role="dialog">
+      <p>We use cookies for analytics. Choose your cookie consent.</p>
+      <button>Reject all cookies</button></section>`}));
+    await f.page.evaluate(url => {
+      for (let i = 0; i < 14; i++) {
+        const iframe = document.createElement("iframe");
+        iframe.src = `https://frame-decoy.test/${i}?reference=googlefc`;
+        iframe.style.display = "none";
+        document.body.append(iframe);
+      }
+      const cmp = document.createElement("iframe");
+      cmp.src = url;
+      cmp.style.cssText = "position:fixed;top:20px;left:20px;width:480px;height:210px;z-index:99";
+      document.body.append(cmp);
+    }, cmpUrl);
+    await f.page.frameLocator(`iframe[src="${cmpUrl}"]`).getByRole("button", {name: "Reject all cookies"}).waitFor();
+    const cmpFrame = f.page.frame({url: cmpUrl});
+    assert.ok(cmpFrame);
+    const captured = await captureConsentControlGeometry(f.page, {
+      documentIdentity: f.identity, screenshotArtifactRef: f.screenshot.path, timeoutMs: 1100,
+    });
+    assert.equal(captured.controlInspection?.captureCoverage.frameCount, 16);
+    assert.equal(captured.controlInspection?.captureCoverage.capturedFrameCount, 12);
+    assert.equal(captured.controlInspection?.structuralCoverage, "limited");
+    assert.ok(captured.candidates.some(candidate => candidate.label === "Reject all cookies"));
+    const limited = f.assess(f.limited, captured).assessment;
+    assert.equal(limited.controls.reject.state, "observed");
+    const childButton = cmpFrame.getByRole("button", {name: "Reject all cookies"});
+    await childButton.evaluate(button => button.remove());
+    const withoutReject = await captureConsentControlGeometry(f.page, {
+      documentIdentity: f.identity, screenshotArtifactRef: f.screenshot.path, timeoutMs: 1100,
+    });
+    assert.equal(withoutReject.controlInspection?.structuralCoverage, "limited");
+    assert.equal(f.assess(f.limited, withoutReject).assessment.controls.reject.state, "unknown");
+
+    await f.page.locator("#cookie-banner button").evaluateAll(buttons => buttons.forEach(button => button.remove()));
+    const prior = await captureConsentControlGeometry(f.page, {
+      documentIdentity: f.identity, screenshotArtifactRef: f.screenshot.path, timeoutMs: 1100,
+    });
+    const observation = consentUiObservationSchema.parse({
+      ...f.stale, observedAtMs: Date.parse(prior.capturedAt) - f.started + 1, controls: [],
+    });
+    await f.page.screenshot({path: f.screenshot.path});
+    const screenshot = {...f.screenshot, capturedAtMs: Date.now() - f.started};
+    const refresh = () => createFinalConsentGeometryRefresh({
+      scanStartedAtMs: f.started, moduleDeadlineAtMs: Date.now() + 3000, readState: f.state,
+      allowLimitedPositiveRefresh: true,
+      capture: options => captureConsentControlGeometry(f.page, options),
+      prepare: geometry => prepareFinalConsentGeometryArtifact(f.path, geometry),
+    })({observation, geometry: prior, screenshot});
+    const previousBytes = await readFile(f.path);
+    const empty = await refresh();
+    assert.equal(empty.outcome, "no_positive_control");
+    assert.deepEqual(await readFile(f.path), previousBytes);
+
+    await cmpFrame.locator("section").evaluate(section => {
+      const button = document.createElement("button");
+      button.textContent = "Reject all cookies";
+      section.append(button);
+    });
+    const positive = await refresh();
+    assert.equal(positive.outcome, "retained");
+    assert.equal(positive.limitedPositiveOnly, true);
+    const partial = reconcileConsentGeometryInventoryCoverage({observation, geometry: prior, scanStartedAtMs: f.started});
+    const assessed = f.assess(partial, positive.geometry!).assessment;
+    assert.equal(assessed.controls.reject.state, "observed");
+    assert.equal(assessed.controls.accept.state, "unknown");
+    assert.equal(assessed.controls.options.state, "unknown");
+  } finally {
+    await f.close();
+  }
 });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type {ConsentCaptureDiagnostic} from "./consent-capture-diagnostic";
 import { classifyConsentControlLabel } from "./consent-control-label-classifier";
 import {
   deriveConsentControlAssessment,
@@ -92,6 +93,43 @@ function candidate(input: Record<string, unknown>) {
     ...input,
   };
 }
+
+test("capture diagnostics preserve all three control states and bind the exact observation and source hash", () => {
+  for (const intent of ["accept", "reject", "options"] as const) {
+    for (const state of ["observed", "not_observed", "unknown"] as const) {
+      const input = baseInput();
+      input.document!.canonicalDocumentToken = "loader";
+      if (state === "unknown") input.coverage = {status: "limited", requiredChannels: ["geometry", "dom_inventory"], completedChannels: [], incompleteChannels: ["geometry"]};
+      input.observations = [{observationId: "o", observedAtMs: 100, likelyPresent: state === "observed",
+        layerInspected: "first_layer", documentId: input.document!.canonicalDocumentId, documentToken: "loader",
+        captureStatus: state === "unknown" ? "incomplete" : state === "observed" ? "observed" : "no_evidence",
+        inventoryOutcome: state === "unknown" ? "partial" : state === "observed" ? "complete_with_controls" : "complete_empty",
+        completedChannels: state === "unknown" ? [] : ["dom_inventory", "geometry"],
+        controls: state === "observed" ? [candidate({intent, label: {accept: "Accept all", reject: "Reject all", options: "Cookie settings"}[intent]})] : []}];
+      const before = deriveConsentControlAssessment(input);
+      assert.equal(before.controls[intent].state, state);
+      const diagnostic: ConsentCaptureDiagnostic = {version: "consent_capture_diagnostic.v1", refreshPolicy: "final_consent_geometry_refresh.v3",
+        observationId: "o", documentToken: "loader", inventoryObservedAtMs: 100, geometryObservedAtMs: 50,
+        geometryBinding: "matched", geometryMinusInventoryMs: -50, outcome: "budget_unavailable", skipReason: null, attempted: false, elapsedMs: 0};
+      input.observations[0]!.captureDiagnostic = diagnostic;
+      const after = deriveConsentControlAssessment(input);
+      assert.deepEqual(after.controls, before.controls);
+      const {captureDiagnostic: retainedDiagnostic, ...coverage} = after.coverage;
+      assert.deepEqual(coverage, before.coverage);
+      assert.deepEqual(after.limitations, before.limitations);
+      assert.deepEqual(retainedDiagnostic, diagnostic);
+      assert.notEqual(after.provenance.sourceHash, before.provenance.sourceHash);
+      assert.deepEqual(consentControlAssessmentSchema.parse(JSON.parse(JSON.stringify(after))), after);
+      for (const patch of [{documentToken: "other"}, {observationId: "other"}, {inventoryObservedAtMs: 101, geometryMinusInventoryMs: -51}]) {
+        input.observations[0]!.captureDiagnostic = {...diagnostic, ...patch};
+        assert.equal(deriveConsentControlAssessment(input).coverage.captureDiagnostic, undefined);
+      }
+      assert.equal(consentControlAssessmentSchema.safeParse({...after, coverage: {...after.coverage, captureDiagnostic: {...diagnostic, documentToken: "other"}}}).success, false);
+      delete input.observations[0]!.captureDiagnostic;
+      assert.deepEqual(deriveConsentControlAssessment(input), before);
+    }
+  }
+});
 
 test("retains earlier same-document controls when later geometry is collapsed", () => {
   const input = baseInput();
@@ -648,6 +686,7 @@ test("2.2 retains a verified negative Reject state independently of incomplete O
   assert.equal(assessment.assessmentStatus, "limited");
   assert.equal(assessment.controls.reject.state, "not_observed");
   assert.equal(assessment.controls.reject.inspection?.status, "complete");
+  assert.equal(assessment.controls.accept.state, "not_observed");
   assert.equal(assessment.controls.options.state, "unknown");
   assert.equal(consentControlAssessmentSchema.safeParse({ ...assessment, controls: { ...assessment.controls, reject: { ...assessment.controls.reject, inspection: undefined } } }).success, false);
   input.geometry.controlInspection!.structuralCoverage = "limited";

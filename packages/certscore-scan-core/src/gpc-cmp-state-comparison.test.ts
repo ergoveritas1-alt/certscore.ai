@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildGpcCmpStateComparison } from "./gpc-cmp-state-comparison";
+import { assessGpcCmpStateComparison, buildGpcCmpStateComparison } from "./gpc-cmp-state-comparison";
+import { retainGpcComparisonLedger } from "./gpc-comparison-ledger";
+import { gpcImpactRequestSetHash } from "./gpc-impact-capture";
 import { buildGpcImpactAssessment } from "./gpc-impact-assessment";
 import { cmpStatePairFixture, originalFixtureSource, fixtureHash } from "./test-fixtures/gpc-cmp-state-pair.cases";
 
-const project = (p: ReturnType<typeof cmpStatePairFixture>) => buildGpcCmpStateComparison({scanId: p.gpc.scanId, targetUrl:p.baseline.url,
+const pairInput = (p: ReturnType<typeof cmpStatePairFixture>) => ({scanId: p.gpc.scanId, targetUrl:p.baseline.url,
   baseline: originalFixtureSource(p.baseline), gpc: originalFixtureSource(p.gpc)});
+const project = (p: ReturnType<typeof cmpStatePairFixture>) => buildGpcCmpStateComparison(pairInput(p));
 
 test("independent original-byte snapshots preserve different/same/on/off states and supported section versions", () => {
   for (const [sectionId, sectionVersion] of [[7,1], [7,2], [8,1]] as const)
@@ -151,4 +154,48 @@ test("scoped CMP requires verified page windows despite incomplete full-context 
   assert.equal(project(p)?.contractVersion, "certscore.gpc-cmp-state-comparison.v2");
   p.gpc.gpcImpactCapture!.readbackDocumentToken = "foreign-loader";
   assert.equal(project(p), undefined);
+});
+
+test("incomplete full-context retention uses independently verified production page ledgers", () => {
+  const p = cmpStatePairFixture();
+  assert.equal(project(p)?.contractVersion, "certscore.gpc-cmp-state-comparison.v1");
+  for (const bundle of [p.baseline, p.gpc]) {
+    const subrequest = {...bundle.networkEvents[0]!, eventId:"fixture-subrequest", timestampMs:50, isMainFrame:false};
+    bundle.networkEvents.push(subrequest);
+    for (const window of bundle.gpcImpactCapture!.windows) {
+      window.requestCount = 1;
+      window.requestSetSha256 = gpcImpactRequestSetHash([subrequest]);
+    }
+    bundle.gpcImpactCapture!.comparisonPolicy = "page_http_signal.v2";
+    bundle.gpcImpactCapture = retainGpcComparisonLedger(bundle);
+    assert.equal(bundle.gpcImpactCapture?.requestLedger?.policyVersion, "gpc_compact_requests.v1");
+    bundle.networkEvents.pop();
+    bundle.gpcImpactCapture!.retentionStatus = "incomplete";
+  }
+  const input = pairInput(p);
+  const pair = buildGpcCmpStateComparison(input);
+  assert.equal(pair?.contractVersion, "certscore.gpc-cmp-state-comparison.v2");
+  assert.equal(pair && "scope" in pair && pair.scope, "main_document");
+  assert.deepEqual(pair?.sourceHashes, {baseline:input.baseline.pointer.sha256, gpc:input.gpc.pointer.sha256});
+  p.gpc.gpcImpactCapture!.requestLedger!.rows[0]!.headersVerified = false;
+  assert.deepEqual(assessGpcCmpStateComparison(pairInput(p)), {blocker:"comparison_window_unverified"});
+  delete p.gpc.gpcImpactCapture!.requestLedger;
+  assert.equal(project(p), undefined);
+});
+
+test("pair blockers distinguish original checkpoint availability from invalid evidence", () => {
+  const missing = cmpStatePairFixture();
+  delete missing.baseline.gpcImpactSemanticObservation;
+  assert.deepEqual(assessGpcCmpStateComparison(pairInput(missing)), {blocker:"baseline_checkpoint_missing"});
+  missing.baseline.scanId = "foreign";
+  assert.deepEqual(assessGpcCmpStateComparison(pairInput(missing)), {blocker:"worker_source_unverified"});
+
+  const p = cmpStatePairFixture();
+  const semantic = p.baseline.gpcImpactSemanticObservation!;
+  semantic.gppStatus = "unavailable";
+  semantic.usca = null;
+  semantic.stateSha256 = null;
+  assert.deepEqual(assessGpcCmpStateComparison(pairInput(p)), {blocker:"baseline_checkpoint_unavailable"});
+  semantic.captureBinding!.documentToken = "foreign";
+  assert.deepEqual(assessGpcCmpStateComparison(pairInput(p)), {blocker:"baseline_state_unverified"});
 });

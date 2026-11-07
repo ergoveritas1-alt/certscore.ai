@@ -156,9 +156,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "scripts/lib/audit-progress-contracts.ts",
-      "sha256": "f2a77d27912056dfffe7b3b162891e0b982bad78736ebe5f6489d9551b456a8f",
-      "bytes": 21553,
-      "review": "Reviewed audit-only priority delivery diagnostics and four independently source/scope-bound CMP arm states; no producer schema change."
+      "sha256": "8985c31a91e7a78ee7de79f0441ca150fc53b38e31decb6022e16f7390d05f1d",
+      "bytes": 23140,
+      "review": "Reviewed source-bound opt-out outcomes and pre-action lane facts, explicit no-dispatch states, and existing source-separated CMP and accessibility mappings."
     },
     {
       "file": "packages/certscore-contracts/src/site-metadata.ts",
@@ -198,15 +198,15 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "packages/certscore-contracts/src/consent-action-stages.ts",
-      "sha256": "36eab8b2846c7934c4d95306659b034e45aa27188a1d842c3265181a9136c5de",
-      "bytes": 8161,
-      "review": "CONSENT_ACTION_EVIDENCE_STAGE_KEYS and evidenceStages: initial registration and terminal verification remain independent."
+      "sha256": "7c3557eb252f9b6c6427c5b9d3ca4fe6b8c423032e63dc69e668e18f3ab62cdb",
+      "bytes": 8216,
+      "review": "Read registered terminal evidence through the same typed action stage. Initial registration and execution remain independent."
     },
     {
       "file": "packages/certscore-contracts/src/terminal-consent-decision.ts",
-      "sha256": "6d70ba7f8823aa263521d87d640c8fc3d02d63127d60d07992cbc4584b8de7f2",
-      "bytes": 2646,
-      "review": "terminalConsentDecisionBound: exact action/control target and capture/read time binding."
+      "sha256": "145f9c2d32844c9efca41abf5f0baf3d3a60b82886a9ef97d3ab2ddbde864b52",
+      "bytes": 4836,
+      "review": "Registered terminal evidence has a distinct policy and requires a matching completed window. Legacy dispatch-relative proof is unchanged."
     },
     {
       "file": "packages/certscore-contracts/src/gpc-cmp-state-comparison.ts",

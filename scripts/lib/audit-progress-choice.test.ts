@@ -1,4 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {choiceSummaryFromRecord,choiceSummaryAudit,applyChoiceSummary,choiceMetricRegistry,CHOICE_AUDIT_SQL,LEGACY_CHOICE_AUDIT_VERSION,CHOICE_AUDIT_VERSION} from './audit-progress-choice';
 const id='11111111-1111-4111-8111-111111111111',source='a'.repeat(64),url='https://example.com/';
 function record(){return {scan:{id,scanConfigJson:{execution:{v2DagLambda:{saleSharingOptOutEnabled:true}}}},snapshot:{consentControlAssessment:{scan:{noGo:false},californiaPrivacyReview:{scanId:id,contractVersion:'certscore.california-privacy-review.v10',sourceHash:source,documentUrl:url,verificationStatus:'verified',broadOptOutAssessment:{version:'sale_sharing_opt_out_assessment.v3',scanId:id,documentUrl:url,sourceHash:source,state:'observed',basis:'specific_signal',evidenceRefs:['dom-text:one']},optOutPresenceSignal:{scope:'named_route',basis:'specific_policy_opt_out_instructions'},optOutEffectiveness:'not_assessed'}}},canonicalReportProjection:{globalUnifiedFindings:[{unifiedFindingId:'gpc_response',title:'GPC response',surfacingDecision:{reportable:true},presentationDecision:{status:'surface'}}]}};}
@@ -36,6 +37,16 @@ test('wrong scan, changed source/document, malformed or no-go summaries never pr
 test('submission and confirmation require the retained same-section decision transition',()=>{
  const s:any=choiceSummaryFromRecord(record());s.packetVerification='verified';s.packet={contractVersion:'certscore.sale-sharing-opt-out-evidence.v1',policyVersion:'bounded_sale_sharing_opt_out.v1',scanId:id,status:'complete',provider:'onetrust',recipeVersion:'onetrust.v1',actionCount:1,submitted:true,registration:'confirmed',before:{sectionId:7,sale:2,sharing:2},after:{sectionId:7,sale:1,sharing:1},observationWindowMs:500,captureComplete:true,truncated:false,limitations:[]};
  assert.equal(choiceSummaryAudit(s,id).states['sealed.opt_out.registration'],'confirmed');
+ const legacy=choiceSummaryAudit(s,id);
+ assert.equal(legacy.states['sealed.opt_out.choice_confirmation'],'confirmed_initial');
+ assert.equal(legacy.states['sealed.opt_out.post_confirmation_observation'],'complete');
+ assert.match(legacy.scopes['sealed.opt_out.choice_confirmation']!,/legacy_packet_outcome\.v1$/);
+ const failed=choiceSummaryAudit({...s,packet:{...s.packet,status:'unsupported',provider:null,recipeVersion:null,
+  actionCount:0,submitted:false,registration:'not_attempted',before:null,after:null,observationWindowMs:0,captureComplete:false,limitations:['no_unique_registered_recipe']}},id);
+ assert.equal(failed.states['sealed.opt_out.choice_confirmation'],'not_attempted');
+ assert.equal(failed.states['sealed.opt_out.post_confirmation_observation'],'not_measured');
+ assert.equal(failed.states['sealed.opt_out.confirmation_basis'],undefined);
+ assert.equal(choiceSummaryAudit({...s,execution:{invalid:true}},id).states['sealed.opt_out.choice_confirmation'],undefined);
  for(const patch of [{scanId:'other'},{actionCount:0},{after:{sectionId:7,sale:2,sharing:2}},{captureComplete:false},{truncated:true},{before:{sectionId:8,sale:2,sharing:2}}]){
  const a=choiceSummaryAudit({...s,packet:{...s.packet,...patch}},id);assert.equal(a.states['sealed.opt_out.packet'],'invalid_or_unbound');assert.equal(a.states['sealed.opt_out.registration'],undefined);assert.equal(a.states['sealed.opt_out.presence'],'observed');}
 });
@@ -55,9 +66,10 @@ test('fixed query projection excludes raw runtime evidence and retains canonical
  assert.match(CHOICE_AUDIT_SQL,/optOutObservation,sha256/);
  assert.match(CHOICE_AUDIT_SQL,/artifactVerification,conditionalOptOutDecision/);
  assert.match(CHOICE_AUDIT_SQL,/conditional_no_dispatch_recorded/);
- assert.match(CHOICE_AUDIT_SQL,/octet_length\(summary::text\)>8192/);
- assert.match(CHOICE_AUDIT_SQL,/octet_length\(\(summary \|\| jsonb_build_object\('priorityEvidence',priority\)\)::text\)<=8192/);
- assert.match(CHOICE_AUDIT_SQL,/artifactMetadata,scanArtifactUri/);
+ assert.match(CHOICE_AUDIT_SQL,/octet_length\(s::text\)>8192/);
+ assert.match(CHOICE_AUDIT_SQL,/octet_length\(\(s \|\| jsonb_build_object\('priorityEvidence',j\)\)::text\)<=8192/);
+ assert.match(CHOICE_AUDIT_SQL,/auditPolicyProvenance/);
+ assert.doesNotMatch(CHOICE_AUDIT_SQL,/policyTextEvidenceProjection|discoveredPrivacyPolicyDetails|lambdaLaneTimingSummary/);
  assert.doesNotMatch(CHOICE_AUDIT_SQL,/artifactPointers|retainedPrivacyPolicyTextExcerpt|requestBody|cookies|documentToken|\bUPDATE\b|\bINSERT\b|\bDELETE\b/);
 });
 
@@ -119,6 +131,41 @@ test('a Red Hat authorization skip preserves source coverage without counting a 
  assert.equal(audit.states['sealed.opt_out.dispatch'],'conditional_no_dispatch_recorded');
  assert.equal(audit.states['sealed.opt_out.dispatch_reason'],'authorization_not_granted');
  assert.equal(audit.states['sealed.opt_out.conditional_control'],'observed');
- assert.equal(audit.states['sealed.opt_out.action_completion'],undefined);
+ assert.equal(audit.states['sealed.opt_out.action_completion'],'not_dispatched');
+ assert.equal(audit.states['sealed.opt_out.choice_confirmation'],'not_dispatched');
+ assert.equal(audit.states['sealed.opt_out.post_confirmation_observation'],'not_dispatched');
  assert.equal(audit.measurements['sealed.opt_out.dispatch_elapsed_ms'],undefined);
+});
+
+test('an explicit profile skip is distinct from unknown dispatch and conflicting packet evidence',()=>{
+ const base=choiceSummaryFromRecord(record());
+ const skip={...base,dispatch:'excluded_by_profile'};
+ const key='sealed.opt_out.choice_confirmation';
+ assert.equal(choiceSummaryAudit(skip,id).states[key],'excluded_by_profile');
+ assert.equal(choiceSummaryAudit(base,id).states[key],undefined);
+ assert.equal(choiceSummaryAudit({...skip,packet:{unexpected:true}},id).states[key],undefined);
+ assert.equal(choiceSummaryAudit({...base,dispatch:'dispatch_recorded'},id).states[key],undefined);
+});
+
+test('a verified pre-action stop survives without a California document assessment',()=>{
+ const evidence={contractVersion:'certscore.sale-sharing-opt-out-evidence.v1',policyVersion:'bounded_sale_sharing_opt_out.v1',scanId:id,
+  parentDispatchSha256:source,targetUrl:url,documentToken:null,startedAt:'2026-11-07T12:00:01.000Z',completedAt:'2026-11-07T12:00:02.000Z',
+  status:'limited',recipeVersion:null,provider:null,actionCount:0,submitted:false,registration:'not_attempted',confirmedAt:null,
+  before:null,after:null,observationWindowMs:0,captureComplete:false,truncated:false,requests:[],limitations:['navigation_failed']};
+ const bytes=Buffer.from(JSON.stringify(evidence));
+ const bundleSource={sha256:source,sizeBytes:2000};
+ const bundle={scanId:id,normalizedUrl:url,startedAt:'2026-11-07T12:00:00.000Z',completedAt:'2026-11-07T12:00:04.000Z',
+  saleSharingOptOutLaneOutcome:{status:'joined',startedAt:evidence.startedAt,completedAt:evidence.completedAt},
+  saleSharingOptOut:{verificationStatus:'verified',sha256:createHash('sha256').update(bytes).digest('hex'),sizeBytes:bytes.length,evidence}};
+ const r={...record(),snapshot:{consentControlAssessment:{scan:{noGo:false}}},events:[{
+  eventType:'v2_lambda_result.received',metadataJson:{artifactMetadata:{scanArtifactUri:bundleSource}}}]};
+ const assess=(b:typeof bundle,src=bundleSource)=>choiceSummaryAudit(choiceSummaryFromRecord(r,{bundle:b,bundleSource:src}),id).states;
+ const out=assess(bundle);
+ assert.equal(out['sealed.opt_out.choice_confirmation'],'not_attempted');
+ assert.equal(out['sealed.opt_out.post_confirmation_observation'],'not_measured');
+ assert.equal(out['sealed.opt_out.stop'],'navigation_failed');
+ assert.equal(out['sealed.opt_out.packet'],undefined);
+ for(const bad of [{...bundle,normalizedUrl:'https://other.example/'},{...bundle,saleSharingOptOut:{...bundle.saleSharingOptOut,sha256:source}}])
+  assert.equal(assess(bad)['sealed.opt_out.choice_confirmation'],undefined);
+ assert.equal(assess(bundle,{...bundleSource,sizeBytes:1})['sealed.opt_out.choice_confirmation'],undefined);
 });

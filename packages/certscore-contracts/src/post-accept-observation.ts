@@ -11,7 +11,7 @@ import { observedActionSourceProofSchema, validateObservedActionSourceProof } fr
 import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionTiming } from "./retained-action-timing";
 import { postAcceptFormSnapshotCaptureSchema, postAcceptFormSnapshotProjectionSchema, postAcceptFormSnapshotDeadline } from "./post-accept-form-snapshots";
 import { isPostAcceptFormBootstrapUrl, postAcceptFormCaptureSchema } from "./post-accept-form-capture";
-import { terminalConsentDecisionSchema, validateTerminalConsentDecision } from "./terminal-consent-decision";
+import { terminalConsentDecisionSchema, validateTerminalConsentDecision, registeredTerminalWindow } from "./terminal-consent-decision";
 import { assessChoicePathExecution, choicePathExecutionSchema, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
 import { z } from "zod";
 import { actionStoragePhaseDiagnosticsSchema } from "./action-storage-collection-diagnostics";
@@ -312,7 +312,22 @@ const postAcceptEvidencePacketBaseSchema = z.object({
     terminalDecision:packet.terminalDecisionEvidence,cancelled:packet.cancellation.requested,
     capture:packet.afterActionCapture,storage:packet.storage.postAction,
   },context);
-  validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "accept", context);
+  const terminalWindow = packet.terminalDecisionEvidence?.policyVersion === "bounded_registered_terminal_consent_decision.v1" &&
+    packet.acceptanceRegistration.status === "confirmed" && packet.interactionDiagnostics?.click.outcome === "completed" &&
+    packet.productionProjectable && !packet.cancellation.requested && packet.captureCoverage?.requestsDroppedAfterAction === 0 &&
+    packet.timing.observationExitReason === "window_elapsed" && packet.timing.observationMs >= packet.observationWindowMs &&
+    packet.acceptanceRegistration.actionDispatchedAtMs !== undefined && packet.acceptanceRegistration.acceptanceRegisteredAtMs !== undefined &&
+    packet.timing.observationEndedAtMs !== undefined && packet.timing.observationEndedAtMs <= packet.timing.readyAtMs &&
+    packet.storage.postActionCapturedAtMs !== undefined &&
+    packet.storage.postActionCapturedAtMs >= packet.acceptanceRegistration.acceptanceRegisteredAtMs + packet.observationWindowMs &&
+    packet.storage.collectionDiagnostics?.postAction &&
+    (["cookies", "localStorage", "sessionStorage"] as const).every(channel =>
+      packet.storage.collectionDiagnostics!.postAction![channel].status !== "failed")
+    ? { action: "accept" as const, dispatchedAtMs: packet.acceptanceRegistration.actionDispatchedAtMs,
+      startedAtMs: packet.acceptanceRegistration.acceptanceRegisteredAtMs, requiredWindowMs: packet.observationWindowMs,
+      endedAtMs: packet.timing.observationEndedAtMs }
+    : undefined;
+  validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "accept", context, terminalWindow);
   validateConsentReceiptCapture(packet.consentReceiptCapture,{artifactVersion:packet.artifactVersion,scanId:packet.scanId,action:'accept',
     targetSha256:packet.actionControlProof?.authorizedTargetSha256,frameIdentitySha256:packet.actionControlProof?.frameIdentitySha256,
     dispatchedAtMs:packet.acceptanceRegistration.actionDispatchedAtMs,readyAtMs:packet.timing.readyAtMs,completedAt:packet.completedAt,
@@ -771,7 +786,7 @@ export const postAcceptReportProjectionSchema = z.object({
   },context);
   if (projection.notificationAcknowledgment && !projection.packetSha256) context.addIssue({code:z.ZodIssueCode.custom,
     path:["notificationAcknowledgment"],message:"Acknowledgment projection requires verified packet source binding."});
-  validateTerminalConsentDecision(projection.terminalDecisionEvidence, projection.afterActionCapture, projection.actionControlProof, "accept", context);
+  validateTerminalConsentDecision(projection.terminalDecisionEvidence, projection.afterActionCapture, projection.actionControlProof, "accept", context, registeredTerminalWindow(projection));
   validateChoicePathExecution(projection.execution, projection, "accept", context);
   validateRetainedActionTiming(projection.retainedActionTiming, projection, "accept", context);
   validateAfterActionProjection(projection.afterActionCapture, context, {
@@ -894,7 +909,9 @@ export function projectPostAcceptEvidenceForReport(input: {
       afterActionStorage: packet.afterActionCapture.storageSnapshotRetained ? packet.storage.postAction : [],
     } : {}),
     ...(packet.storage.collectionDiagnostics ? { storageCollectionDiagnostics: packet.storage.collectionDiagnostics } : {}),
-    ...(packet.terminalDecisionEvidence ? { terminalDecisionEvidence: packet.terminalDecisionEvidence } : {}),
+    ...(packet.terminalDecisionEvidence &&
+      (packet.terminalDecisionEvidence.policyVersion === "bounded_terminal_consent_decision.v1" || retainedActionTiming)
+      ? { terminalDecisionEvidence: packet.terminalDecisionEvidence } : {}),
     ...(packet.decisionEvidence ? { decisionEvidence: packet.decisionEvidence } : {}),
     ...(packet.captureCoverage ? { captureCoverage: packet.captureCoverage } : {}),
     contractVersion: POST_ACCEPT_REPORT_PROJECTION_VERSION,

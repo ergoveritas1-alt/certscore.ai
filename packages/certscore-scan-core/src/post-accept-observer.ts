@@ -1255,13 +1255,22 @@ export async function runPostAcceptObserver(
     } else {
       diagnostics.click.outcome = "completed";
     }
+    const targetStillAuthorized = () => {
+      try { return !page!.isClosed() && normalizeTargetUrl(page!.url()) === normalizeTargetUrl(authorizedExactTargetUrl ?? observationTargetUrl); }
+      catch { return false; }
+    };
+    const createTerminalRead = (registeredAtEpochMs?: number) => terminalConsentDecisionRead({
+      onOutcome: confirmationDiagnostic.terminal,
+      action: "accept", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256,
+      parentScanStartedAtMs, dispatchedAtEpochMs: actionDispatchedAtEpochMs!, observationWindowMs, registeredAtEpochMs,
+      resultDeadlineAtMs: registeredAtEpochMs === undefined ? undefined : resultBudgetDeadlineAtMs,
+      signal: effectiveSignal,
+      targetStillAuthorized: () => targetStillAuthorized() && (registeredAtEpochMs === undefined ||
+        !sourceDocumentChanged && sourceFrameBinding.current),
+      read: () => sourceFrameBinding.read(0, () => waitForAcceptanceConfirmation(context!, page!, confirmationScope, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined, { pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason, apiSnapshot:recordHubSpotRead })) });
     if (!confirmedState) {
       limitations.push("acceptance_registration_not_confirmed");
       const captureStartedAtMs = Date.now();
-      const targetStillAuthorized = () => {
-        try { return !page!.isClosed() && normalizeTargetUrl(page!.url()) === normalizeTargetUrl(authorizedExactTargetUrl ?? observationTargetUrl); }
-        catch { return false; }
-      };
       if (input.formSnapshotReviewer && diagnostics.click.outcome === "completed" && !actionDocumentChanged &&
         targetStillAuthorized() && !effectiveSignal?.aborted) {
         formSnapshotHandle = startAfterAcceptClickFormSnapshots({ page,
@@ -1271,11 +1280,7 @@ export async function runPostAcceptObserver(
             resultBudgetDeadlineAtMs ?? Number.POSITIVE_INFINITY), signal: effectiveSignal,
           onDocumentBound: token => formCaptureHandle?.bindMainDocument(token) });
       }
-      const terminalRead = terminalConsentDecisionRead({
-        onOutcome: confirmationDiagnostic.terminal,
-        action: "accept", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256,
-        parentScanStartedAtMs, dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
-        signal: effectiveSignal, targetStillAuthorized, read: () => sourceFrameBinding.read(0, () => waitForAcceptanceConfirmation(context!, page!, confirmationScope, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined, { pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason, apiSnapshot:recordHubSpotRead })) });
+      const terminalRead = createTerminalRead();
       const stopReason = await finishAfterActionWindow({
         onFinalWindow: terminalRead.start,
         dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
@@ -1416,9 +1421,14 @@ export async function runPostAcceptObserver(
         originalWindowEndedAtMs,captureDeadlineAtMs:endAtMs,workerDeadlineAtMs});
     };
     extendFormLifecycle();
+    const registeredTerminal = input.productionProjectable === true && diagnostics.click.outcome === "completed" &&
+      (boundControlDispatch || input.interactionAuthorization.kind === "loopback") &&
+      (confirmationScope === page || confirmationScope === page.mainFrame())
+      ? createTerminalRead(acceptanceRegisteredAtEpochMs) : undefined;
     const observationStartedAtMs = Date.now();
     const observationResult = await waitForPostAcceptObservation({
       confirmation: selectedRecipe.confirmation,
+      onObservationTick: registeredTerminal?.tick,
       confirmedState,
       getCapturedRequests: () => retainedRequests(),
       observationWindowMs,
@@ -1472,6 +1482,19 @@ export async function runPostAcceptObserver(
       parentScanStartedAtMs,
       acceptanceRegisteredAtEpochMs,
     );
+    const terminalStorage = storageCollectionDiagnostics.postAction;
+    if (registeredTerminal && observationResult.completed && observationResult.reason === "window_elapsed" &&
+      timing.observationMs >= observationWindowMs && captureCoverage.requestsDroppedAfterAction === 0 &&
+      postActionCapturedAtMs >= acceptanceRegisteredAtMs + observationWindowMs && terminalStorage &&
+      [terminalStorage.cookies, terminalStorage.localStorage, terminalStorage.sessionStorage].every(channel => channel.status !== "failed")) {
+      terminalDecisionEvidence = registeredTerminal.retained(undefined, {
+        action: "accept", dispatchedAtMs: actionDispatchedAtMs, startedAtMs: acceptanceRegisteredAtMs,
+        requiredWindowMs: observationWindowMs, endedAtMs: elapsed(parentScanStartedAtMs, observationEndedAtEpochMs),
+      });
+      if (terminalDecisionEvidence) confirmationDiagnostic.terminalReason("verified_decision");
+    } else {
+      registeredTerminal?.discard();
+    }
     const postAcceptNonEssentialRequests = requests.filter((request) =>
       request.nonEssential &&
       !request.inFlightAtAcceptanceRegistration &&
@@ -2596,6 +2619,7 @@ async function waitForPostAcceptObservation(input: {
   canExitEarly?: () => boolean;
   observationWindowMs: number;
   page: Page;
+  onObservationTick?: () => void;
   parentScanStartedAtMs: number;
   acceptanceRegisteredAtEpochMs: number;
   signal?: AbortSignal;
@@ -2625,6 +2649,7 @@ async function waitForPostAcceptObservation(input: {
   };
 
   while (Date.now() < observationDeadlineAtMs) {
+    input.onObservationTick?.();
     if (input.signal?.aborted) {
       return {
         completed: false,

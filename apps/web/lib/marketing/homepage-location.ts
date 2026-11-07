@@ -26,3 +26,9 @@ export function homepageAudienceText(location: HomepageLocation) {
     ? "Built for developers and agencies reviewing websites for CCPA and GDPR/ePrivacy concerns."
     : "Built for developers and agencies reviewing websites for GDPR/ePrivacy and CCPA concerns.";
 }
+
+export function homepageHeroText(location: HomepageLocation) {
+  return location === "US"
+    ? "Scan public websites for cookies, trackers, session-replay signals, privacy disclosures, and consent behavior. Test California privacy signals, including Global Privacy Control (GPC) and opt-out mechanisms. Compare activity before consent and after eligible Accept or Reject clicks, with retained evidence and clear coverage limits."
+    : "Scan public pages for cookies, trackers, session-replay signals, privacy policy signals, and consent behavior. Review what appears before consent and after eligible Accept or Reject clicks, with retained evidence and clear coverage limits.";
+}

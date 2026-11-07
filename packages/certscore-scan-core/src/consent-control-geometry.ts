@@ -394,16 +394,11 @@ export async function captureConsentControlGeometry(
   };
   const initialPageUrl = page.url();
   const mainFrame = page.mainFrame();
-  const frames = [
-    mainFrame,
-    ...page.frames().filter((frame) => frame !== mainFrame),
-  ]
-    .sort((left, right) => {
-      if (left === mainFrame) return -1;
-      if (right === mainFrame) return 1;
-      return cmpFramePriority(right.url()) - cmpFramePriority(left.url());
-    })
-    .slice(0, 12);
+  const childFrames = page.frames().filter(frame => frame !== mainFrame)
+    .map(frame => ({frame, priority: cmpFramePriority(frame.url())}))
+    .sort((left, right) => right.priority - left.priority)
+    .slice(0, 11);
+  const frames = [mainFrame, ...childFrames.map(({frame}) => frame)];
   // Frame captures run concurrently, so dividing the deadline by the number
   // of frames unnecessarily starves the canonical document on frame-heavy
   // pages. Keep every read bounded by the caller's wall-clock allowance while
@@ -766,10 +761,13 @@ function cmpFramePriority(frameUrl: string): number {
         return hostname === normalizedDomain || hostname.endsWith(`.${normalizedDomain}`);
       }),
     );
-    const matchesKnownCmpUrl = KNOWN_CMP_REGISTRY.some((definition) =>
-      definition.urlPatterns?.some((pattern) => pattern.test(frameUrl)) === true,
-    );
-    return matchesKnownCmpDomain || matchesKnownCmpUrl ? 100 : 0;
+    if (matchesKnownCmpDomain) return 2;
+    // A query or fragment can mention a CMP even on an unrelated frame.
+    // Ranking is a capture hint only. It does not establish consent context.
+    const location = `${parsed.origin}${parsed.pathname}`;
+    return KNOWN_CMP_REGISTRY.some(definition =>
+      (definition.iframePatterns ?? definition.urlPatterns)?.some(pattern => pattern.test(location)),
+    ) ? 1 : 0;
   } catch {
     return 0;
   }

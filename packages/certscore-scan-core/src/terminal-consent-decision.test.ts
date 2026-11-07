@@ -36,3 +36,36 @@ test("terminal reads retain only in-window, same-document, uncancelled results a
     }
   }
 });
+
+test("registered terminal reads use the registered clock and stop at the earlier result deadline", async context => {
+  let now = 1500;
+  context.mock.method(Date, "now", () => now);
+  let reads = 0;
+  const reader = terminalConsentDecisionRead({
+    action: "accept", authorizedTargetSha256: "a".repeat(64), parentScanStartedAtMs: 0,
+    dispatchedAtEpochMs: 1000, registeredAtEpochMs: 1100, observationWindowMs: 800,
+    resultDeadlineAtMs: 1800, targetStillAuthorized: () => true,
+    read: async () => { reads++; return {stateHash:"b".repeat(64),observedAtEpochMs:1100}; },
+  });
+  reader.tick();
+  assert.equal(reads, 0, "the dispatch-relative final interval does not trigger the registered read");
+  now = 1700;
+  reader.tick();
+  reader.tick();
+  await Promise.resolve();
+  assert.equal(reads, 1);
+  const window = {action:"accept" as const,dispatchedAtMs:1000,startedAtMs:1100,requiredWindowMs:800,endedAtMs:1900};
+  assert.equal(reader.retained(undefined, {...window,endedAtMs:1790}), undefined, "an early end cannot establish a terminal state");
+  assert.equal(reader.retained(undefined, window)?.readStartedAtMs, 1700);
+  reader.discard();
+  assert.equal(reader.retained(undefined, window), undefined);
+
+  const closed = terminalConsentDecisionRead({
+    action: "accept", authorizedTargetSha256: "a".repeat(64), parentScanStartedAtMs: 0,
+    dispatchedAtEpochMs: 1000, registeredAtEpochMs: 1100, observationWindowMs: 800,
+    resultDeadlineAtMs: 1630, targetStillAuthorized: () => true,
+    read: async () => { reads++; return undefined; },
+  });
+  closed.tick();
+  assert.equal(reads, 1, "a result deadline before the final interval cannot launch the read");
+});

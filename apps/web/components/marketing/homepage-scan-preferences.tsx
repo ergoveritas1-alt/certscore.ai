@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   homepageAudienceText,
+  homepageHeroText,
   isSampleScanFrom,
   parseHomepageLocation,
   resolveSampleScanFrom,
@@ -85,9 +86,12 @@ export function HomepageScanPreferencesProvider({ children }: { children: ReactN
   </Preferences.Provider>;
 }
 
-export function HomepageAudienceLine() {
-  const preferences = useHomepageScanPreferences();
-  return <p className="relative top-[15px] mt-[20px] text-sm font-semibold text-sky-400">
-    {homepageAudienceText(preferences?.location ?? "EU")}
-  </p>;
+export function HomepageHeroCopy() {
+  const location = useHomepageScanPreferences()?.location ?? "EU";
+  return <>
+    <p className="text-base leading-8 text-slate-300 sm:text-xl">{homepageHeroText(location)}</p>
+    <p className="relative top-[15px] mt-[20px] text-sm font-semibold text-sky-400">
+      {homepageAudienceText(location)}
+    </p>
+  </>;
 }

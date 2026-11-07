@@ -1,3 +1,8 @@
+import {applyPublicCmpEvidence,PUBLIC_CMP_CRITERIA} from './lib/audit-progress-export';
+import {localDay,type ProgressRow} from './lib/audit-progress';
+import {makeContracts} from './lib/audit-progress-contracts';
+import {progressEngine} from './lib/audit-progress-engine';
+import {auditQuantityCsvMetrics,auditStateCsvMetrics} from './lib/audit-measure-catalog';
 /** Stage a local dashboard candidate at the existing cutoff. Inputs are immutable and already retained. */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -9,9 +14,11 @@ import { renderProgressDashboard } from './lib/audit-progress-html';
 import { COVERAGE_MATRIX } from './lib/audit-progress-coverage-matrix';
 import { COVERAGE_MAP } from './lib/audit-progress-coverage';
 import { OPT_OUT_INPUT_VERSION } from './lib/audit-progress-opt-out';
+import { rebuildChoiceEvidence } from './lib/audit-progress-choice-verification';
+import { CHOICE_METRICS, OPT_OUT_OUTCOME_METRIC_IDS } from './lib/audit-progress-choice';
 
-const [previous, manifest, output] = process.argv.slice(2);
-if (!previous || !manifest || !output) {
+const [previous, manifest, output, upgrade] = process.argv.slice(2);
+if (!previous || !manifest || !output || (upgrade && !['--wire-current-cmp','--replay-opt-out-outcomes'].includes(upgrade))) {
   throw Error('Supply a sealed dashboard.json, a retained-only input manifest, and a fresh output directory');
 }
 const priorFile = realpathSync(previous);
@@ -51,6 +58,41 @@ data.coverageMatrix = COVERAGE_MATRIX;
 data.coverageMap = COVERAGE_MAP;
 if (inputs.privacyFormReceipts?.length) data.privacyFormReceipts = inputs.privacyFormReceipts;
 else delete data.privacyFormReceipts;
+if (upgrade==='--wire-current-cmp') {
+  const currentDay=data.days.at(-1).date;
+  const known=new Set(data.metrics.map((m:{id:string})=>m.id));
+  data.metrics.push(...PUBLIC_CMP_CRITERIA.filter(m=>!known.has(m.id)));
+  for(const row of data.rows as ProgressRow[]){
+    if(!row.reportable||localDay(row.createdAt)!==currentDay)continue;
+    for(const m of PUBLIC_CMP_CRITERIA)row.states[m.id]??='unavailable';
+    const ref=row.refs.find(r=>r.role==='hash_verified_bot_archive_export');
+    if(!ref)continue;
+    const bytes=read(ref.file,6*1024*1024);
+    assert.equal(sha(bytes),ref.sha256,'Current public CMP export hash mismatch');
+    const report=JSON.parse(bytes.toString('utf8'));
+    assert.equal(report.scanId,row.scanId,'Current public CMP export scan mismatch');
+    applyPublicCmpEvidence(row,report);
+  }
+}
+if(upgrade==='--replay-opt-out-outcomes'){
+  const {rows}=rebuildChoiceEvidence(data);
+  for(const [index,row] of (data.rows as ProgressRow[]).entries()){
+    const replay=rows[index]!;
+    assert.equal(replay.scanId,row.scanId);
+    for(const id of OPT_OUT_OUTCOME_METRIC_IDS){
+      delete row.states[id];delete row.metricSources?.[id];
+      if(replay.states[id]===undefined)continue;
+      row.states[id]=replay.states[id]!;
+      (row.metricSources??={})[id]=replay.metricSources![id]!;
+    }
+  }
+  const presence=CHOICE_METRICS.find(metric=>metric.id==='sealed.opt_out.presence')!;
+  data.metrics=data.metrics.map((metric:{id:string})=>metric.id===presence.id?presence:metric);
+}
+if(upgrade){
+  data.days=progressEngine().aggregate(data,data.rows);
+  data.contracts=makeContracts(data.metrics,data.quantities);
+}
 data.masterValueParity = verifyMasterValueParity(data);
 data.generatedAtUtc = new Date().toISOString();
 const json = Buffer.from(JSON.stringify(data) + '\n');
@@ -63,9 +105,17 @@ writeFileSync(path.join(out, 'dashboard.json'), json, { flag: 'wx' });
 writeFileSync(path.join(out, 'dashboard.html'), html, { flag: 'wx' });
 for (const name of dataFiles) {
   const file = path.join(out, name);
-  copyFileSync(path.join(prior, name), file);
-  const bytes = read(file, bound(name));
-  assert.equal(sha(bytes), seal.files.find((entry: { file: string }) => entry.file === path.join(prior, name)).sha256);
+  if (name === 'daily-metrics.csv') {
+    writeFileSync(file, progressEngine().stateCsv(data.days, auditStateCsvMetrics(data)), {flag: 'wx'});
+  } else if (name === 'daily-volumes.csv') {
+    writeFileSync(file, progressEngine().quantityCsv(data.days, auditQuantityCsvMetrics(data)), {flag: 'wx'});
+  } else if(name==='metric-contracts.json'&&upgrade){
+    writeFileSync(file,JSON.stringify(data.contracts,null,2)+'\n',{flag:'wx'});
+  } else {
+    copyFileSync(path.join(prior, name), file);
+    const bytes = read(file, bound(name));
+    assert.equal(sha(bytes), seal.files.find((entry: { file: string }) => entry.file === path.join(prior, name)).sha256);
+  }
 }
 const files = names.map(name => {
   const file = path.join(out, name), bytes = read(file, bound(name));

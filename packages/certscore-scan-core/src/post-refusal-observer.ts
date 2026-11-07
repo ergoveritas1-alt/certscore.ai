@@ -1623,18 +1623,23 @@ export async function runPostRefusalObserver(
       interactionDiagnostics.click.outcome = "completed";
     }
 
+    const targetStillAuthorized = () => {
+      try { return !page!.isClosed() && normalizeTargetUrl(page!.url()) === normalizeTargetUrl(authorizedExactTargetUrl ?? observationTargetUrl); }
+      catch { return false; }
+    };
+    const createTerminalRead = (registeredAtEpochMs?: number) => terminalConsentDecisionRead({
+      onOutcome: confirmationDiagnostic.terminal,
+      action: "reject", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256,
+      parentScanStartedAtMs, dispatchedAtEpochMs: actionDispatchedAtEpochMs!, observationWindowMs, registeredAtEpochMs,
+      resultDeadlineAtMs: registeredAtEpochMs === undefined ? undefined : resultBudgetDeadlineAtMs,
+      signal: effectiveSignal,
+      targetStillAuthorized: () => targetStillAuthorized() && (registeredAtEpochMs === undefined ||
+        !sourceDocumentChanged && sourceFrameBinding.current),
+      read: () => sourceFrameBinding.read(0, () => waitForRefusalConfirmation(context!, page!, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined,
+        {pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason}, selectedRecipe!.controlFrameUrl, boundControlDispatch)) });
     if (!confirmedState) {
       const captureStartedAtMs = Date.now();
-      const targetStillAuthorized = () => {
-        try { return !page!.isClosed() && normalizeTargetUrl(page!.url()) === normalizeTargetUrl(authorizedExactTargetUrl ?? observationTargetUrl); }
-        catch { return false; }
-      };
-      const terminalRead = terminalConsentDecisionRead({
-        onOutcome: confirmationDiagnostic.terminal,
-        action: "reject", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256,
-        parentScanStartedAtMs, dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
-        signal: effectiveSignal, targetStillAuthorized, read: () => sourceFrameBinding.read(0, () => waitForRefusalConfirmation(context!, page!, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined,
-          {pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason}, selectedRecipe!.controlFrameUrl, boundControlDispatch)) });
+      const terminalRead = createTerminalRead();
       const stopReason = await finishAfterActionWindow({
         onFinalWindow: terminalRead.start,
         dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
@@ -1780,6 +1785,9 @@ export async function runPostRefusalObserver(
       witnesses,
     };
 
+    const registeredTerminal = productionProjectable && interactionDiagnostics.click.outcome === "completed" &&
+      (boundControlDispatch || input.interactionAuthorization.kind === "loopback") && !selectedRecipe.controlFrameUrl
+      ? createTerminalRead(confirmedRefusalRegisteredAtEpochMs) : undefined;
     let tcfDataAfterRefusal = await readTcfData(page).catch(() => undefined);
     let tcfDataObservedAtEpochMs = tcfDataAfterRefusal ? Date.now() : undefined;
     let tcfGrantEvidence = tcfPurposeGrantEvidence(tcfDataAfterRefusal);
@@ -1791,6 +1799,7 @@ export async function runPostRefusalObserver(
         }
       : await waitForPostRefusalObservation({
           page,
+          onObservationTick: registeredTerminal?.tick,
           getCapturedRequests: retainedRequests,
           parentScanStartedAtMs,
           refusalRegisteredAtEpochMs: confirmedRefusalRegisteredAtEpochMs,
@@ -1922,6 +1931,19 @@ export async function runPostRefusalObserver(
       postRefusalTcfState: retainedPostRefusalTcfState,
     });
 
+    const terminalStorage = storageCollectionDiagnostics.postAction;
+    if (registeredTerminal && observationResult.reason === "window_elapsed" &&
+      timing.observationMs >= observationWindowMs && captureCoverage.requestsDroppedAfterAction === 0 &&
+      postActionCapturedAtMs >= refusalRegisteredAtMs + observationWindowMs && terminalStorage &&
+      [terminalStorage.cookies, terminalStorage.localStorage, terminalStorage.sessionStorage].every(channel => channel.status !== "failed")) {
+      terminalDecisionEvidence = registeredTerminal.retained(undefined, {
+        action: "reject", dispatchedAtMs: actionDispatchedAtMs, startedAtMs: refusalRegisteredAtMs,
+        requiredWindowMs: observationWindowMs, endedAtMs: elapsed(parentScanStartedAtMs, observationEndedAtEpochMs),
+      });
+      if (terminalDecisionEvidence) confirmationDiagnostic.terminalReason("verified_decision");
+    } else {
+      registeredTerminal?.discard();
+    }
     return await finalize({
       resolverFound: true,
       registration,
@@ -3710,6 +3732,7 @@ async function waitForRefusalConfirmation(
       actionDispatchedAtEpochMs,
       timeoutMs,
       signal,
+      diagnostics?.pass,
     );
     return value === undefined
       ? undefined
@@ -4234,6 +4257,7 @@ function postRefusalTcfState(
 
 async function waitForPostRefusalObservation(input: {
   page: Page;
+  onObservationTick?: () => void;
   getCapturedRequests: () => CapturedRequest[];
   parentScanStartedAtMs: number;
   refusalRegisteredAtEpochMs: number;
@@ -4256,6 +4280,7 @@ async function waitForPostRefusalObservation(input: {
   let lastTcfData: TcfDataSnapshot | undefined;
   let lastTcfObservedAtEpochMs: number | undefined;
   while (Date.now() < deadlineAtMs) {
+    input.onObservationTick?.();
     const requests = classifyRequests(
       input.getCapturedRequests(),
       input.parentScanStartedAtMs,
@@ -4351,10 +4376,14 @@ async function waitForLocalStorageValue(
   actionDispatchedAtEpochMs: number,
   timeoutMs: number,
   signal?: AbortSignal,
+  onPass?: () => void,
 ): Promise<string | undefined> {
   const deadlineAtMs = Date.now() + timeoutMs;
-  while (Date.now() <= deadlineAtMs) {
+  let firstRead = true;
+  while (firstRead || Date.now() <= deadlineAtMs) {
+    firstRead = false;
     if (signal?.aborted) return undefined;
+    onPass?.();
     const writes = await readStorageWrites(page);
     const value = await page.evaluate(
       (storageKey) => window.localStorage.getItem(storageKey),
@@ -4368,7 +4397,8 @@ async function waitForLocalStorageValue(
       write.observedAtEpochMs >= actionDispatchedAtEpochMs
     );
     if (value === expectedValue && correlatedWrite) return value;
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    if (Date.now() >= deadlineAtMs) return undefined;
+    await waitForDelay(25, signal).catch(() => undefined);
   }
   return undefined;
 }

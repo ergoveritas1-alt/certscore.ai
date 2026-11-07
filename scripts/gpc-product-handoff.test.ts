@@ -109,8 +109,10 @@ test("GPC product packets survive runtime, concern/policy, hydration, web/API/JS
   const scan = scanRecord(), fixture = gpcProductFixture({scanId:scan.scan.id,contradiction:true});
   const packet = fixture.cmpStateComparison!;
   assert.ok(packet);
-  const runtime = buildGpcResponseRuntimeProjection({scanId:scan.scan.id,gpcResponseAssessment:fixture.assessment,gpcCmpStateComparison:packet});
+  const runtime = buildGpcResponseRuntimeProjection({scanId:scan.scan.id,gpcResponseAssessment:fixture.assessment,gpcCmpStateComparison:packet,
+    gpcCmpPairBlocker:"baseline_checkpoint_missing"});
   assert.deepEqual(runtime.gpcCmpStateComparison,packet);
+  assert.equal(runtime.gpcCmpPairBlocker,undefined);
   const project = (artifacts: Record<string,unknown>) => buildUnifiedFindingDisplayPackets({runtimeArtifacts:artifacts,reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
   const packets = project(runtime), without = project({gpcResponseAssessment:fixture.assessment});
   const effects = (rows: typeof packets) => rows.map(f=>({id:f.unifiedFindingId,severity:f.severity,score:f.scoreEffects,status:f.presentationDecision.status}));
@@ -143,7 +145,12 @@ test("GPC product packets survive runtime, concern/policy, hydration, web/API/JS
   }
   assert.doesNotMatch(renderCanonicalReportPdf(eu).toString('latin1'),/Site-recorded opt-out settings|site-recorded GPC receipt/);
   const bad = {...packet,gpc:{...packet.gpc,sale:'opted_out' as const}};
-  assert.equal(buildGpcResponseRuntimeProjection({scanId:scan.scan.id,gpcResponseAssessment:fixture.assessment,gpcCmpStateComparison:bad}).gpcCmpStateComparison,undefined);
+  const rejected = buildGpcResponseRuntimeProjection({scanId:scan.scan.id,gpcResponseAssessment:fixture.assessment,gpcCmpStateComparison:bad});
+  assert.equal(rejected.gpcCmpStateComparison,undefined);
+  assert.equal(rejected.gpcCmpPairBlocker,"report_binding_rejected");
+  const missing = buildGpcResponseRuntimeProjection({scanId:scan.scan.id,gpcResponseAssessment:fixture.assessment,gpcCmpPairBlocker:"baseline_checkpoint_missing"});
+  assert.equal(missing.gpcCmpPairBlocker,"baseline_checkpoint_missing");
+  assert.doesNotMatch(JSON.stringify(project(missing)),/gpcCmpPairBlocker|baseline_checkpoint_missing/);
   const unbound=project({...runtime,gpcCmpStateComparison:{...packet,sourceHashes:{...packet.sourceHashes,baseline:'f'.repeat(64)}}});
   assert.equal(buildGpcResponseReportProjection(unbound)?.cmpStateComparison,undefined);
   assert.deepEqual(effects(unbound),effects(packets));

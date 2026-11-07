@@ -1,4 +1,7 @@
+import { gpcCmpPairBlockerSchema } from "./gpc-cmp-pair-coverage";
 import { gpcNavigationRecoverySchema } from "./gpc-navigation-recovery";
+import {consentCaptureDiagnosticSchema} from "./consent-capture-diagnostic";
+export * from "./consent-capture-diagnostic";
 export * from "./gpc-navigation-recovery";
 export * from "./gpc-guidance";
 import { runtimeEvidenceClockSchema, resolveRuntimeEvidenceClock } from "./runtime-evidence-clock";
@@ -728,6 +731,7 @@ export const iframeEventSchema = runtimeEvidenceEventSchema.extend({
 });
 
 export const consentUiObservationSchema = z.object({
+  captureDiagnostic: consentCaptureDiagnosticSchema.optional(),
   observationId: z.string(),
   observedAtMs: z.number().int().nonnegative(),
   // Main-frame document that produced this observation. New scanner output
@@ -872,6 +876,11 @@ export const consentUiObservationSchema = z.object({
   evidenceRefs: z.array(evidenceRefSchema).default([]),
   confidence: confidenceSchema,
 }).superRefine((observation, ctx) => {
+  const diagnostic = observation.captureDiagnostic;
+  if (diagnostic && (diagnostic.observationId !== observation.observationId ||
+      diagnostic.inventoryObservedAtMs !== observation.observedAtMs ||
+      diagnostic.documentToken !== (observation.documentIdentity?.token ?? null)))
+    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Capture diagnostic must bind the exact retained observation.", path: ["captureDiagnostic"]});
   if (observation.controls.some(control => control.domBinding && (
       control.domBinding.documentUrl !== observation.documentUrl ||
       control.domBinding.documentIdentity.source !== observation.documentIdentity?.source ||
@@ -3568,6 +3577,7 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   gpcResponseAssessment: canonicalBundleGpcResponseAssessmentSchema.optional(),
   gpcActivityComparison: canonicalGpcActivityComparisonSchema.optional(),
   gpcCmpStateComparison: canonicalGpcCmpStateComparisonSchema.optional(),
+  gpcCmpPairBlocker: gpcCmpPairBlockerSchema.optional(),
   gpcSignalObservation: canonicalBundleGpcSignalObservationSchema.optional(),
   gpcPrototypeSessionBinding: gpcPrototypeSessionBindingSchema.optional(),
   gpcObservationSession: canonicalGpcSessionSchema.optional(),
@@ -3928,3 +3938,5 @@ export * from "./gpc-collection-comparison.js";
 export * from "./explicit-opt-out-control";
 
 export * from "./conditional-opt-out-decision";
+
+export * from "./gpc-cmp-pair-coverage";

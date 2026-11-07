@@ -1,5 +1,6 @@
 import { pairedGpcAudit, GPC_PAIR_METRICS, GPC_PAIR_QUANTITIES, GPC_SESSION_METRICS, GPC_SESSION_QUANTITIES, GPC_DETAIL_METRICS, GPC_DETAIL_QUANTITIES } from "./audit-progress-gpc";
 import { checklistEvidence, returnedState } from './audit-progress-contracts';
+import {CONTROL_ACCESSIBILITY_METRICS} from './audit-progress-control-accessibility';
 /** Audit-only summaries of returned evidence. Never generates findings or rescoring. */
 import type {Metric, ProgressRow} from "./audit-progress";
 import {siteIntegrityProjectionSchema} from "../../packages/certscore-contracts/src/site-integrity";
@@ -147,5 +148,6 @@ export { COVERAGE_MAP } from "./audit-progress-coverage";
 
 /** Register every verified canonical checklist ID even when an older audit/export omitted it. */
 export function retainedEvidenceMetricRegistry(rows:ProgressRow[]):Metric[]{
- return evidenceMetricRegistry(rows.map(row=>({...row,metricLabels:row.retainedMetricLabels??{}}))).filter(m=>/^(checklist|verdict)\./.test(m.id));
+ const retained=evidenceMetricRegistry(rows.map(row=>({...row,metricLabels:row.retainedMetricLabels??{}}))).filter(m=>/^(checklist|verdict)\./.test(m.id));
+ return [...new Map([...retained,...CONTROL_ACCESSIBILITY_METRICS].map(metric=>[metric.id,metric])).values()];
 }

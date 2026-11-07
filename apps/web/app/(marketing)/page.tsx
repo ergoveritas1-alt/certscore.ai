@@ -6,7 +6,7 @@ import { ApiReadRatePolicyNotice } from "../../components/api-read-rate-policy-n
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
 import { DomainScanForm } from "../../components/marketing/domain-scan-form";
-import { HomepageAudienceLine, HomepageScanPreferencesProvider } from "../../components/marketing/homepage-scan-preferences";
+import { HomepageHeroCopy, HomepageScanPreferencesProvider } from "../../components/marketing/homepage-scan-preferences";
 import { SampleReportButton } from "../../components/marketing/sample-report-button";
 import { HomepageFindingsOverview } from "../../components/marketing/homepage-findings-overview";
 import { ScannerSolutionAnimation } from "../../components/marketing/scanner-solution-animation";
@@ -193,10 +193,7 @@ export default async function MarketingHomePage() {
               <span className="block sm:whitespace-nowrap">See the evidence.</span>
             </h1>
             <div className="max-w-[650px]">
-              <p className="text-base leading-8 text-slate-300 sm:text-xl">
-                Scan public pages for cookies, trackers, session-replay signals, privacy policy signals, and consent behavior. Review what appears before consent and after eligible Accept or Reject clicks, with retained evidence and clear coverage limits.
-              </p>
-              <HomepageAudienceLine />
+              <HomepageHeroCopy />
             </div>
             <div id="homepage-scan" className="max-w-[650px] scroll-mt-24 pt-2">
               <div className="rounded-[1.4rem] border border-sky-300/30 bg-slate-950/35 p-2 shadow-[0_20px_45px_rgba(2,132,199,0.16)] backdrop-blur-sm sm:p-2.5">

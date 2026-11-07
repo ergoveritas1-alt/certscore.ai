@@ -1,3 +1,4 @@
+import {auditQuantityCsvMetrics,auditStateCsvMetrics} from './lib/audit-measure-catalog';
 import {verifyMasterValueParity} from './lib/audit-master-parity';
 import {COVERAGE_MATRIX} from "./lib/audit-progress-coverage-matrix";
 import {applyChoiceSummary,choiceSummaryFromRecord,choiceMetricRegistry} from './lib/audit-progress-choice';
@@ -19,7 +20,7 @@ const hash=(v:string|Uint8Array)=>createHash("sha256").update(v).digest("hex");
 const read=(file:string,max=80_000_000)=>{if(statSync(file).size>max)throw Error("Input exceeds byte bound");return JSON.parse(readFileSync(file,"utf8"));};
 function fingerprint(file:string){const bytes=readFileSync(file);return {file:realpathSync(file),sha256:hash(bytes),bytes:bytes.length};}
 function boundedFile(root:string,file:string,max=20_000_000){const f=realpathSync(file);if(!f.startsWith(realpathSync(root)+path.sep)||statSync(f).size>max)throw Error("Evidence escapes retained run or exceeds bound");return readFileSync(f);}
-export async function buildDashboard(input:{runsFile:string;originsFile:string;evidenceDir:string;out:string;issuesFile?:string;releaseWatchFile?:string}){
+export async function buildDashboard(input:{runsFile:string;originsFile:string;evidenceDir:string;out:string;issuesFile?:string;releaseWatchFile?:string;intermediate?:boolean}){
   if(existsSync(input.out))throw Error("Use a fresh dashboard output directory");
   const runInputs=read(input.runsFile);if(!Array.isArray(runInputs)||!runInputs.length||runInputs.length>30)throw Error("Supply 1–30 retained runs");
   const originInput=read(input.originsFile);if(originInput.version!==BOT_ORIGIN_VERSION||originInput.readOnly!==true||!Array.isArray(originInput.rows))throw Error("Verified read-only original-request provenance required");
@@ -80,7 +81,9 @@ export async function buildDashboard(input:{runsFile:string;originsFile:string;e
         refs.push({file:botFile,sha256:hash(bytes),role:exportState});
       }catch(error:any){if(error?.code!=="ENOENT"){exportState="invalid";errors.push({scanId:i.id,kind:"bot_export",reason:String(error)});}}
       const progress=extractProgressRow({inventory:i,origin:origin!,record,report,bundle,sourceFacts,refs,exportState});
-      if(record)applyChoiceSummary(progress,choiceSummaryFromRecord(record,{manifest,bundle}),`persisted_report_choice_summary/${progress.projectionVersion}`);
+      const bundleRef=refs.find(ref=>ref.role==="scanArtifactUri");
+      const bundleSource=bundleRef?{sha256:bundleRef.sha256,sizeBytes:obj(obj(obj(arr(i.retained)[0]).hashes).scanArtifactUri).sizeBytes}:undefined;
+      if(record)applyChoiceSummary(progress,choiceSummaryFromRecord(record,{manifest,bundle,bundleSource}),`persisted_report_choice_summary/${progress.projectionVersion}`);
       if(bundle){
         const policy=inspectPolicyCapture({root,scanId:i.id,site:i.hostname,region:i.scan_from,status:i.status,bundle,receipts});
         const privacy=policy.documents.filter(d=>d.surfaceType==="privacy_policy");
@@ -107,10 +110,12 @@ export async function buildDashboard(input:{runsFile:string;originsFile:string;e
   const data={version:PROGRESS_VERSION,generatedAtUtc:new Date().toISOString(),timezone:TIMEZONE,cohort:"Original-request credential-bound Mac mini scan bot; canary/synthetic targets excluded",inputRows:seen.size,includedRows:rows.length,exclusionCounts,windows,metrics,quantities:QUANTITIES,coverageMap:COVERAGE_MAP,coverageMatrix:COVERAGE_MATRIX,masterValueParity:null as unknown as ReturnType<typeof verifyMasterValueParity>,days,rows,issues,releaseMarkers:[...new Map(releaseMarkers.map(v=>[v.revision+v.at,v])).values()],errors,sources:[fingerprint(input.runsFile),fingerprint(input.originsFile),...sources],limitations:["Day-over-day percentage-point changes are descriptive, not accuracy or causal claims.","Partial calendar days show descriptive deltas with counts and coverage labels.","Independent action sessions do not form a strict funnel; registration is separate from execution.","Missing evidence remains not checked; intentionally omitted CMP workers remain separate.","Bot exports are fingerprinted and generation-joined; canonical findings require checksum-verified retained projections.","No source scans, findings or audit checkpoints were rewritten."]};
   data.masterValueParity=verifyMasterValueParity(data);
   writeFileSync(path.join(input.out,"dashboard.json"),JSON.stringify(data,null,2)+"\n",{flag:"wx"});
-  writeFileSync(path.join(input.out,"dashboard.html"),renderProgressDashboard(data),{flag:"wx"});
-  writeFileSync(path.join(input.out,"daily-metrics.csv"),progressEngine().stateCsv(days,metrics),{flag:"wx"});
-  writeFileSync(path.join(input.out,"daily-volumes.csv"),progressEngine().quantityCsv(days,QUANTITIES),{flag:"wx"});
   writeFileSync(path.join(input.out,"exclusions.json"),JSON.stringify(accounting,null,2)+"\n",{flag:"wx"});
+  // The month builder joins and namespaces these sealed rows before rendering.
+  if(input.intermediate)return data;
+  writeFileSync(path.join(input.out,"dashboard.html"),renderProgressDashboard(data),{flag:"wx"});
+  writeFileSync(path.join(input.out,"daily-metrics.csv"),progressEngine().stateCsv(days,auditStateCsvMetrics(data)),{flag:"wx"});
+  writeFileSync(path.join(input.out,"daily-volumes.csv"),progressEngine().quantityCsv(days,auditQuantityCsvMetrics(data)),{flag:"wx"});
   writeFileSync(path.join(input.out,"dashboard-seal.json"),JSON.stringify({version:PROGRESS_VERSION,files:["dashboard.json","dashboard.html","daily-metrics.csv","daily-volumes.csv","exclusions.json"].map(f=>fingerprint(path.join(input.out,f))),scheduledInvocationsAdded:0,productionWrites:0,newScans:0},null,2)+"\n",{flag:"wx"});
   console.log(JSON.stringify({included:rows.length,exclusionCounts,days:days.map(d=>({date:d.date,complete:d.completeDay,attempts:d.attempts})),errors:errors.length}));return data;
 }

@@ -4,7 +4,7 @@ import {summarizeConsentConfirmationReads, type ConsentConfirmationReadDiagnosti
 import type { PostAcceptReportProjection } from "./post-accept-observation";
 import type { PostRefusalReportProjection } from "./post-refusal-observation";
 import { consentActionOutcome } from "./notification-acknowledgment";
-import { terminalConsentDecisionBound } from "./terminal-consent-decision";
+import { registeredTerminalWindow, terminalConsentDecisionBound } from "./terminal-consent-decision";
 export const CONSENT_ACTION_STAGE_KEYS = ["providerAttributed","controlResolved","clickCompleted","observationCompleted","categoryScopeVerified","decisionVerified"] as const;
 export type ConsentActionStageKey = typeof CONSENT_ACTION_STAGE_KEYS[number];
 export const CONSENT_ACTION_EVIDENCE_STAGE_KEYS = ["consentSurfaceObserved", "controlIdentified", "actionAttempted", "initialChoiceRegistrationSupported", "terminalChoiceStateVerified", "notificationAcknowledged"] as const;
@@ -59,7 +59,7 @@ function evidenceStages(p: PostAcceptReportProjection | PostRefusalReportProject
     // A missing terminal read is unknown, not a negative choice or an initial registration.
     terminalChoiceStateVerified: terminal && action
       ? terminal.evidence.basis === "verified_state" && terminal.evidence.decision === (action === "accept" ? "granted" : "denied") &&
-        terminalConsentDecisionBound(terminal, p.afterActionCapture, proof, action) === true
+        terminalConsentDecisionBound(terminal, p.afterActionCapture, proof, action, registeredTerminalWindow(p)) === true
       : null,
     notificationAcknowledged: "notificationAcknowledgment" in p && p.notificationAcknowledgment ? true : null,
     registrationStatus: p.registrationStatus ?? null,

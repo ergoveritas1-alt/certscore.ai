@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {buildAuditPolicyProvenance} from '../../packages/certscore-contracts/src/audit-policy-provenance';
 import {choiceSummaryAudit,choiceSummaryFromRecord} from './audit-progress-choice';
 
 export const scanId='11111111-1111-4111-8111-111111111111', digest='a'.repeat(64);
@@ -10,7 +11,7 @@ export function operationsFixture(){
   targetRelationship:'target_controller',documentFormat:'html',extractionStatus:'complete',artifactVerificationStatus:'verified',
   artifactSha256:digest,retainedTextSha256:digest,artifactSizeBytes:102,retainedTextChars:100,
   documentTextCoverage:{status:'complete',sourceTextChars:100,retainedTextChars:100}};
- return {scan:{id:scanId},snapshot:{consentControlAssessment:{scan:{noGo:false}}},
+ return {scan:{id:scanId,status:'completed',createdAt:timestamp},snapshot:{consentControlAssessment:{scan:{noGo:false}}},
   runtimeArtifacts:{policy_disclosure_summary:{policySurfaceAdmissionVersion:'target_policy_surfaces.v1',
    retainedPrivacyPolicyTextExcerpt:'PRIVATE POLICY TEXT',
    discoveredPrivacyPolicyDetails:[{documentFetchState:'failed',url:'https://example.invalid/policy'}],
@@ -67,4 +68,25 @@ test('CMP coordinator proof distinguishes joined, limited, absent and unbound at
  m.artifactMetadata.manifestUri.sha256=digest;
  m.lambdaLaneTimingSummary.cmpPreferenceInspection.completedAt='2026-11-06T08:00:00.000Z';
  assert.equal(read(f)[key('cmp_coordinator')],undefined);
+});
+
+test('compact policy receipts preserve legacy states and reject mismatched scan, time and generation',()=>{
+ const fixture=operationsFixture(),generation='scan-report-projection-v27';
+ const compact=buildAuditPolicyProvenance(fixture,generation,digest);
+ assert.ok(compact);
+ const {binding}=compact;
+ const summary={...choiceSummaryFromRecord(fixture),operationsEvidence:compact};
+ assert.ok(Buffer.byteLength(JSON.stringify(compact))<=512);
+ assert.doesNotMatch(JSON.stringify(compact),/PRIVATE POLICY TEXT|example\.invalid|cmpPreferenceInspection/);
+ const compactStates=choiceSummaryAudit(summary,scanId,binding).states;
+ for(const id of ['policy_fetch','policy_owner','policy_text_receipt'])assert.equal(compactStates[key(id)],read(fixture)[key(id)]);
+ assert.equal(compactStates[key('cmp_coordinator')],undefined);
+ assert.equal(choiceSummaryAudit(summary,scanId).states[key('policy_owner')],undefined);
+ for(const bad of [{sourceHash:'f'.repeat(64)},{createdAt:'2026-11-06T09:00:00.001Z'},
+  {scanId:'22222222-2222-4222-8222-222222222222'},{generation:'scan-report-projection-v26'}]){
+  const badSummary:unknown={...summary,operationsEvidence:{...compact,binding:{...binding,...bad}}};
+  assert.equal(choiceSummaryAudit(badSummary,scanId,binding).states[key('policy_owner')],undefined);
+ }
+ fixture.events.push(fixture.events[0]!);
+ assert.equal(buildAuditPolicyProvenance(fixture,generation,digest),undefined);
 });

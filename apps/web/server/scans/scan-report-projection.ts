@@ -961,7 +961,17 @@ export async function persistScanReportProjection(
             reason: error instanceof Error ? error.name : "UnknownError" }));
         }
       }
-      return buildPersistedScanReportProjection(record, { canonicalReportProjection, auditPrivacyForm });
+      let auditPolicyProvenance: unknown;
+      if (process.env.CERTSCORE_AUDIT_POLICY_PROVENANCE_ENABLED === "1" && !projectScanReportNoGo(record)) {
+        try {
+          const { buildAuditPolicyProvenance } = await import("../../../../packages/certscore-contracts/src/audit-policy-provenance");
+          auditPolicyProvenance = buildAuditPolicyProvenance(record, SCAN_REPORT_PROJECTION_VERSION, hash);
+        } catch (error) {
+          console.warn(JSON.stringify({ event: "scan.audit_policy_provenance.failed", scanId: record.scan.id,
+            reason: error instanceof Error ? error.name : "UnknownError" }));
+        }
+      }
+      return buildPersistedScanReportProjection(record, { canonicalReportProjection, auditPrivacyForm, auditPolicyProvenance });
     }
   );
   const generation = getScanReportProjectionGeneration(scanRecord);

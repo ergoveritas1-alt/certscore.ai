@@ -4,59 +4,189 @@ const root=path.resolve(process.argv[2]),file=path.join(root,'dashboard.html');c
 try{
  const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});await context.route('**/*',route=>{if(!route.request().url().startsWith('file:')){externalRequests++;return route.abort();}return route.continue();});const page=await context.newPage();page.on('pageerror',e=>errors.push(String(e)));
  await page.goto(pathToFileURL(file).href,{waitUntil:'load',timeout:60000});await page.waitForFunction(()=>window.__auditDashboard?.days?.length>0,{timeout:60000});
+ const chartPanel=page.locator('#chartPanel'),chartSummary=chartPanel.locator(':scope > summary');
+ assert.equal(await chartPanel.evaluate(panel=>panel.open),false);
+ assert.equal(await page.locator('#metric').isVisible(),false);
+ assert.ok((await chartPanel.boundingBox()).height<140);
+ await chartSummary.focus();await page.keyboard.press('Enter');
+ assert.equal(await page.locator('#metric').isVisible(),true);
+ assert.equal(await page.locator('#trend').isVisible(),true);
+ await chartSummary.click();
+ assert.equal(await chartPanel.evaluate(panel=>panel.open),false);
+ checks.collapsedChart=true;
  assert.equal(await page.locator('#daily tbody tr[data-table-id]').count(),await page.evaluate(()=>window.__auditDashboard.data.tableEntries.length));
  const measureCatalog=await page.evaluate(()=>window.__auditDashboard.data.measureCatalog);
- assert.ok(measureCatalog?.entries?.length>0);assert.equal(measureCatalog.entries.length,await page.locator('#daily tbody tr[data-table-id]').count());
- assert.equal(await page.locator('#tableSummary').textContent(),measureCatalog.entries.length+' metrics');
+ assert.ok(measureCatalog?.entries?.length>0);
+ const tableEntries=measureCatalog.tableEntries;
+ const metricCell=(id,index)=>{const owner=tableEntries.find(entry=>entry.details.some(detail=>detail.id===id));return owner?page.locator('[data-table-id="'+owner.id+'"] td').nth(index+1).locator('[data-supporting-id="'+id+'"]'):page.locator('[data-table-id="'+id+'"] td').nth(index+1);};
+ assert.equal(tableEntries.length,await page.locator('#daily tbody tr[data-table-id]').count());
+ assert.equal(await page.locator('#tableSummary').textContent(),tableEntries.length+' measures');
+ const missingHeadlines=()=>page.locator('#daily tbody tr[data-table-id]').evaluateAll(rows=>rows.flatMap(row=>
+  Array.from(row.cells).slice(1).filter(cell=>cell.querySelectorAll(':scope > .value').length!==1||
+   !cell.querySelector(':scope > .value').textContent.trim()).map(cell=>[row.dataset.tableId,cell.cellIndex])));
+ assert.deepEqual(await missingHeadlines(),[]);
  for(const removal of measureCatalog.removals)assert.equal(await page.locator('[data-table-id="'+removal.id+'"],#metric option[value="metric:'+removal.id+'"]').count(),0);
+ const csvMetricIds=await page.evaluate(()=>window.__auditDashboard.data.csvMetrics.map(metric=>metric.id));
+ for(const alias of measureCatalog.checklistAliases){
+  assert.ok(!csvMetricIds.includes(alias.id));
+  for(const id of alias.replacements)if(measureCatalog.entries.some(entry=>entry.id===id))assert.ok(csvMetricIds.includes(id));
+ }
+ for(const retired of measureCatalog.retired){assert.ok(!csvMetricIds.includes(retired.id));assert.equal(await page.locator('#metric option[value="metric:'+retired.id+'"]').count(),0);}
  for(const entry of measureCatalog.entries)assert.ok(entry.canonicalLinks.length&&entry.canonicalLinks.every(link=>link.recordType&&link.recordLabel&&link.basis));
- assert.equal(await page.locator('#daily .canonical-mapping').count(),measureCatalog.entries.length);checks.measureCatalog=true;
+ assert.equal(await page.locator('#daily .canonical-mapping').count(),tableEntries.length);checks.measureCatalog=true;
  assert.match(await page.locator('#trendTitle').textContent(),/Reject control presence/);assert.ok((await page.locator('#trend circle title').allTextContents()).every(s=>s.includes('public_export/')&&s.includes('/')));checks.chartTooltips=true;
  const bounds=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));assert.ok(bounds.scroll<=bounds.width+1);checks.desktop=true;
- const quantityExample=await page.evaluate(()=>{const days=window.__auditDashboard.days,i=days.findIndex(d=>d.quantities['technology.detections'].total>0&&Object.values(d.quantities['technology.detections'].series).some(p=>p.median===0&&p.total>0));return i<0?null:{index:i,total:days[i].quantities['technology.detections'].total};});
- if(quantityExample){const cell=page.locator('[data-table-kind="quantity"][data-table-id="technology.detections"] td').nth(quantityExample.index+1);assert.match(await cell.locator(':scope>.value').textContent(),new RegExp(quantityExample.total.toLocaleString()));assert.match(await cell.textContent(),/Median 0.0/);}
- const mixedMeasured=await page.evaluate(()=>window.__auditDashboard.days.flatMap((d,i)=>Object.entries(d.quantities).filter(([id,v])=>id.startsWith('gpc.')&&v.source==='mixed_sources'&&v.measured>0&&v.total===null).map(([id])=>({id,index:i}))));
- for(const entry of mixedMeasured.slice(-8)){
-  const value=await page.locator(`[data-table-id="${entry.id}"] td`).nth(entry.index+1).locator(':scope>.value').textContent();
-  assert.equal(value,'Separate measurement groups');
+ const quantityExamples=await page.evaluate(()=>{
+  const {data,days}=window.__auditDashboard;
+  const quantities=data.measureCatalog.entries.filter(entry=>entry.kind==='quantity');
+  const missingSubjects=quantities.filter(entry=>!['ms','milliseconds'].includes(entry.unit)&&!data.quantitySubjects[entry.id]);
+  if(missingSubjects.length)throw Error('Count headlines need subjects: '+missingSubjects.map(entry=>entry.id).join(', '));
+  return days.flatMap((day,index)=>quantities.map(entry=>{
+   const value=day.quantities[entry.id];
+   const groups=Object.values(value.series).filter(group=>group.measured>0);
+   const source=groups[0];
+   const timing=['ms','milliseconds'].includes(entry.unit);
+   let title='Separate measurement groups';
+   if(!value.eligible)title='No eligible data';
+   else if(!value.measured)title='Unavailable';
+   else if(timing&&value.median!==null)title=value.median.toFixed(1)+' '+entry.unit;
+   else if(!timing&&groups.length===1){
+    const percent=100*source.nonzero/source.measured;
+    title=(Number.isInteger(percent)?percent:percent.toFixed(1))+'% with '+data.quantitySubjects[entry.id];
+   }
+   return {id:entry.id,index,title};
+  }));
+ });
+ const actualQuantityTitles=await page.locator('#daily').evaluate(table=>{
+  const titles={};
+  for(const row of table.querySelectorAll('tr[data-table-id]')){
+   Array.from(row.cells).slice(1).forEach((cell,index)=>{
+    if(row.dataset.tableKind==='quantity')titles[row.dataset.tableId+':'+index]=cell.querySelector(':scope > .value')?.textContent;
+    for(const child of cell.querySelectorAll('[data-supporting-id]')){
+     titles[child.dataset.supportingId+':'+index]=child.querySelector(':scope > .value')?.textContent;
+    }
+   });
+  }
+  return titles;
+ });
+ for(const {id,index,title} of quantityExamples)assert.equal(actualQuantityTitles[id+':'+index],title,id+' day '+index);
+ const accessibilityExample=await page.evaluate(()=>window.__auditDashboard.days.findIndex(day=>
+  day.date==='2026-11-07'&&day.quantities['accessibility.failed_rules'].total===115&&day.quantities['accessibility.failed_rules'].measured===50));
+ if(accessibilityExample>=0){
+  const failed=metricCell('accessibility.failed_rules',accessibilityExample);
+  assert.equal(await failed.locator(':scope>.value').textContent(),'80% with failed rules');
+  assert.match(await failed.locator(':scope > details.series-list:not(.supporting-evidence)').textContent(),/40\/50 measured reports.*Total 115 rules.*Median 2.0/);
+  assert.equal(await metricCell('accessibility.review_rules',accessibilityExample).locator(':scope>.value').textContent(),'96% with rules requiring manual review');
  }
+ await page.locator('[data-table-id="accessibility.failed_rules"] .chart-button').click();
+ assert.match(await page.locator('#chartPopoverTitle').textContent(),/measured reports with failed rules/);
+ assert.ok((await page.locator('#popoverGraph circle title').allTextContents()).some(title=>title.includes('% of measured reports with failed rules')));
+ await page.locator('#popoverState').selectOption('__median__');
+ assert.match(await page.locator('#chartPopoverTitle').textContent(),/median rules/);
+ await page.locator('#closeChartPopover').click();
  checks.quantityTotals=true;
  const rateExamples=await page.evaluate(()=>{
   const dashboard=window.__auditDashboard;
   return ['metrics','findings'].map(kind=>dashboard.days.flatMap((day,index)=>
-   Object.entries(day[kind]).filter(([,v])=>v.source==='mixed_sources'&&Object.values(v.series).some(p=>Number.isFinite(p.rate))&&
+   Object.entries(day[kind]).filter(([id,v])=>dashboard.data.tableEntries.some(entry=>entry.id===id)&&!/^(?:sealed\.)?(?:execution|click)\./.test(id)&&id!=='sealed.choice_evidence.paired_cmp'&&v.source==='mixed_sources'&&Object.values(v.series).some(p=>Number.isFinite(p.rate))&&
     (kind==='findings'||Object.keys(v.counts).some(state=>state!=='unknown'&&state!=='unavailable')))
     .map(([id])=>({id,index,kind:kind==='findings'?'finding':'metric'}))).at(-1)).filter(Boolean);
  });
  for(const {id,index,kind} of rateExamples){
-  const headline=page.locator(`[data-table-kind="${kind}"][data-table-id="${id}"] td`).nth(index+1).locator(':scope>.value').first();
-  assert.match(await headline.textContent(),/^[0-9]+\.[0-9]% · /);
+  const cell=page.locator(`[data-table-kind="${kind}"][data-table-id="${id}"] td`).nth(index+1);
+  assert.match(await cell.locator(':scope>.value').textContent(),/^\d+(?:\.\d)?%(?: observed)?$/);
+  assert.equal(await cell.locator(':scope>.minor:not(.state-percentages)').count(),0);
+  assert.match(await cell.locator(':scope > details.series-list:not(.supporting-evidence) > summary').textContent(),/Separate sources/);
+  assert.equal(await cell.locator(':scope > details.series-list:not(.supporting-evidence)').evaluate(details=>details.open),false);
+  const source=cell.locator(':scope > details.series-list:not(.supporting-evidence) .series-entry').filter({hasText:'Shown above'});
+  assert.equal(await source.count(),1);
+  assert.ok((await source.locator('strong').textContent()).includes('/'));
+  assert.equal(await source.isVisible(),false);
+  await cell.locator(':scope > details.series-list:not(.supporting-evidence) > summary').click();
+  assert.equal(await source.isVisible(),true);
+  await cell.locator(':scope > details.series-list:not(.supporting-evidence) > summary').click();
+ }
+ assert.ok(await page.locator('#daily td > .value').filter({hasText:/^100%$/}).count()>0);
+ const percentages=(cell)=>cell.locator(':scope > .state-percentages > [data-state]').allTextContents();
+ const example=await page.evaluate(()=>{
+  const {days}=window.__auditDashboard;
+  return days.findIndex(day=>day.date==='2026-11-07'&&day.metrics.outcome.denominator===73&&
+   day.metrics.outcome.counts.usable_limited===49&&day.metrics.outcome.counts.usable_complete===2&&
+   day.metrics.outcome.counts.export_unavailable===3&&day.metrics['control.reject'].denominator===51&&
+   day.metrics['control.reject'].counts.observed===5);
+ });
+ if(example>=0){
+  const outcome=page.locator('[data-table-id="outcome"] td').nth(example+1);
+  assert.equal(await outcome.locator(':scope > .value').textContent(),'72.9% observed');
+  assert.deepEqual(await percentages(outcome),['limited: 67.1%','complete: 2.7%','unavailable: 4.1%']);
+  assert.match(await outcome.locator(':scope > details.series-list:not(.supporting-evidence)').textContent(),/no go: 19\/73/);
+  for(const id of ['control.accept','control.reject']){
+   const cell=metricCell(id,example);
+   assert.deepEqual(await percentages(cell),['observed: 9.8%','not observed: 58.8%','unknown: 31.4%']);
+  }
+  for(const [id,title,count,state] of [
+   ['execution.accept','Confirmed: 4.3%','Confirmed: 3/70','succeeded_with_confirmation'],
+   ['execution.reject','Confirmed: 2.9%','Confirmed: 2/70','succeeded_with_confirmation'],
+   ['click.accept','Completed: 7.1%','Completed: 5/70','completed'],
+   ['click.reject','Completed: 7.1%','Completed: 5/70','completed'],
+   ['checklist.cookie_notice_policy_availability','Observed: 62.7%','Observed: 32/51','observed'],
+
+   ['checklist.outdated_transfer_framework_reference','Partial concern: 2.0%','Partial concern: 1/51','partial_concern'],
+  ]){
+   const cell=metricCell(id,example);
+   assert.equal(await cell.locator(':scope > .value').textContent(),title);
+   assert.equal(await cell.locator(':scope > .state-percentages > [data-state="'+state+'"]').count(),0);
+   assert.ok((await cell.locator('details').allTextContents()).join(' ').includes(count.split(': ')[1]),count);
+  }
+  assert.match(await metricCell('execution.reject',example).locator('details').textContent(),/4\/5 ·/);
+ }
+ const mixedOutcome=await page.evaluate(()=>window.__auditDashboard.days.findIndex(day=>day.date==='2026-11-06'&&
+  day.metrics.outcome.denominator===199&&day.metrics.outcome.counts.export_unavailable===15));
+ if(mixedOutcome>=0){
+  const cell=page.locator('[data-table-id="outcome"] td').nth(mixedOutcome+1);
+  assert.equal(await cell.locator(':scope > .value').textContent(),'74.5% observed');
+  assert.match(await cell.locator(':scope > details.series-list:not(.supporting-evidence) .series-entry').filter({hasText:'Shown above'}).locator('strong').textContent(),/^public_export\//);
  }
  const lastDay=await page.evaluate(()=>window.__auditDashboard.days.length);
- const unretained=page.locator('[data-table-id="terminal.accept"] td').nth(lastDay);
- if(await unretained.locator(':scope>.value').textContent()==='Unavailable')assert.match(await unretained.textContent(),/No source-bound terminal verification/);
+ const unretained=metricCell('sealed.terminal.audit_accept',lastDay-1);
+ assert.ok(await unretained.locator(':scope>.value').textContent());
  checks.availability=true;
  await page.screenshot({path:path.join(root,'desktop.png'),fullPage:true});
  for(const [button,name]of [['csv','daily-metrics.csv'],['quantityCsv','daily-volumes.csv'],['findingCsv','daily-findings.csv']]){const wait=page.waitForEvent('download');await page.locator('#'+button).click();const dl=await wait;const temp=path.join(root,'browser-'+name);await dl.saveAs(temp);assert.equal(await fs.readFile(temp,'utf8'),await fs.readFile(path.join(root,name),'utf8'));await fs.unlink(temp);}checks.csvParity=true;
- const regions=await page.locator('#region option').evaluateAll(opts=>opts.map(o=>o.value));if(regions.length>1){await page.selectOption('#region',regions[1]);assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.region===document.getElementById('region').value)),true);const content=await page.evaluate(()=>window.__auditDashboard.engine.stateCsv(window.__auditDashboard.days,window.__auditDashboard.data.metrics));const wait=page.waitForEvent('download');await page.locator('#csv').click();const dl=await wait,temp=path.join(root,'filtered.csv');await dl.saveAs(temp);assert.equal(await fs.readFile(temp,'utf8'),content);await fs.unlink(temp);await page.selectOption('#region','all');}
+ const regions=await page.locator('#region option').evaluateAll(opts=>opts.map(o=>o.value));if(regions.length>1){await page.selectOption('#region',regions[1]);assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.region===document.getElementById('region').value)),true);const content=await page.evaluate(()=>window.__auditDashboard.engine.stateCsv(window.__auditDashboard.days,window.__auditDashboard.data.csvMetrics));const wait=page.waitForEvent('download');await page.locator('#csv').click();const dl=await wait,temp=path.join(root,'filtered.csv');await dl.saveAs(temp);assert.equal(await fs.readFile(temp,'utf8'),content);await fs.unlink(temp);await page.selectOption('#region','all');}
  const providers=await page.locator('#cmp option').evaluateAll(opts=>opts.map(o=>o.value));if(providers.length>1){await page.selectOption('#cmp',providers[1]);assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.states.cmp_provider===document.getElementById('cmp').value)),true);await page.selectOption('#cmp','all');}
  await page.selectOption('#origin','selection');assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.originProof==='production_id_selection_only'&&r.reportable===false)),true);await page.selectOption('#origin','all');
- await page.selectOption('#group','Controls');assert.equal(await page.locator('#daily tbody tr[data-table-id]').count(),5);checks.filters=true;
- const publicOptOut=page.locator('[data-table-id="control.privacyOptOut"]');
- const unexported=await page.evaluate(()=>window.__auditDashboard.days.filter(d=>d.metrics['control.privacyOptOut'].denominator>0&&Object.keys(d.metrics['control.privacyOptOut'].series).every(s=>/^public_export\/pulse-public-v(?:4|5|10)\//.test(s))).length);
- assert.equal(await publicOptOut.locator('td>.value').filter({hasText:'Not exported'}).count(),unexported);
- for(const cell of (await publicOptOut.locator('td').all()).slice(1))if((await cell.locator(':scope>.value').textContent())==='Not exported')assert.ok(!(await cell.textContent()).match(/\b0\/\d+/));
+ await page.selectOption('#group','Controls');assert.equal(await page.locator('#daily tbody tr[data-table-id]').count(),4);checks.filters=true;
+ assert.equal(await page.locator('[data-table-id="control.privacyOptOut"]').count(),0);
+ assert.equal(await page.locator('#metric option[value="metric:control.privacyOptOut"]').count(),0);
  const retainedOptOut=page.locator('[data-table-id="sealed.control.privacyOptOut"]');
- assert.match(await retainedOptOut.textContent(),/Opt-out control presence · retained assessment/);
+ assert.match(await retainedOptOut.textContent(),/Opt-out control presence/);
  const positive=await page.evaluate(()=>window.__auditDashboard.days.reduce((n,d)=>n+(d.metrics['sealed.control.privacyOptOut'].counts.observed??0),0));
  if(positive>0)assert.match(await retainedOptOut.textContent(),/observed:/);
  checks.optOutCoverage=true;
  await page.selectOption('#group','Opt-out');
  const dispatch=page.locator('[data-table-id="sealed.opt_out.dispatch"]');
  assert.match(await dispatch.textContent(),/Effective opt-out dispatch status/);
- for(const state of ['excluded_by_profile','dispatch_recorded','profile_dispatch_conflict']){
-  const days=await page.evaluate(state=>window.__auditDashboard.days.filter(d=>d.metrics['sealed.opt_out.dispatch'].counts[state]>0).length,state);
-  assert.equal(await dispatch.locator('td').filter({hasText:state.replaceAll('_',' ')+':'}).count(),days);
+ for(const state of ['excluded_by_profile','dispatch_recorded','conditional_no_dispatch_recorded','profile_dispatch_conflict']){
+  const expected=await page.evaluate(state=>window.__auditDashboard.days.map(d=>{
+   const {counts,denominator}=d.metrics['sealed.opt_out.dispatch'];
+   if(state==='dispatch_recorded'){
+    if(!Object.keys(counts).some(k=>k!=='unavailable'&&k!=='unknown'))return null;
+    const value=100*(counts[state]??0)/denominator;
+    return 'Dispatch recorded: '+(Number.isInteger(value)?String(value):value.toFixed(1))+'%';
+   }
+   if(!Object.hasOwn(counts,state))return null;
+   const value=100*counts[state]/denominator;
+   return state.replaceAll('_',' ')+': '+(Number.isInteger(value)?String(value):value.toFixed(1))+'%';
+  }),state);
+  const actual=await dispatch.locator('td').evaluateAll((cells,state)=>cells.slice(1).map(cell=>{
+   if(state==='dispatch_recorded'){
+    const hero=cell.querySelector(':scope > .value')?.textContent;
+    return hero?.startsWith('Dispatch recorded: ')?hero:null;
+   }
+   return cell.querySelector(':scope > .state-percentages > [data-state="'+state+'"]')?.textContent??null;
+  }),state);
+  assert.deepEqual(actual,expected,state);
  }
  checks.optOutDispatch=true;
  await page.selectOption('#group','Controls');

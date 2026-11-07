@@ -1,4 +1,5 @@
 import {applyChoiceSummary, CHOICE_AUDIT_VERSION, LEGACY_CHOICE_AUDIT_VERSION} from './audit-progress-choice';
+import {applyControlAccessibility} from './audit-progress-control-accessibility';
 /** Audit-only projection of already-persisted control states. No findings or re-assessment. */
 import {readFileSync,realpathSync,statSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -84,10 +85,16 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
     for(const extract of input.rows){
       summary.inspected++;if(seen.has(extract.scanId))throw Error('Duplicate control-extract scan');seen.add(extract.scanId);
       const row=byId.get(extract.scanId),result=row?retainedOptOutState(extract,row):null;
-      if(row&&retainedGenerationMatches(extract,row)&&[CHOICE_AUDIT_VERSION,LEGACY_CHOICE_AUDIT_VERSION].includes(extract.choice_audit?.version)){
-        applyChoiceSummary(row,extract.choice_audit,`persisted_choice_extract/${row.projectionVersion}`);
-        if(row.states['sealed.opt_out.coverage']==='available'&&!row.refs.some(r=>r.file===file&&r.role==='generation_matched_choice_extract'))
-          row.refs.push({file,sha256:receipt.sha256,role:'generation_matched_choice_extract'});
+      if(row&&retainedGenerationMatches(extract,row)){
+        if([CHOICE_AUDIT_VERSION,LEGACY_CHOICE_AUDIT_VERSION].includes(extract.choice_audit?.version)){
+          applyChoiceSummary(row,extract.choice_audit,`persisted_choice_extract/${row.projectionVersion}`);
+          if(row.states['sealed.opt_out.coverage']==='available'&&!row.refs.some(r=>r.file===file&&r.role==='generation_matched_choice_extract'))
+            row.refs.push({file,sha256:receipt.sha256,role:'generation_matched_choice_extract'});
+        }
+        if(input.version==='certscore.mac-mini-direct-id-inventory.v1'&&extract.projection_version==='scan-report-projection-v27'&&extract.controlAccessibility!==undefined){
+          if(applyControlAccessibility(row,extract.controlAccessibility)&&!row.refs.some(r=>r.file===file&&r.role==='generation_matched_control_accessibility_extract'))
+            row.refs.push({file,sha256:receipt.sha256,role:'generation_matched_control_accessibility_extract'});
+        }
       }
       if(!row||!result){summary.unmatchedOrUnavailable++;continue;}
       const prior=matched.get(row.scanId);if(prior&&(prior.state!==result.state||prior.source!==result.source))throw Error('Conflicting same-generation control extracts');matched.set(row.scanId,result);

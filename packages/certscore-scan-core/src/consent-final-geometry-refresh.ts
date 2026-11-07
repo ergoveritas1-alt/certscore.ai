@@ -2,7 +2,7 @@ import {mkdtemp, writeFile} from "node:fs/promises";
 import {renameSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {hasUnresolvedConsentDecision, UNRESOLVED_CONSENT_DECISION, verifyConsentControlInspection, type ConsentUiObservation, type ScreenshotArtifact} from "@certscore/contracts";
+import {hasUnresolvedConsentDecision, UNRESOLVED_CONSENT_DECISION, verifyConsentControlInspection, type ConsentCaptureDiagnostic, type ConsentUiObservation, type ScreenshotArtifact} from "@certscore/contracts";
 import type {ConsentControlGeometryArtifact} from "./consent-control-geometry";
 import type {ConsentGeometryAccessDiagnostic, ConsentGeometryEgressDiagnostic} from "./consent-geometry-access";
 import {sameDocumentCaptureBinding, type DocumentCaptureBinding} from "./document-bound-capture";
@@ -17,8 +17,10 @@ export type PreparedConsentGeometry = {commitIfCurrent: (current: () => boolean)
 export type FinalConsentGeometryRefreshResult = {
   policyVersion: typeof FINAL_CONSENT_GEOMETRY_REFRESH_POLICY;
   attempted: boolean;
-  outcome: "retained" | "already_considered" | "ineligible" | "budget_unavailable" | "cancelled" | "timed_out" | "invalid_capture" | "document_changed" | "retention_failed";
+  outcome: "retained" | "already_considered" | "ineligible" | "budget_unavailable" | "cancelled" | "timed_out" | "invalid_capture" | "no_positive_control" | "document_changed" | "retention_failed";
   elapsedMs: number;
+  eligibilityBlocker?: EligibilityBlocker;
+  limitedPositiveOnly?: true;
   geometry?: ConsentControlGeometryArtifact;
   artifactPath?: string;
 };
@@ -56,23 +58,37 @@ function sameState(a: State, b: State) {
 /** Scheduling only: old evidence never becomes complete here. A successful
  * fresh read must independently prove a complete, stable inventory of every
  * current frame. Semantic uncertainty remains in the canonical finalizer. */
-export function finalConsentGeometryRefreshReason(input: {
-  observation: ConsentUiObservation; geometry?: ConsentControlGeometryArtifact; scanStartedAtMs: number;
-}): "stale_geometry" | "limited_geometry" | null {
+type EligibilityBlocker = NonNullable<ConsentCaptureDiagnostic["eligibilityBlocker"]>;
+type RefreshInput = {observation: ConsentUiObservation; geometry?: ConsentControlGeometryArtifact; scanStartedAtMs: number};
+type Eligibility = {reason: "stale_geometry" | "limited_geometry"} | {blocker: EligibilityBlocker};
+
+export function finalConsentGeometryRefreshReason(input: RefreshInput) {
+  const eligibility = evaluateFinalConsentGeometryEligibility(input);
+  return "reason" in eligibility ? eligibility.reason : null;
+}
+
+export function evaluateFinalConsentGeometryEligibility(input: RefreshInput): Eligibility {
   const {observation: o, geometry: g} = input;
-  if (!g || o.boundedSameSessionRecoveryOutcome !== undefined || o.basis.some(b =>
-      b.startsWith("recovery:bounded_same_session_consent_packet_") || b === "recovery:bounded_same_session_inventory_completed") ||
-      o.layerInspected !== "first_layer" ||
-      !sameDocumentCaptureBinding({url: o.documentUrl ?? "", documentIdentity: o.documentIdentity},
-        {url: g.pageUrl, documentIdentity: g.documentIdentity}) ||
-      o.captureStatus === "incomplete" || !["interactive", "complete"].includes(o.documentReadyState ?? "") ||
-      !o.captureDiagnostics?.completedChannels.includes("dom_inventory") ||
-      o.captureDiagnostics.timedOutChannels.length > 0 || o.captureDiagnostics.failedChannels.length > 0 ||
-      (o.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) > 0) return null;
-  const inspection = verifyConsentControlInspection(g.controlInspection, g.candidates), c = inspection?.captureCoverage;
-  if (!inspection || !c || c.inventoryTruncated || !c.mainFrameAvailable ||
-      c.frameCount < 1 || c.frameCount > 12 || c.capturedFrameCount > c.frameCount ||
-      c.documentReadyState === "loading") return null;
+  if (!g) return {blocker: "geometry_missing"};
+  if (o.boundedSameSessionRecoveryOutcome !== undefined || o.basis.some(b =>
+    b.startsWith("recovery:bounded_same_session_consent_packet_") || b === "recovery:bounded_same_session_inventory_completed"))
+    return {blocker: "recovery_already_used"};
+  if (o.layerInspected !== "first_layer") return {blocker: "first_layer_not_inspected"};
+  if (!sameDocumentCaptureBinding({url: o.documentUrl ?? "", documentIdentity: o.documentIdentity},
+    {url: g.pageUrl, documentIdentity: g.documentIdentity})) return {blocker: "geometry_document_mismatch"};
+  if (o.captureStatus === "incomplete") return {blocker: "inventory_incomplete"};
+  if (!["interactive", "complete"].includes(o.documentReadyState ?? "")) return {blocker: "inventory_document_not_ready"};
+  if (!o.captureDiagnostics?.completedChannels.includes("dom_inventory")) return {blocker: "dom_inventory_unavailable"};
+  if (o.captureDiagnostics.timedOutChannels.length || o.captureDiagnostics.failedChannels.length)
+    return {blocker: "inventory_channels_failed"};
+  if ((o.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) > 0) return {blocker: "blocking_frame_inaccessible"};
+  const inspection = verifyConsentControlInspection(g.controlInspection, g.candidates);
+  if (!inspection) return {blocker: "geometry_inspection_unverified"};
+  const c = inspection.captureCoverage;
+  if (c.frameCount > 12) return {blocker: "geometry_frame_cap_exceeded"};
+  if (c.inventoryTruncated || !c.mainFrameAvailable || c.frameCount < 1 ||
+      c.capturedFrameCount > c.frameCount || c.documentReadyState === "loading")
+    return {blocker: "geometry_coverage_incomplete"};
   const readinessOnlyPartial = o.inventoryOutcome === "partial" && inspection.structuralCoverage === "limited" &&
     c.documentReadyState === "interactive" && c.documentAndFramesStable && c.frameCount === 1 && c.capturedFrameCount === 1;
   const semanticOnlyPartial = o.inventoryOutcome === "partial" && o.documentReadyState === "complete" &&
@@ -87,13 +103,13 @@ export function finalConsentGeometryRefreshReason(input: {
     inspection.structuralCoverage === "limited" && c.documentReadyState === "interactive" &&
     c.frameCount > 1 && c.capturedFrameCount > 0 && hasUnresolvedConsentDecision(g);
   if (!["complete_empty", "complete_with_controls"].includes(o.inventoryOutcome ?? "") &&
-      !readinessOnlyPartial && !semanticOnlyPartial && !multiFrameSemanticPartial) return null;
+      !readinessOnlyPartial && !semanticOnlyPartial && !multiFrameSemanticPartial) return {blocker: "inventory_outcome_unsupported"};
   const capturedAt = Date.parse(g.capturedAt);
-  if (!Number.isFinite(capturedAt) || capturedAt < input.scanStartedAtMs) return null;
-  if (reconcileConsentGeometryInventoryCoverage(input) !== o) return "stale_geometry";
+  if (!Number.isFinite(capturedAt) || capturedAt < input.scanStartedAtMs) return {blocker: "geometry_timestamp_invalid"};
+  if (reconcileConsentGeometryInventoryCoverage(input) !== o) return {reason: "stale_geometry"};
   return inspection.structuralCoverage === "limited" &&
     (c.documentReadyState === "interactive" || !c.documentAndFramesStable || c.capturedFrameCount < c.frameCount)
-    ? "limited_geometry" : null;
+    ? {reason: "limited_geometry"} : {blocker: "geometry_current"};
 }
 
 async function beforeDeadline<T>(operation: Promise<T>, deadline: number, now: () => number, signal?: AbortSignal): Promise<T> {
@@ -122,6 +138,7 @@ export function createFinalConsentGeometryRefresh(dependencies: {
   signal?: AbortSignal;
   now?: () => number;
   readState: () => State;
+  allowLimitedPositiveRefresh?: boolean;
   capture: (options: {timeoutMs: number; screenshotArtifactRef: string; documentIdentity: NonNullable<State["documentIdentity"]>}) => Promise<ConsentControlGeometryArtifact>;
   prepare: (geometry: ConsentControlGeometryArtifact) => Promise<PreparedConsentGeometry>;
 }) {
@@ -136,20 +153,39 @@ export function createFinalConsentGeometryRefresh(dependencies: {
     considered = true;
     if (dependencies.signal?.aborted) return result("cancelled");
     const o = input.observation, image = input.screenshot;
-    const reason = finalConsentGeometryRefreshReason({...input, scanStartedAtMs: dependencies.scanStartedAtMs});
+    const ineligible = (eligibilityBlocker: EligibilityBlocker): FinalConsentGeometryRefreshResult =>
+      ({...result("ineligible"), eligibilityBlocker});
+    const eligibility = evaluateFinalConsentGeometryEligibility({...input, scanStartedAtMs: dependencies.scanStartedAtMs});
+    const priorGeometry = input.geometry;
+    const priorCoverage = priorGeometry?.controlInspection?.captureCoverage;
+    const limitedPositiveOnly = dependencies.allowLimitedPositiveRefresh === true &&
+      "blocker" in eligibility && eligibility.blocker === "geometry_frame_cap_exceeded" &&
+      priorCoverage?.capturedFrameCount === 12 && priorCoverage.mainFrameAvailable &&
+      priorCoverage.documentReadyState === "complete" && !priorCoverage.inventoryTruncated &&
+      o.documentReadyState === "complete" && o.controls.length === 0 &&
+      priorGeometry?.candidates.every(candidate => candidate.decisionStatus !== "confirmed_visible") === true &&
+      reconcileConsentGeometryInventoryCoverage({...input, scanStartedAtMs: dependencies.scanStartedAtMs}) !== o;
+    if ("blocker" in eligibility && !limitedPositiveOnly) return ineligible(eligibility.blocker);
+    if (!priorGeometry) return ineligible("geometry_missing");
     const snapshot = dependencies.readState();
     const state: State = {...snapshot, documentIdentity: snapshot.documentIdentity ? {...snapshot.documentIdentity} : undefined, frames: [...snapshot.frames]};
     const observedBinding = {url: o.documentUrl ?? "", documentIdentity: o.documentIdentity};
-    if (!input.geometry || !image || !image.path || image.consentStateAtTime !== "pre_consent" ||
-      image.retentionStatus === "withheld" || image.displayStatus === "withheld" ||
-      !["primary_full_page", "primary_viewport_fallback"].includes(image.captureMethod ?? "") ||
-      !Number.isFinite(image.capturedAtMs) || image.capturedAtMs < 0 || image.capturedAtMs > now() - dependencies.scanStartedAtMs ||
-      !sameDocumentCaptureBinding(state, observedBinding) ||
-      !sameDocumentCaptureBinding(state, {url: image.url, documentIdentity: image.documentIdentity}) ||
-      !/^https?:\/\//.test(state.url) || state.documentIdentity?.source !== "cdp_loader_id" ||
-      !reason || !Number.isFinite(o.observedAtMs) || o.observedAtMs < 0 ||
-      o.observedAtMs > started - dependencies.scanStartedAtMs || Date.parse(input.geometry.capturedAt) > started ||
-      state.frames.length === 0 || state.frames.length > 12) return result("ineligible");
+    if (!image || !image.path) return ineligible("screenshot_missing");
+    if (image.consentStateAtTime !== "pre_consent" || image.retentionStatus === "withheld" ||
+        image.displayStatus === "withheld" || !["primary_full_page", "primary_viewport_fallback"].includes(image.captureMethod ?? ""))
+      return ineligible("screenshot_unusable");
+    if (!Number.isFinite(image.capturedAtMs) || image.capturedAtMs < 0 || image.capturedAtMs > now() - dependencies.scanStartedAtMs)
+      return ineligible("screenshot_timestamp_invalid");
+    if (!sameDocumentCaptureBinding(state, observedBinding)) return ineligible("live_document_mismatch");
+    if (!sameDocumentCaptureBinding(state, {url: image.url, documentIdentity: image.documentIdentity}))
+      return ineligible("screenshot_document_mismatch");
+    if (!/^https?:\/\//.test(state.url) || state.documentIdentity?.source !== "cdp_loader_id")
+      return ineligible("live_document_unsupported");
+    if (!Number.isFinite(o.observedAtMs) || o.observedAtMs < 0 || o.observedAtMs > started - dependencies.scanStartedAtMs ||
+        Date.parse(priorGeometry.capturedAt) > started) return ineligible("checkpoint_timestamp_invalid");
+    if (state.frames.length === 0) return ineligible("live_frames_missing");
+    if (limitedPositiveOnly && image.capturedAtMs < o.observedAtMs) return ineligible("screenshot_timestamp_invalid");
+    if (state.frames.length > 12 && !limitedPositiveOnly) return ineligible("live_frame_cap_exceeded");
     if (dependencies.moduleDeadlineAtMs - started < FINAL_CONSENT_GEOMETRY_REFRESH_MS) return result("budget_unavailable");
     const deadline = Math.min(dependencies.moduleDeadlineAtMs, started + FINAL_CONSENT_GEOMETRY_REFRESH_MS);
     const commitDeadline = deadline - CLEANUP_RESERVE_MS;
@@ -167,8 +203,18 @@ export function createFinalConsentGeometryRefresh(dependencies: {
         !Number.isFinite(capturedAt) || capturedAt < started || capturedAt > now() ||
         capturedAt < dependencies.scanStartedAtMs + o.observedAtMs ||
         geometry.screenshotArtifactRef !== image.path || geometry.summary.confidence <= 0 ||
-        geometry.viewport.width <= 0 || geometry.viewport.height <= 0 || inspection?.structuralCoverage !== "complete" ||
+        geometry.viewport.width <= 0 || geometry.viewport.height <= 0 || !inspection ||
         inspection.captureCoverage.frameCount !== state.frames.length) return result("invalid_capture", true);
+      if (limitedPositiveOnly) {
+        const coverage = inspection.captureCoverage;
+        if (inspection.structuralCoverage !== "limited" || coverage.frameCount <= 12 ||
+            coverage.capturedFrameCount !== 12 || coverage.documentReadyState !== "complete" ||
+            !coverage.mainFrameAvailable || coverage.inventoryTruncated) return result("invalid_capture", true);
+        if (!geometry.summary.firstLayerAccept && !geometry.summary.firstLayerReject && !geometry.summary.firstLayerOptions)
+          return result("no_positive_control", true);
+      } else if (inspection.structuralCoverage !== "complete") {
+        return result("invalid_capture", true);
+      }
       const staging = dependencies.prepare(geometry);
       // A stage finishing after the caller exits may only clean up its private file.
       void staging.then(value => {if (!current()) value.dispose();}, () => undefined);
@@ -177,6 +223,7 @@ export function createFinalConsentGeometryRefresh(dependencies: {
       const artifactPath = prepared.commitIfCurrent(current);
       if (!artifactPath) return result("retention_failed", true);
       const retained = result("retained", true);
+      if (limitedPositiveOnly) retained.limitedPositiveOnly = true;
       retained.geometry = geometry;
       retained.artifactPath = artifactPath;
       return retained;

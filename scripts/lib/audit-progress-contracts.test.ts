@@ -149,3 +149,29 @@ test('new canonical-only checklist IDs register without relying on older audit i
  assert.ok(registry.some(m=>m.id==='sealed.checklist.new_canonical_check'));assert.ok(registry.some(m=>m.id==='sealed.verdict.new_canonical_check'));
  assert.equal(r.metricLabels?.['checklist.new_canonical_check'],undefined);
 });
+
+test('bound customer CMP criteria and optional defaults preserve distinct returned states',()=>{
+ const sourceHash='b'.repeat(64);
+ const controls=['accept','reject','options','privacyOptOut'].map(id=>({id,state:'unknown',layer:'unknown',inspection:null,firstObservedAtMs:null,lastObservedAtMs:null}));
+ const criterion={id:'prominence',status:'Not applicable',sourceIds:[],sourceIdCount:0,sourceIdsTruncated:false};
+ const report={
+  meta:{projectionVersion:'pulse-public-v11',reportProjectionVersion:'scan-report-projection-v27',reportProjectionSourceHash:sourceHash},
+  customerConsentEvidence:{version:'certscore.customer-consent-evidence.v1',status:'available',reason:'persisted_snapshot_only',
+   binding:{scanId:base.scanId,createdAt:base.timestamps.createdAt,reportVersion:'scan-report-projection-v27',reportSourceHash:sourceHash},
+   assessment:{version:'2.2',sourceHash:'fnv1a-01234567',computedAt:base.timestamps.createdAt,coverage:'limited'},
+   controls,criteria:[criterion],checklist:[{id:'consent_optional_defaults_on',evidenceState:'unknown',assessmentStatus:'coverage_limitation'}]},
+ };
+ const id='customer_cmp_check.prominence',defaults='checklist.consent_optional_defaults_on',r=row(report);
+ assert.equal(r.states[id],'not_applicable');
+ assert.equal(r.states[defaults],'unknown');
+ assert.match(r.metricSources?.[id]??'',/customer-consent-evidence.v1\/2.2$/);
+ assert.equal(row({...report,gdprEprivacyChecklistRows:{items:[{id:'consent_optional_defaults_on',evidenceState:'observed'}]}}).states[defaults],'observed');
+ for(const change of [{scanId:'22222222-2222-4222-8222-222222222222'},{createdAt:'2026-10-26T12:00:01Z'},
+  {reportVersion:'scan-report-projection-v26'},{reportSourceHash:'a'.repeat(64)}]){
+  const other=structuredClone(report);Object.assign(other.customerConsentEvidence.binding,change);
+  assert.equal(row(other).states[id],undefined);
+ }
+ const duplicate=structuredClone(report);duplicate.customerConsentEvidence.criteria.push(criterion);
+ assert.equal(row(duplicate).states[id],undefined);
+ assert.equal(row({...report,scanStatus:'failed'}).states[id],undefined);
+});

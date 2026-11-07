@@ -1,15 +1,19 @@
+import { MAX_AUDIT_POLICY_PROVENANCE_BYTES, type AuditPolicyProvenanceBinding } from '../../packages/certscore-contracts/src/audit-policy-provenance';
 import {optOutExecutionAssessmentSchema} from '../../packages/certscore-contracts/src/redhat-opt-out';
 /** Audit-only summaries of persisted choices/findings. No capture, finding creation or rescoring. */
 import {z} from 'zod';
 import {broadOptOutAssessmentSchema} from '../../packages/certscore-contracts/src/broad-opt-out-assessment';
-import {saleSharingOptOutEvidenceSchema,saleSharingOptOutLaneOutcomeSchema} from '../../packages/certscore-contracts/src/sale-sharing-opt-out';
+import {legacyOptOutExecutionOutcome,saleSharingOptOutEvidenceSchema,saleSharingOptOutLaneOutcomeSchema} from '../../packages/certscore-contracts/src/sale-sharing-opt-out';
 import {OPT_OUT_DISPATCH_STATES,retainedOptOutDispatch} from '../../packages/certscore-contracts/src/privacy-capture-profile';
 import {conditionalOptOutDecisionSchema,retainedConditionalOptOutDecision} from '../../packages/certscore-contracts/src/conditional-opt-out-decision';
-import {PRIORITY_EVIDENCE_METRICS, PRIORITY_EVIDENCE_SQL, priorityEvidenceStates, priorityCoverageStates, withBoundedPriority, jsonbBytes} from './audit-progress-priority-evidence';
-import {OPERATIONS_EVIDENCE_METRICS, OPERATIONS_EVIDENCE_SQL, operationsEvidenceFromRecord, operationsEvidenceStates} from './audit-progress-operations-evidence';
+import {PRIORITY_EVIDENCE_METRICS, priorityEvidenceSql, priorityEvidenceStates, priorityCoverageStates, withBoundedPriority, jsonbBytes} from './audit-progress-priority-evidence';
+import {OPERATIONS_EVIDENCE_METRICS, operationsEvidenceFromRecord, operationsEvidenceStates} from './audit-progress-operations-evidence';
+import {projectOptOutLaneOutcome} from '../../apps/web/server/scans/opt-out-lane-projection';
 import type {ProgressRow,Metric} from './audit-progress';
 export const LEGACY_CHOICE_AUDIT_VERSION='certscore.audit-choice-summary.v1';
 export const CHOICE_AUDIT_VERSION='certscore.audit-choice-summary.v2';
+const optOutOutcomeIds=['action_completion','choice_confirmation','post_confirmation_observation'] as const;
+export const OPT_OUT_OUTCOME_METRIC_IDS=[...optOutOutcomeIds,'confirmation_basis','stop'].map(id=>'sealed.opt_out.'+id);
 const hash=z.string().regex(/^[a-f0-9]{64}$/), code=z.string().regex(/^[a-zA-Z0-9_.:-]{1,160}$/);
 const packetKeys=['contractVersion','policyVersion','scanId','status','provider','recipeVersion','actionCount','submitted','registration','before','after','observationWindowMs','captureComplete','truncated','limitations'] as const;
 const packetPick=Object.fromEntries(packetKeys.map(k=>[k,true])) as Record<typeof packetKeys[number],true>;
@@ -33,7 +37,7 @@ export const CHOICE_METRICS:Metric[]=[
  ['dispatch','Effective opt-out dispatch status'],['submission','Explicit opt-out submission'],['registration','Sale/sharing state confirmation'],['capture','Follow-up capture after sale/sharing state confirmation'],
  ['action_completion','Opt-out action completed'],['choice_confirmation','Recorded opt-out choice confirmation'],['confirmation_basis','Opt-out confirmation evidence'],['post_confirmation_observation','Tracking observation after confirmed choice'],
  ['dispatch_reason','Conditional opt-out dispatch or skip reason'],
- ['presence','Broader opt-out route or signal presence'],['basis','Broader opt-out assessment basis'],
+ ['presence','Sale/sharing opt-out route or signal assessment'],['basis','Broader opt-out assessment basis'],
  ['scope','Broader opt-out inspection scope'],['signal_scope','Opt-out signal scope'],['signal_basis','Opt-out signal kind'],
  ['policy_methods','Retained policy opt-out methods'],['packet','Explicit opt-out evidence availability'],
  ['recipe','Explicit opt-out recipe selection'],['actions','Explicit opt-out action execution'],
@@ -56,13 +60,16 @@ const summaryFields:Record<string,string[]>={
 };
 const packetPath=['assessment','californiaPrivacyReview','optOutObservation','evidence'];
 const methodsPath=['assessment','californiaPrivacyReview','policyChoiceMethods','methods'];
-export function choiceSummaryFromRecord(record:any,original?:{manifest?:any;bundle?:any}){
+export function choiceSummaryFromRecord(record:any,original?:{manifest?:any;bundle?:any;bundleSource?:{sha256:string;sizeBytes:number}}){
  const a=record.snapshot?.consentControlAssessment??record.runtimeArtifacts?.consentControlAssessment??record.snapshot?.consent_control_assessment;
- const originalLane=original?.bundle?.saleSharingOptOutLaneOutcome;
+ const results=Array.isArray(record.events)?record.events.filter((e:any)=>e?.eventType==='v2_lambda_result.received'):[];
+ const expected=results.length===1?results[0].metadataJson?.artifactMetadata?.scanArtifactUri:null;
+ const bound=original?.bundleSource&&original.bundleSource.sha256===expected?.sha256&&original.bundleSource.sizeBytes===expected?.sizeBytes&&original.bundle?.scanId===record.scan?.id;
+ const rawLane=saleSharingOptOutLaneOutcomeSchema.safeParse(original?.bundle?.saleSharingOptOutLaneOutcome).data;
+ const originalLane=bound?projectOptOutLaneOutcome(original!.bundle):rawLane?{...rawLane,preActionStop:undefined}:undefined;
  const source={...record,assessment:a,runtimeArtifacts:{...record.runtimeArtifacts,...(originalLane?{saleSharingOptOutLaneOutcome:originalLane}:{})}};
  const packet=get(source,packetPath),methods=get(source,methodsPath),findings=record.canonicalReportProjection?.globalUnifiedFindings;
  const relevant=Array.isArray(findings)?findings.filter(f=>typeof f.unifiedFindingId==='string'&&relevantFinding(f.unifiedFindingId)):null;
- const results=Array.isArray(record.events)?record.events.filter((e:any)=>e?.eventType==='v2_lambda_result.received'):[];
  const verified=results.length===1?dispatchSchema.safeParse(results[0].metadataJson?.artifactVerification?.optOutDispatch):null;
  const conditional=original?.manifest?retainedConditionalOptOutDecision(original.manifest,get(source,['scan','id']),originalLane):undefined;
  const eventConditional=results.length===1?conditionalOptOutDecisionSchema.safeParse(results[0].metadataJson?.artifactVerification?.conditionalOptOutDecision):undefined;
@@ -80,17 +87,21 @@ export function choiceSummaryFromRecord(record:any,original?:{manifest?:any;bund
  const combined={...preferred,operationsEvidence};
  return operationsEvidence&&jsonbBytes(combined)<=8192&&!preferred.availability?combined:preferred;
 }
-const sqlPath=(p:string[])=>`${p[0]==='assessment'?'a.value':'p.report_projection_payload'}#>'{${(p[0]==='assessment'?p.slice(1):p).join(',')}}'`;
+const sqlPath=(p:string[])=>{
+ const assessment=p[0]==='assessment';
+ const review=assessment&&p[1]==='californiaPrivacyReview';
+ const root=review?'j.ca':assessment?'a.value':'p.report_projection_payload';
+ return `${root}#>'{${p.slice(review?2:assessment?1:0).join(',')}}'`;
+};
 // Nested receipts keep their exact shape so unknown keys fail closed and an
 // explicitly null timestamp remains distinguishable from an omitted field.
 const boundedReceiptSql=(value:string,keys:string[])=>`case when jsonb_typeof(${value})='object' then
  case when octet_length((${value})::text)<=2048 and ((${value}) - array[${keys.map(k=>`'${k}'`).join(',')}])='{}'::jsonb then ${value} end end`;
 const conditionalPath="e#>'{metadataJson,artifactVerification,conditionalOptOutDecision}'";
 const dispatchPath="e#>>'{metadataJson,artifactVerification,optOutDispatch}'";
-const dispatchReceiptSql=(includeOperations:boolean)=>`select
+const dispatchReceiptSql=()=>`select
  case when count(*)=1 then max(case when ${dispatchPath} in (${OPT_OUT_DISPATCH_STATES.map(s=>`'${s}'`).join(',')}) then ${dispatchPath} end) end as dispatch,
  case when count(*)=1 then max((${boundedReceiptSql(conditionalPath,Object.keys(conditionalOptOutDecisionSchema.innerType().shape))})::text)::jsonb end as conditional
- ${includeOperations?`,case when count(*)=1 then max((${OPERATIONS_EVIDENCE_SQL})::text)::jsonb end as operations`:''}
  from jsonb_array_elements(case when jsonb_typeof(p.report_projection_payload->'events')='array' then p.report_projection_payload->'events' else '[]'::jsonb end) e
  where e->>'eventType'='v2_lambda_result.received'`;
 const choiceAuditSql=`jsonb_build_object('version','${CHOICE_AUDIT_VERSION}',
@@ -100,8 +111,8 @@ const choiceAuditSql=`jsonb_build_object('version','${CHOICE_AUDIT_VERSION}',
   if(key==='packetSha256')return `'${key}',case when jsonb_typeof(${value})='string' and (${value})#>>'{}' ~ '^[a-f0-9]{64}$' then ${value} end`;
   return `'${key}',${value}`;
  }).join(',\n ')},
- 'dispatch',result.dispatch,
- 'conditional',result.conditional,
+ 'dispatch',r1.dispatch,
+ 'conditional',r1.conditional,
  'policyMethodCount',case when jsonb_typeof(${sqlPath(methodsPath)})='array' then jsonb_array_length(${sqlPath(methodsPath)}) else null end,
  'packet',case when jsonb_typeof(${sqlPath(packetPath)})='object' then jsonb_build_object(${packetKeys.map(k=>`'${k}',${sqlPath([...packetPath,k])}`).join(',')}) else null end,
  'findings',case when jsonb_typeof(p.report_projection_payload#>'{canonicalReportProjection,globalUnifiedFindings}')='array' then
@@ -110,27 +121,36 @@ const choiceAuditSql=`jsonb_build_object('version','${CHOICE_AUDIT_VERSION}',
  where f->>'unifiedFindingId' ~ 'gpc|gpp|^california_.*(opt_out|sale_sharing|post_reject|reject_potential)') else null end)`;
 
 // A fixed per-row transport cap keeps the existing one-query output bounded.
-export function choiceAuditSqlForTransport(includeOperations:boolean){
- const suffix=includeOperations?', operations':'';
- return `(with bounded_choice as materialized (
- select ${choiceAuditSql} as summary, ${PRIORITY_EVIDENCE_SQL} as priority${includeOperations?',result.operations':''} from (${dispatchReceiptSql(includeOperations)}) result
- ), bounded_optional as materialized (
- select summary, octet_length(summary::text)>8192 as core_overflow,
- case when octet_length((summary || jsonb_build_object('priorityEvidence',priority))::text)<=8192
- then summary || jsonb_build_object('priorityEvidence',priority)
- else summary || jsonb_build_object('priorityEvidence',priority || jsonb_build_object('accept',null,'reject',null,'cmp',null,'transport','size_bound')) end as preferred${suffix}
- from bounded_choice
+// Short SQL aliases preserve the reserved launch headroom for 100 pending IDs.
+export function choiceAuditSqlForTransport(includeOperations:boolean,includeCmpBlocker=includeOperations){
+ const suffix=includeOperations?', o1':'';
+ // Only the private fixed-shape receipt may leave the ready payload.
+ const policyColumn=includeOperations?`,(select case when p.report_projection_status='ready'
+  and jsonb_typeof(v)='object' and jsonb_typeof(v->'binding')='object'
+  and octet_length(v::text)<=${MAX_AUDIT_POLICY_PROVENANCE_BYTES} then
+  case when v-array['version','binding','bundle','fetch','owner','text']='{}'::jsonb
+   and (v->'binding')-array['scanId','createdAt','generation','sourceHash']='{}'::jsonb then v end end
+  from (select p.report_projection_payload->'auditPolicyProvenance' v) q) as o1`:'';
+ return `(with bc as materialized (
+ select ${choiceAuditSql} as s, ${priorityEvidenceSql(includeCmpBlocker)} as j${policyColumn} from (${dispatchReceiptSql()}) r1,
+ lateral (select a.value->'californiaPrivacyReview' ca) j
+ ), bo as materialized (
+ select s, octet_length(s::text)>8192 as x,
+ case when octet_length((s || jsonb_build_object('priorityEvidence',j))::text)<=8192
+ then s || jsonb_build_object('priorityEvidence',j)
+ else s || jsonb_build_object('priorityEvidence',j || jsonb_build_object('accept',null,'reject',null,'cmp',null,'transport','size_bound')) end as y${suffix}
+ from bc
  ) select case
- when core_overflow then jsonb_build_object('version','${CHOICE_AUDIT_VERSION}','availability','size_bound')
- when octet_length(preferred::text)>8192 then case when octet_length((summary || jsonb_build_object('priorityEvidence','size_bound'))::text)<=8192 then summary || jsonb_build_object('priorityEvidence','size_bound') else summary end
- ${includeOperations?`when (operations->'policy'<>'null'::jsonb or operations->'cmp'<>'null'::jsonb)
- and octet_length((preferred || jsonb_build_object('operationsEvidence',operations))::text)<=8192
- then preferred || jsonb_build_object('operationsEvidence',operations)`:''}
- else preferred end from bounded_optional)`;
+ when x then jsonb_build_object('version','${CHOICE_AUDIT_VERSION}','availability','size_bound')
+ when octet_length(y::text)>8192 then case when octet_length((s || jsonb_build_object('priorityEvidence','size_bound'))::text)<=8192 then s || jsonb_build_object('priorityEvidence','size_bound') else s end
+ ${includeOperations?`when o1 is not null
+ and octet_length((y || jsonb_build_object('operationsEvidence',o1))::text)<=8192
+ then y || jsonb_build_object('operationsEvidence',o1)`:''}
+ else y end from bo)`;
 }
 export const CHOICE_AUDIT_SQL=choiceAuditSqlForTransport(true);
 
-export function choiceSummaryAudit(value:unknown,scanId:string){
+export function choiceSummaryAudit(value:unknown,scanId:string,policyBinding?:AuditPolicyProvenanceBinding){
  const measurements:Record<string,number>={};
  const states:Record<string,string>={},scopes:Record<string,string>={},labels:Record<string,string>={};
  if(Buffer.byteLength(JSON.stringify(value)??'null')>8192)return {states,scopes,labels,measurements};
@@ -138,7 +158,7 @@ export function choiceSummaryAudit(value:unknown,scanId:string){
  if(!parsed.success||parsed.data.scanId!==scanId)return {states,scopes,labels,measurements};
  const s=parsed.data;
  if(s.version===CHOICE_AUDIT_VERSION){
-  for(const [key,result] of Object.entries({...priorityEvidenceStates(s.priorityEvidence,scanId),...priorityCoverageStates(s.priorityEvidence,scanId),...operationsEvidenceStates(s.operationsEvidence,scanId)})){
+  for(const [key,result] of Object.entries({...priorityEvidenceStates(s.priorityEvidence,scanId),...priorityCoverageStates(s.priorityEvidence,scanId),...operationsEvidenceStates(s.operationsEvidence,scanId,policyBinding)})){
    states[key]=result.value;
    scopes[key]=`${s.version}/${result.scope}`;
   }
@@ -149,9 +169,21 @@ export function choiceSummaryAudit(value:unknown,scanId:string){
  const lane=saleSharingOptOutLaneOutcomeSchema.safeParse(s.lane);
  if(lane.success){set('lane',lane.data.status,'sale_sharing_lane_outcome.v1');set('lane_stop',lane.data.limitationCode??'none_retained','sale_sharing_lane_outcome.v1');}
  const dispatch=dispatchSchema.safeParse(s.dispatch);
+ const conditional=conditionalOptOutDecisionSchema.safeParse(s.conditional);
  if(dispatch.success)set('dispatch',['excluded_by_profile','conditional_no_dispatch_recorded'].includes(dispatch.data)&&lane.success?'profile_dispatch_conflict':dispatch.data,'effective_dispatch.v1');
  else if(lane.success)set('dispatch','dispatch_recorded','sale_sharing_lane_outcome.v1');
- const conditional=conditionalOptOutDecisionSchema.safeParse(s.conditional);
+ if(s.lane==null&&s.packet===null&&s.execution==null&&dispatch.success&&
+   !(conditional.success&&conditional.data.scanId===scanId&&conditional.data.status==='dispatched')&&
+   (dispatch.data==='conditional_no_dispatch_recorded'||dispatch.data==='excluded_by_profile')){
+  const disposition=dispatch.data==='excluded_by_profile'?'excluded_by_profile':'not_dispatched';
+  for(const outcome of optOutOutcomeIds)set(outcome,disposition,'effective_dispatch.v1');
+ }
+ if(lane.success&&lane.data.status==='joined'&&lane.data.preActionStop&&s.packet===null&&s.execution==null&&
+   (!dispatch.success||dispatch.data==='dispatch_recorded')){
+  const scope='verified_pre_action_lane.v1';
+  set('action_completion','not_completed',scope);set('choice_confirmation','not_attempted',scope);
+  set('post_confirmation_observation','not_measured',scope);set('stop',lane.data.preActionStop,scope);
+ }
  if(conditional.success&&conditional.data.scanId===scanId&&conditional.data.status!=='pending'){
   const c=conditional.data;
   const consistent=(c.status==='dispatched'?s.dispatch==='dispatch_recorded':s.dispatch==='conditional_no_dispatch_recorded')&&!(c.status==='skipped'&&lane.success);
@@ -189,10 +221,20 @@ export function choiceSummaryAudit(value:unknown,scanId:string){
    if(consistent){const scope=`${p.contractVersion}/${p.policyVersion}/${p.recipeVersion??'no_recipe'}`;
     set('packet','retained',scope);set('capture',p.status==='complete'&&p.captureComplete?'complete':p.registration==='confirmed'?'limited':'not_confirmed',scope);set('recipe',p.recipeVersion?'selected':'not_selected',scope);
     set('actions',p.actionCount>0?'action_recorded':'no_action_recorded',scope);set('submission',p.submitted?'submitted':'not_submitted',scope);
+    const legacy=p.contractVersion==='certscore.sale-sharing-opt-out-evidence.v4'?undefined:legacyOptOutExecutionOutcome(p);
     const execution=optOutExecutionAssessmentSchema.safeParse(s.execution);
     if(execution.success&&s.version===CHOICE_AUDIT_VERSION&&execution.data.scanId===scanId&&execution.data.packetSha256===s.packetSha256&&execution.data.actionCompleted===p.submitted&&
-      (p.contractVersion==='certscore.sale-sharing-opt-out-evidence.v4'?execution.data.confirmationBasis==='cmp_explicit_choice'&&['confirmed_terminal','unconfirmed','not_attempted'].includes(execution.data.choiceConfirmation)&&execution.data.postConfirmationObservation==='not_measured'&&execution.data.observationWindowMs===0:execution.data.confirmationBasis==='gpp_sale_sharing'&&execution.data.choiceConfirmation===(confirmed?'confirmed_initial':p.submitted?'unconfirmed':'not_attempted'))){
-      const e=execution.data;set('action_completion',e.actionCompleted?'completed':'not_completed',e.version);set('choice_confirmation',e.choiceConfirmation,e.version);set('confirmation_basis',e.confirmationBasis,e.version);set('post_confirmation_observation',e.postConfirmationObservation,e.version);
+      (legacy?execution.data.confirmationBasis===legacy.confirmationBasis&&execution.data.choiceConfirmation===legacy.choiceConfirmation&&execution.data.postConfirmationObservation===legacy.postConfirmationObservation&&execution.data.observationWindowMs===legacy.observationWindowMs:
+       execution.data.confirmationBasis==='cmp_explicit_choice'&&(p.submitted?['confirmed_terminal','unconfirmed'].includes(execution.data.choiceConfirmation):execution.data.choiceConfirmation==='not_attempted')&&execution.data.postConfirmationObservation==='not_measured'&&execution.data.observationWindowMs===0)){
+      const e=execution.data;set('action_completion',e.actionCompleted?'completed':'not_completed',e.version);set('choice_confirmation',e.choiceConfirmation,e.version);
+      if(e.choiceConfirmation==='confirmed_initial'||e.choiceConfirmation==='confirmed_terminal')set('confirmation_basis',e.confirmationBasis,e.version);
+      set('post_confirmation_observation',e.postConfirmationObservation,e.version);
+    }else if(s.execution==null&&legacy){
+      const basis=`${scope}/legacy_packet_outcome.v1`;
+      set('action_completion',legacy.actionCompleted?'completed':'not_completed',basis);
+      set('choice_confirmation',legacy.choiceConfirmation,basis);
+      if(legacy.choiceConfirmation==='confirmed_initial')set('confirmation_basis',legacy.confirmationBasis,basis);
+      set('post_confirmation_observation',legacy.postConfirmationObservation,basis);
     }
     set('registration',p.registration,scope);set('observation',p.status,scope);set('stop',p.limitations.length?[...new Set(p.limitations)].sort().join('+'):'none_retained',scope);
    }
@@ -206,7 +248,11 @@ export function choiceSummaryAudit(value:unknown,scanId:string){
  return {states,scopes,labels,measurements};
 }
 export function applyChoiceSummary(row:ProgressRow,value:unknown,source:string){
- const result=choiceSummaryAudit(value,row.scanId);if(!row.reportable)return;
+ if(!row.reportable)return;
+ const policyBinding=row.projectionVersion==='scan-report-projection-v27'&&row.publicProjectionSourceHash
+  ? {scanId:row.scanId,createdAt:row.createdAt,generation:row.projectionVersion,sourceHash:row.publicProjectionSourceHash} as const
+  : undefined;
+ const result=choiceSummaryAudit(value,row.scanId,policyBinding);
  row.metricSources??={};row.retainedMetricLabels??={};row.measurements??={};
  for(const [key,value] of Object.entries(result.measurements)){
   if(row.measurements[key]!==undefined&&row.measurements[key]!==value)throw Error(`Conflicting opt-out timing: ${key}`);

@@ -3,6 +3,7 @@ import { californiaPrivacyReviewSchema } from "./california-privacy-review";
 import { saleSharingPresenceLinks, privacyChoicePresenceTitle } from "./privacy-choice-presence";
 import { CONTROL_INSPECTION_POLICY, CONTROL_INSPECTION_POLICIES, consentControlInspectionSchema, initialConsentSelectionSchema, isControlInspectionComplete, type InitialConsentSelection, type ConsentControlInspection } from "./consent-control-inspection";
 import { z } from "zod";
+import {consentCaptureDiagnosticSchema, type ConsentCaptureDiagnostic} from "./consent-capture-diagnostic";
 import { consentControlVisualComparisonSchema, type ConsentControlVisualComparison } from "./consent-control-visual-comparison";
 import { CONSENT_CONTROL_LABEL_REGISTRY_VERSION } from "./consent-control-label-classifier";
 import { CONSENT_CONTROL_CAPTURE_POLICY_VERSION, isConsentControlInteractionEligible } from "./consent-control-evidence-policy";
@@ -127,6 +128,7 @@ export const consentControlAssessmentSchema = z.object({
     privacyOptOut: consentControlAssessmentControlResultSchema,
   }),
   coverage: z.object({
+    captureDiagnostic: consentCaptureDiagnosticSchema.optional(),
     status: z.enum(["complete", "limited", "none", "not_applicable"]),
     requiredChannels: z.array(assessmentChannelSchema).max(8),
     completedChannels: z.array(assessmentChannelSchema).max(8),
@@ -150,6 +152,11 @@ export const consentControlAssessmentSchema = z.object({
     computedAt: z.string().datetime(),
   }),
 }).superRefine((assessment, context) => {
+  if (assessment.coverage.captureDiagnostic && (assessment.artifactVersion !== "2.2" ||
+      assessment.document.identityStatus !== "matched" || !assessment.document.canonicalDocumentToken ||
+      assessment.coverage.captureDiagnostic.documentToken !== assessment.document.canonicalDocumentToken)) {
+    context.addIssue({code: z.ZodIssueCode.custom, message: "Capture diagnostics require the assessment's canonical document binding."});
+  }
   const california = assessment.californiaPrivacyReview;
   if (california && (assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||
       california.scanId !== assessment.scan.scanId || california.documentUrl !== assessment.scan.finalUrl)) {
@@ -214,6 +221,7 @@ export function projectConsentVisualProminence(value: unknown) {
 }
 
 export type ConsentControlAssessmentObservation = {
+  captureDiagnostic?: ConsentCaptureDiagnostic;
   observationId: string;
   observedAtMs: number;
   likelyPresent: boolean;
@@ -735,6 +743,16 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     coverage: input.coverage,
   };
   const visual = input.geometry?.visualComparison;
+  // Only the latest observation for this canonical document may explain capture.
+  // Diagnostics never participate in presence, absence, finding or action rules.
+  const latestObservation = observations.at(-1);
+  const parsedDiagnostic = consentCaptureDiagnosticSchema.safeParse(latestObservation?.captureDiagnostic);
+  const captureDiagnostic = parsedDiagnostic.success && documentStatus === "matched" && canonicalDocumentToken &&
+    latestObservation?.documentToken === canonicalDocumentToken && latestObservation.documentId === canonicalId &&
+    parsedDiagnostic.data.documentToken === canonicalDocumentToken &&
+    parsedDiagnostic.data.observationId === latestObservation.observationId &&
+    parsedDiagnostic.data.inventoryObservedAtMs === latestObservation.observedAtMs
+      ? parsedDiagnostic.data : undefined;
   const visualComparison = visual && input.visualEvidence?.status === "available" && !assessmentBlocked &&
     documentStatus === "matched" && surfaceStatus === "observed_actionable" && inspectionDocumentBound &&
     inspectionCurrent && input.geometry?.assessmentStatus === "complete" &&
@@ -776,6 +794,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     },
     controls: firstLayerResults,
     coverage: {
+      ...(captureDiagnostic ? {captureDiagnostic} : {}),
       status: assessmentBlocked
         ? "none"
         : assessmentComplete

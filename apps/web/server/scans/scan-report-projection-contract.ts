@@ -1,3 +1,4 @@
+import { MAX_AUDIT_POLICY_PROVENANCE_BYTES, auditPolicyProvenanceSchema } from '../../../../packages/certscore-contracts/src/audit-policy-provenance';
 import { hasTerminalReportPublicationFailure } from "./report-publication-read-state";
 import { createHash } from "node:crypto";
 import { withScanReportDisposition } from "../../lib/scans/scan-report-disposition";
@@ -193,7 +194,7 @@ function omitOptionalCollectionSamples(value: unknown): boolean {
 
 export function buildPersistedScanReportProjection(
   scanRecord: ScanDetailResponse,
-  options: { canonicalReportProjection?: PersistedCanonicalReportProjection; auditPrivacyForm?: string } = {},
+  options: { canonicalReportProjection?: PersistedCanonicalReportProjection; auditPrivacyForm?: string; auditPolicyProvenance?: unknown } = {},
 ) {
   scanRecord = withScanReportDisposition(scanRecord);
   const snapshot = isRecord(scanRecord.snapshot)
@@ -205,9 +206,14 @@ export function buildPersistedScanReportProjection(
   const runtimeArtifacts = isRecord(scanRecord.runtimeArtifacts)
     ? canonicalizeRuntimeArtifactAliases(scanRecord.runtimeArtifacts)
     : null;
+  const policy = auditPolicyProvenanceSchema.safeParse(options.auditPolicyProvenance);
+  const auditPolicyProvenance = policy.success && policy.data.binding.scanId === scanRecord.scan.id &&
+    Date.parse(policy.data.binding.createdAt) === Date.parse(scanRecord.scan.createdAt) &&
+    Buffer.byteLength(JSON.stringify(policy.data)) <= MAX_AUDIT_POLICY_PROVENANCE_BYTES ? policy.data : undefined;
   const payload = {
     ...scanRecord,
     auditPrivacyForm: options.auditPrivacyForm,
+    auditPolicyProvenance,
     // Request state belongs to the live read, never the immutable report bytes.
     reportPublication: undefined,
     ...(options.canonicalReportProjection
@@ -216,10 +222,15 @@ export function buildPersistedScanReportProjection(
     previousSnapshot,
     runtimeArtifacts,
     snapshot
-  } satisfies ScanDetailResponse & { auditPrivacyForm?: string };
-  const normalizedPayload = normalizeProjectionJson(payload) as ScanDetailResponse & { auditPrivacyForm?: string };
+  } satisfies ScanDetailResponse & { auditPrivacyForm?: string; auditPolicyProvenance?: unknown };
+  const normalizedPayload = normalizeProjectionJson(payload) as ScanDetailResponse & { auditPrivacyForm?: string; auditPolicyProvenance?: unknown };
   let serialized = JSON.stringify(normalizedPayload);
   let sizeBytes = Buffer.byteLength(serialized);
+  if (sizeBytes > MAX_SCAN_REPORT_PROJECTION_BYTES && normalizedPayload.auditPolicyProvenance !== undefined) {
+    delete normalizedPayload.auditPolicyProvenance;
+    serialized = JSON.stringify(normalizedPayload);
+    sizeBytes = Buffer.byteLength(serialized);
+  }
   if (sizeBytes > MAX_SCAN_REPORT_PROJECTION_BYTES && normalizedPayload.auditPrivacyForm !== undefined) {
     delete normalizedPayload.auditPrivacyForm;
     serialized = JSON.stringify(normalizedPayload);
@@ -236,7 +247,7 @@ export function buildPersistedScanReportProjection(
       sizeBytes,
     });
   }
-  const { auditPrivacyForm: _privateAudit, ...report } = normalizedPayload;
+  const { auditPrivacyForm: _privateAudit, auditPolicyProvenance: _privatePolicy, ...report } = normalizedPayload;
   return {
     payload: normalizedPayload,
     report,
@@ -281,7 +292,7 @@ export function readPersistedScanReportProjection(
   ) {
     return null;
   }
-  const { auditPrivacyForm: _privateAudit, ...report } = payload;
+  const { auditPrivacyForm: _privateAudit, auditPolicyProvenance: _privatePolicy, ...report } = payload;
   return withScanReportDisposition({
     ...(report as ScanDetailResponse),
     // Set only after the immutable payload passes byte, hash and identity checks.

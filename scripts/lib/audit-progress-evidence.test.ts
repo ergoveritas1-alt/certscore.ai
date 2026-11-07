@@ -65,7 +65,7 @@ test("numeric CSV leaves unavailable days blank and retains an explicitly measur
 test("viewer preserves absent versus unknown fields without inventing observations",()=>{
   const html=renderProgressDashboard({metrics:[{id:"control.accept"},{id:"control.reject"},{id:"control.options"}],rows:[{scanId:"fixture",states:{"control.accept":"unknown","control.options":"observed"}}]});
   const embedded=JSON.parse(html.match(/<script id="dashboard-data" type="application\/json">(.*?)<\/script>/s)![1]!);
-  assert.deepEqual(Object.fromEntries(Object.entries(embedded.rows[0].stateCodes).map(([k,i])=>[k,embedded.stateValues[i as number]])),{"control.accept":"unknown","control.options":"observed"});
+  assert.deepEqual(Object.fromEntries(Object.entries(embedded.rows[0].stateCodes).map(([k,i])=>[embedded.fieldKeys[k],embedded.stateValues[i as number]])),{"control.accept":"unknown","control.options":"observed"});
 });
 
 test('after Accept capture uses the returned retained vocabulary, without treating limited as retained',()=>{

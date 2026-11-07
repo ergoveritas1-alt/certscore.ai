@@ -1,10 +1,55 @@
+import { customerConsentEvidenceSchema } from '../../packages/certscore-api-contracts/src/customer-consent-evidence';
 import { pairedGpcAudit } from "./audit-progress-gpc";
 import { checklistEvidence, returnedState, publicSource } from './audit-progress-contracts';
 /** Historical public canonical exports: report what was returned, never re-score. */
 import { choicePathExecutionSchema } from "../../packages/certscore-contracts/src/choice-path-execution";
 import { evidenceProgress, QUANTITIES } from "./audit-progress-evidence";
 import { semanticRegistrationStatus, terminalDecisionStatus } from "./audit-progress-registration";
-import { METRICS, TOPIC_ROWS, PRIMARY_CHECKLIST_IDS, arr, obj, accessibilityProgress, type Obj, type ProgressRow } from "./audit-progress";
+import { METRICS, TOPIC_ROWS, PRIMARY_CHECKLIST_IDS, arr, obj, accessibilityProgress, type Obj, type ProgressRow, type Metric } from "./audit-progress";
+
+const CMP_CRITERIA = {
+  prominence: 'Accept and Reject prominence',
+  duration: 'Consent cookie duration',
+  declared_not_found: 'Declared cookies compared with capture',
+  found_not_declared: 'Observed cookies absent from declarations',
+  implementation: 'Activity after consent choices',
+  services: 'CMP services identified',
+  categories: 'CMP category selection',
+  cookie_information: 'CMP cookie information',
+  consent_record: 'Client-side consent record',
+} as const;
+
+export const PUBLIC_CMP_CRITERIA: Metric[] = Object.entries(CMP_CRITERIA).map(([id,label])=>({
+  id:'customer_cmp_check.'+id,label,group:'Consent & CMP',
+  denominator:'Readable reportable scans with an eligible export; explicit not assessed and not applicable remain separate',
+  success:['observed'],
+}));
+
+/** Use only the typed packet projected from the same ready report generation. */
+export function applyPublicCmpEvidence(row: ProgressRow, report: Obj) {
+  if(!row.reportable||row.defaultSource!=='public_export/pulse-public-v11/scan-report-projection-v27')return;
+  const raw=report.customerConsentEvidence;
+  if(!raw||Buffer.byteLength(JSON.stringify(raw))>8192)return;
+  const parsed=customerConsentEvidenceSchema.safeParse(raw);
+  if(!parsed.success||parsed.data.status!=='available'||!parsed.data.assessment)return;
+  const packet=parsed.data,binding=packet.binding;
+  if(binding.scanId!==row.scanId||Date.parse(binding.createdAt)!==Date.parse(row.createdAt)||
+    binding.reportVersion!==row.projectionVersion||binding.reportSourceHash!==row.publicProjectionSourceHash)return;
+
+  const source=[row.defaultSource,packet.version,parsed.data.assessment.version].join('/');
+  const set=(id:string,value:string)=>{
+    row.states[id]=value;
+    (row.metricSources??={})[id]=source;
+  };
+  for(const criterion of packet.criteria)if(Object.hasOwn(CMP_CRITERIA,criterion.id)){
+    set('customer_cmp_check.'+criterion.id,returnedState(criterion.status));
+  }
+  const optional=packet.checklist.find(check=>check.id==='consent_optional_defaults_on');
+  const optionalId='checklist.consent_optional_defaults_on';
+  if(optional&&(row.states[optionalId]===undefined||row.states[optionalId]==='unavailable')){
+    set(optionalId,returnedState(optional.evidenceState));
+  }
+}
 
 export function exportedState(row:Obj|undefined):string {
   return checklistEvidence(row);
@@ -87,5 +132,7 @@ export function extractExportRow(report:Obj,ref:ProgressRow["refs"][number]):Pro
   for (const q of QUANTITIES.filter(q => q.id.startsWith('gpc.session.'))) metricSources[q.id] = source + '/' + gpcScopes.sessionScope;
   for(const key of Object.keys(metricSources))if(metricSources[key]===source)delete metricSources[key];
   metricSources.findings=source+'/'+String(meta.canonicalResolverVersion??'unknown');
-  return {scanId:id,site:String(report.domain??"unknown"),createdAt,region:String(context.scanFrom??"unknown"),producer:"not retained in public export",profile:"not retained in public export",assessmentVersion:String(meta.projectionVersion??"unknown"),projectionVersion:String(meta.reportProjectionVersion??"unknown"),originRequestId:"archive folder provenance; original credential not independently verified",states,defaultSource:source,publicProjectionSourceHash:typeof meta.reportProjectionSourceHash==="string"?meta.reportProjectionSourceHash:undefined,metricSources,measurements:supplement.measurements,metricLabels:supplement.metricLabels,findings,findingInventory,topInventory:false,reportable,refs:[ref]};
+  const row:ProgressRow={scanId:id,site:String(report.domain??"unknown"),createdAt,region:String(context.scanFrom??"unknown"),producer:"not retained in public export",profile:"not retained in public export",assessmentVersion:String(meta.projectionVersion??"unknown"),projectionVersion:String(meta.reportProjectionVersion??"unknown"),originRequestId:"archive folder provenance; original credential not independently verified",states,defaultSource:source,publicProjectionSourceHash:typeof meta.reportProjectionSourceHash==="string"?meta.reportProjectionSourceHash:undefined,metricSources,measurements:supplement.measurements,metricLabels:supplement.metricLabels,findings,findingInventory,topInventory:false,reportable,refs:[ref]};
+  applyPublicCmpEvidence(row,report);
+  return row;
 }

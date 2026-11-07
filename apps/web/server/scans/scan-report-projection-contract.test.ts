@@ -611,3 +611,39 @@ test("incomplete control inventory remains unknown instead of projecting false",
     retained: false
   });
 });
+
+test("policy provenance receipt belongs to the verified private payload only", () => {
+  const scanRecord = {
+    scan: { id: "5eb8e37d-7eac-4c45-bb4b-3c31c239a2df", status: "completed", createdAt: "2026-11-07T09:00:00.000Z" },
+    snapshot: {},
+  } as ScanDetailResponse;
+  const receipt = {
+    version: "certscore.audit-policy-provenance.v1",
+    binding: {
+      scanId: scanRecord.scan.id, createdAt: scanRecord.scan.createdAt,
+      generation: SCAN_REPORT_PROJECTION_VERSION, sourceHash: "a".repeat(64),
+    },
+    bundle: "b".repeat(64), fetch: "fetched", owner: "producer_declared_usable", text: "producer_verified_complete_receipt",
+  };
+  const persisted = buildPersistedScanReportProjection(scanRecord, { auditPolicyProvenance: receipt });
+  assert.deepEqual(persisted.payload.auditPolicyProvenance, receipt);
+  assert.equal(Object.hasOwn(persisted.report, "auditPolicyProvenance"), false);
+  const hydrated = readPersistedScanReportProjection({
+    scan: scanRecord.scan,
+    snapshot: {
+      report_projection_computed_at: "2026-11-07T09:01:00.000Z",
+      report_projection_payload: persisted.payload,
+      report_projection_payload_sha256: persisted.sha256,
+      report_projection_payload_size_bytes: persisted.sizeBytes,
+      report_projection_source_hash: receipt.binding.sourceHash,
+      report_projection_status: "ready",
+      report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+    },
+  });
+  assert.ok(hydrated);
+  assert.equal(Object.hasOwn(hydrated, "auditPolicyProvenance"), false);
+  const invalid = buildPersistedScanReportProjection(scanRecord, {
+    auditPolicyProvenance: { ...receipt, binding: { ...receipt.binding, createdAt: "2026-11-07T09:00:00.001Z" } },
+  });
+  assert.equal(Object.hasOwn(invalid.payload, "auditPolicyProvenance"), false);
+});

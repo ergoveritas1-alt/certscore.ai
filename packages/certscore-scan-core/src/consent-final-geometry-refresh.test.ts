@@ -320,3 +320,22 @@ test("atomic staging keeps the previous artifact intact until a guarded commit",
     assert.equal(JSON.parse(await readFile(target,"utf8")).capturedAt,new Date(2100).toISOString());
   } finally {await rm(root,{recursive:true,force:true});}
 });
+
+test("reports the retained and live frame limits without attempting a read", async () => {
+  const retained = setup();
+  const inspection = retained.input.geometry.controlInspection!;
+  inspection.structuralCoverage = "limited";
+  inspection.captureCoverage.frameCount = 16;
+  inspection.captureCoverage.capturedFrameCount = 12;
+  const fromRetained = await createFinalConsentGeometryRefresh(retained.dependencies)(retained.input);
+  assert.equal(fromRetained.eligibilityBlocker, "geometry_frame_cap_exceeded");
+  assert.equal(fromRetained.attempted, false);
+  assert.equal(retained.counts.capture, 0);
+
+  const live = setup();
+  live.state.frames = Array.from({length: 16}, () => ({}));
+  const fromLive = await createFinalConsentGeometryRefresh(live.dependencies)(live.input);
+  assert.equal(fromLive.eligibilityBlocker, "live_frame_cap_exceeded");
+  assert.equal(fromLive.attempted, false);
+  assert.equal(live.counts.capture, 0);
+});

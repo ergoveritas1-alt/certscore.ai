@@ -275,6 +275,8 @@ export interface RunScanInput {
   preConsentVisualFallbackDeadlineAtMs?: number;
   /** Internal/test override that may shorten, but never extend, the profile module budget. */
   preConsentModuleDeadlineMs?: number;
+  /** Opt-in local experiment for late positive evidence on pages over the frame cap. */
+  localOverflowConsentGeometryRefresh?: boolean;
   consentFlowScreenshotMode?: "auto" | "none";
   consentFlowDeadlineMs?: number;
   consentFlowActionFinalSettleMs?: number;
@@ -588,6 +590,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         gpcComparisonMinDurationMs: comparisonBudgetMs || undefined,
         localGpcAdaptiveParticipant: comparisonBudgetMs ? input.localGpcAdaptiveParticipant : undefined,
         cmpBasicScanId: evidenceLane === "consent_proof" ? scanId : undefined,
+        localOverflowConsentGeometryRefresh: input.region === "local" && input.localOverflowConsentGeometryRefresh === true,
         onPassiveCaptureComplete: accessibilityRequired ? completePassiveCapture : undefined,
         artifactWriter,
         captureScope: evidenceLane === "consent_proof"

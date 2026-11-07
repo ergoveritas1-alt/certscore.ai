@@ -16,6 +16,7 @@ import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-project
 import { assessOutdatedTransferDisclosure } from "../../lib/scans/outdated-transfer-disclosure-policy";
 import { projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
 import { projectCaliforniaPrivacyReview } from "./california-privacy-review-projection";
+import { projectOptOutLaneOutcome } from "./opt-out-lane-projection";
 import { projectCaliforniaObservedScoreBasis } from "./california-observed-score-basis";
 import { isConsentControlInteractionEligible } from "@certscore/contracts";
 import { readGpcActivityComparison } from "../../lib/scans/gpc-activity-comparison";
@@ -6366,6 +6367,9 @@ export function buildMaterializedLocalV2Detail(
     ...postRefusalRuntimeProjection,
     ...postAcceptRuntimeProjection,
     ...buildGpcResponseRuntimeProjection(bundle),
+    saleSharingOptOutLaneOutcome: bundle.scanId === scanRecord.scan.id &&
+      options.policyTextEvidenceContext?.sourceBundle.verificationStatus === "verified"
+      ? projectOptOutLaneOutcome(bundle) : undefined,
     scanLaneRuns: bundle.scanLaneRuns,
     local_v2_dag_scan_core_duration_ms: durationMsFromTimestamps(bundle.startedAt, bundle.completedAt),
     wc01ProductionProjection: {
@@ -6787,18 +6791,21 @@ export function buildMaterializedLocalV2Detail(
 }
 
 export function buildGpcResponseRuntimeProjection(
-  bundle: Pick<CanonicalEvidenceBundle, "gpcResponseAssessment" | "gpcActivityComparison" | "gpcCmpStateComparison"> & Partial<Pick<CanonicalEvidenceBundle, "scanId">>,
+  bundle: Pick<CanonicalEvidenceBundle, "gpcResponseAssessment" | "gpcActivityComparison" | "gpcCmpStateComparison" | "gpcCmpPairBlocker"> & Partial<Pick<CanonicalEvidenceBundle, "scanId">>,
 ): {
   gpcResponseAssessment?: CanonicalEvidenceBundle["gpcResponseAssessment"];
   gpc_response_assessment?: CanonicalEvidenceBundle["gpcResponseAssessment"];
   californiaGpcPotentialRiskAssessment?: CaliforniaPotentialRiskAssessment | null;
   gpcActivityComparison?: CanonicalEvidenceBundle["gpcActivityComparison"];
   gpcCmpStateComparison?: CanonicalEvidenceBundle["gpcCmpStateComparison"];
+  gpcCmpPairBlocker?: CanonicalEvidenceBundle["gpcCmpPairBlocker"];
 } {
   const activityComparison = bundle.gpcResponseAssessment && bundle.scanId
     ? readGpcActivityComparison(bundle.gpcActivityComparison, bundle.gpcResponseAssessment, bundle.scanId) : undefined;
   const cmpStateComparison = bundle.gpcResponseAssessment && bundle.scanId
     ? readBoundGpcCmpStateComparison(bundle.gpcCmpStateComparison, bundle.gpcResponseAssessment, bundle.scanId) : undefined;
+  const cmpBlocker = cmpStateComparison ? undefined : bundle.gpcCmpStateComparison
+    ? "report_binding_rejected" : bundle.gpcCmpPairBlocker;
   const potentialRisk = assessGpcPotentialRisk(bundle.gpcResponseAssessment);
   return bundle.gpcResponseAssessment
     ? {
@@ -6806,6 +6813,7 @@ export function buildGpcResponseRuntimeProjection(
         gpc_response_assessment: bundle.gpcResponseAssessment,
         ...(potentialRisk ? {californiaGpcPotentialRiskAssessment:potentialRisk} : {}),
         ...(cmpStateComparison ? {gpcCmpStateComparison: cmpStateComparison} : {}),
+        ...(cmpBlocker ? {gpcCmpPairBlocker: cmpBlocker} : {}),
         ...(activityComparison ? { gpcActivityComparison: activityComparison } : {}),
       }
     : {};
@@ -6815,7 +6823,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v47";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v49";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

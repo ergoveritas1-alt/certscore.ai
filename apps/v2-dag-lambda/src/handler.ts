@@ -1,5 +1,5 @@
 import { parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
-import { buildGpcCmpStateComparison } from "@certscore/scan-core/gpc-cmp-state-comparison";
+import { assessGpcCmpStateComparison } from "@certscore/scan-core/gpc-cmp-state-comparison";
 import { isLoopbackPostRefusalTarget } from "@certscore/scan-core/post-refusal-target-authorization";
 import { runtimeEvidenceClockSchema } from "@certscore/contracts";
 import { boundRuntimeDocumentStatus } from "@certscore/contracts";
@@ -3057,6 +3057,15 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         failureReason: gpcResult?.failureReason ?? (!verifiedGpc ? "gpc_worker_failed" : undefined),
       }),
     });
+    const cmp = assessGpcCmpStateComparison({
+      scanId: payload.scanId, targetUrl: payload.targetUrl,
+      baseline: verifiedGpcWorkerBytes.has(runtimeEvidenceBundle) ? {
+        bytes: verifiedGpcWorkerBytes.get(runtimeEvidenceBundle)!, pointer: verifiedWorkerArtifact(baselineResult, "runtime_evidence"),
+      } : undefined,
+      gpc: verifiedGpc && gpcResult && verifiedGpcWorkerBytes.has(verifiedGpc) ? {
+        bytes: verifiedGpcWorkerBytes.get(verifiedGpc)!, pointer: verifiedWorkerArtifact(gpcResult, "gpc_observation"),
+      } : undefined,
+    });
     bundle = canonicalEvidenceBundleSchema.parse({
       ...bundle,
       runtimeEvidenceGraphs: [
@@ -3074,15 +3083,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           bytes: verifiedGpcWorkerBytes.get(verifiedGpc)!, pointer: verifiedWorkerArtifact(gpcResult, "gpc_observation"),
         } : undefined,
       }),
-      gpcCmpStateComparison: buildGpcCmpStateComparison({
-        scanId: payload.scanId, targetUrl: payload.targetUrl,
-        baseline: verifiedGpcWorkerBytes.has(runtimeEvidenceBundle) ? {
-          bytes: verifiedGpcWorkerBytes.get(runtimeEvidenceBundle)!, pointer: verifiedWorkerArtifact(baselineResult, "runtime_evidence"),
-        } : undefined,
-        gpc: verifiedGpc && gpcResult && verifiedGpcWorkerBytes.has(verifiedGpc) ? {
-          bytes: verifiedGpcWorkerBytes.get(verifiedGpc)!, pointer: verifiedWorkerArtifact(gpcResult, "gpc_observation"),
-        } : undefined,
-      }),
+      gpcCmpStateComparison: cmp.pair,
+      gpcCmpPairBlocker: cmp.blocker,
       gpcResponseAssessment,
     });
   }
