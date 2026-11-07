@@ -1,3 +1,4 @@
+import {activateReviewedOptOutAfterProducer} from "./lib/reviewed-opt-out-release";
 import { spawn } from "node:child_process";
 import { deployConsumersBeforeProducer, deployConsumersWithPreparedProducer } from "./lib/deployment-consumer-barrier";
 import { assertScannerConfigurationScope, configureScannerSettingsUnlessPreserved, scannerOperationalSnapshot,
@@ -184,15 +185,17 @@ async function executeDeployment(args: Args, startedAt: number, timing?: ReturnT
     let artifact: PreparedScanner | undefined;
     const coupled = await deployConsumersWithPreparedProducer({
       prepareProducer: () => timedLane("Lambda scanner artifact preparation", async () => {
-        if (!changed.scanners && !args.pushScannerRuntimeBase) return;
+        if (!changed.scanners && !args.pushScannerRuntimeBase && process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT !== "1") return;
         artifact = await prepareScannerArtifact({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase,
           preserveOperationalSettings: args.preserveScannerOperationalSettings });
         return { runtimeBase: artifact.runtimeBase };
       }),
       consumers: [
-        () => deployWeb({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs, force: args.forceWeb || changed.web }),
+        () => deployWeb({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs, force: args.forceWeb || changed.web || process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1",
+          reviewedRolloutMode: process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1" ? "disable" : undefined }),
         () => deployValidation({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs,
-          skip: !args.forceValidation && !changed.validation,
+          skip: !args.forceValidation && !changed.validation && process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT !== "1",
+          reviewedRolloutMode: process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1" ? "disable" : undefined,
           pushRuntimeBase: args.forceValidationRuntimeBase || changed.validationRuntimeBase }),
       ],
       producer: () => artifact ? promoteScannerArtifact(artifact, { ref: sha, preserveOperationalSettings: args.preserveScannerOperationalSettings })
@@ -200,6 +203,14 @@ async function executeDeployment(args: Args, startedAt: number, timing?: ReturnT
       skippedProducer: () => skippedLane("Lambda scanner deploys", "a consumer deployment failed; preserve the existing producer contract"),
     });
     lanes.push(...coupled.map(result => Promise.resolve(result)));
+    if (process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1") {
+      // Reader code and all producer regions are healthy before emitting the new dispatch profile.
+      const activations=await activateReviewedOptOutAfterProducer(coupled,()=>verifyScanners(sha),[
+        ()=>deployWeb({ref:sha,workflowRef,force:true,reviewedRolloutMode:"enable"}),
+        ()=>deployValidation({ref:sha,workflowRef,skip:false,pushRuntimeBase:false,reviewedRolloutMode:"enable"}),
+      ]);
+      lanes.push(...activations.map(result=>Promise.resolve(result)));
+    }
     lanes.push(Promise.resolve(skippedLane(
       "production DB migrations",
       "the web workflow applies migrations from the target image before ECS promotion"
@@ -608,7 +619,7 @@ async function runStagedCoupledRelease(args: Args, changed: ChangedTargets, sha:
   return results;
 }
 
-async function deployWeb(input: { force: boolean; ref: string; workflowRef: string; registrationGraceMs?: number; stage?: { runId: string; image: string; baseSha: string } }): Promise<LaneResult> {
+async function deployWeb(input: { force: boolean; ref: string; workflowRef: string; registrationGraceMs?: number; stage?: { runId: string; image: string; baseSha: string }; reviewedRolloutMode?: "preserve"|"enable"|"disable" }): Promise<LaneResult> {
   if (!input.force) return skippedLane("web ECS deploy", "web runtime inputs are proven unchanged");
   return timedLane("web ECS deploy", async () => {
     await run([
@@ -618,30 +629,33 @@ async function deployWeb(input: { force: boolean; ref: string; workflowRef: stri
     ]);
     const { stage } = input;
     const receiptEnable=process.env.CERTSCORE_DEPLOY_AUDIT_RECEIPTS === "1";
-    const rolloutEnable=process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1";
+    const rolloutMode=input.reviewedRolloutMode ?? (process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1" ? "enable" : "preserve");
+    if(rolloutMode==="enable")await verifyScanners(input.ref);
     const runId = await ensureWorkflowRun(WEB_WORKFLOW, input.workflowRef, input.ref,
       [...(stage ? ["-f", `staged_run_id=${stage.runId}`, "-f", `staged_image=${stage.image}`, "-f", `staged_base_sha=${stage.baseSha}`] : []),
        ...(receiptEnable ? ["-f", "audit_privacy_form_receipts=true"] : []),
-       ...(rolloutEnable ? ["-f", "reviewed_opt_out_rollout=enable"] : [])], receiptEnable || rolloutEnable, input.registrationGraceMs,
+       ...(rolloutMode!=="preserve" ? ["-f", `reviewed_opt_out_rollout=${rolloutMode}`] : [])], receiptEnable || rolloutMode!=="preserve", input.registrationGraceMs,
       stage ? `Promote public web ${input.ref} from ${stage.runId} ${stage.image}` : undefined);
     const workflowRun = await waitForRun(runId);
     return { workflow: WEB_WORKFLOW, url: workflowRun.url };
   });
 }
 
-async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; skip: boolean; workflowRef: string; registrationGraceMs?: number; stage?: StagedCoupledRelease["validation"] }): Promise<LaneResult> {
+async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; skip: boolean; workflowRef: string; registrationGraceMs?: number; stage?: StagedCoupledRelease["validation"]; reviewedRolloutMode?: "preserve"|"enable"|"disable" }): Promise<LaneResult> {
   if (input.skip) {
     return skippedLane("validation deploy", "no validation deploy inputs changed");
   }
   return timedLane("validation AWS deploy", async () => {
     const { stage } = input;
+    const rolloutMode=input.reviewedRolloutMode ?? (process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1" ? "enable" : "preserve");
+    if(rolloutMode==="enable")await verifyScanners(input.ref);
     const runId = await ensureWorkflowRun(VALIDATION_WORKFLOW, input.workflowRef, input.ref, [
       "-f", "use_runtime_base=true",
       "-f", `push_runtime_base=${input.pushRuntimeBase ? "true" : "false"}`,
       "-f", "runtime_base_tag=validation-worker-runtime-base",
-      ...(process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1" ? ["-f", "reviewed_opt_out_rollout=enable"] : []),
+      ...(rolloutMode!=="preserve" ? ["-f", `reviewed_opt_out_rollout=${rolloutMode}`] : []),
       ...(stage ? ["-f", `expected_sha=${input.ref}`, "-f", `staged_run_id=${stage.runId}`, "-f", `staged_image=${stage.image}`] : []),
-    ], input.pushRuntimeBase || process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1", input.registrationGraceMs,
+    ], input.pushRuntimeBase || rolloutMode!=="preserve", input.registrationGraceMs,
     stage ? `Promote validation ${input.ref} from ${stage.runId} ${stage.image}` : undefined);
     const workflowRun = await waitForRun(runId);
     return {
@@ -971,7 +985,7 @@ async function verifyScanners(expectedSha: string, { afterStagedPromotion = fals
           "aws", "lambda", "get-function",
           "--region", region,
           "--function-name", SCANNER_FUNCTION_NAME,
-          "--query", "{ImageUri:Code.ResolvedImageUri,RecordedImageDigest:Configuration.Environment.Variables.SCANNER_IMAGE_DIGEST,LastUpdateStatus:Configuration.LastUpdateStatus,State:Configuration.State,Updated:Configuration.LastModified,MemorySize:Configuration.MemorySize}",
+          "--query", "{ImageUri:Code.ResolvedImageUri,RecordedImageDigest:Configuration.Environment.Variables.SCANNER_IMAGE_DIGEST,LastUpdateStatus:Configuration.LastUpdateStatus,State:Configuration.State,Updated:Configuration.LastModified,MemorySize:Configuration.MemorySize,ReviewedOptOut:Configuration.Environment.Variables.CERTSCORE_REVIEWED_OPT_OUT_ROLLOUT_ENABLED,RedHatReload:Configuration.Environment.Variables.CERTSCORE_REDHAT_OPT_OUT_RELOAD_ENABLED}",
           "--output", "json"
         ], { quiet: true });
       })(),
@@ -987,6 +1001,8 @@ async function verifyScanners(expectedSha: string, { afterStagedPromotion = fals
     const payload = JSON.parse(result.stdout) as {
       ImageUri?: string;
       RecordedImageDigest?: string;
+      ReviewedOptOut?: string;
+      RedHatReload?: string;
       LastUpdateStatus?: string;
       MemorySize?: number;
       State?: string;
@@ -998,6 +1014,7 @@ async function verifyScanners(expectedSha: string, { afterStagedPromotion = fals
     if (!payload.ImageUri?.endsWith(`@${expectedDigest}`)) {
       throw new Error(`${region} Lambda image ${payload.ImageUri ?? "unknown"} does not match ${expectedSha}`);
     }
+    if (process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1" && (payload.ReviewedOptOut!=="1" || payload.RedHatReload!=="1"))throw Error(`${region} reviewed opt-out worker activation is not verified`);
     if (payload.RecordedImageDigest !== expectedDigest) throw new Error(`${region} Lambda retained image provenance does not match the deployed image.`);
     if (payload.MemorySize !== SCANNER_MEMORY_SIZE) {
       throw new Error(`${region} Lambda memory ${payload.MemorySize ?? "unknown"} does not match ${SCANNER_MEMORY_SIZE} MB`);

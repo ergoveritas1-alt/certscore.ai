@@ -10,7 +10,7 @@ The owner authorized moving the reconciled release to production with private se
 - Red Hat production authorization uses its exact source-bound v4 dispatch with durable coordinator and worker claims. Its legacy single-scan canary remains available when production rollout is disabled.
 - Reviewed v2 apex/www and v3 exact-route grants require a same-scan hash-verified consent source with a joined visible reviewed control and exact document binding. ReadCube/Gimbal Settings are restricted to their checked-in source/route/locator/label recipes. The worker independently retains native-TLS redirect ancestry and rechecks readiness before any action.
 - Production claims bind scan, original source, parent dispatch, region, function/version and image build. Conditional create prevents reuse. Missing or changed proof fails closed. No production campaign slot, arbitrary target or expired historical grant supplies new authority.
-- Use `CERTSCORE_DEPLOY_AUDIT_RECEIPTS=1` and `CERTSCORE_DEPLOY_REVIEWED_OPT_OUT=1` with the canonical deployment helper. They request explicit workflow settings; reader deployments must succeed before scanner promotion. Existing sources default off without configuration.
+- Use `CERTSCORE_DEPLOY_AUDIT_RECEIPTS=1` and `CERTSCORE_DEPLOY_REVIEWED_OPT_OUT=1` with the canonical deployment helper. They request explicit workflow settings. Deploy reader code with conditional dispatch disabled, promote and verify all regional scanner code, then enable consumer dispatch through the canonical workflows. This avoids emitting a new profile before older scanners understand it. Existing sources default off without configuration.
 
 ## Cost and rollback
 
