@@ -1,0 +1,26 @@
+{
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-11-06T00:20:56.291Z",
+  "entries": {
+    "https://inverse.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-04T00:17:33.021Z",
+      "lastContactAt": "2026-11-06T00:17:33.021Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://inverse.com/"
+    },
+    "https://steamcharts.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-04T00:17:45.789Z",
+      "lastContactAt": "2026-11-06T00:17:45.789Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://steamcharts.com/"
+    }
+  }
+}
