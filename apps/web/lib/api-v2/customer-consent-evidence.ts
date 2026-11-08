@@ -5,7 +5,12 @@ import {getPersistedCanonicalReportProjection} from '../../server/scans/persiste
 import {projectCmpAudit} from '../scans/cmp-audit-projection';
 import {evaluateConsentControlReport} from '../scans/consent-control-report';
 /** Pure public projection over the persisted snapshot only; never recover runtime controls. */
-export function buildCustomerConsentEvidence(scan:ScanDetailResponse){
+type CustomerConsentExport=ReturnType<typeof customerConsentEvidenceSchema.parse>&{
+ cookieDeclarationCounts?:{
+  version:'certscore.cookie-declaration-counts.v1';observed:number;matched:number;declarationInventoryComplete:boolean;
+ };
+};
+export function buildCustomerConsentEvidence(scan:ScanDetailResponse):CustomerConsentExport|undefined{
  const s=scan.snapshot as Record<string,any>|null|undefined,canonical=getPersistedCanonicalReportProjection(scan);
  if(s?.report_projection_status!=='ready'||typeof s.report_projection_source_hash!=='string'||!/^[a-f0-9]{64}$/.test(s.report_projection_source_hash)||typeof s.report_projection_version!=='string'||!canonical)return undefined;
  const binding={scanId:scan.scan.id,createdAt:scan.scan.createdAt,reportVersion:s.report_projection_version,reportSourceHash:s.report_projection_source_hash};
@@ -18,6 +23,8 @@ export function buildCustomerConsentEvidence(scan:ScanDetailResponse){
  if(values.some(v=>JSON.stringify(v)!==JSON.stringify(a)))return unavailable('conflicting_persisted_assessments');
  if(!evaluateConsentControlReport(a,scan.scan.id).report)return unavailable('assessment_scan_or_document_unavailable');
  const cmp=projectCmpAudit({scanId:scan.scan.id,consentControlAssessment:a,normalizedConcerns:canonical.normalizedConcerns,checklistRows:canonical.checklistRows,unifiedFindings:canonical.ownerUnifiedFindings});
+ const declarationRow=cmp.rows.find(row=>row.id==='found_not_declared');
+ const comparison=declarationRow?.supportingEvidence?.cookieComparison;
  const packet=customerConsentEvidenceSchema.parse({version:'certscore.customer-consent-evidence.v1',binding,status:'available',reason:'persisted_snapshot_only',
   assessment:{version:a.artifactVersion,sourceHash:a.provenance.sourceHash,computedAt:a.provenance.computedAt,coverage:a.coverage.status},
   controls:Object.entries(a.controls).map(([id,c])=>({id,state:c.state,layer:c.layer,inspection:c.inspection?{policy:c.inspection.policy,status:c.inspection.status}:null,firstObservedAtMs:c.firstObservedAtMs,lastObservedAtMs:c.lastObservedAtMs})),
@@ -25,5 +32,19 @@ export function buildCustomerConsentEvidence(scan:ScanDetailResponse){
   checklist:canonical.checklistRows.filter(r=>['cmp_framework_signal_observed','consent_optional_defaults_on'].includes(r.id)).map(r=>({id:r.id,evidenceState:r.evidenceState,assessmentStatus:r.assessmentStatus})),
  });
  if(Buffer.byteLength(JSON.stringify(packet))>8192)return unavailable('public_packet_byte_cap');
+ if(comparison && typeof comparison.declarationInventoryComplete==='boolean'){
+  const {observedCookieNameCount:observed,unmatchedNameCount:unmatched,declarationInventoryComplete}=comparison;
+  const verdict=declarationRow?.status;
+  const consistent=verdict==='Partially assessed' || declarationInventoryComplete &&
+   (verdict==='Review recommended' && unmatched>0 || verdict==='Not observed' && unmatched===0);
+  if(consistent && declarationRow?.sourceIds.length && Number.isInteger(observed) && observed>0 && observed<=65535 &&
+     Number.isInteger(unmatched) && unmatched>=0 && unmatched<=observed){
+   const extended={...packet,cookieDeclarationCounts:{
+    version:'certscore.cookie-declaration-counts.v1' as const,
+    observed,matched:observed-unmatched,declarationInventoryComplete,
+   }};
+   if(Buffer.byteLength(JSON.stringify(extended))<=8192)return extended;
+  }
+ }
  return packet;
 }

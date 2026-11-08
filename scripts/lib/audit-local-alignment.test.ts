@@ -63,3 +63,29 @@ test('real full package preserves the new bounded standard packet exactly withou
  assert.equal((full.reportViews.gdpr_eprivacy as any).customerConsentEvidence,undefined);
  assert.equal(JSON.stringify(s),before);
 });
+
+import {buildNormalizedConcerns} from '../../apps/web/lib/scans/normalized-concerns';
+import {cmpAuditAssessmentSchema} from '@certscore/contracts';
+test('cookie declaration counts travel from the persisted comparison without cookie names',()=>{
+ const s=fixture();
+ const assessment=(s.snapshot as any).consent_control_assessment;
+ const ids=['categories','services','privacy_access','consent_record','duration','declared_not_found','found_not_declared','cookie_information','implementation','prominence'];
+ assessment.cmpAudit=cmpAuditAssessmentSchema.parse({
+  version:'cmp_audit_assessment.v6',scanId:s.scan.id,sourceSha256:'a'.repeat(64),
+  support:{state:'partial',provider:'OneTrust',recipeVersion:'fixture',reason:'partial_inventory'},
+  rows:ids.map(id=>id==='found_not_declared'?{
+   id,status:'partially_assessed',detail:'Retained list comparison',evidenceRefs:['cmpBasicEvidence'],
+   cookieComparison:{declarationPatternCount:3,observedCookieNameCount:4,unmatchedNameCount:2,
+    unmatchedNames:['fixture-private-cookie'],allUnmatchedOnlyAfterAccept:false,declarationInventoryComplete:false},
+  }:{id,status:'not_assessed',detail:'Unavailable',evidenceRefs:[]}),
+ });
+ s.canonicalReportProjection!.normalizedConcerns=buildNormalizedConcerns({runtimeArtifacts:{consentControlAssessment:assessment},reviewFindingCandidates:[],validationFindings:[]});
+ const packet=buildCustomerConsentEvidence(s)!;
+ assert.deepEqual(packet.cookieDeclarationCounts,{version:'certscore.cookie-declaration-counts.v1',observed:4,matched:2,declarationInventoryComplete:false});
+ assert.doesNotMatch(JSON.stringify(packet),/fixture-private-cookie/);
+ const {cookieDeclarationCounts,...basePacket}=packet;
+ assert.ok(cookieDeclarationCounts);
+ assert.equal(customerConsentEvidenceSchema.safeParse(basePacket).success,true);
+ s.canonicalReportProjection!.normalizedConcerns=[];
+ assert.equal(buildCustomerConsentEvidence(s)?.cookieDeclarationCounts,undefined);
+});
