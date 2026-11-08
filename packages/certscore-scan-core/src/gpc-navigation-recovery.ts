@@ -64,7 +64,7 @@ export function createGpcNavigationRecovery(input:Parameters<typeof createGpcImp
   if(candidate&&eligibleNow())candidate.navigatedWithinDocument(event,token);
  }
  function recordRequest(event:Request){if(closed)return;original.recordRequest(event);if(candidate&&eligibleNow())candidate.recordRequest(event);}
- function bindReadback(token:string|undefined){if(closed)return;original.bindReadback(token);if(candidate&&eligibleNow())candidate.bindReadback(token);}
+ function bindReadback(...binding:Parameters<Capture['bindReadback']>){if(closed)return;original.bindReadback(...binding);if(candidate&&eligibleNow())candidate.bindReadback(...binding);}
  function invalidate(reason:Parameters<Capture['invalidate']>[0]){if(closed)return;original.invalidate(reason);stop('capture_invalidated');}
  function finish(proof?:GpcSignalObservation):{originalCapture:GpcImpactCapture;recovery:GpcNavigationRecovery}{
   if(result)return result;

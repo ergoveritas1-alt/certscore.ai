@@ -12,7 +12,7 @@ test("exact retained X cookies classify purpose without changing original write 
     assert.equal(c.essentiality, "unknown");
     assert.equal(c.setMethod, "set_cookie_header");
     const result = resolveCanonicalCookieClassification(c.cookieName, { cookieDomain: c.domain });
-    assert.equal(result.version, "certscore.cookie-purpose.v11");
+    assert.equal(result.version, "certscore.cookie-purpose.v12");
     assert.equal(result.category, c.cookieName === "muc_ads" ? "advertising" : "personalization");
     assert.equal(result.essentiality, "non_essential");
     assert.equal(result.provider?.entity, "X Corp.");

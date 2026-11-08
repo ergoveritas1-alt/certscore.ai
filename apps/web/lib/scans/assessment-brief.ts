@@ -1,3 +1,4 @@
+import { contextualFindingSummary, contextualFindingTitle } from "./assessment-finding-context";
 import { assessmentHighlightProminence, selectAssessmentHighlightFindings, supportingAssessmentHighlightOrder } from "./assessment-highlight-selection";
 import { findMissingPrivacyPolicyHighlight } from "./missing-privacy-policy-highlight";
 import { getGdprEprivacyPostureTone } from "./regulatory-coverage-score";
@@ -53,7 +54,7 @@ function readerTitle(finding: AssessmentHighlightFinding): string {
     const members = finding.evidenceJson.findings.filter((value): value is AssessmentHighlightFinding =>
       Boolean(value && typeof value === "object" && typeof value.title === "string"));
     if (members.length) {
-      const label = members.slice(0, 2).map(readerTitle).join(" and ") + (members.length > 2 ? " and other accessibility checks" : "");
+      const label = members.slice(0, 2).map(member => contextualFindingTitle(member, readerTitle(member))).join(" and ") + (members.length > 2 ? " and other accessibility checks" : "");
       if (label.length <= 100) return label;
       const first = readerTitle(members[0]!);
       return first.length <= 65 ? `${first} and other accessibility checks` : normalizeAssessmentCopy(finding.title);
@@ -111,11 +112,13 @@ export function buildAssessmentBrief(
     prominence: assessmentHighlightProminence(finding, findings),
     id: finding.id ?? null,
     title: normalizeAssessmentCopy(finding.title),
-    readerTitle: readerTitle(finding),
+    readerTitle: contextualFindingTitle(finding, readerTitle(finding)),
     summary: normalizeAssessmentCopy(finding.summary ?? ""),
     readerSummary: finding.id === "regulatory_gap__gdpr_eprivacy__privacy_notice_availability"
       ? "Privacy policy not found within the assessed scope."
-      : normalizeAssessmentCopy(accessibilityMembers(finding).map(member => member.summary).join(" ") || finding.summary || ""),
+      : normalizeAssessmentCopy(accessibilityMembers(finding).length
+        ? accessibilityMembers(finding).map(member => contextualFindingSummary(member, member.summary ?? "")).join(" ")
+        : contextualFindingSummary(finding, finding.summary ?? "")),
     status: finding.status ?? "unknown",
     severity: finding.severity ?? null,
     priority: finding.priority ?? null,

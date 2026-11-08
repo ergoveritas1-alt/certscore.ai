@@ -24,7 +24,7 @@ export function createGpcSignalCapture(input: {
   context: BrowserContext; page: Page; enabled: boolean; scanStartedAtMs: number;
   waitMode?: string; internalBudgetMs: number;
   prototypeBinding?: { captureId: string; documentIdentity: () => BrowserDocumentIdentity | undefined };
-  impactReadback?: { documentIdentity: () => BrowserDocumentIdentity | undefined; bind: (token: string | undefined) => void };
+  impactReadback?: { documentIdentity: () => BrowserDocumentIdentity | undefined; bind: (token: string | undefined, atMs: number) => void };
 }) {
   const workers = new Set<Worker>();
   const workerSamples: NonNullable<GpcSignalObservation["workerReadback"]>["samples"] = [];
@@ -102,7 +102,8 @@ export function createGpcSignalCapture(input: {
       }
       const after = input.prototypeBinding?.documentIdentity();
       const impactAfter = input.impactReadback?.documentIdentity();
-      input.impactReadback?.bind(impactBefore?.token && impactBefore.token === impactAfter?.token ? impactAfter.token : undefined);
+      const capturedAtMs = Math.max(0, Date.now() - input.scanStartedAtMs);
+      input.impactReadback?.bind(impactBefore?.token && impactBefore.token === impactAfter?.token ? impactAfter.token : undefined, capturedAtMs);
       const bindingStable = before?.token && before.token === after?.token;
       if (input.prototypeBinding && !bindingStable) limitationKeys.push("prototype_document_identity_unverified");
       return gpcSignalObservationSchema.parse({
@@ -111,7 +112,7 @@ export function createGpcSignalCapture(input: {
         ...(input.prototypeBinding && bindingStable ? { prototypeCaptureBinding: {
           captureId: input.prototypeBinding.captureId, documentIdentitySource: after!.source, documentToken: after!.token,
         } } : {}),
-        capturedAtMs: Math.max(0, Date.now() - input.scanStartedAtMs),
+        capturedAtMs,
         documentStartedAtMs: Math.max(0, Math.round(main.timeOrigin - input.scanStartedAtMs)),
         frameCount: frames.length,
         frames: samples.flatMap((sample) => sample ? [{ documentUrlSha256: sample.documentUrlSha256,

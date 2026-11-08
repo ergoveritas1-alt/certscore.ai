@@ -655,7 +655,7 @@ function getPreconsentCookieEvidenceRows(
     setMethod: row.setMethod,
     sourceRequestUrl: row.sourceRequestUrl,
     timingEvidence: row.timingEvidence,
-    ...(row.cookiePurposePolicyVersion === "certscore.cookie-purpose.v11" ? {
+    ...(["certscore.cookie-purpose.v11", "certscore.cookie-purpose.v12"].includes(row.cookiePurposePolicyVersion ?? "") ? {
       cookiePurposePolicyVersion: row.cookiePurposePolicyVersion,
       cookieClassification: row.cookieClassification,
     } : {}),

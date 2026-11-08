@@ -137,3 +137,33 @@ test('unsupported vendor metadata preserves independent URL proof and actual opt
   assert.doesNotMatch(JSON.stringify(session.requestProofCapture),/private-fixture/);
  }
 });
+
+test('supported body activity remains factual when processing declarations prevent California qualification',()=>{
+ for(const privacy of ['rdp=1','gpp=bad&gpp_sid=7','us_privacy=1NYN']){
+  const e=event(1,'https://www.google.com/pagead/conversion/123/'),session=fixture(e),cap=createGpcRequestProofCapture(()=>150);
+  cap.reserve(e,session.mainDocument!.documentToken,request('gclid=visitor123&'+privacy))!({'content-type':'application/x-www-form-urlencoded'});
+  cap.response(e.eventId,204);session.requestProofCapture=cap.finish(session.mainDocument!.documentToken);
+  const original=JSON.stringify(session),proof=session.requestProofCapture.rows[0]!.proof;
+  assert.equal(proof.proof!.bodyStatus,'complete');
+  assert.equal(proof.qualification.activity,'identified_advertising_collection');
+  assert.equal(isQualifyingSaleSharingRequest(proof.qualification),false);
+  const result=qualifyGpcRequest(e,session,{gpcDelivered:true,requestAtMs:100});
+  assert.equal(result.activity,'identified_advertising_collection',privacy);
+  assert.equal(result.basis,'google_advertising_conversion_identifier');
+  assert.deepEqual(result.processingSignals,proof.qualification.processingSignals);
+  assert.equal(isQualifyingSaleSharingRequest(result),false);
+  assert.equal(JSON.stringify(session),original,'interpretation must not rewrite the original capture');
+  assert.equal(session.requestProofCapture.inspected,1);
+  assert.equal(session.requestProofCapture.rows.length,1);
+  for(const mode of ['wrong_document','wrong_request','missing_headers','unsupported_body'] as const){
+   const changed=structuredClone(session),row=changed.requestProofCapture!.rows[0]!;
+   if(mode==='wrong_document')row.documentToken='other';
+   if(mode==='wrong_request')row.proof.requestId='other';
+   if(mode==='missing_headers')row.proof.proof!.headersStatus='unavailable';
+   if(mode==='unsupported_body')row.proof.proof!.bodyStatus='unsupported';
+   const rejected=qualifyGpcRequest(e,changed,{gpcDelivered:true,requestAtMs:100});
+   assert.equal(rejected.activity,'unresolved',mode);
+   assert.equal(isQualifyingSaleSharingRequest(rejected),false);
+  }
+ }
+});

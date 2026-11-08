@@ -1,0 +1,20 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import React from "react";
+import {renderToStaticMarkup} from "react-dom/server";
+import {FullSiteExecutiveSummary} from "./full-site-executive-summary";
+import {SitePriorityReview} from "./site-priority-review";
+const http={id:"regulatory_gap__gdpr_eprivacy__transport_security_http_redirect",rank:1,title:"HTTP-to-HTTPS redirect review",status:"Potential gap" as const,summary:"The explicit HTTP-origin probe served a terminal HTTP 200 response over plaintext HTTP instead of redirecting to HTTPS.",evidence:[],evidenceJson:{},correctionSteps:["Redirect the affected HTTP URLs to HTTPS."],pages:[]};
+const contrast={...http,id:"visual_contrast_accessibility_issue",title:"Text contrast and color cues",status:"Observed" as const,summary:"An automated contrast finding was retained.",correctionSteps:["Review the affected elements."]};
+test("context-only report separates review count and retains both evidence cards",()=>{
+ const findings=[http,contrast];const before=structuredClone(findings);
+ const overview=renderToStaticMarkup(<FullSiteExecutiveSummary pending={false} scannedPages={1} reviewFocus="gdpr_eprivacy" score={{value:87,scoredPages:1,priorityReview:findings}}/>);
+ assert.match(overview,/0 priority findings · 2 review items/);
+ assert.doesNotMatch(overview,/2 top issues/);
+ assert.match(overview,/does not establish browser exposure/);
+ const cards=renderToStaticMarkup(<SitePriorityReview findings={findings} pending={false} sitewideAvailable scannedPages={1}/>);
+ assert.match(cards,/Findings and review items on this page/);
+ assert.match(cards,/HTTP probe served plaintext/);
+ assert.match(cards,/visual_contrast_accessibility_issue/);
+ assert.deepEqual(findings,before);
+});

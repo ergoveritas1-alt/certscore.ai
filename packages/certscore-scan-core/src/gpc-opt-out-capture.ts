@@ -57,9 +57,14 @@ export async function captureGpcOptOutObservation(page: Page, input: {
         const roots = document.querySelectorAll(selector);
         if (roots.length > 8) truncated = true;
         for (const root of Array.from(roots).slice(0, 8)) {
-          const nodes = root.querySelectorAll<HTMLElement>('[role="status"], [aria-live="polite"], [aria-live="assertive"]');
-          if (nodes.length > 32) truncated = true;
-          for (const node of Array.from(nodes).slice(0, 32)) {
+          const statusSelector = '[role="status"], [aria-live="polite"], [aria-live="assertive"]';
+          const descendants = root.querySelectorAll<HTMLElement>(statusSelector);
+          // The reviewed CMP container can itself be the live-status element.
+          // It shares the existing 32-node allowance with its descendants.
+          const rootIsStatus = root instanceof HTMLElement && root.matches(statusSelector);
+          if (descendants.length + Number(rootIsStatus) > 32) truncated = true;
+          const nodes = rootIsStatus ? [root as HTMLElement, ...Array.from(descendants).slice(0, 31)] : Array.from(descendants).slice(0, 32);
+          for (const node of nodes) {
             if (seen.has(node)) continue;
             seen.add(node);
             const rect = node.getBoundingClientRect(), style = getComputedStyle(node);

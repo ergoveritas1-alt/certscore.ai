@@ -39,7 +39,7 @@ test("fresh classification of retained X writes follows the canonical storage pi
     const row = result.inventory.rows[0]!;
     assert.equal(row.category, c.cookieName === "muc_ads" ? "advertising" : "personalization");
     assert.equal(row.nonEssential, true);
-    assert.equal(row.cookieClassification?.version, "certscore.cookie-purpose.v11");
+    assert.equal(row.cookieClassification?.version, "certscore.cookie-purpose.v12");
     assert.equal(row.setAtMs, c.setAtMs);
     assert.equal(row.setMethod, c.setMethod);
     assert.equal(result.storage.assessmentStatus, "gap_observed");
@@ -191,7 +191,7 @@ test("conflicting retained providers cannot win by observation order or change p
 test("v8 unknown categories reach the canonical inventory while v7 bindings stay historical",()=>{
  for(const [name,domain] of [["UID","scorecardresearch.com"],["MUID","bing.com"],["bcookie","linkedin.com"]]){
   const input=observation(name!,domain!);const result=project([input]);const row=result.inventory.rows[0]!;
-  assert.equal(row.cookieClassification?.version,"certscore.cookie-purpose.v11");
+  assert.equal(row.cookieClassification?.version,"certscore.cookie-purpose.v12");
   assert.ok(row.essentialityReasonCodes?.includes(`cookie_purpose_unknown:${input.cookieClassification!.unknownReason}`));
   assert.equal(row.nonEssential,false);
  }
@@ -203,4 +203,20 @@ test("v8 unknown categories reach the canonical inventory while v7 bindings stay
  const fresh=observation("_cc_aud","crwdcntrl.net");assert.equal(project([fresh]).inventory.rows[0]?.nonEssential,true);
  // A new marker cannot validate an old classification or vice versa.
  assert.equal(project([{...old,essentialityReasonCodes:["cookie_purpose_policy:certscore.cookie-purpose.v8"]}]).inventory.rows[0]?.cookieClassification,null);
+});
+
+test("SOCS leaves unidentified-storage review through the canonical pipeline, retaining unknown necessity", () => {
+  const fresh = observation("SOCS", "google.com");
+  const result = project([fresh]);
+  assert.equal(result.inventory.rows[0]?.category, "consent_management");
+  assert.equal(result.inventory.rows[0]?.essentiality, "unknown");
+  assert.equal(result.storage.assessmentStatus, "checked");
+  assert.equal(getGdprEprivacyRowDeduction(result.storage), 0);
+  assert.equal(project([fresh, observation("unidentified_cookie", "google.com")]).storage.assessmentStatus, "review_signal");
+  assert.equal(project([fresh, observation("_ga", "google.com")]).storage.assessmentStatus, "gap_observed");
+  const legacy = resolveCanonicalCookieClassification("SOCS", {cookieDomain:"google.com"}, "certscore.cookie-purpose.v11");
+  assert.equal(project([{...fresh, category:legacy.category, essentiality:legacy.essentiality,
+    cookieClassification:legacy,essentialityReasonCodes:[`cookie_purpose_policy:${legacy.version}`]}]).storage.assessmentStatus,"review_signal");
+  const forged = {...fresh,cookieClassification:{...resolveCanonicalCookieClassification("SOCS",{cookieDomain:"google.com"}),cookieDomain:"other.test"}};
+  assert.equal(project([forged]).storage.assessmentStatus,"review_signal");
 });

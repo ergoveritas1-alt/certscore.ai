@@ -686,7 +686,7 @@ export async function preConsentRuntimeScanner(
     diagnostic15Seconds: input.gpcComparisonMinDurationMs === 15000,
     adaptive: input.localGpcAdaptiveParticipant,
     expectedEnabled: input.globalPrivacyControlEnabled === true, now: () => elapsed(input.scanStartedAtMs),
-    quietSnapshot: () => passiveEvidenceActivity.snapshot(),
+    quietSnapshot: (readbackAtMs: number) => passiveEvidenceActivity.snapshot(input.scanStartedAtMs + readbackAtMs),
   };
   const impactEnabled = captureScope === "runtime_evidence" && input.executionProfile !== "inventory_only";
   const navigationRecovery = impactEnabled && input.localGpcNavigationRecovery === true

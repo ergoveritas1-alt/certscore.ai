@@ -272,9 +272,19 @@ export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | nu
 /** New bound canonical purposes take precedence over frozen legacy name exclusions. */
 export function isFunctionalCookieEvidenceExcludedFromTracking(row: Pick<RuntimeCookieEvidenceRow,
   "cookieName" | "domain" | "cookiePurposePolicyVersion" | "cookieClassification">) {
+  // New exact consent-purpose recognition is contextual, not an assertion of exemption.
+  if (row.cookiePurposePolicyVersion === "certscore.cookie-purpose.v12") {
+    const retained = readCookieClassification(row.cookieClassification, row.cookieName, row.domain);
+    const canonical = resolveCanonicalCookieKnowledge(row.cookieName, {
+      cookieDomain: row.domain, purposePolicyVersion: row.cookiePurposePolicyVersion,
+    });
+    if (canonical.ruleId === "google_socs_consent_preference.v1" && retained?.version === row.cookiePurposePolicyVersion && retained.category === "consent_management"
+      && canonical.category === retained.category && canonical.ruleId === retained.ruleId
+      && retained.essentiality === canonical.essentiality) return true;
+  }
   if (!isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)) return false;
   // Preserve all historical policies and fail closed on missing/conflicting proof.
-  if (row.cookiePurposePolicyVersion !== "certscore.cookie-purpose.v11") return true;
+  if (row.cookiePurposePolicyVersion !== "certscore.cookie-purpose.v11" && row.cookiePurposePolicyVersion !== "certscore.cookie-purpose.v12") return true;
   const retained = readCookieClassification(row.cookieClassification, row.cookieName, row.domain);
   if (retained?.version !== row.cookiePurposePolicyVersion || retained.essentiality !== "non_essential") return true;
   const canonical = resolveCanonicalCookieKnowledge(row.cookieName, {
@@ -875,7 +885,8 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
         : "unknown",
     ...(usesNewClassification ? {
       cookiePurposePolicyVersion: usesBoundCookieClassificationVersion(retainedVersion) ? retainedVersion
-        : parsedClassification?.version === COOKIE_CLASSIFICATION_VERSION ? COOKIE_CLASSIFICATION_VERSION : "certscore.cookie-purpose.v7",
+        : parsedClassification?.version === COOKIE_CLASSIFICATION_VERSION ? COOKIE_CLASSIFICATION_VERSION
+        : parsedClassification?.version === "certscore.cookie-purpose.v11" ? "certscore.cookie-purpose.v11" : "certscore.cookie-purpose.v7",
       cookieClassification: classification,
       category: classification?.category ?? "unknown", essentiality: classification?.essentiality ?? "unknown",
       nonEssential: classification?.essentiality === "non_essential",
@@ -1186,7 +1197,10 @@ export function buildPreConsentStorageAssessment(input: {
     isEligibleNonEssentialPreconsentStorageRow
   );
   const classifiedEssentialRows = preConsentRows.filter((row) => row.essentiality === "essential");
-  const unclassifiedRows = preConsentRows.filter((row) => row.essentiality === "unknown");
+  const unclassifiedRows = preConsentRows.filter((row) => row.essentiality === "unknown" &&
+    !(row.cookiePurposePolicyVersion === "certscore.cookie-purpose.v12" &&
+      row.cookieClassification?.ruleId === "google_socs_consent_preference.v1" &&
+      isFunctionalCookieEvidenceExcludedFromTracking(row)));
   const excludedRows = preConsentRows.filter((row) =>
     isFunctionalCookieEvidenceExcludedFromTracking(row)
   );

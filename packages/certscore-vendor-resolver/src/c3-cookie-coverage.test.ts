@@ -14,7 +14,7 @@ test("C3 exact first-party analytics cookies retain purpose, canonical identity 
   assert.equal(getCanonicalVendorRegistryManifest().cookieProviderResolverVersion, "certscore-cookie-provider-2026-10-30-v8");
   for (const [name, vendor, entityId] of analytics) {
     const row = resolveCanonicalCookieClassification(name, {cookieDomain:".example.test"});
-    assert.equal(row.version, "certscore.cookie-purpose.v11");
+    assert.equal(row.version, "certscore.cookie-purpose.v12");
     assert.equal(row.category, "analytics");
     assert.equal(row.essentiality, "non_essential");
     assert.equal(row.provider?.vendor, vendor);

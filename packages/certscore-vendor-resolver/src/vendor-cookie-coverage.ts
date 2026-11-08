@@ -33,6 +33,6 @@ export const C3_COOKIE_COVERAGE = [
 ] as const;
 
 export function cookieCoverageForPolicy(version: string | undefined) {
- return ["certscore.cookie-purpose.v7", "certscore.cookie-purpose.v8", "certscore.cookie-purpose.v9", "certscore.cookie-purpose.v10", "certscore.cookie-purpose.v11"].includes(version ?? "") ? [...VENDOR_COOKIE_COVERAGE, ...C3_COOKIE_COVERAGE]
+ return ["certscore.cookie-purpose.v7", "certscore.cookie-purpose.v8", "certscore.cookie-purpose.v9", "certscore.cookie-purpose.v10", "certscore.cookie-purpose.v11", "certscore.cookie-purpose.v12"].includes(version ?? "") ? [...VENDOR_COOKIE_COVERAGE, ...C3_COOKIE_COVERAGE]
   : version === "certscore.cookie-purpose.v6" ? VENDOR_COOKIE_COVERAGE : [];
 }

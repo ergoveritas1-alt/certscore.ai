@@ -6,7 +6,7 @@ import {resolveCanonicalCookieClassification,resolveCanonicalActionStoragePurpos
 test("current writer retains the v8 exact Lotame purpose without inferring active collection",()=>{
  for(const cookieDomain of ["crwdcntrl.net",".crwdcntrl.net","sync.crwdcntrl.net"]){
   const row=resolveCanonicalCookieClassification("_cc_aud",{cookieDomain});
-  assert.equal(row.version,"certscore.cookie-purpose.v11");assert.equal(row.category,"advertising");assert.equal(row.essentiality,"non_essential");assert.equal(row.unknownReason,null);
+  assert.equal(row.version,"certscore.cookie-purpose.v12");assert.equal(row.category,"advertising");assert.equal(row.essentiality,"non_essential");assert.equal(row.unknownReason,null);
   assert.equal(row.provider?.entity,"Lotame Solutions, Inc.");assert.equal(row.provider?.registryAttribution.ruleIds[0],"lotame_exact_audience_cookie_v8");
   assert.deepEqual(readCookieClassification(JSON.parse(JSON.stringify(row)),"_cc_aud",cookieDomain),row);
   assert.equal(resolveCanonicalActionStoragePurpose({storageType:"cookie",name:"_cc_aud",hostname:cookieDomain}).nonEssential,true);

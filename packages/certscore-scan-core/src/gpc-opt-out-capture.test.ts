@@ -124,3 +124,26 @@ test("same-URL document replacement during readback invalidates the browser-nati
     assert.ok(result.limitationKeys.includes("semantic_document_identity_unverified"));
   } finally { await browser.close(); }
 });
+
+test('a reviewed CMP container can itself supply live-status acknowledgment within the existing node cap',async t=>{
+ const browser=await chromium.launch(chromiumLaunchOptions({headless:true}));
+ try {
+  for(const scenario of ['root_status','root_live','hidden_root','ordinary_root','outside_cmp','node_cap','semantic_only'] as const)await t.test(scenario,async()=>{
+   const context=await browser.newContext();
+   try {
+    await installGpcNavigatorSignal(context,true);
+    const html=`<!doctype html><div ${scenario==='outside_cmp'?'':'id="onetrust-banner-sdk"'} ${scenario==='ordinary_root'?'':scenario==='root_live'?'aria-live="polite"':'role="status"'} ${scenario==='hidden_root'?'hidden':''}>Opt-Out Request Honored${scenario==='node_cap'?'<span role="status">Opt-Out Request Honored</span>'.repeat(32):''}</div>`;
+    await context.route('**/*',route=>route.fulfill({contentType:'text/html',body:html}));
+    const page=await context.newPage(),started=Date.now();await page.goto('https://gpc-root-status.test/');
+    const result=await captureGpcOptOutObservation(page,{scanId:'root-status',scanStartedAtMs:started,semanticOnly:scenario==='semantic_only'});
+    assert.equal(result.gppStatus,'unavailable','visible acknowledgment must never become a GPP receipt');
+    assert.equal(result.usca,null);assert.equal(result.usnat,null);
+    if(scenario==='node_cap'){
+     assert.equal(result.acknowledgmentCaptureComplete,false);
+     assert.ok(result.acknowledgment.length<=8);
+     assert.ok(result.limitationKeys.includes('acknowledgment_capture_truncated'));
+    }else assert.equal(result.acknowledgment.length,['root_status','root_live'].includes(scenario)?1:0);
+   } finally {await context.close();}
+  });
+ } finally {await browser.close();}
+});

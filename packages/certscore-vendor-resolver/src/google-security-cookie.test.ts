@@ -12,7 +12,7 @@ test("retained exact Google security identities acquire purpose, not site-specif
     assert.equal(c.category, "unknown");
     assert.equal(c.essentiality, "unknown");
     const result = resolveCanonicalCookieClassification(c.cookieName, {cookieDomain: c.domain});
-    assert.equal(result.version, "certscore.cookie-purpose.v11");
+    assert.equal(result.version, "certscore.cookie-purpose.v12");
     assert.equal(result.category, "security");
     assert.equal(result.essentiality, "unknown");
     assert.equal(result.unknownReason, "necessity_not_established");

@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { vendorRegistryAttributionSchema } from "./vendor-registry-attribution";
 
-export const COOKIE_CLASSIFICATION_VERSION = "certscore.cookie-purpose.v11" as const;
-/** Preserve v7–v10 bound-reader behavior when the fresh writer advances. */
-export function usesBoundCookieClassificationVersion(value: unknown): value is "certscore.cookie-purpose.v7" | "certscore.cookie-purpose.v8" | "certscore.cookie-purpose.v9" | "certscore.cookie-purpose.v10" | typeof COOKIE_CLASSIFICATION_VERSION {
-  return value === "certscore.cookie-purpose.v7" || value === "certscore.cookie-purpose.v8" || value === "certscore.cookie-purpose.v9" || value === "certscore.cookie-purpose.v10" || value === COOKIE_CLASSIFICATION_VERSION;
+export const COOKIE_CLASSIFICATION_VERSION = "certscore.cookie-purpose.v12" as const;
+/** Preserve v7–v11 bound-reader behavior when the fresh writer advances. */
+export function usesBoundCookieClassificationVersion(value: unknown): value is "certscore.cookie-purpose.v7" | "certscore.cookie-purpose.v8" | "certscore.cookie-purpose.v9" | "certscore.cookie-purpose.v10" | "certscore.cookie-purpose.v11" | typeof COOKIE_CLASSIFICATION_VERSION {
+  return value === "certscore.cookie-purpose.v7" || value === "certscore.cookie-purpose.v8" || value === "certscore.cookie-purpose.v9" || value === "certscore.cookie-purpose.v10" || value === "certscore.cookie-purpose.v11" || value === COOKIE_CLASSIFICATION_VERSION;
 }
 export const cookieUnknownReasonSchema = z.enum([
   "no_registry_match", "mixed_purpose", "ambiguous_identity", "missing_context",
@@ -17,7 +17,7 @@ export const cookiePurposeCategorySchema = z.enum([
 
 /** Technical classification of an exact observation, not a consent/legal determination. */
 export const cookieClassificationSchema = z.object({
-  version: z.enum(["certscore.cookie-purpose.v3", "certscore.cookie-purpose.v4", "certscore.cookie-purpose.v5", "certscore.cookie-purpose.v6", "certscore.cookie-purpose.v7", "certscore.cookie-purpose.v8", "certscore.cookie-purpose.v9", "certscore.cookie-purpose.v10", COOKIE_CLASSIFICATION_VERSION]),
+  version: z.enum(["certscore.cookie-purpose.v3", "certscore.cookie-purpose.v4", "certscore.cookie-purpose.v5", "certscore.cookie-purpose.v6", "certscore.cookie-purpose.v7", "certscore.cookie-purpose.v8", "certscore.cookie-purpose.v9", "certscore.cookie-purpose.v10", "certscore.cookie-purpose.v11", COOKIE_CLASSIFICATION_VERSION]),
   cookieName: z.string().max(4096),
   cookieDomain: z.string().max(253).nullable(),
   category: cookiePurposeCategorySchema,
@@ -32,7 +32,7 @@ export const cookieClassificationSchema = z.object({
     registryAttribution: vendorRegistryAttributionSchema,
   }).strict().nullable(),
 }).strict().superRefine((value, context) => {
-  if (value.version !== "certscore.cookie-purpose.v8" && value.version !== "certscore.cookie-purpose.v9" && value.version !== "certscore.cookie-purpose.v10" && value.version !== COOKIE_CLASSIFICATION_VERSION) {
+  if (value.version !== "certscore.cookie-purpose.v8" && value.version !== "certscore.cookie-purpose.v9" && value.version !== "certscore.cookie-purpose.v10" && value.version !== "certscore.cookie-purpose.v11" && value.version !== COOKIE_CLASSIFICATION_VERSION) {
     if (value.unknownReason !== undefined) context.addIssue({code:z.ZodIssueCode.custom,message:"Historical versions retain their original fields."});
     return;
   }

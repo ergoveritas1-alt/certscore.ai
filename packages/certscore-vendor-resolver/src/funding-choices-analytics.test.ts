@@ -14,7 +14,7 @@ test("exact retained Funding Choices analytics cookies reuse canonical provider 
     assert.equal(c.setMethod, "browser_snapshot");
     assert.equal(c.setAtMs, null);
     const result = resolveCanonicalCookieClassification(c.cookieName, {cookieDomain: c.domain});
-    assert.equal(result.version, "certscore.cookie-purpose.v11");
+    assert.equal(result.version, "certscore.cookie-purpose.v12");
     assert.equal(result.category, "analytics");
     assert.equal(result.essentiality, "non_essential");
     assert.equal(result.unknownReason, null);

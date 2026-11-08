@@ -44,7 +44,8 @@ test("sitewide storage and hidden links include corrections with necessary condi
 test("redirect review labels agree with the failed HTTP-to-HTTPS observation",()=>{
   const result=build("unrulymedia.com");
   assert.match(result.text,/“HTTP-to-HTTPS redirect review”/);
-  assert.match(result.text,/plaintext HTTP instead of redirecting to HTTPS/);
+  assert.match(result.text,/HTTP probe served plaintext without an HTTPS redirect/);
+  assert.match(result.text,/does not establish browser exposure/);
   assert.match(result.text,/Redirect the affected HTTP URLs/);
 });
 

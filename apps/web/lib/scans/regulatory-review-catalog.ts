@@ -1,3 +1,4 @@
+import { isContextualReviewFinding } from "./assessment-finding-context";
 import { selectCaliforniaPriorityFindings } from "./california-priority-selection";
 import type { ReportReviewFocus } from "@certscore/api-contracts";
 
@@ -156,6 +157,6 @@ export function selectRegulatoryReview<T extends { id: string; status: string; r
   const other = priorityFindings.filter(finding => isRegulatoryFindingRelevant(finding.id, focus) && !REGULATORY_REVIEW_TOPICS.some(topic => topic.findingIds.includes(finding.id)))
     .map((finding, index) => ({ ...finding, rank: index + 1 }));
   // A finding tied solely to the other privacy framework stays in Detailed evidence.
-  const topIssues = [...regulatory, ...other].map((finding, index) => ({ ...finding, rank: index + 1 }));
-  return { regulatory, other, topIssues };
+  const topIssues = [...regulatory, ...other].sort((a, b) => Number(isContextualReviewFinding(a)) - Number(isContextualReviewFinding(b))).map((finding, index) => ({ ...finding, rank: index + 1 }));
+  return { regulatory, other, topIssues, reviewItemCount: topIssues.filter(isContextualReviewFinding).length };
 }

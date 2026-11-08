@@ -88,10 +88,13 @@ export function qualifyGpcRequest(event:Pick<NetworkEvent,"eventId"|"requestId"|
   supplemental.gpp=applyGppRequestCmpContext(supplemental.gpp,context??{});
   if(supplemental.gpp.cmpComparison==="same_time_conflicting"&&!supplemental.processingSignals.includes("privacy_signal_conflict"))supplemental.processingSignals.push("privacy_signal_conflict");
  }
- const qualified=complete&&supplemental&&(isQualifyingSaleSharingRequest(supplemental)||supplemental.basis==="magnite_exchange_bid_user_identifier"&&supplemental.policyVersion==="ca_sale_sharing_qualification.v5-magnite-auction"||supplemental.basis==="index_exchange_bid_user_identifier"&&supplemental.policyVersion==="ca_sale_sharing_qualification.v4-index-auction")?supplemental:base;
+ // A supported observed role and California eligibility are different facts.
+ // Preserve a complete, exact-request role even when its own processing signals
+ // prevent qualification. The canonical eligibility check still applies later.
+ const observed=complete&&supplemental&&supplemental.activity!=="unresolved"?supplemental:base;
  // Full, exact-request supplemental inspection may observe GPP only in the
  // body. Keep that positive processing evidence even when the request role
  // remains unresolved; role fallback must not relabel it as not_present.
- const gpp=complete&&supplemental?.gpp&&supplemental.gpp.status!=="not_present"?supplemental.gpp:qualified.gpp;
- return {...qualified,...(gpp?{gpp}:{}),processingSignals:[...new Set([...base.processingSignals,...qualified.processingSignals,...(complete?supplemental?.processingSignals??[]:[]),...(restriction?.processingSignals??[]),...(supplemental?.gpp?.cmpComparison==="same_time_conflicting"?["privacy_signal_conflict" as const]:[])])]};
+ const gpp=complete&&supplemental?.gpp&&supplemental.gpp.status!=="not_present"?supplemental.gpp:observed.gpp;
+ return {...observed,...(gpp?{gpp}:{}),processingSignals:[...new Set([...base.processingSignals,...observed.processingSignals,...(complete?supplemental?.processingSignals??[]:[]),...(restriction?.processingSignals??[]),...(supplemental?.gpp?.cmpComparison==="same_time_conflicting"?["privacy_signal_conflict" as const]:[])])]};
 }

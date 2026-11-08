@@ -427,6 +427,12 @@ test("250ms quiet gate restarts for late GPC-condition activity and retains the 
     );
     assert.ok((quietWait?.durationMs ?? 0) >= 400);
     assert.notEqual(quietWait?.outcome, "timed_out");
+    const checkpoint = result.gpcImpactCapture?.quietCheckpoint;
+    assert.ok(checkpoint);
+    assert.equal(checkpoint.documentToken, result.gpcImpactCapture?.readbackDocumentToken);
+    assert.equal(checkpoint.signalReadbackAtMs, result.gpcSignalObservation?.capturedAtMs);
+    assert.equal(checkpoint.inFlightRequestCount, 0);
+    assert.ok(checkpoint.quietForMs >= 250);
   } finally {
     await browser.close();
     await rm(tempRoot, { recursive: true, force: true });

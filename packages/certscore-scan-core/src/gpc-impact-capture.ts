@@ -14,7 +14,7 @@ export function gpcImpactIdentityHash(events: Array<{eventId:string;timestampMs:
 
 /** Uses the already-enabled metadata CDP session and existing request stream.
  * No browser calls, timers, polling, or waits are introduced. */
-export function createGpcImpactCapture(input: { expectedEnabled: boolean; now: () => number; diagnostic15Seconds?: boolean; adaptive?: LocalGpcAdaptiveParticipant; quietSnapshot?: () => {quietForMs: number; inFlightRequestCount: number} }) {
+export function createGpcImpactCapture(input: { expectedEnabled: boolean; now: () => number; diagnostic15Seconds?: boolean; adaptive?: LocalGpcAdaptiveParticipant; quietSnapshot?: (readbackAtMs: number) => {quietForMs: number; inFlightRequestCount: number} }) {
   const startedAt = input.now();
   const requests: RequestIdentity[] = [];
   let requestsDropped = 0;
@@ -30,6 +30,7 @@ export function createGpcImpactCapture(input: { expectedEnabled: boolean; now: (
   };
   let frozen: GpcImpactCapture | undefined;
   let readbackDocumentToken: string | null = null;
+  let readbackQuiet: {atMs: number; quietForMs: number; inFlightRequestCount: number} | undefined;
   let adaptiveOutcome: LocalGpcAdaptiveOutcome | undefined;
   let adaptiveFailed = false;
   return {
@@ -41,7 +42,14 @@ export function createGpcImpactCapture(input: { expectedEnabled: boolean; now: (
     remainingObservationMs(durationMs: 5000 | 15000) {
       return frozen || invalid || !document ? 0 : Math.max(0, document.committedAtMs + durationMs - input.now());
     },
-    bindReadback(token: string | undefined) { if (!frozen) readbackDocumentToken = token ?? null; },
+    bindReadback(token: string | undefined, atMs?: number) {
+      if (frozen) return;
+      readbackDocumentToken = token ?? null;
+      // Sample synchronously with the signal observation. The tracker exposes
+      // current in-flight requests, not the set at a past timestamp.
+      const quiet = token && atMs !== undefined ? input.quietSnapshot?.(atMs) : undefined;
+      readbackQuiet = quiet && atMs !== undefined ? {atMs, ...quiet} : undefined;
+    },
     documentRequested(p: { type?: string; frameId?: string; loaderId?: string; request?: { url?: string; headers?: Record<string, unknown> } }, mainFrameId: string) {
       if (frozen || p.type !== "Document" || p.frameId !== mainFrameId || !p.loaderId || !p.request?.url || !/^https?:/.test(p.request.url)) return;
       if (document) invalidate("document_requested_after_commit");
@@ -94,12 +102,11 @@ export function createGpcImpactCapture(input: { expectedEnabled: boolean; now: (
         return { durationMs, requestCount: events.length, requestSetSha256: gpcImpactRequestSetHash(events) };
       }) : [];
       if (!windows.length && !limits.length) limits.push("observation_window_too_short");
-      const quiet = input.quietSnapshot?.();
-      const quietCheckpoint = quiet && document && proof && !limits.length ? {
+      const quiet = readbackQuiet;
+      const quietCheckpoint = quiet && document && proof && quiet.atMs === proof.capturedAtMs && !limits.length ? {
         contractVersion: "certscore.gpc-comparison-quiet.v1" as const,
         documentToken: document.token, signalReadbackAtMs: proof.capturedAtMs,
-        quietForMs: Math.floor(Math.max(0, Math.min(proof.capturedAtMs - document.committedAtMs,
-          quiet.quietForMs - (capturedAtMs - proof.capturedAtMs)))),
+        quietForMs: Math.floor(Math.max(0, Math.min(proof.capturedAtMs - document.committedAtMs, quiet.quietForMs))),
         inFlightRequestCount: quiet.inFlightRequestCount,
       } : undefined;
       frozen = gpcImpactCaptureSchema.parse({ contractVersion: "certscore.gpc-impact-capture.v1", scope: "page_http_request_attempts_after_document_commit",

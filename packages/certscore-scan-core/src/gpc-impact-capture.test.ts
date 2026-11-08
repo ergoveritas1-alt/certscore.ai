@@ -3,6 +3,7 @@ import test from "node:test";
 import { gpcRuntimeFixture } from "../../certscore-contracts/src/test-fixtures/gpc-runtime";
 import { gpcImpactCaptureSchema } from "../../certscore-contracts/src/gpc-impact";
 import { createGpcImpactCapture } from "./gpc-impact-capture";
+import { createPassiveEvidenceActivityTracker } from "./passive-evidence-quiet-window";
 
 function setup() {
   const b = gpcRuntimeFixture({ enabled: true });
@@ -92,15 +93,30 @@ test("invalidation reasons cannot coexist with usable windows", () => {
   assert.equal(gpcImpactCaptureSchema.safeParse({ ...result, invalidationReasons: ["renderer_crash"] }).success, false);
 });
 
-test("quiet checkpoint freezes existing activity at the signal readback without a wait", () => {
-  const b=gpcRuntimeFixture({enabled:true});let now=0;
-  const capture=createGpcImpactCapture({expectedEnabled:true,now:()=>now,
-    quietSnapshot:()=>({quietForMs:400,inFlightRequestCount:0})});
-  capture.documentRequested({type:"Document",frameId:"main",loaderId:"loader",request:{url:b.url,headers:{"Sec-GPC":"1"}}},"main");
-  now=100;capture.documentCommitted({loaderId:"loader",url:b.url});capture.bindReadback("loader");
-  now=1100;
-  const result=capture.finish({...b.gpcSignalObservation!,capturedAtMs:1000});
-  assert.deepEqual(result.quietCheckpoint,{contractVersion:"certscore.gpc-comparison-quiet.v1",documentToken:"loader",signalReadbackAtMs:1000,quietForMs:300,inFlightRequestCount:0});
-  assert.strictEqual(capture.finish(),result);
-  assert.equal(gpcImpactCaptureSchema.safeParse({...result,quietCheckpoint:{...result.quietCheckpoint,documentToken:"other"}}).success,false);
-});
+for (const pendingAtReadback of [false, true]) {
+  test(`quiet checkpoint ignores requests that ${pendingAtReadback ? "finish" : "start"} after the signal readback`, () => {
+    const b = gpcRuntimeFixture({ enabled: true });
+    const activity = createPassiveEvidenceActivityTracker(0);
+    const request = {};
+    let now = 0;
+    const capture = createGpcImpactCapture({ expectedEnabled: true, now: () => now, quietSnapshot: activity.snapshot });
+    capture.documentRequested({ type: "Document", frameId: "main", loaderId: "loader", request: { url: b.url, headers: { "Sec-GPC": "1" } } }, "main");
+    now = 100;
+    capture.documentCommitted({ loaderId: "loader", url: b.url });
+    if (pendingAtReadback) activity.markRequestStarted(request, 700);
+    else activity.noteActivity(700);
+    now = 1000;
+    capture.bindReadback("loader", now);
+    if (pendingAtReadback) activity.markRequestFinished(request, 1001);
+    else activity.markRequestStarted(request, 1001);
+    now = 1300;
+    const result = capture.finish({ ...b.gpcSignalObservation!, capturedAtMs: 1000 });
+    assert.deepEqual(result.quietCheckpoint, {
+      contractVersion: "certscore.gpc-comparison-quiet.v1",
+      documentToken: "loader", signalReadbackAtMs: 1000,
+      quietForMs: 300, inFlightRequestCount: pendingAtReadback ? 1 : 0,
+    });
+    assert.strictEqual(capture.finish(), result);
+    assert.equal(gpcImpactCaptureSchema.safeParse({ ...result, quietCheckpoint: { ...result.quietCheckpoint, documentToken: "other" } }).success, false);
+  });
+}

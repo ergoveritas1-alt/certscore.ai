@@ -1,6 +1,7 @@
+import { isContextualReviewFinding } from "./assessment-finding-context";
 import {californiaPriorityDemotion} from "./california-priority-selection";
 
-type Finding = {id?: string; evidenceJson?: Record<string, unknown>; severity?: string; priority?: string};
+type Finding = {status?: string; id?: string; evidenceJson?: Record<string, unknown>; severity?: string; priority?: string};
 
 /** Shared narrative prominence over canonical projected findings only. This is
  * independent of top-issue eligibility: qualified collection reviews may be in
@@ -8,6 +9,7 @@ type Finding = {id?: string; evidenceJson?: Record<string, unknown>; severity?: 
  * Other demotions retain their evidence, framework and duplicate protections. */
 export function assessmentHighlightProminence(finding: Finding, findings: readonly Finding[]) {
   const demotion = californiaPriorityDemotion(finding, findings);
+  if (demotion === null && isContextualReviewFinding(finding)) return "supporting";
   if (demotion === null && finding.id === "california_collection_review") return "supporting";
   if (demotion === null && finding.severity === "low" && finding.priority !== "high") return "supporting";
   return demotion === null ? "priority" : "excluded";
