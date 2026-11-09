@@ -3255,11 +3255,17 @@ export function summarizePolicySurfaces(
   if (policyTextExtractionHealth.gdprTransparencyLanguageSupported !== true) policyCoverageReasons |= reason.policy_language_unsupported_or_unverified;
   if (completeOwnedPolicyDocuments.length === 0) policyCoverageReasons |= reason.no_eligible_governing_document;
   if (completeOwnedPolicyDocuments.length !== policyTextEvidenceProjection.documents.length) policyCoverageReasons |= reason.projected_document_not_eligible;
-  if (completeOwnedPolicyDocuments.some((document) =>
-    !(document.retainedTextChars >= MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS &&
-      document.documentTextCoverage.status === "complete" &&
-      document.contentCoverage?.status === "complete")
-  )) policyCoverageReasons |= reason.document_content_coverage_incomplete;
+  for (const document of completeOwnedPolicyDocuments) {
+    if (!(document.retainedTextChars >= MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS)) {
+      policyCoverageReasons |= reason.document_text_below_minimum;
+    }
+    if (document.documentTextCoverage.status !== "complete") {
+      policyCoverageReasons |= reason.document_extraction_coverage_incomplete;
+    }
+    if (document.contentCoverage?.status !== "complete") {
+      policyCoverageReasons |= reason.document_content_scope_incomplete;
+    }
+  }
   if (policyIndexRetainedAsGoverningDocument) policyCoverageReasons |= reason.policy_index_in_governing_scope;
   if (unresolvedMaterialPolicyChildren.length > 0) policyCoverageReasons |= reason.unresolved_material_policy_supplements;
   if (options.policyEvidenceLaneStatus === "degraded") policyCoverageReasons |= reason.policy_evidence_lane_degraded;

@@ -34,6 +34,9 @@ export const TRANSFER_FRAMEWORK_REASON={
  policy_evidence_lane_degraded:1<<8,
  projected_document_not_checked:1<<9,
  matcher_limit:1<<10,
+ document_text_below_minimum:1<<11,
+ document_extraction_coverage_incomplete:1<<12,
+ document_content_scope_incomplete:1<<13,
 } as const;
 const transferReasonMask=z.number().int().min(0).max((1<<Object.keys(TRANSFER_FRAMEWORK_REASON).length)-1);
 // Append only. Each bit represents at least one unresolved child.
