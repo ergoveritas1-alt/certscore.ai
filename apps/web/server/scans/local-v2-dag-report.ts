@@ -14,7 +14,7 @@ import { decodeBoundedPolicyText } from "./policy-text-decoding";
 import { postAcceptEvidencePacketSchema } from "@certscore/contracts";
 import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-projection";
 import { checkOutdatedTransferDisclosure, OUTDATED_TRANSFER_DISCLOSURE_POLICY } from "../../lib/scans/outdated-transfer-disclosure-policy";
-import type { TransferFrameworkAssessment } from "../../../../packages/certscore-contracts/src/audit-policy-provenance";
+import { TRANSFER_FRAMEWORK_REASON, type TransferFrameworkAssessment } from "../../../../packages/certscore-contracts/src/audit-policy-provenance";
 import { projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
 import { projectCaliforniaPrivacyReview } from "./california-privacy-review-projection";
 import { projectOptOutLaneOutcome } from "./opt-out-lane-projection";
@@ -3248,21 +3248,22 @@ export function summarizePolicySurfaces(
   const policyIndexRetainedAsGoverningDocument = policyTextEvidenceProjection.documents.some((document) =>
     document.documentRole === "policy_index"
   );
-  const absenceCoverageBaseSufficient =
-    policyTextEvidenceProjection.projectionStatus === "verified_complete" &&
-    policyTextExtractionHealth.policyTextExtractionStatus === "ok" &&
-    policyTextExtractionHealth.gdprTransparencyLanguageSupported === true &&
-    completeOwnedPolicyDocuments.length > 0 &&
-    completeOwnedPolicyDocuments.length === policyTextEvidenceProjection.documents.length &&
-    completeOwnedPolicyDocuments.every(
-      (document) =>
-        document.retainedTextChars >= MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS &&
-        document.documentTextCoverage.status === "complete" &&
-        document.contentCoverage?.status === "complete",
-    ) &&
-    !policyIndexRetainedAsGoverningDocument &&
-    unresolvedMaterialPolicyChildren.length === 0 &&
-    options.policyEvidenceLaneStatus !== "degraded";
+  const reason = TRANSFER_FRAMEWORK_REASON;
+  let policyCoverageReasons = 0;
+  if (policyTextEvidenceProjection.projectionStatus !== "verified_complete") policyCoverageReasons |= reason.projection_incomplete;
+  if (policyTextExtractionHealth.policyTextExtractionStatus !== "ok") policyCoverageReasons |= reason.extraction_health_not_ok;
+  if (policyTextExtractionHealth.gdprTransparencyLanguageSupported !== true) policyCoverageReasons |= reason.policy_language_unsupported_or_unverified;
+  if (completeOwnedPolicyDocuments.length === 0) policyCoverageReasons |= reason.no_eligible_governing_document;
+  if (completeOwnedPolicyDocuments.length !== policyTextEvidenceProjection.documents.length) policyCoverageReasons |= reason.projected_document_not_eligible;
+  if (completeOwnedPolicyDocuments.some((document) =>
+    !(document.retainedTextChars >= MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS &&
+      document.documentTextCoverage.status === "complete" &&
+      document.contentCoverage?.status === "complete")
+  )) policyCoverageReasons |= reason.document_content_coverage_incomplete;
+  if (policyIndexRetainedAsGoverningDocument) policyCoverageReasons |= reason.policy_index_in_governing_scope;
+  if (unresolvedMaterialPolicyChildren.length > 0) policyCoverageReasons |= reason.unresolved_material_policy_supplements;
+  if (options.policyEvidenceLaneStatus === "degraded") policyCoverageReasons |= reason.policy_evidence_lane_degraded;
+  const absenceCoverageBaseSufficient = policyCoverageReasons === 0;
   const observedArticle13Types = new Set(dedupedArticle13DisclosureSignals
     .filter((signal) => signal.status === "observed")
     .map((signal) => signal.disclosureType));
@@ -3436,8 +3437,11 @@ export function summarizePolicySurfaces(
     const hitMatcherLimit = checks.some(([, check]) => !check.complete);
     const matcherLanguageSupported = policyTextExtractionHealth.detectedPolicyLanguageSource === "policy_surface" &&
       (policyTextExtractionHealth.detectedPolicyLanguage === "en" || policyTextExtractionHealth.detectedPolicyLanguage === "de");
-    const completed = absenceCoverageBaseSufficient && matcherLanguageSupported &&
-      checks.length === policyTextEvidenceProjection.documents.length && !hitMatcherLimit;
+    let reasonMask = policyCoverageReasons;
+    if (!matcherLanguageSupported) reasonMask |= reason.policy_language_unsupported_or_unverified;
+    if (checks.length !== policyTextEvidenceProjection.documents.length) reasonMask |= reason.projected_document_not_checked;
+    if (hitMatcherLimit) reasonMask |= reason.matcher_limit;
+    const completed = reasonMask === 0;
     let status: TransferFrameworkAssessment["status"];
     if (completed) status = signalDocumentIndex === null ? "checked_no_signal" : "checked_review_signal";
     else if (signalDocumentIndex !== null) status = "partial_review_signal";
@@ -3450,6 +3454,7 @@ export function summarizePolicySurfaces(
       status,
       checkedDocumentIndexes: checks.map(([index]) => index),
       signalDocumentIndex,
+      reasonMask,
     };
   }
   const retainedArticle13SectionEvidence = dedupePolicyDisclosureRows(article13Surfaces.flatMap((row) =>

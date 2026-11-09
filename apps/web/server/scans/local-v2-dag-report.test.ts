@@ -4612,6 +4612,7 @@ test("transfer framework check records verified completion and signals independe
     status: "checked_no_signal",
     checkedDocumentIndexes: [0],
     signalDocumentIndex: null,
+    reasonMask: 0,
   });
   assert.equal(clear.staleLegalFrameworkReferenceObserved, false);
   const current = "Our service provider is certified under the EU-US Privacy Shield. We use this framework for transfers. ";
@@ -4619,8 +4620,13 @@ test("transfer framework check records verified completion and signals independe
   assert.equal(positive.transferFrameworkAssessment?.status, "checked_review_signal");
   assert.equal(positive.transferFrameworkAssessment?.signalDocumentIndex, 0);
   assert.equal(positive.legalFrameworkValidityMatches[0]?.outdatedTransferDisclosureAssessment?.assessment, "obsolete_current_guidance");
-  assert.equal(run(current + policy, "degraded").transferFrameworkAssessment?.status, "partial_review_signal");
-  assert.equal(run(policy, "degraded").transferFrameworkAssessment?.status, "inconclusive_policy_coverage");
+  const { TRANSFER_FRAMEWORK_REASON } = await import("../../../../packages/certscore-contracts/src/audit-policy-provenance");
+  const partial = run(current + policy, "degraded").transferFrameworkAssessment;
+  assert.equal(partial?.status, "partial_review_signal");
+  assert.equal(partial?.reasonMask, TRANSFER_FRAMEWORK_REASON.policy_evidence_lane_degraded);
+  const inconclusive = run(policy, "degraded").transferFrameworkAssessment;
+  assert.equal(inconclusive?.status, "inconclusive_policy_coverage");
+  assert.equal(inconclusive?.reasonMask, TRANSFER_FRAMEWORK_REASON.policy_evidence_lane_degraded);
 });
 
 test("summarizePolicySurfaces keeps missing typed topic coverage unknown instead of inferring absence", async () => {

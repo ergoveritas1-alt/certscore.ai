@@ -13,13 +13,30 @@ const documentFields=z.object({documentFetchState:fetchState,
  targetRelationship:z.enum(['target_controller','first_party_brand','service_provider','unrelated','unknown']),
 });
 const textState=z.enum(['producer_verified_complete_receipt','producer_verified_limited_receipt','no_verified_receipt_in_projection']);
-const ownership=z.enum(['producer_declared_usable','no_qualifying_candidate_in_projection']);
+export const POLICY_RECEIPT_OWNER_STATES=['no_qualifying_candidate_in_projection','producer_declared_usable'] as const;
+const ownership=z.enum(POLICY_RECEIPT_OWNER_STATES);
 // Numeric receipt codes preserve the original 512-byte SQL transport cap.
 // Keep this order stable. The audit labels these states separately from findings.
 export const TRANSFER_FRAMEWORK_COVERAGE_STATES=[
  'checked_no_signal','checked_review_signal','partial_review_signal',
  'inconclusive_policy_coverage','inconclusive_matcher_limit','not_assessed_no_eligible_text',
 ] as const;
+// Append only. Existing bits are part of the private receipt contract.
+export const TRANSFER_FRAMEWORK_REASON={
+ projection_incomplete:1<<0,
+ extraction_health_not_ok:1<<1,
+ policy_language_unsupported_or_unverified:1<<2,
+ no_eligible_governing_document:1<<3,
+ projected_document_not_eligible:1<<4,
+ document_content_coverage_incomplete:1<<5,
+ policy_index_in_governing_scope:1<<6,
+ unresolved_material_policy_supplements:1<<7,
+ policy_evidence_lane_degraded:1<<8,
+ projected_document_not_checked:1<<9,
+ matcher_limit:1<<10,
+} as const;
+const transferReasonMask=z.number().int().min(0).max((1<<Object.keys(TRANSFER_FRAMEWORK_REASON).length)-1);
+const completedTransferCheck=(status:string)=>status==='checked_no_signal'||status==='checked_review_signal';
 export const transferFrameworkAssessmentSchema=z.object({
  version:z.literal('certscore.transfer-framework-assessment.v1'),
  matcher:z.literal('outdated_transfer_disclosure.v1'),
@@ -28,7 +45,8 @@ export const transferFrameworkAssessmentSchema=z.object({
  // which already contains the verified original and normalized text hashes.
  checkedDocumentIndexes:z.array(z.number().int().min(0).max(15)).max(16),
  signalDocumentIndex:z.number().int().min(0).max(15).nullable(),
-}).strict();
+ reasonMask:transferReasonMask.optional(),
+}).strict().refine(check=>check.reasonMask===undefined||(check.reasonMask===0)===completedTransferCheck(check.status));
 export type TransferFrameworkAssessment=z.infer<typeof transferFrameworkAssessmentSchema>;
 export const legacyPolicyProvenanceSchema=z.object({scanId:z.string(),sourceSha256:hash,originalSha256:hash,
   fetch:z.enum(['fetched','recorded_fetch_failure','recorded_budget_skip','no_attempt_in_returned_candidates']).nullable(),
@@ -42,10 +60,15 @@ export const auditPolicyProvenanceSchema=z.object({
  binding:bindingSchema,
  bundle:hash,
  fetch:legacyPolicyProvenanceSchema.shape.fetch,
- owner:ownership,
+ // Reason-bearing receipts use a numeric owner code to leave room under the JSONB cap.
+ owner:z.union([ownership,z.literal(0),z.literal(1)]),
  text:textState,
  t:z.number().int().min(0).max(TRANSFER_FRAMEWORK_COVERAGE_STATES.length-1).optional(),
-}).strict();
+ r:transferReasonMask.optional(),
+}).strict().refine(receipt=>receipt.r===undefined
+ ? typeof receipt.owner==='string'
+ : typeof receipt.owner==='number'&&receipt.t!==undefined&&
+   (receipt.r===0)===completedTransferCheck(TRANSFER_FRAMEWORK_COVERAGE_STATES[receipt.t]!));
 export const policyEvidenceObject=(x:any)=>x&&typeof x==='object'&&!Array.isArray(x)?x:{};
 const uint=(n:any)=>Number.isSafeInteger(n)&&n>0;
 const sourceReceipt=(m:any,key:string,metadataKey:string)=>{
@@ -108,13 +131,13 @@ function transferFrameworkCode(record:any){
   const document=policyEvidenceObject(documents[index]);
   return document.targetRelationship!=='target_controller'||!owned(document)||!completeText(document);
  }))return;
- const completed=check.status==='checked_no_signal'||check.status==='checked_review_signal';
+ const completed=completedTransferCheck(check.status);
  const hasSignal=check.status==='checked_review_signal'||check.status==='partial_review_signal';
  if(hasSignal!==(check.signalDocumentIndex!==null)||
     check.signalDocumentIndex!==null&&!indexes.has(check.signalDocumentIndex))return;
  if(completed&&(!indexes.size||indexes.size!==documents.length||projection.projectionStatus!=='verified_complete'))return;
  if(check.status==='not_assessed_no_eligible_text'&&indexes.size)return;
- return TRANSFER_FRAMEWORK_COVERAGE_STATES.indexOf(check.status);
+ return {t:TRANSFER_FRAMEWORK_COVERAGE_STATES.indexOf(check.status),...(check.reasonMask===undefined?{}:{r:check.reasonMask})};
 }
 
 export function buildAuditPolicyProvenance(record:any,generation:string,sourceHash:string){
@@ -130,7 +153,8 @@ export function buildAuditPolicyProvenance(record:any,generation:string,sourceHa
  if(events.length!==1)return undefined;
  const policy=policyProvenanceFromRecord(record,events[0]);
  if(!policy)return undefined;
- const t=transferFrameworkCode(record);
+ const transfer=transferFrameworkCode(record);
+ const owner=transfer?.r===undefined?policy.owner:policy.owner==='producer_declared_usable'?1:0;
  return auditPolicyProvenanceSchema.parse({version:AUDIT_POLICY_PROVENANCE_VERSION,binding:binding.data,
-   bundle:policy.sourceSha256,fetch:policy.fetch,owner:policy.owner,text:policy.text,...(t===undefined?{}:{t})});
+   bundle:policy.sourceSha256,fetch:policy.fetch,owner,text:policy.text,...transfer});
 }
