@@ -3458,6 +3458,26 @@ export function summarizePolicySurfaces(
     const matcherLanguageSupported = policyTextExtractionHealth.detectedPolicyLanguageSource === "policy_surface" &&
       (policyTextExtractionHealth.detectedPolicyLanguage === "en" || policyTextExtractionHealth.detectedPolicyLanguage === "de");
     let reasonMask = policyCoverageReasons;
+    // The transfer matcher reads the verified full text. A bound on the
+    // separately retained section excerpts does not limit that input.
+    if ((reasonMask & reason.document_content_scope_incomplete) !== 0 &&
+      completeOwnedPolicyDocuments.every(document => {
+        if (document.contentCoverage?.status === "complete") return true;
+        const coverage = document.contentCoverage;
+        const text = document.documentTextCoverage;
+        return coverage?.status === "truncated" &&
+          (document.documentFormat === "html" || document.documentFormat === "text") &&
+          text.status === "complete" &&
+          text.limitationKeys.length === 0 &&
+          text.sourceTextChars === document.retainedTextChars &&
+          text.retainedTextChars === document.retainedTextChars &&
+          coverage.sourceTextChars === document.retainedTextChars &&
+          coverage.limitationKeys.some(key => key === "policy_section_inventory_bounded" || key === "policy_section_text_bounded") &&
+          coverage.limitationKeys.every(key => key === "policy_section_inventory_bounded" ||
+            key === "policy_section_text_bounded" || key === "limited_policy_sections_retained");
+      })) {
+      reasonMask &= ~reason.document_content_scope_incomplete;
+    }
     if (!matcherLanguageSupported) reasonMask |= reason.policy_language_unsupported_or_unverified;
     if (checks.length !== policyTextEvidenceProjection.documents.length) reasonMask |= reason.projected_document_not_checked;
     if (hitMatcherLimit) reasonMask |= reason.matcher_limit;

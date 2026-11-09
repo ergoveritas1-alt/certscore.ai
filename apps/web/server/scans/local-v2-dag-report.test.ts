@@ -4598,7 +4598,7 @@ test("transfer framework check records verified completion and signals independe
     "We process personal information to provide services under contract and legitimate interests.",
   ].join(" ").repeat(30);
   const date = "2026-10-03T00:00:00.000Z";
-  const run = (textExcerpt: string, policyEvidenceLaneStatus: "complete" | "degraded" = "complete") =>
+  const run = (textExcerpt: string, policyEvidenceLaneStatus: "complete" | "degraded" = "complete", sectionLimits?: string[]) =>
     summarizePolicySurfaces(dedupePolicySurfaces([{
       observationId: "transfer-policy",
       surfaceType: "privacy_policy",
@@ -4606,6 +4606,12 @@ test("transfer framework check records verified completion and signals independe
       status: "fetched",
       documentRole: "policy_document",
       textExcerpt,
+      ...(sectionLimits ? {
+        documentFormat: "html",
+        documentTextCoverage: { status: "complete", sourceTextChars: textExcerpt.length, retainedTextChars: textExcerpt.length, limitationKeys: [] },
+        contentCoverage: { status: "truncated", sourceTextChars: textExcerpt.length, extractedSectionCount: 2, retainedSectionCount: 1,
+          retainedTableRowCount: 0, limitationKeys: sectionLimits },
+      } : {}),
     }] as never, "example.test"), "example.test", { scanStartedAt: date, policyEvidenceLaneStatus, primaryLanguage: "en" });
   const clear = run(policy);
   assert.deepEqual(clear.transferFrameworkAssessment, {
@@ -4629,6 +4635,11 @@ test("transfer framework check records verified completion and signals independe
   const inconclusive = run(policy, "degraded").transferFrameworkAssessment;
   assert.equal(inconclusive?.status, "inconclusive_policy_coverage");
   assert.equal(inconclusive?.reasonMask, TRANSFER_FRAMEWORK_REASON.policy_evidence_lane_degraded);
+  const excerptsBounded = run(policy, "complete", ["policy_section_inventory_bounded"]);
+  assert.equal(excerptsBounded.transferFrameworkAssessment?.status, "checked_no_signal");
+  assert.ok(excerptsBounded.article13CoverageAssessments.every(assessment => assessment.coverageStatus === "insufficient"));
+  const sourceBounded = run(policy, "complete", ["policy_section_inventory_bounded", "policy_source_text_reached_retention_limit"]);
+  assert.equal(sourceBounded.transferFrameworkAssessment?.reasonMask, TRANSFER_FRAMEWORK_REASON.document_content_scope_incomplete);
 });
 
 test("summarizePolicySurfaces keeps missing typed topic coverage unknown instead of inferring absence", async () => {
