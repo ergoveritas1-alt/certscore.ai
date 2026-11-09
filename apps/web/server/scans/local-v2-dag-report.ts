@@ -14,7 +14,7 @@ import { decodeBoundedPolicyText } from "./policy-text-decoding";
 import { postAcceptEvidencePacketSchema } from "@certscore/contracts";
 import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-projection";
 import { checkOutdatedTransferDisclosure, OUTDATED_TRANSFER_DISCLOSURE_POLICY } from "../../lib/scans/outdated-transfer-disclosure-policy";
-import { TRANSFER_FRAMEWORK_REASON, type TransferFrameworkAssessment } from "../../../../packages/certscore-contracts/src/audit-policy-provenance";
+import { POLICY_SUPPLEMENT_DISPOSITION, TRANSFER_FRAMEWORK_REASON, type TransferFrameworkAssessment } from "../../../../packages/certscore-contracts/src/audit-policy-provenance";
 import { projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
 import { projectCaliforniaPrivacyReview } from "./california-privacy-review-projection";
 import { projectOptOutLaneOutcome } from "./opt-out-lane-projection";
@@ -3432,6 +3432,20 @@ export function summarizePolicySurfaces(
   ].slice(0, 20);
   let transferFrameworkAssessment: TransferFrameworkAssessment | undefined;
   if (policyTextEvidenceProjection.sourceBundle.verificationStatus === "verified") {
+    const supplementMask = unresolvedMaterialPolicyChildren.reduce((mask, surface) => {
+      const disposition = POLICY_SUPPLEMENT_DISPOSITION;
+      const fetch = surface.documentFetchState ?? surface.status;
+      if (fetch === "skipped_budget") return mask | disposition.skipped_budget;
+      if (fetch === "failed") return mask | disposition.fetch_failed;
+      if (fetch === "fetched") {
+        const coverage = surface.documentTextCoverage?.status;
+        return mask | (coverage && coverage !== "complete"
+          ? disposition.fetched_incomplete_text
+          : disposition.fetched_without_eligible_match);
+      }
+      if (surface.selectionReasonCodes?.includes("not_selected_for_bounded_fetch")) return mask | disposition.not_selected;
+      return mask | disposition.disposition_unknown;
+    }, 0);
     const checks = [...checkedTransferDocuments.entries()];
     const signalDocumentIndex = checks.find(([, check]) => check.signal)?.[0] ?? null;
     const hitMatcherLimit = checks.some(([, check]) => !check.complete);
@@ -3455,6 +3469,7 @@ export function summarizePolicySurfaces(
       checkedDocumentIndexes: checks.map(([index]) => index),
       signalDocumentIndex,
       reasonMask,
+      ...(supplementMask ? { supplementMask } : {}),
     };
   }
   const retainedArticle13SectionEvidence = dedupePolicyDisclosureRows(article13Surfaces.flatMap((row) =>

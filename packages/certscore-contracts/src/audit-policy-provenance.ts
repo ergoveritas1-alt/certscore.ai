@@ -36,6 +36,18 @@ export const TRANSFER_FRAMEWORK_REASON={
  matcher_limit:1<<10,
 } as const;
 const transferReasonMask=z.number().int().min(0).max((1<<Object.keys(TRANSFER_FRAMEWORK_REASON).length)-1);
+// Append only. Each bit represents at least one unresolved child.
+export const POLICY_SUPPLEMENT_DISPOSITION={
+ not_selected:1<<0,
+ skipped_budget:1<<1,
+ fetch_failed:1<<2,
+ fetched_incomplete_text:1<<3,
+ fetched_without_eligible_match:1<<4,
+ disposition_unknown:1<<5,
+} as const;
+const supplementMask=z.number().int().min(1).max((1<<Object.keys(POLICY_SUPPLEMENT_DISPOSITION).length)-1);
+const supplementBound=(reason:number|undefined,disposition:number|undefined)=>disposition===undefined||
+ (reason!==undefined&&(reason&TRANSFER_FRAMEWORK_REASON.unresolved_material_policy_supplements)!==0);
 const completedTransferCheck=(status:string)=>status==='checked_no_signal'||status==='checked_review_signal';
 export const transferFrameworkAssessmentSchema=z.object({
  version:z.literal('certscore.transfer-framework-assessment.v1'),
@@ -46,7 +58,9 @@ export const transferFrameworkAssessmentSchema=z.object({
  checkedDocumentIndexes:z.array(z.number().int().min(0).max(15)).max(16),
  signalDocumentIndex:z.number().int().min(0).max(15).nullable(),
  reasonMask:transferReasonMask.optional(),
-}).strict().refine(check=>check.reasonMask===undefined||(check.reasonMask===0)===completedTransferCheck(check.status));
+ supplementMask:supplementMask.optional(),
+}).strict().refine(check=>supplementBound(check.reasonMask,check.supplementMask)&&
+ (check.reasonMask===undefined||(check.reasonMask===0)===completedTransferCheck(check.status)));
 export type TransferFrameworkAssessment=z.infer<typeof transferFrameworkAssessmentSchema>;
 export const legacyPolicyProvenanceSchema=z.object({scanId:z.string(),sourceSha256:hash,originalSha256:hash,
   fetch:z.enum(['fetched','recorded_fetch_failure','recorded_budget_skip','no_attempt_in_returned_candidates']).nullable(),
@@ -65,7 +79,8 @@ export const auditPolicyProvenanceSchema=z.object({
  text:textState,
  t:z.number().int().min(0).max(TRANSFER_FRAMEWORK_COVERAGE_STATES.length-1).optional(),
  r:transferReasonMask.optional(),
-}).strict().refine(receipt=>receipt.r===undefined
+ s:supplementMask.optional(),
+}).strict().refine(receipt=>supplementBound(receipt.r,receipt.s)).refine(receipt=>receipt.r===undefined
  ? typeof receipt.owner==='string'
  : typeof receipt.owner==='number'&&receipt.t!==undefined&&
    (receipt.r===0)===completedTransferCheck(TRANSFER_FRAMEWORK_COVERAGE_STATES[receipt.t]!));
@@ -137,7 +152,9 @@ function transferFrameworkCode(record:any){
     check.signalDocumentIndex!==null&&!indexes.has(check.signalDocumentIndex))return;
  if(completed&&(!indexes.size||indexes.size!==documents.length||projection.projectionStatus!=='verified_complete'))return;
  if(check.status==='not_assessed_no_eligible_text'&&indexes.size)return;
- return {t:TRANSFER_FRAMEWORK_COVERAGE_STATES.indexOf(check.status),...(check.reasonMask===undefined?{}:{r:check.reasonMask})};
+ return {t:TRANSFER_FRAMEWORK_COVERAGE_STATES.indexOf(check.status),
+  ...(check.reasonMask===undefined?{}:{r:check.reasonMask}),
+  ...(check.supplementMask===undefined?{}:{s:check.supplementMask})};
 }
 
 export function buildAuditPolicyProvenance(record:any,generation:string,sourceHash:string){

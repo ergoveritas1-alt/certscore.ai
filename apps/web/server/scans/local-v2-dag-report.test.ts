@@ -4527,6 +4527,8 @@ test("summarizePolicySurfaces keeps absence coverage insufficient while a materi
     discoveredPolicySurfaces: [unresolvedSupplement],
     primaryLanguage: "en",
   });
+  const { POLICY_SUPPLEMENT_DISPOSITION } = await import("../../../../packages/certscore-contracts/src/audit-policy-provenance");
+  assert.equal(summary.transferFrameworkAssessment?.supplementMask, POLICY_SUPPLEMENT_DISPOSITION.skipped_budget);
   const retention = (summary.article13CoverageAssessments as Array<Record<string, unknown>>)
     .find((assessment) => assessment.topic === "data_retention");
 
