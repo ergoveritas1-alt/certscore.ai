@@ -12,11 +12,12 @@ function currentGuidance(text: string) {
     /\b(?:wir|unser\w* (?:anbieter|dienstleister)).{0,120}\b(?:stützen|nutzen|verlassen|ist zertifiziert|sind zertifiziert|übermitteln)\b.{0,120}privacy[\s–—-]+shield\b/iu.test(text) ||
     /privacy[\s–—-]+shield.{0,120}\b(?:ombudsmann|ombudsman|ombudsperson)\b.{0,100}\b(?:hat|kann|ist|has|can|is)\b/iu.test(text);
 }
+const sourceUrlSchema = z.string().url().max(2000);
 const assessmentSchema = z.object({
   policyVersion: z.literal(OUTDATED_TRANSFER_DISCLOSURE_POLICY),
   canonicalId: z.literal('eu_us_privacy_shield'),
   sourceDocumentSha256: z.string().regex(/^[a-f0-9]{64}$/),
-  sourceUrl: z.string().url().max(2000),
+  sourceUrl: sourceUrlSchema,
   scanDate: z.string().datetime(),
   evidenceText: z.string().min(35).max(1200),
   assessment: z.literal('obsolete_current_guidance'),
@@ -27,11 +28,25 @@ export function readOutdatedTransferDisclosureAssessment(value: unknown) {
   const parsed = assessmentSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
-/** WC01 interpretation, invoked only with a verified target-owned retained policy document. */
-export function assessOutdatedTransferDisclosure(input: { text: string; sourceDocumentSha256: string; sourceUrl: string; scanDate?: string | Date | null }) {
-  if (!input.scanDate || !Number.isFinite(new Date(input.scanDate).getTime())) return null;
-  const text = input.text.slice(0,100_000).replace(/\s+/gu,' ');
-  for (const match of Array.from(text.matchAll(/privacy[\s–—-]+shield/giu)).slice(0,32)) {
+type MatcherInput = { text: string; sourceDocumentSha256: string; sourceUrl: string; scanDate?: string | Date | null };
+
+/** Report matcher coverage alongside the existing positive assessment. */
+export function checkOutdatedTransferDisclosure(input: MatcherInput) {
+  if (!input.scanDate || !Number.isFinite(new Date(input.scanDate).getTime())) {
+    return { assessment: null, ran: false, complete: false };
+  }
+  const sourceBound = input.text.length > 0 && /^[a-f0-9]{64}$/.test(input.sourceDocumentSha256) &&
+    /^https?:\/\//.test(input.sourceUrl) && sourceUrlSchema.safeParse(input.sourceUrl).success;
+  const textLimit = 100_000;
+  const matchLimit = 32;
+  const text = input.text.slice(0,textLimit).replace(/\s+/gu,' ');
+  const matches = [];
+  for (const match of text.matchAll(/privacy[\s–—-]+shield/giu)) {
+    matches.push(match);
+    if (matches.length > matchLimit) break;
+  }
+  const complete = sourceBound && input.text.length <= textLimit && matches.length <= matchLimit;
+  for (const match of matches.slice(0,matchLimit)) {
     const start = Math.max(0, match.index! - 400);
     const evidenceText = text.slice(start, start + 1200).trim();
     const assessment = readOutdatedTransferDisclosureAssessment({
@@ -39,7 +54,12 @@ export function assessOutdatedTransferDisclosure(input: { text: string; sourceDo
       sourceDocumentSha256:input.sourceDocumentSha256, sourceUrl:input.sourceUrl,
       scanDate:new Date(input.scanDate).toISOString(), evidenceText, assessment:'obsolete_current_guidance',
     });
-    if (assessment) return assessment;
+    if (assessment) return { assessment, ran: sourceBound, complete };
   }
-  return null;
+  return { assessment: null, ran: sourceBound, complete };
+}
+
+/** WC01 interpretation, invoked only with a verified target-owned retained policy document. */
+export function assessOutdatedTransferDisclosure(input: MatcherInput) {
+  return checkOutdatedTransferDisclosure(input).assessment;
 }

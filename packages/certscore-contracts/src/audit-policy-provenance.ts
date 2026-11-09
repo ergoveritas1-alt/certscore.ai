@@ -14,6 +14,22 @@ const documentFields=z.object({documentFetchState:fetchState,
 });
 const textState=z.enum(['producer_verified_complete_receipt','producer_verified_limited_receipt','no_verified_receipt_in_projection']);
 const ownership=z.enum(['producer_declared_usable','no_qualifying_candidate_in_projection']);
+// Numeric receipt codes preserve the original 512-byte SQL transport cap.
+// Keep this order stable. The audit labels these states separately from findings.
+export const TRANSFER_FRAMEWORK_COVERAGE_STATES=[
+ 'checked_no_signal','checked_review_signal','partial_review_signal',
+ 'inconclusive_policy_coverage','inconclusive_matcher_limit','not_assessed_no_eligible_text',
+] as const;
+export const transferFrameworkAssessmentSchema=z.object({
+ version:z.literal('certscore.transfer-framework-assessment.v1'),
+ matcher:z.literal('outdated_transfer_disclosure.v1'),
+ status:z.enum(TRANSFER_FRAMEWORK_COVERAGE_STATES),
+ // Indexes bind to the immutable policyTextEvidenceProjection.documents array,
+ // which already contains the verified original and normalized text hashes.
+ checkedDocumentIndexes:z.array(z.number().int().min(0).max(15)).max(16),
+ signalDocumentIndex:z.number().int().min(0).max(15).nullable(),
+}).strict();
+export type TransferFrameworkAssessment=z.infer<typeof transferFrameworkAssessmentSchema>;
 export const legacyPolicyProvenanceSchema=z.object({scanId:z.string(),sourceSha256:hash,originalSha256:hash,
   fetch:z.enum(['fetched','recorded_fetch_failure','recorded_budget_skip','no_attempt_in_returned_candidates']).nullable(),
   owner:ownership,text:textState}).strict();
@@ -28,6 +44,7 @@ export const auditPolicyProvenanceSchema=z.object({
  fetch:legacyPolicyProvenanceSchema.shape.fetch,
  owner:ownership,
  text:textState,
+ t:z.number().int().min(0).max(TRANSFER_FRAMEWORK_COVERAGE_STATES.length-1).optional(),
 }).strict();
 export const policyEvidenceObject=(x:any)=>x&&typeof x==='object'&&!Array.isArray(x)?x:{};
 const uint=(n:any)=>Number.isSafeInteger(n)&&n>0;
@@ -79,6 +96,27 @@ export function policyProvenanceFromRecord(record:any,event:unknown){
  return policy;
 }
 
+function transferFrameworkCode(record:any){
+ const summary=policyEvidenceObject(record.runtimeArtifacts?.policy_disclosure_summary??record.runtimeArtifacts?.policyDisclosureSummary);
+ const check=transferFrameworkAssessmentSchema.safeParse(summary.transferFrameworkAssessment).data;
+ if(!check)return;
+ const projection=policyEvidenceObject(summary.policyTextEvidenceProjection);
+ const documents=projection.documents;
+ if(!Array.isArray(documents))return;
+ const indexes=new Set(check.checkedDocumentIndexes);
+ if(indexes.size!==check.checkedDocumentIndexes.length||[...indexes].some(index=>{
+  const document=policyEvidenceObject(documents[index]);
+  return document.targetRelationship!=='target_controller'||!owned(document)||!completeText(document);
+ }))return;
+ const completed=check.status==='checked_no_signal'||check.status==='checked_review_signal';
+ const hasSignal=check.status==='checked_review_signal'||check.status==='partial_review_signal';
+ if(hasSignal!==(check.signalDocumentIndex!==null)||
+    check.signalDocumentIndex!==null&&!indexes.has(check.signalDocumentIndex))return;
+ if(completed&&(!indexes.size||indexes.size!==documents.length||projection.projectionStatus!=='verified_complete'))return;
+ if(check.status==='not_assessed_no_eligible_text'&&indexes.size)return;
+ return TRANSFER_FRAMEWORK_COVERAGE_STATES.indexOf(check.status);
+}
+
 export function buildAuditPolicyProvenance(record:any,generation:string,sourceHash:string){
  const scan=policyEvidenceObject(record.scan);
  if(!['completed','completed_limited'].includes(scan.status)||
@@ -92,6 +130,7 @@ export function buildAuditPolicyProvenance(record:any,generation:string,sourceHa
  if(events.length!==1)return undefined;
  const policy=policyProvenanceFromRecord(record,events[0]);
  if(!policy)return undefined;
+ const t=transferFrameworkCode(record);
  return auditPolicyProvenanceSchema.parse({version:AUDIT_POLICY_PROVENANCE_VERSION,binding:binding.data,
-   bundle:policy.sourceSha256,fetch:policy.fetch,owner:policy.owner,text:policy.text});
+   bundle:policy.sourceSha256,fetch:policy.fetch,owner:policy.owner,text:policy.text,...(t===undefined?{}:{t})});
 }

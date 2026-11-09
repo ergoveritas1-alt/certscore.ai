@@ -4589,6 +4589,40 @@ test("summarizePolicySurfaces permits absence coverage for a verified substantiv
   );
 });
 
+test("transfer framework check records verified completion and signals independently", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const policy = [
+    "Privacy Notice. Example Test is the controller for personal information.",
+    "We process personal information to provide services under contract and legitimate interests.",
+  ].join(" ").repeat(30);
+  const date = "2026-10-03T00:00:00.000Z";
+  const run = (textExcerpt: string, policyEvidenceLaneStatus: "complete" | "degraded" = "complete") =>
+    summarizePolicySurfaces(dedupePolicySurfaces([{
+      observationId: "transfer-policy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy",
+      status: "fetched",
+      documentRole: "policy_document",
+      textExcerpt,
+    }] as never, "example.test"), "example.test", { scanStartedAt: date, policyEvidenceLaneStatus, primaryLanguage: "en" });
+  const clear = run(policy);
+  assert.deepEqual(clear.transferFrameworkAssessment, {
+    version: "certscore.transfer-framework-assessment.v1",
+    matcher: "outdated_transfer_disclosure.v1",
+    status: "checked_no_signal",
+    checkedDocumentIndexes: [0],
+    signalDocumentIndex: null,
+  });
+  assert.equal(clear.staleLegalFrameworkReferenceObserved, false);
+  const current = "Our service provider is certified under the EU-US Privacy Shield. We use this framework for transfers. ";
+  const positive = run(current + policy);
+  assert.equal(positive.transferFrameworkAssessment?.status, "checked_review_signal");
+  assert.equal(positive.transferFrameworkAssessment?.signalDocumentIndex, 0);
+  assert.equal(positive.legalFrameworkValidityMatches[0]?.outdatedTransferDisclosureAssessment?.assessment, "obsolete_current_guidance");
+  assert.equal(run(current + policy, "degraded").transferFrameworkAssessment?.status, "partial_review_signal");
+  assert.equal(run(policy, "degraded").transferFrameworkAssessment?.status, "inconclusive_policy_coverage");
+});
+
 test("summarizePolicySurfaces keeps missing typed topic coverage unknown instead of inferring absence", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const policyText = [

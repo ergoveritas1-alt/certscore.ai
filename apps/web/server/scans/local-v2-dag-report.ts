@@ -13,7 +13,8 @@ import { createVerifiedPolicyTextCache } from "./verified-policy-text-cache";
 import { decodeBoundedPolicyText } from "./policy-text-decoding";
 import { postAcceptEvidencePacketSchema } from "@certscore/contracts";
 import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-projection";
-import { assessOutdatedTransferDisclosure } from "../../lib/scans/outdated-transfer-disclosure-policy";
+import { checkOutdatedTransferDisclosure, OUTDATED_TRANSFER_DISCLOSURE_POLICY } from "../../lib/scans/outdated-transfer-disclosure-policy";
+import type { TransferFrameworkAssessment } from "../../../../packages/certscore-contracts/src/audit-policy-provenance";
 import { projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
 import { projectCaliforniaPrivacyReview } from "./california-privacy-review-projection";
 import { projectOptOutLaneOutcome } from "./opt-out-lane-projection";
@@ -3368,6 +3369,7 @@ export function summarizePolicySurfaces(
       textExcerpt: section.textExcerpt,
     }))
   ).slice(0, 80);
+  const checkedTransferDocuments = new Map<number, {complete: boolean; signal: boolean}>();
   const legalFrameworkValidityMatches = [
     ...new Map(
       article13Surfaces.flatMap((row) => {
@@ -3379,11 +3381,25 @@ export function summarizePolicySurfaces(
           options.policyTextEvidenceContext?.sourceBundle.verificationStatus === "verified" &&
           verifiedPolicyText && typeof retainedPolicyText.sha256 === "string" && /^[a-f0-9]{64}$/.test(retainedPolicyText.sha256) &&
           row.surface.documentTextCoverage?.status === "complete" && row.surface.targetRelationship === "target_controller";
-        const outdatedTransferDisclosureAssessment = verifiedForAssessment ? assessOutdatedTransferDisclosure({
+        const transferCheck = verifiedForAssessment ? checkOutdatedTransferDisclosure({
           // The loader verified original bytes; its text may be whitespace-normalized.
           text: verifiedPolicyText, sourceDocumentSha256: retainedPolicyText!.sha256!,
           sourceUrl, scanDate: options.scanStartedAt,
         }) : null;
+        const outdatedTransferDisclosureAssessment = transferCheck?.assessment ?? null;
+        if (transferCheck?.ran) {
+          const index = policyTextEvidenceProjection.documents.findIndex((document) =>
+            document.observationId === row.surface.observationId &&
+            document.artifactSha256 === retainedPolicyText?.sha256 &&
+            document.extractionStatus === "complete" && document.documentRole === "policy_document" &&
+            document.targetRelationship === "target_controller"
+          );
+          if (index >= 0) {
+            checkedTransferDocuments.set(index, {
+              complete: transferCheck.complete, signal: outdatedTransferDisclosureAssessment !== null,
+            });
+          }
+        }
         const policyTexts = uniqueStrings([
           verifiedPolicyText,
           firstString(row.surface.textExcerpt),
@@ -3413,6 +3429,29 @@ export function summarizePolicySurfaces(
       ])
     ).values(),
   ].slice(0, 20);
+  let transferFrameworkAssessment: TransferFrameworkAssessment | undefined;
+  if (policyTextEvidenceProjection.sourceBundle.verificationStatus === "verified") {
+    const checks = [...checkedTransferDocuments.entries()];
+    const signalDocumentIndex = checks.find(([, check]) => check.signal)?.[0] ?? null;
+    const hitMatcherLimit = checks.some(([, check]) => !check.complete);
+    const matcherLanguageSupported = policyTextExtractionHealth.detectedPolicyLanguageSource === "policy_surface" &&
+      (policyTextExtractionHealth.detectedPolicyLanguage === "en" || policyTextExtractionHealth.detectedPolicyLanguage === "de");
+    const completed = absenceCoverageBaseSufficient && matcherLanguageSupported &&
+      checks.length === policyTextEvidenceProjection.documents.length && !hitMatcherLimit;
+    let status: TransferFrameworkAssessment["status"];
+    if (completed) status = signalDocumentIndex === null ? "checked_no_signal" : "checked_review_signal";
+    else if (signalDocumentIndex !== null) status = "partial_review_signal";
+    else if (hitMatcherLimit) status = "inconclusive_matcher_limit";
+    else if (policyTextEvidenceProjection.documents.some(document => document.retainedTextChars > 0)) status = "inconclusive_policy_coverage";
+    else status = "not_assessed_no_eligible_text";
+    transferFrameworkAssessment = {
+      version: "certscore.transfer-framework-assessment.v1",
+      matcher: OUTDATED_TRANSFER_DISCLOSURE_POLICY,
+      status,
+      checkedDocumentIndexes: checks.map(([index]) => index),
+      signalDocumentIndex,
+    };
+  }
   const retainedArticle13SectionEvidence = dedupePolicyDisclosureRows(article13Surfaces.flatMap((row) =>
     (row.surface.retainedArticle13SectionEvidence ?? []).map((evidence) => ({
       coverageArea: evidence.coverageArea,
@@ -3535,6 +3574,7 @@ export function summarizePolicySurfaces(
       .map((signal) => signal.disclosureType)),
     discardedArticle13DisclosureSignals,
     legalFrameworkValidityMatches,
+    transferFrameworkAssessment,
     staleLegalFrameworkReferenceObserved:
       hasStaleLegalFrameworkReference(legalFrameworkValidityMatches),
     gdprTransparencyEvidenceProfile,

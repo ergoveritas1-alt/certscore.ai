@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assessOutdatedTransferDisclosure, readOutdatedTransferDisclosureAssessment } from './outdated-transfer-disclosure-policy';
+import { assessOutdatedTransferDisclosure, checkOutdatedTransferDisclosure, readOutdatedTransferDisclosureAssessment } from './outdated-transfer-disclosure-policy';
 import { buildNormalizedConcerns } from './normalized-concerns';
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from './gdpr-eprivacy-coverage-policy';
 import { deriveRegulatoryCoverageScore, getGdprEprivacyRowDeduction } from './regulatory-coverage-score';
@@ -27,7 +27,9 @@ test('verified guidance follows concern policy and deducts three points once',()
  assert.equal(getGdprEprivacyRowDeduction(bare),0);
  assert.equal(score([row,row,row]),97);
  assert.equal(score(mergeSiteChecklistRows([row],[row,row])),97);
- assert.equal(score([row,{id:'privacy_notice_availability',assessmentStatus:'gap_observed',evidenceState:'observed',status:'Gap observed'}]),88);
+ const noticeGap = {id:'privacy_notice_availability',assessmentStatus:'gap_observed',evidenceState:'observed',status:'Gap observed'};
+ assert.equal(score([noticeGap]),91);
+ assert.equal(score([row,noticeGap]),score([noticeGap]));
  assert.equal(deriveCanonicalOverallScoreForReport({scanRecord:{} as any,checklistRows:[row],unifiedFindings:[]}),97);
 });
 test('historical, corrected, uncertain, legacy, and unbound evidence cannot deduct',()=>{
@@ -40,6 +42,17 @@ test('historical, corrected, uncertain, legacy, and unbound evidence cannot dedu
  assert.equal(getGdprEprivacyRowDeduction(project(positive,null)),0);
  assert.equal(getGdprEprivacyRowDeduction(project('Different unbound policy passage',assessOutdatedTransferDisclosure(input))),0);
  assert.equal(readOutdatedTransferDisclosureAssessment({...assessOutdatedTransferDisclosure(input),sourceDocumentSha256:'bad'}),null);
+});
+test('a negative matcher result only establishes coverage within the supported bounds',()=>{
+ const clear={...input,text:'We explain our transfer safeguards in this privacy notice.'};
+ assert.deepEqual(checkOutdatedTransferDisclosure(clear),{assessment:null,ran:true,complete:true});
+ assert.equal(checkOutdatedTransferDisclosure({...clear,scanDate:null}).ran,false);
+ assert.equal(checkOutdatedTransferDisclosure({...clear,sourceDocumentSha256:'unbound'}).complete,false);
+ assert.equal(checkOutdatedTransferDisclosure({...clear,text:'word '.repeat(20_001)}).complete,false);
+ assert.equal(checkOutdatedTransferDisclosure({...clear,text:'Formerly Privacy Shield. '.repeat(33)}).complete,false);
+ const positiveBeyondScope={...input,text:positive+' '+ 'word '.repeat(20_001)};
+ assert.ok(checkOutdatedTransferDisclosure(positiveBeyondScope).assessment);
+ assert.equal(checkOutdatedTransferDisclosure(positiveBeyondScope).complete,false);
 });
 test('current German ombudsman guidance qualifies without claiming a transfer violation',()=>{
  const text='Bei der Übermittlung Ihrer personenbezogenen Daten in die USA beachten Sie: Der im Privacy Shield vorgesehene Ombudsmann hat keine genügende Unabhängigkeit; er kann keine bindenden Anordnungen treffen.';
