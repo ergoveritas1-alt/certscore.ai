@@ -11484,7 +11484,7 @@ function deriveAccessibilityConsentControlsOutcome(input: GdprEprivacyCoveragePo
     );
   }
 
-  if(assessment){
+  if(assessment && audit){
     const failed=assessment.controls.filter(c=>c.checks.some(([,state])=>state==="fail"));
     const review=assessment.controls.some(c=>c.checks.some(([,state])=>state==="review"));
     const status=failed.length?"Gap observed":review?"Review signal":assessment.status==="completed"?"Not observed":"Not testable";
@@ -11493,9 +11493,9 @@ function deriveAccessibilityConsentControlsOutcome(input: GdprEprivacyCoveragePo
       assessment.status==="completed"?"Applicable automated checks completed for the retained visible controls without a detected issue. This does not assess keyboard operation, closed shadow roots, unopened panels or assistive-technology usability.":
       "Control-specific automated coverage is incomplete: "+assessment.reasons.join(", ")+".",
       [audit.evidenceRef],{retainedEvidence:{controlAccessibilityAssessment:assessment,controlAccessibilityReceipt:controlAccessibilityReceipt(assessment),
-        controlAccessibilityIssueObserved:failed.length>0,controlScopeConfidence:"high",
-        cookieConsentAccessibilityIssueObserved:failed.some(c=>c.intent!=="privacy_opt_out"),
-        privacyChoiceAccessibilityIssueObserved:failed.some(c=>c.intent==="privacy_opt_out"),scoreEffect:"none"}});
+        controlAccessibilityIssueObserved:failed.length?true:assessment.status==="completed"?false:null,controlScopeConfidence:"high",
+        cookieConsentAccessibilityIssueObserved:failed.some(c=>c.intent!=="privacy_opt_out")?true:assessment.status==="completed"?false:null,
+        privacyChoiceAccessibilityIssueObserved:failed.some(c=>c.intent==="privacy_opt_out")?true:assessment.status==="completed"?false:null,scoreEffect:"none"}});
   }
   const controlFindings = audit?.contractVersion === "certscore.accessibility-audit-projection.v1"
     ? audit.observation.consentControlFindings : undefined;
