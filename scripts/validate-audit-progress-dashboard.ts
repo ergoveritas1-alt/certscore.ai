@@ -6,8 +6,10 @@ import {verifyChoiceEvidence} from './lib/audit-progress-choice-verification';
 /** Offline publication gate. Recomputes every aggregate and CSV from retained rows. */
 import assert from 'node:assert/strict';import {readFileSync,writeFileSync,realpathSync} from 'node:fs';import path from 'node:path';import {createHash} from 'node:crypto';
 import {progressEngine} from './lib/audit-progress-engine';import {makeContracts} from './lib/audit-progress-contracts';import {verifyProgressPins} from './lib/audit-progress-pins';
-import {applyRetainedReports} from './lib/audit-progress-retained-report';
-import {applyRetainedOptOutExtracts} from './lib/audit-progress-opt-out';
+import {applyRetainedReports,RETAINED_CLICK_ACTIVITY_KEYS} from './lib/audit-progress-retained-report';
+import {applyRetainedOptOutExtracts,TECHNICAL_COUNT_KEYS,TECHNICAL_COUNT_SOURCE,TECHNICAL_COUNT_REF} from './lib/audit-progress-opt-out';
+import {localDay} from './lib/audit-progress';
+import {TRACKING_REVIEW_KEYS,TRACKING_REVIEW_REF,TRACKING_REVIEW_SOURCE} from './lib/audit-progress-control-accessibility';
 const root=realpathSync(process.argv[2]!);const read=(p:string)=>JSON.parse(readFileSync(path.join(root,p),'utf8')),hash=(p:string)=>createHash('sha256').update(readFileSync(p)).digest('hex');
 const data=read('dashboard.json'),seal=read('dashboard-seal.json'),browser=read('browser-validation.json'),tests=JSON.parse(readFileSync(process.argv[3]!,'utf8'));
 assert.deepEqual(data.coverageMatrix,COVERAGE_MATRIX);for(const area of COVERAGE_MATRIX.areas)for(const item of area.items)for(const id of item.metricIds)assert.ok([...data.metrics,...data.quantities].some(m=>m.id===id),"Coverage item references missing measure: "+id);assert.deepEqual(data.coverageMap,COVERAGE_MAP);assert.deepEqual(data.toolSources,verifyProgressPins());assert.equal(data.errors.length,0);assert.equal(new Set(data.rows.map((r:any)=>r.scanId)).size,data.rows.length);
@@ -16,15 +18,42 @@ const previousFile=path.resolve(root,'../../../latest/dashboard.json');
 try {const previous=JSON.parse(readFileSync(previousFile,'utf8'));for(const m of previous.metrics)assert.ok(data.metrics.some((n:any)=>n.id===m.id||n.id==='sealed.'+m.id),`Prior metric lost: ${m.id}`);for(const q of previous.quantities)assert.ok(data.quantities.some((n:any)=>n.id===q.id),`Prior quantity lost: ${q.id}`);}catch(error:any){if(error.code!=='ENOENT')throw error;}
 const retainedProof=structuredClone(data.rows),recovery=applyRetainedReports(retainedProof,data.retainedReports??[]);assert.equal(recovery.matched,data.retainedReportCoverage?.matched??0,'Retained report cohort changed');for(let i=0;i<data.rows.length;i++){for(const m of data.metrics)assert.equal(retainedProof[i].states[m.id],data.rows[i].states[m.id],'Unapplied retained report metric '+m.id);assert.deepEqual(retainedProof[i].measurements,data.rows[i].measurements,'Unapplied original-artifact counts');}
 if(data.retainedReportCoverage?.inputCoverage){assert.deepEqual(recovery.inputCoverage,data.retainedReportCoverage.inputCoverage,'Retained input coverage changed');for(let i=0;i<data.rows.length;i++)assert.equal(retainedProof[i].retainedReportInput,data.rows[i].retainedReportInput,'Retained input disposition changed');}
+for(const [index,proof] of retainedProof.entries())for(const key of RETAINED_CLICK_ACTIVITY_KEYS){
+ const row=data.rows[index];
+ assert.equal(row.states[key],proof.states[key],'Retained click activity '+row.scanId);
+ assert.equal(row.metricSources?.[key],proof.metricSources?.[key],'Retained click activity source '+row.scanId);
+}
 const choiceEvidence=verifyChoiceEvidence(data);
 const masterValueParity=verifyMasterValueParity(data);assert.deepEqual(data.masterValueParity,masterValueParity);
 const actual=progressEngine().aggregate(data,data.rows);
 assert.ok(Array.isArray(data.optOutExtracts)&&data.optOutExtracts.length>0,'Missing retained opt-out inputs');
-const proofRows=structuredClone(data.rows);applyRetainedOptOutExtracts(proofRows,data.optOutExtracts);
+const proofRows=structuredClone(data.rows);
+const replayedRefs=new Set([TECHNICAL_COUNT_REF,TRACKING_REVIEW_REF]);
+for(let i=0;i<proofRows.length;i++){
+ delete proofRows[i].californiaRejectCoverage;
+ if(retainedProof[i].californiaRejectCoverage)proofRows[i].californiaRejectCoverage=retainedProof[i].californiaRejectCoverage;
+ proofRows[i].refs=proofRows[i].refs.filter((ref:any)=>!replayedRefs.has(ref.role));
+ for(const key of TECHNICAL_COUNT_KEYS)if(proofRows[i].metricSources?.[key]?.startsWith(TECHNICAL_COUNT_SOURCE)){
+  delete proofRows[i].measurements?.[key];
+  delete proofRows[i].metricSources[key];
+ }
+ for(const key of TRACKING_REVIEW_KEYS)if(proofRows[i].metricSources?.[key]?.startsWith(TRACKING_REVIEW_SOURCE)){
+  delete proofRows[i].states[key];
+  delete proofRows[i].metricSources[key];
+ }
+}
+applyRetainedOptOutExtracts(proofRows,data.optOutExtracts);
 // The builder consumes these temporary labels when constructing the canonical record
 // registry and omits them from the sealed rows. Keep every persisted row field in scope.
 for(const row of proofRows)delete row.retainedMetricLabels;
-assert.deepEqual(proofRows,data.rows,'Unapplied or conflicting retained control evidence');
+// Extract references can be replayed after other receipts have already been
+// attached. Compare membership without treating insertion order as provenance.
+for(const [i,row] of proofRows.entries()){
+ const references=(r:any)=>r.refs.filter((ref:any)=>replayedRefs.has(ref.role)).map((ref:any)=>JSON.stringify(ref)).sort();
+ assert.deepEqual(references(row),references(data.rows[i]),'Unverified compact audit receipt');
+}
+const withoutReplayedReferences=(rows:any[])=>rows.map(row=>({...row,refs:row.refs.filter((ref:any)=>!replayedRefs.has(ref.role))}));
+assert.deepEqual(withoutReplayedReferences(proofRows),withoutReplayedReferences(data.rows),'Unapplied or conflicting retained control evidence');
 assert.deepEqual(actual,data.days,'Stored daily aggregates differ from canonical audit engine');
 assert.equal(progressEngine().stateCsv(actual,auditStateCsvMetrics({...data,days:actual})),readFileSync(path.join(root,'daily-metrics.csv'),'utf8'));
 assert.equal(progressEngine().quantityCsv(actual,auditQuantityCsvMetrics(data)),readFileSync(path.join(root,'daily-volumes.csv'),'utf8'));
@@ -32,8 +61,24 @@ assert.equal(progressEngine().findingCsv(actual,data.findingIds),readFileSync(pa
 for(const d of actual){for(const v of Object.values(d.metrics) as any[]){assert.equal(Object.values(v.counts).reduce((a:any,b:any)=>a+b,0),v.denominator);assert.equal(Object.values(v.series).reduce((a:number,b:any)=>a+b.denominator,0),v.denominator);if(v.source==='mixed_sources'){assert.equal(v.rate,null);assert.equal(v.deltaPp,null);}}for(const v of Object.values(d.quantities) as any[]){assert.equal(v.measured+v.missing,v.eligible);if(v.source==='mixed_sources'){assert.equal(v.median,null);assert.equal(v.delta,null);}}}
 for(const r of data.rows){if(r.originProof==='production_id_selection_only'){assert.equal(r.reportable,false);assert.equal(r.findingInventory,false);assert.equal(r.states.evidence,'unavailable');}for(const [id,s] of Object.entries(r.metricSources??{}))if(!id.startsWith('sealed.')&&!/^(site|technology|graph|form)\./.test(id))assert.ok(!String(s).startsWith('sealed_assessment/'),'Incompatible public fallback');}
 const measureCatalog=buildAuditMeasureView(data);assert.equal(browser.checks.measureCatalog,true);assert.equal(browser.measureCatalogSha256,createHash('sha256').update(JSON.stringify(measureCatalog)).digest('hex'));
-assert.equal(browser.status,'passed');assert.equal(browser.htmlSha256,hash(path.join(root,'dashboard.html')));for(const k of ['desktop','mobile','filters','csvParity','chartTooltips','quantityTotals','optOutDispatch','coverageMap','coverageMatrix','evidenceCatalog','evidenceGapReview','taxonomyNormalization','masterCatalog','masterValueParity','reportFormats','p2Coverage','p2PersistedSources'])assert.equal(browser.checks[k],true);assert.equal(browser.externalRequests,0);
+assert.equal(browser.status,'passed');assert.equal(browser.htmlSha256,hash(path.join(root,'dashboard.html')));for(const k of ['desktop','mobile','filters','csvParity','chartTooltips','quantityTotals','optOutDispatch','optOutFunnel','coverageMap','coverageMatrix','evidenceCatalog','evidenceGapReview','taxonomyNormalization','masterCatalog','masterValueParity','reportFormats','p2Coverage','p2PersistedSources'])assert.equal(browser.checks[k],true);assert.equal(browser.externalRequests,0);
 assert.equal(tests.status,'passed');for(const r of tests.logs){assert.equal(hash(r.file),r.sha256);assert.equal(r.exitCode,0);}
 const snapshotHashes=Object.fromEntries(seal.files.map((r:any)=>{assert.equal(hash(r.file),r.sha256);return[path.basename(r.file),r.sha256];}));
-writeFileSync(path.join(root,'dashboard-validation.json'),JSON.stringify({version:'certscore.audit-dashboard-validation.v1',status:'passed',validatedAtUtc:new Date().toISOString(),choiceEvidence,masterValueParity:{status:masterValueParity.status,comparisons:masterValueParity.comparisons,mismatches:masterValueParity.mismatches},checks:{measureCatalog:true,p2PersistedSources:true,p2Coverage:true,reportFormats:true,masterValueParity:true,masterCatalog:true,taxonomyNormalization:true,evidenceGapReview:true,evidenceCatalog:true,coverageMatrix:true,coverageMap:true,choiceEvidence:true,optOutDispatch:true,contracts:true,aggregation:true,csvParity:true,sourceBoundaries:true,focusedTests:true,desktop:true,mobile:true,filters:true,chartTooltips:true,quantityTotals:true},snapshotHashes,browserReceipt:{file:path.join(root,'browser-validation.json'),sha256:hash(path.join(root,'browser-validation.json'))},testReceipt:{file:realpathSync(process.argv[3]!),sha256:hash(process.argv[3]!)},productionQueries:0,newScans:0},null,2)+'\n',{flag:'wx'});
+const latestDay=actual.at(-1)?.date;
+const technicalRows=proofRows.filter((row:any)=>row.reportable&&localDay(row.createdAt)===latestDay);
+const trackingReviews={date:latestDay,reportable:technicalRows.length,metrics:Object.fromEntries(TRACKING_REVIEW_KEYS.map(key=>{
+ const counts:Record<string,number>={};
+ for(const row of technicalRows){
+  const state=row.states[key]??'unavailable';
+  counts[state]=(counts[state]??0)+1;
+ }
+ return [key,{counts,compactSource:technicalRows.filter((row:any)=>row.metricSources?.[key]?.startsWith(TRACKING_REVIEW_SOURCE)).length}];
+}))};
+const technicalCounts={date:latestDay,reportable:technicalRows.length,metrics:Object.fromEntries(TECHNICAL_COUNT_KEYS.map(key=>{
+ const values:number[]=technicalRows.flatMap((row:any)=>row.measurements?.[key]===undefined?[]:[row.measurements[key]]);
+ return [key,{measured:values.length,positive:values.filter(n=>n>0).length,zero:values.filter(n=>n===0).length,
+  unavailable:technicalRows.length-values.length,total:values.length?values.reduce((sum,n)=>sum+n,0):null,
+  compactSource:technicalRows.filter((row:any)=>row.metricSources?.[key]?.startsWith(TECHNICAL_COUNT_SOURCE)).length}];
+}))};
+writeFileSync(path.join(root,'dashboard-validation.json'),JSON.stringify({version:'certscore.audit-dashboard-validation.v1',status:'passed',validatedAtUtc:new Date().toISOString(),choiceEvidence,technicalCounts,trackingReviews,masterValueParity:{status:masterValueParity.status,comparisons:masterValueParity.comparisons,mismatches:masterValueParity.mismatches},checks:{measureCatalog:true,p2PersistedSources:true,p2Coverage:true,reportFormats:true,masterValueParity:true,masterCatalog:true,taxonomyNormalization:true,evidenceGapReview:true,evidenceCatalog:true,coverageMatrix:true,coverageMap:true,choiceEvidence:true,optOutDispatch:true,optOutFunnel:true,contracts:true,aggregation:true,csvParity:true,sourceBoundaries:true,focusedTests:true,desktop:true,mobile:true,filters:true,chartTooltips:true,quantityTotals:true},snapshotHashes,browserReceipt:{file:path.join(root,'browser-validation.json'),sha256:hash(path.join(root,'browser-validation.json'))},testReceipt:{file:realpathSync(process.argv[3]!),sha256:hash(process.argv[3]!)},productionQueries:0,newScans:0},null,2)+'\n',{flag:'wx'});
 console.log(JSON.stringify({status:'passed',rows:data.rows.length,stateMetrics:data.metrics.length,quantities:data.quantities.length,findings:data.findingIds.length,days:data.days.length}));

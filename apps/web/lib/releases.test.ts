@@ -21,7 +21,7 @@ test("published releases include choice-path testing and MCP Light", () => {
   assert.ok(choicePathRelease);
   assert.equal(release.headline, "CertScore.ai MCP Light is now available");
   assert.equal(release.primaryCta.href, "/mcp/light");
-  assert.deepEqual(getPublishedReleases().map((item) => item.slug), ["privacy-policy-evidence", "session-replay-detection", "forms-capture", "mcp-hosted-oauth", "accept-and-reject-path-testing", "mcp-light"]);
+  assert.deepEqual(getPublishedReleases().map((item) => item.slug), ["one-in-three-websites-gpc-ad-services", "privacy-policy-evidence", "session-replay-detection", "forms-capture", "mcp-hosted-oauth", "accept-and-reject-path-testing", "mcp-light"]);
   assert.equal(getPublishedRelease("mcp-light-reject-path"), null);
 
   const copy = JSON.stringify(release);
@@ -45,6 +45,39 @@ test("published releases include choice-path testing and MCP Light", () => {
   assert.match(choicePathCopy, /California Attorney General CCPA guidance/);
   assert.doesNotMatch(choicePathCopy, /CertScore(?!\.ai)/);
   assert.doesNotMatch(choicePathRelease.headline, /GPC/i);
+});
+
+test("GPC announcement keeps the tested cohort, limits, image, timeline, and scan CTA together", () => {
+  const article = getPublishedRelease("one-in-three-websites-gpc-ad-services");
+  assert.ok(article);
+  const copy = JSON.stringify(article);
+  assert.match(article.headline, /1 in 3 Websites Tested/);
+  assert.equal(article.headlineTone, "quiet");
+  assert.match(copy, /337 of them—33\.7%/);
+  assert.match(copy, /1,000 websites scanned from California with GPC enabled/);
+  assert.match(copy, /November 1–8, 2026/);
+  assert.match(copy, /Disney agreed to \$2\.75 million in civil penalties/);
+  assert.match(copy, /Sephora agreed to \$1\.2 million/);
+  assert.match(copy, /CalPrivacy fined Tractor Supply \$1\.35 million/);
+  assert.ok(article.sections.find(section => section.id === "primary-sources")?.sourceLinks?.some(link => link.href === "https://oag.ca.gov/node/556528"));
+  assert.doesNotMatch(copy, /not a random sample/);
+  assert.match(copy, /A visit with no such activity leaves open whether the site recognized GPC/);
+  assert.doesNotMatch(article.heroImage?.caption ?? "", /The sample does not represent all websites/);
+  assert.doesNotMatch(copy, /doesn’t require the setting to be switched on/);
+  assert.match(copy, /Opt Me Out Act \(AB 566, Lowenthal\)/);
+  assert.ok(article.sections.find(section => section.id === "primary-sources")?.sourceLinks?.some(link => link.href === "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202520260AB566"));
+  assert.equal(article.sections.find(section => section.id === "browser-setting")?.image?.path, "/images/releases/gpc-2026/timeline-compact.png");
+  assert.equal(article.heroImage?.path, article.socialImage.path);
+  assert.equal(article.primaryCta.href, "/#homepage-scan");
+  assert.equal(article.resourceLinks?.[0]?.href, "/guides/test-global-privacy-control");
+  assert.equal(article.scanButtonLabel, "Scan Any Website Free");
+  const metadata = createReleaseMetadata(article);
+  assert.equal(metadata.title, "GPC Study: 1 in 3 Websites Contacted Ad Services");
+  assert.match(metadata.description ?? "", /Global Privacy Control \(GPC\)/);
+  assert.equal(metadata.alternates?.canonical, "https://certscore.ai/releases/one-in-three-websites-gpc-ad-services");
+  assert.equal((metadata.openGraph?.images as { url: string }[])[0]?.url, "https://certscore.ai/images/releases/gpc-2026/hero-toggle.png");
+  assert.ok(sitemap().some(entry => entry.url === metadata.alternates?.canonical));
+  assert.doesNotMatch(copy, /leaking through|one in three websites ignored GPC|proved.*violat/i);
 });
 
 test("the evergreen consent guide carries AEO answers without FAQPage schema", () => {

@@ -1,4 +1,5 @@
 import {auditQuantityCsvMetrics,auditStateCsvMetrics} from './lib/audit-measure-catalog';
+import snapshotLimits from './lib/audit-progress-snapshot-limits.json';
 import {verifyMasterValueParity} from './lib/audit-master-parity';
 import {COVERAGE_MATRIX} from "./lib/audit-progress-coverage-matrix";
 import {choiceMetricRegistry} from './lib/audit-progress-choice';
@@ -16,7 +17,7 @@ import {METRICS,PROGRESS_VERSION,summarizeDays,mergeVerifiedProgress,type Progre
 import {PUBLIC_CMP_CRITERIA,extractExportRow,exportIsTest} from "./lib/audit-progress-export";
 import {renderProgressDashboard} from "./lib/audit-progress-html";
 import {applyRetainedOptOutExtracts,OPT_OUT_INPUT_VERSION,type OptOutReceipt} from './lib/audit-progress-opt-out';
-import {applyRetainedReports} from './lib/audit-progress-retained-report';
+import {applyRetainedReports,RETAINED_CLICK_ACTIVITY_KEYS} from './lib/audit-progress-retained-report';
 import type {PrivacyFormInput} from './lib/audit-privacy-form-inputs';
 const sha=(v:Uint8Array|string)=>createHash("sha256").update(v).digest("hex");
 function load(file:string){if(statSync(file).size>80_000_000)throw Error("Input exceeds bound");return JSON.parse(readFileSync(file,"utf8"));}
@@ -112,7 +113,8 @@ export async function buildMonth(input:{runsFile:string;originsFile:string;cache
   const base=[...METRICS,...PUBLIC_CMP_CRITERIA,...evidenceMetricRegistry(selected),{id:"selection.status",label:"Production ID-only status (no detailed export)",group:"Publication & evidence",denominator:"Retained ID-only rows; completion status does not establish usable report or detailed evidence",success:[]}];
   const metrics=[...monthMetricRegistry(base,[...recent.metrics,...retainedEvidenceMetricRegistry(selected)]),...choiceMetricRegistry(selected)];
   const quantities=QUANTITIES;
-  const metricIds=new Set(metrics.map(m=>m.id));
+  // Retained post-click activity feeds the engine without a standalone metric.
+  const metricIds=new Set([...metrics.map(m=>m.id),...RETAINED_CLICK_ACTIVITY_KEYS]);
   for(const row of selected)for(const id of Object.keys(row.states))if(!metricIds.has(id)){delete row.states[id];delete row.metricSources?.[id];}
   for(const row of selected){
     // Retain unavailable public evidence in its eligible population, never backfill it.
@@ -143,15 +145,29 @@ export async function buildMonth(input:{runsFile:string;originsFile:string;cache
     "No scans, model calls, public target visits, production changes or historical report rewrites were performed. This view cannot independently close backlog issues."
   ]};
   data.masterValueParity=verifyMasterValueParity(data);
-  writeFileSync(path.join(input.out,"dashboard.json"),JSON.stringify(data)+"\n",{flag:"wx"});
-  writeFileSync(path.join(input.out,"dashboard.html"),renderProgressDashboard(data),{flag:"wx"});
+  const snapshot = {
+    "dashboard.json": JSON.stringify(data) + "\n",
+    "dashboard.html": renderProgressDashboard(data),
+  };
+  const snapshotBytes = {
+    "dashboard.json": Buffer.byteLength(snapshot["dashboard.json"]),
+    "dashboard.html": Buffer.byteLength(snapshot["dashboard.html"]),
+  };
+  for (const name of Object.keys(snapshot) as Array<keyof typeof snapshot>) {
+    if (snapshotBytes[name] > snapshotLimits[name]) {
+      throw Error(`${name} is ${snapshotBytes[name]} bytes and exceeds the ${snapshotLimits[name]}-byte local snapshot limit`);
+    }
+  }
+  for (const [name, content] of Object.entries(snapshot)) {
+    writeFileSync(path.join(input.out, name), content, {flag:"wx"});
+  }
   writeFileSync(path.join(input.out,"metric-contracts.json"),JSON.stringify(contracts,null,2)+"\n",{flag:"wx"});
   writeFileSync(path.join(input.out,"daily-metrics.csv"),progressEngine().stateCsv(days,auditStateCsvMetrics(data)),{flag:"wx"});
   writeFileSync(path.join(input.out,"daily-volumes.csv"),progressEngine().quantityCsv(days,auditQuantityCsvMetrics(data)),{flag:"wx"});
   writeFileSync(path.join(input.out,"daily-findings.csv"),progressEngine().findingCsv(days,findingIds),{flag:"wx"});
   writeFileSync(path.join(input.out,"exclusions.json"),JSON.stringify(accounting,null,2)+"\n",{flag:"wx"});
   writeFileSync(path.join(input.out,"dashboard-seal.json"),JSON.stringify({version:PROGRESS_VERSION,files:["dashboard.json","dashboard.html","daily-metrics.csv","daily-volumes.csv","daily-findings.csv","metric-contracts.json","exclusions.json"].map(f=>receipt(path.join(input.out,f))),productionWrites:0,newScans:0,scheduledInvocationsAdded:0},null,2)+"\n",{flag:"wx"});
-  console.log(JSON.stringify({included:selected.length,days:days.length,errors:errors.length,exclusionCounts}));return data;
+  console.log(JSON.stringify({included:selected.length,days:days.length,errors:errors.length,exclusionCounts,snapshotBytes}));return data;
 }
 if(process.argv[1]&&pathToFileURL(realpathSync(process.argv[1])).href===import.meta.url){
   const [runsFile,originsFile,cacheRoot,out,issuesFile,releaseWatchFile,optOutInputsFile]=process.argv.slice(2);

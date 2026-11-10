@@ -716,10 +716,6 @@ jobs:
                 if .name == "CERTSCORE_AUDIT_PRIVACY_FORM_PROJECTION_ENABLED"
                 then .value = $receipts else . end
               )
-            | .containerDefinitions[0].environment |= (
-                map(select(.name != "CERTSCORE_AUDIT_POLICY_PROVENANCE_ENABLED"))
-                + [{name:"CERTSCORE_AUDIT_POLICY_PROVENANCE_ENABLED",value:"1"}]
-              )
           ' target-task-definition.json > target-materializer-task-definition.json
 
           TARGET_MATERIALIZER_TASK_DEFINITION="$(aws ecs register-task-definition \

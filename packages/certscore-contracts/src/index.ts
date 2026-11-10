@@ -3938,6 +3938,7 @@ export * from "./gpc-collection-comparison.js";
 export * from "./explicit-opt-out-control";
 
 export * from "./conditional-opt-out-decision";
+export * from "./opt-out-dispatch-rejection";
 
 export * from "./gpc-cmp-pair-coverage";
 

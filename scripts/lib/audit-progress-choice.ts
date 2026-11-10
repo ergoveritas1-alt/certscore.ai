@@ -6,10 +6,12 @@ import {broadOptOutAssessmentSchema} from '../../packages/certscore-contracts/sr
 import {legacyOptOutExecutionOutcome,saleSharingOptOutEvidenceSchema,saleSharingOptOutLaneOutcomeSchema} from '../../packages/certscore-contracts/src/sale-sharing-opt-out';
 import {OPT_OUT_DISPATCH_STATES,retainedOptOutDispatch} from '../../packages/certscore-contracts/src/privacy-capture-profile';
 import {conditionalOptOutDecisionSchema,retainedConditionalOptOutDecision} from '../../packages/certscore-contracts/src/conditional-opt-out-decision';
-import {PRIORITY_EVIDENCE_METRICS, priorityEvidenceSql, priorityEvidenceStates, priorityCoverageStates, withBoundedPriority, jsonbBytes} from './audit-progress-priority-evidence';
+import {gpcCmpPairBlockerSchema} from '../../packages/certscore-contracts/src/gpc-cmp-pair-coverage';
+import {CMP_BLOCKER_NOT_PROJECTED,CMP_DELIVERY_KEY,PRIORITY_EVIDENCE_METRICS, priorityEvidenceSql, priorityEvidenceStates, priorityCoverageStates, withBoundedPriority, jsonbBytes} from './audit-progress-priority-evidence';
 import {OPERATIONS_EVIDENCE_METRICS, operationsEvidenceFromRecord, operationsEvidenceStates} from './audit-progress-operations-evidence';
 import {projectOptOutLaneOutcome} from '../../apps/web/server/scans/opt-out-lane-projection';
 import type {ProgressRow,Metric} from './audit-progress';
+import type {OptOutDispatchRejection} from '../../packages/certscore-contracts/src/opt-out-dispatch-rejection';
 export const LEGACY_CHOICE_AUDIT_VERSION='certscore.audit-choice-summary.v1';
 export const CHOICE_AUDIT_VERSION='certscore.audit-choice-summary.v2';
 const optOutOutcomeIds=['action_completion','choice_confirmation','post_confirmation_observation'] as const;
@@ -95,8 +97,8 @@ const sqlPath=(p:string[])=>{
 };
 // Nested receipts keep their exact shape so unknown keys fail closed and an
 // explicitly null timestamp remains distinguishable from an omitted field.
-const boundedReceiptSql=(value:string,keys:string[])=>`case when jsonb_typeof(${value})='object' then
- case when octet_length((${value})::text)<=2048 and ((${value}) - array[${keys.map(k=>`'${k}'`).join(',')}])='{}'::jsonb then ${value} end end`;
+const boundedReceiptSql=(value:string,keys:string[])=>`(select case when jsonb_typeof(v)='object' then
+ case when octet_length(v::text)<=2048 and (v - array[${keys.map(k=>`'${k}'`).join(',')}])='{}'::jsonb then v end end from (select ${value} v) q)`;
 const conditionalPath="e#>'{metadataJson,artifactVerification,conditionalOptOutDecision}'";
 const dispatchPath="e#>>'{metadataJson,artifactVerification,optOutDispatch}'";
 const dispatchReceiptSql=()=>`select
@@ -150,15 +152,16 @@ export function choiceAuditSqlForTransport(includeOperations:boolean,includeCmpB
 }
 export const CHOICE_AUDIT_SQL=choiceAuditSqlForTransport(true);
 
-export function choiceSummaryAudit(value:unknown,scanId:string,policyBinding?:AuditPolicyProvenanceBinding){
+export function choiceSummaryAudit(value:unknown,scanId:string,policyBinding?:AuditPolicyProvenanceBinding,cmpBlockerOmitted=false){
+ let rejection: {receipt:OptOutDispatchRejection;sourceSha256:string}|undefined;
  const measurements:Record<string,number>={};
  const states:Record<string,string>={},scopes:Record<string,string>={},labels:Record<string,string>={};
- if(Buffer.byteLength(JSON.stringify(value)??'null')>8192)return {states,scopes,labels,measurements};
+ if(Buffer.byteLength(JSON.stringify(value)??'null')>8192)return {states,scopes,labels,measurements,rejection};
  const parsed=summarySchema.safeParse(value);
- if(!parsed.success||parsed.data.scanId!==scanId)return {states,scopes,labels,measurements};
+ if(!parsed.success||parsed.data.scanId!==scanId)return {states,scopes,labels,measurements,rejection};
  const s=parsed.data;
  if(s.version===CHOICE_AUDIT_VERSION){
-  for(const [key,result] of Object.entries({...priorityEvidenceStates(s.priorityEvidence,scanId),...priorityCoverageStates(s.priorityEvidence,scanId),...operationsEvidenceStates(s.operationsEvidence,scanId,policyBinding)})){
+  for(const [key,result] of Object.entries({...priorityEvidenceStates(s.priorityEvidence,scanId),...priorityCoverageStates(s.priorityEvidence,scanId,cmpBlockerOmitted),...operationsEvidenceStates(s.operationsEvidence,scanId,policyBinding)})){
    states[key]=result.value;
    scopes[key]=`${s.version}/${result.scope}`;
   }
@@ -195,6 +198,7 @@ export function choiceSummaryAudit(value:unknown,scanId:string,policyBinding?:Au
    }
    if(c.supportedRoute!==undefined)set('supported_route',c.supportedRoute?'supported':'unsupported_or_unverified',scope);
    set('dispatch_reason',c.reason,scope);
+   if(c.rejection)rejection={receipt:c.rejection,sourceSha256:c.sourceSha256!};
    if(c.remainingTimeMs!==undefined){measurements['sealed.opt_out.decision_remaining_ms']=c.remainingTimeMs;scopes['sealed.opt_out.decision_remaining_ms']=scope;}
    if(c.status==='dispatched'&&c.decidedAtMs!==undefined){measurements['sealed.opt_out.dispatch_elapsed_ms']=c.decidedAtMs;scopes['sealed.opt_out.dispatch_elapsed_ms']=scope;}
   }
@@ -241,18 +245,24 @@ export function choiceSummaryAudit(value:unknown,scanId:string,policyBinding?:Au
   }
  }
  if(s.findings){
-  if(new Set(s.findings.map(f=>f.id)).size!==s.findings.length)return {states,scopes,labels,measurements};
+  if(new Set(s.findings.map(f=>f.id)).size!==s.findings.length)return {states,scopes,labels,measurements,rejection};
   set('findings_coverage','available');
   for(const f of s.findings){const key=`sealed.choice_finding.${f.id}`;states[key]=f.surfaced?'surfaced':'not_surfaced';scopes[key]=s.version;labels[key]=f.label;}
  }
- return {states,scopes,labels,measurements};
+ return {states,scopes,labels,measurements,rejection};
 }
-export function applyChoiceSummary(row:ProgressRow,value:unknown,source:string){
+const isDetailedCmpAbsence=(value:string|undefined)=>value==='source_missing'||gpcCmpPairBlockerSchema.safeParse(value).success;
+
+export function applyChoiceSummary(row:ProgressRow,value:unknown,source:string,cmpBlockerOmitted=false){
  if(!row.reportable)return;
  const policyBinding=row.projectionVersion==='scan-report-projection-v27'&&row.publicProjectionSourceHash
   ? {scanId:row.scanId,createdAt:row.createdAt,generation:row.projectionVersion,sourceHash:row.publicProjectionSourceHash} as const
   : undefined;
- const result=choiceSummaryAudit(value,row.scanId,policyBinding);
+ const result=choiceSummaryAudit(value,row.scanId,policyBinding,cmpBlockerOmitted);
+ if(result.rejection){
+  if(row.optOutRejection&&JSON.stringify(row.optOutRejection)!==JSON.stringify(result.rejection))throw Error('Conflicting generation-bound opt-out rejection receipt');
+  row.optOutRejection=result.rejection;
+ }
  row.metricSources??={};row.retainedMetricLabels??={};row.measurements??={};
  for(const [key,value] of Object.entries(result.measurements)){
   if(row.measurements[key]!==undefined&&row.measurements[key]!==value)throw Error(`Conflicting opt-out timing: ${key}`);
@@ -261,8 +271,13 @@ export function applyChoiceSummary(row:ProgressRow,value:unknown,source:string){
  for(const [id,v] of Object.entries(result.states)){
   // Transport diagnostics describe the query, not a replay of a full local record.
   if(id.startsWith('sealed.priority_evidence.')&&source.startsWith('persisted_report_choice_summary/'))continue;
-  if(row.states[id]!==undefined&&row.states[id]!=='unavailable'&&row.states[id]!==v)throw Error(`Conflicting persisted choice summary: ${id}`);
-  if(row.states[id]!==undefined&&row.states[id]!=='unavailable')continue;
+  const prior=row.states[id];
+  if(id===CMP_DELIVERY_KEY&&v===CMP_BLOCKER_NOT_PROJECTED&&isDetailedCmpAbsence(prior))continue;
+  const fillsOmittedBlocker=id===CMP_DELIVERY_KEY&&prior===CMP_BLOCKER_NOT_PROJECTED&&isDetailedCmpAbsence(v);
+  if(prior!==undefined&&prior!=='unavailable'&&!fillsOmittedBlocker){
+   if(prior!==v)throw Error(`Conflicting persisted choice summary: ${id}`);
+   continue;
+  }
   row.states[id]=v;row.metricSources[id]=`${source}/${result.scopes[id]}`;
  }
  Object.assign(row.retainedMetricLabels,result.labels);

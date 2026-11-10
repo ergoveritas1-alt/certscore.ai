@@ -3,10 +3,16 @@ import {CHOICE_AUDIT_VERSION} from './audit-progress-choice';
 import {choiceAuditSqlForTransport} from './audit-progress-choice';
 import {botOriginWindowSql} from './audit-bot-origin';
 import {OPT_OUT_EXTRACT_SQL,OPT_OUT_ASSESSMENT_JOIN_SQL} from './audit-progress-opt-out';
-import {CONTROL_ACCESSIBILITY_SQL} from './audit-progress-control-accessibility';
+import {CONTROL_ACCESSIBILITY_SQL,TRACKING_REVIEW_SQL} from './audit-progress-control-accessibility';
 import {auditSqlOverrideFits} from './audit-prod-db-bounded';
+import {CALIFORNIA_REJECT_COVERAGE_SQL} from './audit-california-reject-coverage';
+import {MAX_AUDIT_POLICY_PROVENANCE_BYTES} from '../../packages/certscore-contracts/src/audit-policy-provenance';
+
+// ECS rejected an 8,174-byte compact override. Leave room for launch
+// serialization before choosing among the existing query variants.
+const DELTA_OVERRIDE_HEADROOM_BYTES = 192;
 /** Pure offline query builder; never starts a task. */
-export function buildAuditDeltaQuery(b:any,includeOperations:boolean,includePrivacyForm=false,includeControlAccessibility=false):string{
+export function buildAuditDeltaQuery(b:any,includeOperations:boolean,includePrivacyForm=false,includeControlAccessibility=false,includeCaliforniaReject=false,includeTechnicalCounts=false,includeTrackingReviews=false,includePolicyReceipt=false):string{
 const origin=botOriginWindowSql(b.overlapStartUtc,b.windowEndUtc);
 const pending:string[]=b.pendingRefreshIds??[];
 if(!Array.isArray(pending)||pending.length>100||new Set(pending).size!==pending.length||pending.some(id=>!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(id)))throw Error('At most 100 distinct pending scan UUIDs required');
@@ -35,6 +41,10 @@ select row_to_json(r) from (
  ${choiceAuditSqlForTransport(includeOperations,includeControlAccessibility||includeOperations)} choice_audit,
  ${includeControlAccessibility?`case when not o."isCanary" and p.report_projection_payload#>>'{scan,id}'=s.id::text then ${CONTROL_ACCESSIBILITY_SQL} end "controlAccessibility",`:''}
  ${includePrivacyForm ? `case when not o."isCanary" then p.report_projection_payload->>'auditPrivacyForm' end "auditPrivacyForm",` : ''}
+ ${includeCaliforniaReject ? `${CALIFORNIA_REJECT_COVERAGE_SQL} "caReject",` : ''}
+ ${includeTechnicalCounts ? `${technicalCountsSql()} "technicalCounts",` : ''}
+ ${includeTrackingReviews ? `case when not o."isCanary" and p.report_projection_payload#>>'{scan,id}'=s.id::text then ${TRACKING_REVIEW_SQL} end "trackingReviews",` : ''}
+ ${includePolicyReceipt ? policyReceiptSql : ''}
  count(*) over() cohort_total
  from origins o join public.scans s on s.id=o."scanId"
  left join public.domains d on d.id=s.domain_id
@@ -49,18 +59,46 @@ return sql.replace(/'(?:''|[^'])*'|"(?:""|[^"])*"|\s*[(),]\s*|\s+/g,
  token=>token.trim() || ' ').trim();
 }
 
+// This producer-only slot is validated at persistence and again on audit
+// intake. Transport it separately so a full choice summary cannot evict it.
+const policyReceipt="p.report_projection_payload->'auditPolicyProvenance'";
+const policyReceiptSql=`case when not o."isCanary" and p.report_projection_status='ready' and octet_length((${policyReceipt})::text)<=${MAX_AUDIT_POLICY_PROVENANCE_BYTES} then ${policyReceipt} end "policyReceipt",`;
+
+function technicalCountsSql(){
+ const fields=[
+  ['siteIntegrity','{observation,links}'],
+  ['cmsSecurity','{assessment,detections}','{assessment,matches}'],
+ ];
+ const sources=fields.map(([key],i)=>`a->'${key}' t${i}`).join(',');
+ const values=fields.map(([, ...paths],i)=>{
+  const ref=`t${i}`;
+  const lengths=paths.map(path=>`jsonb_array_length(${ref}#>'${path}')`).join(',');
+  const arrays=paths.map(path=>`jsonb_typeof(${ref}#>'${path}')='array'`).join(' and ');
+  const catalogue=i===1?`${ref}#>>'{assessment,catalogueVersion}'`:null;
+  const catalogueGuard=catalogue?` and length(${catalogue})<80`:'';
+  return `case when ${ref}->>'verificationStatus'='verified' and ${ref}->>'scanId'=s.id::text
+   and ${ref}->>'sourceHash'=h and length(${ref}->>'contractVersion')<80 and ${arrays}${catalogueGuard}
+   then jsonb_build_array(${ref}->>'contractVersion',${lengths}${catalogue?','+catalogue:''}) end`;
+ }).join(',');
+ return `(select jsonb_build_array(${values}) from
+  (select p.report_projection_payload->'runtimeArtifacts' a) v,
+  lateral (select jsonb_path_query_array(p.report_projection_payload,'$.events[*] ? (@.eventType == "v2_lambda_result.received")') e) w,
+  lateral (select ${sources},e#>>'{0,metadataJson,artifactMetadata,scanArtifactUri,sha256}' h) t
+  where p.report_projection_status='ready' and not o."isCanary"
+  and p.report_projection_payload#>>'{scan,id}'=s.id::text and e->1 is null and h~'^[0-9a-f]{64}$')`;
+}
+
 export function planAuditDeltaQuery(b:any,marker:string){
  const privacyForm=b.includePrivacyFormReceipts===true;
- // Prefer both optional sources, then the control-specific assessment. Keep
- // paired CMP blockers in either variant and preserve the required core.
+ // Same-document control coverage is required alongside the existing receipts.
+ // An oversized launch blocks acquisition instead of silently omitting it.
  const candidates=[
-  {operations:true,controlAccessibility:true},
-  {operations:false,controlAccessibility:true},
-  {operations:true,controlAccessibility:false},
-  {operations:false,controlAccessibility:false},
+  {controlAccessibility:true},
  ].map(variant=>{
-  const sql=buildAuditDeltaQuery(b,variant.operations,privacyForm,variant.controlAccessibility);
-  return {...variant,privacyForm,sql,override:auditSqlOverrideFits({marker,readOnly:true,sql})};
+  const sql=buildAuditDeltaQuery(b,false,privacyForm,variant.controlAccessibility,true,true,true,true);
+  const measured=auditSqlOverrideFits({marker,readOnly:true,sql});
+  const planningLimitBytes=measured.limitBytes-DELTA_OVERRIDE_HEADROOM_BYTES;
+  return {...variant,operations:false,policyReceipt:true,privacyForm,sql,override:{...measured,planningLimitBytes,fits:measured.bytes<=planningLimitBytes}};
  });
  return {selected:candidates.find(candidate=>candidate.override.fits)??candidates.at(-1)!,expanded:candidates[0]!.override};
 }

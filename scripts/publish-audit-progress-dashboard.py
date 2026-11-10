@@ -2,13 +2,15 @@
 """Publish a verified local audit snapshot through an atomic latest symlink."""
 import argparse,datetime,hashlib,json,os,pathlib,uuid
 
+SNAPSHOT_LIMITS=json.loads((pathlib.Path(__file__).resolve().parent/'lib/audit-progress-snapshot-limits.json').read_text())
+
 def digest(p):
     h=hashlib.sha256()
     with p.open('rb') as f:
         for b in iter(lambda:f.read(4*1024*1024),b''):h.update(b)
     return h.hexdigest()
 def read(p):
-    if p.stat().st_size>(200_000_000 if p.name=='dashboard.json' else 100_000_000 if p.name=='dashboard.html' else 80_000_000):raise ValueError('Input exceeds bound')
+    if p.stat().st_size>SNAPSHOT_LIMITS.get(p.name,80_000_000):raise ValueError(f'Input exceeds bound: {p.name}')
     return json.loads(p.read_text())
 def end(data):
     return max(datetime.datetime.fromisoformat(w['end'].replace('Z','+00:00')) for w in data['windows'])
@@ -18,7 +20,7 @@ def publish(run,root):
     seal=read(run/'dashboard-seal.json');required={'dashboard.html','dashboard.json','daily-metrics.csv','daily-volumes.csv','daily-findings.csv','metric-contracts.json','exclusions.json'};verified={}
     for entry in seal['files']:
         p=pathlib.Path(entry['file']).resolve()
-        if p.parent!=run or not p.is_file() or p.stat().st_size>(200_000_000 if p.name=='dashboard.json' else 100_000_000 if p.name=='dashboard.html' else 80_000_000):raise ValueError('Output escapes snapshot or exceeds bound')
+        if p.parent!=run or not p.is_file() or p.stat().st_size>SNAPSHOT_LIMITS.get(p.name,80_000_000):raise ValueError(f'Output escapes snapshot or exceeds bound: {p.name}')
         if digest(p)!=entry['sha256'] or entry.get('bytes',p.stat().st_size)!=p.stat().st_size:raise ValueError('Output hash/size mismatch')
         verified[p.name]=entry['sha256']
     if not required.issubset(verified):raise ValueError('Required sealed outputs missing')

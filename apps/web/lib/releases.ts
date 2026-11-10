@@ -24,6 +24,9 @@ export type ReleaseSection = {
 
 export type ProductRelease = {
   scanForm?: boolean;
+  scanButtonLabel?: string;
+  heroImage?: { path: string; alt: string; width: number; height: number; caption?: string };
+  headlineTone?: "quiet";
   researchLink?: ReleaseLink;
   body: readonly string[];
   cardImage?: {
@@ -54,6 +57,62 @@ export type ProductRelease = {
 };
 
 const releases: readonly ProductRelease[] = [
+{
+  slug: "one-in-three-websites-gpc-ad-services",
+  headline: "With a “Don’t Sell My Data” Signal On, 1 in 3 Websites Tested Contacted Ad Services",
+  shortDescription: "With Global Privacy Control (GPC) enabled, 337 of 1,000 websites tested from California contacted ad services ahead of a 2027 browser change.",
+  publicationDate: "2026-11-09",
+  category: "GPC research announcement",
+  headlineTone: "quiet",
+  seoTitle: "GPC Study: 1 in 3 Websites Contacted Ad Services",
+  metaDescription: "CertScore.ai tested 1,000 California-origin websites with Global Privacy Control (GPC) enabled. On 337, advertising or marketing collection services responded.",
+  body: [
+    "California is about to make browser privacy opt-outs easier to find. A new website test offers a glimpse of what happens after the signal is sent.",
+    "Imagine telling every website you visit, automatically: Don’t sell or share my personal information. No searching for privacy links. No making the same request over and over.",
+    "That’s the idea behind Global Privacy Control (GPC), a browser signal that communicates your preference as you browse.",
+    "But what happens after a website receives it?"
+  ],
+  heroImage: {
+    path: "/images/releases/gpc-2026/hero-toggle.png",
+    alt: "With a Don’t Sell My Data signal enabled, 337 of 1,000 websites tested from California contacted advertising services. These observations are not proof of a GPC violation.",
+    width: 1600, height: 900,
+    caption: "337 of 1,000 California-origin websites tested had observed requests to recognized advertising or marketing data-collection services during GPC-enabled visits."
+  },
+  sections: [
+    { id: "finding", heading: "What the GPC test observed", paragraphs: [
+      "From November 1–8, 2026, CertScore.ai examined 1,000 websites scanned from California with GPC enabled. On 337 of them—33.7%, or roughly one in three—the scanner observed requests reaching recognized advertising and marketing data-collection services. The requests weren’t merely inactive scripts on a page; the services responded.",
+      "Each response is a glimpse of activity most visitors cannot see. The scan captures the connection; it does not follow what happens inside an advertising service afterward. A visit with no such activity leaves open whether the site recognized GPC."
+    ] },
+    { id: "browser-setting", heading: "A browser setting arrives in 2027", paragraphs: [
+      "On January 1, 2027, California’s Opt Me Out Act (AB 566, Lowenthal) will require web browsers—including major browsers such as Chrome, Safari and Edge—to offer an accessible, built-in privacy opt-out signal setting. People won’t have to install a separate extension just to make that request available in those browsers."
+    ], image: { path: "/images/releases/gpc-2026/timeline-compact.png", alt: "Regulatory timeline from California GPC enforcement in 2022 through the 2027 browser opt-out setting requirement.", width: 1600, height: 390, caption: "A visual timeline of selected privacy-signal rules and enforcement milestones, 2022–2027." } },
+    { id: "what-changes", heading: "What is already required", paragraphs: [
+      "Websites covered by California’s privacy law already have to honor qualifying opt-out signals. Several other states have similar requirements. Regulators aren’t waiting for 2027: California has brought GPC-related enforcement actions, and authorities in California, Colorado, and Connecticut announced a coordinated GPC investigation in 2025.",
+      "California enforcement has real financial stakes for businesses. Disney agreed to $2.75 million in civil penalties after the Attorney General alleged its opt-outs, including GPC requests, did not carry across linked services. Sephora agreed to $1.2 million over allegations that included unprocessed GPC signals, and CalPrivacy fined Tractor Supply $1.35 million for several CCPA failures, including ineffective GPC opt-outs.",
+      "California now requires covered businesses to provide a way to confirm their opt-out has been processed, for example with a message such as “Opt-Out Request Honored.” A message alone cannot show everything a website sent behind the scenes."
+    ] },
+    { id: "how-we-tested", heading: "How we tested", paragraphs: [
+      "From November 1–8, 2026, CertScore.ai reviewed the latest 1,000 distinct websites for which its California-based scans had usable GPC results. The scanner made brief automated visits with GPC enabled and recorded requests reaching recognized advertising or marketing collection services. Observed requests are not proof of a privacy-law violation or of a failure to honor GPC."
+    ] },
+    { id: "primary-sources", heading: "Primary sources", sourceLinks: [
+      { href: "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202520260AB566", label: "California Legislature: AB 566 (Opt Me Out Act)" },
+      { href: "https://privacy.ca.gov/2026/01/californias-opt-me-out-act-your-privacy-just-got-easier/", label: "CalPrivacy: Opt Me Out Act" },
+      { href: "https://oag.ca.gov/node/556528", label: "California Attorney General: Sephora settlement" },
+      { href: "https://www.cppa.ca.gov/announcements/2025/20250909.html", label: "CalPrivacy: three-state GPC investigation" },
+      { href: "https://www.cppa.ca.gov/announcements/2025/20250930.html", label: "CalPrivacy: Tractor Supply action" },
+      { href: "https://oag.ca.gov/news/press-releases/california-wont-let-it-go-attorney-general-bonta-announces-275-million", label: "California Attorney General: Disney settlement" },
+      { href: "https://cppa.ca.gov/pdf/things_to_know_before_2026_updates.pdf", label: "CalPrivacy: 2026 opt-out confirmation guide" }
+    ] }
+  ],
+  ctaHeading: "Curious about a website you use—or one you run?",
+  ctaDescription: "Scan any website free at CertScore.ai and explore the cookies, trackers and advertising-related requests our scanner can observe. Results reflect the scan’s selected origin and available evidence.",
+  primaryCta: { href: "/#homepage-scan", label: "Scan Any Website Free" },
+  resourceLinks: [{ href: "/guides/test-global-privacy-control", label: "How to test GPC response" }],
+  scanButtonLabel: "Scan Any Website Free",
+  scanForm: true,
+  cardImage: { path: "/images/releases/gpc-2026/hero-toggle.png", alt: "337 of 1,000 California-origin websites tested contacted advertising services during GPC-enabled visits.", width: 1600, height: 900 },
+  socialImage: { path: "/images/releases/gpc-2026/hero-toggle.png", alt: "With GPC on, 337 of 1,000 websites tested from California contacted advertising services.", width: 1600, height: 900 }
+},
 {
   "slug": "privacy-policy-evidence",
   "headline": "Read the privacy-policy wording behind your report",
@@ -88,7 +147,7 @@ const releases: readonly ProductRelease[] = [
         "Use the magnifying glass beside an available disclosure to read its retained passage, source URL and capture timestamp. The viewer shows evidence retained at scan time, rather than a live fetch of the current policy."
       ],
       "image": {
-        "path": "/insights/assets/privacy-policy-evidence-viewer-2026.jpg",
+        "path": "/images/releases/privacy-policy-evidence-viewer-2026.jpg",
         "alt": "Captured privacy policy viewer showing the retained controller/contact passage, source URL and October 15, 2026 capture time from an ErgoVeritas test report.",
         "width": 1280,
         "height": 720,
@@ -154,13 +213,13 @@ const releases: readonly ProductRelease[] = [
     }
   ],
   "socialImage": {
-    "path": "/insights/assets/privacy-policy-evidence-social-2026.png",
+    "path": "/images/releases/privacy-policy-evidence-social-2026.png",
     "alt": "Read the wording behind your report. Retained passage, source URL and capture time in CertScore.ai.",
     "width": 1200,
     "height": 630
   },
   "cardImage": {
-    "path": "/insights/assets/privacy-policy-evidence-social-2026.png",
+    "path": "/images/releases/privacy-policy-evidence-social-2026.png",
     "alt": "Read the wording behind your report. Retained passage, source URL and capture time in CertScore.ai.",
     "width": 1200,
     "height": 630

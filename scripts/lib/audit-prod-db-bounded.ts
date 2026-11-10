@@ -2,11 +2,15 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { gzipSync, gunzipSync } from "node:zlib";
 import {createHash} from "node:crypto";
-import {writeFileSync} from "node:fs";
+import {existsSync,readFileSync,writeFileSync} from "node:fs";
 
 const execFileAsync = promisify(execFile);
 
 type TaskDescription = {
+  taskArn?: string;
+  lastStatus?: string;
+  clusterArn?: string;
+  taskDefinitionArn?: string;
   containers?: Array<{ exitCode?: number; name?: string; reason?: string }>;
   stoppedReason?: string;
 };
@@ -18,6 +22,7 @@ type RunProdDbSqlInput = {
   logChunkThrottle?: boolean;
   sql: string;
   receiptDir: string;
+  recoverStarted?: boolean;
 };
 
 const DEFAULT_CLUSTER = "certscore-validation-cluster";
@@ -81,7 +86,9 @@ export function auditSqlOverrideFits(input: Pick<RunProdDbSqlInput, 'marker'|'re
 
 export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
   const {marker,containerName,overrides,bytes}=prepareSqlOverride(input);
-  if(bytes>ECS_OVERRIDE_MAX_BYTES)throw Error(`ECS SQL launch override exceeds ${ECS_OVERRIDE_MAX_BYTES} bytes (${bytes}); no task started`);
+  const dailyDelta = marker === MAC_MINI_DELTA_MARKER && input.readOnly === true;
+  if(input.recoverStarted && !dailyDelta)throw Error('Only the read-only daily delta supports started-task recovery');
+  if(!input.recoverStarted && bytes>ECS_OVERRIDE_MAX_BYTES)throw Error(`ECS SQL launch override exceeds ${ECS_OVERRIDE_MAX_BYTES} bytes (${bytes}); no task started`);
   const region = env("CALIBRATION_DB_ECS_REGION", "us-west-1");
   const cluster = env("CALIBRATION_DB_ECS_CLUSTER", DEFAULT_CLUSTER);
   const taskDefinition = env("CALIBRATION_DB_ECS_TASK_DEFINITION", DEFAULT_TASK_DEFINITION);
@@ -92,7 +99,12 @@ export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
       subnets: csvEnv("CALIBRATION_DB_ECS_SUBNETS", DEFAULT_SUBNETS),
     },
   };
-  const runPayload = parseJson<{ failures?: unknown[]; tasks?: Array<{ taskArn?: string }> }>(await aws([
+  type StartedTask = { taskArn?: string; clusterArn?: string; taskDefinitionArn?: string };
+  const startedFile = `${input.receiptDir}/started-${marker}.json`;
+  const taskFile = `${input.receiptDir}/task-${marker}.json`;
+  const withoutOverrides = (key:string,value:unknown) => key === 'overrides' ? undefined : value;
+  if (!input.recoverStarted && existsSync(startedFile)) throw Error('A task receipt already exists; recover its output');
+  const runPayload = parseJson<{ failures?: unknown[]; tasks?: StartedTask[] }>(input.recoverStarted ? readFileSync(startedFile,'utf8') : await aws([
     "ecs", "run-task",
     "--region", region,
     "--cluster", cluster,
@@ -101,19 +113,41 @@ export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
     "--network-configuration", JSON.stringify(networkConfiguration),
     "--overrides", overrides,
     "--output", "json",
-  ]));
+  ], dailyDelta ? { singleAttempt: true } : undefined));
   if (runPayload.failures?.length) {
     throw new Error(`Production DB one-off failed to start: ${JSON.stringify(runPayload.failures)}`);
   }
-  writeFileSync(`${input.receiptDir}/started-${marker}.json`,JSON.stringify(runPayload,(_key,value)=>_key==="overrides"?undefined:value,2)+"\n",{flag:"wx"});
-  const taskArn = runPayload.tasks?.[0]?.taskArn;
+  if (!input.recoverStarted) writeFileSync(startedFile,JSON.stringify(runPayload,withoutOverrides,2)+"\n",{flag:"wx"});
+  const started = runPayload.tasks?.[0];
+  const taskArn = started?.taskArn;
   if (!taskArn) throw new Error("Production DB one-off did not return a task ARN");
-
-  await aws(["ecs", "wait", "tasks-stopped", "--region", region, "--cluster", cluster, "--tasks", taskArn]);
-  const taskPayload = parseJson<{ tasks?: TaskDescription[] }>(await aws([
-    "ecs", "describe-tasks", "--region", region, "--cluster", cluster, "--tasks", taskArn, "--output", "json",
-  ]));
-  writeFileSync(`${input.receiptDir}/task-${marker}.json`,JSON.stringify(taskPayload,(_key,value)=>_key==="overrides"?undefined:value,2)+"\n",{flag:"wx"});
+  if (dailyDelta && (runPayload.tasks?.length !== 1 || !started.clusterArn || !started.taskDefinitionArn ||
+      !taskArn.startsWith(`arn:aws:ecs:${region}:`) ||
+      (cluster.startsWith('arn:') ? started.clusterArn !== cluster : !started.clusterArn.endsWith('/'+cluster)) ||
+      !matchesTaskDefinition(started.taskDefinitionArn,taskDefinition))) {
+    throw Error('Started task does not match the configured daily query topology');
+  }
+  const describeTask = ["ecs", "describe-tasks", "--region", region, "--cluster", cluster, "--tasks", taskArn, "--output", "json"];
+  let taskPayload: { tasks?: TaskDescription[] };
+  if (dailyDelta) {
+    taskPayload = await readStoppedDeltaTask(describeTask, taskArn);
+    if (taskPayload.tasks?.[0]?.clusterArn !== started.clusterArn ||
+        taskPayload.tasks?.[0]?.taskDefinitionArn !== started.taskDefinitionArn) {
+      throw Error('Stopped task does not match its original launch receipt');
+    }
+  } else {
+    await aws(["ecs", "wait", "tasks-stopped", "--region", region, "--cluster", cluster, "--tasks", taskArn]);
+    taskPayload = parseJson(await aws(describeTask));
+  }
+  const terminalReceipt = JSON.stringify(taskPayload,withoutOverrides,2)+"\n";
+  if (!existsSync(taskFile)) writeFileSync(taskFile,terminalReceipt,{flag:"wx"});
+  else if (!input.recoverStarted) throw Error('Unexpected terminal task receipt already exists');
+  else {
+    const prior = parseJson<{ tasks?: TaskDescription[] }>(readFileSync(taskFile,'utf8'));
+    if (prior.tasks?.length !== 1 || prior.tasks[0]?.taskArn !== taskArn || prior.tasks[0]?.lastStatus !== 'STOPPED') {
+      throw Error('Existing terminal receipt does not match the stopped daily task');
+    }
+  }
   const task = taskPayload.tasks?.[0];
   const taskContainer = task?.containers?.find((candidate) => candidate.name === containerName) ?? task?.containers?.[0];
   const taskDefinitionPayload = parseJson<{
@@ -122,7 +156,7 @@ export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
       name?: string;
     }> };
   }>(await aws([
-    "ecs", "describe-task-definition", "--region", region, "--task-definition", taskDefinition, "--output", "json",
+    "ecs", "describe-task-definition", "--region", region, "--task-definition", dailyDelta ? started.taskDefinitionArn! : taskDefinition, "--output", "json",
   ]));
   const logOptions = taskDefinitionPayload.taskDefinition?.containerDefinitions
     ?.find((candidate) => candidate.name === containerName)?.logConfiguration?.options ?? {};
@@ -143,6 +177,36 @@ export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
   const compressed=Buffer.from(parts.map(p=>p.s).join(''),'base64');
   if(createHash('sha256').update(compressed).digest('hex')!==expected)throw Error('Compressed export SHA-256 mismatch');
   return gunzipSync(compressed).toString('utf8');
+}
+
+function matchesTaskDefinition(arn: string, configured: string) {
+  const actual = configured.startsWith('arn:') ? arn : arn.slice(arn.lastIndexOf('/')+1);
+  return actual === configured || actual.slice(0,actual.lastIndexOf(':')) === configured;
+}
+
+async function readStoppedDeltaTask(args: string[], taskArn: string) {
+  const deadline = Date.now() + 180_000;
+  do {
+    let stdout: string | undefined;
+    try {
+      stdout = await aws(args,{singleAttempt:true});
+    } catch (error) {
+      const message = String((error as { stderr?: string }).stderr ?? '');
+      if (!/connection was closed|could not connect to the endpoint|read timeout|connect timeout|Throttl|ServiceUnavailable|ServerException/i.test(message)) throw error;
+    }
+    if (stdout) {
+      const payload = parseJson<{ tasks?: TaskDescription[]; failures?: Array<{ arn?:string; reason?:string }> }>(stdout);
+      const task = payload.tasks?.[0];
+      if (payload.tasks?.length === 1 && task?.taskArn === taskArn && !payload.failures?.length) {
+        if (task.lastStatus === 'STOPPED') return payload;
+      } else if (payload.tasks?.length || !payload.failures?.length ||
+        !payload.failures.every(failure => failure.arn === taskArn && failure.reason === 'MISSING')) {
+        throw Error('Unexpected response for the started daily query task');
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 5_000));
+  } while (Date.now() < deadline);
+  throw Error('Timed out waiting for the existing daily query task; recover its output from the started receipt');
 }
 
 export function extractMarkedOutput(logs: string, marker: string) {
@@ -208,8 +272,11 @@ async function readAllLogEvents(input: { logGroup: string; region: string; strea
   return messages.join("\n");
 }
 
-async function aws(args: string[]) {
-  const { stdout } = await execFileAsync("aws", args, { maxBuffer: 64 * 1024 * 1024 });
+async function aws(args: string[], options?: { singleAttempt: boolean }) {
+  const { stdout } = await execFileAsync("aws", options ? [...args,'--cli-connect-timeout','8','--cli-read-timeout','20'] : args, {
+    maxBuffer: 64 * 1024 * 1024,
+    ...(options?.singleAttempt ? { env: { ...process.env, AWS_MAX_ATTEMPTS:'1' } } : {}),
+  });
   return stdout;
 }
 

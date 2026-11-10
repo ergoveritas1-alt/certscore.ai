@@ -12,6 +12,7 @@ import {
 } from './lib/audit-privacy-form-receipt';
 import { createP2Coverage } from './lib/audit-p2-coverage';
 import type { PersistedP2Inputs } from './lib/audit-p2-persisted';
+import snapshotLimits from './lib/audit-progress-snapshot-limits.json';
 
 const [dashboard, output] = process.argv.slice(2);
 if (!dashboard || !output || process.argv.length !== 4) {
@@ -21,11 +22,11 @@ const root = path.resolve(output);
 if (existsSync(root)) throw Error('Fresh receipt output directory required');
 const dashboardFile = realpathSync(dashboard);
 const sealFile = path.join(path.dirname(dashboardFile), 'dashboard-seal.json');
-if (statSync(dashboardFile).size > 200_000_000 || statSync(sealFile).size > 100_000) {
+if (statSync(dashboardFile).size > snapshotLimits['dashboard.json'] || statSync(sealFile).size > 100_000) {
   throw Error('Local dashboard or seal exceeds input bound');
 }
 const dashboardBytes = readFileSync(dashboardFile);
-if (dashboardBytes.length > 200_000_000) throw Error('Local dashboard exceeds input bound');
+if (dashboardBytes.length > snapshotLimits['dashboard.json']) throw Error('Local dashboard exceeds input bound');
 const dashboardSha256 = createHash('sha256').update(dashboardBytes).digest('hex');
 const seal: { files: Array<{ file: string; bytes: number; sha256: string }> } = JSON.parse(readFileSync(sealFile, 'utf8'));
 const sealedDashboard = seal.files.filter(entry => entry.file === dashboardFile);

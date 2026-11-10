@@ -156,9 +156,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "scripts/lib/audit-progress-contracts.ts",
-      "sha256": "8985c31a91e7a78ee7de79f0441ca150fc53b38e31decb6022e16f7390d05f1d",
-      "bytes": 23140,
-      "review": "Reviewed source-bound opt-out outcomes and pre-action lane facts, explicit no-dispatch states, and existing source-separated CMP and accessibility mappings."
+      "sha256": "155acf3a0e1af798c6b2cf1a4dd32bfe3c0c333aa0de3248651b31e6933dfb73",
+      "bytes": 25647,
+      "review": "Reviewed transfer-framework coverage from the existing bound producer receipt, separate from the historical conditional finding and scoring. Transfer-framework completion reason metadata is bound to the compact policy receipt. Unresolved supplement dispositions are bound to the same compact policy receipt."
     },
     {
       "file": "packages/certscore-contracts/src/site-metadata.ts",

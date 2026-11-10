@@ -3,6 +3,13 @@ import {auditStateCsvMetrics,auditMeasureLinks,buildAuditMeasureView,forwardAudi
 import {progressEngine} from './audit-progress-engine';
 import {MASTER_CATALOG} from './audit-evidence-master-catalog';
 const metric=(id:string)=>({id,label:id,group:'Test',denominator:'Fixture scans',success:[]});
+test('opt-out stages share one table row while every original CSV metric remains',()=>{
+ const ids=['sealed.opt_out.action_completion','sealed.opt_out.dispatch','sealed.opt_out.coverage','sealed.opt_out.configured','sealed.opt_out.conditional_control','sealed.opt_out.supported_route','sealed.opt_out.dispatch_reason','sealed.opt_out.choice_confirmation','sealed.opt_out.post_confirmation_observation','sealed.opt_out.registration','sealed.opt_out.confirmation_basis','sealed.opt_out.capture','sealed.opt_out.observation'];
+ const data={metrics:ids.map(metric),rows:[]};const v=buildAuditMeasureView(data);
+ assert.deepEqual(v.tableEntries.map(e=>e.id),[ids[0]]);assert.equal(v.tableEntries[0]!.label,'Opt-out execution and verification');
+ assert.deepEqual(new Set(v.tableEntries[0]!.details.map(e=>e.id)),new Set(ids.slice(1)));
+ assert.deepEqual(auditStateCsvMetrics(data).map(e=>e.id),ids);
+});
 test('retire only reviewed unsupported slots; preserve terminal and CMP coverage gaps',()=>{
  const ids=[...Object.keys(RETIRED_TABLE_MEASURES),'sealed.terminal.audit_accept','sealed.terminal.audit_reject','sealed.choice_evidence.paired_cmp','sealed.opt_out.action_completion'];
  const data={metrics:ids.map(metric),rows:[{states:Object.fromEntries(ids.map(id=>[id,'unavailable']))}]};
@@ -69,4 +76,14 @@ test('same-source checklist aliases retire from the chart and CSV only while the
   assert.ok(auditStateCsvMetrics(different).some(metric=>metric.id===id),change);
   assert.ok(buildAuditMeasureView(different).entries.some(entry=>entry.id===id),change);
  }
+});
+
+test('four canonical GPC questions own the diagnostics without merging their values',()=>{
+ const primary=MASTER_CATALOG.questionGroups.map(q=>q.primaryMetric);
+ const diagnostics=['detail.gpc.response','detail.gpc.paired_pair','detail.gpc.assessment_coverage','sealed.choice_evidence.paired_cmp','gpc.paired.duration_ms','sealed.choice_finding.gpc_response'];
+ const view=buildAuditMeasureView({metrics:[...primary,...diagnostics.filter(id=>!id.startsWith('gpc.paired.'))].map(id=>({...metric(id),group:'GPC'})),quantities:[{id:'gpc.paired.duration_ms',label:'Interval',unit:'ms'}],rows:[]});
+ assert.deepEqual(view.tableEntries.map(e=>e.id),primary);
+ assert.ok(diagnostics.every(id=>view.tableEntries.some(e=>e.details.some(d=>d.id===id))));
+ assert.ok(view.tableEntries.find(e=>e.id==='detail.gpc.cmp_receipt')!.details.some(d=>d.id==='detail.gpc.response'));
+ assert.ok(view.tableEntries.find(e=>e.id==='detail.gpc.cmp_receipt')!.details.some(d=>d.id==='detail.gpc.assessment_coverage'));
 });

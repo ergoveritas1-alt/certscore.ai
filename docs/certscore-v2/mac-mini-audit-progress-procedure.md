@@ -297,8 +297,21 @@ cache end minus 48h), newScanStartUtc (prior cache end), priorCache and priorSna
 Run `pnpm exec tsx --tsconfig apps/web/tsconfig.test.json scripts/export-mac-mini-delta.ts RUN`.
 It uses the existing AWS psql one-off topology, a read-only transaction, canonical
 original-creator/key-name logic, max eight days/5,000 rows and 45-second statements.
-Save query hashes, transport/task receipts and delta-inventory.json; recover the
-existing task/logs rather than rerunning SQL after interruption.
+Save query hashes, transport/task receipts and delta-inventory.json. The daily
+export retries transient status reads for the exact recorded task for up to
+three minutes. After a process interruption, reuse an existing inventory or
+run the same command with `RUN --recover` if the run contains its started-task
+receipt. Recovery reads the existing task and verifies its output checksum.
+
+The same daily query projects a private California Reject qualification receipt
+from the ready report's existing typed assessment. It carries the policy,
+status, scope, truncation flag and distinct request reason codes. The receipt
+requires a completed click, scan identity and matching packet and target hashes.
+The audit reader also requires the original creator selection and matching report
+generation. Missing or unbound evidence stays unavailable. Keep this field in
+every launch variant. The planner may omit optional operations and control
+accessibility to fit the existing 100-ID budget, and records those omissions.
+The receipt adds no capture, request, or separate query.
 
 Run `python3 scripts/cache-mac-mini-delta.py --source /Volumes/miniben/CertScore
 --out FRESH_CACHE --start MONTH_START --end CUTOFF --reuse PRIOR_CACHE
@@ -570,8 +583,10 @@ These rows use separate audit IDs and preserve public evidence. If the combined
 summary exceeds 8,192 bytes, the query retains the existing v2 summary and
 omits the optional section. Missing original facts remain unavailable.
 
-The lower-priority optional `operationsEvidence` section uses compact states
-from the same v2 query. It matches the retained policy projection's scan and
+Historical `operationsEvidence` uses compact states retained in its original
+choice summary. Current queries carry the persisted producer provenance in a
+separate required `policyReceipt` column capped at 512 bytes. This keeps it
+available when the choice summary exceeds its own cap. The producer matches the policy projection's scan and
 original bundle SHA-256/size to the unique verified result event. Candidate
 fetch states cover only the returned, target-relevant candidates. Ownership and
 document role are producer declarations; they do not establish independent
@@ -582,19 +597,33 @@ returns policy text, URLs, entity names or worker packets. The CMP coordinator
 series distinguishes an explicit joined result from a limited attempt. A flag,
 missing receipt, or recognized CMP does not establish worker dispatch; original
 profile omissions keep their existing sealed series. Report missing receipt
-coverage by date. Under the 8,192-byte cap, keep the v2 core first, then the
-Accept/Reject and paired GPC/CMP section, then operations. Historical gaps stay
+coverage by date and source version. Under the choice summary's 8,192-byte cap,
+keep the v2 core first, then the Accept/Reject and paired GPC/CMP section.
+The importer checks the private receipt schema, scan/time, original creator and
+ready generation/source binding before reading the producer states. The optional
+transfer-framework code in that same receipt records the existing bounded matcher
+on verified target-controller policy text. A completed check covers the retained
+supported policy scope. Keep qualifying partial-coverage signals, matcher bounds,
+inconclusive scope, explicit not assessed and historical unknown separate from
+the conditional report finding. The assessment does not enter scoring. Historical gaps stay
 unavailable. No extra task, archive read or cloud retention is needed.
 
 The ECS launch override has a separate 8,192-byte limit. Pack each pending UUID
 as its exact 16 bytes, resolve origin once for the union of overlap and pending
 IDs, and transport the priority facts as fixed scalar tuples. Keep support for
-older structured priority receipts. Record the exact launch sizes and the
-optional operations decision in delta-query-transport.json. If operations cannot
-fit the launch override, omit only that section; retain the v2 core, priority
-facts and every planned UUID in the same query. Fail before the AWS task if that
-required payload does not fit. Apply existing verified local policy receipts
-regardless of optional query coverage.
+older structured priority receipts. Record the exact launch sizes and policy
+receipt transport in delta-query-transport.json. The November 9 owner-authorized
+same-document control assessment requires the exact control-accessibility row
+and its optional generation-bound compact coverage receipt alongside policy,
+privacy/form and required v2 fields and every planned UUID. Only existing
+optional operations evidence may be omitted. The daily pending planner selects
+at most 60 IDs and preserves all deferred IDs and ancestry. A detailed receipt
+records status, reason mask and counts for retained/completed/issue/review controls.
+Group its version and coverage reasons separately; missing historical receipts
+remain unknown. No keyboard, child-frame, closed-shadow or unopened-panel
+coverage is inferred from a completed main-document automated assessment.
+Fail before the AWS task if the required payload does not fit. Apply existing
+verified local policy receipts under their original source bindings.
 
 `sealed.opt_out.*` distinguishes summary coverage, broad presence/basis/scope,
 signal kind/scope, policy methods, configured enablement, retained worker outcome,
@@ -654,7 +683,11 @@ planning total remains $1.13 per 31 days. No extra recurring query, capture, mod
 paid retention, service or capacity is added. Schedule/model/project, production
 configuration and protected checkpoint/issue/release/model ledgers stay unchanged.
 
-The expanded local dashboard permits up to 200,000,000 bytes for dashboard.json and 100,000,000 bytes for dashboard.html (previously 160,000,000 / 80,000,000). These local output/read limits retain the added measures; source-query, capture, evidence and cloud-retention budgets are unchanged. Incremental recurring infrastructure cost from the local file limit is $0.
+The local builder, reader and publisher share limits of 320,000,000 bytes for
+dashboard.json and 100,000,000 bytes for dashboard.html. The November 8 snapshot
+used 199,343,667 bytes under the previous 200,000,000-byte JSON cap. The new JSON
+limit provides bounded local headroom for the same rolling window and complete
+evidence lineage. Incremental recurring infrastructure cost is $0.
 
 ## Scoped paired CMP states — November 5
 

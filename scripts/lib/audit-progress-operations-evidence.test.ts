@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildAuditPolicyProvenance} from '../../packages/certscore-contracts/src/audit-policy-provenance';
+import {auditPolicyProvenanceSchema,buildAuditPolicyProvenance,POLICY_SUPPLEMENT_DISPOSITION,TRANSFER_FRAMEWORK_REASON} from '../../packages/certscore-contracts/src/audit-policy-provenance';
 import {choiceSummaryAudit,choiceSummaryFromRecord} from './audit-progress-choice';
+import {jsonbBytes} from './audit-progress-priority-evidence';
+import {operationsEvidenceStates} from './audit-progress-operations-evidence';
 
 export const scanId='11111111-1111-4111-8111-111111111111', digest='a'.repeat(64);
 const timestamp='2026-11-06T09:00:00.000Z';
@@ -89,4 +91,59 @@ test('compact policy receipts preserve legacy states and reject mismatched scan,
  }
  fixture.events.push(fixture.events[0]!);
  assert.equal(buildAuditPolicyProvenance(fixture,generation,digest),undefined);
+});
+
+test('transfer assessment only uses explicit bound results and preserves the SQL receipt cap',()=>{
+ const f=operationsFixture();
+ const policy=f.runtimeArtifacts.policy_disclosure_summary;
+ const check={version:'certscore.transfer-framework-assessment.v1',matcher:'outdated_transfer_disclosure.v1',
+  status:'checked_no_signal',checkedDocumentIndexes:[0],signalDocumentIndex:null};
+ const gen='scan-report-projection-v27',metric=key('transfer_framework_check');
+ const reasonMetric=key('transfer_framework_reasons');
+ const historical=buildAuditPolicyProvenance(f,gen,digest)!;
+ assert.equal(operationsEvidenceStates(historical,scanId,historical.binding)[metric],undefined);
+ const fresh={...f,runtimeArtifacts:{policy_disclosure_summary:{...policy,transferFrameworkAssessment:check as unknown}}};
+ const compact=buildAuditPolicyProvenance(fresh,gen,digest)!;
+ assert.equal(compact.t,0);
+ assert.equal(operationsEvidenceStates(compact,scanId,compact.binding)[metric]?.value,'checked_no_signal');
+ assert.equal(operationsEvidenceStates(compact,scanId,compact.binding)[reasonMetric],undefined);
+ assert.equal(operationsEvidenceStates(compact,scanId,{...compact.binding,sourceHash:'b'.repeat(64)})[metric],undefined);
+ const maxMask=Object.values(TRANSFER_FRAMEWORK_REASON).reduce((mask,bit)=>mask|bit,0);
+ const largest=auditPolicyProvenanceSchema.parse({...compact,fetch:'no_attempt_in_returned_candidates',
+  owner:0,text:'producer_verified_complete_receipt',t:5,r:maxMask,
+  s:Object.values(POLICY_SUPPLEMENT_DISPOSITION).reduce((mask,bit)=>mask|bit,0)});
+ assert.ok(jsonbBytes(largest)<=512);
+ assert.equal(jsonbBytes(largest),492);
+ for(const reason of ['document_text_below_minimum','document_extraction_coverage_incomplete','document_content_scope_incomplete'] as const){
+  const r=TRANSFER_FRAMEWORK_REASON[reason];
+  const split=auditPolicyProvenanceSchema.parse({...compact,owner:1,t:3,r});
+  assert.equal(operationsEvidenceStates(split,scanId,split.binding)[reasonMetric]?.value,'reason_mask_'+r);
+ }
+ assert.equal(auditPolicyProvenanceSchema.safeParse({...largest,r:TRANSFER_FRAMEWORK_REASON.matcher_limit}).success,false);
+ assert.equal(auditPolicyProvenanceSchema.safeParse({...compact,r:1}).success,false);
+ assert.equal(auditPolicyProvenanceSchema.safeParse({...historical,r:1}).success,false);
+ assert.equal(auditPolicyProvenanceSchema.safeParse({...largest,r:maxMask+1}).success,false);
+ for(const patch of [{checkedDocumentIndexes:[1]},{checkedDocumentIndexes:[]},{checkedDocumentIndexes:[0,0]},
+  {status:'checked_review_signal'},{signalDocumentIndex:0},{matcher:'unsupported'}]){
+  fresh.runtimeArtifacts.policy_disclosure_summary.transferFrameworkAssessment={...check,...patch};
+  const invalid=buildAuditPolicyProvenance(fresh,gen,digest)!;
+  assert.equal(invalid.t,undefined);
+  assert.equal(invalid.text,compact.text);
+ }
+ fresh.runtimeArtifacts.policy_disclosure_summary.transferFrameworkAssessment={...check,reasonMask:0};
+ const complete=buildAuditPolicyProvenance(fresh,gen,digest)!;
+ assert.equal(complete.owner,1);
+ assert.equal(operationsEvidenceStates(complete,scanId,complete.binding)[reasonMetric]?.value,'reason_mask_0');
+ assert.equal(operationsEvidenceStates(complete,scanId,complete.binding)[key('policy_owner')]?.value,compact.owner);
+ const reasonMask=TRANSFER_FRAMEWORK_REASON.policy_evidence_lane_degraded|TRANSFER_FRAMEWORK_REASON.unresolved_material_policy_supplements;
+ const supplementMask=POLICY_SUPPLEMENT_DISPOSITION.skipped_budget|POLICY_SUPPLEMENT_DISPOSITION.fetched_without_eligible_match;
+ fresh.runtimeArtifacts.policy_disclosure_summary.transferFrameworkAssessment={...check,status:'partial_review_signal',signalDocumentIndex:0,reasonMask,supplementMask};
+ const partial=buildAuditPolicyProvenance(fresh,gen,digest)!;
+ assert.equal(operationsEvidenceStates(partial,scanId,partial.binding)[metric]?.value,'partial_review_signal');
+ assert.equal(partial.r,reasonMask);
+ assert.equal(partial.s,supplementMask);
+ assert.equal(operationsEvidenceStates(partial,scanId,partial.binding)[key('transfer_supplement_disposition')]?.value,'supplement_mask_'+supplementMask);
+ assert.equal(operationsEvidenceStates({...partial,s:undefined},scanId,partial.binding)[key('transfer_supplement_disposition')],undefined);
+ assert.equal(operationsEvidenceStates(partial,scanId,partial.binding)[reasonMetric]?.value,'reason_mask_'+reasonMask);
+ assert.equal(operationsEvidenceStates(partial,scanId,{...partial.binding,sourceHash:'b'.repeat(64)})[reasonMetric],undefined);
 });

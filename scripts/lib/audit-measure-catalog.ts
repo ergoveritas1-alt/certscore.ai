@@ -27,6 +27,8 @@ function field(legacyId:string,basis:string,relationship:Link['relationship']='s
 }
 const extras:Record<string,[string,string]>={
  cmp_dispatch:['audit.acquisition_receipt','Persisted inventory worker state, distinct from coordinator dispatch.'],
+ 'detail.gpc.california_collection':['privacy.canonical_choice_result','Recorded California GPC policy application with verified qualifying collection; neutral canonical presence is not a finding.'],
+ 'detail.gpc.assessment_coverage':['gpc.response_assessment','Source-validated comparison assessability, independent of tracker reduction.'],
  gpc_path:['gpc.response_assessment','Observation-path availability; not the response assessment verdict.'],
  gpc_finding:['privacy.canonical_choice_result','Aggregate result-record presence; public list and persisted canonical inventory remain distinct.'],
  'accessibility.results':['accessibility.audit','Availability of returned rule-result counts.'],
@@ -70,6 +72,9 @@ const checklistConcepts:Record<string,string>={
 };
 const topicChecks:Record<string,string>={controller_contact_disclosure:'controller_contact',processing_purposes_disclosure:'processing_purposes',legal_basis_disclosure_observed:'legal_basis',recipients_vendor_categories_disclosure:'recipients_or_vendor_categories',retention_disclosure_observed:'data_retention',data_subject_rights_disclosure:'data_subject_rights',international_transfers_disclosure:'international_transfers',dpo_contact_point_disclosure:'dpo_contact',supervisory_authority_complaint_disclosure:'supervisory_authority',automated_decision_making_profiling_disclosure:'automated_decision_making_or_profiling'};
 export function auditMeasureLinks(id:string,kind:string):Link[]{
+ if(id==='sealed.operations.transfer_framework_check')return [field('policies.stale_framework.evidence_state','Related audit coverage of the versioned retained-text matcher, separate from the returned checklist finding.','assessment_context')];
+ if(id==='sealed.operations.transfer_framework_reasons')return [field('policies.stale_framework.evidence_state','Producer-recorded prerequisites for completing the retained-text matcher.','assessment_context')];
+ if(id==='sealed.operations.transfer_supplement_disposition')return [field('policies.stale_framework.evidence_state','Producer-recorded disposition of unresolved material supplements.','assessment_context')];
  if(id.startsWith('sealed.priority_evidence.'))return [field('operations.series.summary_coverage','Priority delivery coverage for '+id.split('.').at(-1)+'; source absence, eligibility and transport omission are distinct.','source_variant')];
  if(kind==='finding')return [record('audit.canonical_inventory','Exact returned finding ID '+id+'; separate finding identity, policy and inventory completeness.','inventory_identity')];
  const direct=CATALOG_VIEW_BINDINGS.filter(b=>b.metricIds.includes(id));
@@ -92,6 +97,7 @@ export function auditMeasureLinks(id:string,kind:string):Link[]{
   if(name==='privacy_notice_availability')return [field('policies.discovery.link.'+(type==='verdict'?'verdict':'evidence_state'),'Privacy-notice checklist '+type+'; independent of source fetch.')];
   if(checklistConcepts[name!])return [record(checklistConcepts[name!]!,'Named checklist '+name+' / '+type+'; related assessment, not underlying observation or exact CMP criterion.')];
  }
+ if(/^detail\.(accept|reject)\.activity_all$/.test(key))return [record('consent.post_choice_capture','Observed non-essential activity after a completed click, including verified captures with unconfirmed registration.')];
  const reason=key.match(/^detail\.(accept|reject)\.reason$/);
  if(reason)return [record('consent.choice_execution',reason[1]+' indeterminate reason; separate from execution status and terminal verification.')];
  if(extras[key])return [record(...extras[key]!)];
@@ -149,27 +155,30 @@ const FORWARD_MEASURES:Record<string,string[]>={
  'sealed.control.privacyOptOut':['sealed.opt_out.scope','sealed.opt_out.basis','sealed.opt_out.signal_scope','sealed.opt_out.signal_basis','sealed.opt_out.policy_methods'],
  'click.accept':['execution.accept','sealed.priority_evidence.accept'],
  'registration.accept':['sealed.terminal.audit_accept'],
+ 'detail.accept.activity_all':[],
  'detail.accept.verdict':['detail.accept.projectable','detail.accept.reason','detail.accept.stop','accept.requests','accept.storage_writes'],
  'click.reject':['execution.reject','sealed.priority_evidence.reject'],
  'registration.reject':['sealed.terminal.audit_reject'],
- 'detail.reject.verdict':['detail.reject.projectable','detail.reject.reason','detail.reject.stop','reject.requests','reject.storage_writes'],
+ 'detail.reject.activity_all':['customer_cmp_check.implementation'],
+ 'detail.reject.verdict':['sealed.choice_finding.california_post_reject_collection','detail.reject.projectable','detail.reject.reason','detail.reject.stop','reject.requests','reject.storage_writes'],
  gpc_delivery:['gpc_path'],
- 'detail.gpc.response':['detail.gpc.semantic_probe','detail.gpc.semantic_readiness','detail.gpc.cmp_receipt'],
+ 'detail.gpc.cmp_receipt':['detail.gpc.acknowledgment','detail.gpc.semantic_probe','detail.gpc.semantic_readiness','gpc.session.semantic_read_ms','detail.gpc.assessment_coverage'],
+ 'detail.gpc.assessment_coverage':['detail.gpc.response','detail.gpc.paired_pair','sealed.choice_evidence.paired_cmp','detail.gpc.paired_cmp','detail.gpc.paired_cmp_scope','detail.gpc.paired_window'],
+ 'detail.gpc.california_collection':['sealed.choice_finding.gpc_response','sealed.choice_finding.gpp_propagation_inconsistency','sealed.choice_finding.california_frictionless_gpc_exception'],
  'sealed.choice_evidence.paired_cmp':['sealed.choice_evidence.paired_baseline_sale','sealed.choice_evidence.paired_baseline_sharing','sealed.choice_evidence.paired_gpc_sale','sealed.choice_evidence.paired_gpc_sharing','sealed.choice_evidence.paired_sale_transition','sealed.choice_evidence.paired_sharing_transition','sealed.choice_evidence.paired_cmp_scope','sealed.priority_evidence.cmp'],
  'detail.gpc.paired_pair':['detail.gpc.paired_collection','detail.gpc.paired_identifiers','detail.gpc.paired_sample_cap','detail.gpc.paired_advertising_opportunity','gpc.paired.duration_ms','gpc.paired.baseline.advertising_requests','gpc.paired.gpc.advertising_requests','gpc.paired.baseline.analytics_requests','gpc.paired.gpc.analytics_requests','gpc.paired.baseline.collection_sample','gpc.paired.gpc.collection_sample','gpc.paired.baseline.identified_sample','gpc.paired.gpc.identified_sample'],
- 'detail.gpc.session_collection':['detail.gpc.session_request_coverage','detail.gpc.early_zero_later_collection','detail.gpc.request_sample_cap','gpc.session.advertising_collection','gpc.session.classified_requests','gpc.session.through_ms','gpc.session.semantic_read_ms','gpc.session.supported_activity_requests','gpc.session.unresolved_activity_requests','gpc.session.processing_context_requests','gpc.session.recipients'],
+ 'detail.gpc.session_collection':['detail.gpc.session_request_coverage','detail.gpc.early_zero_later_collection','detail.gpc.request_sample_cap','gpc.session.advertising_collection','gpc.session.classified_requests','gpc.session.through_ms','gpc.session.supported_activity_requests','gpc.session.unresolved_activity_requests','gpc.session.processing_context_requests','gpc.session.recipients'],
  'sealed.choice_finding.gpc_response':[],
  'sealed.choice_finding.gpp_propagation_inconsistency':[],
  'sealed.choice_finding.california_frictionless_gpc_exception':[],
- 'sealed.choice_finding.california_post_reject_collection':[],
  'sealed.opt_out.dispatch':['sealed.opt_out.coverage','sealed.opt_out.configured','sealed.opt_out.conditional_control','sealed.opt_out.supported_route','sealed.opt_out.dispatch_reason'],
- 'sealed.opt_out.action_completion':['sealed.opt_out.lane','sealed.opt_out.lane_stop','sealed.opt_out.recipe','sealed.opt_out.packet','sealed.opt_out.actions','sealed.opt_out.submission','sealed.opt_out.stop'],
+ 'sealed.opt_out.action_completion':['sealed.opt_out.dispatch','sealed.opt_out.choice_confirmation','sealed.opt_out.post_confirmation_observation','sealed.opt_out.lane','sealed.opt_out.lane_stop','sealed.opt_out.recipe','sealed.opt_out.packet','sealed.opt_out.actions','sealed.opt_out.submission','sealed.opt_out.stop'],
  'sealed.opt_out.choice_confirmation':['sealed.opt_out.registration','sealed.opt_out.confirmation_basis'],
  'sealed.opt_out.post_confirmation_observation':['sealed.opt_out.capture','sealed.opt_out.observation'],
  'sealed.opt_out.presence':['sealed.opt_out.basis','sealed.opt_out.scope','sealed.opt_out.effectiveness','sealed.choice_finding.california_sale_sharing_opt_out_assessment','sealed.opt_out.findings_coverage'],
  privacy_policy:['verdict.privacy_notice_availability'],
  'checklist.cookie_notice_policy_availability':['verdict.cookie_notice_policy_availability'],
- 'checklist.outdated_transfer_framework_reference':['verdict.outdated_transfer_framework_reference'],
+ 'checklist.outdated_transfer_framework_reference':['verdict.outdated_transfer_framework_reference','sealed.operations.transfer_framework_check'],
  'sealed.operations.policy_text_receipt':['sealed.operations.policy_fetch','sealed.operations.policy_owner','detail.inventory.policy'],
  accessibility:['accessibility.results','accessibility.coverage','accessibility.examples'],
  'accessibility.failed_rules':['accessibility.affected_nodes'],
@@ -184,10 +193,11 @@ const FORWARD_MEASURES:Record<string,string[]>={
  'detail.inventory.requests':['inventory.unclassified_requests'],
  'detail.inventory.findings':[],
  'site.link_evidence':['site.links_inspected','sealed.detail.sealed.site_integrity'],
- 'technology.matches':['technology.detections','sealed.detail.sealed.technology'],
+ 'technology.detections':[],
+ 'technology.matches':['sealed.detail.sealed.technology'],
 };
 const FORWARD_CHECKS=[
- 'consent_browsing_as_consent','consent_optional_defaults_on','consent_surface_observed',
+ 'consent_optional_defaults_on','consent_surface_observed',
  'device_identification_fingerprinting_signal_observed','embedded_content_pre_consent',
  'pre_consent_cookies_storage','pre_consent_third_party_tracking','session_replay_fingerprinting_review',
  'social_media_embed_pre_consent','third_party_iframe_pre_consent',
@@ -206,6 +216,15 @@ for(const id of ['declared_not_found','duration','found_not_declared','implement
 }
 FORWARD_MEASURES['customer_cmp_check.services']=['customer_cmp_check.categories','customer_cmp_check.cookie_information'];
 FORWARD_MEASURES['customer_cmp_check.implementation']=['customer_cmp_check.consent_record'];
+
+const OMITTED_MAIN_TABLE_MEASURES=new Set([
+ 'sealed.checklist.public_collection_surfaces',
+ 'sealed.detail.sealed.form_destinations',
+ 'sealed.checklist.preference_withdrawal_control',
+ 'customer_cmp_check.found_not_declared',
+ 'checklist.consent_optional_defaults_on',
+ 'sealed.checklist.consent_optional_defaults_on',
+]);
 
 export function forwardAuditMeasures<T extends {id:string;kind:string}>(all:T[]){
  const byId=new Map(all.map(entry=>[entry.id,entry]));
@@ -242,8 +261,18 @@ export function forwardAuditMeasures<T extends {id:string;kind:string}>(all:T[])
   text_alternative_accessibility_issue:'accessibility.failed_rules',
  };
  for(const entry of all)if(entry.kind==='finding'&&findingOwners[entry.id]&&byId.has(findingOwners[entry.id]!))parent.set(entry.id,findingOwners[entry.id]!);
- const entries=all.filter(entry=>Object.hasOwn(FORWARD_MEASURES,entry.id)||parent.has(entry.id)||entry.kind==='finding');
- const tableEntries=entries.filter(entry=>!parent.has(entry.id)||!byId.has(parent.get(entry.id)!))
+ for (const entry of all) {
+  if (entry.kind==='finding' && /gpc|gpp/.test(entry.id)) parent.set(entry.id,'detail.gpc.california_collection');
+ }
+ for (const [child, owner] of parent) {
+  let root=owner;const seen=new Set([child]);
+  while(parent.has(root)&&byId.has(parent.get(root)!)){if(seen.has(root))throw Error('Supporting measure cycle');seen.add(root);root=parent.get(root)!;}
+  parent.set(child,root);
+ }
+ const entries=all.filter(entry=>entry.id!=='regulatory_gap__gdpr_eprivacy__consent_browsing_as_consent'&&
+  (Object.hasOwn(FORWARD_MEASURES,entry.id)||parent.has(entry.id)||entry.kind==='finding'));
+ const tableEntries=entries.filter(entry=>!OMITTED_MAIN_TABLE_MEASURES.has(entry.id))
+  .filter(entry=>!parent.has(entry.id)||!byId.has(parent.get(entry.id)!))
   .map(entry=>({...entry,details:entries.filter(detail=>parent.get(detail.id)===entry.id)}));
  return {entries,tableEntries,retired:all.filter(entry=>!entries.includes(entry)).map(entry=>({
   id:entry.id,reason:'No separate forward report question beyond the selected canonical measures and their supporting evidence.',
@@ -264,19 +293,85 @@ export function buildAuditMeasureView(data:any){
  const checklistAliases=reviewedChecklistAliases(data);
  removals.push(...checklistAliases);
  const reviewed=all.filter(e=>!removals.some(r=>r.id===e.id)).map(e=>({...e,canonicalLinks:auditMeasureLinks(e.id,e.kind)}));
+ const choiceLabels:Record<string,string>={
+  'control.accept':'Accept control presence',
+  'click.accept':'Accept click completed',
+  'detail.accept.activity_all':'After Accept non-essential activity (all)',
+  'registration.accept':'Accept choice confirmed',
+  'detail.accept.verdict':'After Accept non-essential activity (confirmed)',
+  'control.reject':'Reject control presence',
+  'click.reject':'Reject click completed',
+  'detail.reject.activity_all':'After Reject non-essential activity (all)',
+  'registration.reject':'Reject choice confirmed',
+  'detail.reject.verdict':'After Reject non-essential activity (confirmed)',
+ };
+ const coreLabels:Record<string,string>=Object.fromEntries(MASTER_CATALOG.questionGroups.map(q=>[q.primaryMetric,q.title]));
+ const quantityLabels:Record<string,string>={'site.link_evidence':'Hidden links','technology.detections':'Tech stack observed'};
+ const accessibilityLabels:Record<string,string>={
+  accessibility:'Page accessibility · audit completion',
+  'accessibility.failed_rules':'Page accessibility · detected rule failures',
+  'accessibility.review_rules':'Page accessibility · manual review needed',
+  'sealed.checklist.accessibility_consent_controls':'Privacy/consent controls · accessibility test coverage',
+ };
+ const trackingPresentation:Record<string,{label:string;scopeNote:string}>={
+  'checklist.device_identification_fingerprinting_signal_observed':{
+   label:'Device identification / fingerprinting · review signals',
+   scopeNote:'A recorded device-identification review signal is not proof of marketing fingerprinting. Depending on the source version, it can include coordinated device signals or security/bot telemetry. Session replay is a separate question. Not observed means no qualifying signal was returned for the tested scope.',
+  },
+  'checklist.session_replay_fingerprinting_review':{
+   label:'Session replay / behavioral analytics · review signals',
+   scopeNote:'The headline counts the recorded review verdict, not every replay-tool detection. A separate Observed verdict can describe activity after Accept or activity whose pre-consent timing was not confirmed. Device-identification evidence alone does not establish replay. Preserve the original source/version interpretation.',
+  },
+  'checklist.embedded_content_pre_consent':{
+   label:'Third-party embedded content · review signals',
+   scopeNote:'This broad embedded-content check can overlap the social/media and iframe rows. It is not the union of those rows and does not establish tracking or successful data collection by itself. Do not add these percentages; one report can contribute to several checks.',
+  },
+  'checklist.social_media_embed_pre_consent':{
+   label:'Social/media provider activity before consent',
+   scopeNote:'The retained check can cover embeds, plugins, widgets and pixels. Gap observed and Partial concern retain their different producer verdicts; a static asset can support a review signal without stronger embed behavior. This row overlaps other embed/tracking checks and does not independently prove successful collection.',
+  },
+  'checklist.third_party_iframe_pre_consent':{
+   label:'Third-party iframe activity before consent',
+   scopeNote:'This check concerns retained iframe activity, a narrower mechanism than the broad embedded-content check. An iframe is not automatically a tracker. Gap observed is the returned checklist verdict, not a new tracking classification. Do not add this rate to the broader embed rate.',
+  },
+  'checklist.pre_consent_cookies_storage':{
+   label:'Classified non-essential pre-consent storage',
+   scopeNote:'Storage and network tracking are separate evidence paths. Gap observed, Partial concern and insufficient evidence retain their original classifications; snapshot presence alone does not prove when a write occurred. This row can overlap tracking checks and is not an additional count of affected sites.',
+  },
+  'checklist.pre_consent_third_party_tracking':{
+   label:'Pre-consent non-essential tracking',
+   scopeNote:'The headline counts only the recorded Gap observed verdict. Vendor inventories, requests or summary flags can remain Insufficient evidence or Not confirmed. Not observed means no qualifying finding was returned for the tested scope, not that all tracking was ruled out. Overlapping storage, embed and replay rows must not be summed.',
+  },
+ };
  const grouped=reviewed.map(entry=>{
   let group=(entry.group??'Other report signals').replace(/^Retained · /,'');
   if(['GPC details','Canonical GPC & opt-out records'].includes(group))group='GPC';
-  if(['A/R paths','A/R verdicts'].includes(group)||entry.id==='sealed.choice_finding.california_post_reject_collection')group='Accept & Reject';
+  if(Object.hasOwn(choiceLabels,entry.id)||['A/R paths','A/R verdicts'].includes(group)||entry.id==='sealed.choice_finding.california_post_reject_collection')group='Accept & Reject';
   if(entry.id==='sealed.choice_finding.california_sale_sharing_opt_out_assessment')group='Opt-out';
   if(group==='CMP details')group='Consent & CMP';
   if(entry.id==='sealed.detail.sealed.form_destinations')group='Forms';
-  const label=(entry.label??entry.id).replace(/ · retained assessment$/,'').replace(/ · audit extract$/,'');
-  return {...entry,group,label};
+  const label=(trackingPresentation[entry.id]?.label??accessibilityLabels[entry.id]??choiceLabels[entry.id]??coreLabels[entry.id]??quantityLabels[entry.id]??entry.label??entry.id)
+   .replace(/ · retained assessment$/,'').replace(/ · audit extract$/,'');
+  let denominator=(entry as {denominator?:string}).denominator;
+  if(entry.id==='detail.gpc.session_collection')denominator='Reportable scans; successful collection during the retained GPC visit.';
+  if(entry.id==='detail.gpc.california_collection')denominator='Reportable scans; recorded California qualification with verified collection.';
+  if(/^detail\.(accept|reject)\.verdict$/.test(entry.id))denominator='All readable reportable scans, including scans with unavailable verdict evidence.';
+  if(/^detail\.(accept|reject)\.activity_all$/.test(entry.id))denominator='All usable scans. Counts observed non-essential activity after a completed click, with or without choice confirmation.';
+  return {...entry,group,label,denominator,...(trackingPresentation[entry.id]?{scopeNote:trackingPresentation[entry.id]!.scopeNote}:{})};
  });
  const groupOrder=[...new Set(grouped.map(entry=>entry.group))];
  grouped.sort((a,b)=>groupOrder.indexOf(a.group)-groupOrder.indexOf(b.group));
- const {entries,tableEntries,retired}=forwardAuditMeasures(grouped);
+ const {entries,tableEntries:forwardTableEntries,retired}=forwardAuditMeasures(grouped);
+ const tableEntries=forwardTableEntries.map(entry=>entry.id==='sealed.opt_out.action_completion'
+  ? {...entry,label:'Opt-out execution and verification'}:entry);
+ const coreOrder=MASTER_CATALOG.questionGroups.map(q=>q.primaryMetric);
+ const choiceOrder=Object.keys(choiceLabels);
+ tableEntries.sort((a,b)=>{
+  if(a.group!==b.group)return groupOrder.indexOf(a.group)-groupOrder.indexOf(b.group);
+  if(a.group==='GPC')return coreOrder.indexOf(a.id)-coreOrder.indexOf(b.id);
+  if(a.group==='Accept & Reject')return choiceOrder.indexOf(a.id)-choiceOrder.indexOf(b.id);
+  return 0;
+ });
  return {version:'certscore.audit-measure-catalog.v2',catalogVersion:MASTER_CATALOG.version,entries,tableEntries,retired,removals,checklistAliases,
   scope:'Current table uses reviewed canonical bindings. Related assessments and source variants are not equal-value aliases. Historical contracts, source rows and CSVs remain intact. Missing meaningful evidence stays visible.'};
 }

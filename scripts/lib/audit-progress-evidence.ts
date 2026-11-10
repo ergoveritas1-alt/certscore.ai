@@ -15,7 +15,8 @@ const denominator="Readable reportable scans; missing historical fields stay not
 export const EVIDENCE_METRICS:Metric[]=[
   ...GPC_PAIR_METRICS, ...GPC_SESSION_METRICS, ...GPC_DETAIL_METRICS,
   ...["accept","reject"].flatMap(action=>[
-    {id:`detail.${action}.verdict`,label:`${action} returned verdict`,group:"A/R verdicts",denominator,success:[]},
+    {id:`detail.${action}.activity_all`,label:`After ${action} non-essential activity (all)`,group:"A/R verdicts",denominator,success:["activity_observed"]},
+    {id:`detail.${action}.verdict`,label:`${action} returned verdict`,group:"A/R verdicts",denominator,success:[action==="accept"?"eligible_nonessential_activity_observed_after_confirmed_acceptance":"eligible_nonessential_activity_observed_after_confirmed_refusal"]},
     {id:`detail.${action}.projectable`,label:`${action} evidence projectable`,group:"A/R verdicts",denominator,success:["projectable"]},
     {id:`detail.${action}.reason`,label:`${action} indeterminate reason`,group:"A/R verdicts",denominator,success:[]},
     {id:`detail.${action}.stop`,label:`${action} after-click stop reason`,group:"A/R verdicts",denominator,success:[]},
@@ -64,7 +65,7 @@ const CHECK_GROUPS:Record<string,string>={
 export function checklistGroup(id:string){return id.startsWith("transport_security_")?"Connection security":CHECK_GROUPS[id]??"Tracking & embeds";}
 export function evidenceProgress(report:Obj,checklist:Obj[],covered:ReadonlySet<string>){
   const states:Record<string,string>={},measurements:Record<string,number>={},metricLabels:Record<string,string>={};
-  for(const m of EVIDENCE_METRICS)states[m.id]="unavailable";
+  for(const m of EVIDENCE_METRICS)if(!m.id.endsWith(".activity_all"))states[m.id]="unavailable";
   // Preserve returned customer status. A transport concern can have evidenceState
   // observed while status is Gap observed: it must not become a positive check.
   for(const r of checklist){

@@ -8,9 +8,30 @@ import {sealedSource} from './audit-progress-contracts';
 import {retainedArtifactContext} from './audit-progress-retained-artifacts';
 import type {OptOutReceipt} from './audit-progress-opt-out';
 import {retainedInputCoverage,type RetainedReportInputState} from './audit-progress-input-coverage';
+import {retainedCaliforniaPostReject} from '../../apps/web/lib/scans/california-post-reject-policy';
+import {postAcceptReportProjectionSchema} from '../../packages/certscore-contracts/src/post-accept-observation';
+import {postRefusalReportProjectionSchema} from '../../packages/certscore-contracts/src/post-refusal-observation';
 const require=createRequire(import.meta.url);require.cache[require.resolve('server-only')]={exports:{},loaded:true} as any;
 const {normalizeProjectionJson}=require('../../apps/web/server/scans/scan-report-projection-contract');
 type ReportReceipt=OptOutReceipt&{artifacts?:OptOutReceipt};
+const actions=['accept','reject'] as const;
+export const RETAINED_CLICK_ACTIVITY_KEYS=actions.map(action=>`sealed.detail.${action}.post_click_activity`);
+
+function retainedClickActivity(record:any,action:typeof actions[number]){
+ const runtime=record.runtimeArtifacts;
+ const parsed=action==='accept'
+  ? postAcceptReportProjectionSchema.safeParse(runtime?.postAcceptEvidenceProjection??runtime?.post_accept_evidence_projection)
+  : postRefusalReportProjectionSchema.safeParse(runtime?.postRefusalEvidenceProjection??runtime?.post_refusal_evidence_projection);
+ if(!parsed.success)return;
+ const {afterActionCapture:capture,afterActionRequests:requests,execution,packetSha256}=parsed.data;
+ if(!packetSha256||execution?.clickCompleted!==true||capture?.activationStatus!=='completed'||
+    capture.stopReason==='target_changed'||capture.stopReason==='click_uncertain')return;
+ // A retained non-essential write is direct evidence. A request needs a root
+ // start after the click so redirects from an earlier request cannot qualify.
+ const postClickIds=new Set(capture.requestAncestry?.filter(request=>request.rootStartedAtMs>=capture.actionDispatchedAtMs).map(request=>request.requestId));
+ if(capture.storageWrites.some(write=>write.nonEssential)||requests?.some(request=>request.nonEssential&&postClickIds.has(request.requestId)))
+  return capture.policyVersion;
+}
 function readEnvelope(ref:ReportReceipt){
  const bytes=readFileSync(ref.file);if(bytes.length>20_000_000||bytes.length!==ref.bytes||createHash('sha256').update(bytes).digest('hex')!==ref.sha256)throw Error('Retained projection receipt mismatch');
  return JSON.parse(bytes.toString('utf8'));
@@ -30,7 +51,11 @@ export function applyRetainedReports(rows:ProgressRow[],receipts:(OptOutReceipt&
  const byId=new Map(rows.map(r=>[r.scanId,r]));if(byId.size!==rows.length)throw Error('Duplicate scan rows cannot establish retained input coverage');
  const matchedIds=new Set<string>(),seen=new Set<string>();let filled=0,duplicateReceipts=0;
  const candidates:{ref:ReportReceipt;row:ProgressRow;payloadHash:string}[]=[],hashes=new Map<string,Set<string>>();
- for(const row of rows){if(row.reportable)row.retainedReportInput='missing_input';else delete row.retainedReportInput;}
+ for(const row of rows){
+  delete row.californiaRejectCoverage;
+  for(const key of RETAINED_CLICK_ACTIVITY_KEYS){delete row.states[key];delete row.metricSources?.[key];}
+  if(row.reportable)row.retainedReportInput='missing_input';else delete row.retainedReportInput;
+ }
  // Preflight all candidates before supplementing any row. Keep only small
  // receipts/signatures in memory, not thousands of complete report payloads.
  for(const ref of receipts){
@@ -50,6 +75,27 @@ export function applyRetainedReports(rows:ProgressRow[],receipts:(OptOutReceipt&
   if(seen.has(key)){duplicateReceipts++;continue;}seen.add(key);
   const e=readEnvelope(ref);if(inputDisposition(row,e)!=='matched')throw Error('Retained projection changed during import');
   const p=e.snapshot,record={...p.report_projection_payload,snapshot:{...p.report_projection_payload.snapshot,report_projection_version:p.report_projection_version,report_projection_source_hash:p.report_projection_source_hash}};
+  for(const [index,action] of actions.entries()){
+   if(row.states['click.'+action]!=='completed')continue;
+   const policy=retainedClickActivity(record,action);
+   if(!policy)continue;
+   const key=RETAINED_CLICK_ACTIVITY_KEYS[index]!;
+   row.states[key]='activity_observed';
+   (row.metricSources??={})[key]='persisted_report_projection/'+row.projectionVersion+'/'+policy;
+  }
+  if(row.states['click.reject']==='completed'){
+   const assessment=retainedCaliforniaPostReject(record.runtimeArtifacts);
+   if(assessment?.scanId===row.scanId){
+    row.californiaRejectCoverage={
+     policyVersion:assessment.policyVersion,status:assessment.status,
+     reasons:[...new Set([
+      ...(assessment.scope==='unknown'?['reject_scope_unknown']:[]),
+      ...(assessment.requestsTruncated?['request_inventory_truncated']:[]),
+      ...assessment.requests.filter(request=>request.reason!=='qualified_collection').map(request=>request.reason),
+     ])].sort(),
+    };
+   }
+  }
   const context=retainedArtifactContext(p.report_projection_payload,row.scanId,ref.artifacts);
   applyChoiceSummary(row,choiceSummaryFromRecord(record,context??undefined),`persisted_report_choice_summary/${row.projectionVersion}`);
   const raw=extractProgressRow({inventory:{id:row.scanId,hostname:row.site,created_at:row.createdAt,status:e.status,scan_from:row.region,lambda_config:p.report_projection_payload.scan.scanConfigJson?.execution?.v2DagLambda},origin:e,record,report:record,bundle:context?.bundle,sourceFacts:context?.sourceFacts,refs:context?.refs??[],exportState:context?'generation_matched':'persisted_generation_matched'});

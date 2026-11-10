@@ -83,9 +83,8 @@ test('cookie declaration counts travel from the persisted comparison without coo
  const packet=buildCustomerConsentEvidence(s)!;
  assert.deepEqual(packet.cookieDeclarationCounts,{version:'certscore.cookie-declaration-counts.v1',observed:4,matched:2,declarationInventoryComplete:false});
  assert.doesNotMatch(JSON.stringify(packet),/fixture-private-cookie/);
- const {cookieDeclarationCounts,...basePacket}=packet;
- assert.ok(cookieDeclarationCounts);
- assert.equal(customerConsentEvidenceSchema.safeParse(basePacket).success,true);
+ assert.equal(customerConsentEvidenceSchema.safeParse({...packet,cookieDeclarationCounts:{...packet.cookieDeclarationCounts,matched:5}}).success,false);
+ assert.equal(customerConsentEvidenceSchema.safeParse({...packet,criteria:packet.criteria.map(c=>c.id==='found_not_declared'?{...c,status:'Review recommended'}:c)}).success,false);
  s.canonicalReportProjection!.normalizedConcerns=[];
  assert.equal(buildCustomerConsentEvidence(s)?.cookieDeclarationCounts,undefined);
 });

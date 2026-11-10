@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {saleSharingOptOutLaneOutcomeSchema} from './sale-sharing-opt-out';
+import {optOutDispatchRejectionSchema} from './opt-out-dispatch-rejection';
 
 /** Operational dispatch facts, never evidence of action completion or honoring. */
 export const conditionalOptOutDecisionSchema=z.object({
@@ -16,12 +17,17 @@ export const conditionalOptOutDecisionSchema=z.object({
   supportedRoute:z.boolean().optional(),
   decidedAtMs:z.number().int().min(0).max(600000).optional(),
   remainingTimeMs:z.number().int().min(0).max(600000).optional(),
+  rejection:optOutDispatchRejectionSchema.optional(),
 }).strict().superRefine((row,ctx)=>{
   if((row.controlObserved!==undefined||row.supportedRoute!==undefined)&&!row.sourceSha256 ||
     row.version==='conditional_opt_out_dispatch.v3'&&row.controlObserved===true&&!row.observationId ||
     row.supportedRoute===true&&(!row.controlObserved||!row.observationId||!row.recipeVersion) ||
     row.status==='dispatched'&&(row.reason!=='supported_control'||row.supportedRoute!==true||row.remainingTimeMs===undefined||row.remainingTimeMs<5000))
     ctx.addIssue({code:'custom',message:'Conditional dispatch facts require verified source and eligible-route proof.'});
+  if(row.rejection&&(row.version!=='conditional_opt_out_dispatch.v3'||!row.sourceSha256||
+    row.status!=='skipped'||row.supportedRoute!==false||
+    !['unsupported_or_unverified_control','ambiguous_control'].includes(row.reason)))
+    ctx.addIssue({code:'custom',message:'Rejection details require a source-bound skipped candidate decision.'});
 });
 export type ConditionalOptOutDecision=z.infer<typeof conditionalOptOutDecisionSchema>;
 

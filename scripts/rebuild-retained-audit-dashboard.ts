@@ -1,8 +1,12 @@
+import {EVIDENCE_METRICS} from './lib/audit-progress-evidence';
+import {extractExportRow} from './lib/audit-progress-export';
+import {GPC_CORE_METRICS} from './lib/audit-progress-gpc';
 import {applyPublicCmpEvidence,PUBLIC_CMP_CRITERIA} from './lib/audit-progress-export';
-import {localDay,type ProgressRow} from './lib/audit-progress';
+import {localDay,METRICS,type ProgressRow} from './lib/audit-progress';
 import {makeContracts} from './lib/audit-progress-contracts';
 import {progressEngine} from './lib/audit-progress-engine';
 import {auditQuantityCsvMetrics,auditStateCsvMetrics} from './lib/audit-measure-catalog';
+import snapshotLimits from './lib/audit-progress-snapshot-limits.json';
 /** Stage a local dashboard candidate at the existing cutoff. Inputs are immutable and already retained. */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -16,9 +20,11 @@ import { COVERAGE_MAP } from './lib/audit-progress-coverage';
 import { OPT_OUT_INPUT_VERSION } from './lib/audit-progress-opt-out';
 import { rebuildChoiceEvidence } from './lib/audit-progress-choice-verification';
 import { CHOICE_METRICS, OPT_OUT_OUTCOME_METRIC_IDS } from './lib/audit-progress-choice';
+import {applyRetainedReports,RETAINED_CLICK_ACTIVITY_KEYS} from './lib/audit-progress-retained-report';
+import {applyRetainedOptOutExtracts} from './lib/audit-progress-opt-out';
 
 const [previous, manifest, output, upgrade] = process.argv.slice(2);
-if (!previous || !manifest || !output || (upgrade && !['--wire-current-cmp','--replay-opt-out-outcomes'].includes(upgrade))) {
+if (!previous || !manifest || !output || (upgrade && !['--wire-current-cmp','--replay-opt-out-outcomes','--gpc-core-questions','--usable-choice-funnel','--choice-click-activity'].includes(upgrade))) {
   throw Error('Supply a sealed dashboard.json, a retained-only input manifest, and a fresh output directory');
 }
 const priorFile = realpathSync(previous);
@@ -28,7 +34,7 @@ assert.equal(path.basename(priorFile), 'dashboard.json');
 const dataFiles = ['daily-metrics.csv', 'daily-volumes.csv', 'daily-findings.csv', 'metric-contracts.json', 'exclusions.json'];
 const names = ['dashboard.json', 'dashboard.html', ...dataFiles];
 const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
-const bound = (name: string) => name === 'dashboard.json' ? 200_000_000 : name === 'dashboard.html' ? 100_000_000 : 80_000_000;
+const bound = (name: string) => snapshotLimits[name as keyof typeof snapshotLimits] ?? 80_000_000;
 function read(file: string, maximum: number) {
   if (statSync(file).size > maximum) throw Error('Retained input exceeds its byte bound: ' + path.basename(file));
   const bytes = readFileSync(file);
@@ -88,6 +94,50 @@ if(upgrade==='--replay-opt-out-outcomes'){
   }
   const presence=CHOICE_METRICS.find(metric=>metric.id==='sealed.opt_out.presence')!;
   data.metrics=data.metrics.map((metric:{id:string})=>metric.id===presence.id?presence:metric);
+}
+if(upgrade==='--gpc-core-questions'){
+  const known=new Set(data.metrics.map((m:{id:string})=>m.id));
+  data.metrics.push(...GPC_CORE_METRICS.filter(m=>!known.has(m.id)));
+  for(const row of data.rows as ProgressRow[]){
+    if(!row.reportable)continue;
+    for(const m of GPC_CORE_METRICS)row.states[m.id]='unavailable';
+    const ref=row.refs.find(r=>r.role==='hash_verified_bot_archive_export');
+    if(!ref)continue;
+    const bytes=read(ref.file,6*1024*1024);
+    assert.equal(sha(bytes),ref.sha256,'GPC question source hash');
+    const extracted=extractExportRow(JSON.parse(bytes.toString('utf8')),ref);
+    assert.equal(extracted.scanId,row.scanId);
+    for(const m of GPC_CORE_METRICS){row.states[m.id]=extracted.states[m.id]??'unavailable';(row.metricSources??={})[m.id]=extracted.metricSources![m.id]!;}
+  }
+}
+if(upgrade==='--usable-choice-funnel'){
+  const definitions=new Map(METRICS.filter(m=>/^(click|registration)\.(accept|reject)$/.test(m.id)).map(m=>[m.id,m]));
+  data.metrics=data.metrics.map((m:{id:string})=>definitions.get(m.id)??m);
+}
+if(upgrade==='--choice-click-activity'){
+  const definitions=new Map(EVIDENCE_METRICS.filter(m=>/^detail\.(accept|reject)\.(verdict|activity_all)$/.test(m.id)).map(m=>[m.id,m]));
+  data.metrics=data.metrics.map((m:{id:string})=>{
+    const definition=definitions.get(m.id);
+    definitions.delete(m.id);
+    return definition??m;
+  });
+  data.metrics.push(...definitions.values());
+}
+const replay = structuredClone(data.rows) as ProgressRow[];
+applyRetainedReports(replay, data.retainedReports);
+applyRetainedOptOutExtracts(replay, inputs.sources);
+for (const [index, row] of (data.rows as ProgressRow[]).entries()) {
+  const coverage = replay[index]!.californiaRejectCoverage;
+  if (coverage) row.californiaRejectCoverage = coverage;
+  else delete row.californiaRejectCoverage;
+  if(upgrade==='--choice-click-activity')for(const key of RETAINED_CLICK_ACTIVITY_KEYS){
+    delete row.states[key];delete row.metricSources?.[key];
+    const verified=replay[index]!;
+    if(verified.states[key]!==undefined){
+      row.states[key]=verified.states[key]!;
+      (row.metricSources??={})[key]=verified.metricSources![key]!;
+    }
+  }
 }
 if(upgrade){
   data.days=progressEngine().aggregate(data,data.rows);

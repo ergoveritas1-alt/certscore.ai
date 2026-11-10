@@ -171,7 +171,48 @@ test('bound customer CMP criteria and optional defaults preserve distinct return
   const other=structuredClone(report);Object.assign(other.customerConsentEvidence.binding,change);
   assert.equal(row(other).states[id],undefined);
  }
+ const counts={version:'certscore.cookie-declaration-counts.v1',observed:4,matched:2,declarationInventoryComplete:false};
+ const counted={...report,customerConsentEvidence:{...report.customerConsentEvidence,cookieDeclarationCounts:counts,
+  criteria:[{...criterion,id:'found_not_declared',status:'Partially assessed',sourceIds:['fixture'],sourceIdCount:1}]}};
+ assert.deepEqual(row(counted).cookieDeclarationCounts,counts);
+ assert.equal(row({...counted,customerConsentEvidence:{...counted.customerConsentEvidence,
+  binding:{...counted.customerConsentEvidence.binding,reportSourceHash:'c'.repeat(64)}}}).cookieDeclarationCounts,undefined);
  const duplicate=structuredClone(report);duplicate.customerConsentEvidence.criteria.push(criterion);
  assert.equal(row(duplicate).states[id],undefined);
  assert.equal(row({...report,scanStatus:'failed'}).states[id],undefined);
+});
+
+test('choice funnel uses the usable cohort and distinguishes missing evidence from known non-completion',()=>{
+ const base={...row(),reportable:true};
+ const completed={...base,states:{'click.reject':'completed','registration.reject':'confirmed'}};
+ const noClick={...base,states:{'click.reject':'not_attempted'}};
+ const unknown={...base,states:{}};
+ const outOfCohort={...completed,reportable:false};
+ const measures=[
+  {id:'click.reject',success:['completed']},
+  {id:'registration.reject',success:['confirmed']},
+  {id:'control.reject',success:['observed']},
+  {id:'detail.reject.verdict',success:[]},
+ ];
+ const {metrics}=aggregate([completed,noClick,unknown,outOfCohort],measures)[0];
+ for(const {id} of measures)assert.equal(metrics[id].denominator,3,id);
+ assert.deepEqual(metrics['click.reject'].counts,{completed:1,not_attempted:1,unavailable:1});
+ assert.deepEqual(metrics['registration.reject'].counts,{confirmed:1,no_completed_click:1,unavailable:1});
+});
+
+test('all-click activity counts verified unconfirmed evidence and leaves generic capture counts unavailable',()=>{
+ const base={...row(),reportable:true};
+ const confirmed='eligible_nonessential_activity_observed_after_confirmed_refusal';
+ const noVerdict='no_confirmed_post_refusal_verdict';
+ const samples=[
+  {...base,states:{'click.reject':'completed','detail.reject.verdict':confirmed,'sealed.detail.reject.post_click_activity':'activity_observed'}},
+  {...base,states:{'click.reject':'completed','detail.reject.verdict':noVerdict,'sealed.detail.reject.post_click_activity':'activity_observed'}},
+  {...base,states:{'click.reject':'completed','detail.reject.verdict':noVerdict},measurements:{'reject.requests':8,'reject.storage_writes':4}},
+  {...base,states:{'click.reject':'not_attempted'}},
+ ];
+ const measures=evidenceMetricRegistry([]).filter(m=>['detail.reject.activity_all','detail.reject.verdict'].includes(m.id));
+ const {metrics}=aggregate(samples,measures)[0];
+ assert.equal(metrics['detail.reject.verdict'].numerator,1);
+ assert.equal(metrics['detail.reject.activity_all'].denominator,4);
+ assert.deepEqual(metrics['detail.reject.activity_all'].counts,{activity_observed:2,unavailable:1,no_completed_click:1});
 });

@@ -4,6 +4,7 @@ import { SessionReplayEvidenceExample } from "../../../components/marketing/sess
 import { EditorialByline } from "../../../components/marketing/editorial-byline";
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Badge } from "@website-signal-risk-scanner/ui";
 import { SocialFollowLinks } from "../../../components/releases/social-follow-links";
@@ -69,7 +70,9 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
               {formatReleaseDate(release.publicationDate)}
             </time>
           </div>
-          <h1 className="mt-6 text-4xl font-semibold tracking-tight text-slate-950 sm:text-6xl">
+          <h1 className={release.headlineTone === "quiet"
+            ? "mt-6 text-3xl font-medium leading-tight tracking-tight text-slate-950 sm:text-[2.75rem]"
+            : "mt-6 text-4xl font-semibold tracking-tight text-slate-950 sm:text-6xl"}>
             {release.headline}
           </h1>
         <EditorialByline path={releasePath(release)} />
@@ -81,6 +84,13 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
         <section aria-label="Release introduction" className="space-y-5 text-base leading-8 text-slate-700">
           {release.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
         </section>
+
+        {release.heroImage ? <figure className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+          <Link href="#try-release" aria-label="Go to the free website scan" className="block focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sky-500 focus-visible:ring-inset">
+            <Image src={release.heroImage.path} alt={release.heroImage.alt} width={release.heroImage.width} height={release.heroImage.height} sizes="(min-width: 768px) 56rem, 100vw" priority className="h-auto w-full" />
+          </Link>
+          {release.heroImage.caption ? <figcaption className="px-5 py-4 text-sm leading-6 text-slate-600">{release.heroImage.caption}</figcaption> : null}
+        </figure> : null}
 
         {release.sections.map((section) => (
           <section className="min-w-0 scroll-mt-28" id={section.id} key={section.id}>
@@ -135,7 +145,7 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
 
         <section className="rounded-2xl border border-sky-200 bg-sky-50 p-6 sm:p-8" aria-labelledby="try-release">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-800">Try it</p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950" id="try-release">
+          <h2 className="mt-2 scroll-mt-28 text-3xl font-semibold tracking-tight text-slate-950" id="try-release">
             {release.ctaHeading}
           </h2>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
@@ -144,7 +154,7 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
           {release.scanForm ? (
             <div className="mt-6">
               <Suspense fallback={<p className="text-sm text-slate-600">Loading scan form…</p>}>
-                <DomainScanForm mode="full" variant="homepage-hero" scanSource="release" buttonLabel="Run free scan" inputLabel="Website URL" inputPlaceholder="https://your-website.com" />
+                <DomainScanForm mode="full" variant="homepage-hero" scanSource="release" buttonLabel={release.scanButtonLabel ?? "Run free scan"} inputLabel="Website URL" inputPlaceholder="https://your-website.com" />
               </Suspense>
               <p className="mt-4 text-sm leading-6 text-slate-600">Start with a free scan of one public page. Results describe the scan’s conditions and coverage.</p>
             </div>

@@ -44,6 +44,7 @@ export function applyPublicCmpEvidence(row: ProgressRow, report: Obj) {
   for(const criterion of packet.criteria)if(Object.hasOwn(CMP_CRITERIA,criterion.id)){
     set('customer_cmp_check.'+criterion.id,returnedState(criterion.status));
   }
+  if(packet.cookieDeclarationCounts)row.cookieDeclarationCounts=packet.cookieDeclarationCounts;
   const optional=packet.checklist.find(check=>check.id==='consent_optional_defaults_on');
   const optionalId='checklist.consent_optional_defaults_on';
   if(optional&&(row.states[optionalId]===undefined||row.states[optionalId]==='unavailable')){
@@ -122,6 +123,7 @@ export function extractExportRow(report:Obj,ref:ProgressRow["refs"][number]):Pro
   }
   for(const {id:q} of QUANTITIES)metricSources[q]=source+(q.startsWith('accessibility.')?'/'+String(report.accessibilityAudit?.engine??'unknown')+'/'+String(report.accessibilityAudit?.engineVersion??'unknown')+'/'+String(report.accessibilityAudit?.scope??'unknown'):'');
   const gpcScopes = pairedGpcAudit(report), pairedScope = gpcScopes.scope;
+  metricSources['detail.gpc.california_collection']=source+'/'+gpcScopes.sessionScope+'/recorded_california_collection.v1';
   // Keep newly scoped snapshots out of the legacy full-context trend series.
   if (gpcScopes.cmpScope.startsWith("certscore.gpc-cmp-state-comparison.v2/")) {
     for (const key of ["detail.gpc.paired_cmp", "detail.gpc.paired_cmp_scope", "detail.gpc.paired_sale_transition", "detail.gpc.paired_sharing_transition"])

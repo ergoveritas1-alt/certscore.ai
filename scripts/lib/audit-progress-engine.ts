@@ -16,9 +16,37 @@ export function progressEngine() {
     for(const base of data.days){
       const chosen=byDay.get(base.date)??[],previous=result.at(-1),metrics:any={},quantities:any={},findings:any={};
       for(const m of data.metrics){
-        const selected=chosen.filter(r=>eligible(r,m.id)),groups:any={};
-        for(const r of selected){const s=source(r,m.id);(groups[s]??=[]).push(r);}
-        const tally=(rs:any[],s:string)=>{const counts:any={};for(const r of rs)counts[r.states[m.id]??'unavailable']=(counts[r.states[m.id]??'unavailable']??0)+1;const n=m.success.reduce((n:number,k:string)=>n+(counts[k]??0),0);return {source:s,counts,numerator:n,denominator:rs.length,rate:rs.length&&m.success.length&&s!=='mixed_sources'&&!s.startsWith('unavailable')&&(counts.unavailable??0)!==rs.length?100*n/rs.length:null};};
+        const funnel=/^(control|click|registration)\.(accept|reject)$|^detail\.(accept|reject)\.(verdict|activity_all)$/.test(m.id);
+        const registration=/^registration\.(accept|reject)$/.exec(m.id);
+        const activity=/^detail\.(accept|reject)\.activity_all$/.exec(m.id);
+        const action=activity?.[1];
+        const verdictKey=`detail.${action}.verdict`;
+        const retainedKey=`sealed.detail.${action}.post_click_activity`;
+        const activityVerdict=action==='accept'?'eligible_nonessential_activity_observed_after_confirmed_acceptance':'eligible_nonessential_activity_observed_after_confirmed_refusal';
+        const cleanVerdict='no_eligible_nonessential_activity_observed_during_completed_window';
+        const activityState=(r:any)=>{
+          const verdict=r.states[verdictKey];
+          if(verdict===activityVerdict)return {state:'activity_observed',key:verdictKey};
+          if(r.states['click.'+action]==='completed'&&r.states[retainedKey]==='activity_observed')return {state:'activity_observed',key:retainedKey};
+          if(verdict===cleanVerdict)return {state:cleanVerdict,key:verdictKey};
+          const click=r.states['click.'+action];
+          return {state:['not_attempted','incomplete','unsupported'].includes(click)?'no_completed_click':'unavailable',key:'click.'+action};
+        };
+        const selected=chosen.filter(r=>funnel?r.reportable:eligible(r,m.id)),groups:any={};
+        for(const r of selected){const s=source(r,activity?activityState(r).key:m.id);(groups[s]??=[]).push(r);}
+        const tally=(rs:any[],s:string)=>{
+          const counts:any={};
+          for(const r of rs){
+            let state=activity?activityState(r).state:r.states[m.id]??'unavailable';
+            if(registration){
+              const click=r.states['click.'+registration[1]];
+              if(click!=='completed')state=['not_attempted','incomplete','unsupported'].includes(click)?'no_completed_click':'unavailable';
+            }
+            counts[state]=(counts[state]??0)+1;
+          }
+          const n=m.success.reduce((n:number,k:string)=>n+(counts[k]??0),0);
+          return {source:s,counts,numerator:n,denominator:rs.length,rate:rs.length&&m.success.length&&s!=='mixed_sources'&&!s.startsWith('unavailable')&&(counts.unavailable??0)!==rs.length?100*n/rs.length:null};
+        };
         const keys=Object.keys(groups),v:any=tally(selected,keys.length===1?keys[0]!:'mixed_sources');v.series={};
         for(const [s,rs]of Object.entries(groups)){const sub=tally(rs as any[],s);compare(sub,previous?.metrics[m.id]?.series[s],!base.completeDay||!previous?.completeDay);v.series[s]=sub;}
         compare(v,previous?.metrics[m.id],!base.completeDay||!previous?.completeDay);metrics[m.id]=v;
@@ -65,5 +93,25 @@ export function progressEngine() {
     return lines.join('\n')+'\n';
   }
   function findingCsv(days:any[],ids:string[]){const lines=['date,completeDay,finding,source,count,denominator,unavailable,incompletePositives,top,percent,deltaPp,comparison'];for(const d of days)for(const id of ids)for(const s of Object.keys(d.findings[id].series).sort()){const p=d.findings[id].series[s];lines.push([d.date,d.completeDay,id,s,p.numerator,p.denominator,p.unavailable,p.incompletePositives,p.top,p.rate,p.deltaPp,p.comparison].map(quote).join(','));}return lines.join('\n')+'\n';}
-  return {aggregate,stateCsv,quantityCsv,findingCsv};
+  function rejectCoverage(rows:any[]) {
+    const days = new Map<string,{clicks:number;assessments:number;qualification:Record<string,Record<string,number>>;observation:Record<string,number>}>();
+    const increment = (counts:Record<string,number>, key:string) => { counts[key]=(counts[key]??0)+1; };
+    for(const row of rows){
+      if(!row.reportable||row.states['click.reject']!=='completed')continue;
+      const date=dayOf(row.createdAt);
+      const day=days.get(date)??{clicks:0,assessments:0,qualification:{},observation:{}};
+      day.clicks++;
+      increment(day.observation,row.states['detail.reject.verdict']??'unavailable');
+      const a=row.californiaRejectCoverage;
+      if(a){
+        day.assessments++;
+        const counts=day.qualification[a.policyVersion]??={};
+        increment(counts,a.status);
+        if(a.status!=='qualified_collection')for(const reason of a.reasons)increment(counts,reason);
+      }
+      days.set(date,day);
+    }
+    return days;
+  }
+  return {aggregate,stateCsv,quantityCsv,findingCsv,rejectCoverage};
 }

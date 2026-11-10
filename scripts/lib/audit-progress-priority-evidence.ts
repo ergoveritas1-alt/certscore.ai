@@ -168,7 +168,10 @@ export function priorityEvidenceStates(value: unknown, scanId: string) {
   return states;
 }
 
-export function priorityCoverageStates(value:unknown,scanId:string){
+export const CMP_BLOCKER_NOT_PROJECTED='cmp_blocker_not_projected';
+export const CMP_DELIVERY_KEY='sealed.priority_evidence.cmp';
+
+export function priorityCoverageStates(value:unknown,scanId:string,cmpBlockerOmitted=false){
  const states:Record<string,{value:string;scope:string}>={};
  if(value==='size_bound'){for(const lane of ['accept','reject','cmp'])states['sealed.priority_evidence.'+lane]={value:'summary_size_bound',scope:'certscore.audit-priority-coverage.v1'};return states;}
  const p=receipt.safeParse(value);
@@ -176,15 +179,18 @@ export function priorityCoverageStates(value:unknown,scanId:string){
  const evidence=priorityEvidenceStates(value,scanId);
  for(const [i,lane] of (['accept','reject','cmp'] as const).entries()){
   const observedSource=p.data.coverage[i]!;
-  const source=lane==='cmp'&&observedSource!=='source_present'&&!gpcCmpPairBlockerSchema.safeParse(observedSource).success
+  const source=lane==='cmp'&&cmpBlockerOmitted&&observedSource==='source_missing'&&p.data.cmp===null
+   ? CMP_BLOCKER_NOT_PROJECTED
+   : lane==='cmp'&&observedSource!=='source_present'&&!gpcCmpPairBlockerSchema.safeParse(observedSource).success
    ? 'source_missing' : observedSource;
   const eligible=source==='eligible_source'||source==='source_present';
   const payload=p.data[lane],present=payload!==null&&payload!==undefined;
   const key=lane==='cmp'?'sealed.choice_evidence.paired_cmp':'sealed.terminal.audit_'+lane;
   const inconsistent=p.data.transport==='size_bound'&&present||!eligible&&present||eligible&&p.data.transport==='included'&&!present;
   const status=inconsistent?'invalid_coverage_receipt':!eligible?source:p.data.transport==='size_bound'?'summary_size_bound':!evidence[key]||evidence[key]!.value==='invalid_or_unbound'?'invalid_or_unbound':'included';
-  states['sealed.priority_evidence.'+lane]={value:status,scope:lane==='cmp'&&gpcCmpPairBlockerSchema.safeParse(status).success
-   ? 'certscore.gpc-cmp-pair-blocker.v1' : 'certscore.audit-priority-coverage.v1'};
+  const scope=status===CMP_BLOCKER_NOT_PROJECTED?'certscore.audit-priority-coverage.v1/cmp-blocker-omitted'
+   :lane==='cmp'&&gpcCmpPairBlockerSchema.safeParse(status).success?'certscore.gpc-cmp-pair-blocker.v1':'certscore.audit-priority-coverage.v1';
+  states['sealed.priority_evidence.'+lane]={value:status,scope};
  }
  return states;
 }

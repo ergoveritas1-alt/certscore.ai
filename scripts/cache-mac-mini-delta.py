@@ -4,6 +4,8 @@ import argparse, collections, concurrent.futures, datetime, hashlib, json, os, p
 
 UUID = re.compile(r'^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$', re.I)
 MAX_PENDING_RECHECKS = 100
+# Reserve launch space for control accessibility and the required receipts.
+DAILY_PENDING_RECHECKS = 60
 def utc(v): return datetime.datetime.fromisoformat(v.replace('Z', '+00:00')).astimezone(datetime.timezone.utc)
 def digest(b): return hashlib.sha256(b).hexdigest()
 def read(p): return json.loads(p.read_text())
@@ -42,12 +44,12 @@ def pending_exports(prior):
                             'productionStatus':row['status'], 'lastExactCheckUtc':last_check}
     return pending
 
-def pending_plan(pending, start, end):
+def pending_plan(pending, start, end, limit=MAX_PENDING_RECHECKS):
     eligible = [r for r in pending.values() if start <= utc(r['scanCreatedAt']) < end]
     eligible.sort(key=lambda r: (utc(r['lastExactCheckUtc']),
                                  r['productionStatus'] not in ('completed','completed_limited'),
                                  utc(r['scanCreatedAt']), r['scanId']))
-    selected = [r['scanId'] for r in eligible[:MAX_PENDING_RECHECKS]]
+    selected = [r['scanId'] for r in eligible[:limit]]
     return {'priorPendingCount':len(pending), 'pendingRefreshIds':selected,
             'deferredPendingCount':len(eligible)-len(selected), 'agedOutPendingCount':len(pending)-len(eligible)}
 
@@ -139,7 +141,7 @@ if __name__=='__main__':
     start,end=utc(a.start),utc(a.end)
     reuse=pathlib.Path(a.reuse).resolve()
     if a.plan_pending:
-        print(json.dumps(pending_plan(pending_exports(read(reuse/'cache-manifest.json')),start,end)))
+        print(json.dumps(pending_plan(pending_exports(read(reuse/'cache-manifest.json')),start,end,DAILY_PENDING_RECHECKS)))
         raise SystemExit(0)
     if not (a.source and a.out and a.inventory):
         p.error('--source, --out and --inventory are required for a refresh')

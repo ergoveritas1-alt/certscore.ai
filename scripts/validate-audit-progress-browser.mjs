@@ -15,16 +15,276 @@ try{
  assert.equal(await chartPanel.evaluate(panel=>panel.open),false);
  checks.collapsedChart=true;
  assert.equal(await page.locator('#daily tbody tr[data-table-id]').count(),await page.evaluate(()=>window.__auditDashboard.data.tableEntries.length));
+ assert.equal(await page.evaluate(()=>{
+  const data=window.__auditDashboard.data;
+  return ['retainedReports','optOutExtracts','privacyFormReceipts'].every(key=>!(key in data))&&
+   data.rows.every(row=>!('refs' in row));
+ }),true);
  const measureCatalog=await page.evaluate(()=>window.__auditDashboard.data.measureCatalog);
  assert.ok(measureCatalog?.entries?.length>0);
  const tableEntries=measureCatalog.tableEntries;
+ const displayedEntries=await page.evaluate(()=>window.__auditDashboard.data.tableEntries);
+ const gpcQuestions=await page.evaluate(()=>window.__auditDashboard.data.gpcQuestions);
+ assert.equal(gpcQuestions.length,4);
+ assert.deepEqual(tableEntries.filter(e=>e.group==='GPC').map(e=>e.id),gpcQuestions.map(q=>q.primaryMetric));
+ assert.ok(tableEntries.find(e=>e.id==='detail.gpc.cmp_receipt').details.some(e=>e.id==='detail.gpc.response'));
+ assert.deepEqual(gpcQuestions.map(q=>q.title),['GPC signal delivered','Activity under GPC (all)','GPC acknowledged','California-qualified activity under GPC']);
+ assert.equal(await page.evaluate(ids=>window.__auditDashboard.days.every(day=>ids.every(id=>day.metrics[id].denominator===day.reportable)),gpcQuestions.map(q=>q.primaryMetric)),true);
+ const meanings=page.locator('#daily tbody tr[data-table-id] > td:first-child > .metric-meaning');
+ assert.equal(await meanings.count(),displayedEntries.length);
+ for(const text of await meanings.allTextContents())assert.ok(text.length>25&&!text.includes('undefined'),text);
+ assert.match(await page.locator('[data-table-id="registration.accept"] > td:first-child > .metric-meaning').textContent(),/Usable scans.*confirmed Accept choice/);
+ assert.match(await page.locator('[data-table-id="inventory.cookies"] > td:first-child > .metric-meaning').textContent(),/Measured reports.*distinct cookies.*Missing measurements are excluded/);
+ assert.ok(await page.locator('.gpc-acknowledged-activity').count()>0);
+ for(const item of await page.locator('.gpc-acknowledged-activity').all())assert.equal(await item.evaluate(el=>el.open),false);
+ const acknowledgmentSample=await page.evaluate(()=>{
+  const d=window.__auditDashboard.days.findIndex(day=>day.date==='2026-11-08'&&day.reportable===51&&day.metrics['detail.gpc.cmp_receipt'].counts.received===2);
+  return d;
+ });
+ if(acknowledgmentSample>=0){
+  const cell=page.locator('[data-table-id="detail.gpc.cmp_receipt"] > td').nth(acknowledgmentSample+1);
+  assert.equal(await cell.locator(':scope > .value').textContent(),'3.9%');
+  assert.match(await cell.locator(':scope > .states [data-headline]').textContent(),/2\/51/);
+  assert.match(await cell.locator('.gpc-acknowledged-activity').textContent(),/2 acknowledged visits/);
+ }
+ assert.match(await page.locator('[data-table-id="detail.gpc.session_collection"] > td:first-child > .metric-meaning').textContent(),/sale\/sharing role is unresolved.*Script downloads alone do not count/);
+ assert.match(await page.locator('[data-table-id="detail.gpc.california_collection"] > td:first-child > .metric-meaning').textContent(),/narrower subset.*identifier syncing or audience collection/);
+ const prominenceRow='[data-table-id="customer_cmp_check.prominence"]';
+ const validComparisonRow=page.locator(prominenceRow+' + [data-table-id="customer_cmp_check.prominence_valid_comparison"]');
+ if(tableEntries.some(entry=>entry.id==='customer_cmp_check.prominence')){
+  assert.equal(await validComparisonRow.locator('.metric-name').textContent(),'Accept and Reject prominence valid comparison');
+  assert.equal(displayedEntries.length,tableEntries.length+1);
+ }
+ const prominenceSample=await page.evaluate(()=>window.__auditDashboard.days.findIndex(day=>
+  day.date==='2026-11-08'&&day.reportable===51&&day.metrics['customer_cmp_check.prominence'].counts.observed===1));
+ if(prominenceSample>=0){
+  const originalCell=page.locator(prominenceRow+' > td').nth(prominenceSample+1);
+  assert.equal(await originalCell.locator(':scope > .value').textContent(),'11.8%');
+  assert.equal(await originalCell.locator('.prominence-coverage').textContent(),'Both observed: 6/51');
+  const cell=validComparisonRow.locator(':scope > td').nth(prominenceSample+1);
+  assert.equal(await cell.locator(':scope > .value').textContent(),'2.0%');
+  assert.equal(await cell.locator('.prominence-coverage').textContent(),'Valid comparison: 1/51');
+  assert.match(await cell.textContent(),/5 without a completed comparison/);
+  const original=await page.evaluate(()=>{
+   const audit=window.__auditDashboard;
+   const row=audit.data.rows.find(r=>r.reportable&&r.site==='adtarget.biz'&&r.states['customer_cmp_check.prominence']==='observed'&&
+    new Intl.DateTimeFormat('en-CA',{timeZone:audit.data.timezone}).format(new Date(r.createdAt))==='2026-11-08');
+   const id='customer_cmp_check.prominence';
+   row.states[id]='review_recommended';
+   document.getElementById('cmp').dispatchEvent(new Event('change'));
+   return row.scanId;
+  });
+  try {
+   assert.equal(await cell.locator('.prominence-coverage').textContent(),'Valid comparison: 1/51');
+  } finally {
+   await page.evaluate(scanId=>{
+    window.__auditDashboard.data.rows.find(r=>r.scanId===scanId).states['customer_cmp_check.prominence']='observed';
+    document.getElementById('cmp').dispatchEvent(new Event('change'));
+   },original);
+  }
+  checks.prominenceCoverage=true;
+ }
+ checks.metricMeanings=true;
+ checks.gpcFourQuestions=true;
  const metricCell=(id,index)=>{const owner=tableEntries.find(entry=>entry.details.some(detail=>detail.id===id));return owner?page.locator('[data-table-id="'+owner.id+'"] td').nth(index+1).locator('[data-supporting-id="'+id+'"]'):page.locator('[data-table-id="'+id+'"] td').nth(index+1);};
- assert.equal(tableEntries.length,await page.locator('#daily tbody tr[data-table-id]').count());
- assert.equal(await page.locator('#tableSummary').textContent(),tableEntries.length+' measures');
+ const controlAccessibility='sealed.checklist.accessibility_consent_controls';
+ const controlSample=await page.evaluate(id=>{
+  const {days}=window.__auditDashboard;
+  return days.findIndex(day=>day.date==='2026-11-09'&&day.metrics[id]?.counts.not_testable===84&&day.metrics[id].denominator===90);
+ },controlAccessibility);
+ if(controlSample>=0){
+  const cell=metricCell(controlAccessibility,controlSample);
+  assert.equal(await cell.locator(':scope > .value').textContent(),'Not testable · 93.3%');
+  assert.equal(await cell.locator(':scope > .checklist-verdicts [data-state="not_observed"]').textContent(),'Not observed: 6 (6.7%)');
+  assert.match(await cell.locator('.control-coverage').textContent(),/0\/90 reports with a detailed assessment receipt/);
+  const fixtureId=await page.evaluate(()=>{
+   const row=window.__auditDashboard.data.rows.find(r=>r.reportable&&new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date(r.createdAt))==='2026-11-09');
+   row.controlAccessibilityCoverage={version:1,status:'partial',reasons:['control_results_missing','frames_outside_scope'],controls:2,completed:1,issues:0,review:0};
+   document.getElementById('cmp').dispatchEvent(new Event('change'));return row.scanId;
+  });
+  try{
+   const panel=cell.locator('.control-coverage');
+   assert.match(await panel.textContent(),/1\/90 reports with a detailed assessment receipt/);
+   assert.match(await panel.textContent(),/Control-specific rule results missing: 1 reports \(100%\)/);
+   assert.match(await panel.textContent(),/Child-frame controls outside assessed scope/);
+   assert.match(await panel.textContent(),/1\/2 retained controls completed/);
+  }finally{await page.evaluate(id=>{delete window.__auditDashboard.data.rows.find(r=>r.scanId===id).controlAccessibilityCoverage;document.getElementById('cmp').dispatchEvent(new Event('change'));},fixtureId);}
+  checks.controlAccessibilityCoverageReasons=true;
+  checks.controlAccessibilityHeadline=true;
+ }
+ const verdictChecks=await page.evaluate(()=>{
+  const {data,days}=window.__auditDashboard;
+  const checks=[];
+  for(const [id,layout] of Object.entries(data.verdictLayouts)){
+   const row=document.querySelector('[data-table-id="'+id+'"]');
+   for(const [index,day] of days.entries()){
+    const verdict=day.metrics[layout.id],cell=row.cells[index+1];
+    const headline=cell.querySelector(':scope > .value').textContent;
+    if(Object.keys(verdict.series).length>1){
+     checks.push({id,date:day.date,actual:headline,expected:'Separate measurement groups'});
+     continue;
+    }
+    const counts=verdict.counts;
+    if(!Object.keys(counts).some(state=>state!=='unavailable'&&state!=='unknown'))continue;
+    const percent=count=>{
+     const rate=100*count/verdict.denominator;
+     return (Number.isInteger(rate)?rate:rate.toFixed(1))+'%';
+    };
+    const gap=counts.gap_observed??0,partial=counts.review_signal??0;
+    checks.push({id,date:day.date,actual:headline,expected:layout.hero==='observed'?'Observed · '+percent(counts.observed??0):
+     layout.hero==='gap_observed'?'Gap observed · '+percent(gap):'Partial concern · '+partial+' ('+percent(partial)+')'});
+    const breakdown=[...(layout.hero==='observed'?[['gap_observed','Gap observed']]:[]),
+     ...(layout.hero!=='review_signal'?[['review_signal','Partial concern']]:[]),['not_observed','Not observed'],
+     ['insufficient_evidence','Insufficient evidence'],['not_confirmed','Not confirmed']];
+    for(const [state,label] of breakdown){
+     const count=counts[state]??0;
+     const line=cell.querySelector(':scope > .checklist-verdicts > [data-state="'+state+'"]');
+     checks.push({id,date:day.date,actual:line?.textContent,expected:label+': '+count+' ('+percent(count)+')'});
+    }
+   }
+  }
+  return {layouts:data.verdictLayouts,checks};
+ });
+ for(const id of ['checklist.pre_consent_third_party_tracking','checklist.pre_consent_cookies_storage',
+  'checklist.social_media_embed_pre_consent','checklist.third_party_iframe_pre_consent',
+  'sealed.checklist.cross_border_endpoint_review','sealed.checklist.sensitive_surfaces_third_party_tracking']){
+  if(displayedEntries.some(entry=>entry.id===id))assert.equal(verdictChecks.layouts[id]?.hero,'gap_observed',id);
+ }
+ for(const id of ['privacy_policy','checklist.cookie_notice_policy_availability']){
+  if(displayedEntries.some(entry=>entry.id===id))assert.equal(verdictChecks.layouts[id]?.hero,'observed',id);
+ }
+ for(const id of ['checklist.device_identification_fingerprinting_signal_observed',
+  'checklist.embedded_content_pre_consent','checklist.session_replay_fingerprinting_review']){
+  if(displayedEntries.some(entry=>entry.id===id))assert.ok(verdictChecks.layouts[id],id);
+ }
+ for(const {actual,expected,id,date} of verdictChecks.checks)assert.equal(actual,expected,id+' '+date);
+ checks.checklistVerdicts=true;
+ const observedOutcomes=await page.evaluate(()=>{
+  const {days}=window.__auditDashboard;
+  return [...document.querySelectorAll('#daily tr[data-table-id]')].flatMap(row=>
+   days.flatMap((day,index)=>{
+    const cell=row.cells[index+1],metric=day.metrics[row.dataset.tableId];
+    if(!cell.querySelector(':scope > .state-percentages > [data-headline][data-state="observed"]')||
+     metric?.source==='mixed_sources')return [];
+    return Object.entries(metric.counts).filter(([state])=>state!=='observed').map(([state,count])=>{
+     const rate=100*count/metric.denominator;
+     return {id:row.dataset.tableId,state,date:day.date,
+      actual:cell.querySelector(':scope > .state-percentages > [data-state="'+state+'"] .state-line-value')?.textContent,
+      expected:(Number.isInteger(rate)?rate:rate.toFixed(1))+'%'};
+    });
+   }));
+ });
+ for(const {actual,expected,id,state,date} of observedOutcomes)assert.equal(actual,expected,id+' '+state+' '+date);
+ checks.observedOutcomeBreakdown=true;
+ const choiceRows=tableEntries.filter(entry=>entry.group==='Accept & Reject');
+ for(const id of ['sealed.checklist.public_collection_surfaces','sealed.detail.sealed.form_destinations',
+  'sealed.checklist.preference_withdrawal_control','customer_cmp_check.found_not_declared',
+  'checklist.consent_optional_defaults_on','sealed.checklist.consent_optional_defaults_on']){
+  assert.equal(await page.locator('#daily [data-table-id="'+id+'"]').count(),0);
+ }
+ const combinedActivity='customer_cmp_check.implementation';
+ if(measureCatalog.entries.some(entry=>entry.id===combinedActivity)){
+  assert.equal(await page.locator('[data-table-id="'+combinedActivity+'"]').count(),0);
+  const rejectActivity=page.locator('[data-table-id="detail.reject.activity_all"]');
+  assert.ok(await rejectActivity.locator('.supporting-evidence [data-supporting-id="'+combinedActivity+'"]').count()>0);
+  assert.ok(tableEntries.find(entry=>entry.id==='detail.reject.activity_all').details.some(entry=>entry.id==='customer_cmp_check.consent_record')||
+   !measureCatalog.entries.some(entry=>entry.id==='customer_cmp_check.consent_record'));
+ }
+ assert.equal(await page.evaluate(ids=>window.__auditDashboard.days.every(day=>ids.every(id=>day.metrics[id].denominator===day.reportable)),choiceRows.map(entry=>entry.id)),true);
+ assert.deepEqual(choiceRows.map(entry=>[entry.id,entry.label]),[
+  ['control.accept','Accept control presence'],
+  ['click.accept','Accept click completed'],['detail.accept.activity_all','After Accept non-essential activity (all)'],
+  ['registration.accept','Accept choice confirmed'],['detail.accept.verdict','After Accept non-essential activity (confirmed)'],
+  ['control.reject','Reject control presence'],
+  ['click.reject','Reject click completed'],['detail.reject.activity_all','After Reject non-essential activity (all)'],
+  ['registration.reject','Reject choice confirmed'],['detail.reject.verdict','After Reject non-essential activity (confirmed)'],
+ ]);
+ for(const action of ['accept','reject']){
+  const sample=await page.evaluate(action=>{
+   const days=window.__auditDashboard.days;
+   const index=days.findLastIndex(day=>day.metrics['registration.'+action].counts.confirmed>0);
+   if(index<0)return null;
+   const click=days[index].metrics['click.'+action],choice=days[index].metrics['registration.'+action];
+   return {index,eligible:click.denominator,completed:click.counts.completed,confirmed:choice.counts.confirmed,choiceDenominator:choice.denominator};
+  },action);
+  if(!sample)continue;
+  assert.equal(sample.eligible,sample.choiceDenominator);
+  const confirmation=metricCell('registration.'+action,sample.index);
+  assert.deepEqual(await confirmation.locator(':scope > .state-percentages > [data-state]').allTextContents(),[
+   'Confirmed: '+sample.confirmed+'/'+sample.choiceDenominator,
+  ]);
+  const gap=sample.completed-sample.confirmed;
+  assert.deepEqual(await confirmation.locator('.choice-confirmation-gap').allTextContents(),gap>0?[gap+' of '+sample.completed+' clicks lack confirmation']:[]);
+  const details=confirmation.locator(':scope > details.series-list:not(.supporting-evidence)');
+  assert.equal(await details.evaluate(panel=>panel.open),false);
+  assert.match(await details.textContent(),new RegExp('confirmed: '+sample.confirmed+'/'+sample.choiceDenominator));
+  const percentage=(count,denominator)=>{
+   const value=100*count/denominator;
+   return (Number.isInteger(value)?String(value):value.toFixed(1))+'%';
+  };
+  assert.equal(await metricCell('click.'+action,sample.index).locator(':scope > .value').textContent(),percentage(sample.completed,sample.eligible));
+  assert.equal(await metricCell('registration.'+action,sample.index).locator(':scope > .value').textContent(),percentage(sample.confirmed,sample.eligible));
+  assert.match(await page.locator('[data-table-id="detail.'+action+'.verdict"] td').first().textContent(),/All readable reportable scans/);
+  const activity=await page.evaluate(({action,index})=>{
+   const day=window.__auditDashboard.days[index];
+   return ['activity_all','verdict'].map(suffix=>{
+    const metric=day.metrics['detail.'+action+'.'+suffix];
+    return {numerator:metric.numerator,unavailable:(metric.counts.unavailable??0)===metric.denominator};
+   });
+  },{action,index:sample.index});
+  assert.ok(activity[0].numerator>=activity[1].numerator);
+  for(const [i,suffix] of ['activity_all','verdict'].entries()){
+   assert.equal(await metricCell('detail.'+action+'.'+suffix,sample.index).locator(':scope > .value').textContent(),activity[i].unavailable?'Unavailable':percentage(activity[i].numerator,sample.eligible));
+  }
+ }
+ checks.choiceStagePresentation=true;
+ assert.equal(displayedEntries.length,await page.locator('#daily tbody tr[data-table-id]').count());
+ const canonicalReject='sealed.choice_finding.california_post_reject_collection';
+ const rejectCoverage=tableEntries.find(entry=>entry.id==='detail.reject.verdict');
+ if(measureCatalog.entries.some(entry=>entry.id===canonicalReject)){
+  assert.ok(rejectCoverage?.details.some(detail=>detail.id===canonicalReject));
+  assert.equal(await page.locator('[data-table-id="'+canonicalReject+'"]').count(),0);
+  const day=await page.evaluate(()=>window.__auditDashboard.days.findIndex(d=>d.date==='2026-11-08'&&d.reportable===51));
+  if(day>=0){
+   const detail=metricCell(canonicalReject,day);
+   assert.equal(await detail.locator('.reject-cohort-counts').textContent(),'0 surfaced51 reportable scans4 completed Reject clicks');
+   assert.match(await detail.locator('.reject-qualification').textContent(),/California assessment unavailable for 4 of 4 completed clicks/);
+   assert.match(await detail.locator('.reject-qualification').textContent(),/Separate post-click observation verdicts/);
+  }
+ }
+ assert.equal(await page.locator('#tableSummary').textContent(),displayedEntries.length+' measures');
  const missingHeadlines=()=>page.locator('#daily tbody tr[data-table-id]').evaluateAll(rows=>rows.flatMap(row=>
   Array.from(row.cells).slice(1).filter(cell=>cell.querySelectorAll(':scope > .value').length!==1||
    !cell.querySelector(':scope > .value').textContent.trim()).map(cell=>[row.dataset.tableId,cell.cellIndex])));
  assert.deepEqual(await missingHeadlines(),[]);
+ const percentHeadlineErrors=()=>page.locator('#daily td > .value, #daily [data-supporting-id] > .value').evaluateAll(values=>
+  values.flatMap(value=>{
+   const text=value.textContent;
+   if(!text.includes('%')||value.hasAttribute('data-checklist-verdict'))return [];
+   const line=value.parentElement.querySelector(':scope > .state-percentages > [data-headline]');
+   const subvalue=line?.querySelector('.state-line-value')?.textContent;
+   const fraction=/^(\d+)\/(\d+)$/.exec(subvalue??'');
+   const countRate=fraction?100*Number(fraction[1])/Number(fraction[2]):null;
+   const matches=subvalue===text||(countRate!==null&&Math.abs(countRate-parseFloat(text))<=0.051);
+   return /^\d+(?:\.\d+)?%$/.test(text)&&matches&&
+    line?.querySelector('.state-line-label')?.textContent.trim().endsWith(':')?[]:[text];
+  }));
+ const wrappingStates=()=>page.locator('#daily .state-line').evaluateAll(lines=>lines.filter(line=>
+  line.getClientRects().length>0&&(line.getBoundingClientRect().height>parseFloat(getComputedStyle(line).lineHeight)+1||
+   line.querySelector('.state-line-value').getBoundingClientRect().right>line.getBoundingClientRect().right+1)).map(line=>line.textContent));
+ assert.deepEqual(await percentHeadlineErrors(),[]);
+ assert.deepEqual(await wrappingStates(),[]);
+ const ambiguousBreakdowns=await page.locator('#daily .state-percentages').evaluateAll(groups=>groups.flatMap(group=>{
+  const labels=[...group.querySelectorAll('.state-line-label')].map(label=>label.textContent.toLowerCase());
+  return new Set(labels).size===labels.length?[]:[group.textContent];
+ }));
+ assert.deepEqual(ambiguousBreakdowns,[]);
+ const shortRejectState=page.locator('#daily [data-state="no_eligible_nonessential_activity_observed_during_completed_window"]').first();
+ if(await shortRejectState.count()){
+  assert.match(await shortRejectState.textContent(),/^No eligible activity: \d+(?:\.\d)?%$/);
+  assert.match(await shortRejectState.getAttribute('title'),/no eligible nonessential activity observed during completed window:/);
+ }
+ checks.compactTablePercentages=true;
  for(const removal of measureCatalog.removals)assert.equal(await page.locator('[data-table-id="'+removal.id+'"],#metric option[value="metric:'+removal.id+'"]').count(),0);
  const csvMetricIds=await page.evaluate(()=>window.__auditDashboard.data.csvMetrics.map(metric=>metric.id));
  for(const alias of measureCatalog.checklistAliases){
@@ -41,7 +301,8 @@ try{
   const quantities=data.measureCatalog.entries.filter(entry=>entry.kind==='quantity');
   const missingSubjects=quantities.filter(entry=>!['ms','milliseconds'].includes(entry.unit)&&!data.quantitySubjects[entry.id]);
   if(missingSubjects.length)throw Error('Count headlines need subjects: '+missingSubjects.map(entry=>entry.id).join(', '));
-  return days.flatMap((day,index)=>quantities.map(entry=>{
+  const displayedIds=new Set(data.measureCatalog.tableEntries.flatMap(entry=>[entry.id,...entry.details.map(detail=>detail.id)]));
+  return days.flatMap((day,index)=>quantities.filter(entry=>displayedIds.has(entry.id)).map(entry=>{
    const value=day.quantities[entry.id];
    const groups=Object.values(value.series).filter(group=>group.measured>0);
    const source=groups[0];
@@ -52,9 +313,12 @@ try{
    else if(timing&&value.median!==null)title=value.median.toFixed(1)+' '+entry.unit;
    else if(!timing&&groups.length===1){
     const percent=100*source.nonzero/source.measured;
-    title=(Number.isInteger(percent)?percent:percent.toFixed(1))+'% with '+data.quantitySubjects[entry.id];
+    title=(Number.isInteger(percent)?percent:percent.toFixed(1))+'%';
    }
-   return {id:entry.id,index,title};
+   const estimate=value.eligible>0&&!value.measured&&
+    (day.date>='2026-10-09'&&day.date<='2026-10-22'||day.date>='2026-11-02'&&day.date<='2026-11-05')
+    ? {'technology.detections':'17.5%','technology.matches':'0.25%'}[entry.id]:undefined;
+   return {id:entry.id,index,title:estimate??title,estimate};
   }));
  });
  const actualQuantityTitles=await page.locator('#daily').evaluate(table=>{
@@ -70,13 +334,173 @@ try{
   return titles;
  });
  for(const {id,index,title} of quantityExamples)assert.equal(actualQuantityTitles[id+':'+index],title,id+' day '+index);
+ const estimatedExamples=quantityExamples.filter(example=>example.estimate);
+ assert.equal(await page.locator('[data-technology-estimate]').count(),estimatedExamples.length);
+ for(const {id,index,estimate} of estimatedExamples){
+  const cell=metricCell(id,index);
+  assert.equal(await cell.locator(':scope > .state-percentages > [data-headline]').textContent(),'Estimate: '+estimate);
+  assert.match(await cell.textContent(),/0 measured that day/);
+ }
+ if(estimatedExamples.length){
+  await page.selectOption('#origin','verified');
+  assert.equal(await page.locator('[data-technology-estimate]').count(),0);
+  await page.selectOption('#origin','all');
+  const dates=await page.evaluate(()=>window.__auditDashboard.days.map(day=>day.date));
+  for(const id of new Set(estimatedExamples.map(example=>example.id))){
+   const expected=estimatedExamples.filter(example=>example.id===id);
+   await page.locator('[data-table-id="'+id+'"] .chart-button').click();
+   const graph=page.locator('#popoverGraph');
+   const points=graph.locator('[data-technology-estimate-date]');
+   assert.deepEqual(await points.evaluateAll(nodes=>nodes.map(node=>node.dataset.technologyEstimateDate)),
+    expected.map(example=>dates[example.index]));
+   assert.ok((await points.locator('title').allTextContents()).every(label=>label.includes('Estimate '+expected[0].estimate)&&label.includes('0 measured')));
+   const segments=[];
+   for(const {index} of expected){
+    if(segments.at(-1)?.at(-1)===index-1)segments.at(-1).push(index);
+    else segments.push([index]);
+   }
+   const lines=graph.locator('[data-technology-estimate-line]');
+   assert.deepEqual(await lines.evaluateAll(nodes=>nodes.map(line=>[line.getAttribute('stroke-dasharray'),line.getAttribute('points').split(' ').length])),
+    segments.filter(segment=>segment.length>1).map(segment=>['7 4',segment.length]));
+   assert.equal(await page.locator('#popoverLegend [data-technology-estimate-legend]').textContent(),'Estimate (dashed) · '+expected[0].estimate);
+   await page.selectOption('#popoverState','__median__');
+   assert.equal(await points.count(),0);
+   await page.selectOption('#popoverState','__primary__');
+   await page.selectOption('#popoverSource',{index:1});
+   assert.equal(await points.count(),0);
+   await page.selectOption('#popoverSource','all');
+   assert.equal(await points.count(),expected.length);
+   await page.locator('#closeChartPopover').click();
+  }
+  await page.selectOption('#origin','verified');
+  assert.equal(await page.locator('#trend [data-technology-estimate-date]').count(),0);
+  await page.selectOption('#origin','all');
+  await page.locator('[data-table-id="control.reject"] .chart-button').click();
+  await page.locator('#closeChartPopover').click();
+ }
+ checks.technologyEstimates=true;
+ checks.technologyEstimateCharts=true;
+ const policyPresentation=await page.evaluate(()=>{
+  const {days,data}=window.__auditDashboard;
+  const transfer='checklist.outdated_transfer_framework_reference',receipt='sealed.operations.policy_text_receipt';
+  return days.flatMap((day,index)=>[transfer,receipt].flatMap(id=>{
+   const metric=day.metrics[id];
+   if(!data.tableEntries.some(entry=>entry.id===id)||!metric?.denominator)return [];
+   const missing=metric.counts.unavailable??0;
+   const check=day.metrics['sealed.operations.transfer_framework_check'];
+   const checkCounts=check?.counts??{};
+   return [{index,id,eligible:metric.denominator,missing,signals:metric.counts.partial_concern??0,
+    complete:metric.counts.producer_verified_complete_receipt??0,limited:metric.counts.producer_verified_limited_receipt??0,
+    explicitNoReceipt:metric.counts.no_verified_receipt_in_projection??0,
+    verifiedLocal:day.metrics['sealed.policy_full_text']?.counts.verified_full_text??0,
+    checkDenominator:check?.denominator??metric.denominator,unknownChecks:check?(checkCounts.unavailable??0):metric.denominator,
+    completedChecks:(checkCounts.checked_no_signal??0)+(checkCounts.checked_review_signal??0),
+    matcherSignals:(checkCounts.checked_review_signal??0)+(checkCounts.partial_review_signal??0)}];
+  }));
+ });
+ for(const {index,id,eligible,missing,signals,complete,limited,explicitNoReceipt,verifiedLocal,
+  checkDenominator,unknownChecks,completedChecks,matcherSignals} of policyPresentation){
+  const transfer=id.startsWith('checklist.');
+  const cell=metricCell(id,index);
+  if(missing===eligible)assert.equal(await cell.locator(':scope > .value').textContent(),
+   transfer?'No review signal returned':'No producer receipt delivered');
+  const note=await cell.locator(transfer?'[data-transfer-signal-coverage]':'[data-policy-receipt-coverage]').textContent();
+  if(transfer){
+   assert.ok(note.includes(signals+' of '+eligible+' reports returned the conditional checklist signal'));
+   const coverage=await cell.locator('[data-transfer-assessment-coverage]').textContent();
+   if(unknownChecks===checkDenominator)assert.ok(coverage.includes('Completed checks unknown · '+unknownChecks));
+   else assert.ok(coverage.includes('Completed checks '+completedChecks+'/'+checkDenominator+' · Qualifying matcher signals '+matcherSignals));
+  }else{
+   assert.ok(note.includes((eligible-missing)+'/'+eligible+' reportable scans with a producer receipt result'));
+   assert.ok(note.includes(complete+' complete · '+limited+' limited · '+explicitNoReceipt+' explicitly without a verified receipt'));
+   if(verifiedLocal)assert.ok(note.includes('Separate local text verification · '+verifiedLocal+' complete'));
+  }
+ }
+ checks.policyEvidenceAvailability=true;
+ const mixedTransferCoverage=await page.evaluate(()=>{
+  const {data,days}=window.__auditDashboard;
+  const date=days.find(day=>day.reportable>=3)?.date;
+  const refresh=()=>document.getElementById('origin').dispatchEvent(new Event('change'));
+  if(!date)return null;
+  const index=days.findIndex(day=>day.date===date);
+  const field='sealed.operations.transfer_framework_check';
+  const reasonsField='sealed.operations.transfer_framework_reasons';
+  const supplementField='sealed.operations.transfer_supplement_disposition';
+  const bits=data.transferFrameworkReasonBits;
+  const dayOf=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'});
+  const cohort=data.rows.filter(row=>row.reportable&&dayOf.format(new Date(row.createdAt))===date);
+  const original=cohort.map(row=>[row.states[field],row.states[reasonsField],row.states[supplementField]]);
+  const addMetric=!data.metrics.some(metric=>metric.id===field);
+  if(addMetric)data.metrics.push({id:field,success:['checked_no_signal','checked_review_signal']});
+  try {
+   cohort.forEach((row,i)=>{
+    row.states[field]=['checked_no_signal','checked_review_signal','partial_review_signal'][i]??'unavailable';
+    row.states[reasonsField]=['reason_mask_0',undefined,'reason_mask_'+(bits.policy_evidence_lane_degraded|bits.projected_document_not_checked|bits.unresolved_material_policy_supplements)][i]??'unavailable';
+    row.states[supplementField]=i===2?'supplement_mask_'+(data.policySupplementBits.skipped_budget|data.policySupplementBits.fetched_without_eligible_match):'unavailable';
+   });
+   refresh();
+   const cell=document.querySelector('[data-table-id="checklist.outdated_transfer_framework_reference"]').cells[index+1];
+   return {text:cell.querySelector('[data-transfer-assessment-coverage]').textContent,eligible:cohort.length};
+  } finally {
+   cohort.forEach((row,i)=>[field,reasonsField,supplementField].forEach((key,j)=>{
+    if(original[i][j]===undefined)delete row.states[key];else row.states[key]=original[i][j];
+   }));
+   if(addMetric)data.metrics.pop();
+   refresh();
+  }
+ });
+ if(mixedTransferCoverage){
+  assert.ok(mixedTransferCoverage.text.includes('Completed checks 2/'+mixedTransferCoverage.eligible+' · Qualifying matcher signals 2 (1 with partial coverage)'));
+  assert.ok(mixedTransferCoverage.text.includes((mixedTransferCoverage.eligible-3)+' unknown'));
+  assert.ok(mixedTransferCoverage.text.includes('Completion reason detail 2/'+mixedTransferCoverage.eligible+' · '+(mixedTransferCoverage.eligible-2)+' unavailable'));
+  assert.ok(mixedTransferCoverage.text.includes('policy evidence lane degraded: 1'));
+  assert.ok(mixedTransferCoverage.text.includes('projected document not checked: 1'));
+  assert.ok(mixedTransferCoverage.text.includes('Supplement disposition 1/1 · 0 unavailable'));
+  assert.ok(mixedTransferCoverage.text.includes('skipped budget: 1'));
+  assert.ok(mixedTransferCoverage.text.includes('fetched without eligible match: 1'));
+ }
+ checks.transferFrameworkAssessment=true;
+ await page.setViewportSize({width:826,height:680});
+ const tableLayout=await page.locator('.report-table-heading').evaluate(heading=>{
+  const title=heading.querySelector('h2').getBoundingClientRect();
+  const count=heading.querySelector('#tableSummary').getBoundingClientRect();
+  const table=heading.nextElementSibling;
+  const note=table.querySelector('details.coverage-note > summary');
+  const meaning=table.querySelector('.metric-meaning');
+  return {countAtRight:count.left>=title.right&&count.top<title.bottom,
+   maxHeight:parseFloat(getComputedStyle(table).maxHeight),
+   summaryOneLine:note.getBoundingClientRect().height<=parseFloat(getComputedStyle(note).lineHeight)+1,
+   meaningClamp:getComputedStyle(meaning).webkitLineClamp};
+ });
+ assert.equal(tableLayout.countAtRight,true);
+ assert.ok(Math.abs(tableLayout.maxHeight-680*.92)<1);
+ assert.equal(tableLayout.summaryOneLine,true);
+ assert.equal(tableLayout.meaningClamp,'4');
+ const dayHeaders=await page.locator('#daily thead .day-header').evaluateAll(headers=>headers.map(header=>{
+  const [date,count]=header.children;
+  return {date:date.textContent,count:count.textContent,lines:header.childElementCount,
+   stacked:count.getBoundingClientRect().top>=date.getBoundingClientRect().bottom,
+   coverage:header.title};
+ }));
+ assert.deepEqual(dayHeaders,await page.evaluate(()=>window.__auditDashboard.days.map(day=>({
+  date:day.date,count:day.reportable+' of '+day.attempts,lines:2,stacked:true,
+  coverage:(day.completeDay?'Complete day':'Partial day')+' · '+(day.inventoryHours>0?day.inventoryHours.toFixed(1)+'h complete inventory':'Attempt inventory incomplete'),
+ }))));
+ const receiptNote=page.locator('#daily [data-policy-receipt-coverage]').last();
+ assert.equal(await receiptNote.evaluate(note=>note.open),false);
+ await receiptNote.locator('summary').click();
+ assert.equal(await receiptNote.locator(':scope > div').isVisible(),true);
+ await receiptNote.locator('summary').click();
+ await page.setViewportSize({width:1440,height:1000});
+ checks.compactReportTable=true;
  const accessibilityExample=await page.evaluate(()=>window.__auditDashboard.days.findIndex(day=>
   day.date==='2026-11-07'&&day.quantities['accessibility.failed_rules'].total===115&&day.quantities['accessibility.failed_rules'].measured===50));
  if(accessibilityExample>=0){
   const failed=metricCell('accessibility.failed_rules',accessibilityExample);
-  assert.equal(await failed.locator(':scope>.value').textContent(),'80% with failed rules');
+  assert.equal(await failed.locator(':scope>.value').textContent(),'80%');
+  assert.equal(await failed.locator(':scope > .state-percentages > [data-headline]').textContent(),'With failed rules: 80%');
   assert.match(await failed.locator(':scope > details.series-list:not(.supporting-evidence)').textContent(),/40\/50 measured reports.*Total 115 rules.*Median 2.0/);
-  assert.equal(await metricCell('accessibility.review_rules',accessibilityExample).locator(':scope>.value').textContent(),'96% with rules requiring manual review');
+  assert.equal(await metricCell('accessibility.review_rules',accessibilityExample).locator(':scope>.value').textContent(),'96%');
  }
  await page.locator('[data-table-id="accessibility.failed_rules"] .chart-button').click();
  assert.match(await page.locator('#chartPopoverTitle').textContent(),/measured reports with failed rules/);
@@ -88,14 +512,16 @@ try{
  const rateExamples=await page.evaluate(()=>{
   const dashboard=window.__auditDashboard;
   return ['metrics','findings'].map(kind=>dashboard.days.flatMap((day,index)=>
-   Object.entries(day[kind]).filter(([id,v])=>dashboard.data.tableEntries.some(entry=>entry.id===id)&&!/^(?:sealed\.)?(?:execution|click)\./.test(id)&&id!=='sealed.choice_evidence.paired_cmp'&&v.source==='mixed_sources'&&Object.values(v.series).some(p=>Number.isFinite(p.rate))&&
+   Object.entries(day[kind]).filter(([id,v])=>dashboard.data.tableEntries.some(entry=>entry.id===id)&&id!=='customer_cmp_check.prominence'&&!dashboard.data.verdictLayouts[id]&&!/^(?:sealed\.)?(?:execution|click|registration)\./.test(id)&&!/^detail\.(accept|reject)\.(activity_all|verdict)$/.test(id)&&!['control.accept','control.reject'].includes(id)&&id!=='sealed.choice_evidence.paired_cmp'&&!['gpc_delivery','detail.gpc.session_collection','detail.gpc.california_collection','detail.gpc.cmp_receipt'].includes(id)&&v.source==='mixed_sources'&&Object.values(v.series).some(p=>Number.isFinite(p.rate))&&
     (kind==='findings'||Object.keys(v.counts).some(state=>state!=='unknown'&&state!=='unavailable')))
     .map(([id])=>({id,index,kind:kind==='findings'?'finding':'metric'}))).at(-1)).filter(Boolean);
  });
  for(const {id,index,kind} of rateExamples){
   const cell=page.locator(`[data-table-kind="${kind}"][data-table-id="${id}"] td`).nth(index+1);
-  assert.match(await cell.locator(':scope>.value').textContent(),/^\d+(?:\.\d)?%(?: observed)?$/);
-  assert.equal(await cell.locator(':scope>.minor:not(.state-percentages)').count(),0);
+  assert.match(await cell.locator(':scope>.value').textContent(),/^\d+(?:\.\d)?%$/);
+  // The dedicated policy coverage assertions above verify these panels.
+  const unexpectedMinor=cell.locator(':scope>.minor:not(.state-percentages):not([data-policy-receipt-coverage]):not([data-transfer-signal-coverage]):not([data-transfer-assessment-coverage])');
+  assert.equal(await unexpectedMinor.count(),0);
   assert.match(await cell.locator(':scope > details.series-list:not(.supporting-evidence) > summary').textContent(),/Separate sources/);
   assert.equal(await cell.locator(':scope > details.series-list:not(.supporting-evidence)').evaluate(details=>details.open),false);
   const source=cell.locator(':scope > details.series-list:not(.supporting-evidence) .series-entry').filter({hasText:'Shown above'});
@@ -108,6 +534,14 @@ try{
  }
  assert.ok(await page.locator('#daily td > .value').filter({hasText:/^100%$/}).count()>0);
  const percentages=(cell)=>cell.locator(':scope > .state-percentages > [data-state]').allTextContents();
+ const gpcDeliveryDay=await page.evaluate(()=>window.__auditDashboard.days.findIndex(day=>day.date==='2026-11-08'&&
+  day.metrics.gpc_delivery.denominator===51&&day.metrics.gpc_delivery.counts.verified===50));
+ if(gpcDeliveryDay>=0){
+  const cell=metricCell('gpc_delivery',gpcDeliveryDay);
+  assert.equal(await cell.locator(':scope > .value').textContent(),'98.0%');
+  assert.deepEqual(await percentages(cell),['Verified: 50/51','unavailable: 2.0%']);
+  assert.match(await cell.locator(':scope > details.series-list:not(.supporting-evidence)').textContent(),/Verified: 50\/51/);
+ }
  const example=await page.evaluate(()=>{
   const {days}=window.__auditDashboard;
   return days.findIndex(day=>day.date==='2026-11-07'&&day.metrics.outcome.denominator===73&&
@@ -117,25 +551,24 @@ try{
  });
  if(example>=0){
   const outcome=page.locator('[data-table-id="outcome"] td').nth(example+1);
-  assert.equal(await outcome.locator(':scope > .value').textContent(),'72.9% observed');
-  assert.deepEqual(await percentages(outcome),['limited: 67.1%','complete: 2.7%','unavailable: 4.1%']);
+  assert.equal(await outcome.locator(':scope > .value').textContent(),'72.9%');
+  assert.deepEqual(await percentages(outcome),['Observed: 72.9%','limited: 67.1%','complete: 2.7%','unavailable: 4.1%']);
   assert.match(await outcome.locator(':scope > details.series-list:not(.supporting-evidence)').textContent(),/no go: 19\/73/);
   for(const id of ['control.accept','control.reject']){
    const cell=metricCell(id,example);
-   assert.deepEqual(await percentages(cell),['observed: 9.8%','not observed: 58.8%','unknown: 31.4%']);
+   const outcomes=await percentages(cell);
+   assert.equal(outcomes[0],'observed: 5/51');
+   assert.ok(outcomes.includes('unknown: 31.4%'));
   }
   for(const [id,title,count,state] of [
    ['execution.accept','Confirmed: 4.3%','Confirmed: 3/70','succeeded_with_confirmation'],
    ['execution.reject','Confirmed: 2.9%','Confirmed: 2/70','succeeded_with_confirmation'],
-   ['click.accept','Completed: 7.1%','Completed: 5/70','completed'],
-   ['click.reject','Completed: 7.1%','Completed: 5/70','completed'],
-   ['checklist.cookie_notice_policy_availability','Observed: 62.7%','Observed: 32/51','observed'],
 
    ['checklist.outdated_transfer_framework_reference','Partial concern: 2.0%','Partial concern: 1/51','partial_concern'],
   ]){
    const cell=metricCell(id,example);
-   assert.equal(await cell.locator(':scope > .value').textContent(),title);
-   assert.equal(await cell.locator(':scope > .state-percentages > [data-state="'+state+'"]').count(),0);
+   assert.equal(await cell.locator(':scope > .value').textContent(),title.split(': ')[1]);
+   assert.equal(await cell.locator(':scope > .state-percentages > [data-state="'+state+'"]').textContent(),title);
    assert.ok((await cell.locator('details').allTextContents()).join(' ').includes(count.split(': ')[1]),count);
   }
   assert.match(await metricCell('execution.reject',example).locator('details').textContent(),/4\/5 ·/);
@@ -144,7 +577,8 @@ try{
   day.metrics.outcome.denominator===199&&day.metrics.outcome.counts.export_unavailable===15));
  if(mixedOutcome>=0){
   const cell=page.locator('[data-table-id="outcome"] td').nth(mixedOutcome+1);
-  assert.equal(await cell.locator(':scope > .value').textContent(),'74.5% observed');
+  assert.equal(await cell.locator(':scope > .value').textContent(),'74.5%');
+  assert.equal(await cell.locator(':scope > .state-percentages > [data-headline]').textContent(),'Observed: 74.5%');
   assert.match(await cell.locator(':scope > details.series-list:not(.supporting-evidence) .series-entry').filter({hasText:'Shown above'}).locator('strong').textContent(),/^public_export\//);
  }
  const lastDay=await page.evaluate(()=>window.__auditDashboard.days.length);
@@ -156,7 +590,7 @@ try{
  const regions=await page.locator('#region option').evaluateAll(opts=>opts.map(o=>o.value));if(regions.length>1){await page.selectOption('#region',regions[1]);assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.region===document.getElementById('region').value)),true);const content=await page.evaluate(()=>window.__auditDashboard.engine.stateCsv(window.__auditDashboard.days,window.__auditDashboard.data.csvMetrics));const wait=page.waitForEvent('download');await page.locator('#csv').click();const dl=await wait,temp=path.join(root,'filtered.csv');await dl.saveAs(temp);assert.equal(await fs.readFile(temp,'utf8'),content);await fs.unlink(temp);await page.selectOption('#region','all');}
  const providers=await page.locator('#cmp option').evaluateAll(opts=>opts.map(o=>o.value));if(providers.length>1){await page.selectOption('#cmp',providers[1]);assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.states.cmp_provider===document.getElementById('cmp').value)),true);await page.selectOption('#cmp','all');}
  await page.selectOption('#origin','selection');assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.originProof==='production_id_selection_only'&&r.reportable===false)),true);await page.selectOption('#origin','all');
- await page.selectOption('#group','Controls');assert.equal(await page.locator('#daily tbody tr[data-table-id]').count(),4);checks.filters=true;
+ await page.selectOption('#group','Controls');assert.equal(await page.locator('#daily tbody tr[data-table-id]').count(),2);checks.filters=true;
  assert.equal(await page.locator('[data-table-id="control.privacyOptOut"]').count(),0);
  assert.equal(await page.locator('#metric option[value="metric:control.privacyOptOut"]').count(),0);
  const retainedOptOut=page.locator('[data-table-id="sealed.control.privacyOptOut"]');
@@ -165,8 +599,10 @@ try{
  if(positive>0)assert.match(await retainedOptOut.textContent(),/observed:/);
  checks.optOutCoverage=true;
  await page.selectOption('#group','Opt-out');
- const dispatch=page.locator('[data-table-id="sealed.opt_out.dispatch"]');
- assert.match(await dispatch.textContent(),/Effective opt-out dispatch status/);
+ assert.equal(await page.locator('[data-table-id="sealed.opt_out.dispatch"]').count(),0);
+ const dispatch=page.locator('[data-table-id="sealed.opt_out.action_completion"] [data-supporting-id="sealed.opt_out.dispatch"]');
+ assert.equal(await dispatch.count(),await page.evaluate(()=>window.__auditDashboard.days.length));
+ assert.match(await dispatch.first().textContent(),/Effective opt-out dispatch status/);
  for(const state of ['excluded_by_profile','dispatch_recorded','conditional_no_dispatch_recorded','profile_dispatch_conflict']){
   const expected=await page.evaluate(state=>window.__auditDashboard.days.map(d=>{
    const {counts,denominator}=d.metrics['sealed.opt_out.dispatch'];
@@ -179,19 +615,72 @@ try{
    const value=100*counts[state]/denominator;
    return state.replaceAll('_',' ')+': '+(Number.isInteger(value)?String(value):value.toFixed(1))+'%';
   }),state);
-  const actual=await dispatch.locator('td').evaluateAll((cells,state)=>cells.slice(1).map(cell=>{
-   if(state==='dispatch_recorded'){
-    const hero=cell.querySelector(':scope > .value')?.textContent;
-    return hero?.startsWith('Dispatch recorded: ')?hero:null;
-   }
+  const actual=await dispatch.evaluateAll((cells,state)=>cells.map(cell=>{
    return cell.querySelector(':scope > .state-percentages > [data-state="'+state+'"]')?.textContent??null;
   }),state);
   assert.deepEqual(actual,expected,state);
  }
  checks.optOutDispatch=true;
- await page.selectOption('#group','Controls');
+ const funnel=page.locator('[data-table-id="sealed.opt_out.action_completion"]');
+ assert.match(await funnel.locator('.metric-name strong').textContent(),/^Opt-out execution and verification$/);
+ for(const id of ['sealed.opt_out.dispatch','sealed.opt_out.coverage','sealed.opt_out.configured','sealed.opt_out.conditional_control','sealed.opt_out.supported_route','sealed.opt_out.dispatch_reason','sealed.opt_out.choice_confirmation','sealed.opt_out.post_confirmation_observation']){
+  assert.equal(await page.locator('[data-table-id="'+id+'"]').count(),0);
+  assert.ok(tableEntries.find(e=>e.id==='sealed.opt_out.action_completion').details.some(e=>e.id===id));
+  assert.ok(csvMetricIds.includes(id));
+ }
+ const dispatchDetails=funnel.locator('td').last().locator(':scope > .supporting-evidence');
+ await dispatchDetails.locator(':scope > summary').click();
+ await dispatch.last().locator('button.supporting-chart').click();
+ await page.selectOption('#popoverState','dispatch_recorded');
+ assert.equal(await page.locator('#popoverState').inputValue(),'dispatch_recorded');
+ assert.match(await page.locator('#chartPopoverTitle').textContent(),/Effective opt-out dispatch status/);
+ await page.locator('#closeChartPopover').click();
+ await dispatchDetails.locator(':scope > summary').click();
+ const funnelDay=await page.evaluate(()=>window.__auditDashboard.days.findIndex(d=>d.date==='2026-11-09'&&d.reportable===90));
+ if(funnelDay>=0){
+  const cell=funnel.locator('td').nth(funnelDay+1);
+  assert.equal(await cell.locator(':scope > .value').textContent(),'Not tested · 0 dispatched');
+  assert.match(await cell.locator('.opt-out-blockers').textContent(),/No qualifying control recorded in dispatch source: 22/);
+  assert.match(await cell.locator('.opt-out-blockers').textContent(),/Control recorded, no supported route: 4/);
+  await cell.locator('.opt-out-stages > summary').focus();await page.keyboard.press('Enter');
+  assert.equal(await cell.locator('.opt-out-stages').evaluate(e=>e.open),true);
+  assert.match(await cell.locator('.opt-out-stages').textContent(),/rates are not calculated/);
+  await cell.locator('.opt-out-stages > summary').click();
+ }
+ await page.selectOption('#origin','selection');
+ assert.ok((await funnel.locator('td > .value').allTextContents()).every(v=>v==='No eligible data'));
+ await page.selectOption('#origin','all');
+ await funnel.locator('.chart-button').click();assert.equal(await page.locator('#popoverState').inputValue(),'completed');
+ assert.match(await page.locator('#chartPopoverTitle').textContent(),/completed share/);
+ await page.locator('#closeChartPopover').click();
+ checks.optOutFunnel=true;
+ const rejectionPreview=await page.evaluate(()=>{
+  const {data,days}=window.__auditDashboard;
+  const row=data.rows.find(r=>r.reportable&&r.states['sealed.opt_out.dispatch']==='conditional_no_dispatch_recorded');
+  if(!row)return null;
+  const prior=row.optOutRejection;
+  const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(row.createdAt));
+  const index=days.findIndex(d=>d.date===day),counts=Array(14).fill(0);counts[12]=1;
+  try{
+   row.optOutRejection={sourceSha256:'a'.repeat(64),receipt:[1,1,1,1,4,counts,[[0,0,12,2]]]};
+   document.getElementById('origin').dispatchEvent(new Event('change'));
+   const cell=document.querySelector('[data-table-id="sealed.opt_out.action_completion"]').querySelectorAll('td')[index+1];
+   return cell.querySelector('.opt-out-rejection-details').textContent;
+  }finally{
+   if(prior===undefined)delete row.optOutRejection;else row.optOutRejection=prior;
+   document.getElementById('origin').dispatchEvent(new Event('change'));
+  }
+ });
+ if(rejectionPreview!==null){
+  assert.match(rejectionPreview,/Observation 0 \/ control 0: Selector not supported by matching recipe/i);
+  assert.match(rejectionPreview,/Native alternative checks: Native opt out binding missing/i);
+  assert.match(rejectionPreview,/sample limit/);assert.ok(rejectionPreview.includes('a'.repeat(64)));
+ }
+ checks.optOutRejectionDetails=true;
+ await page.selectOption('#group','Accept & Reject');
+ assert.deepEqual(await page.locator('#daily tbody tr[data-table-id]').evaluateAll(rows=>rows.map(row=>row.dataset.tableId)),choiceRows.map(entry=>entry.id));
  const icon=page.locator('[data-chart-id="control.reject"]');await icon.click();await page.waitForSelector('#chartPopover:not([hidden])');assert.match(await page.locator('#chartPopoverTitle').textContent(),/presence/);assert.ok(await page.locator('#contract').textContent());await page.screenshot({path:path.join(root,'desktop-chart.png'),fullPage:true});await page.keyboard.press('Escape');
- await page.setViewportSize({width:390,height:844});await icon.click();const rect=await page.locator('#chartPopover').boundingBox();assert.ok(rect&&rect.x>=0&&rect.x+rect.width<=391&&rect.y>=0&&rect.y+rect.height<=845);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1),true);await page.screenshot({path:path.join(root,'mobile-chart.png'),fullPage:true});checks.mobile=true;
+ await page.setViewportSize({width:390,height:844});await icon.click();const rect=await page.locator('#chartPopover').boundingBox();assert.ok(rect&&rect.x>=0&&rect.x+rect.width<=391&&rect.y>=0&&rect.y+rect.height<=845);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1),true);assert.deepEqual(await wrappingStates(),[]);await page.screenshot({path:path.join(root,'mobile-chart.png'),fullPage:true});checks.mobile=true;
  assert.deepEqual(errors,[]);assert.equal(externalRequests,0);
  await page.keyboard.press('Escape');
  const coveragePanel=page.locator('details.panel').filter({has:page.locator('#coverageMap')});

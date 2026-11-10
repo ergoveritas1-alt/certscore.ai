@@ -103,3 +103,34 @@ test("daily CMP scope distinguishes main-document snapshots without changing leg
   assert.equal(audit.states["detail.gpc.paired_cmp_scope"],"main_document");
   assert.equal(audit.cmpScope,"certscore.gpc-cmp-state-comparison.v2/main_document");
 });
+
+test('four-question assessment coverage does not promote incomplete packets or neutral records',()=>{
+ const r=fixture();
+ Object.assign(r.gpcResponse,{status:'no_observable_response',californiaPolicy:{applied:false,deductionPoints:0}});
+ const a=pairedGpcAudit(r);
+ assert.equal(a.states['detail.gpc.assessment_coverage'],'unavailable');
+ assert.equal(a.states['detail.gpc.california_collection'],'unavailable');
+});
+
+test('recorded California collection is independent of comparison direction and neutral record surfacing',async()=>{
+ const {buildGpcResponseAssessment}=await import('../../packages/certscore-scan-core/src/gpc-response-assessment');
+ const {buildGpcProductionAssessment}=await import('../../packages/certscore-scan-core/src/gpc-production-observation');
+ const {apiV2GpcResponseSchema}=await import('../../packages/certscore-api-contracts/src/scan-observation-results');
+ const pair=collectionPairFixture(), b=collectionFixtureSource(pair.baseline),g=collectionFixtureSource(pair.gpc);
+ const comparison=buildGpcResponseAssessment({baseline:pair.baseline,baselineArtifact:b.pointer,gpc:pair.gpc,gpcArtifact:g.pointer});
+ const assessment=buildGpcProductionAssessment({scanId:pair.gpc.scanId,source:g,comparison});
+ const {baselineArtifact,gpcArtifact,delivery,evidenceRefs,...c}=assessment.comparison;
+ const response=apiV2GpcResponseSchema.parse({contractVersion:assessment.contractVersion,status:assessment.status,findingTitle:assessment.findingTitle,
+  summary:'Synthetic retained evidence',observation:assessment.observation,scoreEffect:'none',legalInterpretation:'not_assessed',
+  comparison:{...c,baselineArtifact:{lane:'runtime_evidence',sha256:b.pointer.sha256,sizeBytes:b.pointer.sizeBytes},gpcArtifact:{lane:'gpc_observation',sha256:g.pointer.sha256,sizeBytes:g.pointer.sizeBytes},delivery:{status:delivery.status}},
+  californiaPolicy:{applied:true,deductionPoints:15},evidenceUrl:'https://example.test/evidence'});
+ const report={scanId:pair.gpc.scanId,gpcResponse:response};
+ const values=pairedGpcAudit(report).states;
+ assert.equal(values['detail.gpc.california_collection'],'recorded');
+ assert.equal(values['detail.gpc.assessment_coverage'],comparison.comparison.comparable?'assessed':'inconclusive');
+ response.californiaPolicy={applied:false,deductionPoints:0};
+ assert.equal(pairedGpcAudit(report).states['detail.gpc.california_collection'],'not_recorded');
+ response.observation!.sourceSha256='f'.repeat(64);
+ assert.equal(pairedGpcAudit(report).states['detail.gpc.california_collection'],'unavailable');
+ assert.equal(pairedGpcAudit({...report,scanId:'other'}).states['detail.gpc.assessment_coverage'],'unavailable');
+});

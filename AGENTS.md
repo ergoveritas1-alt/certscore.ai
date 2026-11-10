@@ -1600,6 +1600,17 @@ Do not use local production DB tunnels, ECS Exec, or copied secrets for routine 
 - Prefer Git-based deploy promotion through the connected AWS ECS deployment workflows, but verify which runtime is actually serving `certscore.ai` before claiming production is updated.
 - Web deploys are forward-only: the target revision must contain the Git SHA currently reported by the production `/api/version` endpoint. Merge the live revision into the target branch before deploying; use the explicit non-descendant override only for an intentional emergency rollback.
 
+### Default for prepare and deploy requests
+
+Treat “prepare for deploy and then deploy when ready” as authorization to prepare, deploy after the required gates pass, and verify production. Follow the [AWS deployment runbook](docs/aws-ecs-deployment-runbook.md) and select the affected services against their installed revisions.
+
+- Fetch `origin` and inventory local branches, remote branches, and linked worktrees before freezing the release. Identify which changes are already integrated, which belong in this release, and which need to stay separate. Preserve unique commits and uncommitted or untracked work. Integrate the release scope with current `origin/main` in an isolated clean checkout and resolve conflicts before verification. Ensure the exact verified candidate is the commit that lands on `main` and deploys. Revalidate the candidate if integration changes its SHA.
+- Look for valid preflight receipts for the exact release commit before starting checks. Run any missing checks as soon as the candidate is ready and retain the resulting receipts for the deploy command.
+- For an eligible coupled release, prefer the staged path when its repository setting is already approved and active. Prepare images and run required CI before promotion, then reuse the verified artifacts. Otherwise use the normal deployment path, which already prepares scanner artifacts alongside consumer deployments. Changing the staging setting requires separate approval because it changes what a push to `main` does.
+- Keep required tests, CI, migrations, consumer ordering, and live verification in place. Use test sharding only through a reviewed release gate that verifies full test coverage. Keep experimental timing benchmarks outside the production release path.
+- After verifying production, remove merged local branches and unused worktrees only after confirming that they contain no unique work and are not in use. Check for uncommitted and untracked files and preserve any needed local artifacts. Use Git's non-forced cleanup commands. Delete a merged remote branch only when it is a release branch whose cleanup is authorized. Preserve shared branches and any branch or worktree with uncertain ownership, use, or merge status.
+- Finish with a clean local `main` synced to `origin/main`. If existing work or a concurrent remote update prevents that safely, preserve it and report the exact divergence or dirty checkout. Report what was integrated and cleaned up, what remains unresolved, the verified production revision, and preparation and rollout times separately. Include the longest stage and which work ran in parallel.
+
 ### Canonical deployment selection
 
 Before deploying, require a clean committed worktree, discover the revision currently served by the production `/api/version` endpoint, and use that live revision as the comparison base when previewing the canonical deployment plan.

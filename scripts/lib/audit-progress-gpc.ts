@@ -3,6 +3,12 @@ import { gpcBoundedObservationSchema } from "../../packages/certscore-api-contra
 import { gpcActivityComparisonSchema } from "../../packages/certscore-api-contracts/src/gpc-activity-comparison";
 import { readBoundGpcCollectionComparison } from "../../packages/certscore-api-contracts/src/gpc-collection-comparison";
 import { readBoundGpcCmpStateComparison } from "../../packages/certscore-api-contracts/src/gpc-cmp-state-comparison";
+import { apiV2GpcResponseSchema } from "../../packages/certscore-api-contracts/src/scan-observation-results";
+import { gpcPolicyCollectionEvidenceIds } from "../../packages/certscore-api-contracts/src/gpc-bounded-observation";
+export const GPC_CORE_METRICS = [
+  {id:"detail.gpc.california_collection",label:"California GPC collection findings",group:"GPC",denominator:"Reportable scans; recorded California policy application with verified qualifying collection. Missing assessment stays unavailable.",success:["recorded"]},
+  {id:"detail.gpc.assessment_coverage",label:"GPC assessment coverage",group:"GPC",denominator:"Reportable scans; comparison assessability, independent of whether tracking decreased.",success:["assessed"]},
+];
 const denominator = "Readable reportable scans; missing/unbound paired evidence stays unavailable";
 export const GPC_PAIR_METRICS = [
   ["pair", "GPC paired request evidence", ["measured"]],
@@ -23,6 +29,7 @@ export const GPC_PAIR_QUANTITIES = [
   ]),
 ].map(([id, label, unit]) => ({ id: `gpc.paired.${id}`, label: label!, unit: unit!, path: "validated_gpc_pair_only" }));
 export const GPC_SESSION_METRICS = [
+  ...GPC_CORE_METRICS,
   { id: "detail.gpc.session_collection", label: "Full GPC visit retained advertising collection", group: "GPC details", denominator, success: [] as string[] },
   { id: "detail.gpc.session_request_coverage", label: "Full GPC visit request coverage", group: "GPC details", denominator, success: [] as string[] },
 ];
@@ -52,6 +59,20 @@ export function pairedGpcAudit(report: Record<string, any>) {
   const g = report.gpcResponse ?? {}, value = g.activityComparison;
   const states: Record<string, string> = Object.fromEntries([...GPC_PAIR_METRICS, ...GPC_SESSION_METRICS, ...GPC_DETAIL_METRICS].map(m => [m.id, "unavailable"]));
   const measurements: Record<string, number> = {};
+  const response = apiV2GpcResponseSchema.safeParse(g);
+  if (response.success && response.data.contractVersion === "certscore.gpc-response-assessment.v3" &&
+      response.data.observation?.scanId === report.scanId) {
+    const r = response.data, o = r.observation!;
+    states["detail.gpc.assessment_coverage"] = r.comparison.comparable ? "assessed" : "inconclusive";
+    // Read the recorded policy application; never infer a finding from a neutral
+    // canonical record, resource presence or response-comparison outcome.
+    if (o.sourceSha256 && o.sessionSha256 && o.documentUrlSha256 && o.status !== "unavailable" &&
+        o.delivery.httpHeaderRetained && o.delivery.mainNavigatorReadbackRetained &&
+        o.positiveEvidence?.representativeDocument) {
+      states["detail.gpc.california_collection"] = r.californiaPolicy.applied && gpcPolicyCollectionEvidenceIds(o).length > 0
+        ? "recorded" : "not_recorded";
+    }
+  }
   let sessionScope = "unavailable";
   const parsedObservation = gpcBoundedObservationSchema.safeParse(g.observation);
   const cmp = g.comparison && parsedObservation.success

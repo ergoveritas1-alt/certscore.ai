@@ -1,4 +1,5 @@
 import {readIdChanges} from './audit-id-changes';
+import snapshotLimits from './audit-progress-snapshot-limits.json';
 /** Snapshot-level facts are never duplicated into scan evidence or rate denominators. */
 import {readFileSync,statSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -42,7 +43,7 @@ export function readMasterContext(data:Record<string,any>){
   const inputs=data.idChangeInputs;
   if(!ref||inputs.currentCache?.file!==ref.file||inputs.currentCache?.sha256!==ref.sha256||inputs.currentCache?.bytes!==ref.bytes)throw Error('ID comparison current-cache mismatch');
   const p=inputs.priorSnapshot;
-  if(!p||!Number.isSafeInteger(p.bytes)||p.bytes>200_000_000||statSync(p.file).size!==p.bytes)throw Error('ID comparison prior snapshot bound');
+  if(!p||!Number.isSafeInteger(p.bytes)||p.bytes>snapshotLimits['dashboard.json']||statSync(p.file).size!==p.bytes)throw Error('ID comparison prior snapshot bound');
   const bytes=readFileSync(p.file);if(hash(bytes)!==p.sha256)throw Error('Changed prior snapshot bytes');
   const prior=JSON.parse(bytes.toString());
   if(!prior.sources?.some((s:any)=>s.file===inputs.previousCache?.file&&s.sha256===inputs.previousCache?.sha256&&s.bytes===inputs.previousCache?.bytes))throw Error('Previous cache lacks original snapshot receipt');

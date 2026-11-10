@@ -27,9 +27,7 @@ test('verified guidance follows concern policy and deducts three points once',()
  assert.equal(getGdprEprivacyRowDeduction(bare),0);
  assert.equal(score([row,row,row]),97);
  assert.equal(score(mergeSiteChecklistRows([row],[row,row])),97);
- const noticeGap = {id:'privacy_notice_availability',assessmentStatus:'gap_observed',evidenceState:'observed',status:'Gap observed'};
- assert.equal(score([noticeGap]),91);
- assert.equal(score([row,noticeGap]),score([noticeGap]));
+ assert.equal(score([row,{id:'privacy_notice_availability',assessmentStatus:'gap_observed',evidenceState:'observed',status:'Gap observed'}]),88);
  assert.equal(deriveCanonicalOverallScoreForReport({scanRecord:{} as any,checklistRows:[row],unifiedFindings:[]}),97);
 });
 test('historical, corrected, uncertain, legacy, and unbound evidence cannot deduct',()=>{
