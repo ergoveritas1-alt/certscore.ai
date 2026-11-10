@@ -24,6 +24,7 @@ export type ReleaseSection = {
 
 export type ProductRelease = {
   scanForm?: boolean;
+  ctaBeforeSection?: string;
   scanButtonLabel?: string;
   heroImage?: { path: string; alt: string; width: number; height: number; caption?: string };
   headlineTone?: "quiet";
@@ -81,7 +82,7 @@ const releases: readonly ProductRelease[] = [
   sections: [
     { id: "finding", heading: "What the GPC test observed", paragraphs: [
       "From November 1–8, 2026, CertScore.ai examined 1,000 websites scanned from California with GPC enabled. On 337 of them—33.7%, or roughly one in three—the scanner observed requests reaching recognized advertising and marketing data-collection services. The requests weren’t merely inactive scripts on a page; the services responded.",
-      "Each response is a glimpse of activity most visitors cannot see. The scan captures the connection; it does not follow what happens inside an advertising service afterward. A visit with no such activity leaves open whether the site recognized GPC."
+      "That doesn't necessarily mean those websites ignored GPC or broke the law; some advertising activity can continue legitimately. Each response is a glimpse of activity most visitors cannot see. The scan captures the connection; it does not follow what happens inside an advertising service afterward. A visit with no such activity leaves open whether the site recognized GPC."
     ] },
     { id: "browser-setting", heading: "A browser setting arrives in 2027", paragraphs: [
       "On January 1, 2027, California’s Opt Me Out Act (AB 566, Lowenthal) will require web browsers—including major browsers such as Chrome, Safari and Edge—to offer an accessible, built-in privacy opt-out signal setting. People won’t have to install a separate extension just to make that request available in those browsers."
@@ -92,7 +93,7 @@ const releases: readonly ProductRelease[] = [
       "California now requires covered businesses to provide a way to confirm their opt-out has been processed, for example with a message such as “Opt-Out Request Honored.” A message alone cannot show everything a website sent behind the scenes."
     ] },
     { id: "how-we-tested", heading: "How we tested", paragraphs: [
-      "From November 1–8, 2026, CertScore.ai reviewed the latest 1,000 distinct websites for which its California-based scans had usable GPC results. The scanner made brief automated visits with GPC enabled and recorded requests reaching recognized advertising or marketing collection services. Observed requests are not proof of a privacy-law violation or of a failure to honor GPC."
+      "From November 1–8, 2026, CertScore.ai reviewed the latest 1,000 distinct websites for which its California-based scans had usable GPC results. The scanner made brief automated visits with GPC enabled and recorded requests reaching recognized advertising or marketing collection services."
     ] },
     { id: "primary-sources", heading: "Primary sources", sourceLinks: [
       { href: "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202520260AB566", label: "California Legislature: AB 566 (Opt Me Out Act)" },
@@ -108,6 +109,7 @@ const releases: readonly ProductRelease[] = [
   ctaDescription: "Scan any website free at CertScore.ai and explore the cookies, trackers and advertising-related requests our scanner can observe. Results reflect the scan’s selected origin and available evidence.",
   primaryCta: { href: "/#homepage-scan", label: "Scan Any Website Free" },
   resourceLinks: [{ href: "/guides/test-global-privacy-control", label: "How to test GPC response" }],
+  ctaBeforeSection: "how-we-tested",
   scanButtonLabel: "Scan Any Website Free",
   scanForm: true,
   cardImage: { path: "/images/releases/gpc-2026/hero-toggle.png", alt: "337 of 1,000 California-origin websites tested contacted advertising services during GPC-enabled visits.", width: 1600, height: 900 },

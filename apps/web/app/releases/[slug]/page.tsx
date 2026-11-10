@@ -51,6 +51,47 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
     ])
   ];
 
+  const cta = (
+    <section className="rounded-2xl border border-sky-200 bg-sky-50 p-6 sm:p-8" aria-labelledby="try-release" key="try-release">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-800">Try it</p>
+      <h2 className="mt-2 scroll-mt-28 text-3xl font-semibold tracking-tight text-slate-950" id="try-release">
+        {release.ctaHeading}
+      </h2>
+      <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+        {release.ctaDescription}
+      </p>
+      {release.scanForm ? (
+        <div className="mt-6">
+          <Suspense fallback={<p className="text-sm text-slate-600">Loading scan form…</p>}>
+            <DomainScanForm mode="full" variant="homepage-hero" scanSource="release" buttonLabel={release.scanButtonLabel ?? "Run free scan"} inputLabel="Website URL" inputPlaceholder="https://your-website.com" />
+          </Suspense>
+          <p className="mt-4 text-sm leading-6 text-slate-600">Start with a free scan of one public page. Results describe the scan’s conditions and coverage.</p>
+        </div>
+      ) : null}
+      <div className="mt-6 flex flex-wrap gap-3">
+        {!release.scanForm ? <Link
+          className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+          data-analytics-feature="release_cta"
+          data-analytics-id={`release:${release.slug}:product`}
+          href={release.primaryCta.href}
+        >
+          {release.primaryCta.label}
+        </Link> : null}
+        {release.resourceLinks?.map((link) => (
+          <Link
+            className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-sky-400 hover:text-sky-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+            data-analytics-feature="release_resource"
+            data-analytics-id={`release:${release.slug}:${link.href.replaceAll("/", "-")}`}
+            href={link.href}
+            key={link.href}
+          >
+            {link.label}
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+
   return (
     <main>
       <article>
@@ -92,7 +133,8 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
           {release.heroImage.caption ? <figcaption className="px-5 py-4 text-sm leading-6 text-slate-600">{release.heroImage.caption}</figcaption> : null}
         </figure> : null}
 
-        {release.sections.map((section) => (
+        {release.sections.flatMap((section) => [
+          ...(section.id === release.ctaBeforeSection ? [cta] : []),
           <section className="min-w-0 scroll-mt-28" id={section.id} key={section.id}>
             <h2 className="text-3xl font-semibold tracking-tight text-slate-950">{section.heading}</h2>
             {section.paragraphs?.length ? (
@@ -141,46 +183,9 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
               </ol>
             ) : null}
           </section>
-        ))}
+        ])}
 
-        <section className="rounded-2xl border border-sky-200 bg-sky-50 p-6 sm:p-8" aria-labelledby="try-release">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-800">Try it</p>
-          <h2 className="mt-2 scroll-mt-28 text-3xl font-semibold tracking-tight text-slate-950" id="try-release">
-            {release.ctaHeading}
-          </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-            {release.ctaDescription}
-          </p>
-          {release.scanForm ? (
-            <div className="mt-6">
-              <Suspense fallback={<p className="text-sm text-slate-600">Loading scan form…</p>}>
-                <DomainScanForm mode="full" variant="homepage-hero" scanSource="release" buttonLabel={release.scanButtonLabel ?? "Run free scan"} inputLabel="Website URL" inputPlaceholder="https://your-website.com" />
-              </Suspense>
-              <p className="mt-4 text-sm leading-6 text-slate-600">Start with a free scan of one public page. Results describe the scan’s conditions and coverage.</p>
-            </div>
-          ) : null}
-          <div className="mt-6 flex flex-wrap gap-3">
-            {!release.scanForm ? <Link
-              className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
-              data-analytics-feature="release_cta"
-              data-analytics-id={`release:${release.slug}:product`}
-              href={release.primaryCta.href}
-            >
-              {release.primaryCta.label}
-            </Link> : null}
-            {release.resourceLinks?.map((link) => (
-              <Link
-                className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-sky-400 hover:text-sky-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
-                data-analytics-feature="release_resource"
-                data-analytics-id={`release:${release.slug}:${link.href.replaceAll("/", "-")}`}
-                href={link.href}
-                key={link.href}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
-        </section>
+        {release.ctaBeforeSection ? null : cta}
 
         <nav aria-label="Adjacent releases" className="grid gap-4 border-t border-slate-200 pt-8 sm:grid-cols-2">
           {newer ? <Link className="text-sky-700" href={releasePath(newer)}>Newer release: {newer.headline}</Link> : <span />}
