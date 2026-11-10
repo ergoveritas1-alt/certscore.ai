@@ -3940,3 +3940,5 @@ export * from "./explicit-opt-out-control";
 export * from "./conditional-opt-out-decision";
 
 export * from "./gpc-cmp-pair-coverage";
+
+export * from "./control-accessibility-assessment";

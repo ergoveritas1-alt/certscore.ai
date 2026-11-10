@@ -44,6 +44,24 @@ test("an evaluated page with no failures completes without a fabricated accessib
   });
 });
 
+test("the existing axe run binds a consent violation only to the exact retained control", async () => {
+  await withPage('<section id="onetrust-banner-sdk"><button id="onetrust-reject-all-handler" style="color:#aaa;background:#fff">Reject all cookies</button></section><button id="unrelated"></button>', async page => {
+    const result = await audit(page);
+    assert.deepEqual(result.consentControlFindings?.findings, [{intent: "reject", ruleId: "color-contrast"}]);
+    assert.ok(result.violations.some(rule => rule.ruleId === "button-name"));
+    await page.evaluate(() => {
+      const control = document.getElementById("onetrust-reject-all-handler")!;
+      control.parentElement!.append(control.cloneNode(true));
+    });
+    assert.equal((await audit(page)).consentControlFindings, undefined);
+    await page.evaluate(() => {
+      document.querySelectorAll("#onetrust-reject-all-handler")[1]!.remove();
+      document.getElementById("onetrust-banner-sdk")!.removeAttribute("id");
+    });
+    assert.equal((await audit(page)).consentControlFindings, undefined);
+  });
+});
+
 test("image-only links retain shared DOM identity without private content or selector inference", async () => {
   await withPage('<p><a href="/private?secret=1" target="_blank"><img src="data:image/png;base64,AA=="></a></p><img src="data:image/png;base64,AA=="><a href="/other"></a>', async page => {
     const result = await audit(page);
@@ -294,5 +312,67 @@ test("audit failure records a safe stage and code without retaining exception co
     assert.deepEqual(result.executionDiagnostic, { version: "capture_failure.v1", phase: "engine_execution", code: "document_changed", errorName: "Error" });
     assert.doesNotMatch(JSON.stringify(result), /secret|private.test/);
     assert.deepEqual(result.rulesEvaluated, []);
+  });
+});
+
+
+test("same-document controls retain actual clean checks, issues and private coverage receipts", async () => {
+  await withPage('<section role="dialog" aria-label="Cookie consent"><p>We use cookies</p><button style="color:#000;background:#fff">Reject all cookies</button><button style="color:#000;background:#fff">Accept all cookies</button></section>',async page=>{
+    const result=await audit(page),a=result.controlAssessment!;
+    assert.equal(a.status,"completed",JSON.stringify(a));
+    assert.equal(a.controls.length,2);
+    assert.ok(a.controls.every(c=>c.complete&&c.checks.some(([r,s])=>r==="button-name"&&s==="pass")));
+    assert.doesNotMatch(JSON.stringify(a),/cookies|selector|label|context/);
+  });
+  await withPage('<section id="onetrust-banner-sdk"><button id="onetrust-reject-all-handler"></button></section><button>Unrelated</button>',async page=>{
+    const result=await audit(page),a=result.controlAssessment!;
+    assert.equal(a.controls.length,1,JSON.stringify(a));
+    assert.ok(a.controls[0]!.checks.some(([r,s])=>r==="button-name"&&s==="fail"));
+  });
+});
+
+test("same-document discovery covers open shadow controls and keeps frame limits explicit",async()=>{
+  await withPage('<div id="host"></div><iframe src="about:blank"></iframe>',async page=>{
+    await page.evaluate(()=>{document.getElementById('host')!.attachShadow({mode:'open'}).innerHTML='<section role="dialog"><p>Cookie preferences</p><button>Reject all cookies</button></section>';});
+    const a=(await audit(page)).controlAssessment!;
+    assert.equal(a.controls.length,1,JSON.stringify(a));
+    assert.ok(a.controls[0]!.checks.some(([r,s])=>r==='button-name'&&s==='pass'));
+    assert.ok(a.reasons.includes('frames_outside_scope'));
+    assert.equal(a.status,'partial');
+  });
+});
+
+test("control assessment never calls missing results a clean check",async t=>{
+  await withPage('<section><p>Cookie consent</p><button>Reject all cookies</button></section>',async page=>{
+    const evaluate=page.evaluate.bind(page);
+    t.mock.method(page,'evaluate',async(fn,arg)=>{
+      const result:any=await evaluate(fn,arg);
+      if(result?.controlCandidates){for(const c of result.controlCandidates)c.checks=[];}
+      return result;
+    });
+    const a=(await audit(page)).controlAssessment!;
+    assert.equal(a.status,'partial');assert.ok(a.reasons.includes('control_results_missing'));
+    assert.equal(a.controls[0]!.complete,false);
+  });
+});
+
+test("changed controls, timeout and candidate limits retain distinct coverage reasons",async t=>{
+  await withPage('<section><p>Cookie consent</p><button>Reject all cookies</button></section>',async page=>{
+    const evaluate=page.evaluate.bind(page);
+    t.mock.method(page,'evaluate',async(fn,arg)=>{
+      const result:any=await evaluate(fn,arg);
+      if(result?.controlCandidates)for(const c of result.controlCandidates)c.binding='changed';
+      return result;
+    });
+    const a=(await audit(page)).controlAssessment!;
+    assert.ok(a.reasons.includes('control_changed'));assert.equal(a.controls[0]!.checks.length,0);
+  });
+  await withPage('<section><p>Cookie consent</p>'+('<button>Reject all cookies</button>'.repeat(60))+'</section>',async page=>{
+    const a=(await audit(page)).controlAssessment!;
+    assert.equal(a.controls.length,8);assert.ok(a.reasons.includes('candidate_limit'));assert.ok(a.reasons.includes('control_limit'));
+  });
+  await withPage('<button>Reject all cookies</button>',async page=>{
+    const a=(await audit(page,{budgetMs:1})).controlAssessment!;
+    assert.equal(a.status,'unavailable');assert.deepEqual(a.reasons,['audit_timeout']);
   });
 });

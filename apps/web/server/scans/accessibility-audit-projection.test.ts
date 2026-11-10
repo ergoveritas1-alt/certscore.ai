@@ -10,6 +10,7 @@ import { accessibilityDeductionBreakdown,buildAccessibilityScoreEffects } from "
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import { projectAccessibilityAuditSummary } from "../../lib/scans/accessibility-audit-evidence";
+import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 
 function bundle(): CanonicalEvidenceBundle {
   const audit = accessibilityAuditFixture();
@@ -19,6 +20,23 @@ function bundle(): CanonicalEvidenceBundle {
   } as unknown as CanonicalEvidenceBundle;
 }
 const source = { verificationStatus: "verified", sha256: "a".repeat(64) };
+
+test("a document-bound control finding reaches the private checklist and stale proof does not", () => {
+  const input = bundle();
+  const audit = input.accessibilityAudit!;
+  assert.ok(audit.violations.some(rule => rule.ruleId === "color-contrast"));
+  audit.consentControlFindings = {version: "main_document_consent_control_findings.v1",
+    findings: [{intent: "reject", ruleId: "color-contrast"}]};
+  const assess = (accessibilityAudit: ReturnType<typeof projectAccessibilityAudit>) =>
+    deriveGdprEprivacyCoveragePolicyOutcomes({coverageLimited: false, scanCompleted: true, runtimeArtifacts: {accessibilityAudit}})
+      .accessibility_consent_controls;
+  const matched = assess(projectAccessibilityAudit(input, source, audit.documentUrl));
+  assert.equal(matched?.status, "Gap observed");
+  assert.equal(matched?.criticalEvidence.retainedEvidence.scoreEffect, "none");
+  const stale = projectAccessibilityAudit({...input, accessibilityAudit: {...audit, documentToken: "stale"}}, source, audit.documentUrl);
+  assert.equal(stale?.observation.consentControlFindings, undefined);
+  assert.equal(assess(stale)?.status, "Not testable");
+});
 
 test("existing additional-page audits require verified bytes and exact attempt, configuration and document binding", () => {
   const pageId = "10000000-0000-4000-8000-000000000001", parentScanId = "parent-scan", attemptId = "20000000-0000-4000-8000-000000000001";
@@ -340,4 +358,31 @@ test("opened preference accessibility preserves its lane through concerns, share
  for(const patch of [{documentToken:"other"},{finalUrl:"https://other.test/"},{action:{...packet.action,opened:false}},{checkpoints:{...packet.checkpoints,controlsSurface:"first_layer"}}]){
   assert.equal(projectPreferenceAccessibilityAudit({...input,cmpPreferencesEvidence:{...packet,...patch}} as never,source),null);
  }
+});
+
+test("same-document control completion and reasons survive projection without changing scores",()=>{
+  const input=bundle(),audit=input.accessibilityAudit!;
+  const baseline=projectAccessibilityAudit(input,source,audit.documentUrl)!;
+  const effects=(accessibilityAudit:unknown)=>buildUnifiedFindingDisplayPackets({runtimeArtifacts:{accessibilityAudit},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()}).flatMap(p=>p.scoreEffects??[]);
+  const score=effects(baseline);
+  assert.ok(score.length);
+  audit.controlAssessment={version:'same_document_controls.v1',scope:'visible_main_document_and_open_shadow_controls',
+    status:'completed',reasons:[],controls:[{id:1,intent:'reject',binding:'stable',required:['button-name','nested-interactive'],
+      checks:[['button-name','pass'],['nested-interactive','pass']],complete:true}]};
+  const assess=(projection:ReturnType<typeof projectAccessibilityAudit>)=>deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited:false,scanCompleted:true,runtimeArtifacts:{accessibilityAudit:projection}}).accessibility_consent_controls!;
+  const projected=projectAccessibilityAudit(input,source,audit.documentUrl)!;
+  assert.deepEqual(effects(projected),score);
+  const clean=assess(projected);
+  assert.equal(clean.status,'Not observed');
+  assert.equal(clean.criticalEvidence.retainedEvidence.scoreEffect,'none');
+  assert.deepEqual(clean.criticalEvidence.retainedEvidence.controlAccessibilityReceipt,[1,'completed',0,1,1,0,0]);
+  audit.controlAssessment.status='partial';audit.controlAssessment.reasons=['rules_need_review'];
+  audit.controlAssessment.controls[0]!.checks=[['button-name','pass'],['nested-interactive','review']];
+  audit.controlAssessment.controls[0]!.complete=false;
+  assert.equal(assess(projectAccessibilityAudit(input,source,audit.documentUrl)).status,'Review signal');
+  const stale=projectAccessibilityAudit({...input,accessibilityAudit:{...audit,documentToken:'wrong'}},source,audit.documentUrl);
+  assert.equal(assess(stale).status,'Not testable');
+  assert.deepEqual(stale?.observation.controlAssessment?.reasons,['evidence_binding_invalid']);
+  assert.equal(stale?.observation.controlAssessment?.controls.length,0);
 });

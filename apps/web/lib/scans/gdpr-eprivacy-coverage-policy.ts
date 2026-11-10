@@ -1,3 +1,4 @@
+import {controlAccessibilityReceipt} from "@certscore/contracts";
 import { readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { GDPR_NARROW_RULES, gdprNarrowFindingId, GDPR_NARROW_SIGNAL, isActiveGdprNarrowKind } from "@certscore/contracts";
 import { readBoundGdprNarrow, gdprNarrowSummary } from "./gdpr-narrow-evidence";
@@ -9,6 +10,7 @@ import { summarizePostRejectActivity } from "./post-reject-finding-copy";
 import { projectPreconsentTrackingTiming } from "./preconsent-tracking-timing";
 import { readChoicePathExecution } from "./choice-path-execution";
 import { checklistRemediation } from "./checklist-remediation";
+import { readAccessibilityAudit } from "./accessibility-audit-evidence";
 import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import { readRejectClickTrackingAssessment, REJECT_CLICK_TRACKING_SIGNAL } from "./reject-click-tracking-policy";
 import { derivePolicyCoverageContext, getWeakPolicyEvidenceLimitation } from "./policy-coverage-context";
@@ -11467,6 +11469,9 @@ function deriveAccessibilityConsentControlsOutcome(input: GdprEprivacyCoveragePo
     visualAccessReviewRetained: Boolean(visualAccessReview)
   });
 
+  const audit = readAccessibilityAudit(input.runtimeArtifacts?.accessibilityAudit);
+  const assessment = audit?.contractVersion === "certscore.accessibility-audit-projection.v1" ? audit.observation.controlAssessment : undefined;
+
   if (evaluation.status === "Gap observed") {
     return makeOutcome(
       "accessibility_consent_controls",
@@ -11474,8 +11479,42 @@ function deriveAccessibilityConsentControlsOutcome(input: GdprEprivacyCoveragePo
       "CertScore.ai retained basic automated accessibility evidence for consent or privacy controls, including button-name, link-name, color-contrast, ARIA, focus, or keyboard-related issues. Review whether users can perceive, understand, and operate the consent or privacy-choice controls, including with keyboard navigation and assistive technology.",
       evaluation.evidenceRefs,
       {
-        retainedEvidence: evaluation.retainedEvidence
+        retainedEvidence: {...evaluation.retainedEvidence,...(assessment?{controlAccessibilityAssessment:assessment,controlAccessibilityReceipt:controlAccessibilityReceipt(assessment)}:{})}
       }
+    );
+  }
+
+  if(assessment){
+    const failed=assessment.controls.filter(c=>c.checks.some(([,state])=>state==="fail"));
+    const review=assessment.controls.some(c=>c.checks.some(([,state])=>state==="review"));
+    const status=failed.length?"Gap observed":review?"Review signal":assessment.status==="completed"?"Not observed":"Not testable";
+    return makeOutcome("accessibility_consent_controls",status,
+      failed.length?"Automated checks found an issue on a same-document consent or privacy control. Coverage limitations remain separate.":
+      assessment.status==="completed"?"Applicable automated checks completed for the retained visible controls without a detected issue. This does not assess keyboard operation, closed shadow roots, unopened panels or assistive-technology usability.":
+      "Control-specific automated coverage is incomplete: "+assessment.reasons.join(", ")+".",
+      [audit.evidenceRef],{retainedEvidence:{controlAccessibilityAssessment:assessment,controlAccessibilityReceipt:controlAccessibilityReceipt(assessment),
+        controlAccessibilityIssueObserved:failed.length>0,controlScopeConfidence:"high",
+        cookieConsentAccessibilityIssueObserved:failed.some(c=>c.intent!=="privacy_opt_out"),
+        privacyChoiceAccessibilityIssueObserved:failed.some(c=>c.intent==="privacy_opt_out"),scoreEffect:"none"}});
+  }
+  const controlFindings = audit?.contractVersion === "certscore.accessibility-audit-projection.v1"
+    ? audit.observation.consentControlFindings : undefined;
+  if (controlFindings) {
+    const privacyChoice = controlFindings.findings.some(finding => finding.intent === "privacy_opt_out");
+    const cookieConsent = controlFindings.findings.some(finding => finding.intent !== "privacy_opt_out");
+    return makeOutcome(
+      "accessibility_consent_controls",
+      "Gap observed",
+      "CertScore.ai retained an automated accessibility violation on a verified first-layer consent or privacy-choice control.",
+      controlFindings.findings.map(finding => `Evidence: ${finding.ruleId} on ${finding.intent}`),
+      { retainedEvidence: {
+        controlAccessibilityFindings: controlFindings,
+        controlAccessibilityIssueObserved: true,
+        controlScopeConfidence: "high",
+        cookieConsentAccessibilityIssueObserved: cookieConsent,
+        privacyChoiceAccessibilityIssueObserved: privacyChoice,
+        scoreEffect: "none",
+      } }
     );
   }
 

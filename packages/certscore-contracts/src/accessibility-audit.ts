@@ -1,4 +1,5 @@
 import {captureFailureDiagnosticSchema} from "./capture-failure-diagnostic";
+import {controlAccessibilityAssessmentSchema} from "./control-accessibility-assessment";
 import { z } from "zod";
 
 export const ACCESSIBILITY_AUDIT_VERSION = "certscore.accessibility-audit.v1" as const;
@@ -18,6 +19,11 @@ export const ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS = [
 ] as const;
 
 const selectorSchema = z.union([z.string().min(1).max(400), z.array(z.string().min(1).max(400)).min(1).max(8)]);
+const consentControlFindingSchema = z.object({
+  intent: z.enum(["accept", "reject", "options", "privacy_opt_out"]),
+  ruleId: z.enum(["button-name", "link-name", "aria-command-name", "aria-input-field-name", "aria-toggle-field-name",
+    "aria-hidden-focus", "label", "nested-interactive", "color-contrast"]),
+}).strict();
 const nodeSchema = z.object({
   mainDocumentBound: z.literal(true).optional(),
   captureState: z.literal("opened_navigation_menu").optional(),
@@ -76,6 +82,11 @@ export const accessibilityAuditObservationSchema = z.object({
   violations: z.array(accessibilityRuleObservationSchema).max(ACCESSIBILITY_LIMITS.rules),
   reviewItems: z.array(accessibilityRuleObservationSchema).max(ACCESSIBILITY_LIMITS.rules),
   limitations: z.array(z.string().max(120)).max(16),
+  consentControlFindings: z.object({
+    version: z.literal("main_document_consent_control_findings.v1"),
+    findings: z.array(consentControlFindingSchema).min(1).max(16),
+  }).strict().optional(),
+  controlAssessment: controlAccessibilityAssessmentSchema.optional(),
   executionDiagnostic: captureFailureDiagnosticSchema.optional(),
   menuInspection: z.object({
     version: z.literal("bounded_navigation_menu.v1"), documentToken: z.string().min(1).max(200),
@@ -128,7 +139,14 @@ export const accessibilityAuditObservationSchema = z.object({
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Main-document subset requires bound positive rule/node evidence and limited frame coverage." });
     }
   }
+  if(audit.controlAssessment?.controls.length && (!audit.documentToken || audit.status === "failed" || audit.status === "not_testable"))
+    ctx.addIssue({code:"custom",message:"Control checks require a bound successful engine run"});
   const evaluated = new Set(audit.rulesEvaluated);
+  const controlFindings = audit.consentControlFindings?.findings;
+  if (controlFindings && (new Set(controlFindings.map(row => row.intent + "/" + row.ruleId)).size !== controlFindings.length ||
+      controlFindings.some(row => !audit.violations.some(rule => rule.ruleId === row.ruleId)))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Consent control findings require distinct bound violation rules." });
+  }
   if (evaluated.size !== audit.rulesEvaluated.length ||
       new Set(audit.violations.map(rule => rule.ruleId)).size !== audit.violations.length ||
       new Set(audit.reviewItems.map(rule => rule.ruleId)).size !== audit.reviewItems.length) {
@@ -137,6 +155,8 @@ export const accessibilityAuditObservationSchema = z.object({
   if ([...audit.violations, ...audit.reviewItems].some(rule => !evaluated.has(rule.ruleId))) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Result rule was not evaluated." });
 });
 export type AccessibilityAuditObservation = z.infer<typeof accessibilityAuditObservationSchema>;
+export type AccessibilityConsentControlFinding = z.infer<typeof consentControlFindingSchema>;
+export const ACCESSIBILITY_CONSENT_CONTROL_RULES = consentControlFindingSchema.shape.ruleId.options;
 export type AccessibilityRuleObservation = z.infer<typeof accessibilityRuleObservationSchema>;
 
 const startingPageAccessibilityProjectionSchema = z.object({

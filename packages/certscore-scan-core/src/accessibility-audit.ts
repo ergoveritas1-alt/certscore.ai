@@ -1,15 +1,66 @@
 import axe, { type AxeResults, type Result, type NodeResult } from "axe-core";
 import type { Page } from "playwright";
+import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import {
   describeCaptureFailure, type CaptureFailureDiagnostic, ACCESSIBILITY_AUDIT_BUDGET_MS, ACCESSIBILITY_AUDIT_VERSION, ACCESSIBILITY_LIMITS,
-  ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS,
-  ACCESSIBILITY_WCAG_TAGS, accessibilityAuditObservationSchema,
-  type AccessibilityAuditObservation, type AccessibilityRuleObservation,
+  CONTROL_ACCESSIBILITY_RULES, CONTROL_ACCESSIBILITY_REASONS, type ControlAccessibilityAssessment,
+  ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS, ACCESSIBILITY_CONSENT_CONTROL_RULES,
+  ACCESSIBILITY_WCAG_TAGS, accessibilityAuditObservationSchema, classifyConsentControlLabel,
+  type AccessibilityAuditObservation, type AccessibilityConsentControlFinding, type AccessibilityRuleObservation,
 } from "@certscore/contracts";
 
 type Identity = NonNullable<AccessibilityRuleObservation["representativeNodes"][number]["imageLinkIdentity"]>;
 type IdentifiedNode = NodeResult & { imageLinkIdentity?: Identity; mainDocumentBound?: true };
 type CountedRule = Result & { observedNodeCount?: number; mainDocumentNodeCount?: number; mainDocumentNodes?: NodeResult[] };
+type ConsentControlCandidate = {
+  selector: string; scope: string; intent: AccessibilityConsentControlFinding["intent"];
+};
+const registeredConsentControls = [...new Map(KNOWN_CMP_REGISTRY.flatMap(definition => {
+  const controls: ConsentControlCandidate[] = [];
+  const accept = definition.acceptConfirmation, reject = definition.rejectConfirmation;
+  const necessary = definition.rejectLabelBoundNecessaryOnly;
+  if (accept?.kind === "canonical_first_layer_ui_transition")
+    controls.push({scope: accept.bannerSelector, selector: accept.controlSelector, intent: "accept"});
+  if (reject?.kind === "canonical_first_layer_ui_transition")
+    controls.push({scope: reject.bannerSelector, selector: reject.controlSelector, intent: "reject"});
+  if (necessary) {
+    controls.push({scope: necessary.bannerSelector, selector: necessary.controlSelector, intent: "reject"});
+    for (const selector of definition.acceptControlSelectors ?? [])
+      controls.push({scope: necessary.bannerSelector, selector, intent: "accept"});
+    if (definition.preferenceDialogBinding)
+      controls.push({scope: necessary.bannerSelector, selector: definition.preferenceDialogBinding.controlSelector, intent: "options"});
+    if (definition.saleSharingOptOut)
+      controls.push({scope: necessary.bannerSelector, selector: definition.saleSharingOptOut.entranceSelector, intent: "privacy_opt_out"});
+  }
+  return controls.map(control => [JSON.stringify(control), control] as const);
+})).values()].slice(0, 48);
+
+type RawControlCheck = {
+  id:number;label:string;context:string;registeredIntent?:AccessibilityConsentControlFinding["intent"];
+  binding:"stable"|"changed";checks:ControlAccessibilityAssessment["controls"][number]["checks"];required:ControlAccessibilityAssessment["controls"][number]["required"];
+};
+export function normalizeControlAssessment(candidates:RawControlCheck[], initial:ControlAccessibilityAssessment["reasons"]):ControlAccessibilityAssessment{
+  const reasons=new Set(initial);
+  const eligible=candidates.flatMap(c=>{
+    const classified=classifyConsentControlLabel({label:c.label,contextText:c.context,scopeText:c.context,usage:"observation"});
+    const intent=classified.intent!=="unknown"?classified.intent:c.registeredIntent;
+    // A registered exact control with no label must remain testable for its missing name.
+    if(!intent)return [];
+    return [{...c,intent}];
+  });
+  if(eligible.length>8)reasons.add("control_limit");
+  const controls=eligible.slice(0,8).map(c=>{
+    if(c.binding==="changed"){reasons.add("control_changed");return {id:c.id,intent:c.intent,binding:c.binding,required:c.required,checks:[],complete:false};}
+    const reviewed=c.checks.some(([,s])=>s==="review");
+    const covered=c.required.every(r=>c.checks.some(([id])=>id===r));
+    if(reviewed)reasons.add("rules_need_review");
+    if(!covered)reasons.add("control_results_missing");
+    return {id:c.id,intent:c.intent,binding:c.binding,required:c.required,checks:c.checks,complete:covered&&!reviewed};
+  });
+  if(!controls.length)reasons.add("no_eligible_control");
+  return {version:"same_document_controls.v1",scope:"visible_main_document_and_open_shadow_controls",
+    status:!controls.length?"no_controls":reasons.size?"partial":"completed",reasons:[...reasons],controls};
+}
 
 function safeText(value: string, max: number) {
   return value.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted]")
@@ -141,6 +192,8 @@ export function unavailableAccessibilityAudit(input: {
     startedAt: new Date(input.startedAtMs ?? end).toISOString(), completedAt: new Date(end).toISOString(),
     durationMs: Math.min(ACCESSIBILITY_AUDIT_BUDGET_MS + 2000, end - (input.startedAtMs ?? end)),
     rulesEvaluated: [], violations: [], reviewItems: [], limitations: [input.reason],
+    controlAssessment: {version:"same_document_controls.v1",scope:"visible_main_document_and_open_shadow_controls",status:"unavailable",controls:[],
+      reasons:[(CONTROL_ACCESSIBILITY_REASONS as readonly string[]).includes(input.reason)?input.reason:"audit_execution_failed"]},
     ...(input.diagnostic ? { executionDiagnostic: input.diagnostic } : {}),
   });
 }
@@ -177,12 +230,102 @@ export async function runAccessibilityAudit(input: {
     }
     if (stopped) throw new Error("cancelled");
     phase = "engine_execution";
-    const results = await input.page.evaluate(async ({ tags, exampleLimit, mainRules, mainDocumentOnly }): Promise<AxeResults> => {
+    const results = await input.page.evaluate(async ({ tags, exampleLimit, mainRules, mainDocumentOnly, registeredCandidates, consentRules, assessmentRules }):
+      Promise<AxeResults & { consentFindings: (AccessibilityConsentControlFinding & { label: string })[]; controlCandidates: RawControlCheck[]; discoveryReasons: ControlAccessibilityAssessment["reasons"] }> => {
       const engine = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<AxeResults> } }).axe;
+      const bindings = {find(candidate: ConsentControlCandidate) {
+        try {
+          const scopes = document.querySelectorAll(candidate.scope);
+          const scope = scopes.length === 1 ? scopes[0] : null;
+          if (!scope) return null;
+          const matches = document.querySelectorAll(candidate.selector);
+          const element = matches.length === 1 ? matches[0] : null;
+          if (!(element instanceof HTMLElement) || !scope.contains(element) ||
+              !element.matches("button,a[href],input,[role=button],[role=link]") || !element.getClientRects().length ||
+              getComputedStyle(element).visibility !== "visible") return null;
+          const label = element.getAttribute("aria-label") || element.innerText || element.getAttribute("title") || element.getAttribute("value") || "";
+          const normalized = label.replace(/\s+/g, " ").trim();
+          return normalized && normalized.length <= 320 ? {element, scope, label: normalized} : null;
+        } catch {
+          return null;
+        }
+      }};
+      const before = registeredCandidates.flatMap(candidate => {
+        const match = bindings.find(candidate);
+        return match ? [{candidate, ...match}] : [];
+      }).slice(0, 8);
+      // Passive discovery in this exact axe document. Never opens a panel or changes a choice.
+      // Registered selectors include nameless controls; generic candidates use the shared classifier in Node.
+      const candidates: {element:HTMLElement; label:string; context:string; registeredIntent?:AccessibilityConsentControlFinding["intent"]; fingerprint:string}[]=[];
+      const discovered = new Set<Element>();
+      const discoveryReasons:ControlAccessibilityAssessment["reasons"]=[];
+      const collection={fingerprint(element:HTMLElement){return [element.outerHTML.slice(0,1024),element.getAttribute("aria-labelledby"),
+        element.getAttribute("role"),getComputedStyle(element).color,getComputedStyle(element).backgroundColor].join("|");},
+      capture(element:Element,registeredIntent?:AccessibilityConsentControlFinding["intent"]){
+        if(discovered.has(element)||!(element instanceof HTMLElement)||!element.matches('button,a[href],input,[role="button"],[role="link"],[role="checkbox"],[role="switch"]')||
+          !element.getClientRects().length||getComputedStyle(element).visibility!=="visible")return;
+        discovered.add(element);
+        if(candidates.length>=48){if(!discoveryReasons.includes("candidate_limit"))discoveryReasons.push("candidate_limit");return;}
+        const root=element.getRootNode() as Document|ShadowRoot;
+        const labelled=(element.getAttribute("aria-labelledby")??"").split(/\s+/).slice(0,4).map(id=>root.getElementById(id)?.textContent?.slice(0,160)??"").join(" ");
+        const label=(element.getAttribute("aria-label")||labelled.trim()||element.innerText||element.getAttribute("title")||element.getAttribute("value")||"").replace(/\s+/g," ").trim().slice(0,320);
+        const scope=element.closest('[role="dialog"],[role="alertdialog"],section,aside,form')??element.parentElement;
+        const context=(scope?.textContent??"").slice(0,1000);
+        candidates.push({element,label,context,registeredIntent,fingerprint:collection.fingerprint(element)});
+      }};
+      for(const candidate of registeredCandidates){
+        try{const scopes=document.querySelectorAll(candidate.scope),matches=document.querySelectorAll(candidate.selector);
+          if(scopes.length===1&&matches.length===1&&scopes[0]!.contains(matches[0]!))collection.capture(matches[0]!,candidate.intent);
+        }catch{/* Invalid registry selectors cannot establish control identity. */}
+      }
+      const roots:(Document|ShadowRoot)[]=[document];let visited=0;
+      const discoveryDeadline=performance.now()+10;
+      for(let i=0;i<roots.length&&i<16;i++){
+        const walker=document.createTreeWalker(roots[i]!,NodeFilter.SHOW_ELEMENT);
+        let node:Node|null;
+        while((node=walker.nextNode())){
+          if(++visited>2048||performance.now()>discoveryDeadline){discoveryReasons.push("discovery_limit");break;}
+          const element=node as Element;collection.capture(element);
+          if(element.shadowRoot){if(roots.length<16)roots.push(element.shadowRoot);else if(!discoveryReasons.includes("discovery_limit"))discoveryReasons.push("discovery_limit");}
+        }
+        if(visited>2048||performance.now()>discoveryDeadline)break;
+      }
+      if(document.querySelector('iframe,frame'))discoveryReasons.push("frames_outside_scope");
       // Axe otherwise waits up to 60s for a child frame, beyond this entire 8s
       // audit. Bound that existing wait so main-document results can complete;
       // unresponsive child checks remain incomplete rather than clean.
-      const results = await engine.run(document, { runOnly: { type: "tag", values: tags }, rules: { "frame-tested": { enabled: true } }, resultTypes: ["violations", "incomplete"], preload: false, elementRef: true, iframes: !mainDocumentOnly, frameWaitTime: 750 });
+      const mutations:MutationRecord[]=[];let mutationOverflow=false;
+      const observer=new MutationObserver(records=>{if(mutations.length+records.length>64)mutationOverflow=true;mutations.push(...records.slice(0,64-mutations.length));});
+      for(const root of roots)observer.observe(root,{subtree:true,childList:true,attributes:true,characterData:true});
+      const results = await engine.run(document, { runOnly: { type: "tag", values: tags }, rules: { "frame-tested": { enabled: true } }, resultTypes: ["violations", "incomplete", "passes"], preload: false, elementRef: true, iframes: !mainDocumentOnly, frameWaitTime: 750 });
+      const pending=observer.takeRecords();observer.disconnect();
+      if(mutations.length+pending.length>64)mutationOverflow=true;mutations.push(...pending.slice(0,64-mutations.length));
+      const controlCandidates:RawControlCheck[]=candidates.map((c,index)=>({id:index+1,label:c.label,context:c.context,registeredIntent:c.registeredIntent,
+        binding:!mutationOverflow&&!mutations.some(m=>c.element.contains(m.target)||m.type==='attributes'&&m.target instanceof Element&&m.target.contains(c.element))&&c.element.isConnected&&c.element.ownerDocument===document&&collection.fingerprint(c.element)===c.fingerprint?"stable":"changed",checks:[],
+        required:["nested-interactive",...(c.label?["color-contrast" as const]:[]),c.element.localName==="button"?"button-name":c.element.localName==="a"?"link-name":
+          c.element.localName==="input"&&["button","submit","reset"].includes((c.element as HTMLInputElement).type)?"input-button-name":
+          c.element.localName==="input"?"label":["checkbox","switch"].includes(c.element.getAttribute("role")??"")?"aria-toggle-field-name":"aria-command-name"]}));
+      // Keep per-element outcomes before page example truncation. A page-wide pass never supplies a control pass.
+      for(const [outcome,rows] of [["pass",results.passes],["review",results.incomplete],["fail",results.violations]] as const){
+        for(const rule of rows){if(!assessmentRules.includes(rule.id))continue;
+          for(let i=0;i<candidates.length;i++){
+            const c=candidates[i]!,record=controlCandidates[i]!;if(record.binding!=="stable")continue;
+            if(!rule.nodes.some(n=>n.element===c.element||rule.id==="color-contrast"&&n.element&&c.element.contains(n.element)))continue;
+            const old=record.checks.findIndex(([id])=>id===rule.id);
+            if(old>=0)record.checks.splice(old,1);
+            record.checks.push([rule.id as typeof CONTROL_ACCESSIBILITY_RULES[number],outcome]);
+          }
+        }
+      }
+      const controls = new Map<Element, {intent: AccessibilityConsentControlFinding["intent"]; label: string} | null>();
+      for (const {candidate, element, scope, label} of before) {
+        const current = bindings.find(candidate);
+        if (current?.element !== element || current.scope !== scope || current.label !== label) continue;
+        const existing = controls.get(element);
+        if (existing === undefined) controls.set(element, {intent: candidate.intent, label});
+        else if (existing?.intent !== candidate.intent) controls.set(element, null);
+      }
+      const consentFindings = new Map<string, AccessibilityConsentControlFinding & {label: string}>();
       const identities = new WeakMap<Element, number>();
       let nextId = 0;
       const frameElements = [...document.querySelectorAll("iframe,frame")].slice(0, 257);
@@ -199,6 +342,14 @@ export async function runAccessibilityAudit(input: {
           return true;
         }) : [];
         (rule as CountedRule).mainDocumentNodeCount = mainNodes.length;
+        if (controls.size && results.violations.includes(rule) && consentRules.includes(rule.id)) {
+          for (const node of mainNodes) {
+            const control = node.element && controls.get(node.element);
+            if (control && consentFindings.size < 16) consentFindings.set(control.intent + "/" + rule.id, {
+              ...control, ruleId: rule.id as AccessibilityConsentControlFinding["ruleId"],
+            });
+          }
+        }
         if (mainNodes.length && mainNodes.length !== rule.nodes.length) (rule as CountedRule).mainDocumentNodes = mainNodes.slice(0, exampleLimit);
         rule.nodes = rule.nodes.slice(0, exampleLimit);
         const captureIdentity = results.violations.includes(rule) && ["image-alt", "link-name"].includes(rule.id);
@@ -230,8 +381,10 @@ export async function runAccessibilityAudit(input: {
       }
       // These groups contribute evaluated rule IDs, never element examples.
       for (const rule of [...results.passes, ...results.inapplicable]) rule.nodes = [];
-      return results;
-    }, { tags: [...ACCESSIBILITY_WCAG_TAGS], exampleLimit: ACCESSIBILITY_LIMITS.examplesPerRule, mainRules: [...ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS] as string[], mainDocumentOnly: unavailableChildFrameCount > 0 });
+      return { ...results, consentFindings: [...consentFindings.values()], controlCandidates, discoveryReasons: [...new Set(discoveryReasons)] };
+    }, { tags: [...ACCESSIBILITY_WCAG_TAGS], exampleLimit: ACCESSIBILITY_LIMITS.examplesPerRule, mainRules: [...ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS] as string[],
+      mainDocumentOnly: unavailableChildFrameCount > 0, registeredCandidates: registeredConsentControls,
+      consentRules: [...ACCESSIBILITY_CONSENT_CONTROL_RULES] as string[], assessmentRules:[...CONTROL_ACCESSIBILITY_RULES] as string[] });
     phase = "result_normalization";
     if (results.testEngine.name !== "axe-core" || results.testEngine.version !== axe.version) return unavailable("engine_identity_mismatch");
     if (mainNavigated || input.page.url() !== documentUrl || input.documentIdentity()?.token !== documentToken) return unavailable("document_changed");
@@ -254,16 +407,26 @@ export async function runAccessibilityAudit(input: {
         excludedNodeCount: originalNodeCount - [...results.violations, ...results.incomplete].reduce((sum, rule) => sum + (rule as CountedRule).observedNodeCount!, 0) };
       limitations.push(unavailableChildFrameCount ? "unavailable_frames_main_document_retained" : "child_frames_changed_main_document_retained");
     }
+    if(childFramesChanged && !results.discoveryReasons.includes("frames_changed"))results.discoveryReasons.push("frames_changed");
     if (results.violations.length > ACCESSIBILITY_LIMITS.rules || results.incomplete.length > ACCESSIBILITY_LIMITS.rules) limitations.push("rule_limit");
     if (results.incomplete.length) limitations.push("rules_need_review");
     const rulesEvaluated = [...new Set([...results.violations, ...results.incomplete, ...(frameCoverage ? [] : [...results.passes, ...results.inapplicable])].map(rule => rule.id))];
     if (rulesEvaluated.length > ACCESSIBILITY_LIMITS.rules) return unavailable("rule_limit");
+    const violations = results.violations.slice(0, ACCESSIBILITY_LIMITS.rules).map(normalizeAccessibilityRule);
+    const consentFindings = results.consentFindings.flatMap(({label, ...finding}) => {
+      if (classifyConsentControlLabel({
+        label, hasConsentContext: true, usage: "observation",
+      }).intent !== finding.intent) return [];
+      return violations.some(rule => rule.ruleId === finding.ruleId) ? [finding] : [];
+    });
+    const controlAssessment = normalizeControlAssessment(results.controlCandidates,results.discoveryReasons);
     const observation = {
       contractVersion: ACCESSIBILITY_AUDIT_VERSION, required: true, scanId: input.scanId, sourceLane: "runtime_evidence",
       scope: "starting_page_rendered_content", documentUrl, documentToken, engine: "axe-core", engineVersion: results.testEngine.version,
       configuredTags: [...ACCESSIBILITY_WCAG_TAGS], status: limitations.length ? "limited" : "completed",
       startedAt: new Date(startedAtMs).toISOString(), completedAt: new Date().toISOString(), durationMs: Date.now() - startedAtMs,
-      rulesEvaluated, violations: results.violations.slice(0, ACCESSIBILITY_LIMITS.rules).map(normalizeAccessibilityRule),
+      rulesEvaluated, violations, controlAssessment,
+      ...(consentFindings.length ? {consentControlFindings: {version: "main_document_consent_control_findings.v1" as const, findings: consentFindings}} : {}),
       reviewItems: results.incomplete.slice(0, ACCESSIBILITY_LIMITS.rules).map(normalizeAccessibilityRule), limitations: [...new Set(limitations)].slice(0, 16), ...(frameCoverage ? { frameCoverage } : {}),
     };
     // An optional, one-menu probe runs only after the baseline audit and every
