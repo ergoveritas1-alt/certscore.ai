@@ -17,6 +17,8 @@ const stripeBillingEnvSchema = z.object({
   STRIPE_PRICE_INDIVIDUAL_MONTHLY: z.string().optional(),
   STRIPE_PRICE_STARTER_MONTHLY: z.string().optional(),
   STRIPE_PRICE_PRO_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_STARTER_MONTHLY_CURRENT: z.string().trim().transform((value) => value || undefined).optional(),
+  STRIPE_PRICE_PRO_MONTHLY_CURRENT: z.string().trim().transform((value) => value || undefined).optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional()
 });
@@ -35,8 +37,8 @@ export function getStripePriceIdForPlan(plan: PaidPlanCode, env: NodeJS.ProcessE
   const values = getStripeBillingEnv(env);
   const priceId =
     plan === "individual"
-      ? values.STRIPE_PRICE_STARTER_MONTHLY ?? values.STRIPE_PRICE_INDIVIDUAL_MONTHLY
-      : values.STRIPE_PRICE_PRO_MONTHLY;
+      ? values.STRIPE_PRICE_STARTER_MONTHLY_CURRENT ?? values.STRIPE_PRICE_STARTER_MONTHLY ?? values.STRIPE_PRICE_INDIVIDUAL_MONTHLY
+      : values.STRIPE_PRICE_PRO_MONTHLY_CURRENT ?? values.STRIPE_PRICE_PRO_MONTHLY;
   return priceId?.trim() || null;
 }
 
@@ -46,11 +48,15 @@ export function getPlanForStripePriceId(priceId: string | null | undefined, env:
   }
 
   const values = getStripeBillingEnv(env);
-  if (priceId === values.STRIPE_PRICE_STARTER_MONTHLY || priceId === values.STRIPE_PRICE_INDIVIDUAL_MONTHLY) {
+  if (
+    priceId === values.STRIPE_PRICE_STARTER_MONTHLY_CURRENT ||
+    priceId === values.STRIPE_PRICE_STARTER_MONTHLY ||
+    priceId === values.STRIPE_PRICE_INDIVIDUAL_MONTHLY
+  ) {
     return "individual";
   }
 
-  if (priceId === values.STRIPE_PRICE_PRO_MONTHLY) {
+  if (priceId === values.STRIPE_PRICE_PRO_MONTHLY_CURRENT || priceId === values.STRIPE_PRICE_PRO_MONTHLY) {
     return "pro";
   }
 
@@ -65,10 +71,10 @@ export function getStripeBillingMode(env: NodeJS.ProcessEnv = process.env) {
   const values = getStripeBillingEnv(env);
   const missing = [
     values.STRIPE_SECRET_KEY ? null : "STRIPE_SECRET_KEY",
-    values.STRIPE_PRICE_STARTER_MONTHLY || values.STRIPE_PRICE_INDIVIDUAL_MONTHLY
+    values.STRIPE_PRICE_STARTER_MONTHLY_CURRENT || values.STRIPE_PRICE_STARTER_MONTHLY || values.STRIPE_PRICE_INDIVIDUAL_MONTHLY
       ? null
       : "STRIPE_PRICE_STARTER_MONTHLY or STRIPE_PRICE_INDIVIDUAL_MONTHLY",
-    values.STRIPE_PRICE_PRO_MONTHLY ? null : "STRIPE_PRICE_PRO_MONTHLY"
+    values.STRIPE_PRICE_PRO_MONTHLY_CURRENT || values.STRIPE_PRICE_PRO_MONTHLY ? null : "STRIPE_PRICE_PRO_MONTHLY"
   ].filter((value): value is string => Boolean(value));
 
   return {

@@ -47,7 +47,7 @@ const faqs = [
   {
     question: "How are plans measured?",
     answer:
-      "Plans are based on page scans per month. Starter includes 50 page scans per month, Pro includes 500 page scans per month, and Custom plans support higher-volume workflows."
+      "Plans are based on page scans per month. Starter includes 100 page scans per month, Pro includes 1,000 page scans per month, and Custom plans support higher-volume workflows."
   },
   {
     question: "What do I get after the preview scan?",

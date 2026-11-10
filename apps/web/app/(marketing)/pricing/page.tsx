@@ -29,8 +29,8 @@ const planDescriptions: Record<string, string> = {
 };
 
 const includedScanValue: Record<string, string> = {
-  individual: "50 page scans included · $0.80/page",
-  pro: "500 page scans included · $0.40/page"
+  individual: "100 page scans included · $0.80/page",
+  pro: "1,000 page scans included · $0.40/page"
 };
 
 function getPlanSignupHref(plan: string) {
