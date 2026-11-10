@@ -5,7 +5,7 @@ import {
   describeCaptureFailure, type CaptureFailureDiagnostic, ACCESSIBILITY_AUDIT_BUDGET_MS, ACCESSIBILITY_AUDIT_VERSION, ACCESSIBILITY_LIMITS,
   CONTROL_ACCESSIBILITY_RULES, CONTROL_ACCESSIBILITY_REASONS, type ControlAccessibilityAssessment,
   ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS, ACCESSIBILITY_CONSENT_CONTROL_RULES,
-  ACCESSIBILITY_WCAG_TAGS, accessibilityAuditObservationSchema, classifyConsentControlLabel,
+  ACCESSIBILITY_WCAG_TAGS, accessibilityAuditObservationSchema, classifyConsentControlLabel, classifyConsentSurfaceText,
   type AccessibilityAuditObservation, type AccessibilityConsentControlFinding, type AccessibilityRuleObservation,
 } from "@certscore/contracts";
 
@@ -36,14 +36,16 @@ const registeredConsentControls = [...new Map(KNOWN_CMP_REGISTRY.flatMap(definit
 })).values()].slice(0, 48);
 
 type RawControlCheck = {
-  id:number;label:string;context:string;registeredIntent?:AccessibilityConsentControlFinding["intent"];
+  id:number;label:string;context:string;scopeId:number;dialog:boolean;registeredIntent?:AccessibilityConsentControlFinding["intent"];
   binding:"stable"|"changed";checks:ControlAccessibilityAssessment["controls"][number]["checks"];required:ControlAccessibilityAssessment["controls"][number]["required"];
 };
 export function normalizeControlAssessment(candidates:RawControlCheck[], initial:ControlAccessibilityAssessment["reasons"]):ControlAccessibilityAssessment{
   const reasons=new Set(initial);
-  const eligible=candidates.flatMap(c=>{
-    const classified=classifyConsentControlLabel({label:c.label,contextText:c.context,scopeText:c.context,usage:"observation"});
-    const intent=classified.intent!=="unknown"?classified.intent:c.registeredIntent;
+  const classified=candidates.map(c=>classifyConsentControlLabel({label:c.label,contextText:c.context,scopeText:c.context,usage:"observation"}));
+  const eligible=candidates.flatMap((c,i)=>{
+    const scopedUnnamed=c.dialog&&!c.label&&classifyConsentSurfaceText({text:c.context}).recoveryHintObserved&&
+      candidates.some((other,j)=>other.scopeId===c.scopeId&&classified[j]!.intent!=="unknown");
+    const intent=classified[i]!.intent!=="unknown"?classified[i]!.intent:c.registeredIntent??(scopedUnnamed?"unclassified" as const:undefined);
     // A registered exact control with no label must remain testable for its missing name.
     if(!intent)return [];
     return [{...c,intent}];
@@ -256,8 +258,9 @@ export async function runAccessibilityAudit(input: {
       }).slice(0, 8);
       // Passive discovery in this exact axe document. Never opens a panel or changes a choice.
       // Registered selectors include nameless controls; generic candidates use the shared classifier in Node.
-      const candidates: {element:HTMLElement; label:string; context:string; registeredIntent?:AccessibilityConsentControlFinding["intent"]; fingerprint:string}[]=[];
+      const candidates: {element:HTMLElement; label:string; context:string; registeredIntent?:AccessibilityConsentControlFinding["intent"]; fingerprint:string;scopeId:number;dialog:boolean}[]=[];
       const discovered = new Set<Element>();
+      const scopeIds=new WeakMap<Element,number>();let nextScopeId=0;
       const discoveryReasons:ControlAccessibilityAssessment["reasons"]=[];
       const collection={fingerprint(element:HTMLElement){return [element.outerHTML.slice(0,1024),element.getAttribute("aria-labelledby"),
         element.getAttribute("role"),getComputedStyle(element).color,getComputedStyle(element).backgroundColor].join("|");},
@@ -271,7 +274,8 @@ export async function runAccessibilityAudit(input: {
         const label=(element.getAttribute("aria-label")||labelled.trim()||element.innerText||element.getAttribute("title")||element.getAttribute("value")||"").replace(/\s+/g," ").trim().slice(0,320);
         const scope=element.closest('[role="dialog"],[role="alertdialog"],section,aside,form')??element.parentElement;
         const context=(scope?.textContent??"").slice(0,1000);
-        candidates.push({element,label,context,registeredIntent,fingerprint:collection.fingerprint(element)});
+        if(scope&&!scopeIds.has(scope))scopeIds.set(scope,++nextScopeId);
+        candidates.push({element,label,context,registeredIntent,scopeId:scope?scopeIds.get(scope)!:0,dialog:!!scope?.matches('[role="dialog"],[role="alertdialog"]'),fingerprint:collection.fingerprint(element)});
       }};
       for(const candidate of registeredCandidates){
         try{const scopes=document.querySelectorAll(candidate.scope),matches=document.querySelectorAll(candidate.selector);
@@ -300,7 +304,7 @@ export async function runAccessibilityAudit(input: {
       const results = await engine.run(document, { runOnly: { type: "tag", values: tags }, rules: { "frame-tested": { enabled: true } }, resultTypes: ["violations", "incomplete", "passes"], preload: false, elementRef: true, iframes: !mainDocumentOnly, frameWaitTime: 750 });
       const pending=observer.takeRecords();observer.disconnect();
       if(mutations.length+pending.length>64)mutationOverflow=true;mutations.push(...pending.slice(0,64-mutations.length));
-      const controlCandidates:RawControlCheck[]=candidates.map((c,index)=>({id:index+1,label:c.label,context:c.context,registeredIntent:c.registeredIntent,
+      const controlCandidates:RawControlCheck[]=candidates.map((c,index)=>({id:index+1,label:c.label,context:c.context,scopeId:c.scopeId,dialog:c.dialog,registeredIntent:c.registeredIntent,
         binding:!mutationOverflow&&!mutations.some(m=>c.element.contains(m.target)||m.type==='attributes'&&m.target instanceof Element&&m.target.contains(c.element))&&c.element.isConnected&&c.element.ownerDocument===document&&collection.fingerprint(c.element)===c.fingerprint?"stable":"changed",checks:[],
         required:["nested-interactive",...(c.label?["color-contrast" as const]:[]),c.element.localName==="button"?"button-name":c.element.localName==="a"?"link-name":
           c.element.localName==="input"&&["button","submit","reset"].includes((c.element as HTMLInputElement).type)?"input-button-name":

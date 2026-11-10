@@ -376,3 +376,13 @@ test("changed controls, timeout and candidate limits retain distinct coverage re
     assert.equal(a.status,'unavailable');assert.deepEqual(a.reasons,['audit_timeout']);
   });
 });
+
+
+test("unnamed custom dialog controls are assessed without inventing their choice intent",async()=>{
+ await withPage('<section role="dialog" aria-label="Cookie choices"><p>Cookie preferences</p><button>Accept all cookies</button><button></button></section><button></button>',async page=>{
+  const a=(await audit(page)).controlAssessment!;
+  assert.equal(a.controls.length,2,JSON.stringify(a));
+  const unnamed=a.controls.find(c=>c.intent==='unclassified');assert.ok(unnamed);
+  assert.ok(unnamed.checks.some(([r,s])=>r==='button-name'&&s==='fail'));
+ });
+});
