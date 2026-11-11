@@ -646,6 +646,7 @@ jobs:
         if: ${{ !inputs.stage_only }}
         env:
           BF26_EMAIL_DELIVERY: ${{ vars.CERTSCORE_BF26_EMAIL_DELIVERY }}
+          TURNSTILE_SECRET_ARN: ${{ vars.AWS_WEB_TURNSTILE_SECRET_ARN }}
           STRIPE_PRICE_STARTER_MONTHLY_CURRENT: ${{ vars.STRIPE_PRICE_STARTER_MONTHLY_CURRENT }}
           STRIPE_PRICE_PRO_MONTHLY_CURRENT: ${{ vars.STRIPE_PRICE_PRO_MONTHLY_CURRENT }}
         run: |
@@ -755,6 +756,12 @@ jobs:
             | .cpu = $cpu
             | .memory = $memory
             | .containerDefinitions[0].environment |= map(select(.name != "CERTSCORE_BF26_EMAIL_DELIVERY"))
+            | .containerDefinitions[0].secrets |= (
+                (. // []) | map(select(
+                  .name != "CERTSCORE_BF26_TURNSTILE_SITE_KEY"
+                  and .name != "CERTSCORE_BF26_TURNSTILE_SECRET_KEY"
+                ))
+              )
             | .containerDefinitions[0].environment |= map(
                 if .name == "CERTSCORE_AUDIT_PRIVACY_FORM_PROJECTION_ENABLED"
                 then .value = $receipts else . end
@@ -765,6 +772,21 @@ jobs:
           # registering either task. The web template does not carry this flag.
           node --experimental-strip-types scripts/configure-audit-receipts.ts preserve-policy \
             current-materializer-task-definition.json target-materializer-task-definition.json "${AUDIT_POLICY_RECEIPTS_MODE}"
+
+          # Bind the two Turnstile JSON fields to the public web container only.
+          if [[ -n "${TURNSTILE_SECRET_ARN}" ]]; then
+            jq --arg arn "${TURNSTILE_SECRET_ARN}" '
+              ["CERTSCORE_BF26_TURNSTILE_SITE_KEY", "CERTSCORE_BF26_TURNSTILE_SECRET_KEY"] as $names
+              | .containerDefinitions[0] |= (
+                  .environment |= map(select(.name as $name | $names | index($name) | not))
+                  | .secrets = (
+                      [(.secrets // [])[] | select(.name as $name | $names | index($name) | not)]
+                      + [$names[] | {name: ., valueFrom: ($arn + ":" + . + "::")}]
+                    )
+                )
+            ' target-task-definition.json > target-task-definition.turnstile.json
+            mv target-task-definition.turnstile.json target-task-definition.json
+          fi
 
           TARGET_TASK_DEFINITION="$(aws ecs register-task-definition \
             --cli-input-json file://target-task-definition.json \

@@ -4,6 +4,7 @@ import { SiteFooter } from "../../../../components/layout/site-footer";
 import { AnalyticsConsentBanner } from "../../../../components/analytics/analytics-consent-banner";
 import { CampaignForm } from "../../../../components/promotions/campaign-form";
 import { campaignStore } from "../../../../server/promotions/repository";
+import { getTurnstileConfig } from "../../../../server/turnstile";
 import { createPageMetadata } from "../../../../lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ export const metadata = createPageMetadata({
 
 export default async function ApplyPage() {
   const availability = await campaignStore.availability().catch(() => null);
+  const captchaSiteKey = availability?.open ? getTurnstileConfig()?.siteKey : undefined;
 
   return (
     <main className="min-h-screen bg-[#f8faff] text-[#0f2141]">
@@ -41,7 +43,7 @@ export default async function ApplyPage() {
             <AnalyticsConsentBanner campaignPlacement />
           </div>
           <div className="min-w-0 rounded-2xl border border-[#dbe5f3] bg-white p-5 shadow-sm sm:p-8">
-            <CampaignForm open={availability?.open ?? false} />
+            <CampaignForm open={availability?.open ?? false} captchaSiteKey={captchaSiteKey} />
           </div>
         </div>
       </section>

@@ -340,6 +340,12 @@ variable "bx01_observed_signal_ingest_token_secret_arn" {
   default     = ""
 }
 
+variable "turnstile_secret_arn" {
+  description = "Optional Secrets Manager ARN containing the Turnstile key pair for the public forms."
+  type        = string
+  default     = ""
+}
+
 variable "stripe_price_individual_monthly" {
   description = "Stripe monthly price id for the CertScore Starter plan."
   type        = string

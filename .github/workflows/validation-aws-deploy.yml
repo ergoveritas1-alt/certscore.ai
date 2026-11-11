@@ -326,10 +326,14 @@ jobs:
           ECS_SERVICE_NAME: ${{ env.ECS_WORKER_SERVICE_NAME }}
           ECS_CONTAINER_NAME: ${{ env.ECS_WORKER_CONTAINER_NAME }}
           HOLD_AUTOMATIC_PROMOTION: ${{ github.event_name == 'push' && vars.AWS_STAGED_COUPLED_RELEASES == 'true' }}
+          PUSH_BASE: ${{ github.event.before }}
         run: |
           if [[ -n "$STAGED_RUN_ID" ]]; then
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           elif [[ "$HOLD_AUTOMATIC_PROMOTION" == true ]]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_EVENT_NAME" == push ]] && node scripts/check-validation-public-form-release.mjs "$PUSH_BASE" "$GITHUB_SHA"; then
+            echo "Public form release. Validation CI passed and the worker has no changed inputs."
             echo "deploy=false" >> "$GITHUB_OUTPUT"
           else
             node scripts/select-workflow-deployment.mjs validation

@@ -4,7 +4,9 @@ import { ContactSalesForm } from "../../components/contact-sales/contact-sales-f
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
 import { createPageMetadata } from "../../lib/seo";
+import { getTurnstileConfig } from "../../server/turnstile";
 
+export const dynamic = "force-dynamic";
 export const metadata: Metadata = createPageMetadata({
   title: "Contact Sales",
   description: "Contact CertScore.ai about website scanning, monitoring, pricing and onboarding. Send your questions or book a founder demo for your privacy review workflow.",
@@ -12,6 +14,7 @@ export const metadata: Metadata = createPageMetadata({
 });
 
 export default function ContactSalesPage() {
+  const captchaSiteKey = getTurnstileConfig()?.siteKey;
   return (
     <main className="min-h-screen bg-slate-50">
       <SiteHeader />
@@ -30,7 +33,7 @@ export default function ContactSalesPage() {
                 <p className="text-sm leading-6 text-slate-600">Tell us what you’re exploring and we’ll get back to you at your email.</p>
               </CardHeader>
               <CardContent>
-                <ContactSalesForm />
+                <ContactSalesForm captchaSiteKey={captchaSiteKey} />
               </CardContent>
             </Card>
 

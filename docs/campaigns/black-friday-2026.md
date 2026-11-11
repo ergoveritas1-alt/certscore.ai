@@ -78,6 +78,12 @@ New switches, documented in `apps/web/.env.example`:
 |---|---|---|
 | `CERTSCORE_BF26_EMAIL_DELIVERY` | `0` | Set `1` only in the approved environment to enable real transactional delivery and the existing-web-process maintenance loop. |
 | `CERTSCORE_BF26_TEST_WINDOW` | `0` | Local previews only. Ignored in production. Does not waive capacity, identity or quota enforcement. |
+| `CERTSCORE_BF26_TURNSTILE_SITE_KEY` | Unset | Public site key for the managed Cloudflare Turnstile widget shared by the application and contact forms. Configure the widget for the hostname in `NEXT_PUBLIC_APP_URL`. |
+| `CERTSCORE_BF26_TURNSTILE_SECRET_KEY` | Unset | Matching server-side secret. Configure both keys together in the web service runtime. Leave both unset to disable Turnstile. |
+
+Turnstile sends the challenge token to Cloudflare for verification. The application validates the hostname, campaign action and submission ID before accepting the form. It keeps the rate limit and honeypot in place and excludes the token from application records.
+
+The production widget for the application and contact forms is `CertScore.ai Production Forms 2026`. Its key pair is stored in the `certscore/turnstile` Secrets Manager entry in `us-west-1`. For the authorized rollout, grant the public web ECS execution role access to that secret through the `turnstile_secret_arn` infrastructure input, and set the release workflow variable `AWS_WEB_TURNSTILE_SECRET_ARN` to the same ARN. The public web task reads the two JSON fields as runtime secrets. Local previews use the Cloudflare test keys.
 
 Before launch:
 

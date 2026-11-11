@@ -4,7 +4,9 @@ import { getDomain } from "tldts";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { query, withWriteTransaction } from "@website-signal-risk-scanner/db";
 import type { QueryResult, QueryResultRow } from "pg";
-import { applicationSchema, cleanAttribution, campaignOpen, CAPACITY, CAMPAIGN, TERMS_VERSION, addCalendarMonths, type ApplicationInput } from "../../lib/promotions/black-friday";
+import { ZodError } from "zod";
+import { applicationSchema, cleanAttribution, campaignOpen, BARE_WEBSITE_HOSTNAME, CAPACITY, CAMPAIGN, TERMS_VERSION, addCalendarMonths, type ApplicationInput } from "../../lib/promotions/black-friday";
+import { checkDomainDns } from "../domains/domain-dns";
 
 export type Sql = {query: <T extends QueryResultRow = QueryResultRow>(text:string, values?:unknown[]) => Promise<QueryResult<T>>};
 export type Application = {
@@ -26,7 +28,11 @@ export function validInviteToken(token: string, a: Application, secret: string) 
   return token.length === expected.length && timingSafeEqual(Buffer.from(token),Buffer.from(expected));
 }
 export function campaignTestWindow() { return getCampaignConfig().testWindow; }
-export function createCampaignStore(transaction: <T>(fn:(sql: Sql)=>Promise<T>)=>Promise<T>, sql: Sql) {
+export function createCampaignStore(
+  transaction: <T>(fn:(sql: Sql)=>Promise<T>)=>Promise<T>,
+  sql: Sql,
+  checkWebsiteDns = checkDomainDns
+) {
   const queue = async (db: Sql,id: string,kind: string,revision=1) => { await db.query(`insert into promotion_email_outbox(application_id,kind,revision) values($1,$2,$3) on conflict do nothing`,[id,kind,revision]); };
   const event = async (db: Sql,id: string,name: string) => { await db.query(`insert into promotion_events(application_id,event) values($1,$2) on conflict do nothing`,[id,name]); };
   const audit = async (db: Sql,id: string,actor: string,action: string,details: unknown={}) => { await db.query(`insert into promotion_audit_log(application_id,actor_id,action,details) values($1,$2,$3,$4::jsonb)`,[id,actor,action,JSON.stringify(details)]); };
@@ -35,17 +41,29 @@ export function createCampaignStore(transaction: <T>(fn:(sql: Sql)=>Promise<T>)=
     async availability(now = new Date()) { const count=await allocated(sql); return { allocated:count, capacity:CAPACITY, open:campaignOpen(now,count,campaignTestWindow()) }; },
     async submit(raw: unknown, gpc: boolean, now=new Date()) {
       const input=applicationSchema.parse(raw);
+      const bareHostname = BARE_WEBSITE_HOSTNAME.test(input.website);
+      const website = bareHostname ? `https://${input.website}` : input.website;
+      const hostname = new URL(website).hostname.toLowerCase();
+      const domain = getDomain(hostname,{allowPrivateDomains:true}) ?? hostname;
+      // HTTP and HTTPS share DNS records. Resolve once, outside the campaign lock.
+      const dns = bareHostname ? await checkWebsiteDns(hostname) : null;
       return transaction(async db => {
         await db.query(`select id from promotion_campaigns where id=$1 for update`,[CAMPAIGN]);
-        const hostname=new URL(input.website).hostname.toLowerCase();
-        const domain=getDomain(hostname,{allowPrivateDomains:true}) ?? hostname;
         const duplicate=await db.query(`select id from promotion_applications where campaign_id=$1 and (request_id=$2 or email=$3 or business_domain=$4) limit 1`,[CAMPAIGN,input.requestId,input.email,domain]);
         if (duplicate.rows.length) return { created:false, id:null };
         if (!campaignOpen(now,await allocated(db),campaignTestWindow())) throw new PromotionError("Applications are closed or all promotional places have been allocated.",409);
+        if (dns && !dns.exists) {
+          if (dns.retryable) throw new PromotionError("We could not verify your company website right now. Please try again in a minute.",503);
+          throw new ZodError([{
+            code: "custom",
+            path: ["website"],
+            message: "Enter a company website that resolves to a public address."
+          }]);
+        }
         // Do not expose whether an arbitrary email has a paid account. Manual
         // approval and authenticated activation perform authoritative eligibility checks.
         const {requestId,analyticsConsent,attribution,websiteConfirm,terms,marketingOptIn,...details}=input;
-        const row=(await db.query(`insert into promotion_applications(campaign_id,request_id,email,business_domain,full_name,company,details,attribution,terms_version,marketing_opt_in,submitted_at) values($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11) returning id`,[CAMPAIGN,requestId,input.email,domain,input.fullName,input.company,JSON.stringify(details),JSON.stringify(cleanAttribution(attribution,analyticsConsent,gpc)),TERMS_VERSION,marketingOptIn,now])).rows[0]!;
+        const row=(await db.query(`insert into promotion_applications(campaign_id,request_id,email,business_domain,full_name,company,details,attribution,terms_version,marketing_opt_in,submitted_at) values($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11) returning id`,[CAMPAIGN,requestId,input.email,domain,input.fullName,input.company,JSON.stringify({...details,website}),JSON.stringify(cleanAttribution(attribution,analyticsConsent,gpc)),TERMS_VERSION,marketingOptIn,now])).rows[0]!;
         await event(db,row.id,"bf26_form_submit");
         await queue(db,row.id,"owner"); await queue(db,row.id,"received");
         return {created:true,id:row.id as string};

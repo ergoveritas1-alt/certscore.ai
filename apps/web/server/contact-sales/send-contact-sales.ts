@@ -1,7 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { CONTACT_CAPTCHA_ACTION } from "../../lib/turnstile";
 import { createGmailTransport, getGmailConfig } from "../email/gmail";
+import { getTurnstileConfig, TurnstileError, verifyTurnstile } from "../turnstile";
 
 export type SendContactSalesActionState = {
   error: string | null;
@@ -56,6 +58,19 @@ export async function sendContactSalesAction(
 
   if (requestType === "sales" && !message) {
     return { error: "Please add a short message so we know how to help." };
+  }
+
+  try {
+    const captcha = getTurnstileConfig();
+    if (captcha) {
+      await verifyTurnstile(captcha, CONTACT_CAPTCHA_ACTION, formData.get("captchaToken"), formData.get("captchaRequestId"));
+    }
+  } catch (error) {
+    return {
+      error: error instanceof TurnstileError && error.status === 400
+        ? error.message
+        : "The security check is temporarily unavailable. Please email support@certscore.ai or try again shortly."
+    };
   }
 
   const gmailConfig = getGmailConfig();

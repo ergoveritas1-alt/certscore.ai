@@ -5,6 +5,7 @@ import { ZodError } from "zod";
 import { NextResponse } from "next/server";
 import { getTrustedRequestSourceIp } from "../../lib/request-source-ip";
 import { PromotionError } from "./repository";
+import { TurnstileError } from "../turnstile";
 export function assertSameOrigin(request: Request) {
   const expected=process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   if(request.headers.get("origin")!==new URL(expected).origin || request.headers.get("sec-fetch-site")==="cross-site") throw new PromotionError("Request origin not permitted.",403);
@@ -26,6 +27,7 @@ export async function rateLimit(request: Request, kind: "application"|"event"|"i
 }
 export function promotionResponseError(error: unknown) {
   if(error instanceof ZodError) return NextResponse.json({error:"Please check the highlighted fields.",fields:Object.fromEntries(error.issues.map(i=>[i.path[0],i.message]))},{status:400});
+  if(error instanceof TurnstileError) return NextResponse.json({error:error.message},{status:error.status});
   if(error instanceof PromotionError) return NextResponse.json({error:error.message},{status:error.status,headers:error.status===429?{"Retry-After":"3600"}:{}});
   console.error("[bf26] request failed",{errorClass:error instanceof Error?error.name:"unknown"});
   return NextResponse.json({error:"We could not complete that request. Please try again."},{status:503});

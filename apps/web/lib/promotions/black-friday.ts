@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const CAMPAIGN = "black-friday-2026";
+export const BF26_CAPTCHA_ACTION = "bf26_application";
 export const CAMPAIGN_START = "2026-11-10T08:00:00.000Z";
 // Exclusive midnight boundary: includes all of December 2 in Pacific time.
 export const CAMPAIGN_END = "2026-12-03T08:00:00.000Z";
@@ -11,16 +12,17 @@ export const SITE_COUNTS = ["0–5", "6–20", "21–50", "51+"] as const;
 export const STATUSES = ["submitted", "under_review", "approved", "rejected", "invited", "activated", "expired"] as const;
 export const SUCCESS_MESSAGE = "Thank you. Applications are reviewed manually before Pro access is granted.";
 const short = (max: number) => z.string().trim().min(1, "This field is required.").max(max).refine(v => !/[\u0000-\u001f\u007f]/.test(v), "Use plain text.");
+export const BARE_WEBSITE_HOSTNAME = /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i;
 function publicWebsite(value: string) {
   try {
-    const u = new URL(value);
+    const u = new URL(BARE_WEBSITE_HOSTNAME.test(value) ? `https://${value}` : value);
     return ["https:", "http:"].includes(u.protocol) && !u.username && !u.password && !u.port &&
-      /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(u.hostname) && !u.hostname.endsWith(".local") && !u.hostname.endsWith(".localhost");
+      BARE_WEBSITE_HOSTNAME.test(u.hostname) && !u.hostname.endsWith(".local") && !u.hostname.endsWith(".localhost");
   } catch { return false; }
 }
 export const applicationSchema = z.object({
   fullName: short(120), email: z.string().trim().email().max(254).transform(v => v.toLowerCase()),
-  company: short(160), website: short(300).refine(publicWebsite, "Enter a public organization website, including https://."),
+  company: short(160), website: short(300).refine(publicWebsite, "Enter a public company website, such as example.com."),
   businessType: z.enum(BUSINESS_TYPES), clientSites: z.enum(SITE_COUNTS),
   intendedUse: short(600), linkedIn: z.string().trim().max(300).optional().default("").refine(v => !v || /^https:\/\/(www\.)?linkedin\.com\/(in|company)\/[a-zA-Z0-9_%-]+\/?$/.test(v), "Enter a LinkedIn profile URL."),
   comments: z.string().trim().max(1500).optional().default(""), terms: z.literal(true),

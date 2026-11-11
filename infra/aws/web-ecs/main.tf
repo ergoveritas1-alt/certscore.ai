@@ -67,6 +67,7 @@ locals {
     var.stripe_secret_key_secret_arn,
     var.stripe_webhook_secret_secret_arn,
     var.bx01_observed_signal_ingest_token_secret_arn,
+    var.turnstile_secret_arn,
     data.aws_secretsmanager_secret.oauth_jwt.arn
   ])
   base_environment = concat(
@@ -133,6 +134,10 @@ locals {
     var.stripe_secret_key_secret_arn != "" ? [{ name = "STRIPE_SECRET_KEY", valueFrom = var.stripe_secret_key_secret_arn }] : [],
     var.stripe_webhook_secret_secret_arn != "" ? [{ name = "STRIPE_WEBHOOK_SECRET", valueFrom = var.stripe_webhook_secret_secret_arn }] : [],
     var.bx01_observed_signal_ingest_token_secret_arn != "" ? [{ name = "BX01_OBSERVED_SIGNAL_INGEST_TOKEN", valueFrom = var.bx01_observed_signal_ingest_token_secret_arn }] : [],
+    var.turnstile_secret_arn != "" ? [
+      for name in ["CERTSCORE_BF26_TURNSTILE_SITE_KEY", "CERTSCORE_BF26_TURNSTILE_SECRET_KEY"] :
+      { name = name, valueFrom = "${var.turnstile_secret_arn}:${name}::" }
+    ] : [],
     [{ name = "CERTSCORE_OAUTH_JWT_SECRET", valueFrom = data.aws_secretsmanager_secret.oauth_jwt.arn }]
   )
   certscore_base_url = local.certificate_arn != null ? "https://${var.certscore_domain_name}" : "http://${aws_lb.web.dns_name}"

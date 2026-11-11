@@ -9,7 +9,9 @@ import { createCampaignStore,inviteToken,validInviteToken,type Application,type 
 import { campaignDashboard } from "./dashboard";
 import { campaignEmail,drainCampaignEmails } from "./email";
 import { recordCampaignAggregate } from "./aggregate";
-import { assertSameOrigin,boundedBody,rateLimit } from "./http";
+import { assertSameOrigin,boundedBody,promotionResponseError,rateLimit } from "./http";
+import { checkDomainDnsWithResolvers } from "../domains/domain-dns-core";
+import { getTurnstileConfig, verifyTurnstile } from "../turnstile";
 const secret="isolated-campaign-test-secret-32-characters";
 const now=new Date("2026-11-11T01:00:00Z");
 function input(n=0){return {requestId:randomUUID(),fullName:"Test Applicant",email:`person${n}@agency${n}.example`,company:`Agency ${n}`,website:`https://agency${n}.example`,businessType:"Web design/development agency",clientSites:"0–5",intendedUse:"Client launch reviews",terms:true,marketingOptIn:false,analyticsConsent:false};}
@@ -17,6 +19,41 @@ test("campaign configuration fails closed and cannot override production timing"
   assert.deepEqual(getCampaignConfig({}),{emailDelivery:false,testWindow:false});
   assert.equal(getCampaignConfig({NODE_ENV:"production",CERTSCORE_BF26_TEST_WINDOW:"1"}).testWindow,false);
   assert.throws(()=>getCampaignConfig({CERTSCORE_BF26_EMAIL_DELIVERY:"maybe"}));
+});
+test("campaign CAPTCHA requires paired keys and validates the challenge for this submission", async () => {
+  assert.equal(getTurnstileConfig({}), null);
+  assert.throws(() => getTurnstileConfig({ CERTSCORE_BF26_TURNSTILE_SITE_KEY: "site-key" }), /Both/);
+  const config = getTurnstileConfig({
+    CERTSCORE_BF26_TURNSTILE_SITE_KEY: "site-key",
+    CERTSCORE_BF26_TURNSTILE_SECRET_KEY: "server-secret",
+    NEXT_PUBLIC_APP_URL: "https://certscore.ai"
+  })!;
+  const requestId = randomUUID();
+  const valid = { success: true, hostname: "certscore.ai", action: "bf26_application", cdata: requestId };
+  const verifier: typeof fetch = async (url, init) => {
+    assert.equal(url, "https://challenges.cloudflare.com/turnstile/v0/siteverify");
+    assert.equal(init?.method, "POST");
+    assert.deepEqual(Object.fromEntries(init?.body as URLSearchParams), {
+      secret: "server-secret",
+      response: "browser-token"
+    });
+    return Response.json(valid);
+  };
+  await verifyTurnstile(config, valid.action, "browser-token", requestId, verifier);
+  for (const token of [undefined, "", "x".repeat(2049)]) {
+    await assert.rejects(verifyTurnstile(config, valid.action, token, requestId, verifier), { status: 400 });
+  }
+  for (const change of [
+    { success: false, "error-codes": ["timeout-or-duplicate"] },
+    { hostname: "other.example" },
+    { action: "other_action" },
+    { cdata: randomUUID() }
+  ]) {
+    const verify: typeof fetch = async () => Response.json({ ...valid, ...change });
+    await assert.rejects(verifyTurnstile(config, valid.action, "browser-token", requestId, verify), { status: 400 });
+  }
+  const unavailable: typeof fetch = async () => new Response(null, { status: 503 });
+  await assert.rejects(verifyTurnstile(config, valid.action, "browser-token", requestId, unavailable), { status: 503 });
 });
 test("Pacific campaign boundaries include Dec 2 and close at next midnight; capacity wins",()=>{
   assert.equal(campaignOpen(new Date("2026-11-10T07:59:59.999Z"),0),false);
@@ -27,7 +64,9 @@ test("Pacific campaign boundaries include Dec 2 and close at next midnight; capa
 });
 test("form validates business identity, no-minimum-size eligibility and separate unchecked marketing consent",()=>{
   assert.equal(applicationSchema.parse(input()).marketingOptIn,false);
-  for(const change of [{email:"bad"},{terms:false},{website:"http://localhost"},{website:"https://user:password@example.com"},{website:"https://127.0.0.1"},{websiteConfirm:"bot"},{intendedUse:""},{comments:"x".repeat(1501)}])assert.equal(applicationSchema.safeParse({...input(),...change}).success,false);
+  for(const change of [{email:"bad"},{terms:false},{website:"http://localhost"},{website:"https://user:password@example.com"},{website:"https://127.0.0.1"},{website:"example.local"},{website:"user@example.com"},{website:"ftp://example.com"},{websiteConfirm:"bot"},{intendedUse:""},{comments:"x".repeat(1501)}])assert.equal(applicationSchema.safeParse({...input(),...change}).success,false);
+  assert.equal(applicationSchema.parse({...input(),website:" example.com "}).website,"example.com");
+  assert.equal(applicationSchema.parse({...input(),website:"http://example.com/about"}).website,"http://example.com/about");
   assert.equal(applicationSchema.safeParse({...input(),email:"solo@gmail.com"}).success,true);
   const legacy = applicationSchema.parse({...input(),country:"GB",state:"London"});
   assert.equal("country" in legacy,false);
@@ -106,19 +145,45 @@ test("isolated PostgreSQL campaign journey, concurrency, quota, delivery and exp
         throw new Error("rollback paid-account fixture");
       }),/rollback paid-account fixture/);
     });
-    await t.test("persistence and outbox are atomic, retries and domain/email duplicates do not allocate",async()=>{
-      const data={...input(),company:"Example Retail",email:"privacy@retail-review.co.uk",website:"https://retail-review.co.uk",businessType:"In-house privacy team (DPO)",intendedUse:"Review the websites our organization operates"};
-      const results=await Promise.all(Array.from({length:8},()=>store.submit(data,false,now)));
+    await t.test("unresolvable, private and temporarily unavailable bare domains cannot create applications",async()=>{
+      for (const [resolve4, status] of [
+        [async () => [], 400],
+        [async () => ["127.0.0.1"], 400],
+        [async () => { throw Object.assign(new Error("DNS timeout"), {code:"ETIMEOUT"}); }, 503]
+      ] as const) {
+        const isolated = createCampaignStore(transaction,sql,hostname =>
+          checkDomainDnsWithResolvers(hostname,{resolve4,resolve6:async () => []}));
+        const response = await isolated.submit({...input(),website:"example.com"},false,now).catch(promotionResponseError);
+        assert.ok(response instanceof Response);
+        assert.equal(response.status,status);
+        if (status === 400) assert.match((await response.json()).fields.website,/public address/);
+      }
+      assert.equal((await sql.query(`select count(*)::int n from promotion_applications`)).rows[0]!.n,0);
+    });
+    await t.test("bare domain persistence and outbox are atomic, retries and domain/email duplicates do not allocate",async()=>{
+      const data={...input(),company:"Example Retail",email:"privacy@retail-review.co.uk",website:"retail-review.co.uk",businessType:"In-house privacy team (DPO)",intendedUse:"Review the websites our organization operates"};
+      let dnsAvailable = true;
+      const isolated = createCampaignStore(transaction,sql,hostname =>
+        checkDomainDnsWithResolvers(hostname,{
+          resolve4:async candidate => {
+            assert.equal(candidate,data.website);
+            return dnsAvailable ? ["93.184.216.34"] : [];
+          },
+          resolve6:async () => []
+        }));
+      const results=await Promise.all(Array.from({length:8},()=>isolated.submit(data,false,now)));
       assert.equal(results.filter(r=>r.created).length,1);firstId=results.find(r=>r.id)!.id!;
       const stored=(await sql.query(`select details, terms_version from promotion_applications where id=$1`,[firstId])).rows[0]!;
-      assert.equal(stored.details.website,data.website);
+      assert.equal(stored.details.website,`https://${data.website}`);
       assert.equal(stored.details.businessType,data.businessType);
       assert.equal("country" in stored.details,false);
       assert.equal("state" in stored.details,false);
       assert.equal(stored.terms_version,TERMS_VERSION);
       assert.equal((await sql.query(`select count(*)::int n from promotion_email_outbox`)).rows[0]!.n,2);
       assert.equal((await store.availability(now)).allocated,0);
-      assert.equal((await store.submit({...input(50),website:data.website},false,now)).created,false);
+      dnsAvailable = false;
+      assert.equal((await isolated.submit(data,false,now)).created,false);
+      assert.equal((await store.submit({...input(50),website:`http://${data.website}`},false,now)).created,false);
       assert.equal((await store.submit({...input(51),email:data.email},false,now)).created,false);
       assert.equal((await sql.query(`select count(*)::int n from promotion_events where event='bf26_form_submit'`)).rows[0]!.n,1);
     });
