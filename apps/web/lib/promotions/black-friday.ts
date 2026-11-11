@@ -5,8 +5,8 @@ export const CAMPAIGN_START = "2026-11-10T08:00:00.000Z";
 // Exclusive midnight boundary: includes all of December 2 in Pacific time.
 export const CAMPAIGN_END = "2026-12-03T08:00:00.000Z";
 export const CAPACITY = 10;
-export const TERMS_VERSION = "bf26.2026-11-10.v4";
-export const BUSINESS_TYPES = ["Web design/development agency", "Digital marketing agency", "Privacy consultancy", "Law firm", "In-house privacy team (DPO)", "Other"] as const;
+export const TERMS_VERSION = "bf26.2026-11-10.v5";
+export const BUSINESS_TYPES = ["Web design/development agency", "Digital marketing agency", "Independent web developer / marketer", "Privacy consultancy", "Law firm", "In-house privacy team (DPO)", "Other"] as const;
 export const SITE_COUNTS = ["0–5", "6–20", "21–50", "51+"] as const;
 export const STATUSES = ["submitted", "under_review", "approved", "rejected", "invited", "activated", "expired"] as const;
 export const SUCCESS_MESSAGE = "Thank you for applying! We'll review your organization information and email you with an update. Applications are subject to approval, and promotional places are limited.";

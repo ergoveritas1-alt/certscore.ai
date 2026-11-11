@@ -5,11 +5,12 @@ import { SiteFooter } from "../../../components/layout/site-footer";
 import { CampaignView } from "../../../components/promotions/campaign-form";
 import { createPageMetadata } from "../../../lib/seo";
 import { campaignStore } from "../../../server/promotions/repository";
+import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../../lib/marketing/sample-report";
 
 export const dynamic = "force-dynamic";
 export const metadata = createPageMetadata({
   title: "Build a Website Privacy Baseline | Black Friday 2026",
-  description: "Three months of CertScore.ai Pro at no cost for eligible agencies, developers, law firms and data privacy officers. Apply by December 2, 2026.",
+  description: "Three months of CertScore.ai Pro at no cost for eligible agencies, developers, marketers, law firms and data privacy officers. Apply by December 2, 2026.",
   path: "/black-friday"
 });
 
@@ -35,9 +36,9 @@ const workflows = [
     description: "Start with a homepage and a key conversion page. Give the client a short list of observed trackers and controls, then agree on what to recheck after the next release."
   },
   {
-    audience: "Web developers",
-    title: "Give consent bugs a reproduction path",
-    description: "When a tag or banner changes, compare scans of the same page and supported choice. Use the recorded requests and controls to narrow down what to reproduce and retest."
+    audience: "Web developers / marketers",
+    title: "Check the tags behind a campaign",
+    description: "Capture a baseline before changing pixels, tags or consent settings. Recheck the same page and supported choice path after release, then use the request evidence to investigate unexpected activity."
   },
   {
     audience: "Law firms and privacy advisors",
@@ -67,6 +68,14 @@ const regulatorySources = [
     nextStep: "Inventory what a client page loads and when. Bring that evidence to the review of which technologies need consent or may qualify for an exception.",
     href: "https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guidance-on-the-use-of-storage-and-access-technologies/",
     linkLabel: "ICO storage and access guidance"
+  },
+  {
+    jurisdiction: "France (EU)",
+    title: "Clear scope for consent choices",
+    description: "France’s CNIL issued GDPR-focused recommendations in January 2026 for cookie consent across devices linked to one account. Refusal and withdrawal should be as simple as consent and cover the same devices.",
+    nextStep: "Review observed banner information and supported refusal paths on public pages as a starting point for a broader consent review.",
+    href: "https://www.cnil.fr/fr/cookies-et-autres-traceurs-recommandations-finales-sur-le-consentement-multi-terminaux",
+    linkLabel: "CNIL consent recommendations"
   }
 ];
 
@@ -121,13 +130,19 @@ export default async function BlackFridayPage() {
             </p>
             <p className="mt-6 max-w-lg border-l-2 border-[#8fcaab] pl-4 text-base leading-7 text-[#e9f5ed]">
               <strong className="font-semibold text-white">Three months of CertScore.ai Pro at no cost.</strong>{" "}
-              Ten places for agencies, developers, consultancies, law firms and data privacy officers (DPOs).
+              Ten places for agencies, developers, marketers, consultancies, law firms and data privacy officers (DPOs).
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">
               <ApplyLink open={open} />
-              <Link href="#client-workflows" className="inline-flex min-h-11 items-center text-sm font-semibold text-white underline decoration-[#8fcaab] underline-offset-4 hover:text-[#c5f2d4]">
-                See how teams can use it
-              </Link>
+              <a
+                href={AUTHENTIC_SAMPLE_REPORT_URL}
+                target="_blank"
+                rel="noreferrer"
+                data-analytics-cta-type="sample_report"
+                className="inline-flex min-h-12 items-center justify-center gap-3 rounded-lg border border-[#9ebfaf] px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9bdcb4]"
+              >
+                View sample report <span aria-hidden="true">↗</span>
+              </a>
             </div>
             <p className="mt-4 text-sm leading-6 text-[#c0d2c9]">
               {open ? "Apply by December 2, 2026. No credit card or automatic paid renewal." : filled ? "All ten places have been allocated." : "Applications are currently closed."}
@@ -233,7 +248,7 @@ export default async function BlackFridayPage() {
         <h2 id="terms-title" className="text-2xl font-semibold tracking-tight">Promotional terms &amp; privacy</h2>
         <div className="mt-4 space-y-4 text-sm leading-7 text-[#425750]">
           <p>Offer begins November 10, 2026 when deployed, and closes December 2, 2026, or when all ten places have been allocated. The first ten eligible, manually approved organizations receive three consecutive calendar months of Pro. Complete applications are considered in submission order.</p>
-          <p>Eligible applicants include agencies, developers, consultancies, law firms and organizations applying through a data privacy officer or in-house privacy team. Applicants must represent an active organization with a verifiable website and professional identity. No minimum company size applies. Existing paid subscribers are excluded. One allocation is permitted per business or commonly controlled business group.</p>
+          <p>Eligible applicants include agencies, developers, marketers, consultancies, law firms and organizations applying through a data privacy officer or in-house privacy team. Applicants must represent an active organization with a verifiable website and professional identity. No minimum company size applies. Existing paid subscribers are excluded. One allocation is permitted per business or commonly controlled business group.</p>
           <p>Activate within 14 days of approval, including if the application window has closed. Your entitlement starts at activation and ends three calendar months later. Each monthly anniversary begins a new 1,000-page allowance. Month-end anniversaries are clipped to that month’s last day. Standard usage and rate restrictions apply. The current Pro rate is $400 per month and the promotional value is $1,200. No payment or credit card is required, and there is no automatic paid renewal.</p>
           <p>We retain application details to review eligibility, administer the promotion and communicate transactional updates.</p>
           <p>CertScore.ai supplies technical observations and evidence for review. It does not provide legal advice or compliance certification. General <Link className="underline" href="/terms">Terms</Link>, <Link className="underline" href="/privacy">Privacy Policy</Link> and <Link className="underline" href="/pricing">Pro plan inclusions</Link> apply.</p>
