@@ -41,7 +41,7 @@ The release also includes migration 0211. It verifies that no account bans or im
 2. Email/domain normalization, a unique request UUID, one application per registrable business domain/email, a honeypot, bounded input, same-origin enforcement and database rate limits protect intake. Solo businesses using a consumer email are not automatically excluded. Website verification is manual; intake never fetches applicant URLs.
 3. Administrators use the existing email-based platform-admin authorization. Review the organization’s website and identity, relevant website privacy work, existing subscription and common control. Record a stable business-group name and the verification attestation. Resolve earlier complete applications before approving later ones.
 4. Approval locks the campaign row, reserves one unique slot from 1–10 and starts the 14-day invitation deadline. Allocations are never silently recycled after expiry. Approval and invitation enqueueing are atomic. Double clicks/concurrent requests cannot allocate an eleventh place.
-5. The invitation URL carries a domain-separated HMAC credential in its fragment. The activation page removes the fragment and exchanges it for an HttpOnly/SameSite cookie. Invitation analytics are disabled. The applicant signs in or creates a normal account using the invitation email, then explicitly activates. The account handoff has campaign-specific copy rather than advertising the seven-day trial.
+5. The invitation URL carries a domain-separated HMAC credential in its fragment. The activation page exchanges the fragment for an HttpOnly/SameSite cookie, then removes the fragment only after successful verification. Temporary failures retain it for retry, including after refresh. Invitation analytics are disabled. The applicant signs in or creates a normal account using the invitation email, then explicitly activates. The account handoff has campaign-specific copy rather than advertising the seven-day trial.
 6. Activation rechecks the signature, current invitation revision, email, deadline, workspace eligibility and previous redemptions in a transaction. Existing paid and Marketplace workspaces are excluded. No Stripe call is made.
 7. Owner notifications go to `ben@certscore.ai`. Applicant emails cover receipt, invitation/approval, rejection, activation and the final seven days of access. Marketing opt-in is stored separately; it does not trigger a campaign marketing send.
 
@@ -156,3 +156,13 @@ Modified integration points:
 - `apps/web/server/pulse/lifecycle-persistence.test.ts`
 
 The DNS regression test assertions were aligned with the existing pre-reuse guard and dynamic error classification. This does not change DNS validation behavior.
+
+## November 10 QA remediation
+
+Landing views and form starts use per-mount event recorders. A later client navigation is a new visit; repeated focus and React effect replay do not create extra events. Existing server transport-ID deduplication remains in place. Duplicate intake retains its generic response without promising a newly created application or another email.
+
+Approved invitations use the normal account controls. Before release, verify `CERTSCORE_PUBLIC_ACCOUNT_CREATION_ENABLED=true` and `CERTSCORE_AUTH_ACCESS_RESTRICTED=false`, or explicitly provide the intended authentication allowlist. An invitation does not bypass a deliberate signup pause or account access restriction. These controls were tested locally; production values were not inspected or changed.
+
+The regression tools are `scripts/black-friday-browser.test.ts`, `scripts/black-friday-dispatch.test.ts` and `scripts/tsconfig.black-friday-qa.json`. Browser tests require `BF26_BROWSER_ORIGIN=http://localhost:3018`, a disposable `bf26_qa_*` database on loopback port 55432, and `BF26_QA_ARTIFACT_DIR`. They truncate promotion tables in that disposable database. The expiry test runs separately with `BF26_EXPIRY_ORIGIN=http://localhost:3019` against a server whose clock is frozen after December 2. The mock mail signing secret must match the local preview. No real SMTP or worker is required. Database campaign integration tests use isolated temporary schemas under `BF26_TEST_DATABASE_URL`.
+
+The dispatcher regression executes the actual transpiled dispatcher with fail-closed dependency mocks. Exhausted/expired promotions return before queue, DNS or other external work. Successful scanning is covered by a local SQL insertion/completion fixture, not an AWS scan. See the final QA receipt for executed tests and remaining launch checks. Deployment remains on hold.

@@ -1,0 +1,6 @@
+{
+  "extends": "../apps/web/tsconfig.test.json",
+  "compilerOptions": { "incremental": false },
+  "include": ["black-friday-browser.test.ts", "black-friday-dispatch.test.ts"],
+  "exclude": ["../node_modules"]
+}

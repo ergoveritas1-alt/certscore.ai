@@ -207,6 +207,24 @@ test("isolated PostgreSQL campaign journey, concurrency, quota, delivery and exp
       assert.equal(result.allocated,10);assert.equal(result.cohort.submitted,12);assert.equal(result.cohort.approved,10);assert.equal(result.cohort.activated,1);assert.equal(result.cohort.first_scan,1);assert.equal(result.cohort.paid,1);
       assert.equal(result.totals.bf26_form_submit,12);assert.equal(result.totals.bf26_activated,1);assert.equal(Object.keys(result.days).length,30);
     });
+    await t.test("approved invitation activates after intake closes while still inside its own deadline",async()=>{
+      await assert.rejects(transaction(async db=>{
+        await db.query("truncate promotion_applications cascade");
+        const isolated=createCampaignStore(fn=>fn(db),db), data=input(92);
+        const applied=new Date("2026-12-02T12:00:00Z"), activated=new Date("2026-12-04T12:00:00Z");
+        const result=await isolated.submit(data,false,applied);
+        await isolated.review(result.id!,actor,"approve","","late-invite",true,applied);
+        const a=(await isolated.list())[0]!;
+        const u=randomUUID(),o=randomUUID();
+        await db.query("insert into users values($1,$2)",[u,data.email]);
+        await db.query("insert into organizations(id,plan) values($1,'free')",[o]);
+        await db.query("insert into organization_members values($1,$2,'owner')",[u,o]);
+        assert.equal((await isolated.availability(activated)).open,false);
+        const active=await isolated.activate(inviteToken(a,secret),secret,{id:u,email:data.email},activated);
+        assert.equal(active.entitlement_end!.toISOString(),"2027-03-04T12:00:00.000Z");
+        throw new Error("rollback late activation fixture");
+      }),/rollback late activation fixture/);
+    });
     await t.test("SQL UTC anniversaries match calendar contract and no additional plan is ever written",async()=>{
       const r=await sql.query(`select promotion_month('2027-01-31T12:00:00Z',1) first,promotion_month('2027-01-31T12:00:00Z',2) second_month`);
       assert.equal(r.rows[0]!.first.toISOString(),"2027-02-28T12:00:00.000Z");assert.equal(r.rows[0]!.second_month.toISOString(),"2027-03-31T12:00:00.000Z");

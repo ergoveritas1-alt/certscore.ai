@@ -2,9 +2,10 @@
 import { useEffect,useState,type FormEvent } from "react";
 import Link from "next/link";
 import { BUSINESS_TYPES,SITE_COUNTS,SUCCESS_MESSAGE } from "../../lib/promotions/black-friday";
-import { campaignAttribution,campaignEvent } from "./campaign-tracking";
-export function CampaignView() {useEffect(()=>campaignEvent("bf26_landing_view"),[]);return null;}
+import { campaignAttribution,createCampaignVisit } from "./campaign-tracking";
+export function CampaignView() {const [recordVisit]=useState(createCampaignVisit);useEffect(()=>recordVisit("bf26_landing_view"),[recordVisit]);return null;}
 export function CampaignForm({open}:{open:boolean}) {
+  const [recordVisit]=useState(createCampaignVisit);
   const [busy,setBusy]=useState(false),[success,setSuccess]=useState(false),[error,setError]=useState(""),[fields,setFields]=useState<Record<string,string>>({});
   const [requestId]=useState(()=>typeof crypto!=="undefined"?crypto.randomUUID():"");
   async function submit(e:FormEvent<HTMLFormElement>) {
@@ -18,9 +19,9 @@ export function CampaignForm({open}:{open:boolean}) {
   const control="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 focus:outline-none focus:ring-2 focus:ring-[#367150]";
   function input(name:string,label:string,type="text",required=true) {return <label className="block text-sm font-medium text-slate-800">{label}{!required&&" (optional)"}<input name={name} type={type} required={required} maxLength={name==="email"?254:name==="website"||name==="linkedIn"?300:160} autoComplete={name==="fullName"?"name":name==="email"?"email":name==="company"?"organization":"off"} className={control} aria-invalid={!!fields[name]} aria-describedby={fields[name]?`${name}-error`:undefined}/>{fields[name]&&<span id={`${name}-error`} className="mt-1 block text-red-700">{fields[name]}</span>}</label>;}
   function select(name:string,label:string,options:readonly string[]) {return <label className="block text-sm font-medium text-slate-800">{label}<select aria-label={label} name={name} required defaultValue="" className={control} aria-invalid={!!fields[name]} aria-describedby={fields[name]?`${name}-error`:undefined}><option value="" disabled>Select an option</option>{options.map(v=><option key={v}>{v}</option>)}</select>{fields[name]&&<span id={`${name}-error`} className="mt-1 block text-red-700">{fields[name]}</span>}</label>;}
-  if(success)return <div role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-lg leading-8 text-emerald-950">{SUCCESS_MESSAGE}<p className="mt-4 text-sm">No account has been created. Look for a confirmation email from CertScore.ai.</p></div>;
+  if(success)return <div role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-lg leading-8 text-emerald-950">{SUCCESS_MESSAGE}<p className="mt-4 text-sm">If this is a new eligible application, we’ll send a confirmation. If you applied before, we keep your existing application and another email may not be sent.</p></div>;
   if(!open)return <div role="status" className="rounded-2xl bg-slate-100 p-8">Applications are currently closed. Existing applications and approved invitations remain valid under their original terms.</div>;
-  return <form onSubmit={submit} onFocusCapture={()=>campaignEvent("bf26_form_start")} data-analytics-submit="manual" data-analytics-form="bf26_application" className="space-y-6">
+  return <form onSubmit={submit} onFocusCapture={()=>recordVisit("bf26_form_start")} data-analytics-submit="manual" data-analytics-form="bf26_application" className="space-y-6">
     <p className="text-sm text-slate-600">All fields are required unless marked optional. No account or credit card is needed.</p>
     <div className="grid gap-5 sm:grid-cols-2">{input("fullName","Full name")}{input("email","Business email","email")}{input("company","Organization name")}{input("website","Organization website","url")}{select("businessType","Organization type",BUSINESS_TYPES)}{select("clientSites","Websites you manage, oversee or advise on",SITE_COUNTS)}</div>
     <label className="block text-sm font-medium text-slate-800">Primary intended use of CertScore.ai<textarea name="intendedUse" required rows={3} maxLength={600} className={control} aria-invalid={!!fields.intendedUse}/>{fields.intendedUse&&<span className="text-red-700">{fields.intendedUse}</span>}</label>

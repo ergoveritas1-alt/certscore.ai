@@ -41,6 +41,7 @@ test("Umami receives no coarse events when optional analytics consent is denied"
     configurable: true,
     value: {
       certscoreAnalyticsConsent: "denied",
+      location: { pathname: "/pricing" },
       localStorage: { getItem: () => null },
       umami: { track: (...args: unknown[]) => calls.push(args) }
     }
@@ -57,6 +58,7 @@ test("events are not retained for later Umami delivery before consent", () => {
     configurable: true,
     value: {
       certscoreAnalyticsConsent: "denied",
+      location: { pathname: "/pricing" },
       localStorage: { getItem: () => null }
     }
   });
