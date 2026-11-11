@@ -63,20 +63,20 @@ const regulatorySources = [
     linkLabel: "California Civil Code § 1798.136"
   },
   {
-    jurisdiction: "United Kingdom",
-    title: "Cookies, pixels and similar technologies",
-    description: "The ICO finalized updated guidance in April 2026 covering storage and access technologies, including cookies and tracking pixels, after changes to the UK rules.",
-    nextStep: "Inventory what a client page loads and when. Bring that evidence to the review of which technologies need consent or may qualify for an exception.",
-    href: "https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guidance-on-the-use-of-storage-and-access-technologies/",
-    linkLabel: "ICO storage and access guidance"
-  },
-  {
     jurisdiction: "France (EU)",
     title: "Clear scope for consent choices",
     description: "France’s CNIL issued GDPR-focused recommendations in January 2026 for cookie consent across devices linked to one account. Refusal and withdrawal should be as simple as consent and cover the same devices.",
     nextStep: "Review observed banner information and supported refusal paths on public pages as a starting point for a broader consent review.",
     href: "https://www.cnil.fr/fr/cookies-et-autres-traceurs-recommandations-finales-sur-le-consentement-multi-terminaux",
     linkLabel: "CNIL consent recommendations"
+  },
+  {
+    jurisdiction: "United Kingdom",
+    title: "Cookies, pixels and similar technologies",
+    description: "The ICO finalized updated guidance in April 2026 covering storage and access technologies, including cookies and tracking pixels, after changes to the UK rules.",
+    nextStep: "Inventory what a client page loads and when. Bring that evidence to the review of which technologies need consent or may qualify for an exception.",
+    href: "https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guidance-on-the-use-of-storage-and-access-technologies/",
+    linkLabel: "ICO storage and access guidance"
   }
 ];
 
