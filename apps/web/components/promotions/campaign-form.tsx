@@ -31,6 +31,6 @@ export function CampaignForm({open}:{open:boolean}) {
     <label className="flex items-start gap-3 text-sm leading-6"><input name="marketingOptIn" type="checkbox" className="mt-1 h-5 w-5 shrink-0"/><span>Send me occasional CertScore.ai product and marketing emails (optional). This does not affect eligibility.</span></label>
     {error&&<p role="alert" className="rounded-lg bg-red-50 p-4 text-red-800">{error}</p>}
     <button disabled={busy} className="w-full rounded-xl bg-[#235b41] px-6 py-4 font-semibold text-white hover:bg-[#163f2c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#235b41] disabled:opacity-60">{busy?"Submitting application…":"Submit Application"}</button>
-    <p className="text-xs leading-5 text-slate-500">We use your application to review eligibility and send operational updates. Optional analytics choices do not affect submission. Please do not include confidential client information.</p>
+    <p className="text-xs leading-5 text-slate-500">We use your application to review eligibility and send operational updates.</p>
   </form>;
 }
