@@ -32,6 +32,11 @@ const reviewSteps = [
 
 const workflows = [
   {
+    audience: "Data privacy officers (DPOs)",
+    title: "Keep evidence ready for internal reviews",
+    description: "Record a baseline for the sites your organization operates. After a vendor or consent setup changes, retest the affected pages and share what changed with your privacy and engineering teams."
+  },
+  {
     audience: "Web agencies",
     title: "Add a privacy review to site handoff",
     description: "Start with a homepage and a key conversion page. Give the client a short list of observed trackers and controls, then agree on what to recheck after the next release."
@@ -45,11 +50,6 @@ const workflows = [
     audience: "Law firms and privacy advisors",
     title: "Put website evidence beside the policy",
     description: "Read the client’s disclosures alongside what a scan observed. Use gaps and unknowns to ask the client or their developers more specific questions."
-  },
-  {
-    audience: "Data privacy officers (DPOs)",
-    title: "Keep evidence ready for internal reviews",
-    description: "Record a baseline for the sites your organization operates. After a vendor or consent setup changes, retest the affected pages and share what changed with your privacy and engineering teams."
   }
 ];
 
