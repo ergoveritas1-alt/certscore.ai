@@ -61,7 +61,10 @@ function campaignValue(name: keyof CampaignAttribution) {
 
 export function trackProductEvent(input: Omit<ProductAnalyticsPayload, "actorId" | "entryRoute" | "language" | "route" | "scanId" | "sessionId" | "viewportBand"> & { route?: string; scanId?: string; anonymousAggregate?: boolean }) {
   if (typeof window === "undefined") return;
-  const choice = window.certscoreAnalyticsConsent ?? getStoredAnalyticsConsent();
+  // Invitation fragments are credentials; never include this route in analytics.
+  if (window.location.pathname === "/black-friday/activate") return;
+  const campaignGpc = window.location.pathname.startsWith("/black-friday") && (navigator as Navigator & {globalPrivacyControl?:boolean}).globalPrivacyControl;
+  const choice = campaignGpc ? "denied" : window.certscoreAnalyticsConsent ?? getStoredAnalyticsConsent();
   const privacyBounded = input.anonymousAggregate || choice === "denied" || Boolean(input.pageRequestToken) || Boolean(input.authenticatedPageToken);
   const actualRoute = input.route ?? window.location.pathname;
   const entryRoute = privacyBounded ? actualRoute : safeStorage(window.sessionStorage, ENTRY_ROUTE_KEY) ?? actualRoute;

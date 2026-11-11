@@ -82,6 +82,7 @@ export function LoginForm(input?: {
 }) {
   const searchParams = useSearchParams();
   const nextPath = getSafeRedirectPath(searchParams?.get("next") ?? null);
+  const isPromotion = nextPath.split(/[?#]/)[0] === "/black-friday/activate";
   const isMarketplaceLight = nextPath.split(/[?#]/)[0] === "/marketplace/light";
   const allowCreateAccount = input?.allowCreateAccount ?? true;
   const initialMessage = searchParams?.get("message") ?? null;
@@ -364,7 +365,7 @@ export function LoginForm(input?: {
                 : "Signing you in…"
               : isCreateAccount
                 ? isCreatePasswordStep
-                  ? isMarketplaceLight ? "Create account and continue" : "Start 7-day trial"
+                  ? isMarketplaceLight || isPromotion ? "Create account and continue" : "Start 7-day trial"
                   : "Continue"
                 : "Sign in"}
           </Button>
@@ -378,7 +379,7 @@ export function LoginForm(input?: {
 
         {allowCreateAccount && isCreateAccount ? (
           <p className="text-xs leading-5 text-slate-500">
-            {isMarketplaceLight ? "Marketplace MCP Light is free. No paid CertScore plan is required; an active AWS Marketplace subscription and shared usage limits apply." : "New accounts include a 7-day trial before choosing a monthly plan."}
+            {isPromotion ? "Create your account, then activate your approved CertScore.ai Pro invitation. No credit card or paid subscription is required." : isMarketplaceLight ? "Marketplace MCP Light is free. No paid CertScore plan is required; an active AWS Marketplace subscription and shared usage limits apply." : "New accounts include a 7-day trial before choosing a monthly plan."}
           </p>
         ) : null}
       </form>

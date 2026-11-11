@@ -30,6 +30,14 @@ export async function getDashboardScanUsage(input: {
   monthlyLimit: number | null;
   organizationId: string;
 }): Promise<DashboardScanUsage> {
+  const { getPromotionalEntitlement } = await import("../promotions/entitlement");
+  const promotion = await getPromotionalEntitlement(input.organizationId);
+  if (promotion?.active && promotion.period) {
+    const total = await queryOne<{ count: number }>(`select count(*)::int count from scans where organization_id=$1`, [input.organizationId], {readOnly:true});
+    return { accountCreatedAt: input.accountCreatedAt, monthlyLimit: promotion.limit,
+      monthlyPeriodStart: promotion.period.start.toISOString(), monthlyPeriodEnd: promotion.period.end.toISOString(),
+      monthlyScansUsed: promotion.used, remainingPercent: Math.max(0,Math.round(100*(1-promotion.used/promotion.limit))), totalScans: total?.count ?? 0 };
+  }
   const monthWindow = getCurrentMonthWindow();
   const row = await queryOne<{
     counter_value: number | null;

@@ -187,11 +187,8 @@ test("new admin-created accounts receive a workspace and default user access", a
 test("unassigned admin-created users retain and display their default user access level", async () => {
   const adminUsersPage = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
   const adminRepository = await readFile("apps/web/server/admin/repository.ts", "utf8");
-  const adminUserList = await readFile("apps/web/server/admin/list-admin-users.ts", "utf8");
 
-  assert.match(adminRepository, /coalesce\(login_activity\.account_role, 'user'\) as account_role/);
   assert.match(adminRepository, /left join better_auth_sessions/);
-  assert.match(adminUserList, /accountRole: row\.account_role/);
   assert.match(adminUsersPage, /aria-label=\{`Access level for \$\{user\.email\}`\}/);
   assert.match(adminUsersPage, /defaultValue="user"/);
   assert.doesNotMatch(adminUsersPage, />Not assigned</);

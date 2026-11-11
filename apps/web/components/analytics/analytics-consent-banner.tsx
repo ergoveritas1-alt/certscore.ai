@@ -12,6 +12,7 @@ import {
 function AnalyticsConsentPanel(input: {
   onChoose: (choice: AnalyticsConsentChoice) => void;
   onClose?: () => void;
+  campaignPlacement?: boolean;
 }) {
   const [showSettings, setShowSettings] = useState(false);
   const choiceButtonClassName =
@@ -20,9 +21,9 @@ function AnalyticsConsentPanel(input: {
   return (
     <section
       aria-label="Cookie and analytics preferences"
-      className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-[0_18px_70px_-30px_rgba(15,23,42,0.5)] backdrop-blur md:bottom-5"
+      className={`mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-[0_18px_70px_-30px_rgba(15,23,42,0.5)] backdrop-blur ${input.campaignPlacement ? "relative mt-4" : "fixed inset-x-3 bottom-3 z-50 md:bottom-5"}`}
     >
-      <div className="md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6">
+      <div className={input.campaignPlacement ? undefined : "md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6"}>
         <div className="max-w-md space-y-1">
           <p className="text-sm font-semibold text-slate-950">Cookie and analytics preferences</p>
           <p className="text-sm leading-5 text-slate-600">
@@ -36,7 +37,7 @@ function AnalyticsConsentPanel(input: {
             </span>
           </p>
         </div>
-        <div className="mt-3 flex shrink-0 flex-wrap items-center gap-2 md:mt-0 md:justify-end">
+        <div className={`mt-3 flex shrink-0 flex-wrap items-center gap-2 ${input.campaignPlacement ? "" : "md:mt-0 md:justify-end"}`}>
           <button
             type="button"
             className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-white hover:text-slate-900"
@@ -81,7 +82,7 @@ function AnalyticsConsentPanel(input: {
   );
 }
 
-export function AnalyticsConsentBanner() {
+export function AnalyticsConsentBanner({ campaignPlacement = false }: { campaignPlacement?: boolean }) {
   const pathname = usePathname();
   const [storedChoice, setStoredChoice] = useState<AnalyticsConsentChoice | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -91,7 +92,8 @@ export function AnalyticsConsentBanner() {
     setIsReady(true);
   }, []);
 
-  if (pathname.startsWith("/calibration/") || !isReady || storedChoice) {
+  const usesCampaignPlacement = pathname === "/black-friday" || pathname === "/black-friday/apply";
+  if (usesCampaignPlacement !== campaignPlacement || pathname.startsWith("/calibration/") || !isReady || storedChoice) {
     return null;
   }
 
@@ -100,7 +102,7 @@ export function AnalyticsConsentBanner() {
     setStoredChoice(choice);
   }
 
-  return <AnalyticsConsentPanel onChoose={choose} />;
+  return <AnalyticsConsentPanel onChoose={choose} campaignPlacement={campaignPlacement} />;
 }
 
 export function AnalyticsPreferencesButton() {

@@ -202,6 +202,14 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     return { error: "Full-site scanning is unavailable in this local environment. Start the local inventory worker before scanning.", scanId: null };
   }
   const scanFrom = normalizeScanFrom(input.scanFrom);
+  // Resolve the private entitlement again at dispatch; stale UI state cannot extend it.
+  const { getPromotionalEntitlement } = await import("../promotions/entitlement");
+  const promotion = await getPromotionalEntitlement(input.organizationId);
+  if (promotion && !promotion.active) return { error: "Promotional Pro access has ended. Choose a paid plan to continue.", scanId: null };
+  if (promotion) {
+    input = { ...input, planCode: "pro", planLimitsOverride: undefined };
+    if (promotion.used >= promotion.limit) return { error: "You have reached your 1,000-page promotional allowance for this entitlement period.", scanId: null };
+  }
   const basePlanLimits = input.planLimitsOverride ?? (await getPlanLimits(input.planCode));
   const manualRescanLimitOverride = await getOrganizationManualRescanLimitOverride(input.organizationId).catch((error) => {
     console.error("[web] organization manual scan limit override lookup failed", {
@@ -210,7 +218,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     });
     return null;
   });
-  const planLimits = await applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
+  const planLimits = promotion ? basePlanLimits : await applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
   const planDefinition = getPlanDefinition(planLimits.planCode);
   if (process.env.NODE_ENV !== "production" && !input.domainContext) {
     await failInterruptedLocalV2DagLambdaScansForDomain({
@@ -442,7 +450,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     }
   }
 
-  if (input.enforceMonthlyUsageLimit) {
+  if (input.enforceMonthlyUsageLimit && !promotion) {
     const monthWindow = getCurrentMonthWindow();
     const metricKey = USAGE_METRIC_KEYS.manualFullScans;
     let usageCounter;

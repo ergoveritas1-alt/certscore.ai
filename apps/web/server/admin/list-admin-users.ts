@@ -25,7 +25,6 @@ import { latestActivityAt } from "../../lib/admin/latest-activity-at";
 import { getMcpOAuthIssuer } from "../oauth/mcp-oauth-config";
 
 export type AdminUserListItem = {
-  accountRole: string;
   activeMcpConnectorCount: number;
   authProvider: string;
   completedScans: number;
@@ -154,7 +153,6 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
     const organization = membership ? organizationMap.get(membership.organization_id) ?? null : null;
 
     return {
-      accountRole: user.account_role,
       activeMcpConnectorCount: 0,
       id: user.id,
       email: user.email,
@@ -217,7 +215,6 @@ function mapAdminUserOverviewRow(
   mcpUsage: AdminMcpToolUsageRow | null = null
 ): AdminUserListItem {
   return {
-    accountRole: row.account_role,
     activeMcpConnectorCount: Number(row.active_mcp_connector_count ?? 0),
     id: row.id,
     email: row.email,

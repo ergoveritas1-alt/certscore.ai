@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentUser } from "../auth";
 import { getAuth } from "../better-auth/auth";
-import { BETTER_AUTH_SESSION_COOKIE_NAME } from "../better-auth/constants";
+import { writeAuthCookies } from "../better-auth/action-cookies";
 import {
   countAdvancedOrganizationMembers,
   deleteAppUserProfileById,
@@ -38,14 +38,15 @@ export async function deleteAccountFormAction(formData: FormData) {
     }
   }
 
-  await getAuth().api.deleteUser({
+  const { headers: authHeaders } = await getAuth().api.deleteUser({
     body: {},
-    headers: await headers()
+    headers: await headers(),
+    returnHeaders: true
   });
   await deleteAppUserProfileById(user.id);
 
+  await writeAuthCookies(authHeaders);
   const cookieStore = await cookies();
-  cookieStore.set(BETTER_AUTH_SESSION_COOKIE_NAME, "", { expires: new Date(0), path: "/" });
   cookieStore.set(LEGACY_PASSWORD_AUTH_COOKIE_NAME, "", { expires: new Date(0), path: "/" });
   redirect("/login?message=account_deleted");
 }

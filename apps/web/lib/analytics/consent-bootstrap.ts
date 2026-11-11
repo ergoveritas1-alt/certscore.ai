@@ -30,6 +30,10 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
       var defaultConsent = ${defaultConsent};
       var grantedConsent = ${grantedConsent};
       var storedChoice = null;
+      function campaignPrivacyBlocked() {
+        var pathname = w.location.pathname || '';
+        return pathname === '/black-friday/activate' || (pathname.indexOf('/black-friday') === 0 && !!(w.navigator && w.navigator.globalPrivacyControl));
+      }
 
       w.dataLayer = w.dataLayer || [];
       w.gtag = w.gtag || function(){ w.dataLayer.push(arguments); };
@@ -41,10 +45,10 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
         storedChoice = null;
       }
 
-      w.certscoreAnalyticsConsent = storedChoice === 'granted' ? 'granted' : 'denied';
+      w.certscoreAnalyticsConsent = storedChoice === 'granted' && !campaignPrivacyBlocked() ? 'granted' : 'denied';
 
       function loadGoogleTag(){
-        if (w.certscoreAnalyticsConsent !== 'granted' || w.certscoreGoogleTagLoaded || !googleTagId || !['certscore.ai', 'www.certscore.ai'].includes(w.location.hostname)) {
+        if (campaignPrivacyBlocked() || w.certscoreAnalyticsConsent !== 'granted' || w.certscoreGoogleTagLoaded || !googleTagId || !['certscore.ai', 'www.certscore.ai'].includes(w.location.hostname)) {
           return;
         }
 
@@ -68,7 +72,7 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
       }
 
       function loadUmami(){
-        if (w.certscoreAnalyticsConsent !== 'granted' || w.certscoreUmamiLoaded || !umamiScriptUrl || !umamiWebsiteId) {
+        if (campaignPrivacyBlocked() || w.certscoreAnalyticsConsent !== 'granted' || w.certscoreUmamiLoaded || !umamiScriptUrl || !umamiWebsiteId) {
           return;
         }
 
@@ -76,7 +80,7 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
         w.certscoreUmamiEventQueue = w.certscoreUmamiEventQueue || [];
 
         w.certscoreBeforeUmamiSend = function(type, payload){
-          if (w.certscoreAnalyticsConsent !== 'granted' || !payload || typeof payload !== 'object') {
+          if (campaignPrivacyBlocked() || w.certscoreAnalyticsConsent !== 'granted' || !payload || typeof payload !== 'object') {
             return false;
           }
 

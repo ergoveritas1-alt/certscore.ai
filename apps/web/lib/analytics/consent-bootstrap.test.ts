@@ -39,3 +39,13 @@ test("OAuth return attribution is ignored only for the exact Google accounts hos
     assert.equal("ignore_referrer" in config, false);
   }
 });
+
+test("campaign GPC and invitation routes suppress third-party scripts even with prior consent", () => {
+  for (const [pathname,gpc] of [["/black-friday",true],["/black-friday/apply",true],["/black-friday/activate",false]] as const) {
+    const scripts:unknown[]=[];
+    const window={location:{hostname:"certscore.ai",pathname},navigator:{globalPrivacyControl:gpc},localStorage:{getItem:()=>"granted"},dataLayer:[]};
+    const document={referrer:"",getElementsByTagName:()=>[{parentNode:{insertBefore:(s:unknown)=>scripts.push(s)}}],createElement:()=>({setAttribute(){},addEventListener(){}})};
+    vm.runInNewContext(buildConsentBootstrapScript("G-TEST",{scriptUrl:"https://analytics.example/script.js",websiteId:"test"}),{window,document,URL});
+    assert.equal(scripts.length,0,pathname);
+  }
+});

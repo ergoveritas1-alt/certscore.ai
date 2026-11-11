@@ -1125,7 +1125,6 @@ export type AdminValidationVerdictRow = {
 };
 
 export type AdminUserRow = {
-  account_role: string;
   auth_provider: string;
   created_at: string;
   email: string;
@@ -2014,12 +2013,10 @@ export async function loadAdminUsersData(): Promise<{
               users.auth_provider,
               users.created_at,
               users.updated_at,
-              coalesce(login_activity.account_role, 'user') as account_role,
               login_activity.last_login_at
          from users
          left join lateral (
-           select max(better_auth_users.role) as account_role,
-                  max(better_auth_sessions.created_at) as last_login_at
+           select max(better_auth_sessions.created_at) as last_login_at
              from better_auth_users
              left join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
             where better_auth_users.email = users.email
@@ -2083,7 +2080,6 @@ export async function loadAdminUsersPageData(
        ),
        login_activity as (
          select better_auth_users.email,
-                max(better_auth_users.role) as account_role,
                 max(better_auth_sessions.created_at) as last_login_at
            from better_auth_users
            left join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
@@ -2144,7 +2140,6 @@ export async function loadAdminUsersPageData(
               selected_users.auth_provider,
               selected_users.created_at,
               selected_users.updated_at,
-              coalesce(login_activity.account_role, 'user') as account_role,
               login_activity.last_login_at,
               coalesce(connector_activity.connector_names, array[]::text[]) as mcp_connector_names,
               coalesce(connector_activity.active_connector_count, 0)::int as active_mcp_connector_count,
@@ -2348,7 +2343,6 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
               users.auth_provider,
               users.created_at,
               users.updated_at,
-              coalesce(login_activity.account_role, 'user') as account_role,
               login_activity.last_login_at,
               membership.organization_id,
               membership.role as membership_role,
@@ -2367,8 +2361,7 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
               coalesce(request_activity.scan_request_count, 0)::int as scan_request_count
          from recent_users users
          left join lateral (
-           select max(better_auth_users.role) as account_role,
-                  max(better_auth_sessions.created_at) as last_login_at
+           select max(better_auth_sessions.created_at) as last_login_at
              from better_auth_users
              left join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
             where better_auth_users.email = users.email

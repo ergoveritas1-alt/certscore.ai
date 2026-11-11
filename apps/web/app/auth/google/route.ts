@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const newUserCallbackURL = new URL("/auth/google/complete", requestOrigin);
   newUserCallbackURL.searchParams.set("next", nextPath);
   const errorCallbackURL = new URL(authRetryPath("google_sign_in_failed", requestUrl.searchParams.get("next")), requestOrigin).toString();
-  const result = await getAuth().api.signInSocial({
+  const { response: result, headers: authResponseHeaders } = await getAuth().api.signInSocial({
     body: {
       callbackURL,
       disableRedirect: true,
@@ -32,12 +32,17 @@ export async function GET(request: Request) {
       newUserCallbackURL: newUserCallbackURL.toString(),
       provider: "google"
     },
-    headers: authHeaders
+    headers: authHeaders,
+    returnHeaders: true
   });
 
   if (!result.url) {
     return NextResponse.redirect(new URL(authRetryPath("google_sign_in_failed", requestUrl.searchParams.get("next")), requestOrigin));
   }
 
-  return NextResponse.redirect(result.url);
+  const response = NextResponse.redirect(result.url);
+  for (const cookie of authResponseHeaders.getSetCookie()) {
+    response.headers.append("Set-Cookie", cookie);
+  }
+  return response;
 }
