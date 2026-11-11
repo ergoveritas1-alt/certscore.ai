@@ -10,7 +10,7 @@ import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../../lib/marketing/sample-repor
 
 export const dynamic = "force-dynamic";
 export const metadata = createPageMetadata({
-  title: "Build a Website Privacy Baseline | Black Friday 2026",
+  title: "Find Website Privacy Blind Spots | Black Friday 2026",
   description: "Three months of CertScore.ai Pro at no cost for eligible agencies, developers, marketers, law firms and data privacy officers. Apply by December 2, 2026.",
   path: "/black-friday"
 });
@@ -124,10 +124,10 @@ export default async function BlackFridayPage() {
               Black Friday 2026
             </p>
             <h1 className="max-w-[12ch] text-[clamp(2.75rem,6vw,5rem)] font-semibold leading-[1.02] tracking-[-0.055em]">
-              Build a website privacy baseline.
+              Find website privacy blind spots.
             </h1>
             <p className="mt-6 max-w-lg text-lg leading-8 text-[#d4e3dc]">
-              See what loads before consent, inspect supported privacy choices, and bring evidence to your next client or internal review.
+              See which trackers load, inspect supported consent choices, and turn scan evidence into clear next steps for your clients or team.
             </p>
             <p className="mt-6 max-w-lg border-l-2 border-[#8fcaab] pl-4 text-base leading-7 text-[#e9f5ed]">
               <strong className="font-semibold text-white">Three months of CertScore.ai Pro at no cost.</strong>{" "}
@@ -183,9 +183,6 @@ export default async function BlackFridayPage() {
               Screenshots from the sample report. Open either capture at full size to explore the detail.
             </p>
           </div>
-          <a href={AUTHENTIC_SAMPLE_REPORT_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 shrink-0 items-center gap-2 text-sm font-semibold text-[#235b41] underline underline-offset-4">
-            Explore a sample report <span aria-hidden="true">↗</span>
-          </a>
         </div>
         <div className="space-y-8">
           <figure className="overflow-hidden rounded-xl border border-[#d8e2db] bg-white shadow-sm">
@@ -220,6 +217,11 @@ export default async function BlackFridayPage() {
               />
             </a>
           </figure>
+        </div>
+        <div className="mt-6">
+          <a href={AUTHENTIC_SAMPLE_REPORT_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[#235b41] underline underline-offset-4">
+            Explore the full sample report <span aria-hidden="true">↗</span>
+          </a>
         </div>
       </section>
 
@@ -268,13 +270,13 @@ export default async function BlackFridayPage() {
       <section className="mx-auto max-w-7xl px-6 py-14 sm:px-10 sm:py-20">
         <div className="grid gap-8 rounded-2xl bg-[#102522] p-6 text-white sm:p-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div>
-            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Pick a site for your first review.</h2>
+            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Bring better data to your next privacy review.</h2>
             <p className="mt-4 max-w-xl leading-7 text-[#d4e3dc]">
-              Solo developers, DPOs, small firms and in-house privacy teams are welcome. Tell us about your organization and what you’d like to review. You can apply without entering payment details.
+              Apply for three months of Pro, free if approved. No card. No automatic paid renewal.
             </p>
           </div>
           <div className="lg:border-l lg:border-white/20 lg:pl-9">
-            <p className="text-base font-semibold">Three calendar months of Pro. A $1,200 value.</p>
+            <p className="text-base font-semibold">A $1,200 value. Ten places.</p>
             {open && <div className="mt-5"><ApplyLink open={open} /></div>}
           </div>
         </div>
