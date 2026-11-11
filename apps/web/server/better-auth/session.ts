@@ -26,7 +26,9 @@ function normalizeProviderList(rows: BetterAuthAccountRow[]) {
 
 export async function getBetterAuthSessionUser(): Promise<AuthenticatedAppUser | null> {
   const session = await getAuth().api.getSession({
-    headers: await headers()
+    headers: await headers(),
+    // Server rendering can read cookies but cannot forward refreshed cookies.
+    query: { disableRefresh: true }
   });
 
   if (!session?.user) {

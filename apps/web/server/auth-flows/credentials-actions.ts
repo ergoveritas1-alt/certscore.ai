@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { getAuth } from "../better-auth/auth";
+import { writeAuthCookies } from "../better-auth/action-cookies";
 import {
   getAccountCreationPausedMessage,
   isPublicAccountCreationEnabled
@@ -125,14 +126,15 @@ export async function submitCredentialsAction(
         };
       }
 
-      const response = await getAuth().api.signUpEmail({
+      const { response, headers: authHeaders } = await getAuth().api.signUpEmail({
         body: {
           callbackURL: values.next,
           email: normalizedEmail,
           name: deriveDisplayName(normalizedEmail),
           password: values.password
         },
-        headers: headerStore
+        headers: headerStore,
+        returnHeaders: true
       });
 
       const provisioned = await provisionSelfServeUserSession({
@@ -142,16 +144,18 @@ export async function submitCredentialsAction(
         id: response.user.id
       });
       await claimAnonymousScansForUser(provisioned.user.id);
+      await writeAuthCookies(authHeaders);
       redirect(getRegistrationCompletionRedirect(values.next));
     }
 
-    const response = await getAuth().api.signInEmail({
+    const { response, headers: authHeaders } = await getAuth().api.signInEmail({
       body: {
         callbackURL: values.next,
         email: normalizedEmail,
         password: values.password
       },
-      headers: headerStore
+      headers: headerStore,
+      returnHeaders: true
     });
 
     const bootstrapped = await bootstrapAppUserSession({
@@ -162,6 +166,7 @@ export async function submitCredentialsAction(
     });
     await claimAnonymousScansForUser(bootstrapped.user.id);
 
+    await writeAuthCookies(authHeaders);
     redirect(values.next);
   } catch (error) {
     if (isRedirectError(error)) {

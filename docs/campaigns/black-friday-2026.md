@@ -31,6 +31,8 @@ Apply `packages/db/migrations/0210_black_friday_2026.sql` through the repository
 
 All use RLS without anonymous policies, matching private service-side SQL access. Migration adds effective-plan/calendar helpers and scan-insertion, completed-scan and paid-subscription event triggers. No historical reports or paid subscription records are rewritten. Roll forward through the normal migration process; do not drop entitlement tables while any allocation is active.
 
+The release also includes migration 0211. It verifies that no account bans or impersonation sessions remain in the retired authentication fields and prevents new values during rollout. If it fails, review those records before promotion. After the previous web tasks have drained and rollback to the previous revision is no longer needed, run `packages/db/maintenance/remove-retired-auth-admin-columns.sql` to drop the five retired fields. Earlier web revisions require these fields. Keep the applied migration files for checksum validation.
+
 ## Application, review and email workflow
 
 1. A complete, valid application is persisted together with `bf26_form_submit` and owner/applicant outbox rows in one database transaction. Email delivery runs afterward. Anonymous application responses do not expose duplicate record IDs.
@@ -97,7 +99,7 @@ Use an isolated local database with the normal schema plus migration 0210, never
 5. Inspect the funnel and application detail/outbox. Verify submit → approved → invitation sent → activated → first scan, and the independent anonymous landing/start aggregates. Test rejection, failed delivery and expired invitations separately.
 6. **To receive a real alert at `ben@certscore.ai` after launch**, enable delivery in the approved environment and submit a real test application through that environment. Inbox receipt is a manual launch verification; no real email was sent during these tests. Do not count a test allocation as a real customer slot without an explicit data-handling decision.
 
-Verification receipts, screenshots and reproducible local browser scripts are under `outputs/black-friday-2026/`. Tests use an isolated local PostgreSQL schema and mock SMTP/billing. The browser walkthrough covers desktop/mobile, validation, application persistence, unauthorized/cross-origin rejection, protected review/CSV, invitation activation and simulated first scan. Axe checks exclude only the existing wordmark under the WCAG logotype contrast exception; campaign footer contrast is corrected locally. An existing Better Auth cookie-plugin ordering warning was observed, but the tested account/session handoff succeeded; the campaign does not reorder the global authentication plugins.
+Verification receipts, screenshots and reproducible local browser scripts are under `outputs/black-friday-2026/`. Tests use an isolated local PostgreSQL schema and mock SMTP/billing. The browser walkthrough covers desktop/mobile, validation, application persistence, unauthorized/cross-origin rejection, protected review/CSV, invitation activation and simulated first scan. Axe checks exclude only the existing wordmark under the WCAG logotype contrast exception; campaign footer contrast is corrected locally.
 
 ## Files delivered
 

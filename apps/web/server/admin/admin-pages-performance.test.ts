@@ -19,7 +19,7 @@ test('Users preserves submitted/claimed/request counts and sorting with grouped 
     await db.query(`create temp table users(id uuid, email text, full_name text, auth_provider text, created_at timestamptz, updated_at timestamptz);
       create temp table organization_members(user_id uuid, organization_id uuid, role text, created_at timestamptz);
       create temp table organizations(id uuid, name text, slug text, plan text, plan_status text);
-      create temp table better_auth_users(id text, email text, role text);
+      create temp table better_auth_users(id text, email text);
       create temp table better_auth_sessions(user_id text, created_at timestamptz);
       create temp table mcp_oauth_clients(client_id text, client_name text);
       create temp table mcp_oauth_refresh_tokens(owner_user_id text, client_id text, revoked_at timestamptz, expires_at timestamptz, created_at timestamptz, last_used_at timestamptz);
@@ -34,7 +34,7 @@ test('Users preserves submitted/claimed/request counts and sorting with grouped 
       insert into scan_requests select jsonb_build_object('userId',id),'2026-09-04' from users where email='a@example.test';
       insert into pulse_requests select jsonb_build_object('userId',id),'2026-09-05' from users where email='a@example.test';
       insert into product_analytics_events select 'event-a',id,'2026-09-07','mcp_tools_listed','mcp:claude','success' from users where email='a@example.test';
-      insert into better_auth_users values ('login-a','a@example.test','admin');
+      insert into better_auth_users values ('login-a','a@example.test');
       insert into better_auth_sessions values ('login-a','2026-09-06');`);
     const source = repository.slice(repository.indexOf('export async function loadAdminUsersPageData('));
     const start = source.indexOf('`with selected_users');

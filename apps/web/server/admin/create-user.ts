@@ -1,10 +1,11 @@
 "use server";
 
+import { queryOne } from "@website-signal-risk-scanner/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { DEFAULT_NEW_MEMBERSHIP_ROLE } from "../../lib/auth/membership-role-policy";
-import { getAuth } from "../better-auth/auth";
+import { isAllowedAuthEmail } from "../access-control";
 import { sendPasswordSetupLink } from "../auth-flows/password-setup";
 import { createUserWorkspaceIdentity } from "../company/workspace-identity";
 import {
@@ -49,28 +50,33 @@ export async function createAdminUserFormAction(formData: FormData): Promise<voi
   }
 
   const initialName = email.split("@", 1)[0] || email;
-  const created = await getAuth().api.createUser({
-    body: {
-      email,
-      name: initialName,
-      role: DEFAULT_NEW_MEMBERSHIP_ROLE
-    }
-  });
-  if (!created?.user) {
+  if (!isAllowedAuthEmail(email)) {
+    throw new Error("This email is outside the allowed account list.");
+  }
+
+  // The password setup link establishes the credential after the user receives it.
+  const identity = await queryOne<{ id: string; name: string }>(
+    `insert into better_auth_users (id, email, name)
+     values ($1, $2, $3)
+     on conflict (email) do nothing
+     returning id, name`,
+    [crypto.randomUUID(), email, initialName]
+  ) ?? await queryOne<{ id: string; name: string }>(
+    "select id, name from better_auth_users where email = $1",
+    [email]
+  );
+  if (!identity) {
     throw new Error("The authentication account could not be created.");
   }
 
   await upsertAppUserProfile({
     authProvider: "password",
-    email: created.user.email,
-    fullName: created.user.name ?? initialName,
-    userId: created.user.id
+    email,
+    fullName: identity.name,
+    userId: identity.id
   });
-  await createWorkspaceForUser({
-    email: created.user.email,
-    userId: created.user.id
-  });
-  await sendPasswordSetupLink(created.user.email);
+  await createWorkspaceForUser({ email, userId: identity.id });
+  await sendPasswordSetupLink(email);
 
   revalidatePath("/app/admin/users");
   revalidatePath("/app/admin");

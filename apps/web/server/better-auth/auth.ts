@@ -1,8 +1,6 @@
 import "server-only";
 
-import { betterAuth, type Auth } from "better-auth";
-import { nextCookies } from "better-auth/next-js";
-import { admin } from "better-auth/plugins";
+import { betterAuth } from "better-auth";
 import { getWritePool } from "@website-signal-risk-scanner/db";
 import { createGmailTransport, getGmailConfig } from "../email/gmail";
 import {
@@ -51,13 +49,7 @@ async function canCreateAuthSession(userId: string | null | undefined) {
   }
 }
 
-type BetterAuthInstance = Auth<any> & {
-  api: Auth<any>["api"] & {
-    createUser: (...args: any[]) => Promise<any>;
-  };
-};
-
-function createAuth(): BetterAuthInstance {
+function createAuth() {
   const env = getBetterAuthEnv();
 
   return betterAuth({
@@ -168,12 +160,12 @@ function createAuth(): BetterAuthInstance {
         });
       }
     },
-    plugins: [nextCookies(), admin({ defaultRole: "user" })],
     secret: env.BETTER_AUTH_SECRET,
     session: {
       cookieCache: {
         enabled: true,
-        maxAge: 5 * 60
+        maxAge: 5 * 60,
+        version: "core"
       },
       fields: {
         createdAt: "created_at",
@@ -207,12 +199,12 @@ function createAuth(): BetterAuthInstance {
       },
       modelName: "better_auth_verifications"
     }
-  }) as BetterAuthInstance;
+  });
 }
 
-let authSingleton: BetterAuthInstance | null = null;
+let authSingleton: ReturnType<typeof createAuth> | null = null;
 
-export function getAuth(): BetterAuthInstance {
+export function getAuth() {
   if (authSingleton) {
     return authSingleton;
   }
