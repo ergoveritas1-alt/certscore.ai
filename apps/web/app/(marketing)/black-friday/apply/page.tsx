@@ -8,7 +8,7 @@ import { createPageMetadata } from "../../../../lib/seo";
 export const dynamic = "force-dynamic";
 export const metadata = createPageMetadata({
   title: "Apply for Complimentary Pro | Black Friday 2026",
-  description: "Apply for three months of CertScore.ai Pro to use in your client website reviews. No account or credit card is required to apply.",
+  description: "Apply for three months of CertScore.ai Pro to use in your client or internal website reviews. No account or credit card is required to apply.",
   path: "/black-friday/apply"
 });
 
@@ -29,7 +29,7 @@ export default async function ApplyPage() {
               Apply for three months of Pro.
             </h1>
             <p className="mt-5 max-w-md text-lg leading-8 text-[#425750]">
-              Tell us about your business and the client work you’d like to use CertScore.ai for.
+              Tell us about your organization and the website privacy work you’d like to use CertScore.ai for.
             </p>
             <div className="mt-6 max-w-md rounded-xl border border-[#d8e2db] bg-[#edf2eb] p-5">
               <h2 className="font-semibold">What happens next</h2>

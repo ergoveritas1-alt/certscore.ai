@@ -107,11 +107,12 @@ test("isolated PostgreSQL campaign journey, concurrency, quota, delivery and exp
       }),/rollback paid-account fixture/);
     });
     await t.test("persistence and outbox are atomic, retries and domain/email duplicates do not allocate",async()=>{
-      const data={...input(),email:"hello@agency-review.co.uk",website:"https://agency-review.co.uk"};
+      const data={...input(),company:"Example Retail",email:"privacy@retail-review.co.uk",website:"https://retail-review.co.uk",businessType:"In-house privacy team (DPO)",intendedUse:"Review the websites our organization operates"};
       const results=await Promise.all(Array.from({length:8},()=>store.submit(data,false,now)));
       assert.equal(results.filter(r=>r.created).length,1);firstId=results.find(r=>r.id)!.id!;
       const stored=(await sql.query(`select details, terms_version from promotion_applications where id=$1`,[firstId])).rows[0]!;
       assert.equal(stored.details.website,data.website);
+      assert.equal(stored.details.businessType,data.businessType);
       assert.equal("country" in stored.details,false);
       assert.equal("state" in stored.details,false);
       assert.equal(stored.terms_version,TERMS_VERSION);
@@ -184,7 +185,7 @@ test("isolated PostgreSQL campaign journey, concurrency, quota, delivery and exp
     });
     await t.test("email content excludes internal notes; mock SMTP failure never removes application",async()=>{
       const rows=await store.list();const a=rows.find(a=>a.id===firstId)!;
-      const owner=campaignEmail(a,"owner","http://localhost:3000",secret,10);assert.equal(owner.to,"ben@certscore.ai");assert.match(owner.text,/Agency 0/);assert.ok(!owner.text.includes("Verified company"));
+      const owner=campaignEmail(a,"owner","http://localhost:3000",secret,10);assert.equal(owner.to,"ben@certscore.ai");assert.ok(owner.text.includes(a.company));assert.ok(!owner.text.includes("Verified company"));
       process.env.CERTSCORE_BF26_EMAIL_DELIVERY="1";process.env.BETTER_AUTH_SECRET=secret;
       const config=()=>({fromEmail:"test@example.test",appPassword:"mock",appUrl:"http://localhost:3000"});
       const mock={query:sql.query,transaction,config,transport:()=>({close(){},async sendMail(){throw Object.assign(new Error("mock refused"),{command:"CONN"});}})};

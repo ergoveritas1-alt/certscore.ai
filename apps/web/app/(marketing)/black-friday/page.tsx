@@ -8,15 +8,15 @@ import { campaignStore } from "../../../server/promotions/repository";
 
 export const dynamic = "force-dynamic";
 export const metadata = createPageMetadata({
-  title: "Build a Client Privacy Review | Black Friday 2026",
-  description: "Give client sites a privacy baseline with three months of CertScore.ai Pro at no cost. Apply by December 2, 2026.",
+  title: "Build a Website Privacy Baseline | Black Friday 2026",
+  description: "Three months of CertScore.ai Pro at no cost for eligible agencies, developers, law firms and data privacy officers. Apply by December 2, 2026.",
   path: "/black-friday"
 });
 
 const reviewSteps = [
   {
     title: "Capture a baseline",
-    description: "Record cookies, third-party requests and visible privacy controls on a key client page."
+    description: "Record cookies, third-party requests and visible privacy controls on a key page."
   },
   {
     title: "Review the choice paths",
@@ -43,6 +43,11 @@ const workflows = [
     audience: "Law firms and privacy advisors",
     title: "Put website evidence beside the policy",
     description: "Read the client’s disclosures alongside what a scan observed. Use gaps and unknowns to ask the client or their developers more specific questions."
+  },
+  {
+    audience: "Data privacy officers (DPOs)",
+    title: "Keep evidence ready for internal reviews",
+    description: "Record a baseline for the sites your organization operates. After a vendor or consent setup changes, retest the affected pages and share what changed with your privacy and engineering teams."
   }
 ];
 
@@ -109,14 +114,14 @@ export default async function BlackFridayPage() {
               Black Friday 2026
             </p>
             <h1 className="max-w-[12ch] text-[clamp(2.75rem,6vw,5rem)] font-semibold leading-[1.02] tracking-[-0.055em]">
-              Give client sites a privacy baseline.
+              Build a website privacy baseline.
             </h1>
             <p className="mt-6 max-w-lg text-lg leading-8 text-[#d4e3dc]">
-              See what loads before consent, inspect supported privacy choices, and bring evidence to your next client review.
+              See what loads before consent, inspect supported privacy choices, and bring evidence to your next client or internal review.
             </p>
             <p className="mt-6 max-w-lg border-l-2 border-[#8fcaab] pl-4 text-base leading-7 text-[#e9f5ed]">
               <strong className="font-semibold text-white">Three months of CertScore.ai Pro at no cost.</strong>{" "}
-              For ten approved agencies, developers, consultancies and law firms.
+              Ten places for agencies, developers, consultancies, law firms and data privacy officers (DPOs).
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">
               <ApplyLink open={open} />
@@ -132,7 +137,7 @@ export default async function BlackFridayPage() {
           <aside aria-labelledby="review-plan-title" className="rounded-2xl border border-white/10 bg-[#f5f4e9] text-[#152624] shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
             <div className="border-b border-[#d9dfd1] px-5 py-5 sm:px-7">
               <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[#365e4d]">Example workflow</p>
-              <h2 id="review-plan-title" className="mt-2 text-2xl font-semibold tracking-tight">A client privacy review</h2>
+              <h2 id="review-plan-title" className="mt-2 text-2xl font-semibold tracking-tight">A website privacy review</h2>
             </div>
             <ol className="divide-y divide-[#d9dfd1] px-5 sm:px-7">
               {reviewSteps.map(({ title, description }, index) => (
@@ -156,10 +161,10 @@ export default async function BlackFridayPage() {
         <div className="grid gap-5 lg:grid-cols-[1fr_1.3fr] lg:items-end">
           <h2 className="max-w-lg text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">Make it part of the work you already do.</h2>
           <p className="max-w-xl text-lg leading-8 text-[#425750]">
-            Start with one client site. Use the three months to establish a baseline, retest a change and decide what belongs in your ongoing reviews.
+            Start with one site you oversee. Use the three months to establish a baseline, retest a change and decide what belongs in your ongoing reviews.
           </p>
         </div>
-        <div className="mt-9 grid gap-px overflow-hidden rounded-xl border border-[#d8e2db] bg-[#d8e2db] md:grid-cols-3">
+        <div className="mt-9 grid gap-px overflow-hidden rounded-xl border border-[#d8e2db] bg-[#d8e2db] md:grid-cols-2">
           {workflows.map(({ audience, title, description }) => (
             <article key={audience} className="bg-white p-6 sm:p-8">
               <p className="font-mono text-xs font-semibold uppercase tracking-wider text-[#365e4d]">{audience}</p>
@@ -175,7 +180,7 @@ export default async function BlackFridayPage() {
           <div>
             <h2 id="regulatory-title" className="text-4xl font-semibold leading-tight tracking-tight">Prepare for the next change.</h2>
             <p className="mt-4 max-w-md text-lg leading-8 text-[#425750]">
-              A dated record of what a site loaded and what the scan could observe gives clients, counsel and developers a common starting point when requirements or site configurations change.
+              A dated record of what a site loaded and what the scan could observe gives privacy, legal and engineering teams a common starting point when requirements or site configurations change.
             </p>
           </div>
           <div className="divide-y divide-[#cbd8cd] border-y border-[#cbd8cd]">
@@ -197,9 +202,9 @@ export default async function BlackFridayPage() {
       <section className="mx-auto max-w-7xl px-6 py-14 sm:px-10 sm:py-20">
         <div className="grid gap-8 rounded-2xl bg-[#102522] p-6 text-white sm:p-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div>
-            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Bring a client site to your first review.</h2>
+            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Pick a site for your first review.</h2>
             <p className="mt-4 max-w-xl leading-7 text-[#d4e3dc]">
-              Eligible solo developers and small firms are welcome. Tell us about your business and what you’d like to review. You can apply without creating an account or entering payment details.
+              Solo developers, small firms and in-house privacy teams are welcome. Tell us about your organization and what you’d like to review. You can apply without creating an account or entering payment details.
             </p>
           </div>
           <div className="lg:border-l lg:border-white/20 lg:pl-9">
@@ -227,8 +232,8 @@ export default async function BlackFridayPage() {
       <section id="terms" aria-labelledby="terms-title" className="mx-auto max-w-4xl scroll-mt-24 px-6 pb-16 sm:px-10">
         <h2 id="terms-title" className="text-2xl font-semibold tracking-tight">Promotional terms &amp; privacy</h2>
         <div className="mt-4 space-y-4 text-sm leading-7 text-[#425750]">
-          <p>Offer begins November 10, 2026 when deployed, and closes December 2, 2026, or when all ten places have been allocated. The first ten eligible, manually approved businesses receive three consecutive calendar months of Pro. Complete applications are considered in submission order.</p>
-          <p>Eligible applicants are active agencies, consultancies, law firms or other relevant client-service businesses with a verifiable website and professional identity. No minimum company size applies. Existing paid subscribers are excluded. One allocation is permitted per business or commonly controlled business group.</p>
+          <p>Offer begins November 10, 2026 when deployed, and closes December 2, 2026, or when all ten places have been allocated. The first ten eligible, manually approved organizations receive three consecutive calendar months of Pro. Complete applications are considered in submission order.</p>
+          <p>Eligible applicants include agencies, developers, consultancies, law firms and organizations applying through a data privacy officer or in-house privacy team. Applicants must represent an active organization with a verifiable website and professional identity. No minimum company size applies. Existing paid subscribers are excluded. One allocation is permitted per business or commonly controlled business group.</p>
           <p>Activate within 14 days of approval, including if the application window has closed. Your entitlement starts at activation and ends three calendar months later. Each monthly anniversary begins a new 1,000-page allowance. Month-end anniversaries are clipped to that month’s last day. Standard usage and rate restrictions apply. The current Pro rate is $400 per month and the promotional value is $1,200. No payment or credit card is required, and there is no automatic paid renewal.</p>
           <p>We retain application details to review eligibility, administer the promotion and communicate transactional updates.</p>
           <p>CertScore.ai supplies technical observations and evidence for review. It does not provide legal advice or compliance certification. General <Link className="underline" href="/terms">Terms</Link>, <Link className="underline" href="/privacy">Privacy Policy</Link> and <Link className="underline" href="/pricing">Pro plan inclusions</Link> apply.</p>

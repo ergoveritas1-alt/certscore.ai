@@ -5,11 +5,11 @@ export const CAMPAIGN_START = "2026-11-10T08:00:00.000Z";
 // Exclusive midnight boundary: includes all of December 2 in Pacific time.
 export const CAMPAIGN_END = "2026-12-03T08:00:00.000Z";
 export const CAPACITY = 10;
-export const TERMS_VERSION = "bf26.2026-11-10.v3";
-export const BUSINESS_TYPES = ["Web design/development agency", "Digital marketing agency", "Privacy consultancy", "Law firm", "Other"] as const;
+export const TERMS_VERSION = "bf26.2026-11-10.v4";
+export const BUSINESS_TYPES = ["Web design/development agency", "Digital marketing agency", "Privacy consultancy", "Law firm", "In-house privacy team (DPO)", "Other"] as const;
 export const SITE_COUNTS = ["0–5", "6–20", "21–50", "51+"] as const;
 export const STATUSES = ["submitted", "under_review", "approved", "rejected", "invited", "activated", "expired"] as const;
-export const SUCCESS_MESSAGE = "Thank you for applying! We'll review your business information and email you with an update. Applications are subject to approval, and promotional places are limited.";
+export const SUCCESS_MESSAGE = "Thank you for applying! We'll review your organization information and email you with an update. Applications are subject to approval, and promotional places are limited.";
 const short = (max: number) => z.string().trim().min(1, "This field is required.").max(max).refine(v => !/[\u0000-\u001f\u007f]/.test(v), "Use plain text.");
 function publicWebsite(value: string) {
   try {
@@ -20,7 +20,7 @@ function publicWebsite(value: string) {
 }
 export const applicationSchema = z.object({
   fullName: short(120), email: z.string().trim().email().max(254).transform(v => v.toLowerCase()),
-  company: short(160), website: short(300).refine(publicWebsite, "Enter a public business website, including https://."),
+  company: short(160), website: short(300).refine(publicWebsite, "Enter a public organization website, including https://."),
   businessType: z.enum(BUSINESS_TYPES), clientSites: z.enum(SITE_COUNTS),
   intendedUse: short(600), linkedIn: z.string().trim().max(300).optional().default("").refine(v => !v || /^https:\/\/(www\.)?linkedin\.com\/(in|company)\/[a-zA-Z0-9_%-]+\/?$/.test(v), "Enter a LinkedIn profile URL."),
   comments: z.string().trim().max(1500).optional().default(""), terms: z.literal(true),
