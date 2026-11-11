@@ -123,15 +123,15 @@ test("Black Friday isolated browser and database QA", { skip: !enabled, timeout:
         page.on("request", request => {
           if (request.url().endsWith("/api/promotions/black-friday/events")) sent.push(request.postDataJSON());
         });
-        await page.goto(app.origin + "/black-friday?utm_source=linkedin");
-        await page.getByRole("link", { name: "Apply for three months of Pro", exact: true }).first().click();
+        await page.goto(app.origin + "/black-friday?utm_source=theadminbar&utm_medium=referral&utm_campaign=black_friday_2026");
+        await page.getByRole("link", { name: "Apply for 3 Free Months", exact: true }).first().click();
         await page.getByLabel("Full name", { exact: true }).fill("Local QA");
         await page.getByLabel("Business email", { exact: true }).focus();
         await settleEvents(page);
         await page.getByRole("link", { name: "Back to the offer" }).click();
         await settleEvents(page);
         assert.equal(sent.filter(event => event.event === "bf26_landing_view").length, 2);
-        await page.getByRole("link", { name: "Apply for three months of Pro", exact: true }).first().click();
+        await page.getByRole("link", { name: "Apply for 3 Free Months", exact: true }).first().click();
         await page.getByLabel("Full name", { exact: true }).fill("Another interaction");
         await settleEvents(page);
         assert.equal(sent.filter(event => event.event === "bf26_form_start").length, 2);
@@ -208,14 +208,19 @@ test("Black Friday isolated browser and database QA", { skip: !enabled, timeout:
 
     await t.test("complete application, approval, mock invitation, signup, activation, first-scan fixture and CSV journey", async () => {
       await reset();
-      const session = await context();
+      const session = await context(false, "granted");
+      await session.route("https://cloud.umami.is/**", route => route.abort());
       const page = await session.newPage();
-      await page.goto(app.origin + "/black-friday");
+      const funnelRequests: Record<string, unknown>[] = [];
+      page.on("request", request => {
+        if (request.url().endsWith("/api/promotions/black-friday/events")) funnelRequests.push(request.postDataJSON());
+      });
+      await page.goto(app.origin + "/black-friday?utm_source=theadminbar&utm_medium=referral&utm_campaign=black_friday_2026");
       await page.screenshot({ path: path.join(artifactDir, "landing-desktop.png"), fullPage: true });
       await page.setViewportSize({ width: 375, height: 812 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await page.screenshot({ path: path.join(artifactDir, "landing-mobile.png"), fullPage: true });
-      await page.getByRole("link", { name: "Apply for three months of Pro", exact: true }).first().click();
+      await page.getByRole("link", { name: "Apply for 3 Free Months", exact: true }).first().click();
       await page.keyboard.press("Tab");
       assert.ok(await page.evaluate(() => document.activeElement !== document.body));
       assert.equal(await page.locator('[name="terms"]').isChecked(), false);
@@ -238,6 +243,14 @@ test("Black Friday isolated browser and database QA", { skip: !enabled, timeout:
       assert.equal(await page.getByText("Look for a confirmation email", { exact: false }).count(), 0);
       const record = (await db.query("select * from promotion_applications where email=$1", [data.email])).rows[0];
       assert.equal(record.status, "submitted");
+      const tab = { utm_source: "theadminbar", utm_medium: "referral", utm_campaign: "black_friday_2026" };
+      assert.deepEqual(record.attribution, tab);
+      assert.deepEqual(funnelRequests.map(request => request.event), ["bf26_landing_view", "bf26_form_start"]);
+      for (const request of funnelRequests) {
+        assert.deepEqual(Object.keys(request).sort(), ["attribution", "consent", "event", "id"]);
+        assert.deepEqual(request.attribution, tab);
+      }
+      assert.deepEqual((await db.query("select distinct source from promotion_aggregate_events")).rows, [{ source: "The Admin Bar" }]);
       assert.equal(record.allocation, null);
       assert.equal((await db.query("select count(*)::int n from promotion_email_outbox")).rows[0].n, 2);
       const duplicate = await session.request.post(app.origin + "/api/promotions/black-friday/applications", { headers: { Origin: app.origin }, data: { ...data, requestId: randomUUID() } });
@@ -295,6 +308,9 @@ test("Black Friday isolated browser and database QA", { skip: !enabled, timeout:
       const today = new Date().toISOString().slice(0, 10);
       const dashboard = await campaignDashboard("2026-11-09", today, { query: (text: string, values?: unknown[]) => db.query(text, values), list: store.list });
       for (const name of events) assert.equal(dashboard.totals[name], 1, name);
+      for (const name of ["bf26_landing_view", "bf26_form_start", "bf26_form_submit"]) {
+        assert.equal(dashboard.sources["The Admin Bar"]?.[name], 1, name);
+      }
       assert.ok((await db.query("select 1 from promotion_audit_log where application_id=$1 and action='approve'", [record.id])).rowCount);
       await adminPage.goto(app.origin + "/app/admin/promotions/black-friday-2026/dashboard");
       await adminPage.getByRole("heading", { name: "Black Friday 2026 funnel", exact: true }).waitFor();
@@ -354,7 +370,7 @@ test("Black Friday isolated browser and database QA", { skip: !enabled, timeout:
       const session = await context();
       const page = await session.newPage();
       await page.goto(app.origin + "/black-friday");
-      assert.equal(await page.getByRole("link", { name: "Apply for three months of Pro", exact: true }).count(), 0);
+      assert.equal(await page.getByRole("link", { name: "Apply for 3 Free Months", exact: true }).count(), 0);
       await page.getByText("All ten places have been allocated.", { exact: true }).waitFor();
       await page.screenshot({ path: path.join(artifactDir, "closed-offer.png"), fullPage: true });
       await page.goto(app.origin + "/black-friday/apply");
@@ -388,7 +404,7 @@ test("expired offer has no interactive application CTA", { skip: !process.env.BF
     await page.route("**/*", route => new URL(route.request().url()).origin === process.env.BF26_EXPIRY_ORIGIN ? route.continue() : route.abort());
     await page.goto(process.env.BF26_EXPIRY_ORIGIN + "/black-friday");
     await page.getByText("Applications are currently closed.", { exact: true }).first().waitFor();
-    assert.equal(await page.getByRole("link", { name: "Apply for three months of Pro", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("link", { name: "Apply for 3 Free Months", exact: true }).count(), 0);
     await page.screenshot({ path: path.join(process.env.BF26_QA_ARTIFACT_DIR!, "expired-offer.png"), fullPage: true });
     await page.goto(process.env.BF26_EXPIRY_ORIGIN + "/black-friday/apply");
     await page.getByRole("status").filter({ hasText: "Applications are currently closed" }).waitFor();

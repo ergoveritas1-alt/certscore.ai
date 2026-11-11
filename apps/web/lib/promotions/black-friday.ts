@@ -62,6 +62,7 @@ export function sourceGroup(a: Attribution) {
   if (/^(linkedin|linkedin.com|www.linkedin.com)$/.test(source)) return "LinkedIn";
   if (/^(x|twitter|x.com|t.co|twitter.com)$/.test(source)) return "X";
   if (/^(termageddon|termageddon.com|www.termageddon.com)$/.test(source)) return "Termageddon";
+  if (source === "theadminbar" || source === "theadminbar.com" || source === "www.theadminbar.com") return "The Admin Bar";
   if (/email|newsletter/.test(a.utm_medium ?? source)) return "Email";
   return source ? "Other" : "Direct/unknown";
 }

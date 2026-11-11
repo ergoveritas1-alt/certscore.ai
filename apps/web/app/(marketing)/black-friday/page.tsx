@@ -23,8 +23,8 @@ const workflows = [
   },
   {
     audience: "Web agencies",
-    title: "Add a privacy review to site handoff",
-    description: "Start with a homepage and a key conversion page. Give the client a short list of observed trackers and controls, then agree on what to recheck after the next release."
+    title: "Add privacy checks to handoffs and care plans",
+    description: "Review a new client’s homepage and a key conversion page. Share the trackers and controls you observed, then recheck after a banner, plugin or tag update."
   },
   {
     audience: "Web developers / marketers",
@@ -86,7 +86,7 @@ function ApplyLink({ open }: { open: boolean }) {
   if (!open) return null;
   return (
     <Link href="/black-friday/apply" className={applyClass}>
-      Apply for three months of Pro <span aria-hidden="true">→</span>
+      Apply for 3 Free Months <span aria-hidden="true">→</span>
     </Link>
   );
 }
@@ -103,22 +103,23 @@ export default async function BlackFridayPage() {
       <CampaignView />
 
       <section className="overflow-hidden bg-[#081a3b] bg-[radial-gradient(ellipse_at_top_right,rgba(37,99,235,0.22),transparent_65%)] text-white">
-        <div className="mx-auto grid max-w-7xl gap-10 px-6 py-14 sm:gap-14 sm:px-10 sm:py-20 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:py-24">
+        <div className="mx-auto grid max-w-7xl gap-10 px-6 py-9 sm:gap-14 sm:px-10 sm:py-20 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:py-24">
           <div>
-            <p className="mb-6 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-[#93c5fd]">
+            <p className="mb-4 font-mono sm:mb-6 text-xs font-semibold uppercase tracking-[0.16em] text-[#93c5fd]">
               Black Friday 2026
             </p>
-            <h1 className="max-w-[12ch] text-[clamp(2.75rem,6vw,5rem)] font-semibold leading-[1.02] tracking-[-0.055em]">
+            <h1 className="max-w-[12ch] text-[clamp(2.25rem,6vw,5rem)] font-semibold leading-[1.02] tracking-[-0.055em]">
               Find website privacy blind spots.
             </h1>
-            <p className="mt-6 max-w-lg text-lg leading-8 text-[#c8d8f3]">
-              See which trackers load, inspect supported consent choices, and turn scan evidence into clear next steps for your clients or team.
+            <p className="mt-4 max-w-lg text-base leading-7 sm:mt-6 sm:text-lg sm:leading-8 text-[#c8d8f3]">
+              CertScore.ai scans client websites for cookies, trackers and privacy disclosures. Share reports that show what the scan observed.
             </p>
-            <p className="mt-6 max-w-lg border-l-2 border-[#60a5fa] pl-4 text-base leading-7 text-[#edf4ff]">
-              <strong className="font-semibold text-white">Three months of CertScore.ai Pro at no cost.</strong>{" "}
-              Ten places for agencies, developers, marketers, consultancies, law firms and data privacy officers (DPOs).
+            <p className="mt-4 max-w-lg border-l-2 sm:mt-6 border-[#60a5fa] pl-4 text-base leading-7 text-[#edf4ff]">
+              <strong className="font-semibold text-white">3 months of Pro free ($1,200 value).</strong>{" "}
+              Limited to 10 approved businesses.
             </p>
-            <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">
+            {open && <p className="mt-3 max-w-lg text-sm leading-6 text-[#edf4ff]">For qualifying web agencies, privacy law firms and other eligible businesses. We manually review applications. No credit card required.</p>}
+            <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
               <ApplyLink open={open} />
               <a
                 href={AUTHENTIC_SAMPLE_REPORT_URL}
@@ -131,7 +132,7 @@ export default async function BlackFridayPage() {
               </a>
             </div>
             <p className="mt-4 text-sm leading-6 text-[#b9cbea]">
-              {open ? "Apply by December 2, 2026. No credit card or automatic paid renewal." : filled ? "All ten places have been allocated." : "Applications are currently closed."}
+              {open ? "Apply by December 2, 2026. No automatic paid renewal." : filled ? "All ten places have been allocated." : "Applications are currently closed."}
             </p>
           </div>
 
@@ -156,6 +157,7 @@ export default async function BlackFridayPage() {
                 </div>
                 <a href={AUTHENTIC_SAMPLE_REPORT_URL} target="_blank" rel="noreferrer" aria-label="Explore the CertScore.ai sample report" data-analytics-cta-type="sample_report" className="block p-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-600 sm:p-3">
                   <Image src="/promotions/black-friday-2026/report-executive-overview.jpg" alt="Actual CertScore.ai sample report with review priorities, consent controls and captured resource counts." width={1232} height={467} unoptimized className="h-auto w-full" />
+                  <span className="block px-2 py-2 text-sm font-semibold text-[#1d4ed8] underline">Open full sample report <span aria-hidden="true">↗</span></span>
                 </a>
                 <div className="grid grid-cols-3 divide-x divide-[#dbe5f3] border-t border-[#dbe5f3] bg-[#f5f8ff] text-[#21477e]">
                   <div className="flex flex-col items-center gap-2 px-1 py-4 text-center text-[11px] font-semibold sm:text-xs">
@@ -176,7 +178,8 @@ export default async function BlackFridayPage() {
             <div className="absolute -right-2 -top-3 rotate-[6deg] rounded-2xl border border-white/40 bg-[#7dd3fc] px-4 py-3 text-center text-[#082349] shadow-[0_10px_35px_rgba(0,0,0,0.25)] sm:-right-3 sm:px-5 sm:py-4">
               <p className="text-[10px] font-bold uppercase tracking-widest">Black Friday offer</p>
               <p className="mt-1 text-3xl font-bold leading-none tracking-tight sm:text-4xl">3 months</p>
-              <p className="mt-1 text-base font-bold">Pro, free upon review</p>
+              <p className="mt-1 text-base font-bold">of Pro free</p>
+              <p className="mt-1 text-xs font-bold uppercase tracking-wide">Approval required</p>
             </div>
             <p className="mt-6 text-center text-sm font-medium text-[#b9cbea]">{pro.monthlyPageScanLabel} · Scan history included</p>
           </aside>
@@ -190,7 +193,7 @@ export default async function BlackFridayPage() {
               See the evidence your team can work with.
             </h2>
             <p className="mt-4 text-lg leading-8 text-[#475b78]">
-              Screenshots from the sample report. Open either capture at full size to explore the detail.
+              See what CertScore.ai found on a real website. Reports can show what loads before consent, after Reject or with Global Privacy Control (GPC), where supported. Open either capture at full size to read the details.
             </p>
           </div>
         </div>

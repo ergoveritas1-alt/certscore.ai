@@ -26,7 +26,7 @@ export default async function ApplyPage() {
           <div>
             <p className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-[#315d9b]">Black Friday 2026</p>
             <h1 className="mt-4 max-w-md text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
-              Apply for three months of Pro.
+              Apply for 3 free months of Pro.
             </h1>
             <p className="mt-5 max-w-md text-lg leading-8 text-[#475b78]">
               Tell us about your organization and the website privacy work you’d like to use CertScore.ai for.
@@ -34,7 +34,7 @@ export default async function ApplyPage() {
             <div className="mt-6 max-w-md rounded-xl border border-[#dbe5f3] bg-[#eff5ff] p-5">
               <h2 className="font-semibold">What happens next</h2>
               <p className="mt-2 text-sm leading-6 text-[#475b78]">
-                We review complete applications in submission order. If approved, you’ll receive a personal link to activate within 14 days.
+                We manually review complete applications in submission order. If approved, you’ll receive a personal link to activate within 14 days.
               </p>
             </div>
           </div>
