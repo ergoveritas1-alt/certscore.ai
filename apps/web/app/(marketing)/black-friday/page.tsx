@@ -184,7 +184,7 @@ export default async function BlackFridayPage() {
             </p>
           </div>
           <a href={AUTHENTIC_SAMPLE_REPORT_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 shrink-0 items-center gap-2 text-sm font-semibold text-[#235b41] underline underline-offset-4">
-            Explore the full sample report <span aria-hidden="true">↗</span>
+            Explore a sample report <span aria-hidden="true">↗</span>
           </a>
         </div>
         <div className="space-y-8">
