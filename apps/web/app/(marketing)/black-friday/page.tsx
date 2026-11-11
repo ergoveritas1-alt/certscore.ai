@@ -270,14 +270,11 @@ export default async function BlackFridayPage() {
           <div>
             <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Pick a site for your first review.</h2>
             <p className="mt-4 max-w-xl leading-7 text-[#d4e3dc]">
-              Solo developers, small firms and in-house privacy teams are welcome. Tell us about your organization and what you’d like to review. You can apply without creating an account or entering payment details.
+              Solo developers, DPOs, small firms and in-house privacy teams are welcome. Tell us about your organization and what you’d like to review. You can apply without entering payment details.
             </p>
           </div>
           <div className="lg:border-l lg:border-white/20 lg:pl-9">
             <p className="text-base font-semibold">Three calendar months of Pro. A $1,200 value.</p>
-            <p className="mt-2 text-sm leading-6 text-[#d4e3dc]">
-              We review complete applications in submission order. Approved applicants have 14 days to activate.
-            </p>
             {open && <div className="mt-5"><ApplyLink open={open} /></div>}
           </div>
         </div>
