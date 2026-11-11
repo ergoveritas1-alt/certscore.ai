@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { getPlanDefinition } from "@website-signal-risk-scanner/shared";
 import { SiteHeader } from "../../../components/layout/site-header";
@@ -169,6 +170,56 @@ export default async function BlackFridayPage() {
               {pro.monthlyPageScanLabel} · Scan history included
             </div>
           </aside>
+        </div>
+      </section>
+
+      <section aria-labelledby="report-preview-title" className="mx-auto max-w-7xl px-6 pt-14 sm:px-10 sm:pt-20">
+        <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <h2 id="report-preview-title" className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+              See the evidence your team can work with.
+            </h2>
+            <p className="mt-4 text-lg leading-8 text-[#425750]">
+              Screenshots from the sample report. Open either capture at full size to explore the detail.
+            </p>
+          </div>
+          <a href={AUTHENTIC_SAMPLE_REPORT_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 shrink-0 items-center gap-2 text-sm font-semibold text-[#235b41] underline underline-offset-4">
+            Explore the full sample report <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+        <div className="space-y-8">
+          <figure className="overflow-hidden rounded-xl border border-[#d8e2db] bg-white shadow-sm">
+            <figcaption className="border-b border-[#d8e2db] px-5 py-5 sm:px-7">
+              <h3 className="text-xl font-semibold">Executive overview</h3>
+              <p className="mt-2 leading-7 text-[#425750]">See review priorities, the consent platform and how much evidence the scan captured.</p>
+            </figcaption>
+            <a href="/promotions/black-friday-2026/report-executive-overview.jpg" target="_blank" rel="noreferrer" aria-label="Open the executive overview screenshot at full size" className="block p-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#235b41] sm:p-5">
+              <Image
+                src="/promotions/black-friday-2026/report-executive-overview.jpg"
+                alt="CertScore.ai executive overview showing priority findings, consent controls and captured resource counts."
+                width={1232}
+                height={467}
+                unoptimized
+                className="h-auto w-full"
+              />
+            </a>
+          </figure>
+          <figure className="overflow-hidden rounded-xl border border-[#d8e2db] bg-white shadow-sm">
+            <figcaption className="border-b border-[#d8e2db] px-5 py-5 sm:px-7">
+              <h3 className="text-xl font-semibold">Services &amp; Resources</h3>
+              <p className="mt-2 leading-7 text-[#425750]">Inspect detected services, purpose classifications and policy disclosure matches alongside the retained resource inventory.</p>
+            </figcaption>
+            <a href="/promotions/black-friday-2026/report-services-resources.jpg" target="_blank" rel="noreferrer" aria-label="Open the services and resources screenshot at full size" className="block p-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#235b41] sm:p-5">
+              <Image
+                src="/promotions/black-friday-2026/report-services-resources.jpg"
+                alt="CertScore.ai Services and Resources table showing detected services, resource counts, purposes, policy disclosure matches and domains."
+                width={1190}
+                height={651}
+                unoptimized
+                className="h-auto w-full"
+              />
+            </a>
+          </figure>
         </div>
       </section>
 
