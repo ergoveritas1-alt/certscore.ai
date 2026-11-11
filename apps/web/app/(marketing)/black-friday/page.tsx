@@ -176,7 +176,7 @@ export default async function BlackFridayPage() {
             <div className="absolute -right-2 -top-3 rotate-[6deg] rounded-2xl border border-white/40 bg-[#7dd3fc] px-4 py-3 text-center text-[#082349] shadow-[0_10px_35px_rgba(0,0,0,0.25)] sm:-right-3 sm:px-5 sm:py-4">
               <p className="text-[10px] font-bold uppercase tracking-widest">Black Friday offer</p>
               <p className="mt-1 text-3xl font-bold leading-none tracking-tight sm:text-4xl">3 months</p>
-              <p className="mt-1 text-base font-bold">Pro, free if approved</p>
+              <p className="mt-1 text-base font-bold">Pro, free upon review</p>
             </div>
             <p className="mt-6 text-center text-sm font-medium text-[#b9cbea]">{pro.monthlyPageScanLabel} · Scan history included</p>
           </aside>
