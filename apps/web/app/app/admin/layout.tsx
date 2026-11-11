@@ -16,7 +16,8 @@ const navItems = [
   { href: "/app/admin/mcp", label: "MCP operations" },
   { href: "/app/admin/marketplace-browser", label: "Browser Marketplace" },
   { href: "/app/admin/analytics", label: "Events" },
-  { href: "/app/admin/monitor-requests", label: "Monitor Requests" }
+  { href: "/app/admin/monitor-requests", label: "Monitor Requests" },
+  { href: "/app/admin/promotions/black-friday-2026", label: "Black Friday 2026" }
 ] as const;
 
 export default async function AdminLayout({ children }: AdminLayoutProps) {

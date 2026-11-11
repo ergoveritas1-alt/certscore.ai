@@ -41,6 +41,7 @@ export function hasAnalyticsConsent() {
     return false;
   }
 
+  if (window.location.pathname === "/black-friday/activate" || (window.location.pathname.startsWith("/black-friday") && (navigator as Navigator & {globalPrivacyControl?:boolean}).globalPrivacyControl)) return false;
   return window.certscoreAnalyticsConsent === "granted" || getStoredAnalyticsConsent() === "granted";
 }
 

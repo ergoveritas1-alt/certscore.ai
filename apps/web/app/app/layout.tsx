@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { getPromotionalEntitlement } from "../../server/promotions/entitlement";
 import { BrowserShell } from "../../components/marketplace-browser/shell";
 import { redirect } from "next/navigation";
 import { AuthenticatedPageConfirmation } from "../../components/analytics/authenticated-page-confirmation";
@@ -70,6 +72,7 @@ export default async function AppLayout({ children }: AppLayoutProps) {
     if (route && !/^\/app\/(?:scans|scanso|scanso2)\//.test(route)) redirect("/marketplace/browser");
     return <BrowserShell>{children}</BrowserShell>;
   }
+  const promotion = organization ? await getPromotionalEntitlement(organization.id) : null;
   const canManageCompany = isPlatformAdmin;
   const hasWorkspace = Boolean(organization && membership);
 
@@ -81,6 +84,10 @@ export default async function AppLayout({ children }: AppLayoutProps) {
       plan={organization?.plan ?? "free"}
       userEmail={user.email ?? "Unknown user"}
     >
+      {promotion && <aside className="mb-5 rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950" aria-label="Promotional Pro access">
+        {promotion.active ? <>Complimentary Pro through {promotion.endsAt.toLocaleDateString("en-US",{timeZone:"UTC"})} (UTC). {promotion.used} / 1,000 page scans reserved this entitlement period. No automatic paid renewal.</> : <>Your complimentary Pro access has ended. Your account remains nonpaid.</>}
+        {" "}<Link className="underline" href="/app/modify-plan">Choose a paid plan</Link>
+      </aside>}
       {confirmation ? <AuthenticatedPageConfirmation {...confirmation} /> : null}
       {!hasWorkspace && !isPlatformAdmin ? (
         <div className="mx-auto w-full max-w-2xl px-6 py-16">

@@ -287,7 +287,7 @@ export async function ensureOrganizationForUser(input: {
 export async function findOrganizationById(organizationId: string): Promise<AppOrganizationRow> {
   try {
     const row = await queryOne<AppOrganizationRow>(
-      `select id, name, slug, plan, plan_status, created_at, updated_at
+      `select id, name, slug, promotion_effective_plan(id,plan) as plan, plan_status, created_at, updated_at
          from organizations
         where id = $1`,
       [organizationId],

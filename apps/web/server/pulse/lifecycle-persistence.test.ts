@@ -92,7 +92,7 @@ test("full scans validate DNS before any scan creation path", async () => {
   ]) {
     assert.ok(routeSource.lastIndexOf(creationCall) > dnsIndex, `${creationCall} must remain behind DNS preflight`);
   }
-  assert.match(routeSource, /code: "domain_not_found"/);
+  assert.match(routeSource, /failedDnsStatus\.status\.retryable \? "dns_unavailable" : "domain_not_found"/);
 });
 
 test("scan creation primitives repeat DNS validation immediately before queueing", async () => {
@@ -103,14 +103,16 @@ test("scan creation primitives repeat DNS validation immediately before queueing
   ]);
 
   const anonymousDns = anonymousSource.indexOf("await requireDomainDns(input.hostname)");
-  assert.ok(anonymousDns > anonymousSource.indexOf('reuseDecision?.action === "reuse"'));
+  assert.ok(anonymousDns > 0);
+  assert.ok(anonymousDns < anonymousSource.indexOf('reuseDecision?.action === "reuse"'));
   assert.ok(anonymousDns < anonymousSource.indexOf(": await claimAnonymousScanDailyQuota"));
   assert.ok(anonymousDns < anonymousSource.indexOf("scan = await createQueuedFullScan"));
-  assert.match(anonymousSource, /resolutionMode: "dns_preflight_rejected"/);
+  assert.ok(anonymousDns < anonymousSource.indexOf("const domain = await findOrCreateAnonymousPreviewDomain"));
 
   const workspaceDns = workspaceSource.indexOf("const dnsStatus = await checkDomainDns(domainRecord.domain.hostname)");
-  assert.ok(workspaceDns > workspaceSource.indexOf('reuseDecision?.action === "reuse"'));
-  assert.ok(workspaceDns < workspaceSource.indexOf("if (input.enforceMonthlyUsageLimit)"));
+  assert.ok(workspaceDns > 0);
+  assert.ok(workspaceDns < workspaceSource.indexOf('reuseDecision?.action === "reuse"'));
+  assert.ok(workspaceDns < workspaceSource.indexOf("if (input.enforceMonthlyUsageLimit"));
   assert.ok(workspaceDns < workspaceSource.indexOf("scan = await createQueuedFullScan"));
   assert.match(workspaceSource, /resolutionMode: "dns_preflight_rejected"/);
 

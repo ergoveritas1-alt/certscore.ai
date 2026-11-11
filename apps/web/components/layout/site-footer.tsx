@@ -64,10 +64,11 @@ const companyLegalLinks = [
 
 type SiteFooterProps = {
   hideDisclaimer?: boolean;
+  highContrast?: boolean;
   wide?: boolean;
 };
 
-export function SiteFooter({ hideDisclaimer = false, wide = true }: SiteFooterProps = {}) {
+export function SiteFooter({ hideDisclaimer = false, wide = true, highContrast = false }: SiteFooterProps = {}) {
   const certscoreGptUrl = getCertScoreGptUrl();
   const sections = footerSections.map((section) =>
     section.title === "Resources"
@@ -87,7 +88,7 @@ export function SiteFooter({ hideDisclaimer = false, wide = true }: SiteFooterPr
       : section
   );
   return (
-    <footer className="border-t border-slate-200 bg-white">
+    <footer className={`border-t border-slate-200 bg-white ${highContrast ? "[&_.text-slate-400]:text-slate-600" : ""}`}>
       <div className={`mx-auto flex flex-col gap-6 py-8 text-sm text-slate-500 ${wide ? "max-w-[90rem] px-5 lg:px-10" : "max-w-6xl px-4 sm:px-6"}`}>
         {!hideDisclaimer ? (
           <p className="max-w-none text-xs leading-5 text-slate-500 lg:whitespace-nowrap">

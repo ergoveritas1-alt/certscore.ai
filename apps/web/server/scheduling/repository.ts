@@ -37,7 +37,7 @@ export type ScheduledMonitoringCandidateFilter = {
 export async function loadSchedulingOrganization(organizationId: string): Promise<SchedulingOrganizationRow | null> {
   try {
     return await queryOne<SchedulingOrganizationRow>(
-      `select id, plan
+      `select id, promotion_effective_plan(id,plan) as plan
          from organizations
         where id = $1`,
       [organizationId],
@@ -96,7 +96,7 @@ export async function loadScheduledMonitoringDomainCandidates(input: ScheduledMo
           domains.organization_id,
           domains.scan_frequency,
           domains.max_pages_override,
-          organizations.plan as organization_plan,
+          promotion_effective_plan(organizations.id,organizations.plan) as organization_plan,
           organization_settings.default_scan_frequency as settings_frequency,
           coalesce(scan_state.active_scan_exists, false) as active_scan_exists,
           scan_state.last_completed_at

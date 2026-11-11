@@ -14,6 +14,7 @@ const staticPaths = [
   "/what-is-certscore",
   "/press",
   "/pricing",
+  "/black-friday",
   "/monitor-site",
   "/guides",
   "/guides/test-global-privacy-control",
