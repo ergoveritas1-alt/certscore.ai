@@ -87,7 +87,7 @@ function ApplyLink({ open }: { open: boolean }) {
   if (!open) return null;
   return (
     <Link href="/black-friday/apply" className={applyClass}>
-      Apply for 3 Free Months <span aria-hidden="true">→</span>
+      Get 3 Months Free <span aria-hidden="true">→</span>
     </Link>
   );
 }
