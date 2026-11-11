@@ -5,7 +5,7 @@ export const CAMPAIGN_START = "2026-11-10T08:00:00.000Z";
 // Exclusive midnight boundary: includes all of December 2 in Pacific time.
 export const CAMPAIGN_END = "2026-12-03T08:00:00.000Z";
 export const CAPACITY = 10;
-export const TERMS_VERSION = "bf26.2026-11-10.v2";
+export const TERMS_VERSION = "bf26.2026-11-10.v3";
 export const BUSINESS_TYPES = ["Web design/development agency", "Digital marketing agency", "Privacy consultancy", "Law firm", "Other"] as const;
 export const SITE_COUNTS = ["0–5", "6–20", "21–50", "51+"] as const;
 export const STATUSES = ["submitted", "under_review", "approved", "rejected", "invited", "activated", "expired"] as const;

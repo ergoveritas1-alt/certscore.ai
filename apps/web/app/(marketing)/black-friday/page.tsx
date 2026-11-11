@@ -68,7 +68,7 @@ const regulatorySources = [
 const questions = [
   {
     title: "Will I be charged when it ends?",
-    answer: "No. A credit card is not required and this promotion does not create a paid subscription. Pro access ends automatically unless you explicitly purchase a plan."
+    answer: "You can activate the offer without providing billing details, and activation does not create a paid subscription. Pro access ends automatically unless you explicitly purchase a plan."
   },
   {
     title: "What is included?",
@@ -76,7 +76,7 @@ const questions = [
   },
   {
     title: "Does a scan certify compliance?",
-    answer: "No. CertScore.ai provides technical observations and evidence for review. Capture coverage varies by site and workflow. Your team or counsel determines which rules apply and how to respond."
+    answer: "CertScore.ai records technical observations for your review. Capture coverage varies by site and workflow. Your team or counsel determines which rules apply and how to respond."
   }
 ];
 
@@ -228,9 +228,9 @@ export default async function BlackFridayPage() {
         <h2 id="terms-title" className="text-2xl font-semibold tracking-tight">Promotional terms &amp; privacy</h2>
         <div className="mt-4 space-y-4 text-sm leading-7 text-[#425750]">
           <p>Offer begins November 10, 2026 when deployed, and closes December 2, 2026, or when all ten places have been allocated. The first ten eligible, manually approved businesses receive three consecutive calendar months of Pro. Complete applications are considered in submission order.</p>
-          <p>Eligible applicants are active agencies, consultancies, law firms or other relevant client-service businesses with a verifiable website and professional identity. No minimum company size applies. Existing paid subscribers are excluded. One allocation is permitted per business or commonly controlled business group. Related entities must be disclosed during review. Approval is subject to verification.</p>
+          <p>Eligible applicants are active agencies, consultancies, law firms or other relevant client-service businesses with a verifiable website and professional identity. No minimum company size applies. Existing paid subscribers are excluded. One allocation is permitted per business or commonly controlled business group.</p>
           <p>Activate within 14 days of approval, including if the application window has closed. Your entitlement starts at activation and ends three calendar months later. Each monthly anniversary begins a new 1,000-page allowance. Month-end anniversaries are clipped to that month’s last day. Standard usage and rate restrictions apply. The current Pro rate is $400 per month and the promotional value is $1,200. No payment or credit card is required, and there is no automatic paid renewal.</p>
-          <p>We retain application details to review eligibility, administer the promotion and communicate transactional updates. Marketing permission is separate and optional. Anonymous aggregate campaign views and form starts do not count unique visitors. Optional source attribution respects analytics consent and GPC.</p>
+          <p>We retain application details to review eligibility, administer the promotion and communicate transactional updates.</p>
           <p>CertScore.ai supplies technical observations and evidence for review. It does not provide legal advice or compliance certification. General <Link className="underline" href="/terms">Terms</Link>, <Link className="underline" href="/privacy">Privacy Policy</Link> and <Link className="underline" href="/pricing">Pro plan inclusions</Link> apply.</p>
         </div>
       </section>
