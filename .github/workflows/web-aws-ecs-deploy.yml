@@ -645,6 +645,7 @@ jobs:
       - name: Apply database migrations from target web image
         if: ${{ !inputs.stage_only }}
         env:
+          BF26_EMAIL_DELIVERY: ${{ vars.CERTSCORE_BF26_EMAIL_DELIVERY }}
           STRIPE_PRICE_STARTER_MONTHLY_CURRENT: ${{ vars.STRIPE_PRICE_STARTER_MONTHLY_CURRENT }}
           STRIPE_PRICE_PRO_MONTHLY_CURRENT: ${{ vars.STRIPE_PRICE_PRO_MONTHLY_CURRENT }}
         run: |
@@ -712,6 +713,17 @@ jobs:
             mv billing-task-definition.json target-task-definition.json
           fi
 
+          if [[ -n "$BF26_EMAIL_DELIVERY" ]]; then
+            [[ "$BF26_EMAIL_DELIVERY" =~ ^[01]$ ]]
+            jq --arg delivery "$BF26_EMAIL_DELIVERY" '
+              .containerDefinitions[0].environment |= (
+                map(select(.name != "CERTSCORE_BF26_EMAIL_DELIVERY"))
+                + [{name:"CERTSCORE_BF26_EMAIL_DELIVERY",value:$delivery}]
+              )
+            ' target-task-definition.json > campaign-task-definition.json
+            mv campaign-task-definition.json target-task-definition.json
+          fi
+
           node_types=(node --import tsx)
           if [[ -n "$STAGED_RUN_ID" ]]; then node_types=(node --experimental-strip-types); fi
           "${node_types[@]}" scripts/configure-marketplace-light.ts target-task-definition.json "${{ inputs.marketplace_light || 'preserve' }}"
@@ -742,6 +754,7 @@ jobs:
             .family = (.family + "-materializer")
             | .cpu = $cpu
             | .memory = $memory
+            | .containerDefinitions[0].environment |= map(select(.name != "CERTSCORE_BF26_EMAIL_DELIVERY"))
             | .containerDefinitions[0].environment |= map(
                 if .name == "CERTSCORE_AUDIT_PRIVACY_FORM_PROJECTION_ENABLED"
                 then .value = $receipts else . end

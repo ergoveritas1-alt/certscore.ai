@@ -859,7 +859,7 @@ The next existing scheduled refresh runs `verify-audit-receipt-delivery.ts` with
 that real release receipt and sealed dashboard, producing a separate delivery
 receipt. No post-release reportable scans stays pending; missing generation-bound
 policy receipts fails. Do not issue another query to fill the verification gap.
-The current explicit owner deployment hold remains active.
+The owner resumed deployment on November 10, 2026.
 
 Current implementation cost is $0. Forward comparison metadata is capped at
 512 bytes per materialization (at most 51.2 MB at 100,000 scans before compression)
