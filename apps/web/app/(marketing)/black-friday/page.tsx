@@ -5,24 +5,236 @@ import { SiteFooter } from "../../../components/layout/site-footer";
 import { CampaignView } from "../../../components/promotions/campaign-form";
 import { createPageMetadata } from "../../../lib/seo";
 import { campaignStore } from "../../../server/promotions/repository";
-export const dynamic="force-dynamic";
-export const metadata=createPageMetadata({title:"Black Friday 2026 — 3 Months of Pro, Free",description:"Ten qualified agencies and firms can receive three months of CertScore.ai Pro free. Apply by December 2, 2026. No credit card or automatic renewal.",path:"/black-friday"});
+
+export const dynamic = "force-dynamic";
+export const metadata = createPageMetadata({
+  title: "Build a Client Privacy Review | Black Friday 2026",
+  description: "Give client sites a privacy baseline with three months of CertScore.ai Pro at no cost. Apply by December 2, 2026.",
+  path: "/black-friday"
+});
+
+const reviewSteps = [
+  {
+    title: "Capture a baseline",
+    description: "Record cookies, third-party requests and visible privacy controls on a key client page."
+  },
+  {
+    title: "Review the choice paths",
+    description: "Inspect what was observed with Global Privacy Control (GPC) or after Reject where the scan supports it."
+  },
+  {
+    title: "Retest after a change",
+    description: "Rescan the same page after a banner, tag or vendor update and compare the evidence."
+  }
+];
+
+const workflows = [
+  {
+    audience: "Web agencies",
+    title: "Add a privacy review to site handoff",
+    description: "Start with a homepage and a key conversion page. Give the client a short list of observed trackers and controls, then agree on what to recheck after the next release."
+  },
+  {
+    audience: "Web developers",
+    title: "Give consent bugs a reproduction path",
+    description: "When a tag or banner changes, compare scans of the same page and supported choice. Use the recorded requests and controls to narrow down what to reproduce and retest."
+  },
+  {
+    audience: "Law firms and privacy advisors",
+    title: "Put website evidence beside the policy",
+    description: "Read the client’s disclosures alongside what a scan observed. Use gaps and unknowns to ask the client or their developers more specific questions."
+  }
+];
+
+const regulatorySources = [
+  {
+    jurisdiction: "California",
+    title: "Browser opt-out signals",
+    description: "California’s Opt Me Out Act takes effect January 1, 2027. It requires covered browser providers to offer a configurable signal for opting out of sale or sharing.",
+    nextStep: "For client sites in scope, capture a baseline with the signal enabled so the team has evidence to revisit when its consent setup changes.",
+    href: "https://cppa.ca.gov/pdf/20260101_ccpa_statute.pdf#page=19",
+    linkLabel: "California Civil Code § 1798.136"
+  },
+  {
+    jurisdiction: "United Kingdom",
+    title: "Cookies, pixels and similar technologies",
+    description: "The ICO finalized updated guidance in April 2026 covering storage and access technologies, including cookies and tracking pixels, after changes to the UK rules.",
+    nextStep: "Inventory what a client page loads and when. Bring that evidence to the review of which technologies need consent or may qualify for an exception.",
+    href: "https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guidance-on-the-use-of-storage-and-access-technologies/",
+    linkLabel: "ICO storage and access guidance"
+  }
+];
+
+const questions = [
+  {
+    title: "Will I be charged when it ends?",
+    answer: "No. A credit card is not required and this promotion does not create a paid subscription. Pro access ends automatically unless you explicitly purchase a plan."
+  },
+  {
+    title: "What is included?",
+    answer: "Standard Pro includes 1,000 page scans per monthly entitlement period. Existing scan limits and product usage restrictions apply. Unused scans do not roll over. API access, white-label features and other Custom-only capabilities are not included."
+  },
+  {
+    title: "Does a scan certify compliance?",
+    answer: "No. CertScore.ai provides technical observations and evidence for review. Capture coverage varies by site and workflow. Your team or counsel determines which rules apply and how to respond."
+  }
+];
+
+const applyClass = "inline-flex min-h-12 items-center justify-center gap-3 rounded-lg bg-[#c5f2d4] px-6 py-3 text-sm font-semibold text-[#10241c] transition hover:bg-[#ddf9e6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9bdcb4]";
+
+function ApplyLink({ open }: { open: boolean }) {
+  if (!open) return null;
+  return (
+    <Link href="/black-friday/apply" className={applyClass}>
+      Apply for three months of Pro <span aria-hidden="true">→</span>
+    </Link>
+  );
+}
+
 export default async function BlackFridayPage() {
-  const availability=await campaignStore.availability().catch(()=>null),pro=getPlanDefinition("pro");
-  const filled=!!availability&&availability.allocated>=availability.capacity;
-  const cta=availability?.open?"Apply for Free Pro Access":filled?"All promotional places are filled":"Applications are currently closed";
-  const button="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-7 py-4 text-base font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-600";
-  const apply=<Link href="/black-friday/apply" className={button}>{cta}<span aria-hidden="true" className="ml-4">↗</span></Link>;
-  return <main className="min-h-screen bg-white text-slate-950"><SiteHeader/><CampaignView/>
-    <section className="relative overflow-hidden border-b border-indigo-100 bg-gradient-to-br from-slate-50 via-indigo-50 to-violet-100">
-      <div className="mx-auto grid max-w-6xl gap-12 px-6 py-16 lg:grid-cols-[1.3fr_0.8fr] lg:items-center lg:py-24">
-        <div><p className="mb-6 text-xs font-bold tracking-[0.2em] text-indigo-700">BLACK FRIDAY 2026 — LIMITED OFFER</p><h1 className="max-w-3xl text-5xl font-semibold leading-[1.06] tracking-tight sm:text-6xl">Get 3 Months of<br/><span className="text-indigo-600">CertScore.ai Pro.</span><br/>Free.</h1><p className="mt-7 text-xl font-medium">{filled?"All 10 promotional places have been filled.":"A $1,200 Value. Just 10 Spots Available."}</p><p className="mt-5 max-w-xl text-lg leading-8 text-slate-600">We're offering 10 qualified web agencies, digital agencies, privacy consultancies, and law firms three full months of CertScore.ai Pro at no cost.</p><div className="mt-8">{apply}</div><p className="mt-4 text-sm font-medium text-slate-600">No credit card. No commitment. Just three months of Pro access.</p></div>
-        <aside className="rounded-3xl border border-white bg-white/90 p-8 shadow-xl shadow-indigo-200/50"><div className="flex items-center justify-between"><span className="text-sm font-semibold tracking-widest text-indigo-600">YOUR PRO INVITATION</span><span aria-hidden="true" className="text-2xl">✦</span></div><p className="mt-9 text-7xl font-semibold tracking-tight">$0<span className="ml-2 text-base font-normal text-slate-500">for 3 months</span></p><p className="mt-3 text-slate-500">Normally {pro.priceLabel}. A $1,200 value.</p><hr className="my-7 border-slate-200"/><ul className="space-y-4 text-sm leading-6">{[pro.monthlyPageScanLabel,"California privacy and GDPR/ePrivacy review workflows","Cookie, tracker and privacy disclosure evidence","GPC and supported post-Reject observations","Standard Pro features. No automatic paid renewal."].map(t=><li key={t} className="flex gap-3"><span className="font-bold text-indigo-600" aria-hidden="true">✓</span>{t}</li>)}</ul><p className="mt-8 border-t border-slate-200 pt-5 text-xs leading-5 text-slate-500">Applications through December 2, 2026, or until ten qualified businesses are approved. Subject to verification.</p></aside>
-      </div>
-    </section>
-    <section className="mx-auto max-w-6xl px-6 py-16"><p className="text-sm font-semibold uppercase tracking-widest text-indigo-600">Evidence for your client conversations</p><h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">See what websites do.<br/>Bring more context to your review.</h2><p className="mt-5 max-w-3xl leading-8 text-slate-600">Use CertScore.ai to independently examine how your clients' websites handle cookies, trackers, consent controls, Global Privacy Control (GPC), and other privacy signals. Explore pre-consent tracking and post-Reject behavior where supported, with supporting evidence and coverage limitations.</p><div className="mt-10 grid gap-6 md:grid-cols-2">{[["For Web Agencies","Bring evidence into launch reviews and ongoing client work. Compare observable website behavior, investigate third-party services, and identify questions worth addressing with your clients."],["For Privacy Law Firms","Add technical observations to your advisory work. Review privacy disclosures alongside observed signals and consent behavior, while keeping legal judgment with your firm."]].map(([title,text])=><article key={title} className="rounded-2xl border border-slate-200 bg-slate-50 p-8"><h3 className="text-xl font-semibold">{title}</h3><p className="mt-4 leading-7 text-slate-600">{text}</p></article>)}</div></section>
-    <section className="bg-slate-950 px-6 py-14 text-white"><div className="mx-auto grid max-w-6xl gap-6 md:grid-cols-[1fr_2fr]"><h2 className="text-2xl font-semibold">A note from the founder</h2><div><p className="text-xl leading-9 text-slate-200">“We're inviting a small group of professional agencies and firms to put CertScore.ai to work and share candid feedback. We want to learn where the evidence helps your conversations—and where we can make it more useful.”</p><p className="mt-5 text-sm text-indigo-300">Ben · Founder, CertScore.ai</p></div></div></section>
-    <section className="mx-auto max-w-6xl px-6 py-16"><h2 className="text-3xl font-semibold">A simple application. A human review.</h2><ol className="mt-8 grid gap-6 md:grid-cols-3">{[["01","Apply","Tell us about your business and intended use. No account required."],["02","Get approved","We verify eligibility and consider complete applications in submission order."],["03","Activate Pro","Use your personal invitation within 14 days. Your three months begin at activation."]].map(([n,t,d])=><li key={n} className="border-t border-slate-200 pt-5"><p className="text-sm font-semibold text-indigo-600">{n}</p><h3 className="mt-3 text-xl font-semibold">{t}</h3><p className="mt-2 leading-7 text-slate-600">{d}</p></li>)}</ol><div className="mt-12 rounded-2xl bg-indigo-50 p-8"><h3 className="text-xl font-semibold">Small teams are welcome.</h3><p className="mt-3 leading-7 text-slate-600">You must represent an active, legitimate business providing relevant client services, with a verifiable company website and professional identity. Solo agencies and boutique firms can apply; there is no minimum company size. Existing free or trial users are eligible. Paid subscribers are not eligible. One allocation per business or commonly controlled business group.</p></div></section>
-    <section className="mx-auto max-w-3xl px-6 pb-16"><h2 className="mb-7 text-3xl font-semibold">A few things to know</h2>{[["Will I be charged when it ends?","No. A credit card is not required and this promotion does not create a paid subscription. Pro access ends automatically unless you explicitly purchase a plan."],["What is included?","Standard Pro includes 1,000 page scans per monthly entitlement period. Existing scan limits and product usage restrictions apply. Unused scans do not roll over. API access, white-label features and other Custom-only capabilities are not included. See the pricing page for canonical plan details."],["Does a scan certify compliance?","No. CertScore.ai provides technical observations and evidence for review. It does not provide legal advice or compliance certification. Capture coverage varies by site and supported workflow."]].map(([q,a])=><details key={q} className="border-b border-slate-200 py-5"><summary className="cursor-pointer font-semibold">{q}</summary><p className="mt-3 leading-7 text-slate-600">{a}</p></details>)}
-    <details id="terms" className="scroll-mt-8 border-b border-slate-200 py-5"><summary className="cursor-pointer font-semibold">Promotional terms &amp; privacy</summary><div className="mt-4 space-y-4 text-sm leading-7 text-slate-600"><p>Offer begins November 10, 2026 when deployed, and closes December 2, 2026, or when all ten places have been allocated. The first ten eligible, manually approved businesses receive three consecutive calendar months of Pro. Complete applications are considered in submission order.</p><p>Eligible applicants are active agencies, consultancies, law firms or other relevant client-service businesses with a verifiable website and professional identity. No minimum company size applies. Existing paid subscribers are excluded. One allocation is permitted per business or commonly controlled business group; related entities must be disclosed during review. Approval is subject to verification.</p><p>Activate within 14 days of approval, including if the application window has closed. Your entitlement starts at activation and ends three calendar months later. Each monthly anniversary begins a new 1,000-page allowance; month-end anniversaries are clipped to that month's last day. Standard usage and rate restrictions apply. The current Pro rate is $400/month and the promotional value is $1,200. No payment or credit card is required, and there is no automatic paid renewal.</p><p>We retain application details to review eligibility, administer the promotion and communicate transactional updates. Marketing permission is separate and optional. Anonymous aggregate campaign views and form starts are not unique visitor counts. Optional source attribution respects analytics consent and GPC.</p><p>CertScore.ai supplies technical observations and evidence, not legal advice or compliance certification. General <Link className="underline" href="/terms">Terms</Link>, <Link className="underline" href="/privacy">Privacy Policy</Link> and <Link className="underline" href="/pricing">Pro plan inclusions</Link> apply.</p></div></details><div className="mt-10">{apply}</div></section><SiteFooter highContrast/></main>;
+  const availability = await campaignStore.availability().catch(() => null);
+  const open = availability?.open ?? false;
+  const filled = availability !== null && availability.allocated >= availability.capacity;
+  const pro = getPlanDefinition("pro");
+
+  return (
+    <main className="min-h-screen bg-[#fbfaf6] text-[#152624]">
+      <SiteHeader />
+      <CampaignView />
+
+      <section className="bg-[#102522] text-white">
+        <div className="mx-auto grid max-w-7xl gap-10 px-6 py-14 sm:gap-14 sm:px-10 sm:py-20 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:py-24">
+          <div>
+            <p className="mb-6 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-[#bde9cd]">
+              Black Friday 2026
+            </p>
+            <h1 className="max-w-[12ch] text-[clamp(2.75rem,6vw,5rem)] font-semibold leading-[1.02] tracking-[-0.055em]">
+              Give client sites a privacy baseline.
+            </h1>
+            <p className="mt-6 max-w-lg text-lg leading-8 text-[#d4e3dc]">
+              See what loads before consent, inspect supported privacy choices, and bring evidence to your next client review.
+            </p>
+            <p className="mt-6 max-w-lg border-l-2 border-[#8fcaab] pl-4 text-base leading-7 text-[#e9f5ed]">
+              <strong className="font-semibold text-white">Three months of CertScore.ai Pro at no cost.</strong>{" "}
+              For ten approved agencies, developers, consultancies and law firms.
+            </p>
+            <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">
+              <ApplyLink open={open} />
+              <Link href="#client-workflows" className="inline-flex min-h-11 items-center text-sm font-semibold text-white underline decoration-[#8fcaab] underline-offset-4 hover:text-[#c5f2d4]">
+                See how teams can use it
+              </Link>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-[#c0d2c9]">
+              {open ? "Apply by December 2, 2026. No credit card or automatic paid renewal." : filled ? "All ten places have been allocated." : "Applications are currently closed."}
+            </p>
+          </div>
+
+          <aside aria-labelledby="review-plan-title" className="rounded-2xl border border-white/10 bg-[#f5f4e9] text-[#152624] shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
+            <div className="border-b border-[#d9dfd1] px-5 py-5 sm:px-7">
+              <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[#365e4d]">Example workflow</p>
+              <h2 id="review-plan-title" className="mt-2 text-2xl font-semibold tracking-tight">A client privacy review</h2>
+            </div>
+            <ol className="divide-y divide-[#d9dfd1] px-5 sm:px-7">
+              {reviewSteps.map(({ title, description }, index) => (
+                <li key={title} className="grid grid-cols-[2rem_1fr] gap-3 py-5 sm:gap-4">
+                  <span aria-hidden="true" className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full border border-[#b7c8b9] bg-[#e7eee0] font-mono text-xs font-semibold text-[#284c3b]">{index + 1}</span>
+                  <div>
+                    <h3 className="font-semibold">{title}</h3>
+                    <p className="mt-1 text-sm leading-6 text-[#425750]">{description}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="rounded-b-2xl border-t border-[#d9dfd1] bg-[#e7eee0] px-5 py-4 text-sm font-semibold text-[#284c3b] sm:px-7">
+              {pro.monthlyPageScanLabel} · Scan history included
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="client-workflows" className="mx-auto max-w-7xl scroll-mt-24 px-6 py-14 sm:px-10 sm:py-20">
+        <div className="grid gap-5 lg:grid-cols-[1fr_1.3fr] lg:items-end">
+          <h2 className="max-w-lg text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">Make it part of the work you already do.</h2>
+          <p className="max-w-xl text-lg leading-8 text-[#425750]">
+            Start with one client site. Use the three months to establish a baseline, retest a change and decide what belongs in your ongoing reviews.
+          </p>
+        </div>
+        <div className="mt-9 grid gap-px overflow-hidden rounded-xl border border-[#d8e2db] bg-[#d8e2db] md:grid-cols-3">
+          {workflows.map(({ audience, title, description }) => (
+            <article key={audience} className="bg-white p-6 sm:p-8">
+              <p className="font-mono text-xs font-semibold uppercase tracking-wider text-[#365e4d]">{audience}</p>
+              <h3 className="mt-4 text-xl font-semibold leading-snug tracking-tight">{title}</h3>
+              <p className="mt-3 leading-7 text-[#425750]">{description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section aria-labelledby="regulatory-title" className="border-y border-[#d8e2db] bg-[#edf2eb]">
+        <div className="mx-auto grid max-w-7xl gap-8 px-6 py-14 sm:px-10 sm:py-16 lg:grid-cols-[0.78fr_1.22fr] lg:gap-14">
+          <div>
+            <h2 id="regulatory-title" className="text-4xl font-semibold leading-tight tracking-tight">Prepare for the next change.</h2>
+            <p className="mt-4 max-w-md text-lg leading-8 text-[#425750]">
+              A dated record of what a site loaded and what the scan could observe gives clients, counsel and developers a common starting point when requirements or site configurations change.
+            </p>
+          </div>
+          <div className="divide-y divide-[#cbd8cd] border-y border-[#cbd8cd]">
+            {regulatorySources.map(({ jurisdiction, title, description, nextStep, href, linkLabel }) => (
+              <article key={jurisdiction} className="py-5 first:pt-0 last:pb-0 sm:py-6">
+                <p className="font-mono text-xs font-semibold uppercase tracking-wider text-[#365e4d]">{jurisdiction}</p>
+                <h3 className="mt-2 text-xl font-semibold">{title}</h3>
+                <p className="mt-2 leading-7 text-[#425750]">{description}</p>
+                <p className="mt-2 leading-7 text-[#425750]">{nextStep}</p>
+                <a className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-[#235b41] underline underline-offset-4 hover:text-[#102522]" href={href} target="_blank" rel="noreferrer">
+                  {linkLabel} <span className="ml-2" aria-hidden="true">↗</span>
+                </a>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-6 py-14 sm:px-10 sm:py-20">
+        <div className="grid gap-8 rounded-2xl bg-[#102522] p-6 text-white sm:p-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+          <div>
+            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Bring a client site to your first review.</h2>
+            <p className="mt-4 max-w-xl leading-7 text-[#d4e3dc]">
+              Eligible solo developers and small firms are welcome. Tell us about your business and what you’d like to review. You can apply without creating an account or entering payment details.
+            </p>
+          </div>
+          <div className="lg:border-l lg:border-white/20 lg:pl-9">
+            <p className="text-base font-semibold">Three calendar months of Pro. A $1,200 value.</p>
+            <p className="mt-2 text-sm leading-6 text-[#d4e3dc]">
+              We review complete applications in submission order. Approved applicants have 14 days to activate.
+            </p>
+            {open && <div className="mt-5"><ApplyLink open={open} /></div>}
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="faq-title" className="mx-auto max-w-4xl px-6 pb-14 sm:px-10">
+        <h2 id="faq-title" className="text-3xl font-semibold tracking-tight">Questions about the offer</h2>
+        <div className="mt-5 divide-y divide-[#d8e2db] border-y border-[#d8e2db]">
+          {questions.map(({ title, answer }) => (
+            <details key={title} className="py-4">
+              <summary className="cursor-pointer font-semibold">{title}</summary>
+              <p className="mt-3 max-w-2xl leading-7 text-[#425750]">{answer}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <section id="terms" aria-labelledby="terms-title" className="mx-auto max-w-4xl scroll-mt-24 px-6 pb-16 sm:px-10">
+        <h2 id="terms-title" className="text-2xl font-semibold tracking-tight">Promotional terms &amp; privacy</h2>
+        <div className="mt-4 space-y-4 text-sm leading-7 text-[#425750]">
+          <p>Offer begins November 10, 2026 when deployed, and closes December 2, 2026, or when all ten places have been allocated. The first ten eligible, manually approved businesses receive three consecutive calendar months of Pro. Complete applications are considered in submission order.</p>
+          <p>Eligible applicants are active agencies, consultancies, law firms or other relevant client-service businesses with a verifiable website and professional identity. No minimum company size applies. Existing paid subscribers are excluded. One allocation is permitted per business or commonly controlled business group. Related entities must be disclosed during review. Approval is subject to verification.</p>
+          <p>Activate within 14 days of approval, including if the application window has closed. Your entitlement starts at activation and ends three calendar months later. Each monthly anniversary begins a new 1,000-page allowance. Month-end anniversaries are clipped to that month’s last day. Standard usage and rate restrictions apply. The current Pro rate is $400 per month and the promotional value is $1,200. No payment or credit card is required, and there is no automatic paid renewal.</p>
+          <p>We retain application details to review eligibility, administer the promotion and communicate transactional updates. Marketing permission is separate and optional. Anonymous aggregate campaign views and form starts do not count unique visitors. Optional source attribution respects analytics consent and GPC.</p>
+          <p>CertScore.ai supplies technical observations and evidence for review. It does not provide legal advice or compliance certification. General <Link className="underline" href="/terms">Terms</Link>, <Link className="underline" href="/privacy">Privacy Policy</Link> and <Link className="underline" href="/pricing">Pro plan inclusions</Link> apply.</p>
+        </div>
+      </section>
+      <SiteFooter highContrast />
+    </main>
+  );
 }

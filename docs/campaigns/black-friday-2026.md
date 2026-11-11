@@ -13,7 +13,7 @@ Implemented locally on November 10, 2026. **Not deployed. No real campaign email
 | Protected funnel | `/app/admin/promotions/black-friday-2026/dashboard` |
 | Preferred short admin URLs | `/admin/promotions/black-friday-2026` and `/admin/promotions/black-friday-2026/dashboard` redirect to the existing protected admin area |
 
-The landing page uses the existing navigation, footer, plan catalog, canonical metadata and social image. The reference promotion at <https://termageddon.com/black-friday/> was reviewed for offer clarity; its wording and design were not copied. Custom-only API and white-label capabilities are explicitly excluded.
+The landing page uses the existing navigation, footer, plan catalog, canonical metadata and social image. The landing page leads with a client privacy review: capture a baseline, inspect supported choice paths, and retest after a change. The campaign links to [California Civil Code § 1798.136](https://cppa.ca.gov/pdf/20260101_ccpa_statute.pdf#page=19) and the [UK ICO’s storage and access technologies guidance](https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guidance-on-the-use-of-storage-and-access-technologies/) for examples of regulatory developments a client team can prepare to review. Custom-only API and white-label capabilities are explicitly excluded.
 
 ## Storage and migration
 
