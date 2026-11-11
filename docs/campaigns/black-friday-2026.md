@@ -37,7 +37,7 @@ The release also includes migration 0211. It verifies that no account bans or im
 
 ## Application, review and email workflow
 
-1. A complete, valid application is persisted together with `bf26_form_submit` and owner/applicant outbox rows in one database transaction. Email delivery runs afterward. Anonymous application responses do not expose duplicate record IDs.
+1. A complete, valid application is persisted together with `bf26_form_submit` and owner/applicant outbox rows in one database transaction. The owner alert can send after submission. Applicant messages stay in the outbox until an admin approves or rejects the application. Moving an application into review keeps those messages on hold. Anonymous application responses do not expose duplicate record IDs.
 2. Email/domain normalization, a unique request UUID, one application per registrable business domain/email, a honeypot, bounded input, same-origin enforcement and database rate limits protect intake. Solo businesses using a consumer email are not automatically excluded. Website verification is manual; intake never fetches applicant URLs.
 3. Administrators use the existing email-based platform-admin authorization. Review the organization’s website and identity, relevant website privacy work, existing subscription and common control. Record a stable business-group name and the verification attestation. Resolve earlier complete applications before approving later ones.
 4. Approval locks the campaign row, reserves one unique slot from 1–10 and starts the 14-day invitation deadline. Allocations are never silently recycled after expiry. Approval and invitation enqueueing are atomic. Double clicks/concurrent requests cannot allocate an eleventh place.

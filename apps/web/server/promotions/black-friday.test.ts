@@ -260,6 +260,26 @@ test("isolated PostgreSQL campaign journey, concurrency, quota, delivery and exp
       await sql.query(`update promotion_email_outbox set available_at=now() where application_id=$1 and status='failed'`,[firstId]);
       const successful={...mock,transport:()=>({close(){},async sendMail(){return {accepted:["test@example.test"]};}})};
       const delivered=await drainCampaignEmails(firstId,successful as never);assert.ok(delivered.sent>=2);
+      const awaitingReview = rows.find(a => a.status === "submitted")!;
+      const recipients: string[] = [];
+      const tracked = {...mock, transport: () => ({
+        close() {},
+        async sendMail(message: {to: string}) {
+          recipients.push(message.to);
+          return {accepted: [message.to]};
+        }
+      })};
+      await drainCampaignEmails(awaitingReview.id, tracked as never);
+      assert.deepEqual(recipients, ["ben@certscore.ai"]);
+      await store.review(awaitingReview.id, actor, "under_review", "", "", false, now);
+      assert.equal((await drainCampaignEmails(awaitingReview.id, tracked as never)).sent, 0);
+      assert.deepEqual((await sql.query(
+        `select status, attempts from promotion_email_outbox where application_id=$1 and kind='received'`,
+        [awaitingReview.id]
+      )).rows, [{status: "pending", attempts: 0}]);
+      await store.review(awaitingReview.id, actor, "reject", "", "", false, now);
+      assert.equal((await drainCampaignEmails(awaitingReview.id, tracked as never)).sent, 2);
+      assert.deepEqual(recipients, ["ben@certscore.ai", awaitingReview.email, awaitingReview.email]);
       // Accepted SMTP followed by uncertain outcome does not retry automatically.
       const other=rows.find(a=>a.id!==firstId && a.allocation!==null)!;
       const uncertain={...mock,transport:()=>({close(){},async sendMail(){throw Object.assign(new Error("mock ambiguous"),{command:"DATA"});}})};

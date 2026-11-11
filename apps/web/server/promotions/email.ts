@@ -10,7 +10,7 @@ export function campaignEmail(a: Application, kind: string, origin: string, secr
   const deadline=a.activation_deadline?.toISOString() ?? "";
   const content: Record<string,{subject:string;text:string;to:string}> = {
     owner:{to:"ben@certscore.ai",subject:`[CertScore.ai Black Friday] New application — ${a.company.replace(/[\r\n]/g," ")}`,text:[`Applicant: ${a.full_name} <${a.email}>`,`Organization: ${a.company}`,`Website: ${a.details.website}`,`Type: ${a.details.businessType}`,`Websites overseen: ${a.details.clientSites}`,`Intended use: ${a.details.intendedUse}`,`Submitted: ${a.submitted_at.toISOString()}`,`Attribution: ${JSON.stringify(a.attribution)}`,`Allocated: ${allocated}/10 (at delivery)`,new URL(`/app/admin/promotions/black-friday-2026?application=${a.id}`,base).href].join("\n")},
-    received:{to:a.email,subject:"CertScore.ai — Black Friday application received",text:"Thank you for applying! We'll review your organization information and email you with an update. Applications are subject to approval, and promotional places are limited. No account or payment is required at this stage."},
+    received:{to:a.email,subject:"CertScore.ai — Black Friday application received",text:"Thank you for applying. Your application has been reviewed. Your decision is sent in a separate email."},
     invitation:{to:a.email,subject:"Your CertScore.ai Black Friday application is approved",text:`Your organization has been approved for three calendar months of Pro, including 1,000 page scans per monthly entitlement period. Activate by ${deadline} (UTC).\n\n${activation.href}\n\nSign in or create an account using ${a.email}. Your three months start when you activate. No credit card, charge or automatic paid renewal. This link is personal; do not forward it.`},
     rejected:{to:a.email,subject:"An update on your CertScore.ai Black Friday application",text:"Thank you for your interest. We are unable to approve your application for this limited promotion. Reply to this email if you would like us to clarify the decision. No account or subscription has been changed."},
     activated:{to:a.email,subject:"Your complimentary CertScore.ai Pro access is active",text:`Your Pro access is active through ${a.entitlement_end?.toISOString()} (UTC). You have 1,000 page scans in each monthly entitlement period. There is no automatic paid renewal.\n\n${new URL('/app',base).href}`},
@@ -25,7 +25,20 @@ export async function drainCampaignEmails(applicationId?: string, dependencies=d
   let sent=0;
   for(let i=0;i<20;i++) {
     const job=await dependencies.transaction(async db => {
-      const row=(await db.query(`select * from promotion_email_outbox where status in ('pending','failed') and attempts<5 and available_at<=now() and ($1::uuid is null or application_id=$1) order by available_at for update skip locked limit 1`,[applicationId??null])).rows[0];
+      // Owner alerts can go out on submission. Applicant messages wait for
+      // a recorded approval or rejection, including receipts already queued.
+      const row = (await db.query(`
+        select job.*
+        from promotion_email_outbox job
+        join promotion_applications application on application.id = job.application_id
+        where job.status in ('pending', 'failed')
+          and job.attempts < 5 and job.available_at <= now()
+          and ($1::uuid is null or job.application_id = $1)
+          and (job.kind = 'owner' or application.approved_at is not null or application.rejected_at is not null)
+        order by job.available_at, job.id
+        for update of job skip locked
+        limit 1
+      `, [applicationId ?? null])).rows[0];
       if(!row) return null;
       await db.query(`update promotion_email_outbox set status='sending',attempts=attempts+1,lease_until=now()+interval '2 minutes' where id=$1`,[row.id]);return row;
     });
