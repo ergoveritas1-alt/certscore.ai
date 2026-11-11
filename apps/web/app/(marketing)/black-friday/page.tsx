@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getPlanDefinition } from "@website-signal-risk-scanner/shared";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { SiteFooter } from "../../../components/layout/site-footer";
+import { AnalyticsConsentBanner } from "../../../components/analytics/analytics-consent-banner";
 import { CampaignView } from "../../../components/promotions/campaign-form";
 import { createPageMetadata } from "../../../lib/seo";
 import { campaignStore } from "../../../server/promotions/repository";
@@ -112,13 +113,13 @@ export default async function BlackFridayPage() {
               Find website privacy blind spots.
             </h1>
             <p className="mt-4 max-w-lg text-base leading-7 sm:mt-6 sm:text-lg sm:leading-8 text-[#c8d8f3]">
-              CertScore.ai scans client websites for cookies, trackers and privacy disclosures. Share reports that show what the scan observed.
+              CertScore.ai scans client websites for cookies, trackers and privacy disclosures. Share evidence with clients at handoff or after an update.
             </p>
             <p className="mt-4 max-w-lg border-l-2 sm:mt-6 border-[#60a5fa] pl-4 text-base leading-7 text-[#edf4ff]">
               <strong className="font-semibold text-white">3 months of Pro free ($1,200 value).</strong>{" "}
-              Limited to 10 approved businesses.
+              {pro.monthlyPageScanLabel}. Limited to 10 approved businesses.
             </p>
-            {open && <p className="mt-3 max-w-lg text-sm leading-6 text-[#edf4ff]">For qualifying web agencies, privacy law firms and other eligible businesses. We manually review applications. No credit card required.</p>}
+            {open && <p className="mt-3 max-w-lg text-sm leading-6 text-[#edf4ff]">We manually review each application. No credit card required.</p>}
             <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
               <ApplyLink open={open} />
               <a
@@ -134,6 +135,7 @@ export default async function BlackFridayPage() {
             <p className="mt-4 text-sm leading-6 text-[#b9cbea]">
               {open ? "Apply by December 2, 2026. No automatic paid renewal." : filled ? "All ten places have been allocated." : "Applications are currently closed."}
             </p>
+            <AnalyticsConsentBanner campaignPlacement />
           </div>
 
           <aside aria-labelledby="report-graphic-title" className="relative isolate min-w-0 pb-3 pt-24 sm:pt-10">
@@ -181,7 +183,7 @@ export default async function BlackFridayPage() {
               <p className="mt-1 text-base font-bold">of Pro free</p>
               <p className="mt-1 text-xs font-bold uppercase tracking-wide">Approval required</p>
             </div>
-            <p className="mt-6 text-center text-sm font-medium text-[#b9cbea]">{pro.monthlyPageScanLabel} · Scan history included</p>
+            <p className="mt-6 text-center text-sm font-medium text-[#b9cbea]">Scan history included</p>
           </aside>
         </div>
       </section>

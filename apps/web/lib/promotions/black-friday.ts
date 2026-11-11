@@ -9,7 +9,7 @@ export const TERMS_VERSION = "bf26.2026-11-10.v6";
 export const BUSINESS_TYPES = ["Web design/development agency", "Digital marketing agency", "Independent web developer / marketer", "Privacy consultancy", "Law firm", "In-house privacy team (DPO)", "Other"] as const;
 export const SITE_COUNTS = ["0–5", "6–20", "21–50", "51+"] as const;
 export const STATUSES = ["submitted", "under_review", "approved", "rejected", "invited", "activated", "expired"] as const;
-export const SUCCESS_MESSAGE = "Thank you. If your application is new and eligible, it has been received for review. Repeat submissions keep the existing application. Promotional places require approval.";
+export const SUCCESS_MESSAGE = "Thank you. Applications are reviewed manually before Pro access is granted.";
 const short = (max: number) => z.string().trim().min(1, "This field is required.").max(max).refine(v => !/[\u0000-\u001f\u007f]/.test(v), "Use plain text.");
 function publicWebsite(value: string) {
   try {

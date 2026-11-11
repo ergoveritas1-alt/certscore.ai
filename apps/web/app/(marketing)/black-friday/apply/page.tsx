@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SiteHeader } from "../../../../components/layout/site-header";
 import { SiteFooter } from "../../../../components/layout/site-footer";
+import { AnalyticsConsentBanner } from "../../../../components/analytics/analytics-consent-banner";
 import { CampaignForm } from "../../../../components/promotions/campaign-form";
 import { campaignStore } from "../../../../server/promotions/repository";
 import { createPageMetadata } from "../../../../lib/seo";
@@ -37,6 +38,7 @@ export default async function ApplyPage() {
                 We manually review complete applications in submission order. If approved, you’ll receive a personal link to activate within 14 days.
               </p>
             </div>
+            <AnalyticsConsentBanner campaignPlacement />
           </div>
           <div className="min-w-0 rounded-2xl border border-[#dbe5f3] bg-white p-5 shadow-sm sm:p-8">
             <CampaignForm open={availability?.open ?? false} />

@@ -48,14 +48,14 @@ test("Black Friday isolated browser and database QA", { skip: !enabled, timeout:
   const external: string[] = [];
   const errors: string[] = [];
 
-  async function context(gpc = false, consent = "denied") {
+  async function context(gpc = false, consent: string | null = "denied") {
     const session = await browser.newContext({
       viewport: { width: 1440, height: 1000 },
       extraHTTPHeaders: gpc ? { "Sec-GPC": "1" } : {}
     });
     await session.addInitScript(({ gpc, consent }) => {
       Object.defineProperty(navigator, "globalPrivacyControl", { value: gpc });
-      if (location.protocol === "http:") localStorage.setItem("certscore:analytics-consent:v1", consent);
+      if (location.protocol === "http:" && consent !== null) localStorage.setItem("certscore:analytics-consent:v1", consent);
     }, { gpc, consent });
     await session.route("**/*", route => {
       if (new URL(route.request().url()).origin !== app.origin) {
@@ -208,7 +208,7 @@ test("Black Friday isolated browser and database QA", { skip: !enabled, timeout:
 
     await t.test("complete application, approval, mock invitation, signup, activation, first-scan fixture and CSV journey", async () => {
       await reset();
-      const session = await context(false, "granted");
+      const session = await context(false, null);
       await session.route("https://cloud.umami.is/**", route => route.abort());
       const page = await session.newPage();
       const funnelRequests: Record<string, unknown>[] = [];
@@ -220,6 +220,7 @@ test("Black Friday isolated browser and database QA", { skip: !enabled, timeout:
       await page.setViewportSize({ width: 375, height: 812 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await page.screenshot({ path: path.join(artifactDir, "landing-mobile.png"), fullPage: true });
+      await page.getByRole("button", { name: "Allow analytics" }).click();
       await page.getByRole("link", { name: "Apply for 3 Free Months", exact: true }).first().click();
       await page.keyboard.press("Tab");
       assert.ok(await page.evaluate(() => document.activeElement !== document.body));
@@ -248,9 +249,11 @@ test("Black Friday isolated browser and database QA", { skip: !enabled, timeout:
       assert.deepEqual(funnelRequests.map(request => request.event), ["bf26_landing_view", "bf26_form_start"]);
       for (const request of funnelRequests) {
         assert.deepEqual(Object.keys(request).sort(), ["attribution", "consent", "event", "id"]);
-        assert.deepEqual(request.attribution, tab);
+        const isLanding = request.event === "bf26_landing_view";
+        assert.equal(request.consent, !isLanding);
+        assert.deepEqual(request.attribution, isLanding ? {} : tab);
       }
-      assert.deepEqual((await db.query("select distinct source from promotion_aggregate_events")).rows, [{ source: "The Admin Bar" }]);
+      assert.deepEqual((await db.query("select distinct source from promotion_aggregate_events order by source")).rows, [{ source: "Direct/unknown" }, { source: "The Admin Bar" }]);
       assert.equal(record.allocation, null);
       assert.equal((await db.query("select count(*)::int n from promotion_email_outbox")).rows[0].n, 2);
       const duplicate = await session.request.post(app.origin + "/api/promotions/black-friday/applications", { headers: { Origin: app.origin }, data: { ...data, requestId: randomUUID() } });
@@ -308,7 +311,8 @@ test("Black Friday isolated browser and database QA", { skip: !enabled, timeout:
       const today = new Date().toISOString().slice(0, 10);
       const dashboard = await campaignDashboard("2026-11-09", today, { query: (text: string, values?: unknown[]) => db.query(text, values), list: store.list });
       for (const name of events) assert.equal(dashboard.totals[name], 1, name);
-      for (const name of ["bf26_landing_view", "bf26_form_start", "bf26_form_submit"]) {
+      assert.equal(dashboard.sources["Direct/unknown"]?.bf26_landing_view, 1);
+      for (const name of ["bf26_form_start", "bf26_form_submit"]) {
         assert.equal(dashboard.sources["The Admin Bar"]?.[name], 1, name);
       }
       assert.ok((await db.query("select 1 from promotion_audit_log where application_id=$1 and action='approve'", [record.id])).rowCount);
