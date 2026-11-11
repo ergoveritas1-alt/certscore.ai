@@ -9877,3 +9877,33 @@ test('canonical surface admission cannot credit guessed privacy seeds or third-p
  const linked=summarizePolicySurfaces(dedupePolicySurfaces([authentic] as never,'https://example.test/'),'example.test',{discoveredPolicySurfaces:[authentic] as never,privacyPolicyObserved:true});
  assert.equal(linked.privacyNoticeAvailabilityObserved,true,'a genuine target link remains factual evidence even without the body');
 });
+
+
+test("audit comparison metadata survives materialization and persistence only with the verified original bundle", async () => {
+  const { buildMaterializedLocalV2Detail } = await loadLocalV2DagReport();
+  const { buildPersistedScanReportProjection } = await import("./scan-report-projection-contract");
+  const { buildAuditComparison } = await import("../../../../packages/certscore-contracts/src/audit-comparison");
+  const { gpcRuntimeFixture } = require("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
+  const bundle=gpcRuntimeFixture({enabled:false}) as CanonicalEvidenceBundle;
+  bundle.scanId="11111111-1111-4111-8111-111111111111";
+  bundle.scannerBuildProvenance={contractVersion:"scanner_build_provenance.v1",gitSha:"b".repeat(40)};
+  const record=makeScanRecord();record.scan={...record.scan,id:bundle.scanId,createdAt:bundle.startedAt};
+  const auditComparison=buildAuditComparison({scanId:bundle.scanId,createdAt:record.scan.createdAt,bundle,
+    manifest:{scanId:bundle.scanId,privacyCaptureProfile:"presence_only_six_workers.v1"},bundleSha256:"a".repeat(64),manifestSha256:"c".repeat(64)});
+  assert.ok(auditComparison);
+  const sourceBundle={verificationStatus:"verified" as const,sha256:"a".repeat(64),schemaVersion:bundle.schemaVersion,uri:"s3://fixture/original.json",sizeBytes:1};
+  const options={auditComparison,policyTextEvidenceContext:{sourceBundle,scanId:bundle.scanId,generatedAt:bundle.completedAt,localOutDir:null,artifactsById:new Map()}};
+  const detail=buildMaterializedLocalV2Detail(record,bundle,options);
+  assert.deepEqual(detail.runtimeArtifacts?.auditComparison,auditComparison);
+  const {buildAuditComparisonDelivery}=await import("../../../../packages/certscore-contracts/src/audit-comparison");
+  const unavailable=buildAuditComparisonDelivery({scanId:bundle.scanId,createdAt:record.scan.createdAt,bundle,manifest:null,sourcesVerified:false});
+  const unavailableDetail=buildMaterializedLocalV2Detail(record,bundle,{...options,auditComparison:unavailable});
+  assert.deepEqual(unavailableDetail.runtimeArtifacts?.auditComparison,unavailable);
+  assert.deepEqual(buildPersistedScanReportProjection(unavailableDetail).payload.runtimeArtifacts?.auditComparison,unavailable);
+  const persisted=buildPersistedScanReportProjection(detail);
+  assert.deepEqual(persisted.payload.runtimeArtifacts?.auditComparison,auditComparison);
+  for(const patch of [{auditComparison:{...auditComparison,bundle:"f".repeat(64)}},{auditComparison:{...auditComparison,scanId:"22222222-2222-4222-8222-222222222222"}},{auditComparison:null}]){
+    const rejected=buildMaterializedLocalV2Detail({...record,runtimeArtifacts:{auditComparison}},bundle,{...options,...patch});
+    assert.equal(rejected.runtimeArtifacts?.auditComparison,null);
+  }
+});

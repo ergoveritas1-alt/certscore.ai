@@ -4,6 +4,37 @@ const root=path.resolve(process.argv[2]),file=path.join(root,'dashboard.html');c
 try{
  const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});await context.route('**/*',route=>{if(!route.request().url().startsWith('file:')){externalRequests++;return route.abort();}return route.continue();});const page=await context.newPage();page.on('pageerror',e=>errors.push(String(e)));
  await page.goto(pathToFileURL(file).href,{waitUntil:'load',timeout:60000});await page.waitForFunction(()=>window.__auditDashboard?.days?.length>0,{timeout:60000});
+ const assertDataHealth=async()=>{
+  const actual=await page.evaluate(()=>{
+   const a=window.__auditDashboard,h=a.health;
+   const day=new Intl.DateTimeFormat('en-CA',{timeZone:a.data.timezone,year:'numeric',month:'2-digit',day:'2-digit'});
+   const rows=a.currentRows().filter(r=>day.format(new Date(r.createdAt))===h.date),reports=rows.filter(r=>r.reportable);
+   return {h,attempts:rows.length,reportable:reports.length,quantities:h.quantities.map(q=>({id:q.id,measured:reports.filter(r=>Number.isFinite(r.measurements?.[q.id])).length,unavailable:reports.filter(r=>!Number.isFinite(r.measurements?.[q.id])).length}))};
+  });
+  assert.equal(actual.h.attempts,actual.attempts);assert.equal(actual.h.reportable,actual.reportable);
+  for(const q of actual.quantities){const h=actual.h.quantities.find(v=>v.id===q.id);assert.equal(h.measured,q.measured);assert.equal(h.unavailable,q.unavailable);assert.equal(h.zero+h.positive,h.measured);}
+  assert.match(await page.locator('#healthCounts').textContent(),new RegExp('Reportable'));
+  assert.match(await page.locator('#healthFreshness').textContent(),/cutoff.*Los Angeles.*does not refresh/);
+  assert.match(await page.locator('#healthComparison').textContent(),/identical region, profile and retained source\/version map/);
+  return actual.h;
+ };
+ const health=await assertDataHealth();
+ const healthContext=await page.evaluate(()=>window.__auditDashboard.data.healthContext);
+ if(healthContext.cache){
+  const bytes=await fs.readFile(healthContext.cache.file);assert.equal(createHash('sha256').update(bytes).digest('hex'),healthContext.cache.sha256);
+  const cache=JSON.parse(bytes),pending=cache.receipts.filter(r=>r.state==='source_unavailable');
+  assert.equal(health.pending.count,pending.length);
+  assert.deepEqual(healthContext.pending.map(r=>r.scanId).sort(),pending.map(r=>r.scanId).sort());
+  const inventoryCache=new Map();
+  for(const entry of pending){
+   const ref=entry.selectionInventory??cache.directInventory;
+   if(!inventoryCache.has(ref.file)){const b=await fs.readFile(ref.file);assert.equal(createHash('sha256').update(b).digest('hex'),ref.sha256);assert.equal(b.length,ref.bytes);inventoryCache.set(ref.file,JSON.parse(b));}
+   const original=inventoryCache.get(ref.file).rows.find(r=>r.scanId===entry.scanId);
+   assert.equal(healthContext.pending.find(r=>r.scanId===entry.scanId).createdAt,original.created_at);
+   assert.equal(healthContext.pending.find(r=>r.scanId===entry.scanId).status,original.status??'unavailable');
+  }
+ }
+ checks.dataHealth=true;
  const chartPanel=page.locator('#chartPanel'),chartSummary=chartPanel.locator(':scope > summary');
  assert.equal(await chartPanel.evaluate(panel=>panel.open),false);
  assert.equal(await page.locator('#metric').isVisible(),false);
@@ -120,6 +151,26 @@ try{
    for(const [index,day] of days.entries()){
     const verdict=day.metrics[layout.id],cell=row.cells[index+1];
     const headline=cell.querySelector(':scope > .value').textContent;
+    if(id==='sealed.checklist.accessibility_consent_controls'){
+     const metric=day.metrics[id];
+     const percent=count=>{
+      const rate=100*count/metric.denominator;
+      return (Number.isInteger(rate)?rate:rate.toFixed(1))+'%';
+     };
+     const expected=Object.keys(metric.series).length>1?'Separate measurement groups':
+      metric.denominator===0?'No eligible data':
+      metric.counts.unavailable===metric.denominator?'No matched assessment':
+      'Not testable · '+percent(metric.counts.not_testable??0);
+     checks.push({id,date:day.date,actual:headline,expected});
+     if(expected.startsWith('Not testable')){
+      for(const [state,count] of Object.entries(metric.counts)){
+       if(state==='not_testable')continue;
+       const line=cell.querySelector(':scope > .checklist-verdicts > [data-state="'+state+'"] .state-line-value');
+       checks.push({id,date:day.date,actual:line?.textContent,expected:count+' ('+percent(count)+')'});
+      }
+     }
+     continue;
+    }
     if(Object.keys(verdict.series).length>1){
      checks.push({id,date:day.date,actual:headline,expected:'Separate measurement groups'});
      continue;
@@ -513,12 +564,14 @@ try{
   const dashboard=window.__auditDashboard;
   return ['metrics','findings'].map(kind=>dashboard.days.flatMap((day,index)=>
    Object.entries(day[kind]).filter(([id,v])=>dashboard.data.tableEntries.some(entry=>entry.id===id)&&id!=='customer_cmp_check.prominence'&&!dashboard.data.verdictLayouts[id]&&!/^(?:sealed\.)?(?:execution|click|registration)\./.test(id)&&!/^detail\.(accept|reject)\.(activity_all|verdict)$/.test(id)&&!['control.accept','control.reject'].includes(id)&&id!=='sealed.choice_evidence.paired_cmp'&&!['gpc_delivery','detail.gpc.session_collection','detail.gpc.california_collection','detail.gpc.cmp_receipt'].includes(id)&&v.source==='mixed_sources'&&Object.values(v.series).some(p=>Number.isFinite(p.rate))&&
-    (kind==='findings'||Object.keys(v.counts).some(state=>state!=='unknown'&&state!=='unavailable')))
+    (kind==='findings'||Object.keys(v.counts).some(state=>state!=='unknown'&&state!=='unavailable'))&&
+    (!/^(?:customer_cmp_check|sealed\.cmp_check)\./.test(id)||
+     Object.keys(v.counts).some(state=>!['not_assessed','incomplete','partially_assessed','unavailable'].includes(state))))
     .map(([id])=>({id,index,kind:kind==='findings'?'finding':'metric'}))).at(-1)).filter(Boolean);
  });
  for(const {id,index,kind} of rateExamples){
   const cell=page.locator(`[data-table-kind="${kind}"][data-table-id="${id}"] td`).nth(index+1);
-  assert.match(await cell.locator(':scope>.value').textContent(),/^\d+(?:\.\d)?%$/);
+  assert.match(await cell.locator(':scope>.value').textContent(),/^\d+(?:\.\d)?%$/,id);
   // The dedicated policy coverage assertions above verify these panels.
   const unexpectedMinor=cell.locator(':scope>.minor:not(.state-percentages):not([data-policy-receipt-coverage]):not([data-transfer-signal-coverage]):not([data-transfer-assessment-coverage])');
   assert.equal(await unexpectedMinor.count(),0);
@@ -587,7 +640,7 @@ try{
  checks.availability=true;
  await page.screenshot({path:path.join(root,'desktop.png'),fullPage:true});
  for(const [button,name]of [['csv','daily-metrics.csv'],['quantityCsv','daily-volumes.csv'],['findingCsv','daily-findings.csv']]){const wait=page.waitForEvent('download');await page.locator('#'+button).click();const dl=await wait;const temp=path.join(root,'browser-'+name);await dl.saveAs(temp);assert.equal(await fs.readFile(temp,'utf8'),await fs.readFile(path.join(root,name),'utf8'));await fs.unlink(temp);}checks.csvParity=true;
- const regions=await page.locator('#region option').evaluateAll(opts=>opts.map(o=>o.value));if(regions.length>1){await page.selectOption('#region',regions[1]);assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.region===document.getElementById('region').value)),true);const content=await page.evaluate(()=>window.__auditDashboard.engine.stateCsv(window.__auditDashboard.days,window.__auditDashboard.data.csvMetrics));const wait=page.waitForEvent('download');await page.locator('#csv').click();const dl=await wait,temp=path.join(root,'filtered.csv');await dl.saveAs(temp);assert.equal(await fs.readFile(temp,'utf8'),content);await fs.unlink(temp);await page.selectOption('#region','all');}
+ const regions=await page.locator('#region option').evaluateAll(opts=>opts.map(o=>o.value));if(regions.length>1){await page.selectOption('#region',regions[1]);await assertDataHealth();assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.region===document.getElementById('region').value)),true);const content=await page.evaluate(()=>window.__auditDashboard.engine.stateCsv(window.__auditDashboard.days,window.__auditDashboard.data.csvMetrics));const wait=page.waitForEvent('download');await page.locator('#csv').click();const dl=await wait,temp=path.join(root,'filtered.csv');await dl.saveAs(temp);assert.equal(await fs.readFile(temp,'utf8'),content);await fs.unlink(temp);await page.selectOption('#region','all');}
  const providers=await page.locator('#cmp option').evaluateAll(opts=>opts.map(o=>o.value));if(providers.length>1){await page.selectOption('#cmp',providers[1]);assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.states.cmp_provider===document.getElementById('cmp').value)),true);await page.selectOption('#cmp','all');}
  await page.selectOption('#origin','selection');assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.originProof==='production_id_selection_only'&&r.reportable===false)),true);await page.selectOption('#origin','all');
  await page.selectOption('#group','Controls');assert.equal(await page.locator('#daily tbody tr[data-table-id]').count(),2);checks.filters=true;
@@ -703,7 +756,7 @@ try{
  }
  checks.coverageMap=true;
  const expectedMatrix=await page.evaluate(()=>window.__auditDashboard.data.coverageMatrix);
- assert.equal(await page.locator('main > .panel').first().getAttribute('id'),'coverageComparison');
+ assert.equal(await page.locator('main > .panel').first().getAttribute('id'),'dataHealth');
  assert.equal(await page.locator('#coverageComparison').evaluate(e=>e.tagName),'DETAILS');
  assert.equal(await page.locator('#coverageComparison').evaluate(e=>e.open),false);
  await page.locator('#coverageComparison > summary').click();

@@ -385,3 +385,30 @@ preview deliberately had no live database or mail credentials, so it did not
 exercise authenticated licenses or email delivery; existing operational-event
 writes in that preview failed as expected. A narrow-screen signup header layout
 issue found during inspection was corrected.
+
+## Public MCP Browser Integrity Check extension — November 10, 2026
+
+The owner approved extending the existing Cloudflare configuration rule
+`1ffa18dd9fde463c8c40da072a6b7144`, now named
+`MCP - allow non-browser clients`, to this exact scope:
+
+```text
+(http.host eq "mcp.certscore.ai" and http.request.uri.path in {"/mcp" "/mcp/light" "/mcp/marketplace/light"})
+```
+
+Browser Integrity Check remains the sole override (off). Authentication,
+application quotas, other firewall protections, capacity and application releases
+were unchanged. The Marketplace path retains its existing exception.
+
+Default Python-urllib/3.14 requests from the LAX edge changed from Cloudflare
+403 to application 401 for `/mcp`, and from 403 to successful initialization
+and four-tool catalogue retrieval for `/mcp/light`. Marketplace continued to
+return 401 without credentials; the non-exempt `/healthz` control continued
+to return 403 for this user agent. No scans or app deployments were performed.
+This verifies the scoped transport fix, not recovery of ChatGPT traffic.
+
+No additional Cloudflare subscription fee or capacity was introduced; admitted
+requests remain subject to existing application budgets and quotas.
+Rollback restores the original Marketplace-only expression and name above,
+keeping its Browser Integrity Check override off. Verification receipts are in
+`outputs/mcp-openai-investigation-20261110/cloudflare/bic-extension/verification.json`.

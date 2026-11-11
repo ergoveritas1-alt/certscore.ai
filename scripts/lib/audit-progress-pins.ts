@@ -15,5 +15,7 @@ export function verifyProgressPins(){
  for(const relative of ['apps/web/server/scans/privacy-form-audit-fields.ts','apps/web/server/scans/privacy-form-audit-receipt.ts'])if(!activation.toolSources.some((s:any)=>s.file===path.join(root,relative)))throw Error('Missing shared privacy/form source pin: '+relative);
  for(const relative of ['apps/web/app/api/scans/[scanId]/visual-evidence/[artifactId]/route.ts','apps/web/lib/api-v2/customer-consent-evidence.ts','packages/certscore-api-contracts/src/customer-consent-evidence.ts'])if(!activation.toolSources.some((s:any)=>s.file===path.join(root,relative)))throw Error('Missing customer evidence source pin: '+relative);
  verifyMasterSources();
+ for(const relative of ['scripts/lib/audit-data-health.ts','scripts/lib/audit-data-health-context.ts','scripts/lib/audit-data-health.test.ts','scripts/lib/audit-technical-reasons-query.test.ts'])if(!activation.toolSources.some((s:any)=>s.file===path.join(root,relative)))throw Error('Missing data-health source pin: '+relative);
+ for(const relative of ['packages/certscore-contracts/src/audit-comparison.ts','scripts/lib/audit-refresh-reliability.test.ts','scripts/verify-audit-receipt-release.ts','scripts/verify-audit-receipt-delivery.ts','scripts/deploy-verified-ecs-settings.mjs'])if(!activation.toolSources.some((s:any)=>s.file===path.join(root,relative)))throw Error('Missing refresh reliability source pin: '+relative);
  return activation.toolSources;
 }

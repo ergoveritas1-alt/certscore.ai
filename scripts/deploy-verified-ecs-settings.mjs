@@ -5,13 +5,14 @@ import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { configureReviewedOptOut } from './configure-reviewed-opt-out.ts';
-import { resolveAuditReceipts } from './configure-audit-receipts.ts';
+import { verifyReceiptRelease } from './verify-audit-receipt-release.ts';
+import { resolveAuditReceipts, preservePolicyReceipts } from './configure-audit-receipts.ts';
 import { installedEcsRevision } from './lib/deployed-image.mjs';
 import { waitForStagedEcs } from './wait-for-staged-ecs.mjs';
 
 const receiptKey = 'CERTSCORE_AUDIT_PRIVACY_FORM_PROJECTION_ENABLED';
 
-export async function planVerifiedSettings(aws, { cluster, name, container, region, repository, sha, rollout, receipts }) {
+export async function planVerifiedSettings(aws, { cluster, name, container, region, repository, sha, rollout, receipts, policyReceipts = 'preserve' }) {
   const state = aws('ecs', 'describe-services', '--cluster', cluster, '--services', name);
   const currentArn = state.services?.[0]?.taskDefinition;
   if (!currentArn) throw new Error(`Missing task definition for ${name}.`);
@@ -37,7 +38,9 @@ export async function planVerifiedSettings(aws, { cluster, name, container, regi
   }
 
   const current = definition.taskDefinition;
-  const configured = configureReviewedOptOut(structuredClone(current), rollout, container);
+  let configured = configureReviewedOptOut(structuredClone(current), rollout, container);
+  if(container==='certscore-web')configured=preservePolicyReceipts(configured,current,policyReceipts);
+  else if(policyReceipts!=='preserve')throw new Error('Policy receipts require the materializer container.');
   const target = configured.containerDefinitions.find(c => c.name === container);
   if (receipts !== 'preserve') {
     resolveAuditReceipts('preserve', current); // Validate the existing flag and secret binding before replacing it.
@@ -46,7 +49,7 @@ export async function planVerifiedSettings(aws, { cluster, name, container, regi
   }
   const original = current.containerDefinitions.find(c => c.name === container);
   const sortedEnv = entries => [...(entries ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-  if (isDeepStrictEqual(sortedEnv(original.environment), sortedEnv(target.environment))) return { name, currentArn };
+  if (isDeepStrictEqual(sortedEnv(original.environment), sortedEnv(target.environment))) return { name, currentArn, expected: configured };
 
   target.image = `199536052647.dkr.ecr.${region}.amazonaws.com/${repository}@${digest}`;
   target.dockerLabels = { ...target.dockerLabels, 'org.opencontainers.image.revision': sha };
@@ -54,18 +57,19 @@ export async function planVerifiedSettings(aws, { cluster, name, container, regi
   if (definition.tags?.length) input.tags = definition.tags;
   for (const key of ['taskDefinitionArn', 'revision', 'status', 'requiresAttributes', 'compatibilities',
     'registeredAt', 'registeredBy', 'deregisteredAt']) delete input[key];
-  return { name, currentArn, input };
+  return { name, currentArn, input, expected: configured };
 }
 
 async function main() {
   const [kind] = process.argv.slice(2);
   const { AWS_REGION: region, ECS_CLUSTER_NAME: cluster, ECS_SERVICE_NAME: name, ECS_CONTAINER_NAME: container,
-    ECR_REPOSITORY: repository, GITHUB_SHA: sha, REVIEWED_OPT_OUT_MODE: rollout, AUDIT_RECEIPTS_MODE: receipts,
+    ECR_REPOSITORY: repository, GITHUB_SHA: sha, REVIEWED_OPT_OUT_MODE: rollout, AUDIT_RECEIPTS_MODE: receipts, AUDIT_POLICY_RECEIPTS_MODE: policyMode,
     ECS_MATERIALIZER_SERVICE_NAME: materializer } = process.env;
+  const policyReceipts=policyMode??'preserve';
   if (!['web', 'validation'].includes(kind) || !cluster || !name || !container || !repository ||
     !/^[a-f0-9]{40}$/.test(sha ?? '') || !['preserve', 'enable', 'disable'].includes(rollout) ||
-    !['preserve', 'true', 'false'].includes(receipts) || (rollout === 'preserve' && receipts === 'preserve') ||
-    (receipts !== 'preserve' && kind !== 'web') || (kind === 'web' && (!materializer || name === materializer))) {
+    !['preserve', 'true', 'false'].includes(receipts) || !['preserve','true','false'].includes(policyReceipts) || (rollout === 'preserve' && receipts === 'preserve' && policyReceipts === 'preserve') ||
+    ((receipts !== 'preserve' || policyReceipts !== 'preserve') && kind !== 'web') || (kind === 'web' && (!materializer || name === materializer))) {
     throw new Error('Invalid ECS settings-only request.');
   }
   const aws = (...args) => {
@@ -78,7 +82,7 @@ async function main() {
   };
   const services = [];
   if (rollout !== 'preserve') services.push({ name, rollout, receipts: 'preserve' });
-  if (kind === 'web') services.push({ name: materializer, rollout, receipts });
+  if (kind === 'web') services.push({ name: materializer, rollout, receipts, policyReceipts });
   const planService = service => planVerifiedSettings(aws, { cluster, container, region, repository, sha, ...service });
   const plans = await Promise.all(services.map(planService));
   const updates = plans.filter(plan => plan.input);
@@ -106,6 +110,12 @@ async function main() {
       aws('ecs', 'describe-services', '--cluster', cluster, '--services', ...updates.map(plan => plan.name)));
     const applied = await Promise.all(services.map(planService));
     if (applied.some(plan => plan.input)) throw new Error('ECS settings did not converge.');
+  }
+  if(kind==='web'){
+    const plan=plans.find(p=>p.name===materializer),arn=plan.task??plan.currentArn;
+    const proof=verifyReceiptRelease(plan.expected,aws('ecs','describe-task-definition','--task-definition',arn),
+      aws('ecs','describe-services','--cluster',cluster,'--services',materializer),arn);
+    writeFileSync('audit-receipt-release.json',JSON.stringify(proof,null,2)+'\n',{flag:'wx'});
   }
   console.log(`Verified settings for ${plans.length} service(s); ${updates.length} required an ECS rollout.`);
 }

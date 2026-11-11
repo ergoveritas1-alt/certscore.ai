@@ -14,6 +14,17 @@ for the possessive. Preserve existing technical identifiers, package names,
 paths, protocol headers, and evidence keys; this naming rule is not authorization
 to rename those contracts.
 
+## Feature-flag authorization — November 10, 2026
+
+Feature-flag changes needed for owner-requested work do not require a separate
+approval solely because they change a flag. This supersedes blanket flag-change
+prohibitions or repeat-approval requirements in earlier agent notes and audit
+instructions. Preserve the requested task scope, cost-approval thresholds,
+privacy-action eligibility, evidence validation and acquisition limits. This does
+not activate unrelated experiments or expand scan/action permissions.
+
+Honor an explicit deployment hold until the owner authorizes resuming deployment.
+
 ## Local capture-quality approval — October 17, 2026
 
 The owner approved up to $50/month incremental at 100,000 scans for bounded

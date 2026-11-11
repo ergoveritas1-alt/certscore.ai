@@ -1,3 +1,4 @@
+import {readAuditComparisonDelivery} from '../../packages/certscore-contracts/src/audit-comparison';
 import {applyChoiceSummary, CHOICE_AUDIT_VERSION, LEGACY_CHOICE_AUDIT_VERSION} from './audit-progress-choice';
 import {applyControlAccessibility,applyTrackingReviews,TRACKING_REVIEW_REF} from './audit-progress-control-accessibility';
 import {readCaliforniaRejectCoverage} from './audit-california-reject-coverage';
@@ -112,7 +113,8 @@ function applyPolicyReceipt(row:ProgressRow,value:unknown):boolean {
   return Object.keys(states).length>0;
 }
 
-function applyTechnicalCounts(row:ProgressRow,value:unknown):boolean {
+export const TECHNICAL_COUNT_UNAVAILABLE_REASONS=['source_missing','source_unverified','source_binding_mismatch','source_schema_incomplete','original_source_binding_unavailable'] as const;
+export function applyTechnicalCounts(row:ProgressRow,value:unknown):boolean {
   if(value==null)return false;
   if(!Array.isArray(value)||value.length!==2)throw Error('Invalid technical count receipt');
   const records=[
@@ -122,6 +124,17 @@ function applyTechnicalCounts(row:ProgressRow,value:unknown):boolean {
   let measured=false;
   for(const record of records){
     if(record.value===null)continue;
+    if(typeof record.value==='string'){
+      if(!(TECHNICAL_COUNT_UNAVAILABLE_REASONS as readonly string[]).includes(record.value))throw Error('Unknown technical count unavailable reason');
+      for(const key of record.keys){
+        if(row.measurements?.[key]!==undefined)throw Error('Conflicting measured/unavailable technical count '+key);
+        const existing=row.technicalCountUnavailable?.reasons[key];
+        if(existing&&existing!==record.value)throw Error('Conflicting technical count unavailable reason '+key);
+        (row.technicalCountUnavailable??={version:"certscore.technical-count-availability.v1",reasons:{}}).reasons[key]=record.value;
+      }
+      measured=true; // A delivered diagnostic also needs the exact inventory reference.
+      continue;
+    }
     const [version,...counts]=Array.isArray(record.value)?record.value:[];
     const catalogue=record.hasCatalogue?counts.pop():null;
     if(record.hasCatalogue&&![CMS_CATALOGUE_V1,CMS_CATALOGUE_V2,CMS_CATALOGUE_V3,CMS_CATALOGUE_VERSION].includes(catalogue))
@@ -129,6 +142,7 @@ function applyTechnicalCounts(row:ProgressRow,value:unknown):boolean {
     if(!record.versions.includes(version)||counts.length!==record.keys.length||
       counts.some((count,i)=>!Number.isSafeInteger(count)||count<0||count>record.limits[i]!))throw Error('Invalid verified technical counts');
     for(const [i,key] of record.keys.entries()){
+      if(row.technicalCountUnavailable?.reasons[key])throw Error('Conflicting unavailable/measured technical count '+key);
       const existing=row.measurements?.[key];
       const source=TECHNICAL_COUNT_SOURCE+row.projectionVersion+'/'+version+(catalogue?'/'+catalogue:'');
       if(existing!==undefined){
@@ -161,6 +175,19 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
       summary.inspected++;if(seen.has(extract.scanId))throw Error('Duplicate control-extract scan');seen.add(extract.scanId);
       const row=byId.get(extract.scanId),result=row?retainedOptOutState(extract,row):null;
       if(row&&retainedGenerationMatches(extract,row)){
+        if(input.version==='certscore.mac-mini-direct-id-inventory.v1'&&extract.auditComparison!=null&&
+          (row.originProof!=='original_credential_verified'||row.originRequestId===extract.originalRequestId)){
+          const comparison=readAuditComparisonDelivery(extract.auditComparison);
+          if(!comparison||comparison.scanId!==row.scanId||Date.parse(comparison.createdAt)!==Date.parse(row.createdAt))throw Error('Invalid generation-bound comparison metadata');
+          if('reason' in comparison){
+            if(row.comparisonMetadata||row.comparisonUnavailableReason&&row.comparisonUnavailableReason!==comparison.reason)throw Error('Conflicting generation-bound comparison metadata');
+            row.comparisonUnavailableReason=comparison.reason;
+          }else{
+            if(row.comparisonUnavailableReason||row.comparisonMetadata&&!isDeepStrictEqual(row.comparisonMetadata,comparison))throw Error('Conflicting generation-bound comparison metadata');
+            row.comparisonMetadata=comparison;
+          }
+          if(!row.refs.some(r=>r.file===file&&r.role==='generation_matched_comparison'))row.refs.push({file,sha256:receipt.sha256,role:'generation_matched_comparison'});
+        }
         if(input.version==='certscore.mac-mini-direct-id-inventory.v1'&&
           (row.originProof!=='original_credential_verified'||row.originRequestId===extract.originalRequestId)&&
           applyTrackingReviews(row,extract.trackingReviews)&&!row.refs.some(r=>r.file===file&&r.role===TRACKING_REVIEW_REF)){

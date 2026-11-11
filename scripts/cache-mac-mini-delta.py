@@ -4,8 +4,8 @@ import argparse, collections, concurrent.futures, datetime, hashlib, json, os, p
 
 UUID = re.compile(r'^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$', re.I)
 MAX_PENDING_RECHECKS = 100
-# Reserve launch space for control accessibility and the required receipts.
-DAILY_PENDING_RECHECKS = 60
+# Reserve launch space for control accessibility, required receipts and unavailable reasons.
+DAILY_PENDING_RECHECKS = 56
 def utc(v): return datetime.datetime.fromisoformat(v.replace('Z', '+00:00')).astimezone(datetime.timezone.utc)
 def digest(b): return hashlib.sha256(b).hexdigest()
 def read(p): return json.loads(p.read_text())
@@ -46,11 +46,19 @@ def pending_exports(prior):
 
 def pending_plan(pending, start, end, limit=MAX_PENDING_RECHECKS):
     eligible = [r for r in pending.values() if start <= utc(r['scanCreatedAt']) < end]
-    eligible.sort(key=lambda r: (utc(r['lastExactCheckUtc']),
-                                 r['productionStatus'] not in ('completed','completed_limited'),
-                                 utc(r['scanCreatedAt']), r['scanId']))
-    selected = [r['scanId'] for r in eligible[:limit]]
+    if not isinstance(limit,int) or not 0 <= limit <= MAX_PENDING_RECHECKS:
+        raise ValueError('Pending limit must be between zero and 100')
+    eligible.sort(key=lambda r: (utc(r['lastExactCheckUtc']), utc(r['scanCreatedAt']), r['scanId']))
+    # Reserve half for useful completed reports; fill every remaining slot by
+    # oldest exact check across the whole queue, including failed attempts.
+    completed = [r for r in eligible if r['productionStatus'] in ('completed','completed_limited')]
+    reserved = completed[:(limit+1)//2]
+    reserved_ids = {r['scanId'] for r in reserved}
+    ordered = reserved + [r for r in eligible if r['scanId'] not in reserved_ids]
+    selected = [r['scanId'] for r in ordered[:limit]]
     return {'priorPendingCount':len(pending), 'pendingRefreshIds':selected,
+            'deferredPendingIds':[r['scanId'] for r in ordered[limit:]],
+            'completedReservedCount':len(reserved),
             'deferredPendingCount':len(eligible)-len(selected), 'agedOutPendingCount':len(pending)-len(eligible)}
 
 def refresh(source, out, start, end, reuse, inventory_file):

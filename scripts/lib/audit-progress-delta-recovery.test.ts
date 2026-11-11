@@ -22,6 +22,7 @@ test('daily export recovers transient polling and resumes only the original task
       isMacMini: true,
       cohort_total: 1,
       choice_audit: { version: 'certscore.audit-choice-summary.v2', availability: 'size_bound' },
+      auditComparison: null,
       caReject: null,
       technicalCounts: null,
       trackingReviews: null,
@@ -39,9 +40,13 @@ test('daily export recovers transient polling and resumes only the original task
         text: 'producer_verified_complete_receipt',
       },
     };
+    const planned=Array.from({length:100},(_,i)=>{
+      const h=createHash('sha256').update('recovery-pending-'+i).digest('hex');
+      return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20,32)}`;
+    });
     writeFileSync(path.join(run, 'begin.json'), JSON.stringify({
       overlapStartUtc: start, windowEndUtc: end, newScanStartUtc: start,
-      includePrivacyFormReceipts: true, pendingRefreshIds: [],
+      includePrivacyFormReceipts: true, pendingRefreshIds: planned,
     }));
     const compressed = gzipSync(JSON.stringify(row) + '\n');
     const messages = [
@@ -100,6 +105,9 @@ switch (call) {
     const inventory = path.join(run, 'delta-inventory.json');
     const first = readFileSync(inventory, 'utf8');
     assert.deepEqual(JSON.parse(first).rows, [row]);
+    const saved=JSON.parse(first);
+    assert.ok(saved.pendingRefreshIds.length<100&&saved.pendingRefreshIds.length>0);
+    assert.deepEqual([...saved.pendingRefreshIds,...saved.deferredPendingIds],planned);
     // In this fixture, simulate an interruption after saving raw task output.
     rmSync(inventory);
     await exec(process.execPath, [...command, '--recover'], { env });

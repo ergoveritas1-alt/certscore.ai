@@ -12,7 +12,7 @@ import {MAX_AUDIT_POLICY_PROVENANCE_BYTES} from '../../packages/certscore-contra
 // serialization before choosing among the existing query variants.
 const DELTA_OVERRIDE_HEADROOM_BYTES = 192;
 /** Pure offline query builder; never starts a task. */
-export function buildAuditDeltaQuery(b:any,includeOperations:boolean,includePrivacyForm=false,includeControlAccessibility=false,includeCaliforniaReject=false,includeTechnicalCounts=false,includeTrackingReviews=false,includePolicyReceipt=false):string{
+export function buildAuditDeltaQuery(b:any,includeOperations:boolean,includePrivacyForm=false,includeControlAccessibility=false,includeCaliforniaReject=false,includeTechnicalCounts=false,includeTrackingReviews=false,includePolicyReceipt=false,includeComparison=false):string{
 const origin=botOriginWindowSql(b.overlapStartUtc,b.windowEndUtc);
 const pending:string[]=b.pendingRefreshIds??[];
 if(!Array.isArray(pending)||pending.length>100||new Set(pending).size!==pending.length||pending.some(id=>!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(id)))throw Error('At most 100 distinct pending scan UUIDs required');
@@ -37,6 +37,8 @@ select row_to_json(r) from (
  p.report_projection_source_hash projection_source_hash,
  p.report_projection_payload_sha256 projection_payload_sha256,
  p.report_projection_version projection_version,p.report_projection_status projection_status,
+ ${includeComparison?`case when not o."isCanary" and p.report_projection_status='ready' and p.report_projection_payload#>>'{scan,id}'=s.id::text and octet_length((p.report_projection_payload#>'{runtimeArtifacts,auditComparison}')::text)<=512
+ then p.report_projection_payload#>'{runtimeArtifacts,auditComparison}' end "auditComparison",`:''}
  ${OPT_OUT_EXTRACT_SQL} control_assessment,
  ${choiceAuditSqlForTransport(includeOperations,includeControlAccessibility||includeOperations)} choice_audit,
  ${includeControlAccessibility?`case when not o."isCanary" and p.report_projection_payload#>>'{scan,id}'=s.id::text then ${CONTROL_ACCESSIBILITY_SQL} end "controlAccessibility",`:''}
@@ -64,7 +66,7 @@ return sql.replace(/'(?:''|[^'])*'|"(?:""|[^"])*"|\s*[(),]\s*|\s+/g,
 const policyReceipt="p.report_projection_payload->'auditPolicyProvenance'";
 const policyReceiptSql=`case when not o."isCanary" and p.report_projection_status='ready' and octet_length((${policyReceipt})::text)<=${MAX_AUDIT_POLICY_PROVENANCE_BYTES} then ${policyReceipt} end "policyReceipt",`;
 
-function technicalCountsSql(){
+export function technicalCountsSql(){
  const fields=[
   ['siteIntegrity','{observation,links}'],
   ['cmsSecurity','{assessment,detections}','{assessment,matches}'],
@@ -76,16 +78,20 @@ function technicalCountsSql(){
   const arrays=paths.map(path=>`jsonb_typeof(${ref}#>'${path}')='array'`).join(' and ');
   const catalogue=i===1?`${ref}#>>'{assessment,catalogueVersion}'`:null;
   const catalogueGuard=catalogue?` and length(${catalogue})<80`:'';
-  return `case when ${ref}->>'verificationStatus'='verified' and ${ref}->>'scanId'=s.id::text
-   and ${ref}->>'sourceHash'=h and length(${ref}->>'contractVersion')<80 and ${arrays}${catalogueGuard}
-   then jsonb_build_array(${ref}->>'contractVersion',${lengths}${catalogue?','+catalogue:''}) end`;
+  return `case when ${ref} is null or ${ref}='null'::jsonb then to_jsonb('source_missing'::text)
+   when ${ref}->>'verificationStatus' is distinct from 'verified' then to_jsonb('source_unverified'::text)
+   when ${ref}->>'scanId' is distinct from s.id::text or ${ref}->>'sourceHash' is distinct from h then to_jsonb('source_binding_mismatch'::text)
+   when length(${ref}->>'contractVersion')<80 and ${arrays}${catalogueGuard}
+   then jsonb_build_array(${ref}->>'contractVersion',${lengths}${catalogue?','+catalogue:''})
+   else to_jsonb('source_schema_incomplete'::text) end`;
  }).join(',');
- return `(select jsonb_build_array(${values}) from
+ return `coalesce((select jsonb_build_array(${values}) from
   (select p.report_projection_payload->'runtimeArtifacts' a) v,
   lateral (select jsonb_path_query_array(p.report_projection_payload,'$.events[*] ? (@.eventType == "v2_lambda_result.received")') e) w,
   lateral (select ${sources},e#>>'{0,metadataJson,artifactMetadata,scanArtifactUri,sha256}' h) t
   where p.report_projection_status='ready' and not o."isCanary"
-  and p.report_projection_payload#>>'{scan,id}'=s.id::text and e->1 is null and h~'^[0-9a-f]{64}$')`;
+  and p.report_projection_payload#>>'{scan,id}'=s.id::text and e->1 is null and h~'^[0-9a-f]{64}$'),
+  '["original_source_binding_unavailable","original_source_binding_unavailable"]'::jsonb)`;
 }
 
 export function planAuditDeltaQuery(b:any,marker:string){
@@ -95,12 +101,23 @@ export function planAuditDeltaQuery(b:any,marker:string){
  const candidates=[
   {controlAccessibility:true},
  ].map(variant=>{
-  const sql=buildAuditDeltaQuery(b,false,privacyForm,variant.controlAccessibility,true,true,true,true);
+  const sql=buildAuditDeltaQuery(b,false,privacyForm,variant.controlAccessibility,true,true,true,true,true);
   const measured=auditSqlOverrideFits({marker,readOnly:true,sql});
   const planningLimitBytes=measured.limitBytes-DELTA_OVERRIDE_HEADROOM_BYTES;
   return {...variant,operations:false,policyReceipt:true,privacyForm,sql,override:{...measured,planningLimitBytes,fits:measured.bytes<=planningLimitBytes}};
  });
  return {selected:candidates.find(candidate=>candidate.override.fits)??candidates.at(-1)!,expanded:candidates[0]!.override};
+}
+/** Offline only. Preserve priority order and required columns; shrink the exact
+ * pending prefix until the actual dates/container fit. Never start a task here. */
+export function fitAuditDeltaQuery(b:any,marker:string){
+ const planned:string[]=b.pendingRefreshIds??[];
+ const initial=planAuditDeltaQuery(b,marker); // Validate all IDs before shrinking.
+ for(let count=planned.length;count>=0;count--){
+  const plan=count===planned.length?initial:planAuditDeltaQuery({...b,pendingRefreshIds:planned.slice(0,count)},marker);
+  if(plan.selected.override.fits)return {...plan,pendingRefreshIds:planned.slice(0,count),deferredPendingIds:planned.slice(count),plannedPendingIds:planned};
+ }
+ throw Error('Required query exceeds planning cap even with zero pending IDs; no task started');
 }
 /** Current query contract only; historical manifests keep their original readable versions. */
 export function assertCurrentPriorityExtraction(rows:any[]){

@@ -7,7 +7,34 @@ uses the preceding calendar month, grouped by America/Los_Angeles date. Partial
 days and retained-export samples are allowed. It does not change the audit
 schedule, model, checkpoint, backlog, release watch, scoring or production data.
 
+Owner direction, November 10: feature-flag changes needed for owner-requested
+work do not require separate approval solely because they change a flag. This
+supersedes blanket flag-change prohibitions and repeat-approval wording in this
+procedure and earlier agent notes. Preserve task scope, cost approvals, privacy-
+action eligibility, source validation and acquisition limits. Explicit deployment
+holds still apply. The current owner hold keeps the policy-receipt restoration
+and safeguard local until deployment is resumed, including rollout-backed flags.
+
 ## Evidence and cohort
+
+The local data-health panel reports the retained cutoff and age, latest-day
+attempt/reportable/no-go/export-gap populations, measured/positive/zero/unavailable
+technical counts, policy receipt delivery and strict same-site/source-profile
+comparison candidates. Queue age is since scan creation at the cutoff, for the
+entire hash-verified cache queue; it is not export-processing latency. The panel
+does not create pooled rates or treat site mix, partial days or unmatched sources
+as controlled comparisons. Integrity status describes the sealed snapshot only.
+
+Future technical-count slots may carry reviewed unavailability reason codes
+(`certscore.technical-count-availability.v1` on audit intake): source missing,
+unverified, binding mismatch, incomplete schema or original binding unavailable.
+Require the existing original-creator/scan/time/generation binding before intake.
+Historical nulls remain reason-not-retained. Diagnostics never supply a zero count.
+The same bounded query now plans 56 pending UUIDs to reserve launch space, carrying
+all deferred ancestry. Freeze and size actual dates and IDs before each launch;
+do not omit required receipts or add queries. Estimated metadata increment is
+below $0.01/month within the approved receipt reserve. No production deployment,
+new capture or retrospective evidence reconstruction is needed for this reader.
 
 The default daily job is the focused data/dashboard refresh described in the
 audit-state audit-prompt.md. Reuse already sealed audit inputs; do not initiate
@@ -562,8 +589,15 @@ Historical v1 receipts retain their original source and coverage. Check the
 active source pins before submitting the ECS task.
 Use the exact-ID cache tool's `--plan-pending` mode against the prior verified
 manifest and the new month window. Copy its `pendingRefreshIds` into
-`begin.json`. It prioritizes least recently checked entries and targets up to
-100 in the existing SELECT. Deferred in-window entries keep their original
+`begin.json`. The daily plan starts with at most 56 IDs (hard ceiling 100).
+Reserve ceil(limit/2) slots for completed/completed_limited reports, ordered by
+oldest exact check; fill remaining slots by oldest exact check across every
+remaining status. This preserves fair failed-attempt rotation and all ancestry.
+Run `export-mac-mini-delta.ts RUN --plan` locally with actual dates/container.
+The fitter removes only the planned tail until the override fits 8,000 bytes;
+all required receipts stay present. The transport and inventory retain original
+planned IDs, effective targets and additionally deferred IDs. Recovery verifies
+both the planned list and exact effective SQL and never calls the fitter again. Deferred in-window entries keep their original
 selection receipts and last check date, even when the recent overlap returns
 the ID. They receive no archive lookup and remain ID-only gaps. The cache
 records the targeted, actually rechecked, deferred and aged-out counts.
@@ -617,7 +651,7 @@ same-document control assessment requires the exact control-accessibility row
 and its optional generation-bound compact coverage receipt alongside policy,
 privacy/form and required v2 fields and every planned UUID. Only existing
 optional operations evidence may be omitted. The daily pending planner selects
-at most 60 IDs and preserves all deferred IDs and ancestry. A detailed receipt
+at most 56 IDs and preserves all deferred IDs and ancestry. A detailed receipt
 records status, reason mask and counts for retained/completed/issue/review controls.
 Group its version and coverage reasons separately; missing historical receipts
 remain unknown. No keyboard, child-frame, closed-shadow or unopened-panel
@@ -800,3 +834,69 @@ The four baseline/GPC sale/sharing scalar audit rows now use the same strict pai
 packet reader as transitions. Public export and persisted-summary series stay
 separate, with unavailable values for missing/unbound pairs. No new query fields,
 capture or acquisition are needed for these mappings. Verify with audit-forward-gap.test.ts.
+
+
+## November 10 forward reliability and release verification
+
+`certscore.audit-comparison.v1` is an additive private provenance receipt capped
+at 512 bytes. The existing materialization consumes an already hash-verified
+bundle and manifest from the same original result. Only matching scan IDs,
+reviewed privacy profiles and exact scanner Git SHA are retained. Original bundle
+and manifest hashes remain distinct. No artifact fetch, visit, model call or
+capture budget is added. The existing single query transports this receipt;
+intake additionally requires original-creator, scan/time and ready projection
+source/payload/generation binding. The dashboard keeps historical metadata absent,
+checks conflicts and independently replays hash-verified inputs. These are
+comparison candidates, not evidence that two visits are experimentally equivalent.
+
+The owner-requested policy restoration is now an explicit
+`audit_policy_receipts=true` AWS workflow input; normal deployments preserve the
+materializer's current value independently of privacy-form enablement. The fast
+release path forwards `CERTSCORE_DEPLOY_AUDIT_POLICY_RECEIPTS=1`. Both full-image
+and settings-only paths verify exact converged materializer task configuration
+and retain `audit-receipt-release.json`. Its delivery status is pending, not passed.
+The next existing scheduled refresh runs `verify-audit-receipt-delivery.ts` with
+that real release receipt and sealed dashboard, producing a separate delivery
+receipt. No post-release reportable scans stays pending; missing generation-bound
+policy receipts fails. Do not issue another query to fill the verification gap.
+The current explicit owner deployment hold remains active.
+
+Current implementation cost is $0. Forward comparison metadata is capped at
+512 bytes per materialization (at most 51.2 MB at 100,000 scans before compression)
+and transported only in the existing bounded daily query. Estimated incremental
+storage/transport is below $0.10/month within the existing $1 receipt reserve;
+no retention, worker capacity, query count or paid task increase. This estimate
+is planning, not measured billing. Recalculate actual cumulative cost before
+any paid refresh under the unchanged $5 allowance.
+
+The November 10 required-receipt rule also supersedes older optional
+control-accessibility transport wording: neither launch fitting nor inventory
+serialization may evict required accessibility detail. If the 32 MB inventory
+cannot fit, preserve task output and prior dashboard and report the blocker;
+never issue another task/query to fill the omitted information.
+
+
+## November 10 combined receipt acceptance
+
+The next existing scheduled refresh after an actual release uses the v2 delivery
+checker for policy and comparison receipts. Comparison null/missing is delivery
+missing, not a recorded source limitation. New producer diagnostics retain
+`certscore.audit-comparison-unavailable.v1` with exact scan/time plus one bounded
+reason: original_sources_unverified, source_identity_mismatch,
+scanner_build_not_retained, capture_profile_not_retained,
+capture_profile_unsupported or source_metadata_invalid. These facts use existing
+materializer source checks and the same 512-byte transport slot. No additional
+reads, capture, storage allowance, recurring service or paid query is introduced.
+Both available and unavailable receipts still require original creator and ready
+source/payload/generation binding at intake; conflicts fail. Historical absence
+is never assigned a new producer reason. Diagnostic receipts cannot populate
+measured build/profile values or become comparison matches.
+
+The combined checker reports comparison availability and reasons by Los Angeles
+date, projection generation and receipt version. Missing/invalid/conflicting
+receipts fail (exit1); explicit source limitations are degraded (exit2); no new
+eligible scans stays pending. All eligible comparison metadata plus expected
+policy delivery must be available for a green pass. Keep the structured delivery
+result separate from dashboard integrity and from policy/action effectiveness.
+Do not issue another query or replay historical production reports to fix it.
+The current deployment hold and all acquisition limits remain unchanged.

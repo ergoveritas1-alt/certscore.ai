@@ -3,7 +3,7 @@ import fixtures from '../../apps/web/lib/scans/test-fixtures/retained-terminal-c
 import {gpcProductFixture} from '../../apps/web/lib/scans/test-fixtures/gpc-product';
 import {priorityEvidenceFromRecord,priorityEvidenceStates,priorityCoverageStates,withBoundedPriority,jsonbBytes} from './audit-progress-priority-evidence';
 import {choiceSummaryFromRecord,choiceSummaryAudit,applyChoiceSummary} from './audit-progress-choice';
-import {buildAuditDeltaQuery,planAuditDeltaQuery,assertCurrentPriorityExtraction} from './audit-delta-query';import {auditSqlOverrideFits} from './audit-prod-db-bounded';
+import {buildAuditDeltaQuery,planAuditDeltaQuery,fitAuditDeltaQuery,assertCurrentPriorityExtraction} from './audit-delta-query';import {auditSqlOverrideFits} from './audit-prod-db-bounded';
 import {NORMALIZED_CMP_ITEMS,FORM_CONTEXT_ITEMS,FORWARD_UTILITY} from './audit-forward-utility';import {P2_AUDIT_IDS} from './audit-p2-coverage';import {COVERAGE_MATRIX} from './audit-progress-coverage-matrix';
 const id='11111111-1111-4111-8111-111111111111';
 const record=(runtimeArtifacts:any)=>({scan:{id},snapshot:{consentControlAssessment:{scan:{noGo:false}}},runtimeArtifacts,canonicalReportProjection:{globalUnifiedFindings:[]}});
@@ -59,7 +59,7 @@ test('100 high-entropy pending UUIDs fit one bounded query; 101 and over-eight-d
  const q=buildAuditDeltaQuery(b,false),fit=auditSqlOverrideFits({marker:'MACMINI_DELTA_IDS',readOnly:true,sql:q});assert.ok(fit.fits,JSON.stringify(fit));assert.match(q,/statement_timeout='45s'/);assert.match(q,/limit 5001/);assert.match(q,/priorityEvidence/);assert.match(q,/size_bound/);assert.doesNotMatch(q,/\b(?:INSERT|UPDATE|DELETE)\b/i);assert.throws(()=>buildAuditDeltaQuery({...b,pendingRefreshIds:[...ids,'11111111-1111-4111-8111-111111111111']},false),/100/);assert.throws(()=>buildAuditDeltaQuery({...b,overlapStartUtc:'2026-10-01T00:00:00.000Z'},false),/eight|8|window/i);
 });
 
-test('daily query planning keeps all required receipts and launch headroom for 70 high-entropy pending UUIDs', () => {
+test('daily query planning keeps required receipts and diagnostics for 56 high-entropy planned UUIDs', () => {
  const originalContainer = process.env.CALIBRATION_DB_ECS_CONTAINER;
  delete process.env.CALIBRATION_DB_ECS_CONTAINER;
  try {
@@ -85,7 +85,7 @@ test('daily query planning keeps all required receipts and launch headroom for 7
    assert.match(full, /"controlAccessibility"/);
    assert.match(full, /'operationsEvidence'/);
    assert.ok(combined.fits, JSON.stringify({ sample, ...combined }));
-   const { selected, expanded } = planAuditDeltaQuery({...plan,pendingRefreshIds:pendingRefreshIds.slice(0,60),includePrivacyFormReceipts:true},'MACMINI_DELTA_IDS');
+   const { selected, expanded } = fitAuditDeltaQuery({...plan,pendingRefreshIds:pendingRefreshIds.slice(0,56),includePrivacyFormReceipts:true},'MACMINI_DELTA_IDS');
    assert.equal(selected.controlAccessibility,true);
    assert.ok(selected.override.fits,JSON.stringify({sample,...selected.override}));
    assert.ok(selected.override.limitBytes-selected.override.bytes>=192);

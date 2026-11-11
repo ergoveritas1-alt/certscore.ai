@@ -98,4 +98,18 @@ class DeltaTests(unittest.TestCase):
             next_plan=delta.pending_plan(delta.pending_exports(manifest),start,end)
             self.assertEqual(next_plan['pendingRefreshIds'][:8],ids[100:])
 
+    def test_completed_reservation_and_oldest_check_rotation_preserve_all_ids(self):
+        pending={str(i):dict(scanId=str(i),scanCreatedAt='2026-10-26T12:00:00Z',lastExactCheckUtc='2026-10-27T12:00:00Z' if i<141 else '2026-10-28T12:00:00Z',productionStatus='failed' if i<141 else 'completed') for i in range(157)}
+        start,end=delta.utc('2026-10-01T00:00:00Z'),delta.utc('2026-11-01T00:00:00Z')
+        plan=delta.pending_plan(pending,start,end,56)
+        self.assertEqual(sum(pending[i]['productionStatus']=='completed' for i in plan['pendingRefreshIds']),16)
+        self.assertEqual(len(plan['deferredPendingIds']),101)
+        self.assertEqual(set(plan['pendingRefreshIds']+plan['deferredPendingIds']),set(pending))
+        first_failed={i for i in plan['pendingRefreshIds'] if pending[i]['productionStatus']=='failed'}
+        for i in plan['pendingRefreshIds']:pending[i]['lastExactCheckUtc']='2026-10-29T12:00:00Z'
+        second=delta.pending_plan(pending,start,end,56)
+        self.assertFalse(first_failed.intersection(second['pendingRefreshIds']))
+        self.assertEqual(delta.pending_plan(pending,start,end,0)['pendingRefreshIds'],[])
+        with self.assertRaises(ValueError):delta.pending_plan(pending,start,end,101)
+
 if __name__=='__main__':unittest.main()

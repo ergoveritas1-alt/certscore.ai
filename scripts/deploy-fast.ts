@@ -634,12 +634,14 @@ async function deployWeb(input: { force: boolean; ref: string; workflowRef: stri
     ]);
     const { stage } = input;
     const receiptEnable=process.env.CERTSCORE_DEPLOY_AUDIT_RECEIPTS === "1";
+    const policyReceiptEnable=process.env.CERTSCORE_DEPLOY_AUDIT_POLICY_RECEIPTS === "1";
     const rolloutMode=input.reviewedRolloutMode ?? (process.env.CERTSCORE_DEPLOY_REVIEWED_OPT_OUT === "1" ? "enable" : "preserve");
     if(rolloutMode==="enable")await verifyScanners(input.ref);
     const runId = await ensureWorkflowRun(WEB_WORKFLOW, input.workflowRef, input.ref,
       [...(input.settingsOnly ? ["-F", "settings_only=true"] : []), ...(stage ? ["-f", `staged_run_id=${stage.runId}`, "-f", `staged_image=${stage.image}`, "-f", `staged_base_sha=${stage.baseSha}`] : []),
        ...(receiptEnable ? ["-f", "audit_privacy_form_receipts=true"] : []),
-       ...(rolloutMode!=="preserve" ? ["-f", `reviewed_opt_out_rollout=${rolloutMode}`] : [])], receiptEnable || rolloutMode!=="preserve", input.registrationGraceMs,
+       ...(policyReceiptEnable ? ["-f", "audit_policy_receipts=true"] : []),
+       ...(rolloutMode!=="preserve" ? ["-f", `reviewed_opt_out_rollout=${rolloutMode}`] : [])], receiptEnable || policyReceiptEnable || rolloutMode!=="preserve", input.registrationGraceMs,
       input.settingsOnly ? `Apply public web settings ${input.ref}` : stage ? `Promote public web ${input.ref} from ${stage.runId} ${stage.image}` : undefined);
     const workflowRun = await waitForRun(runId);
     return { workflow: WEB_WORKFLOW, url: workflowRun.url };

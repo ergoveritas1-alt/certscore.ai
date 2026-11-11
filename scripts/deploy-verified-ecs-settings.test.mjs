@@ -52,3 +52,13 @@ test('settings-only planning rejects an unverified running digest or revision an
   await assert.rejects(planVerifiedSettings(fixture({ installedImage: `${image}:${'c'.repeat(40)}` }).aws, config), /requested revision/);
   assert.equal((await planVerifiedSettings(fixture({ receipt: '1' }).aws, config)).input, undefined);
 });
+
+
+test('explicit policy restoration changes only the materializer grant and preserves existing privacy receipts', async () => {
+ const {aws,taskDefinition}=fixture({receipt:'1'});
+ const {input}=await planVerifiedSettings(aws,{...config,receipts:'preserve',policyReceipts:'true'});
+ const env=Object.fromEntries(input.containerDefinitions[0].environment.map(e=>[e.name,e.value]));
+ assert.equal(env.CERTSCORE_AUDIT_POLICY_PROVENANCE_ENABLED,'1');assert.equal(env[receiptKey],'1');assert.equal(env.KEEP,'1');
+ assert.equal(taskDefinition.containerDefinitions[0].environment.some(e=>e.name==='CERTSCORE_AUDIT_POLICY_PROVENANCE_ENABLED'),false);
+ assert.equal(input.cpu,taskDefinition.cpu);
+});

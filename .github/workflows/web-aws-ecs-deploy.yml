@@ -24,6 +24,9 @@ on:
       - "scripts/runtime-base-changes.mjs"
       - "scripts/lib/runtime-base-inputs.mjs"
       - "scripts/docker-source-policy.json"
+      - "scripts/configure-audit-receipts.ts"
+      - "scripts/verify-audit-receipt-release.ts"
+      - "scripts/deploy-verified-ecs-settings.mjs"
       - "scripts/configure-marketplace-light.ts"
       - "scripts/configure-marketplace-browser.ts"
       - "scripts/insert-integration-api-key.mjs"
@@ -87,6 +90,12 @@ on:
         type: choice
         default: preserve
         options: [preserve, enable, disable]
+      audit_policy_receipts:
+        description: "Preserve, explicitly restore (true), or disable (false) materializer policy receipts"
+        required: false
+        default: preserve
+        type: choice
+        options: [preserve, "true", "false"]
       audit_privacy_form_receipts:
         description: "Preserve, enable (true), or disable (false) private seven-field materializer receipts"
         required: false
@@ -125,6 +134,7 @@ jobs:
       ECR_REPOSITORY: ${{ vars.AWS_WEB_ECR_REPOSITORY }}
       ECS_CONTAINER_NAME: certscore-web
       AUDIT_RECEIPTS_MODE: ${{ inputs.audit_privacy_form_receipts }}
+      AUDIT_POLICY_RECEIPTS_MODE: ${{ inputs.audit_policy_receipts }}
     steps:
       - name: Require settings-only inputs on main
         env:
@@ -144,6 +154,12 @@ jobs:
         run: |
           test "$(git ls-remote --exit-code origin refs/heads/main)" = "$GITHUB_SHA"$'\t'refs/heads/main
           node --experimental-strip-types scripts/deploy-verified-ecs-settings.mjs web
+      - name: Retain settings receipt verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-receipt-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: audit-receipt-release.json
+          if-no-files-found: error
 
   verify-public-web:
     if: ${{ !inputs.settings_only && inputs.staged_run_id == '' && (github.event_name != 'push' || vars.AWS_STAGED_COUPLED_RELEASES != 'true') }}
@@ -358,6 +374,7 @@ jobs:
       ECS_CERTSCORE_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
       ECS_MATERIALIZER_SERVICE_NAME: ${{ vars.AWS_WEB_MATERIALIZER_SERVICE || 'certscore-web-materializer' }}
       MATERIALIZER_TASK_CPU: ${{ vars.AWS_WEB_MATERIALIZER_TASK_CPU || '1024' }}
+      AUDIT_POLICY_RECEIPTS_MODE: ${{ inputs.audit_policy_receipts || 'preserve' }}
       AUDIT_PRIVACY_FORM_RECEIPTS_MODE: ${{ inputs.audit_privacy_form_receipts || 'preserve' }}
       MATERIALIZER_TASK_MEMORY: ${{ vars.AWS_WEB_MATERIALIZER_TASK_MEMORY || '2048' }}
       CERTSCORE_BASE_URL: ${{ vars.AWS_WEB_CERTSCORE_BASE_URL }}
@@ -704,7 +721,7 @@ jobs:
 
           aws ecs describe-services --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_MATERIALIZER_SERVICE_NAME}" > current-materializer-service.json
           materializer_status="$(jq -r '.services[0].status // "MISSING"' current-materializer-service.json)"
-          if [[ "${AUDIT_PRIVACY_FORM_RECEIPTS_MODE}" == "true" && "$materializer_status" != ACTIVE ]]; then
+          if [[ ( "${AUDIT_PRIVACY_FORM_RECEIPTS_MODE}" == "true" || "${AUDIT_POLICY_RECEIPTS_MODE}" == "true" ) && "$materializer_status" != ACTIVE ]]; then
             echo "::error::Receipt enablement requires an active materializer service."
             exit 1
           fi
@@ -715,12 +732,6 @@ jobs:
           fi
           AUDIT_PRIVACY_FORM_RECEIPTS="$(node --experimental-strip-types scripts/configure-audit-receipts.ts "$AUDIT_PRIVACY_FORM_RECEIPTS_MODE" current-materializer-task-definition.json)"
           echo "AUDIT_PRIVACY_FORM_RECEIPTS=$AUDIT_PRIVACY_FORM_RECEIPTS" >> "$GITHUB_ENV"
-
-          TARGET_TASK_DEFINITION="$(aws ecs register-task-definition \
-            --cli-input-json file://target-task-definition.json \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)"
-          echo "TARGET_TASK_DEFINITION=${TARGET_TASK_DEFINITION}" >> "${GITHUB_ENV}"
 
           # Projection is CPU-heavy and intentionally isolated from public web
           # traffic. Register a distinct family so giving the materializer one
@@ -736,6 +747,17 @@ jobs:
                 then .value = $receipts else . end
               )
           ' target-task-definition.json > target-materializer-task-definition.json
+
+          # Preserve the materializer's independent policy-receipt grant before
+          # registering either task. The web template does not carry this flag.
+          node --experimental-strip-types scripts/configure-audit-receipts.ts preserve-policy \
+            current-materializer-task-definition.json target-materializer-task-definition.json "${AUDIT_POLICY_RECEIPTS_MODE}"
+
+          TARGET_TASK_DEFINITION="$(aws ecs register-task-definition \
+            --cli-input-json file://target-task-definition.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)"
+          echo "TARGET_TASK_DEFINITION=${TARGET_TASK_DEFINITION}" >> "${GITHUB_ENV}"
 
           TARGET_MATERIALIZER_TASK_DEFINITION="$(aws ecs register-task-definition \
             --cli-input-json file://target-materializer-task-definition.json \
@@ -779,7 +801,7 @@ jobs:
             --services "${ECS_MATERIALIZER_SERVICE_NAME}" \
             --query 'services[0].status' \
             --output text 2>/dev/null || true)"
-          if [[ "${AUDIT_PRIVACY_FORM_RECEIPTS}" == "1" && "${materializer_status}" != "ACTIVE" ]]; then
+          if [[ ( "${AUDIT_PRIVACY_FORM_RECEIPTS}" == "1" || "${AUDIT_POLICY_RECEIPTS_MODE}" == "true" ) && "${materializer_status}" != "ACTIVE" ]]; then
             echo "::error::Enabling audit privacy/form receipts requires an active materializer service."
             exit 1
           fi
@@ -857,6 +879,21 @@ jobs:
             fi
             STAGED_ECS_ALB_TIMING=1 node scripts/wait-for-staged-ecs.mjs "$ECS_CLUSTER_NAME" "${expected[@]}"
           fi
+
+      - name: Verify materializer receipt configuration
+        if: ${{ !inputs.stage_only && env.MATERIALIZER_SERVICE_DEPLOYED == 'true' }}
+        run: |
+          aws ecs describe-services --cluster "$ECS_CLUSTER_NAME" --services "$ECS_MATERIALIZER_SERVICE_NAME" > audit-receipt-services.json
+          aws ecs describe-task-definition --task-definition "$TARGET_MATERIALIZER_TASK_DEFINITION" > audit-receipt-task.json
+          node --experimental-strip-types scripts/verify-audit-receipt-release.ts target-materializer-task-definition.json audit-receipt-task.json audit-receipt-services.json "$TARGET_MATERIALIZER_TASK_DEFINITION" > audit-receipt-release.json
+
+      - name: Retain receipt configuration verification
+        if: ${{ always() && !inputs.stage_only && env.MATERIALIZER_SERVICE_DEPLOYED == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-receipt-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: audit-receipt-release.json
+          if-no-files-found: error
 
       - name: Submit IndexNow URLs
         if: ${{ !inputs.stage_only }}

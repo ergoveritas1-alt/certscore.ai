@@ -1,3 +1,4 @@
+import {buildAuditComparisonDelivery,readAuditComparisonDelivery,type AuditComparisonDelivery} from '../../../../packages/certscore-contracts/src/audit-comparison';
 import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { readBoundGpcCmpStateComparison } from "@certscore/contracts";
 import {reviewedOptOutPolicyOwner,reviewedOptOutPolicyRedirect} from "@certscore/contracts";
@@ -5652,6 +5653,7 @@ export function buildMaterializedLocalV2Detail(
   scanRecord: ScanDetailResponse,
   bundle: CanonicalEvidenceBundle,
   options: {
+    auditComparison?: AuditComparisonDelivery | null;
     consentControlGeometryEvidence?: Record<string, unknown> | null;
     gdprTransparencyEvidenceProfile?: GdprTransparencyProductionEvidenceProfile | string | null;
     localOutDir?: string | null;
@@ -6412,6 +6414,12 @@ export function buildMaterializedLocalV2Detail(
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
   const runtimeArtifacts = {
     ...inheritedRuntimeArtifacts,
+    // Never inherit stale comparison metadata into a newly materialized report.
+    auditComparison: options.auditComparison?.scanId===scanRecord.scan.id &&
+      Date.parse(options.auditComparison.createdAt)===Date.parse(scanRecord.scan.createdAt) &&
+      ('reason' in options.auditComparison || options.policyTextEvidenceContext?.sourceBundle.verificationStatus==='verified' &&
+      options.auditComparison.bundle===options.policyTextEvidenceContext.sourceBundle.sha256)
+        ? readAuditComparisonDelivery(options.auditComparison) : null,
     gdprNarrowPosture: runtimeEvidenceReportable && !consentControlAssessment.scan.noGo ? projectGdprNarrowPosture({
       bundle, source: options.policyTextEvidenceContext?.sourceBundle, documentUrl: canonicalDocumentUrl,
       geometry: options.consentControlGeometryEvidence,
@@ -7082,6 +7090,11 @@ async function materializeLocalV2DagScanDetailUncached(
   return bundle
     ? timed("app.scan_detail.local_v2_projection", async () =>
         buildMaterializedLocalV2Detail(scanRecord, bundle, {
+          auditComparison: buildAuditComparisonDelivery({
+            sourcesVerified:verifiedArtifactChainAvailable && remoteManifest!==null,
+            scanId:scanRecord.scan.id,createdAt:scanRecord.scan.createdAt,bundle,manifest:remoteManifest,
+            bundleSha256:input.scanArtifactSha256,manifestSha256:input.manifestArtifactSha256,
+          }),
           consentControlGeometryEvidence,
           gdprTransparencyEvidenceProfile: input.gdprTransparencyEvidenceProfile,
           localOutDir: shouldReadLocalOutDir ? input.outDir : null,
