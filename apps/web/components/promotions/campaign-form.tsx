@@ -1,7 +1,7 @@
 "use client";
 import { useEffect,useState,type FormEvent } from "react";
 import Link from "next/link";
-import { BUSINESS_TYPES,SITE_COUNTS,STATES,SUCCESS_MESSAGE } from "../../lib/promotions/black-friday";
+import { BUSINESS_TYPES,SITE_COUNTS,SUCCESS_MESSAGE } from "../../lib/promotions/black-friday";
 import { campaignAttribution,campaignEvent } from "./campaign-tracking";
 export function CampaignView() {useEffect(()=>campaignEvent("bf26_landing_view"),[]);return null;}
 export function CampaignForm({open}:{open:boolean}) {
@@ -22,12 +22,12 @@ export function CampaignForm({open}:{open:boolean}) {
   if(!open)return <div role="status" className="rounded-2xl bg-slate-100 p-8">Applications are currently closed. Existing applications and approved invitations remain valid under their original terms.</div>;
   return <form onSubmit={submit} onFocusCapture={()=>campaignEvent("bf26_form_start")} data-analytics-submit="manual" data-analytics-form="bf26_application" className="space-y-6">
     <p className="text-sm text-slate-600">All fields are required unless marked optional. No account or credit card is needed.</p>
-    <div className="grid gap-5 sm:grid-cols-2">{input("fullName","Full name")}{input("email","Business email","email")}{input("company","Company / firm name")}{input("website","Company website","url")}{select("businessType","Business type",BUSINESS_TYPES)}{select("clientSites","Client websites managed or advised",SITE_COUNTS)}<label className="block text-sm font-medium text-slate-800">Country<select aria-label="Country" name="country" className={control} defaultValue="US"><option value="US">United States</option></select></label>{select("state","State / territory",STATES)}</div>
+    <div className="grid gap-5 sm:grid-cols-2">{input("fullName","Full name")}{input("email","Business email","email")}{input("company","Company / firm name")}{input("website","Company website","url")}{select("businessType","Business type",BUSINESS_TYPES)}{select("clientSites","Client websites managed or advised",SITE_COUNTS)}</div>
     <label className="block text-sm font-medium text-slate-800">Primary intended use of CertScore.ai<textarea name="intendedUse" required rows={3} maxLength={600} className={control} aria-invalid={!!fields.intendedUse}/>{fields.intendedUse&&<span className="text-red-700">{fields.intendedUse}</span>}</label>
     {input("linkedIn","LinkedIn profile","url",false)}
     <label className="block text-sm font-medium text-slate-800">Additional comments (optional)<textarea name="comments" rows={3} maxLength={1500} className={control}/></label>
     <div className="hidden" aria-hidden="true"><label>Leave this empty<input name="websiteConfirm" autoComplete="off" tabIndex={-1}/></label></div>
-    <label className="flex items-start gap-3 text-sm leading-6"><input name="terms" type="checkbox" required className="mt-1 h-5 w-5 shrink-0"/><span>I agree to the <Link className="underline" href="/black-friday#terms" target="_blank">promotional terms</Link> and acknowledge the <Link className="underline" href="/privacy" target="_blank">Privacy Policy</Link>. I represent a legitimate U.S.-based business, am not an existing paid subscriber, and will disclose related businesses during review.</span></label>
+    <label className="flex items-start gap-3 text-sm leading-6"><input name="terms" type="checkbox" required className="mt-1 h-5 w-5 shrink-0"/><span>I agree to the <Link className="underline" href="/black-friday#terms" target="_blank">promotional terms</Link> and acknowledge the <Link className="underline" href="/privacy" target="_blank">Privacy Policy</Link>. I represent a legitimate business, am not an existing paid subscriber, and will disclose related businesses during review.</span></label>
     <label className="flex items-start gap-3 text-sm leading-6"><input name="marketingOptIn" type="checkbox" className="mt-1 h-5 w-5 shrink-0"/><span>Send me occasional CertScore.ai product and marketing emails (optional). This does not affect eligibility.</span></label>
     {error&&<p role="alert" className="rounded-lg bg-red-50 p-4 text-red-800">{error}</p>}
     <button disabled={busy} className="w-full rounded-xl bg-indigo-600 px-6 py-4 font-semibold text-white hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-600 disabled:opacity-60">{busy?"Submitting application…":"Submit Application"}</button>

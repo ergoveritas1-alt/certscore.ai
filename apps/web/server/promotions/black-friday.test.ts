@@ -3,7 +3,7 @@ import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
-import { applicationSchema,campaignOpen,addCalendarMonths,entitlementPeriod,cleanAttribution,sourceGroup,csvCell,percentage } from "../../lib/promotions/black-friday";
+import { applicationSchema,TERMS_VERSION,campaignOpen,addCalendarMonths,entitlementPeriod,cleanAttribution,sourceGroup,csvCell,percentage } from "../../lib/promotions/black-friday";
 import { getCampaignConfig } from "./config";
 import { createCampaignStore,inviteToken,validInviteToken,type Application,type Sql } from "./repository";
 import { campaignDashboard } from "./dashboard";
@@ -12,7 +12,7 @@ import { recordCampaignAggregate } from "./aggregate";
 import { assertSameOrigin,boundedBody,rateLimit } from "./http";
 const secret="isolated-campaign-test-secret-32-characters";
 const now=new Date("2026-11-11T01:00:00Z");
-function input(n=0){return {requestId:randomUUID(),fullName:"Test Applicant",email:`person${n}@agency${n}.example`,company:`Agency ${n}`,website:`https://agency${n}.example`,businessType:"Web design/development agency",country:"US",state:"CA",clientSites:"0–5",intendedUse:"Client launch reviews",terms:true,marketingOptIn:false,analyticsConsent:false};}
+function input(n=0){return {requestId:randomUUID(),fullName:"Test Applicant",email:`person${n}@agency${n}.example`,company:`Agency ${n}`,website:`https://agency${n}.example`,businessType:"Web design/development agency",clientSites:"0–5",intendedUse:"Client launch reviews",terms:true,marketingOptIn:false,analyticsConsent:false};}
 test("campaign configuration fails closed and cannot override production timing",()=>{
   assert.deepEqual(getCampaignConfig({}),{emailDelivery:false,testWindow:false});
   assert.equal(getCampaignConfig({NODE_ENV:"production",CERTSCORE_BF26_TEST_WINDOW:"1"}).testWindow,false);
@@ -27,8 +27,11 @@ test("Pacific campaign boundaries include Dec 2 and close at next midnight; capa
 });
 test("form validates business identity, no-minimum-size eligibility and separate unchecked marketing consent",()=>{
   assert.equal(applicationSchema.parse(input()).marketingOptIn,false);
-  for(const change of [{email:"bad"},{country:"CA"},{state:"bad"},{terms:false},{website:"http://localhost"},{website:"https://user:password@example.com"},{website:"https://127.0.0.1"},{websiteConfirm:"bot"},{intendedUse:""},{comments:"x".repeat(1501)}])assert.equal(applicationSchema.safeParse({...input(),...change}).success,false);
+  for(const change of [{email:"bad"},{terms:false},{website:"http://localhost"},{website:"https://user:password@example.com"},{website:"https://127.0.0.1"},{websiteConfirm:"bot"},{intendedUse:""},{comments:"x".repeat(1501)}])assert.equal(applicationSchema.safeParse({...input(),...change}).success,false);
   assert.equal(applicationSchema.safeParse({...input(),email:"solo@gmail.com"}).success,true);
+  const legacy = applicationSchema.parse({...input(),country:"GB",state:"London"});
+  assert.equal("country" in legacy,false);
+  assert.equal("state" in legacy,false);
 });
 test("UTC calendar periods clip month-end without drifting subsequent anniversaries",()=>{
   const start=new Date("2026-11-30T23:59:00Z");
@@ -104,8 +107,14 @@ test("isolated PostgreSQL campaign journey, concurrency, quota, delivery and exp
       }),/rollback paid-account fixture/);
     });
     await t.test("persistence and outbox are atomic, retries and domain/email duplicates do not allocate",async()=>{
-      const data=input();const results=await Promise.all(Array.from({length:8},()=>store.submit(data,false,now)));
+      const data={...input(),email:"hello@agency-review.co.uk",website:"https://agency-review.co.uk"};
+      const results=await Promise.all(Array.from({length:8},()=>store.submit(data,false,now)));
       assert.equal(results.filter(r=>r.created).length,1);firstId=results.find(r=>r.id)!.id!;
+      const stored=(await sql.query(`select details, terms_version from promotion_applications where id=$1`,[firstId])).rows[0]!;
+      assert.equal(stored.details.website,data.website);
+      assert.equal("country" in stored.details,false);
+      assert.equal("state" in stored.details,false);
+      assert.equal(stored.terms_version,TERMS_VERSION);
       assert.equal((await sql.query(`select count(*)::int n from promotion_email_outbox`)).rows[0]!.n,2);
       assert.equal((await store.availability(now)).allocated,0);
       assert.equal((await store.submit({...input(50),website:data.website},false,now)).created,false);
