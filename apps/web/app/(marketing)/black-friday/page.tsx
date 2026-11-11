@@ -7,7 +7,6 @@ import { AnalyticsConsentBanner } from "../../../components/analytics/analytics-
 import { CampaignView } from "../../../components/promotions/campaign-form";
 import { createPageMetadata } from "../../../lib/seo";
 import { campaignStore } from "../../../server/promotions/repository";
-import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../../lib/marketing/sample-report";
 
 export const dynamic = "force-dynamic";
 export const metadata = createPageMetadata({
@@ -15,6 +14,10 @@ export const metadata = createPageMetadata({
   description: "Three months of CertScore.ai Pro at no cost for eligible agencies, developers, marketers, law firms and data privacy officers. Apply by December 2, 2026.",
   path: "/black-friday"
 });
+
+const californiaSampleReportUrl = "https://certscore.ai/scan/c4c071c6-9313-40b3-94de-23d50d24ba18?reviewFocus=ccpa_cpra";
+const executiveOverviewImage = "/promotions/black-friday-2026/report-california-executive-overview.jpg";
+const servicesResourcesImage = "/promotions/black-friday-2026/report-california-services-resources.jpg";
 
 const workflows = [
   {
@@ -123,7 +126,7 @@ export default async function BlackFridayPage() {
             <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
               <ApplyLink open={open} />
               <a
-                href={AUTHENTIC_SAMPLE_REPORT_URL}
+                href={californiaSampleReportUrl}
                 target="_blank"
                 rel="noreferrer"
                 data-analytics-cta-type="sample_report"
@@ -157,8 +160,8 @@ export default async function BlackFridayPage() {
                   <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#1d4ed8]">Website privacy insights</p>
                   <h2 id="report-graphic-title" className="mt-2 max-w-[15ch] text-2xl font-semibold leading-tight tracking-tight text-[#0f2141] sm:text-3xl">See the signals.<br />Keep the evidence.</h2>
                 </div>
-                <a href={AUTHENTIC_SAMPLE_REPORT_URL} target="_blank" rel="noreferrer" aria-label="View Full Sample Report" data-analytics-cta-type="sample_report" className="block p-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-600 sm:p-3">
-                  <Image src="/promotions/black-friday-2026/report-executive-overview.jpg" alt="Actual CertScore.ai sample report with review priorities, consent controls and captured resource counts." width={1232} height={467} unoptimized className="h-auto w-full" />
+                <a href={californiaSampleReportUrl} target="_blank" rel="noreferrer" aria-label="View Full Sample Report" data-analytics-cta-type="sample_report" className="block p-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-600 sm:p-3">
+                  <Image src={executiveOverviewImage} alt="CertScore.ai executive overview of a scan from California with CCPA/CPRA selected." width={1232} height={612} unoptimized className="h-auto w-full" />
                   <span className="mt-1 inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-[#1d4ed8] underline underline-offset-2">View Full Sample Report <span aria-hidden="true">↗</span></span>
                 </a>
                 <div className="grid grid-cols-3 divide-x divide-[#dbe5f3] border-t border-[#dbe5f3] bg-[#f5f8ff] text-[#21477e]">
@@ -195,7 +198,7 @@ export default async function BlackFridayPage() {
               See the evidence your team can work with.
             </h2>
             <p className="mt-4 text-lg leading-8 text-[#475b78]">
-              See what CertScore.ai found on a real website. Reports can show what loads before consent, after Reject or with Global Privacy Control (GPC), where supported. Open either capture at full size to read the details.
+              See what CertScore.ai found when it scanned our sample website from California. Reports can show what loads before consent, after Reject or with Global Privacy Control (GPC), where supported. Open either capture at full size to read the details.
             </p>
           </div>
         </div>
@@ -203,14 +206,14 @@ export default async function BlackFridayPage() {
           <figure className="overflow-hidden rounded-xl border border-[#dbe5f3] bg-white shadow-sm">
             <figcaption className="border-b border-[#dbe5f3] px-5 py-5 sm:px-7">
               <h3 className="text-xl font-semibold">Executive overview</h3>
-              <p className="mt-2 leading-7 text-[#475b78]">See review priorities, the consent platform and how much evidence the scan captured.</p>
+              <p className="mt-2 leading-7 text-[#475b78]">See the CCPA/CPRA posture, review priorities and captured evidence from the California scan.</p>
             </figcaption>
-            <a href="/promotions/black-friday-2026/report-executive-overview.jpg" target="_blank" rel="noreferrer" aria-label="Open the executive overview screenshot at full size" className="block p-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#1d4ed8] sm:p-5">
+            <a href={executiveOverviewImage} target="_blank" rel="noreferrer" aria-label="Open the executive overview screenshot at full size" className="block p-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#1d4ed8] sm:p-5">
               <Image
-                src="/promotions/black-friday-2026/report-executive-overview.jpg"
-                alt="CertScore.ai executive overview showing priority findings, consent controls and captured resource counts."
+                src={executiveOverviewImage}
+                alt="CertScore.ai CCPA/CPRA executive overview showing the California scan’s score, review priorities and resource counts."
                 width={1232}
-                height={467}
+                height={612}
                 unoptimized
                 className="h-auto w-full"
               />
@@ -221,12 +224,12 @@ export default async function BlackFridayPage() {
               <h3 className="text-xl font-semibold">Services &amp; Resources</h3>
               <p className="mt-2 leading-7 text-[#475b78]">Inspect detected services, purpose classifications and policy disclosure matches alongside the retained resource inventory.</p>
             </figcaption>
-            <a href="/promotions/black-friday-2026/report-services-resources.jpg" target="_blank" rel="noreferrer" aria-label="Open the services and resources screenshot at full size" className="block p-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#1d4ed8] sm:p-5">
+            <a href={servicesResourcesImage} target="_blank" rel="noreferrer" aria-label="Open the services and resources screenshot at full size" className="block p-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#1d4ed8] sm:p-5">
               <Image
-                src="/promotions/black-friday-2026/report-services-resources.jpg"
+                src={servicesResourcesImage}
                 alt="CertScore.ai Services and Resources table showing detected services, resource counts, purposes, policy disclosure matches and domains."
                 width={1190}
-                height={651}
+                height={503}
                 unoptimized
                 className="h-auto w-full"
               />
@@ -234,7 +237,7 @@ export default async function BlackFridayPage() {
           </figure>
         </div>
         <div className="mt-6">
-          <a href={AUTHENTIC_SAMPLE_REPORT_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[#1d4ed8] underline underline-offset-4">
+          <a href={californiaSampleReportUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[#1d4ed8] underline underline-offset-4">
             Explore the full sample report <span aria-hidden="true">↗</span>
           </a>
         </div>
