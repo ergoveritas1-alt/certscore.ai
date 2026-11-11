@@ -104,7 +104,7 @@ export default async function BlackFridayPage() {
       <CampaignView />
 
       <section className="overflow-hidden bg-[#081a3b] bg-[radial-gradient(ellipse_at_top_right,rgba(37,99,235,0.22),transparent_65%)] text-white">
-        <div className="mx-auto grid max-w-7xl gap-10 px-6 py-9 sm:gap-14 sm:px-10 sm:py-20 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:py-24">
+        <div className="mx-auto grid max-w-7xl gap-10 px-6 py-9 sm:gap-14 sm:px-10 sm:py-16 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
           <div>
             <p className="mb-4 font-mono sm:mb-6 text-xs font-semibold uppercase tracking-[0.16em] text-[#93c5fd]">
               Black Friday 2026
@@ -138,7 +138,7 @@ export default async function BlackFridayPage() {
             <AnalyticsConsentBanner campaignPlacement />
           </div>
 
-          <aside aria-labelledby="report-graphic-title" className="relative isolate min-w-0 pb-3 pt-24 sm:pt-10">
+          <aside aria-labelledby="report-graphic-title" className="relative isolate min-w-0 pb-3 pt-28 sm:pt-10">
             <div aria-hidden="true" className="pointer-events-none absolute -inset-10 -z-10 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.32),transparent_67%)]" />
             <svg aria-hidden="true" viewBox="0 0 560 460" fill="none" className="pointer-events-none absolute inset-0 -z-10 h-full w-full text-blue-400/25">
               <circle cx="280" cy="210" r="190" stroke="currentColor" />
@@ -157,9 +157,9 @@ export default async function BlackFridayPage() {
                   <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#1d4ed8]">Website privacy insights</p>
                   <h2 id="report-graphic-title" className="mt-2 max-w-[15ch] text-2xl font-semibold leading-tight tracking-tight text-[#0f2141] sm:text-3xl">See the signals.<br />Keep the evidence.</h2>
                 </div>
-                <a href={AUTHENTIC_SAMPLE_REPORT_URL} target="_blank" rel="noreferrer" aria-label="Explore the CertScore.ai sample report" data-analytics-cta-type="sample_report" className="block p-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-600 sm:p-3">
+                <a href={AUTHENTIC_SAMPLE_REPORT_URL} target="_blank" rel="noreferrer" aria-label="View Full Sample Report" data-analytics-cta-type="sample_report" className="block p-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-600 sm:p-3">
                   <Image src="/promotions/black-friday-2026/report-executive-overview.jpg" alt="Actual CertScore.ai sample report with review priorities, consent controls and captured resource counts." width={1232} height={467} unoptimized className="h-auto w-full" />
-                  <span className="block px-2 py-2 text-sm font-semibold text-[#1d4ed8] underline">Open full sample report <span aria-hidden="true">↗</span></span>
+                  <span className="mt-1 inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-[#1d4ed8] underline underline-offset-2">View Full Sample Report <span aria-hidden="true">↗</span></span>
                 </a>
                 <div className="grid grid-cols-3 divide-x divide-[#dbe5f3] border-t border-[#dbe5f3] bg-[#f5f8ff] text-[#21477e]">
                   <div className="flex flex-col items-center gap-2 px-1 py-4 text-center text-[11px] font-semibold sm:text-xs">
