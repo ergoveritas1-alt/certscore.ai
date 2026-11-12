@@ -14,7 +14,7 @@ export default function WebsitePrivacyPolicyRequirementsGuidePage() {
     <GuideTemplate
       eyebrow="Policy guide"
       title="Website Privacy Policy Requirements"
-      intro="A website privacy policy usually explains what information a site collects, how that information is used, which third parties may be involved, and how visitors can contact the site operator. For many teams, the first challenge is simply confirming that a meaningful public-facing policy is present."
+      intro="Compare the site’s privacy disclosures with the cookies, services and forms observed in the report. Give the privacy owner specific passages and vendor evidence to review for purposes, recipients, retention, rights and contact information."
       pagePath="/guides/website-privacy-policy-requirements"
       questionTitle="What should a privacy policy include?"
       whyItMatters={[
@@ -34,7 +34,7 @@ export default function WebsitePrivacyPolicyRequirementsGuidePage() {
       ]}
       automatedScanningHelp={[
         "Automated scanning can detect likely privacy policy pages through URL patterns, link text, and selected scan-page structure.",
-        "It can also perform shallow content checks for common topic signals such as personal data, cookies, contact information, and third-party references.",
+        "Review retained policy passages and their source links for processing purposes, legal-basis language, retention, recipients, transfers and privacy rights. Compare specific disclosures with relevant observed website behavior.",
         "This kind of analysis helps teams decide whether a policy review should move higher on the remediation list."
       ]}
       certScoreHelp={[
@@ -43,13 +43,14 @@ export default function WebsitePrivacyPolicyRequirementsGuidePage() {
         "It also connects privacy-policy gaps to the rest of the scan so teams can compare disclosure coverage against tracker and cookie findings."
       ]}
       certScoreFlagExample="The scan could flag a missing privacy policy link, thin policy-topic coverage, or tracking signals that outpace the site’s disclosures."
+      sources={[{"href": "https://eur-lex.europa.eu/eli/dir/2002/58/2009-12-19/eng", "label": "ePrivacy Directive, Article 5(3)"}, {"href": "https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng", "label": "GDPR, consent and transparency"}, {"href": "https://www.oag.ca.gov/privacy/ccpa", "label": "California Attorney General: CCPA"}]}
       relatedGuides={[
         { href: "/solutions/privacy-policy-risk-scanner", label: "Scan your website’s privacy policy" },
         { href: "/findings/cookie_disclosure_gap", label: "Cookie disclosure gap finding" },
         { href: "/findings/policy_behavior_contradiction_detected", label: "Policy/runtime alignment finding" },
         { href: "/guides/privacy-policy-examples", label: "Privacy policy examples" },
         { href: "/guides/cookie-consent-laws", label: "Cookie consent laws" },
-        { href: "/guides/website-signal-check", label: "Website signal review checklist" }
+        { href: "/guides/website-consent-audit-checklist", label: "Website consent audit checklist" }
       ]}
     />
   );

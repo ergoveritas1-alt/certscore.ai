@@ -319,7 +319,7 @@ export function LightMcpCallout() {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Recommended starting point</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Start with Light MCP</h2>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-            Connect an MCP-capable agent to CertScore in about a minute. No account, API key, browser login, or OAuth—a remote URL for scanning, status, result bundles and paginated report evidence.
+            Connect an MCP-capable agent to CertScore.ai in about a minute. No account, API key, browser login, or OAuth—a remote URL for scanning, status, result bundles and paginated report evidence.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Link className="rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800" href="/mcp/light">

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import { AnalyticsPreferencesButton } from "../analytics/analytics-consent-banner";
 import { SocialFollowLinks } from "../releases/social-follow-links";
 import { FOOTER_COPYRIGHT_COPY, FOOTER_DISCLAIMER_COPY } from "./footer-copy";
@@ -8,12 +7,10 @@ const footerSections = [
   {
     title: "Product",
     links: [
-      { href: "/", label: "Home" },
+      { href: "/#homepage-scan", label: "Run free scan" },
+      { href: "/sample-report", label: "View sample report" },
+      { href: "/how-it-works", label: "How it works" },
       { href: "/solutions", label: "Solutions" },
-      { href: "/how-it-works", label: "How It Works" },
-      { href: "/browser-extension", label: "Chrome extension" },
-      { href: "/findings", label: "Findings" },
-      { href: "/developers", label: "Developers" },
       { href: "/pricing", label: "Pricing" }
     ]
   },
@@ -21,46 +18,51 @@ const footerSections = [
     title: "Resources",
     links: [
       { href: "/guides", label: "Guides" },
-      { href: "/benchmarks", label: "Benchmarks" },
-      { href: "/releases", label: "Releases" },
       { href: "/findings", label: "Findings" },
-      { href: "/developers/reference", label: "API reference" },
-      { href: "/developers/sdk", label: "SDK docs" },
-      { href: "/developers/mcp", label: "MCP docs" },
-      { href: "/muse", label: "CertScore.ai for Muse" },
-      { href: "/claude", label: "Claude website scanner" },
-      { href: "/regulatory", label: "Regulatory pages" },
-      { href: "/gdpr", label: "GDPR evidence guide" },
-      { href: "/methodology", label: "Methodology" },
-      { href: "/editorial-policy", label: "Editorial policy" },
-      { href: "/ccpa", label: "CCPA evidence guide" },
-      { href: "/guides/test-global-privacy-control", label: "Test GPC response" },
-      { href: "/compare", label: "Compare" }
+      { href: "/releases", label: "Research & releases" },
+      { href: "/methodology", label: "Methodology" }
     ]
   },
   {
-    title: "Use cases",
+    title: "Developers",
     links: [
-      { href: "/solutions/gdpr-website-compliance-scanner", label: "GDPR website scanner" },
-      { href: "/solutions/cookie-consent-scanner", label: "Cookie consent scanner" },
-      { href: "/solutions/privacy-policy-risk-scanner", label: "Privacy policy risk scanner" },
-      { href: "/guides/detect-tracking-before-consent", label: "Detect tracking before consent" },
-      { href: "/guides/cookie-consent-enforcement-checker", label: "Verify cookie consent" },
-      { href: "/guides/third-party-cookie-checker", label: "Review third-party tracking" },
-      { href: "/monitor-site", label: "Monitor vendor changes" }
+      { href: "/developers/reference", label: "API reference" },
+      { href: "/developers/sdk", label: "SDK documentation" },
+      { href: "/developers/mcp", label: "MCP integration" }
+    ]
+  },
+  {
+    title: "Company",
+    links: [
+      { href: "/what-is-certscore", label: "About CertScore.ai" },
+      { href: "/contact-sales", label: "Contact" },
+      { href: "/security", label: "Security" }
     ]
   }
 ];
 
-const companyLegalLinks = [
-  { href: "/contact-sales", label: "Contact" },
-  { href: "/trust", label: "Trust & Security" },
-  { href: "/security", label: "Security" },
-  { href: "/privacy", label: "Privacy Policy" },
+const legalLinks = [
+  { href: "/privacy", label: "Privacy" },
   { href: "/terms", label: "Terms" },
-  { href: "/privacy-request", label: "Privacy Request" },
-  { href: "/login", label: "Sign in", analyticsEvent: "sign_in_clicked" }
+  { href: "/privacy-request", label: "Privacy requests" }
 ];
+
+function FooterLinks({ links }: { links: (typeof footerSections)[number]["links"] }) {
+  return (
+    <ul className="space-y-1">
+      {links.map((link) => (
+        <li key={link.href}>
+          <Link
+            href={link.href}
+            className={`inline-flex min-h-11 items-center rounded py-2 transition hover:text-sky-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 sm:min-h-0 sm:py-1.5 ${link.href === "/#homepage-scan" || link.href === "/sample-report" ? "font-semibold text-sky-700" : "text-slate-600"}`}
+          >
+            {link.label}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 type SiteFooterProps = {
   hideDisclaimer?: boolean;
@@ -69,89 +71,44 @@ type SiteFooterProps = {
 };
 
 export function SiteFooter({ hideDisclaimer = false, wide = true, highContrast = false }: SiteFooterProps = {}) {
-  const certscoreGptUrl = getCertScoreGptUrl();
-  const sections = footerSections.map((section) =>
-    section.title === "Resources"
-      ? {
-          ...section,
-          links: [
-            ...section.links,
-            {
-              href: certscoreGptUrl,
-              label: "CertScore.ai GPT beta",
-              external: true,
-              analyticsEvent: "gpt_cta_clicked",
-              analyticsLocation: "footer"
-            }
-          ]
-        }
-      : section
-  );
   return (
     <footer className={`border-t border-slate-200 bg-white ${highContrast ? "[&_.text-slate-400]:text-slate-600" : ""}`}>
-      <div className={`mx-auto flex flex-col gap-6 py-8 text-sm text-slate-500 ${wide ? "max-w-[90rem] px-5 lg:px-10" : "max-w-6xl px-4 sm:px-6"}`}>
+      <div className={`mx-auto py-8 text-sm text-slate-600 sm:py-10 ${wide ? "max-w-[90rem] px-5 lg:px-10" : "max-w-6xl px-4 sm:px-6"}`}>
         {!hideDisclaimer ? (
-          <p className="max-w-none text-xs leading-5 text-slate-500 lg:whitespace-nowrap">
-            {FOOTER_DISCLAIMER_COPY}
-          </p>
+          <p className="mb-6 text-xs leading-5 text-slate-500">{FOOTER_DISCLAIMER_COPY}</p>
         ) : null}
-        <div className={`grid gap-7 sm:grid-cols-2 lg:grid-cols-4 ${hideDisclaimer ? "" : "border-t border-slate-100 pt-6"}`}>
-          {sections.map((section) => (
-            <nav key={section.title} aria-label={section.title} className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{section.title}</p>
-              <div className="flex flex-col gap-2">
-                {section.links.map((link) =>
-                  "external" in link && link.external ? (
-                    <a
-                      key={link.href}
-                      className="hover:text-slate-900"
-                      data-analytics-cta-location={link.analyticsLocation}
-                      data-analytics-destination-url={link.href}
-                      data-analytics-event={link.analyticsEvent}
-                      href={link.href}
-                      rel="noopener noreferrer"
-                      target="_blank"
-                    >
-                      {link.label}
-                    </a>
-                  ) : (
-                    <Link key={link.href} href={link.href} className="hover:text-slate-900">
-                      {link.label}
-                    </Link>
-                  )
-                )}
-              </div>
+        <div className="hidden gap-8 sm:grid sm:grid-cols-2 lg:grid-cols-4">
+          {footerSections.map((section) => (
+            <nav key={section.title} aria-label={`Footer ${section.title}`} className="space-y-3">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{section.title}</h2>
+              <FooterLinks links={section.links} />
             </nav>
           ))}
-          <nav aria-label="Company and legal" className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Company / Legal</p>
-            <div className="flex flex-col gap-2">
-              {companyLegalLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  data-analytics-cta-location={link.analyticsEvent ? "unknown" : undefined}
-                  data-analytics-event={link.analyticsEvent}
-                  href={link.href}
-                  className="hover:text-slate-900"
-                >
-                  {link.label}
-                </Link>
-              ))}
-              <div className="flex justify-start">
-                <AnalyticsPreferencesButton />
-              </div>
-              <div className="mt-3 border-t border-slate-100 pt-3">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Follow</p>
-                <SocialFollowLinks compact />
-              </div>
-            </div>
-          </nav>
         </div>
-        <div className="space-y-2 border-t border-slate-100 pt-5 text-xs leading-5 text-slate-400">
-          <p>
-            Privacy rights requests can be submitted at <Link href="/privacy-request" className="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">certscore.ai/privacy-request</Link> or by emailing <a href="mailto:privacy@certscore.ai" className="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">privacy@certscore.ai</a>.
-          </p>
-          <p>{FOOTER_COPYRIGHT_COPY}</p>
+        <nav aria-label="Footer navigation" className="divide-y divide-slate-100 sm:hidden">
+          {footerSections.map((section) => (
+            <details key={section.title} name="footer-navigation-group" open={section.title === "Product"} className="group/footer">
+              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between rounded py-4 font-semibold text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
+                {section.title}
+                <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4 text-slate-500 transition group-open/footer:rotate-180">
+                  <path d="M5.5 7.5 10 12l4.5-4.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </summary>
+              <div className="pb-4"><FooterLinks links={section.links} /></div>
+            </details>
+          ))}
+        </nav>
+        <div className="mt-7 space-y-5 border-t border-slate-200 pt-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <nav aria-label="Legal and privacy" className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs [&_button]:min-h-11 [&_button]:py-2 sm:[&_button]:min-h-0">
+              {legalLinks.map((link) => (
+                <Link key={link.href} href={link.href} className="inline-flex min-h-11 items-center rounded py-2 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 sm:min-h-0">{link.label}</Link>
+              ))}
+              <AnalyticsPreferencesButton />
+            </nav>
+            <SocialFollowLinks compact />
+          </div>
+          <p className="text-xs leading-5 text-slate-500">{FOOTER_COPYRIGHT_COPY}</p>
         </div>
       </div>
     </footer>

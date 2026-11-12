@@ -13,8 +13,7 @@ const config: GrowthContentPageConfig = {
     "Consent platforms help configure and present choices. Runtime scanning helps verify what actually happens in the browser before and after those choices.",
   path: "/compare/cmp-vs-runtime-consent-scanner",
   relatedLinks: [
-    { href: "/guides/cmp-verification", label: "CMP verification guide" },
-    { href: "/guides/cookie-consent-enforcement-checker", label: "Consent enforcement checker" },
+    { href: "/guides/consent-enforcement-testing", label: "Consent enforcement testing" },
     { href: "/compare/cookiebot-alternative-runtime-testing", label: "Cookiebot consent management and runtime testing" },
     { href: "/compare/onetrust-runtime-consent-testing", label: "OneTrust runtime testing" }
   ],
@@ -37,8 +36,8 @@ const config: GrowthContentPageConfig = {
       title: "Where runtime scanning helps",
       paragraphs: [
         "On eligible scans, CertScore.ai uses separate fresh browser sessions for baseline, Accept, and Reject. It acts only on an authorized, uniquely identified first-layer control; the completed click and any confirmed consent-state transition are reported separately.",
-        "Runtime scanning compares request timing, cookie timing, and vendor domains in the retained observation windows. Accept is a score-neutral comparison baseline. Qualifying activity after confirmed refusal, and separately verified Reject-click tracking where registration is unconfirmed, can support review findings.",
-        "This evidence helps teams investigate implementation drift without making legal conclusions."
+        "Compare cookies, service requests and timing across the retained observation windows. After a completed eligible Reject action, retained non-essential cookies and services can support GDPR/ePrivacy review. California collection review uses separate request, purpose and choice-scope evidence. Presence alone does not prove active use or a legal violation.",
+        "DPOs, agencies and developers can use this evidence to investigate CMP settings and tag configuration, assign a fix and retest."
       ]
     }
   ],

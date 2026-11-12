@@ -3,7 +3,6 @@ import { EditorialByline } from "../../components/marketing/editorial-byline";
 import { Badge } from "@website-signal-risk-scanner/ui";
 import Link from "next/link";
 import { FindingAtlasBrowser } from "../../components/marketing/findings/finding-atlas-browser";
-import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import {
   FINDING_REFERENCE_CATEGORIES,
   getFindingReferenceItems,
@@ -304,7 +303,6 @@ function RelatedFindingsSection({
 
 export function FindingsReferencePage({ activeFinding }: FindingsReferencePageProps) {
   const findings = getFindingReferenceItems();
-  const certscoreGptUrl = getCertScoreGptUrl();
   const initialFindingId = activeFinding?.id ?? DEFAULT_FINDING_ID;
   const { pageDescription, pagePath, pageTitle } = getFindingReferencePageCopy(activeFinding);
   const headingTitle = activeFinding?.title ?? "CertScore.ai findings reference";
@@ -386,21 +384,15 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
             privacy and dark-pattern materials, and accessibility guidance where applicable.
           </p>
           <div className="border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-slate-700">
-            <p>Want to test these findings on a public website? Use the CertScore.ai GPT to scan a public website from ChatGPT.</p>
-            <p className="mt-1 text-slate-600">
-              Results are automated public-web observations for human and agentic review, not legal advice or a compliance determination.
-            </p>
-            <a
-              className="mt-3 inline-flex rounded-full border border-sky-300 bg-white px-3 py-2 font-semibold text-sky-700 hover:bg-sky-50"
-              data-analytics-cta-location="guides_findings"
-              data-analytics-destination-url={certscoreGptUrl}
-              data-analytics-event="gpt_cta_clicked"
-              href={certscoreGptUrl}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              Open CertScore.ai GPT
-            </a>
+            <p>See these findings in context. Run a free website privacy scan or explore the evidence in a sample report.</p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <Link className="inline-flex rounded-full border border-sky-300 bg-white px-3 py-2 font-semibold text-sky-700 hover:bg-sky-50" href="/#homepage-scan">
+                Run free scan
+              </Link>
+              <Link className="inline-flex rounded-full border border-sky-300 bg-white px-3 py-2 font-semibold text-sky-700 hover:bg-sky-50" href="/sample-report">
+                View sample report
+              </Link>
+            </div>
           </div>
         </section>
       ) : null}

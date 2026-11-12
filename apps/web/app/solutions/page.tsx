@@ -11,6 +11,13 @@ import {
 
 const solutions = [
   {
+    title: "CCPA / California website review",
+    description: "Inspect GPC, supported opt-out mechanisms, collection notices and privacy-rights disclosures with retained evidence.",
+    href: "/ccpa",
+    animation: "trace" as const,
+    meta: "CCPA / California"
+  },
+  {
     title: "GDPR website scanner",
     description:
       "Review consent, cookie, tracking, policy, and disclosure signals for GDPR/ePrivacy workflows.",
@@ -39,7 +46,7 @@ const solutions = [
 export const metadata: Metadata = createPageMetadata({
   title: "CertScore.ai Solutions",
   description:
-    "Explore CertScore.ai scanners for GDPR, cookie consent and privacy policy risk. Compare review workflows and the website evidence each helps you inspect.",
+    "Explore evidence-led GDPR/ePrivacy and CCPA website review workflows, cookie consent testing and privacy-policy evidence for DPOs, agencies and developers.",
   path: "/solutions"
 });
 
@@ -48,7 +55,7 @@ export default function SolutionsPage() {
     createPublicWebPageSchema({
       title: "CertScore.ai Solutions",
       description:
-        "Explore CertScore.ai scanners for GDPR, cookie consent and privacy policy risk. Compare review workflows and the website evidence each helps you inspect.",
+        "Explore evidence-led GDPR/ePrivacy and CCPA website review workflows, cookie consent testing and privacy-policy evidence for DPOs, agencies and developers.",
       path: "/solutions"
     }),
     createBreadcrumbSchema([
@@ -57,7 +64,7 @@ export default function SolutionsPage() {
     ]),
     createItemListSchema({
       name: "CertScore.ai scanner solutions",
-      description: "Public CertScore.ai solution pages for website risk-signal scanning.",
+      description: "Evidence-led website privacy review workflows from CertScore.ai.",
       path: "/solutions",
       items: solutions.map((solution) => ({
         name: solution.title,
@@ -81,11 +88,11 @@ export default function SolutionsPage() {
         <Badge tone="neutral">Solutions</Badge>
         <h1 className="text-4xl font-semibold tracking-tight text-slate-950">CertScore.ai scanner solutions</h1>
         <p className="text-lg leading-8 text-slate-600">
-          Focused scanner pages for teams reviewing public website privacy, cookies, consent, policy, and disclosure signals.
+          Focused workflows for DPOs, agencies and developers reviewing GDPR/ePrivacy and CCPA concerns. Start with a free public-page scan, inspect the evidence and plan the next implementation review.
         </p>
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid gap-8 md:grid-cols-2">
         {solutions.map((solution) => (
           <Link key={solution.href} href={solution.href} className="group block">
             <article className="h-full">

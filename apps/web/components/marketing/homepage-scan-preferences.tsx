@@ -88,10 +88,10 @@ export function HomepageScanPreferencesProvider({ children }: { children: ReactN
 
 export function HomepageHeroCopy() {
   const location = useHomepageScanPreferences()?.location ?? "EU";
-  return <>
-    <p className="text-base leading-8 text-slate-300 sm:text-xl">{homepageHeroText(location)}</p>
-    <p className="relative top-[15px] mt-[20px] text-sm font-semibold text-sky-400">
-      {homepageAudienceText(location)}
-    </p>
-  </>;
+  return <p className="text-base leading-7 text-slate-300 sm:text-xl sm:leading-8">{homepageHeroText(location)}{" "}<strong className="font-semibold text-sky-200">For DPOs, web agencies and developers.</strong></p>;
+}
+
+export function HomepageHeroAudience() {
+  const location = useHomepageScanPreferences()?.location ?? "EU";
+  return <p className="max-w-[600px] text-xs leading-5 text-slate-400">{homepageAudienceText(location)}</p>;
 }

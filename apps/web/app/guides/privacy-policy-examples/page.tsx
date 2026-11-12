@@ -46,7 +46,7 @@ export default function PrivacyPolicyExamplesPage() {
       relatedGuides={[
         { href: "/guides/website-privacy-policy-requirements", label: "Privacy policy requirements" },
         { href: "/guides/cookie-banner-requirements", label: "Cookie banner requirements" },
-        { href: "/insights/common-privacy-policy-gaps", label: "Common privacy policy gaps" }
+        { href: "/solutions/privacy-policy-risk-scanner", label: "Common privacy policy gaps" }
       ]}
     />
   );

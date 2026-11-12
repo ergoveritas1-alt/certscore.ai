@@ -5,7 +5,6 @@ import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
 import { EvidenceJsonBlock } from "../../components/scans/evidence-json-block";
-import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import {
   PULSE_COVERAGE_LIMITATION_COPY,
   PULSE_FEEDBACK_EMAIL,
@@ -455,7 +454,6 @@ function CodeBlock({ children }: { children: string }) {
 }
 
 export default function ApiPulsePage() {
-  const certscoreGptUrl = getCertScoreGptUrl();
   return (
     <main className="min-h-screen bg-slate-50">
       <SiteHeader />
@@ -483,21 +481,13 @@ export default function ApiPulsePage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-7 text-slate-700">
             <div className="rounded-lg border border-sky-200 bg-white p-4">
-              <h2 className="text-base font-semibold text-slate-950">Try CertScore.ai GPT beta</h2>
+              <h2 className="text-base font-semibold text-slate-950">Connect your agents to CertScore.ai</h2>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                Paste a public website URL and get a CertScore.ai Pulse summary inside ChatGPT. Automated observations for human and agentic review, not legal advice or a compliance determination.
+                Use MCP, the REST API or the TypeScript SDK to run website privacy scans and retrieve evidence for review.
               </p>
-              <a
-                className="mt-3 inline-flex w-fit rounded-full border border-sky-300 bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700"
-                data-analytics-cta-location="api_pulse"
-                data-analytics-destination-url={certscoreGptUrl}
-                data-analytics-event="gpt_cta_clicked"
-                href={certscoreGptUrl}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                Open CertScore.ai GPT beta
-              </a>
+              <Link className="mt-3 inline-flex w-fit rounded-full border border-sky-300 bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700" href="/developers">
+                Explore API, SDK &amp; MCP
+              </Link>
             </div>
             <p>
               If you are an agent with OpenAPI actions or HTTP tools, start here before trying ad hoc fetches. CertScore.ai Pulse works
@@ -555,17 +545,6 @@ Summary JSON is best for concise agent output. Markdown is best for conversation
               >
                 Open GPT Action beta example
               </Link>
-              <a
-                className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
-                data-analytics-cta-location="api_pulse"
-                data-analytics-destination-url={certscoreGptUrl}
-                data-analytics-event="gpt_cta_clicked"
-                href={certscoreGptUrl}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                Open CertScore.ai GPT beta
-              </a>
               <Link
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
                 href="/api/v1/pulse-self-test"

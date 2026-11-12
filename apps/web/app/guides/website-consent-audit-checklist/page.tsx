@@ -35,7 +35,6 @@ export default function WebsiteConsentAuditChecklistGuidePage() {
         { href: "/findings/reject_tracking_persists_after_reject", label: "reject tracking persists finding" },
         { href: "/findings/cookie_disclosure_gap", label: "cookie disclosure gap finding" },
         { href: "/findings/policy_behavior_contradiction_detected", label: "policy/runtime alignment finding" },
-        { href: "/guides/website-consent-audit", label: "website consent audit" },
         { href: "/guides/reject-consent-tracking-test", label: "reject consent tracking test" }
       ]}
       schema={buildArticleSchema(guide)}

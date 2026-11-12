@@ -10,15 +10,15 @@ import { createPageMetadata } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "How It Works",
   description:
-    "See how CertScore.ai scans public websites, collects browser and policy evidence, and turns supported privacy signals into findings for human review.",
+    "Explore 24 CertScore.ai report highlights: cookies, trackers, consent, GPC, policy excerpts and detailed evidence for GDPR/ePrivacy and CCPA website review.",
   path: "/how-it-works"
 });
 
 const steps = [
   {
-    title: "Start with the homepage, then expand where it matters",
+    title: "Start with a public website",
     description:
-      "CertScore.ai begins with the public-facing website and can extend into the pages and surfaces most relevant to consent, disclosures, accessibility, and user trust."
+      "Run a free browser-based scan to begin your review. Choose the pages and scan options relevant to your next investigation; the walkthrough shows report capabilities across supported scan paths."
   },
   {
     title: "Collect runtime and disclosure evidence",
@@ -26,14 +26,14 @@ const steps = [
       "The scanner reviews runtime behavior, consent interactions, accessibility signals, and relevant public policy and disclosure surfaces in one scan. Where an eligible consent control can be actioned safely, Accept and Reject observations run in separate, clean browser sessions."
   },
   {
-    title: "Surface supported findings",
+    title: "Investigate the finding and assign the fix",
     description:
-      "Observed signals are evaluated and promoted into findings when the retained evidence is strong enough to support review. This includes issues such as pre-consent tracking, broken reject flows, missing public surfaces, and policy-to-behavior contradictions."
+      "Open the retained evidence and correction steps. A DPO can review disclosures and purposes while a developer or agency investigates consent settings, tag configuration and the affected page elements."
   },
   {
-    title: "Track what changed between scans",
+    title: "Retest after changes",
     description:
-      "Repeated scans help teams understand what changed, what improved, what regressed, and what new signals appeared over time."
+      "Run a new scan after a fix and review the updated observations against the earlier report. Keep the scan location, page and coverage in view when comparing results with your team or client."
   }
 ];
 
@@ -52,16 +52,21 @@ export default function HowItWorksPage() {
   return (
     <main className="min-h-screen bg-slate-50">
       <SiteHeader />
-      <section className="border-b border-slate-200 bg-white">
+      <section id="free-scan" className="scroll-mt-24 border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-16">
         <div className="max-w-3xl space-y-4">
-          <Badge tone="neutral">How it works</Badge>
-          <h1 className="text-4xl font-semibold tracking-tight text-slate-950">From homepage scan to reviewable findings</h1>
+          <Badge tone="neutral">Evidence-led Website Privacy Scanner</Badge>
+          <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Website privacy scanner.<br />See the evidence.</h1>
           <p className="text-lg text-slate-600">
-            CertScore.ai turns public website behavior and visible website surfaces into structured findings across privacy, consent, accessibility, disclosures, and observable contradictions.
+            See how CertScore.ai captures cookies, trackers, session-replay signals, privacy disclosures and consent behavior. Explore 24 report highlights built for developers, DPOs and web agencies reviewing GDPR/ePrivacy and CCPA concerns.
           </p>
           <div className="max-w-[30rem] pt-2">
-            <DomainScanForm buttonLabel="Scan a website" inputLabel="Website domain" mode="preview" />
+            <DomainScanForm buttonLabel="Run a free scan" inputLabel="Website domain" mode="preview" />
+          </div>
+          <p className="text-sm text-slate-600">Start with a free browser-based scan, or explore the report below.</p>
+          <div className="flex flex-wrap gap-x-6 gap-y-3 pt-2 text-sm font-semibold text-sky-700">
+            <a href="#walkthrough" className="underline underline-offset-4">Explore the 24 highlights ↓</a>
+            <Link href="/sample-report" className="underline underline-offset-4">Open an interactive sample report</Link>
           </div>
         </div>
         </div>
@@ -81,11 +86,12 @@ export default function HowItWorksPage() {
       <section id="choice-paths" className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-5xl px-6 py-14">
           <Badge tone="neutral">Choice paths</Badge>
-          <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">After the choice is confirmed</h2>
+          <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">See what happens before and after a choice</h2>
           <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600">
-            <p>Where CertScore can identify an eligible consent control unambiguously, it makes one deliberate choice. Accept and Reject each receive a fresh browser session, so neither result is contaminated by the other.</p>
-            <p>On the Reject side, a refusal-state transition must be confirmed before post-choice activity qualifies. From that point, CertScore retains relevant requests, cookie and storage writes, and consent state; activity already in flight at confirmation is excluded.</p>
-            <p>If a consent surface cannot be actioned safely—because the interface is unsupported, a control is ambiguous, or confirmation fails—CertScore does not guess. The report records limited coverage. That is not a clean result and never counts as a pass.</p>
+            <p>Your CMP manages consent choices. CertScore.ai checks observed website behavior. Where a control is eligible, Accept and Reject each run in a fresh browser session, with their own captured activity and coverage.</p>
+            <p>For GDPR/ePrivacy review, inspect non-essential cookies and services observed before consent and after Reject. The report distinguishes the completed click, any consent-state confirmation and the retained observations. A cookie snapshot shows retained presence; request evidence supplies the activity and timing it actually captured.</p>
+            <p>For CCPA review, inspect GPC delivery and response evidence, sale/sharing choices, collection notices and rights disclosures. A cookie Reject action and a sale/sharing opt-out are separate review questions.</p>
+            <p>Unsupported controls and incomplete observations remain visible, so teams can identify what still needs manual investigation.</p>
           </div>
         </div>
       </section>
@@ -129,6 +135,27 @@ export default function HowItWorksPage() {
           <Link href="/methodology" className="hover:text-sky-800">
             CertScore.ai methodology
           </Link>
+        </div>
+      </section>
+
+      <section className="border-y border-slate-200 bg-white">
+        <div className="mx-auto grid max-w-6xl gap-8 px-6 py-14 md:grid-cols-2">
+          <div>
+            <Badge tone="neutral">For DPOs &amp; web agencies</Badge>
+            <h2 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">Make the next review more concrete</h2>
+            <p className="mt-4 text-sm leading-7 text-slate-600">Use retained requests, policy passages and consent observations to brief the people who can investigate and fix the website. Support both a GDPR/ePrivacy review workflow and a CCPA review workflow, with accessibility and connection evidence alongside them.</p>
+            <Link href="/contact-sales" className="mt-5 inline-block font-semibold text-sky-700 underline underline-offset-4">Discuss your agency or team workflow</Link>
+          </div>
+          <div>
+            <Badge tone="neutral">For agents &amp; developers</Badge>
+            <h2 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">Bring scan evidence into your tools</h2>
+            <p className="mt-4 text-sm leading-7 text-slate-600">Connect an AI agent through MCP, integrate scans through the API, or build with the TypeScript SDK. Use structured results and supported evidence retrieval to bring website privacy review into your own workflow.</p>
+            <div className="mt-5 flex flex-wrap gap-5 font-semibold text-sky-700">
+              <Link href="/developers/mcp" className="underline underline-offset-4">MCP for agents</Link>
+              <Link href="/developers/quickstart" className="underline underline-offset-4">API quickstart</Link>
+              <Link href="/developers/sdk" className="underline underline-offset-4">TypeScript SDK</Link>
+            </div>
+          </div>
         </div>
       </section>
 

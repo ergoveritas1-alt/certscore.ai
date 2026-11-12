@@ -59,7 +59,7 @@ const definitions = [
   },
   {
     term: "Confirmed consent decision",
-    definition: "Evidence, separate from a click, that Accept registered a grant or Reject registered a refusal. Required for confirmed post-refusal findings; separately verified Reject-click tracking can support review without confirmed registration."
+    definition: "Evidence, separate from a click, that Accept registered a grant or Reject registered a refusal. A completed eligible Reject path may also support review of retained non-essential cookies and services when registration is unconfirmed."
   },
   {
     term: "Confirmed clean",
@@ -177,13 +177,13 @@ export default function MethodologyPage() {
             </article>
             <article className="rounded-2xl border border-teal-200 bg-white p-6 sm:p-8">
               <span className="inline-flex rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800">Reject Path</span>
-              <h3 className="mt-4 text-xl font-semibold text-slate-950">Evidence after a verified refusal</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-600">The confirmed-refusal path requires an independently verified refusal-state transition and qualifying activity anchored after it. Requests already in flight at confirmation are excluded.</p>
+              <h3 className="mt-4 text-xl font-semibold text-slate-950">Evidence after a completed Reject path</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-600">A completed authorized Reject path can support review of retained non-essential cookies and classified service requests. The report distinguishes the completed click, available consent-state evidence, cookie presence and subsequent activity.</p>
             </article>
           </div>
           <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
-            <h3 className="text-base font-semibold text-slate-950">Reject-click tracking is a separate review signal</h3>
-            <p className="mt-2 text-sm leading-7 text-slate-600">A completed authorized Reject click with directly observed, verified analytics, advertising, or session-replay requests may support a Reject-click tracking review signal even when registration is unverified. An unchanged stored cookie alone does not prove active tracking.</p>
+            <h3 className="text-base font-semibold text-slate-950">Interpret presence and collection separately</h3>
+            <p className="mt-2 text-sm leading-7 text-slate-600">Non-essential cookie or service presence after Reject can support GDPR/ePrivacy review without proving active use or a registered refusal. California collection review uses its own request, purpose and choice-scope evidence. Inspect each finding’s retained evidence rather than treating these observations as interchangeable.</p>
           </div>
           <p className="mt-6 border-l-2 border-sky-500 pl-4 text-sm leading-7 text-slate-600">Unsupported, ambiguous, incomplete, stale, timed-out, or unverifiable interactions remain limited coverage. Missing evidence cannot become a clean result or a finding.</p>
         </div>
@@ -195,7 +195,7 @@ export default function MethodologyPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Evidence & scope</p>
             <h2 id="evidence-heading" className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Understand the finding.<br />Know its limits.</h2>
             <p className="mt-5 text-base leading-7 text-slate-600">Findings are tied to retained observations. A score summarizes supported findings; it does not replace the evidence behind them.</p>
-            <div className="mt-6 rounded-2xl bg-sky-50 p-5 text-sm leading-6 text-slate-700">CertScore is not a certification service. It records website behavior and evidence for review, not legal compliance determinations.</div>
+            <div className="mt-6 rounded-2xl bg-sky-50 p-5 text-sm leading-6 text-slate-700">CertScore.ai is not a certification service. It records website behavior and evidence for review, not legal compliance determinations.</div>
           </div>
           <div className="space-y-7">
             <div>
@@ -204,15 +204,20 @@ export default function MethodologyPage() {
             </div>
             <div className="border-t border-slate-200 pt-6">
               <h3 className="text-lg font-semibold text-slate-950">Geographic measurement</h3>
-              <p className="mt-2 text-sm leading-7 text-slate-600">Websites may return different content, consent interfaces, cookies, or third-party activity by location. CertScore can observe the same website from different locations while keeping its core measurement approach consistent.</p>
+              <p className="mt-2 text-sm leading-7 text-slate-600">Websites may return different content, consent interfaces, cookies, or third-party activity by location. CertScore.ai can observe the same website from different locations while keeping its core measurement approach consistent.</p>
             </div>
             <div className="border-t border-slate-200 pt-6">
               <h3 className="text-lg font-semibold text-slate-950">Validation and repeatability</h3>
               <p className="mt-2 text-sm leading-7 text-slate-600">The measurement approach is evaluated through defined manual-validation studies and repeated browser observations. Each study describes its own sample and conditions, rather than a universal accuracy claim.</p>
             </div>
             <div className="border-t border-slate-200 pt-6">
+              <h3 className="text-lg font-semibold text-slate-950">Sources and corrections</h3>
+              <p className="mt-2 text-sm leading-7 text-slate-600">CertScore.ai publishes its guides and research with source context, observation dates and coverage limits. Illustrative examples are labeled separately from retained scan evidence. Research describes its own sample and conditions.</p>
+              <p className="mt-2 text-sm leading-7 text-slate-600">To request a correction, <Link className="font-semibold text-sky-700 hover:underline" href="/contact-sales">contact CertScore.ai</Link> with the page URL and supporting evidence. Explanatory content can be corrected without rewriting historical scan records.</p>
+            </div>
+            <div className="border-t border-slate-200 pt-6">
               <h3 className="text-lg font-semibold text-slate-950">Technical observations, bounded conclusions</h3>
-              <p className="mt-2 text-sm leading-7 text-slate-600">CertScore measures observable technical states and runtime outcomes for privacy engineering and assurance. Legal compliance, processing purpose, and operator intent may require additional context.</p>
+              <p className="mt-2 text-sm leading-7 text-slate-600">CertScore.ai measures observable technical states and runtime outcomes for privacy engineering and assurance. Legal compliance, processing purpose, and operator intent may require additional context.</p>
               <Link className="mt-3 inline-block text-sm font-semibold text-sky-700 hover:underline" href="/guides/consent-report-example">Read an annotated retained report →</Link>
             </div>
           </div>

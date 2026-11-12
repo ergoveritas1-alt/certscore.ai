@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { homepageAudienceText, homepageHeroText, parseHomepageLocation, resolveSampleScanFrom } from "./homepage-location";
+import { homepageReviewIntro, homepageReviewWorkflows } from "./homepage-review-workflows";
+
+test("review workflows lead with the visitor region while keeping both privacy perspectives and shared tools", () => {
+  assert.deepEqual(homepageReviewWorkflows("US").map((item) => item.id), ["us", "eu", "consent", "policy"]);
+  assert.deepEqual(homepageReviewWorkflows("EU").map((item) => item.id), ["eu", "us", "consent", "policy"]);
+  assert.deepEqual(new Set(homepageReviewWorkflows("US").map((item) => item.href)), new Set(homepageReviewWorkflows("EU").map((item) => item.href)));
+  assert.match(homepageReviewIntro("US"), /^Start with CCPA\/California/);
+  assert.match(homepageReviewIntro("EU"), /^Start with GDPR\/ePrivacy/);
+});
 
 test("loc overrides country in both directions and explicit scan selection wins over loc", () => {
   assert.equal(resolveSampleScanFrom({ countryDefault: "california", locationOverride: "EU" }), "eu_ie");
@@ -16,11 +25,12 @@ test("loc overrides country in both directions and explicit scan selection wins 
 });
 
 test("audience copy follows visitor location independently of the selected scan region", () => {
-  assert.equal(homepageAudienceText("US"), "Built for developers and agencies reviewing websites for CCPA and GDPR/ePrivacy concerns.");
-  assert.equal(homepageAudienceText("EU"), "Built for developers and agencies reviewing websites for GDPR/ePrivacy and CCPA concerns.");
+  assert.equal(homepageAudienceText("US"), "CCPA and GDPR/ePrivacy review");
+  assert.equal(homepageAudienceText("EU"), "GDPR/ePrivacy and CCPA review");
 });
 
-test("California privacy signal copy is specific to the US homepage variant", () => {
-  assert.match(homepageHeroText("US"), /Test California privacy signals, including Global Privacy Control \(GPC\) and opt-out mechanisms\./);
-  assert.equal(homepageHeroText("EU"), "Scan public pages for cookies, trackers, session-replay signals, privacy policy signals, and consent behavior. Review what appears before consent and after eligible Accept or Reject clicks, with retained evidence and clear coverage limits.");
+test("both homepage heroes share the concise product explanation", () => {
+  for (const location of ["US", "EU"] as const) {
+    assert.equal(homepageHeroText(location), "See what your websites collect—and what happens before and after consent.");
+  }
 });

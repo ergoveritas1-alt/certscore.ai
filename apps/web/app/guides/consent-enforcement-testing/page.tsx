@@ -6,55 +6,43 @@ import { buildArticleSchema, type AiGuideContent } from "../ai-guide-content";
 const guide: AiGuideContent = {
   badge: "Consent testing guide",
   title: "Consent enforcement testing: what happens after Accept and Reject",
-  description: "Learn how separate browser sessions, confirmed choice transitions, temporal anchoring, and explicit coverage make Accept and Reject Path observations reviewable.",
+  description: "Compare website activity before consent and after eligible Accept or Reject clicks. Inspect retained cookies, services and request evidence for GDPR/ePrivacy and CCPA review.",
   path: "/guides/consent-enforcement-testing",
-  intro: "A consent platform can report the choice it recorded. Consent enforcement testing asks a different question: what did the browser do after that choice was independently confirmed? CertScore.ai compares a pre-choice baseline with separate Accept and Reject observations on eligible public sites.",
+  intro: "Your CMP manages consent choices. CertScore.ai checks observed website behavior. Use separate baseline, Accept and Reject observations to investigate cookies, trackers and services, then give your DPO, agency or developer the evidence needed to review the implementation.",
   sections: [
     {
-      title: "What is Accept and Reject Path testing?",
+      title: "Start with independent sessions",
       paragraphs: [
-        "Accept and Reject Path testing observes what a website does after a visitor’s consent choice. On eligible sites, CertScore.ai performs one authorized, deterministic first-layer Accept or Reject in separate clean browser sessions, then compares the cookies, storage, trackers, and network activity that follow against the pre-choice baseline. A Reject result requires a confirmed refusal-state transition before any activity counts, and activity already in flight at that moment is excluded."
+        "Record the public URL, scan origin and time. CertScore.ai observes eligible first-layer Accept and Reject controls in separate fresh sessions so one choice does not contaminate the other.",
+        "Review the untouched baseline, completed action and subsequent observations separately. Accept provides a comparison for consent-dependent activity. The report also records available consent-state evidence; a completed click and a registered decision are different facts."
       ]
     },
     {
-      title: "Separate sessions prevent choice contamination",
+      title: "Inspect the evidence after Reject",
       paragraphs: [
-        "Accept and Reject each run in a fresh browser session. That prevents an earlier choice, cookie, or storage value from influencing the other path and preserves a comparable pre-choice baseline.",
-        "The Accept Path is a score-neutral comparison baseline. Ordinary analytics or advertising activity after acceptance is expected; it helps identify which activity is genuinely consent-dependent and does not create a negative finding on its own."
+        "For a completed authorized Reject path, inspect retained non-essential cookies and classified service requests. These observations can support GDPR/ePrivacy review even when semantic consent registration is unconfirmed. Keep the action, cookie snapshot, request timing and source evidence together.",
+        "Cookie presence is distinct from a new write, a read or successful collection. Do not treat a script download as proof of data collection. The report keeps those evidence types separate so the implementation owner can investigate the relevant behavior."
       ]
     },
     {
-      title: "A Reject result starts with confirmation",
+      title: "Use the right regulatory perspective",
       paragraphs: [
-        "A click or disappearing banner is not enough. CertScore.ai requires an independently verified refusal-state transition before post-refusal activity can qualify. Requests already in flight at that moment are excluded so queued activity is not mislabeled as a response to the refusal.",
-        "A projected Reject Path finding requires classified non-essential activity anchored after confirmation, such as an eligible request, a cookie or storage write, or a retained consent-state contradiction. An unchanged stored value by itself remains a factual review signal, not proof of active use."
+        "For GDPR/ePrivacy review, help the DPO investigate non-essential activity before consent and after Reject, review CMP categories and tag triggers, and compare the affected activity with privacy disclosures.",
+        "For CCPA/California review, inspect GPC delivery and response, the scope of the tested opt-out control, retained collection evidence, and relevant notices. Cookie rejection, GPC and a sale/sharing opt-out are separate mechanisms. A vendor name alone does not establish the purpose of a request."
       ]
     },
     {
-      title: "Clean and limited are different outcomes",
+      title: "Keep the conclusion within the observation",
       paragraphs: [
-        "A confirmed-clean result means no qualifying activity was retained during one completed observation window. It is bounded to that region, session, and point in time; it is not proof that the site always honors refusal.",
-        "If CertScore.ai cannot identify a control safely, confirm the choice, complete the observation, or verify the evidence, the result stays limited or unknown. Limited coverage is score-neutral and never a pass."
+        "Review the capture status and evidence for the particular page, region and session. Unsupported controls, incomplete observations and unverified actions retain their reported status. No activity observed in a bounded window does not establish that tracking never occurs.",
+        "A scan supports privacy review; it does not provide legal advice, certification or a compliance determination. Use the retained evidence alongside your organization’s implementation and privacy review."
       ]
     },
     {
-      title: "Why this matters for privacy review",
+      title: "Assign a fix and retest",
       paragraphs: [
-        "A cookie banner’s appearance does not establish what a website actually does after someone makes a choice. On eligible sites, CertScore.ai tests the resulting browser behavior—cookies, storage, trackers, and relevant network activity—after a confirmed Accept and after a confirmed Reject.",
-        "For GDPR and ePrivacy review, this evidence can help teams investigate whether consent-dependent activity reflects the visitor’s choice and whether non-essential storage or access continues after a confirmed refusal. The ePrivacy Directive specifically addresses storing information on, or gaining access to information stored in, a user’s terminal equipment, subject to limited exceptions; GDPR requirements govern consent and its withdrawal. The two ask different questions of the same evidence.",
-        "For CCPA and CPRA review, the evidence may be relevant where the tested control governs the sale or sharing of personal information, including sharing for cross-context behavioral advertising. An ordinary cookie-banner Reject action is not automatically a statutory CCPA/CPRA opt-out, so CertScore.ai reports the observed behavior without making that legal conclusion. This relevance depends on the specific mechanism observed, not on the presence of a Reject control.",
-        "Where a choice cannot be confirmed, the report records limited coverage rather than a result."
-      ],
-      sourceLinks: [
-        { href: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32016R0679", label: "GDPR (Regulation 2016/679)" },
-        { href: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A02002L0058-20091219", label: "Consolidated ePrivacy Directive" },
-        { href: "https://oag.ca.gov/privacy/ccpa", label: "California Attorney General CCPA guidance" }
-      ]
-    },
-    {
-      title: "Does Accept and Reject Path testing determine GDPR or CCPA compliance?",
-      paragraphs: [
-        "No. CertScore.ai records evidence about website behavior; it does not make a legal compliance determination. The observations can support GDPR, ePrivacy and—where the tested control governs sale or sharing—California privacy-choice review. Applying them to a specific site is a judgment for the reviewer, not an output of the scan."
+        "Share the affected URL, service or cookie, action context, date, region and evidence reference. Review tag-manager triggers, CMP categories, vendor initialization and the corresponding disclosure with the responsible owner.",
+        "After a change, run a fresh scan under comparable conditions. Compare the relevant observations and keep the reports with the remediation task. Repeat the review for important templates and regions instead of treating one page as the entire website."
       ]
     }
   ]

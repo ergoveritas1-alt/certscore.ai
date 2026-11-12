@@ -38,13 +38,13 @@ export default function WebsiteScanningBasicsPage() {
         "Teams can compare repeated scans to see whether changes improved the observed public behavior."
       ]}
       certScoreHelp={[
-        "CertScore.ai combines privacy, cookie, consent, accessibility, policy, and disclosure signals in one public-site scan.",
-        "It groups findings by business-readable issue type and includes representative JSON evidence.",
-        "The output is designed for operational triage and monitoring, not for certification or legal advice."
+        "CertScore.ai is an Evidence-led Website Privacy Scanner for DPOs, agencies and developers reviewing GDPR/ePrivacy and CCPA concerns.",
+        "It groups findings with retained evidence: cookies, services, consent observations, policy passages and supported accessibility checks.",
+        "Start with a free public-page scan, inspect the report and assign a review. MCP, REST API and TypeScript SDK integrations support developer and agent workflows."
       ]}
       certScoreFlagExample="The scan could summarize several findings across tracking, cookies, accessibility, policy, and disclosure review categories."
       relatedGuides={[
-        { href: "/guides/website-signal-check", label: "Website signal review checklist" },
+        { href: "/guides/website-consent-audit-checklist", label: "Website consent audit checklist" },
         { href: "/compare/privacy-scanner-vs-cookie-scanner", label: "Privacy scanner vs cookie scanner" },
         { href: "/how-it-works", label: "How CertScore.ai works" }
       ]}

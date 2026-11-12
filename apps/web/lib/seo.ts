@@ -3,6 +3,8 @@ import { EDITORIAL_AUTHOR, getEditorialDates, getSocialImage } from "./marketing
 
 export const SITE_URL = "https://certscore.ai";
 export const SITE_NAME = "CertScore.ai";
+export const SITE_ORGANIZATION_ID = `${SITE_URL}/#organization`;
+export const SITE_WEBSITE_ID = `${SITE_URL}/#website`;
 
 type CreatePageMetadataInput = {
   title: string;

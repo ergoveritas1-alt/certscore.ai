@@ -1,29 +1,24 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { buildSitemap as sitemap } from "../../app/sitemap";
 import robots from "../../app/robots";
 
-const pageSource = readFileSync(new URL("../../app/trust/page.tsx", import.meta.url), "utf8");
-const footerSource = readFileSync(new URL("../../components/layout/site-footer.tsx", import.meta.url), "utf8");
-const llmsSource = readFileSync(new URL("../../public/llms.txt", import.meta.url), "utf8");
-const llmsFullSource = readFileSync(new URL("../../public/llms-full.txt", import.meta.url), "utf8");
-const discoverySource = readFileSync(new URL("../../app/.well-known/certscore-ai.json/route.ts", import.meta.url), "utf8");
-
-test("trust page publishes conservative assurance and reporting language", () => {
-  assert.match(pageSource, /does not represent a third-party certification or legal compliance determination/);
-  assert.match(pageSource, /security@certscore\.ai/);
-  assert.match(pageSource, /href="\/security"/);
-  assert.doesNotMatch(pageSource, /Compliance &amp; assurance|SOC 2|AES-256|certified compliant|independently audited|penetration test/i);
-});
-
-test("trust page is present on public discovery surfaces", () => {
-  assert.ok(sitemap().some((entry) => entry.url === "https://certscore.ai/trust"));
+test("retired trust page is absent from the site and public discovery surfaces", () => {
+  assert.equal(existsSync(new URL("../../app/trust/page.tsx", import.meta.url)), false);
+  assert.ok(!sitemap().some((entry) => entry.url === "https://certscore.ai/trust"));
   const publicRules = robots().rules;
   assert.ok(Array.isArray(publicRules));
-  assert.ok(publicRules.some((rule) => Array.isArray(rule.allow) && rule.allow.includes("/trust")));
-  assert.match(footerSource, /href: "\/trust", label: "Trust & Security"/);
-  assert.match(llmsSource, /https:\/\/certscore\.ai\/trust/);
-  assert.match(llmsFullSource, /https:\/\/certscore\.ai\/trust/);
-  assert.match(discoverySource, /trustUrl: "https:\/\/certscore\.ai\/trust"/);
+  assert.ok(!publicRules.some((rule) => Array.isArray(rule.allow) && rule.allow.includes("/trust")));
+  for (const path of [
+    "../../components/layout/site-footer.tsx",
+    "../../public/llms.txt",
+    "../../public/llms-full.txt",
+    "../../app/.well-known/certscore-ai.json/route.ts"
+  ]) {
+    const source = readFileSync(new URL(path, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /https:\/\/certscore\.ai\/trust|"\/trust"/, path);
+  }
+  assert.ok(existsSync(new URL("../../app/security/page.tsx", import.meta.url)));
+  assert.ok(existsSync(new URL("../../app/privacy/page.tsx", import.meta.url)));
 });

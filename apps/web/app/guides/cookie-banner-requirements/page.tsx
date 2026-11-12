@@ -14,7 +14,7 @@ export default function CookieBannerRequirementsPage() {
     <GuideTemplate
       eyebrow="Privacy guide"
       title="Cookie Banner Requirements"
-      intro="Cookie banner requirements are usually discussed in terms of clarity, control, and alignment between what the interface offers and what the site actually does. A banner that appears polished can still create risk if the control options are limited or if trackers run before any visible choice."
+      intro="Check whether the banner’s choices match what the website does. Review visible controls, cookies and service requests before consent and after eligible Accept or Reject clicks, then give the CMP owner specific settings to investigate."
       pagePath="/guides/cookie-banner-requirements"
       
       questionTitle="What should a cookie banner include?"
@@ -39,15 +39,16 @@ export default function CookieBannerRequirementsPage() {
         "That combination helps teams decide when the banner experience needs a closer review."
       ]}
       certScoreHelp={[
-        "CertScore.ai detects cookie banner and consent-control signals using bounded DOM and text heuristics.",
+        "CertScore.ai detects cookie banner and consent-control signals from the visible page and retained control evidence.",
         "It also surfaces common tracker requests so visible consent controls can be compared against observed behavior.",
         "That makes it easier to prioritize which pages or templates deserve the next round of manual review."
       ]}
       certScoreFlagExample="The scan could flag a visible banner with no reject control, or trackers that appear to load before any consent choice."
+      sources={[{"href": "https://eur-lex.europa.eu/eli/dir/2002/58/2009-12-19/eng", "label": "ePrivacy Directive, Article 5(3)"}, {"href": "https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng", "label": "GDPR, consent and transparency"}, {"href": "https://www.oag.ca.gov/privacy/ccpa", "label": "California Attorney General: CCPA"}]}
       relatedGuides={[
         { href: "/guides/cookie-consent-laws", label: "Cookie consent laws" },
         { href: "/guides/privacy-policy-examples", label: "Privacy policy examples" },
-        { href: "/insights/common-cookie-consent-issues", label: "Common cookie consent issues" }
+        { href: "/solutions/cookie-consent-scanner", label: "Common cookie consent issues" }
       ]}
     />
   );

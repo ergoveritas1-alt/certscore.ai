@@ -14,7 +14,7 @@ export default function CookieConsentLawsGuidePage() {
     <GuideTemplate
       eyebrow="Privacy guide"
       title="Cookie Consent Laws"
-      intro="Cookie consent questions usually turn on what tracking technologies run on a site, when they run, and whether users are given understandable controls. Public business websites often add analytics, ad pixels, and third-party scripts without revisiting how those tools behave together."
+      intro="Start with the applicable jurisdiction, then inspect what the website does. EU ePrivacy rules address device storage and access, subject to exceptions, while GDPR governs personal-data processing. California’s CCPA includes sale/sharing opt-out rights, including GPC for covered businesses. Use the scan to collect evidence for the relevant review."
       pagePath="/guides/cookie-consent-laws"
       questionTitle="How do cookie consent laws work?"
       whyItMatters={[
@@ -34,15 +34,16 @@ export default function CookieConsentLawsGuidePage() {
       ]}
       automatedScanningHelp={[
         "Automated scanning can observe which tracker requests appear during the initial page load and whether obvious consent UI signals are present.",
-        "It can also identify when reject or preferences controls appear limited based on what is visible in the DOM.",
+        "It can also identify when reject or preferences controls appear limited from the controls visible during the visit.",
         "This type of analysis is useful for triage because it creates a concrete list of observed privacy signals without claiming legal certainty."
       ]}
       certScoreHelp={[
         "CertScore.ai detects common trackers during real page loads and surfaces them as privacy-relevant findings by tracker type.",
-        "It checks for consent UI signals such as banners, reject options, and preferences controls using bounded DOM and text heuristics.",
+        "It checks for consent UI signals such as banners, reject options, and preferences controls from the visible page and retained control evidence.",
         "It uses observed-signal language so teams can decide what needs deeper review."
       ]}
       certScoreFlagExample="The scan could flag pre-consent tracker activity, weak visible consent controls, or a reject path that does not reduce tracking."
+      sources={[{"href": "https://eur-lex.europa.eu/eli/dir/2002/58/2009-12-19/eng", "label": "ePrivacy Directive, Article 5(3)"}, {"href": "https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng", "label": "GDPR, consent and transparency"}, {"href": "https://www.oag.ca.gov/privacy/ccpa", "label": "California Attorney General: CCPA"}]}
       relatedGuides={[
         { href: "/guides/cookie-banner-requirements", label: "Cookie banner requirements" },
         { href: "/guides/website-privacy-policy-requirements", label: "Privacy policy requirements" },

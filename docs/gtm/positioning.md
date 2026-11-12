@@ -13,7 +13,7 @@ Most website owners and service providers do not have a fast, repeatable way to 
 CertScore is a website legal risk signal scanner for public business websites.
 
 ## What CertScore does
-Scan cookies, trackers, session-replay signals, CMPs, consent, privacy policy, GDPR, CCPA, and TLS with CertScore.ai.
+CertScore.ai is an Evidence-led Website Privacy Scanner for DPOs, agencies and developers reviewing GDPR/ePrivacy and CCPA concerns. Inspect cookies, trackers, session-replay signals, CMPs, consent behavior and privacy policy evidence, with supporting TLS observations.
 
 CertScore.ai scans public pages, surfaces observed issues, assigns deterministic scores, and generates structured reports that help teams prioritize remediation and maintain documentation over time.
 

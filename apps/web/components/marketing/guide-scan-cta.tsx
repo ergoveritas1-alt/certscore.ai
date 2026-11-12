@@ -13,10 +13,10 @@ export function GuideScanCta({ title, description }: GuideScanPrompt) {
       <h2 id="guide-scan-heading" className="text-xl font-semibold text-slate-950">{title}</h2>
       <p className="mb-5 mt-2 text-sm leading-7 text-slate-700">{description}</p>
       <Suspense fallback={<p className="text-sm text-slate-600">Loading scan form…</p>}>
-        <DomainScanForm mode="preview" scanSource="unknown" buttonLabel="Scan now" inputLabel="Website URL" inputPlaceholder="https://your-website.com" />
+        <DomainScanForm mode="preview" scanSource="unknown" buttonLabel="Run free scan" inputLabel="Website URL" inputPlaceholder="https://your-website.com" />
       </Suspense>
       <p className="mt-4 text-sm leading-6 text-slate-600">
-        Start with a free scan of one public page. This is not a full-site audit; results describe the scan’s conditions and coverage. Review the retained evidence before making changes.
+        Start with one public page. Open the evidence, identify what to investigate and retest after changes. The report records the scan’s conditions and coverage.
       </p>
       <Link href="/guides/consent-report-example" className="mt-3 inline-block text-sm font-semibold text-sky-700 underline underline-offset-4">
         See how to read a report

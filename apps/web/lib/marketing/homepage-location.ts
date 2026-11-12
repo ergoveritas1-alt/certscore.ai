@@ -23,12 +23,10 @@ export function resolveSampleScanFrom(input: {
 
 export function homepageAudienceText(location: HomepageLocation) {
   return location === "US"
-    ? "Built for developers and agencies reviewing websites for CCPA and GDPR/ePrivacy concerns."
-    : "Built for developers and agencies reviewing websites for GDPR/ePrivacy and CCPA concerns.";
+    ? "CCPA and GDPR/ePrivacy review"
+    : "GDPR/ePrivacy and CCPA review";
 }
 
-export function homepageHeroText(location: HomepageLocation) {
-  return location === "US"
-    ? "Scan public websites for cookies, trackers, session-replay signals, privacy disclosures, and consent behavior. Test California privacy signals, including Global Privacy Control (GPC) and opt-out mechanisms. Compare activity before consent and after eligible Accept or Reject clicks, with retained evidence and clear coverage limits."
-    : "Scan public pages for cookies, trackers, session-replay signals, privacy policy signals, and consent behavior. Review what appears before consent and after eligible Accept or Reject clicks, with retained evidence and clear coverage limits.";
+export function homepageHeroText(_location: HomepageLocation) {
+  return "See what your websites collect—and what happens before and after consent.";
 }

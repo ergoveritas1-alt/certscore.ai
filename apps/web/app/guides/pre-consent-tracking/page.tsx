@@ -25,7 +25,7 @@ export default function PreConsentTrackingGuidePage() {
       relatedLinks={[
         { href: "/findings/pre_consent_tracking_detected", label: "tracking started before consent finding" },
         { href: "/findings/reject_tracking_persists_after_reject", label: "reject tracking persists finding" },
-        { href: "/guides/cookie-consent-enforcement-checker", label: "cookie consent enforcement" },
+        { href: "/guides/consent-enforcement-testing", label: "cookie consent enforcement" },
         { href: "/benchmarks/pre-consent-tracking-2026", label: "pre-consent tracking benchmark" }
       ]}
       schema={buildArticleSchema(guide)}

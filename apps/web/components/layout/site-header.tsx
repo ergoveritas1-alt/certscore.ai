@@ -8,26 +8,46 @@ import { PendingButtonLink } from "../ui/pending-link";
 const navLinks = [
   { href: "/how-it-works", label: "How It Works" },
   { href: "/solutions", label: "Solutions" },
-  { href: "/findings", label: "Findings" },
   { href: "/pricing", label: "Pricing" },
   { href: "/contact", label: "Contact" }
 ];
 
-const resourceLinks = [
-  { href: "/browser-extension", label: "Chrome browser extension" },
-  { href: "/solutions", label: "Scanner solutions" },
-  { href: "/solutions/gdpr-website-compliance-scanner", label: "GDPR website scanner" },
-  { href: "/solutions/cookie-consent-scanner", label: "Cookie consent scanner" },
-  { href: "/solutions/privacy-policy-risk-scanner", label: "Privacy policy risk scanner" },
-  { href: "/gdpr", label: "GDPR evidence guide" },
-  { href: "/guides", label: "Guides" },
-  { href: "/benchmarks", label: "Benchmarks" },
-  { href: "/releases", label: "Releases" },
-  { href: "/findings", label: "Findings" },
-  { href: "/developers", label: "Developers" },
-  { href: "/regulatory", label: "Regulatory pages" },
-  { href: "/methodology", label: "Methodology" },
-  { href: "/compare", label: "Compare" }
+const resourceGroups = [
+  {
+    label: "Scan & integrate",
+    links: [
+      { href: "/solutions", label: "Scanner solutions" },
+      { href: "/browser-extension", label: "Chrome browser extension" },
+      { href: "/developers", label: "Developers · API, SDK & MCP" }
+    ]
+  },
+  {
+    label: "Privacy workflows",
+    links: [
+      { href: "/ccpa", label: "CCPA / California review" },
+      { href: "/solutions/gdpr-website-compliance-scanner", label: "GDPR website scanner" },
+      { href: "/solutions/cookie-consent-scanner", label: "Cookie consent scanner" },
+      { href: "/solutions/privacy-policy-risk-scanner", label: "Privacy policy risk scanner" },
+      { href: "/regulatory", label: "Regulatory pages" }
+    ]
+  },
+  {
+    label: "Evidence & guidance",
+    links: [
+      { href: "/findings", label: "Findings" },
+      { href: "/gdpr", label: "GDPR evidence guide" },
+      { href: "/guides", label: "Guides" },
+      { href: "/methodology", label: "Methodology" }
+    ]
+  },
+  {
+    label: "Research & updates",
+    links: [
+      { href: "/benchmarks", label: "Benchmarks" },
+      { href: "/releases", label: "Releases" },
+      { href: "/compare", label: "Compare" }
+    ]
+  }
 ];
 
 type SiteHeaderProps = {
@@ -49,7 +69,10 @@ export function SiteHeader({ mobilePrimaryAction = "contact", wide = true, accou
       : "rounded-lg px-2 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-ink";
   }
 
-  const resourcesActive = resourceLinks.some((link) => isActive(link.href));
+  const activeResourceHref = resourceGroups.flatMap((group) => group.links)
+    .filter((link) => isActive(link.href))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+  const resourcesActive = Boolean(activeResourceHref);
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/90 shadow-[0_1px_10px_rgba(15,23,42,0.04)] backdrop-blur">
@@ -58,13 +81,13 @@ export function SiteHeader({ mobilePrimaryAction = "contact", wide = true, accou
           <CertScoreLogo compact showText size="small" className="shrink-0" />
         </div>
 
-        <nav className="hidden items-center gap-1.5 md:flex">
-          {navLinks.slice(0, 3).map((link) => (
+        <nav className="relative hidden items-center gap-1.5 md:flex">
+          {navLinks.slice(0, 2).map((link) => (
             <Link key={link.href} href={link.href} aria-current={isActive(link.href) ? "page" : undefined} className={linkClass(link.href)}>
               {link.label}
             </Link>
           ))}
-          <details className="group relative">
+          <details className="group">
             <summary
               aria-label="Resources navigation"
               aria-current={resourcesActive ? "page" : undefined}
@@ -75,22 +98,30 @@ export function SiteHeader({ mobilePrimaryAction = "contact", wide = true, accou
                 <path d="M5.5 7.5 10 12l4.5-4.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </summary>
-            <div className="absolute left-0 top-[calc(100%+0.6rem)] z-50 w-64 border border-slate-200 bg-white p-2 shadow-[0_18px_44px_rgba(15,23,42,0.14)]">
-              <nav aria-label="Resources" className="flex flex-col">
-                {resourceLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    aria-current={isActive(link.href) ? "page" : undefined}
-                    className={`px-3 py-2 text-sm font-medium ${isActive(link.href) ? "bg-sky-50 text-sky-800" : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"}`}
-                  >
-                    {link.label}
-                  </Link>
+            <div className="absolute right-0 top-[calc(100%+0.75rem)] z-50 max-h-[calc(100dvh-6rem)] w-[min(640px,calc(100vw-2rem))] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_18px_44px_rgba(15,23,42,0.14)]">
+              <nav aria-label="Resources" className="grid grid-cols-2 gap-x-6 gap-y-5">
+                {resourceGroups.map((group) => (
+                  <section key={group.label} aria-label={group.label}>
+                    <h2 className="mb-2 border-b border-slate-100 px-3 pb-2 text-xs font-semibold uppercase tracking-[0.1em] text-sky-800">{group.label}</h2>
+                    <ul className="space-y-0.5">
+                      {group.links.map((link) => (
+                        <li key={link.href}>
+                          <Link
+                            href={link.href}
+                            aria-current={link.href === activeResourceHref ? "page" : undefined}
+                            className={`flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${link.href === activeResourceHref ? "bg-sky-50 text-sky-800" : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"}`}
+                          >
+                            {link.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
                 ))}
               </nav>
             </div>
           </details>
-          {navLinks.slice(3).map((link) => (
+          {navLinks.slice(2).map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -159,7 +190,7 @@ export function SiteHeader({ mobilePrimaryAction = "contact", wide = true, accou
                 />
               </div>
               <Link href="/contact-sales" className="rounded-2xl bg-sky-50 px-4 py-3 text-base font-semibold text-sky-800">Contact</Link>
-              {navLinks.slice(0, 3).map((link) => (
+              {navLinks.filter((link) => link.href !== "/contact").map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
@@ -172,26 +203,31 @@ export function SiteHeader({ mobilePrimaryAction = "contact", wide = true, accou
               <div className="px-4 pb-2 pt-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                 Resources
               </div>
-              {resourceLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  aria-current={isActive(link.href) ? "page" : undefined}
-                  className={`rounded-2xl px-6 py-2 text-sm font-medium transition ${isActive(link.href) ? "bg-sky-50 text-sky-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"}`}
-                >
-                  {link.label}
-                </Link>
-              ))}
-              {navLinks.slice(3).filter(link => link.href !== "/contact").map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  aria-current={isActive(link.href) ? "page" : undefined}
-                  className={`rounded-2xl px-4 py-3 text-base font-medium transition ${link.label === "Contact" ? "bg-sky-50 font-semibold text-sky-800" : isActive(link.href) ? "bg-sky-50 text-sky-800" : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"}`}
-                >
-                  {link.label}
-                </Link>
-              ))}
+              <div className="space-y-1">
+                {resourceGroups.map((group) => (
+                  <details key={group.label} name="mobile-resource-group" className="group/resource rounded-xl border border-slate-100 bg-slate-50/60" open={group.links.some((link) => link.href === activeResourceHref) || undefined}>
+                    <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
+                      {group.label}
+                      <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500 transition group-open/resource:rotate-180">
+                        <path d="M5.5 7.5 10 12l4.5-4.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </summary>
+                    <ul className="px-2 pb-2">
+                      {group.links.map((link) => (
+                        <li key={link.href}>
+                          <Link
+                            href={link.href}
+                            aria-current={link.href === activeResourceHref ? "page" : undefined}
+                            className={`flex min-h-11 items-center rounded-lg px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${link.href === activeResourceHref ? "bg-sky-50 text-sky-800" : "text-slate-600 hover:bg-white hover:text-slate-950"}`}
+                          >
+                            {link.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ))}
+              </div>
 
 
             </nav>

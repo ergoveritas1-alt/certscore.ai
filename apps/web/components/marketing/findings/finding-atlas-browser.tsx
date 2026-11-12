@@ -538,20 +538,20 @@ const FINDING_REGISTRY_GROUPS: Array<{
 
 const PRIVACY_RELATED_READING = [
   { href: "/guides/pre-consent-tracking", label: "Tracking before consent" },
-  { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement" },
+  { href: "/guides/consent-enforcement-testing", label: "Cookie consent enforcement" },
   { href: "/guides/rtb-cookie-syncing", label: "Third-party cookies and RTB sync" },
   { href: "/guides/session-replay-risk", label: "Session replay risk" }
 ];
 
 const CONSENT_RELATED_READING = [
   { href: "/guides/pre-consent-tracking", label: "Tracking before consent" },
-  { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement" },
+  { href: "/guides/consent-enforcement-testing", label: "Cookie consent enforcement" },
   { href: "/guides/cookie-banner-requirements", label: "Cookie banner requirements" }
 ];
 
 const TRACKING_RELATED_READING = [
   { href: "/guides/pre-consent-tracking", label: "Tracking before consent" },
-  { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement" },
+  { href: "/guides/consent-enforcement-testing", label: "Cookie consent enforcement" },
   { href: "/guides/check-third-party-cookies-before-consent", label: "Third-party cookies before consent" },
   { href: "/guides/rtb-cookie-syncing", label: "Third-party cookies and RTB sync" }
 ];

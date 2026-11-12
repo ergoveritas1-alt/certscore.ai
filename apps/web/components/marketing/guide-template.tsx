@@ -1,3 +1,4 @@
+import { WebsiteBehaviorScanCta, STANDARD_AUTOMATED_FINDINGS_DISCLAIMER } from "./ai-visibility-content";
 import { EditorialByline } from "./editorial-byline";
 import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
@@ -36,6 +37,7 @@ type GuideTemplateProps = {
   certScoreFlagExample: string;
   relatedGuides: RelatedLink[];
   sampleFindingsJson?: SampleFindingJson[];
+  sources?: RelatedLink[];
 };
 
 function GuideTextSection({ title, paragraphs }: GuideSection) {
@@ -58,7 +60,6 @@ export function GuideTemplate({
   title,
   intro,
   pagePath,
-  questionTitle,
   whyItMatters,
   commonIssues,
   examples,
@@ -66,7 +67,8 @@ export function GuideTemplate({
   certScoreHelp,
   certScoreFlagExample,
   relatedGuides,
-  sampleFindingsJson
+  sampleFindingsJson,
+  sources = []
 }: GuideTemplateProps) {
   const visibleSampleFindings = sampleFindingsJson ?? getGuideSampleFindings({ path: pagePath, title });
   const articleSchema = createPublicArticleSchema({
@@ -116,28 +118,13 @@ export function GuideTemplate({
         <Badge tone="neutral">{eyebrow}</Badge>
         <h1 className="text-4xl font-semibold tracking-tight text-slate-900">{title}</h1>
         <p className="text-lg text-slate-600">{intro}</p>
-            <EditorialByline path={pagePath} />
+        <EditorialByline path={pagePath} />
       </div>
 
-      <div className="mt-10 grid gap-6">
-        <GuideTextSection
-          title={questionTitle}
-          paragraphs={[
-            intro,
-            "CertScore.ai approaches this topic as a question of observable website signals. It helps teams surface structured findings and track change over time, but it does not provide legal advice or certification."
-          ]}
-        />
-
-        <GuideTextSection title="Why it matters" paragraphs={whyItMatters} />
-
-        <GuideTextSection title="Common issues websites have" paragraphs={commonIssues} />
-
-        <GuideTextSection title="Examples of problems" paragraphs={examples} />
-
-        <GuideTextSection
-          title="How automated scanning supports review"
-          paragraphs={automatedScanningHelp}
-        />
+      <div className="mt-8"><WebsiteBehaviorScanCta /></div>
+      <div className="mt-8 grid gap-6">
+        <GuideTextSection title="What to investigate" paragraphs={commonIssues} />
+        <GuideTextSection title="Examples to check on your site" paragraphs={examples} />
 
         <Card className="border-slate-200 bg-white">
           <CardHeader>
@@ -157,18 +144,35 @@ export function GuideTemplate({
                 <p className="mt-2 text-sm leading-6 text-slate-700">{certScoreFlagExample}</p>
               </div>
             </div>
+            <p>Give the evidence to the responsible developer, agency or privacy owner. Record the expected behavior, agree on a change and retest the same page and region.</p>
             <div className="flex flex-wrap gap-3 pt-3">
               <Button
                 asChild
                 className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
               >
-                <Link data-analytics-cta-type="scan" data-analytics-event="guide_cta_clicked" href="/">
-                  Use this guide, scan a website
+                <Link data-analytics-cta-type="scan" data-analytics-event="guide_cta_clicked" href="/#homepage-scan">
+                  Run free scan
                 </Link>
               </Button>
+              <Button asChild variant="secondary"><Link href="/sample-report">View sample report</Link></Button>
             </div>
           </CardContent>
         </Card>
+
+        <details className="rounded-2xl border border-slate-200 bg-white p-5">
+          <summary className="cursor-pointer font-semibold text-slate-950">Background and scan coverage</summary>
+          <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
+            {[...whyItMatters, ...automatedScanningHelp].map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+          </div>
+        </details>
+        {sources.length > 0 ? (
+          <div className="text-sm leading-7 text-slate-600">
+            <p className="font-semibold text-slate-800">Primary sources</p>
+            <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+              {sources.map((source) => <li key={source.href}><a className="text-sky-700 underline underline-offset-4" href={source.href}>{source.label}</a></li>)}
+            </ul>
+          </div>
+        ) : null}
 
         {visibleSampleFindings.length > 0 ? (
           <Card className="border-slate-200 bg-white">
@@ -182,11 +186,10 @@ export function GuideTemplate({
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
-              {visibleSampleFindings.map((sample, index) => (
+              {visibleSampleFindings.map((sample) => (
                 <details
                   key={sample.findingId}
                   className="group rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                  open={index === 0}
                 >
                   <summary className="cursor-pointer list-none">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -235,20 +238,7 @@ export function GuideTemplate({
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 bg-white">
-          <CardHeader>
-            <CardTitle>Summary for AI assistants</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
-            <p>
-              This CertScore.ai guide explains {title.toLowerCase()} as an observable public website signal for human and agentic review.
-              CertScore.ai scans public website behavior around tracking, cookies, consent, session recording indicators, fingerprinting-related signals, accessibility, and disclosures.
-            </p>
-            <p>
-              CertScore.ai findings are automated risk signals supported by retained evidence; they are not legal advice, certification, or compliance determinations.
-            </p>
-          </CardContent>
-        </Card>
+        <p className="text-xs leading-6 text-slate-500">{STANDARD_AUTOMATED_FINDINGS_DISCLAIMER}</p>
       </div>
     </section>
   );

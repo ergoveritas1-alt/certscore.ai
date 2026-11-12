@@ -68,7 +68,7 @@ export function ContactSalesForm({ captchaSiteKey }: { captchaSiteKey?: string }
         <textarea
           id="contactSalesMessage"
           name="message"
-          placeholder="How can we help?"
+          placeholder="For example: We’re a web agency reviewing 30 client sites in the EU and California. We need monthly checks and white-label reports. Or tell us about your DPO, developer or product question."
           required
           rows={6}
           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400"

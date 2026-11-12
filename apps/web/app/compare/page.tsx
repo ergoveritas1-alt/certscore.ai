@@ -12,7 +12,7 @@ import {
 
 const title = "Compare website scanning approaches";
 const description =
-  "Compare static cookie inventory, CMP configuration review, and runtime public-web behavior observations for website review workflows.";
+  "Compare cookie inventories, consent management platforms and evidence-led website privacy scanning for GDPR/ePrivacy and CCPA review.";
 
 const comparisonPages = [
   {
@@ -93,21 +93,20 @@ export default function CompareIndexPage() {
           <Badge tone="neutral">Comparison</Badge>
           <h1 className="text-4xl font-semibold tracking-tight text-slate-950">{title}</h1>
           <p className="text-lg leading-8 text-slate-600">
-            Static cookie inventory, CMP configuration review, and runtime website behavior observations answer different
-            questions. CertScore.ai focuses on automated public-web observations that can surface review signals for
-            teams to investigate.
+            Your CMP manages consent choices. CertScore.ai checks observed website behavior. Compare the tools that help
+            DPOs, agencies and developers investigate cookies, tracking and consent behavior for GDPR/ePrivacy and CCPA review.
           </p>
           <div className="flex flex-wrap gap-3">
             <PendingButtonLink
               className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
-              href="/"
-              idleContent="Start a trial scan"
+              href="/#homepage-scan"
+              idleContent="Run free scan"
               pendingContent="Opening..."
             />
             <PendingButtonLink
               className="border-slate-200 bg-white text-slate-900 ring-1 ring-slate-200 hover:bg-slate-100"
-              href="/methodology"
-              idleContent="Review methodology"
+              href="/sample-report"
+              idleContent="View sample report"
               pendingContent="Opening..."
               variant="secondary"
             />

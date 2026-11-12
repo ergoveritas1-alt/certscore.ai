@@ -16,13 +16,13 @@ const insightPages = [
   { href: "/insights/ai-lab-privacy-leaderboard-2026", title: "Privacy signals across 10 AI-company websites", description: "October 12, 2026 observations from Ireland: the leaderboard, retained report links, methodology and validation limits." },
   { href: "/insights/session-replay-study-2026", title: "Session replay signals: findings from 5,000 production scans", description: "Original CertScore.ai research: 12.0% of 3,199 domains with usable evidence showed an observable replay-service signal." },
   {
-    href: "/insights/common-cookie-consent-issues",
-    title: "Common cookie consent issues",
+    href: "/solutions/cookie-consent-scanner",
+    title: "Investigate cookie consent behavior",
     description: "Typical consent-control and tracker timing issues teams run into."
   },
   {
-    href: "/insights/common-privacy-policy-gaps",
-    title: "Common privacy policy gaps",
+    href: "/solutions/privacy-policy-risk-scanner",
+    title: "Review privacy-policy evidence",
     description: "Typical policy-page and disclosure gaps that appear during public-site review."
   }
 ];

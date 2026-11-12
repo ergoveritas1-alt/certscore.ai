@@ -14,7 +14,6 @@ const config: GrowthContentPageConfig = {
   path: "/compare/cookiebot-alternative-runtime-testing",
   relatedLinks: [
     { href: "/compare/cmp-vs-runtime-consent-scanner", label: "CMP vs runtime scanner" },
-    { href: "/guides/cmp-verification", label: "CMP verification" },
     { href: "/guides/third-party-cookie-checker", label: "Third-party cookie checker" },
     { href: "/guides/detect-tracking-before-consent", label: "Pre-consent tracking detection" },
     { href: "/guides/consent-report-example", label: "Annotated retained report" }
@@ -39,7 +38,7 @@ const config: GrowthContentPageConfig = {
       title: "Read the action evidence separately",
       paragraphs: [
         "On eligible scans, Accept and Reject use separate sessions. A completed click, confirmed choice, and after-action activity are distinct facts. Accept is an ordinary score-neutral comparison; limited coverage is not a clean result.",
-        "For a confirmed refusal, inspect any qualifying later requests alongside timing and attribution limits. Separately verified tracking after a completed Reject click can be a review signal even when registration was not confirmed."
+        "After a completed eligible Reject action, inspect retained non-essential cookies and classified service requests for GDPR/ePrivacy review. Keep cookie presence, active collection and confirmed consent state separate; California collection review uses its own request, purpose and choice-scope evidence."
       ]
     }
   ],

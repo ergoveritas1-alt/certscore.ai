@@ -12,7 +12,7 @@ const config: SolutionPageConfig = {
   description:
     "Review cookie consent timing, third-party cookies before consent, CMP behavior, and what a site does after an Accept or Reject click. Evidence-backed observations for review.",
   intro:
-    "CertScore establishes a pre-consent baseline and, where an eligible consent control can be actioned safely, observes Accept and Reject in separate browser sessions. Reports retain observable requests and storage activity after a completed click and separately state whether consent registration was verified. These observations remain useful when registration is unconfirmed.",
+    "CertScore.ai establishes a pre-consent baseline and, where an eligible consent control can be actioned safely, observes Accept and Reject in separate browser sessions. Reports retain observable requests and storage activity after a completed click and separately state whether consent registration was verified. These observations remain useful when registration is unconfirmed.",
   path: "/solutions/cookie-consent-scanner",
   primarySignals: [
     "Cookie and storage timing",
@@ -38,7 +38,7 @@ const config: SolutionPageConfig = {
     {
       title: "What CertScore.ai checks",
       body:
-        "CertScore.ai reviews cookie timing, third-party domains, storage writes, consent surface presence, available choices, and separate Accept and Reject observations. Accept is a score-neutral comparison baseline; Reject can support a finding after confirmed refusal with qualifying activity, or after a completed Reject click with independently verified tracking evidence under the Reject-click review policy."
+        "CertScore.ai reviews cookie timing, third-party domains, storage writes, consent surface presence, available choices, and separate Accept and Reject observations. Accept provides a comparison baseline. A completed authorized Reject path can support review of retained non-essential cookies and classified services; inspect cookie presence, request activity and available consent-state evidence separately."
     },
     {
       title: "When to run it",
@@ -65,7 +65,7 @@ const config: SolutionPageConfig = {
     {
       question: "Does CertScore.ai test reject behavior?",
       answer:
-        "On eligible sites, CertScore can observe Accept and Reject in separate sessions. Reports retain activity observed after a completed Reject click and separately report refusal registration. A finding requires qualifying retained evidence under the confirmed-refusal or Reject-click tracking policy. Missing or incomplete capture remains limited coverage. Findings remain automated review signals, not legal determinations."
+        "On eligible sites, CertScore.ai can observe Accept and Reject in separate sessions. Reports retain activity observed after a completed Reject click and separately report refusal registration. A finding requires qualifying retained evidence under the confirmed-refusal or Reject-click tracking policy. Missing or incomplete capture remains limited coverage. Findings remain automated review signals, not legal determinations."
     }
   ],
   aiSummary: [
@@ -74,9 +74,9 @@ const config: SolutionPageConfig = {
   ],
   relatedLinks: [
     { href: "/mcp/light", label: "Run a cookie and consent scan with MCP Light" },
-    { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement checker" },
+    { href: "/guides/consent-enforcement-testing", label: "Consent enforcement testing" },
     { href: "/guides/check-third-party-cookies-before-consent", label: "Third-party cookies before consent" },
-    { href: "/guides/cmp-verification", label: "CMP verification" },
+    { href: "/compare/cmp-vs-runtime-consent-scanner", label: "CMP verification" },
     { href: AUTHENTIC_SAMPLE_REPORT_URL, label: "Sample report" }
   ],
   title: "Cookie consent scanner"

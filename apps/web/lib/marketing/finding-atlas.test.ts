@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { getFindingReferenceItems } from "./finding-atlas";
+import { HOMEPAGE_SHOWCASE, PRODUCT_GROUPS } from "./homepage-showcase";
 import { CERT_SCORE_FINDING_REGISTRY } from "../scans/finding-registry";
 import { FINDING_DENSITY_BENCHMARKS } from "../scans/finding-density-benchmarks";
 import { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../scans/rank-findings";
@@ -156,15 +157,30 @@ test("finding reference index includes official executive findings and the Rejec
   );
 });
 
-test("homepage findings overview uses the GDPR and ePrivacy checklist presentation", () => {
+test("homepage product overview covers 24 capabilities with sourced evidence and distinct review and integration paths", () => {
   const homepageSource = readFileSync("apps/web/app/(marketing)/page.tsx", "utf8");
   const overviewSource = readFileSync("apps/web/components/marketing/homepage-findings-overview.tsx", "utf8");
 
-  assert.match(homepageSource, /const findings = getFindingReferenceItems\(\);/);
-  assert.match(homepageSource, /<HomepageFindingsOverview findings=\{findings\} \/>/);
-  assert.match(overviewSource, /const HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDINGS = \[/);
-  assert.match(overviewSource, /href: "\/findings\/reject_option_missing_or_hidden"/);
-  assert.doesNotMatch(overviewSource, /HOMEPAGE_FINDING_CAROUSEL_COPY/);
+  assert.match(homepageSource, /<HomepageFindingsOverview \/>/);
+  assert.match(overviewSource, /Product overview/);
+  assert.equal(HOMEPAGE_SHOWCASE.length, 24);
+  assert.equal(new Set(HOMEPAGE_SHOWCASE.map((feature) => feature.id)).size, 24);
+  for (const group of PRODUCT_GROUPS) {
+    assert.equal(HOMEPAGE_SHOWCASE.filter((feature) => feature.group === group.id).length, 6);
+  }
+  const byId = new Map(HOMEPAGE_SHOWCASE.map((feature) => [feature.id, feature]));
+  for (const [id, href] of [["gdpr", "/gdpr"], ["california", "/ccpa"], ["mcp", "/developers/mcp"], ["api", "/developers/quickstart"], ["sdk", "/developers/sdk"]]) {
+    assert.equal(byId.get(id!)?.href, href);
+  }
+  for (const feature of HOMEPAGE_SHOWCASE) {
+    if (feature.kind === "report") {
+      const bytes = readFileSync(`apps/web/public${feature.image.src}`);
+      assert.equal(bytes.subarray(0, 3).toString("hex"), "ffd8ff", feature.id);
+      assert.ok(feature.image.alt && feature.source.date && feature.source.href.startsWith("https://certscore.ai/scan/"));
+    } else if (feature.kind === "code") {
+      assert.match(feature.code.label, /example/i);
+    }
+  }
 });
 
 test("public finding references omit deferred CCPA/CPRA context", () => {

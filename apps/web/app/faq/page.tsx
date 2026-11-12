@@ -17,7 +17,7 @@ const faqs = [
   {
     question: "What does CertScore.ai scan?",
     answer:
-      "CertScore.ai scans public website pages for accessibility signals, privacy and cookie-consent behavior, tracker activity, policy-page presence, disclosure gaps, and policy-to-behavior contradictions that can be supported by retained evidence."
+      "CertScore.ai is an Evidence-led Website Privacy Scanner for DPOs, agencies and developers. Review cookies, trackers, session-replay signals, privacy disclosures and consent behavior for GDPR/ePrivacy and CCPA concerns, with retained evidence to investigate and retest."
   },
   {
     question: "How accurate are the results?",
@@ -32,7 +32,7 @@ const faqs = [
   {
     question: "Does CertScore.ai scan private or logged-in pages?",
     answer:
-      "No. The MVP scans public websites only. Logged-in, private, or staging-only pages are outside the current scan scope."
+      "CertScore.ai scans publicly accessible pages. Logged-in and private pages are outside this public-web workflow."
   },
   {
     question: "What scan data does CertScore.ai store?",
@@ -42,17 +42,17 @@ const faqs = [
   {
     question: "How long does a scan take?",
     answer:
-      "Homepage previews return quickly. Larger scans usually take a few minutes depending on site responsiveness, page count, and the selected scan scope."
+      "Duration depends on site responsiveness and scan scope. Follow the scan status until it completes, then inspect the report and its retained evidence."
   },
   {
     question: "How are plans measured?",
     answer:
-      "Plans are based on page scans per month. Starter includes 100 page scans per month, Pro includes 1,000 page scans per month, and Custom plans support higher-volume workflows."
+      "Plans use page-scan allowances. See the Pricing page for current allowances, features and higher-volume options."
   },
   {
-    question: "What do I get after the preview scan?",
+    question: "How can I start and expand my review?",
     answer:
-      "After signup, you can save websites, run broader scans, review structured findings and retained evidence in the app, and track changes over time."
+      "Start with a free browser-based scan of one public page, or view the sample report first. An account provides access to saved reports and broader workflows according to your plan. Developers and agents can also use the MCP, REST API and TypeScript SDK integrations."
   },
   {
     question: "Does CertScore.ai fix issues automatically?",
@@ -62,7 +62,7 @@ const faqs = [
   {
     question: "Does CertScore.ai test what happens after I click Reject?",
     answer:
-      "On eligible sites, CertScore.ai can attempt one bounded first-layer Reject action in a separate browser session. The report distinguishes a completed click from a confirmed refusal and retains bounded after-click observations when available. Confirmed post-refusal findings require their own verified evidence; a separately verified Reject-click tracking signal may support review even if consent registration remains unconfirmed. Incomplete or unverifiable observations remain limited coverage."
+      "On eligible sites, CertScore.ai can attempt one bounded first-layer Reject action in a separate browser session. The report distinguishes a completed click from a confirmed refusal and retains bounded after-click observations when available. Retained non-essential cookies and classified service requests after a completed authorized Reject path can support review even if consent registration remains unconfirmed. Incomplete or unverifiable observations remain limited coverage."
   },
   {
     question: "What does a limited or unknown choice-path result mean?",
@@ -77,7 +77,7 @@ const faqs = [
   {
     question: "What happens if my site changes after the scan?",
     answer:
-      "Run another scan. CertScore.ai compares each completed scan to the previous one so you can see added, removed, and changed signals over time."
+      "Run a fresh scan under comparable conditions and review the affected evidence. Saved scan history and supported comparison workflows help your team track changes; confirm monitoring scope and cadence before activation."
   },
   {
     question: "Is CertScore.ai legal advice?",
@@ -124,7 +124,7 @@ export default function FaqPage() {
               asChild
               className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
             >
-              <Link href="/">Scan a website</Link>
+              <Link href="/#homepage-scan">Run free scan</Link>
             </Button>
           </div>
         </div>
@@ -145,21 +145,21 @@ export default function FaqPage() {
           <div className="max-w-3xl space-y-3">
             <h2 className="text-2xl font-semibold tracking-tight text-slate-900">What to do next</h2>
             <p className="text-sm text-slate-600">
-              Start with a homepage preview, then create an account to save domains, run broader scans, and track signal changes over time.
+              Start with a free scan or inspect the sample report. Use the evidence to assign a fix, review the implementation and retest.
             </p>
             <div className="flex flex-wrap gap-3">
               <Button
                 asChild
                 className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
               >
-                <Link href="/">Scan a website</Link>
+                <Link href="/#homepage-scan">Run free scan</Link>
               </Button>
               <Button
                 asChild
                 variant="secondary"
                 className="border-emerald-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(240,253,244,0.98)_100%)] text-slate-900 ring-1 ring-emerald-200 hover:bg-emerald-50"
               >
-                <Link href="/how-it-works">How it works</Link>
+                <Link href="/sample-report">View sample report</Link>
               </Button>
             </div>
           </div>

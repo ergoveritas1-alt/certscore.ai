@@ -24,6 +24,9 @@ type GuideCard = {
 };
 
 const guides: GuideCard[] = [
+  { category: "Solutions", title: "CCPA / California website review", description: "Review GPC, supported opt-out mechanisms, collection notices and rights disclosures.", href: "/ccpa" },
+  { category: "Cookies & Storage", title: "Accept and Reject testing", description: "Inspect eligible choice actions, retained cookies and services, then investigate configuration changes.", href: "/guides/consent-enforcement-testing" },
+  { category: "Scanning Basics", title: "Website consent audit checklist", description: "Scope a review, collect evidence, assign remediation and retest under comparable conditions.", href: "/guides/website-consent-audit-checklist" },
   {
     title: "CertScore.ai for Muse",
     description: "Connect Muse, scan a public website, and compare results after changes.",
@@ -62,12 +65,6 @@ const guides: GuideCard[] = [
     href: "/guides/website-scanning-basics"
   },
   {
-    title: "Website Signal Review Checklist",
-    description: "A practical overview for reviewing privacy, accessibility, policy, and disclosure signals.",
-    category: "Scanning Basics",
-    href: "/guides/website-signal-check"
-  },
-  {
     title: "GDPR website compliance scanner",
     description: "Scanner page for GDPR-relevant consent, cookie, tracking, policy, and disclosure review signals.",
     category: "Solutions",
@@ -75,7 +72,7 @@ const guides: GuideCard[] = [
   },
   {
     title: "Cookie consent scanner",
-    description: "Scanner page for cookie consent timing, third-party cookies, CMP behavior, and confirmed Accept/Reject observations.",
+    description: "Scanner page for cookie consent timing, third-party cookies, CMP behavior, and eligible Accept/Reject observations.",
     category: "Solutions",
     href: "/solutions/cookie-consent-scanner"
   },
@@ -134,12 +131,6 @@ const guides: GuideCard[] = [
     href: "/guides/cookie-consent-laws"
   },
   {
-    title: "Cookie consent enforcement checker",
-    description: "How runtime checks help verify consent-control behavior.",
-    category: "Cookies & Storage",
-    href: "/guides/cookie-consent-enforcement-checker"
-  },
-  {
     title: "Third-party cookies before consent",
     description: "Review third-party cookie timing before a recorded consent choice.",
     category: "Cookies & Storage",
@@ -150,12 +141,6 @@ const guides: GuideCard[] = [
     description: "How to inspect cookie domains, names, and related vendor evidence.",
     category: "Cookies & Storage",
     href: "/guides/third-party-cookie-checker"
-  },
-  {
-    title: "CMP verification",
-    description: "Compare consent-platform UI signals with observed runtime behavior.",
-    category: "Cookies & Storage",
-    href: "/guides/cmp-verification"
   },
   {
     title: "Privacy policy requirements",
@@ -188,7 +173,7 @@ const categories = Array.from(new Set(guides.map((guide) => guide.category)));
 export const metadata: Metadata = createPageMetadata({
   title: "CertScore.ai Guides",
   description:
-    "Browse CertScore.ai guides for privacy, cookies, consent, accessibility, policy, disclosure, and website scanning signals.",
+    "Practical website privacy review guides for DPOs, agencies and developers: GDPR/ePrivacy, CCPA, consent behavior, cookies, trackers and policy evidence.",
   path: "/guides"
 });
 
@@ -214,7 +199,7 @@ export default async function GuidesPage({
     createPublicWebPageSchema({
       title: "CertScore.ai Guides",
       description:
-        "Browse CertScore.ai guides for privacy, cookies, consent, accessibility, policy, disclosure, and website scanning signals.",
+        "Practical website privacy review guides for DPOs, agencies and developers: GDPR/ePrivacy, CCPA, consent behavior, cookies, trackers and policy evidence.",
       path: "/guides"
     }),
     createBreadcrumbSchema([
@@ -247,8 +232,7 @@ export default async function GuidesPage({
         <Badge tone="neutral">Guides</Badge>
         <h1 className="text-4xl font-semibold tracking-tight text-slate-950">CertScore.ai guides</h1>
         <p className="text-lg leading-8 text-slate-600">
-          Browse evidence-backed guides for public website privacy, cookies, consent, accessibility, policy,
-          disclosure, and scanning workflows.
+          Use practical evidence-led workflows to investigate GDPR/ePrivacy and CCPA concerns, review consent and tracking behavior, and hand off fixes to the right owner.
         </p>
       </div>
 

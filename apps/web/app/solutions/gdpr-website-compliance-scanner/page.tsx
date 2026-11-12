@@ -73,7 +73,7 @@ const config: SolutionPageConfig = {
     { href: "/insights/session-replay-study-2026", label: "Session replay study: evidence and limitations" },
     { href: "/guides/website-form-scanning", label: "Review forms and field evidence" },
     { href: "/gdpr", label: "How to interpret GDPR website evidence" },
-    { href: "/guides/cmp-verification", label: "CMP verification" },
+    { href: "/compare/cmp-vs-runtime-consent-scanner", label: "CMP verification" },
     { href: "/guides/rtb-cookie-syncing", label: "RTB cookie syncing" },
     { href: AUTHENTIC_SAMPLE_REPORT_URL, label: "Sample report" }
   ],

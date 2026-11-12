@@ -7,8 +7,8 @@ import {
   DisclaimerBlock,
   WebsiteBehaviorScanCta
 } from "../../components/marketing/ai-visibility-content";
-import { getFindingDensityBenchmark } from "../../lib/scans/finding-density-benchmarks";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
+import { CORE_MARKETING_POSITIONING } from "../../lib/marketing/core-positioning";
 
 const title = "Press and media information";
 const description =
@@ -28,16 +28,12 @@ export const metadata: Metadata = {
 const scanCategories = [
   "Tracking requests and third-party activity",
   "Cookies before consent",
-  "Public consent surfaces and confirmed Accept/Reject choice paths on eligible scans",
+  "Public consent controls and separate eligible Accept/Reject observations",
   "Session recording and replay-related signals",
   "Fingerprinting-related signals",
   "Homepage accessibility signals",
   "Policy/runtime consistency review signals where evidence is available"
 ];
-
-function benchmarkLabel(findingId: Parameters<typeof getFindingDensityBenchmark>[0]) {
-  return getFindingDensityBenchmark(findingId)?.contextLabel.toLowerCase() ?? "observed in recent benchmark scans";
-}
 
 export default function PressPage() {
   const schema = {
@@ -57,7 +53,7 @@ export default function PressPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Press</p>
           <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Press and media information</h1>
           <p className="text-lg leading-8 text-slate-600">
-            CertScore.ai scans public websites for observable pre-consent tracking, cookie and storage, public policy surface, accessibility, session recording, fingerprinting-related, and disclosure-consistency risk signals.
+            {CORE_MARKETING_POSITIONING}
           </p>
         </div>
 
@@ -66,10 +62,10 @@ export default function PressPage() {
         </div>
 
         <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-5 text-sm leading-7 text-slate-700">
-          <p className="font-semibold text-slate-950">Latest product announcement</p>
-          <p className="mt-1">CertScore.ai now tests Accept and Reject in separate browser sessions on eligible scans, with confirmed-interaction requirements and explicit limited-coverage states.</p>
-          <Link className="mt-2 inline-flex font-semibold text-sky-700 hover:text-sky-900" href="/releases/accept-and-reject-path-testing">
-            Read the Accept &amp; Reject Path announcement →
+          <p className="font-semibold text-slate-950">Product updates and original research</p>
+          <p className="mt-1">Explore current product releases and original research on GPC, privacy-policy evidence and session-replay detection. Each study retains its own date, sample and methodology.</p>
+          <Link className="mt-2 inline-flex font-semibold text-sky-700 hover:text-sky-900" href="/releases">
+            Explore releases and research →
           </Link>
         </div>
 
@@ -79,7 +75,7 @@ export default function PressPage() {
               <CardTitle className="text-xl text-slate-950">Boilerplate</CardTitle>
             </CardHeader>
             <CardContent className="text-sm leading-7 text-slate-600">
-              CertScore.ai is a website risk-signal scanner that observes real website behavior around pre-consent tracking, cookies and storage, public policy surfaces, accessibility, session recording, fingerprinting-related signals, and disclosure consistency. CertScore.ai helps teams review automated evidence about how public websites behave, not just what policies claim.
+              {CORE_MARKETING_POSITIONING} Start with a free public-page scan, review retained report evidence, or connect an agent through MCP, the REST API or TypeScript SDK.
             </CardContent>
           </Card>
 
@@ -96,19 +92,7 @@ export default function PressPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200 bg-white shadow-none">
-            <CardHeader>
-              <CardTitle className="text-xl text-slate-950">Benchmark highlights</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm leading-7 text-slate-600">
-              <p>Pre-consent tracking was {benchmarkLabel("pre_consent_tracking_detected")}.</p>
-              <p>RTB cookie sync was {benchmarkLabel("rtb_cookie_sync_observed")}.</p>
-              <p>
-                Fingerprinting-related signals were {benchmarkLabel("fingerprinting_related_signals_observed")}, while probable fingerprinting was {benchmarkLabel("probable_fingerprinting")}.
-              </p>
-              <p>Session recording services were {benchmarkLabel("session_recording_services_detected")}.</p>
-            </CardContent>
-          </Card>
+
 
           <Card className="border-slate-200 bg-white shadow-none">
             <CardHeader>

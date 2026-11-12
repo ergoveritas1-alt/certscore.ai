@@ -44,7 +44,7 @@ export default function WebsiteDisclosureRequirementsPage() {
       ]}
       certScoreFlagExample="The scan could flag testimonial or affiliate-style language on a page where obvious disclosure wording is not detected."
       relatedGuides={[
-        { href: "/guides/website-signal-check", label: "Website signal review checklist" },
+        { href: "/guides/website-consent-audit-checklist", label: "Website consent audit checklist" },
         { href: "/guides/privacy-policy-examples", label: "Privacy policy examples" },
         { href: "/how-it-works", label: "How CertScore.ai works" }
       ]}

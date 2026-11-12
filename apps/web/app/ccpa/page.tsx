@@ -5,7 +5,7 @@ import { createPageMetadata, createPublicArticleSchema, createBreadcrumbSchema }
 const content = {
   "title": "CCPA website evidence review: tracking, disclosures, and GPC",
   "description": "Review public website tracking, opt-out surfaces, disclosures, and GPC response as evidence for CCPA assessment, with clear automated-scan limits.",
-  "intro": "A website scan can help identify tracking vendors, public disclosures, opt-out surfaces, and observable GPC behavior for CCPA review. It cannot establish whether the law applies to a business, determine every downstream data use, or certify compliance.",
+  "intro": "Give DPOs, agencies and developers retained evidence for CCPA/California review: tracking requests, cookies, GPC response, supported opt-out controls, collection notices and privacy-rights disclosures. Use the evidence to investigate implementation issues, assign a fix and retest.",
   "sections": [
     {
       "title": "Start with applicability and context",
@@ -41,9 +41,9 @@ const content = {
       ]
     },
     {
-      "title": "Build an evidence packet for review",
+      "title": "Assign the review and retest",
       "paragraphs": [
-        "Include the target and region, retained requests or storage identities with sensitive values removed, policy references, control observations, GPC proof, contract version, and coverage limitations. Assign follow-up questions to the responsible owner.",
+        "Give the responsible owner the page, region, report link, relevant request or cookie evidence, policy passages and GPC observations. Record the expected behavior and coverage limits, then compare a fresh scan after changes. Remove sensitive values from shared notes.",
         "Review authenticated experiences, server-side handling, consumer request workflows, contracts, and other regions separately. They are beyond what an unauthenticated public-page scan can establish."
       ]
     }
@@ -53,7 +53,7 @@ const path = "/ccpa";
 export const metadata = createPageMetadata({ ...content, path });
 export default function EvidencePage() {
  return <main className="min-h-screen bg-slate-50"><SiteHeader />
-   <AiVisibilityContent {...content} path={path} badge="Evidence standards" showEvidenceExamples={false}
+   <AiVisibilityContent {...content} path={path} badge="CCPA / California review" showEvidenceExamples={false}
      schema={[createPublicArticleSchema({ ...content, path }), createBreadcrumbSchema([{ name: "Home", path: "/" }, { name: content.title, path }])]}
      relatedLinks={[{ href: "/methodology", label: "Methodology" }, { href: "/guides", label: "Practical guides" }, { href: "/guides/consent-report-example", label: "Annotated report" }]} />
    <SiteFooter /></main>;

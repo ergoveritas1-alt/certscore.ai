@@ -14,8 +14,7 @@ const config: GrowthContentPageConfig = {
   path: "/compare/onetrust-runtime-consent-testing",
   relatedLinks: [
     { href: "/compare/cmp-vs-runtime-consent-scanner", label: "CMP vs runtime scanner" },
-    { href: "/guides/cmp-verification", label: "CMP verification" },
-    { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement checker" },
+    { href: "/guides/consent-enforcement-testing", label: "Consent enforcement testing" },
     { href: "/methodology", label: "CertScore.ai methodology" },
     { href: "/guides/test-global-privacy-control", label: "How to test GPC response" }
   ],
@@ -39,7 +38,7 @@ const config: GrowthContentPageConfig = {
       title: "Read GPC and refusal results carefully",
       paragraphs: [
         "A GPC assessment records whether signal delivery was verified and what a paired passive comparison observed. Unverified delivery remains indeterminate. No observable response in that window does not establish every downstream use of data or a legal conclusion.",
-        "After Reject, distinguish a verified refusal from a completed click with unconfirmed registration. Review supported findings and their evidence rather than treating a banner dismissal as a confirmed choice."
+        "After a completed eligible Reject action, retained non-essential cookies and services can support GDPR/ePrivacy review without establishing a registered refusal or active use. Keep California collection review separate and inspect its request, purpose and choice-scope evidence."
       ]
     }
   ],

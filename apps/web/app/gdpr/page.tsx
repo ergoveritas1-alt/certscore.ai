@@ -47,55 +47,7 @@ export const metadata: Metadata = {
   }
 };
 
-const heroChips = ["Runtime evidence", "Consent + cookie timing", "23 findings"];
-
-const gdprSignalBenchmarks = [
-  {
-    id: "pre_consent_tracking_detected",
-    label: "Tracking before recorded consent",
-    count: 458,
-    denominatorApprox: 2500,
-    displayPercent: "18%",
-    caveat: "Observed signals across approximately 2,500 scanned rank slots.",
-    gdprRelevance: "Consent timing and ePrivacy storage/access review"
-  },
-  {
-    id: "session_recording_services_detected",
-    label: "Session recording services detected",
-    count: 228,
-    denominatorApprox: 2500,
-    displayPercent: "9%",
-    caveat: "Requires review of masking, consent gating, and sensitive-page exclusions.",
-    gdprRelevance: "Data minimization, transparency, and security review"
-  },
-  {
-    id: "third_party_cookie_pre_consent",
-    label: "Third-party tracking cookies before consent",
-    count: null,
-    denominatorApprox: null,
-    displayPercent: "10% in completed cookie-timing buckets",
-    caveat: "Final all-bucket denominator pending; do not overstate.",
-    gdprRelevance: "Cookie consent and terminal-equipment access review"
-  },
-  {
-    id: "cross_domain_identifier_sharing_observed",
-    label: "Cross-domain identifier sharing observed",
-    count: 49,
-    denominatorApprox: 2500,
-    displayPercent: "2%",
-    caveat: "Identifier-like data movement observed across domain contexts.",
-    gdprRelevance: "Transparency, online identifiers, and third-party disclosure review"
-  },
-  {
-    id: "reject_tracking_persists_after_reject",
-    label: "Tracking appeared to continue after reject",
-    count: 34,
-    denominatorApprox: 2500,
-    displayPercent: "1-2%",
-    caveat: "Reject-path persistence signals require careful manual review.",
-    gdprRelevance: "Consent withdrawal and enforcement review"
-  }
-] as const;
+const heroChips = ["Runtime evidence", "Consent + cookie timing", "Retained evidence"];
 
 const runtimeCards = [
   {
@@ -104,9 +56,9 @@ const runtimeCards = [
       "CertScore.ai records whether non-essential requests, cookies, storage, or identifier-bearing activity appear before a recorded consent choice."
   },
   {
-    title: "After a confirmed choice",
+    title: "After an eligible Accept or Reject click",
     body:
-      "On eligible sites, separate Accept and Reject observations retain what follows a confirmed choice. Accept is a score-neutral baseline; qualifying activity after a confirmed refusal can support a Reject Path finding."
+      "On eligible sites, separate Accept and Reject sessions retain the completed action, observed cookies and services, and available choice-state evidence. DPOs can use the evidence to review non-essential activity after Reject and coordinate a fix with developers or agencies."
   },
   {
     title: "Disclosure alignment",
@@ -166,26 +118,23 @@ const regulatoryContexts = [
     body:
       "Consent quality, purpose specificity, withdrawal, transparency, and accountability may be relevant when runtime behavior depends on a consent basis.",
     links: [
-      { href: "https://gdpr-info.eu/", label: "GDPR text" },
-      { href: "https://gdpr-info.eu/art-7-gdpr/", label: "Article 7" },
-      { href: "https://gdpr-info.eu/art-5-gdpr/", label: "Article 5" },
-      { href: "https://gdpr-info.eu/art-25-gdpr/", label: "Article 25" }
+      { href: "https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng", label: "Official GDPR text — Articles 5, 7 and 25" }
     ]
   },
   {
     title: "ePrivacy cookie and device access review",
     body:
       "Cookie, local storage, and similar terminal-equipment access can require separate review from broader GDPR processing analysis.",
-    links: [{ href: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32002L0058", label: "ePrivacy Directive" }]
+    links: [{ href: "https://eur-lex.europa.eu/eli/dir/2002/58/2009-12-19/eng", label: "ePrivacy Directive" }]
   },
   {
     title: "UK GDPR / PECR / ICO context",
     body:
-      "UK cookie and similar technology guidance is often useful for reviewing consent controls, essential-cookie claims, and clear explanations.",
+      "UK PECR guidance is separate from EU law. Use the ICO’s storage and access guidance, finalised in April 2026, to review UK consent requirements and applicable exceptions.",
     links: [
       {
-        href: "https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guide-to-pecr/cookies-and-similar-technologies/",
-        label: "ICO cookie guidance"
+        href: "https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guidance-on-the-use-of-storage-and-access-technologies/",
+        label: "ICO storage and access guidance"
       }
     ]
   },
@@ -195,7 +144,7 @@ const regulatoryContexts = [
       "EDPB materials are useful context when reviewing affirmative action, refusal paths, imbalance, bundled choices, and consent withdrawal.",
     links: [
       {
-        href: "https://www.edpb.europa.eu/our-work-tools/our-documents/guidelines/guidelines-052020-consent-under-regulation-2016679_en",
+        href: "https://www.edpb.europa.eu/documents/guideline/guidelines-052020-on-consent-under-regulation-2016679_en",
         label: "EDPB consent guidance"
       }
     ]
@@ -264,17 +213,6 @@ const faqs = [
   }
 ];
 
-function Bar({ percentLabel, widthClass }: { percentLabel: string; widthClass: string }) {
-  return (
-    <div className="space-y-2">
-      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-        <div className={`h-full rounded-full bg-sky-500 ${widthClass}`} />
-      </div>
-      <p className="text-xs font-medium text-slate-500">{percentLabel}</p>
-    </div>
-  );
-}
-
 function ExternalLink({ href, label }: { href: string; label: string }) {
   return (
     <a href={href} rel="noopener noreferrer" target="_blank" className="text-sm font-medium text-sky-700 hover:text-sky-800">
@@ -291,11 +229,11 @@ function CtaButtons({ location }: { location: string }) {
         className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_10px_24px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
       >
         <Link href="#scan" data-analytics-cta-location={location} data-analytics-event="guide_cta_clicked">
-          Start a trial scan &rarr;
+          Run free scan &rarr;
         </Link>
       </Button>
       <Button asChild variant="secondary">
-        <Link href="/findings">Browse findings</Link>
+        <Link href="/sample-report">View sample report</Link>
       </Button>
     </div>
   );
@@ -408,7 +346,7 @@ export default function GdprPage() {
             CMPs and privacy policies are only part of GDPR/ePrivacy review. Reviewers need evidence of what loads, writes cookies or storage, transmits identifiers, or continues after reject. CertScore.ai compares live browser behavior with consent controls, cookies, trackers, and disclosures.
           </p>
           <p className="text-sm leading-7 text-slate-600">
-            Where an eligible consent control can be actioned safely, CertScore confirms the choice transition and retains what follows. That can support review of whether a refusal is reflected in observed runtime behavior and whether the presented choice is consistent with retained technical evidence. It does not establish consent validity or a legal violation. <Link className="font-semibold text-sky-700 hover:text-sky-900" href="/findings/reject_tracking_persists_after_reject">Review the finding method.</Link>
+            Where an eligible consent control can be actioned safely, CertScore.ai records the action, available choice-state evidence and subsequent observations separately. That can support review of whether a refusal is reflected in observed runtime behavior and whether the presented choice is consistent with retained technical evidence. It does not establish consent validity or a legal violation. <Link className="font-semibold text-sky-700 hover:text-sky-900" href="/findings/reject_tracking_persists_after_reject">Review the finding method.</Link>
           </p>
         </div>
         <div className="mt-8 grid gap-5 md:grid-cols-3">
@@ -424,57 +362,13 @@ export default function GdprPage() {
       </section>
 
       <section className="border-y border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-14">
-          <div className="max-w-3xl space-y-3">
-            <Badge tone="neutral">Production scan context</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
-              GDPR/ePrivacy signals observed in recent production scans
-            </h2>
-            <p className="text-base leading-7 text-slate-600">
-              Across recent CertScore.ai production scan batches covering public websites, the most common GDPR/ePrivacy-relevant review signal was tracking before a recorded consent choice. These are automated public-web observations for human and agentic review, not legal conclusions, certification, or compliance determinations.
-            </p>
+        <div className="mx-auto max-w-6xl px-6 py-12">
+          <div className="max-w-3xl space-y-4">
+            <Badge tone="neutral">Original research</Badge>
+            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Explore the evidence behind the research.</h2>
+            <p className="text-base leading-7 text-slate-600">Explore CertScore.ai research on session-replay signals, privacy-policy evidence and GPC. Each study has its own sample, observation period and coverage limits; its results describe those observations.</p>
+            <Link className="inline-flex font-semibold text-sky-700 hover:underline" href="/releases">Read research and product updates →</Link>
           </div>
-          <div className="mt-8 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-              {gdprSignalBenchmarks.slice(0, 3).map((metric) => (
-                <Card key={metric.id} className="border-slate-200 bg-slate-50 shadow-none">
-                  <CardHeader className="pb-2">
-                    <p className="text-3xl font-semibold text-slate-950">{metric.displayPercent}</p>
-                    <CardTitle className="text-base text-slate-950">{metric.label}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-sm leading-6 text-slate-600">
-                    <p>{metric.gdprRelevance}</p>
-                    <p className="text-xs leading-5 text-slate-500">{metric.caveat}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            <Card className="border-slate-200 bg-slate-50 shadow-none">
-              <CardHeader>
-                <CardTitle className="text-xl text-slate-950">Signal mix</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                {gdprSignalBenchmarks.map((metric, index) => (
-                  <div key={metric.id} className="space-y-2">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">{metric.label}</p>
-                        <p className="text-xs leading-5 text-slate-500">{metric.gdprRelevance}</p>
-                      </div>
-                      <p className="shrink-0 text-sm font-semibold text-slate-950">{metric.displayPercent}</p>
-                    </div>
-                    <Bar
-                      percentLabel={metric.count && metric.denominatorApprox ? `${metric.count} / ${metric.denominatorApprox}` : metric.caveat}
-                      widthClass={index === 0 ? "w-[72%]" : index === 1 ? "w-[44%]" : index === 2 ? "w-[50%]" : index === 3 ? "w-[20%]" : "w-[14%]"}
-                    />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-          <p className="mt-5 text-sm leading-6 text-slate-500">
-            Recent production scan batches may include incomplete coverage, protected routes, regional variance, and overlapping windows. Percentages are directional context for prioritizing review, not a legal or statistical conclusion.
-          </p>
         </div>
       </section>
 
@@ -485,7 +379,7 @@ export default function GdprPage() {
             GDPR-relevant examples from the CertScore.ai findings registry
           </h2>
           <p className="text-base leading-7 text-slate-600">
-            These are GDPR/ePrivacy-relevant examples from the 23-finding registry. They are review signals backed by retained evidence, not a statement that every registry item is a GDPR finding.
+            These are GDPR/ePrivacy-relevant examples from the findings reference. They are review signals backed by retained evidence, not a statement that every registry item is a GDPR finding.
           </p>
         </div>
         <div className="mt-8 grid gap-6">
@@ -604,13 +498,21 @@ export default function GdprPage() {
 
       <section id="scan" className="mx-auto max-w-6xl px-6 py-16">
         <div className="border border-slate-200 bg-white p-6">
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Turn GDPR/ePrivacy questions into a practical website review.</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">DPOs and web agencies can inspect consent timing, eligible Accept/Reject observations, third-party vendors and privacy disclosures together. Identify a configuration or policy question, assign an owner, and compare evidence after remediation.</p>
+          <p className="mb-6 mt-3 max-w-3xl text-sm leading-6 text-slate-600">Choose an available EU scan origin for an EU-facing review. Results describe the tested pages, origin and coverage; a scan does not establish compliance across markets or complete a legal assessment.</p>
           <DomainScanForm
-            buttonLabel="Start a trial scan"
+            buttonLabel="Run free scan"
             helperText="Public website scans surface automated observations for human and agentic review."
             inputLabel="Website domain"
             mode="preview"
             scanSource="unknown"
           />
+          <div className="mt-5 flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold text-sky-700">
+            <Link className="underline underline-offset-4" href="/?loc=EU#homepage-scan">Choose an EU-origin scan</Link>
+            <Link className="underline underline-offset-4" href="/sample-report">Explore the sample report layout</Link>
+            <Link className="underline underline-offset-4" href="/contact-sales">Plan recurring client reviews</Link>
+          </div>
         </div>
       </section>
 

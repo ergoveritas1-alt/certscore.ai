@@ -7,8 +7,8 @@ import { parseHomepageLocation } from "../../lib/marketing/homepage-location";
 import { useHomepageScanPreferences } from "./homepage-scan-preferences";
 
 export function SampleReportButton({
-  className, label = "View sample report", variant = "primary",
-}: { className?: string; label?: string; variant?: "primary" | "secondary" }) {
+  className, label = "View sample report", variant = "primary", showArrow = false,
+}: { className?: string; label?: string; variant?: "primary" | "secondary"; showArrow?: boolean }) {
   const router = useRouter();
   const preferences = useHomepageScanPreferences();
   const submitting = useRef(false);
@@ -65,6 +65,7 @@ export function SampleReportButton({
       data-analytics-cta-type="sample_report" data-analytics-event="hero_sample_report_clicked"
       onClick={() => void openSampleReport()}>
       {pending ? "Opening..." : label}
+      {showArrow && !pending && <svg viewBox="0 0 24 24" className="ml-2 h-4 w-4 shrink-0 transition-transform motion-safe:group-hover:translate-x-0.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg>}
     </Button>
     {error ? <span role="alert" className="max-w-sm rounded bg-rose-50 px-2 py-1 text-sm text-rose-800">{error}</span> : null}
   </span>;

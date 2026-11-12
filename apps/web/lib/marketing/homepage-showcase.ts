@@ -1,127 +1,185 @@
-import evidence from "./showcase-evidence.json";
-import { AUTHENTIC_SAMPLE_REPORT_URL } from "./sample-report";
+import { HOW_IT_WORKS_HIGHLIGHTS } from "./how-it-works-walkthrough";
 
+export const PRODUCT_GROUPS = [
+  { id: "review", label: "Privacy review", description: "GDPR/ePrivacy + California", icon: "shield" },
+  { id: "behavior", label: "Website behavior", description: "Cookies, tracking + consent", icon: "activity" },
+  { id: "evidence", label: "Evidence to action", description: "Inspect, explain + remediate", icon: "evidence" },
+  { id: "connect", label: "Scan your way", description: "Browser, MCP, API + SDK", icon: "connect" }
+] as const;
+
+export type ProductGroup = (typeof PRODUCT_GROUPS)[number]["id"];
 export type ShowcaseSlide = {
   id: string;
+  group: ProductGroup;
   label: string;
-  category: string;
   title: string;
   description: string;
-  highlights: string[];
+  highlights: [string, string];
   result: string;
-  image?: { name: string; width: number; height: number; alt: string };
-  code?: { label: string; content: string };
-  json?: unknown;
   href: string;
   linkLabel: string;
-};
+} & (
+  | { kind: "report"; image: { src: string; width: number; height: number; alt: string }; source: { date: string; label: string; href: string } }
+  | { kind: "code"; code: { label: string; content: string } }
+  | { kind: "workflow"; workflow: { title: string; steps: [string, string][]; output: string } }
+);
 
-const report = (anchor = "") => `${AUTHENTIC_SAMPLE_REPORT_URL}?reviewFocus=ccpa_cpra${anchor}`;
-const image = (name: string, width: number, height: number, alt: string) => ({ name, width, height, alt });
-const overview = image("overview", 449, 439, "Fresh test2 report: score 42, four priority issues, OneTrust and the consent, policy and transport signal snapshot.");
+type Copy = Omit<Extract<ShowcaseSlide, { kind: "report" }>, "kind" | "image" | "source">;
+function report(captureId: string, copy: Copy): ShowcaseSlide {
+  const capture = HOW_IT_WORKS_HIGHLIGHTS.find((item) => item.id === captureId);
+  if (!capture) throw new Error(`Missing product overview capture: ${captureId}`);
+  return { ...copy, kind: "report", image: { src: capture.src, width: capture.width, height: capture.height, alt: capture.alt }, source: capture.source };
+}
 
 export const HOMEPAGE_SHOWCASE: ShowcaseSlide[] = [
+  report("overview", {
+    id: "overview", group: "review", label: "Report overview", title: "One website. Evidence you can act on.",
+    description: "Give your DPO, developer and agency a shared picture of website privacy. Move from the report overview to the cookies, services, consent behavior and disclosures behind each finding.",
+    highlights: ["Priorities, scores and scan context in one view", "Supporting evidence a technical team can investigate"],
+    result: "A practical starting point for deciding what to review, who should act and what to retest.", href: "/sample-report", linkLabel: "Explore a sample report"
+  }),
+  report("policy-checklist", {
+    id: "gdpr", group: "review", label: "GDPR / ePrivacy", title: "Put GDPR/ePrivacy concerns into focus.",
+    description: "Review pre-consent activity, non-essential cookies, Reject behavior and privacy disclosures together. Help DPOs and agencies connect technical observations with the questions that need closer review.",
+    highlights: ["Consent behavior and cookie-purpose evidence", "Controller, purpose, rights and disclosure checks"],
+    result: "Build a GDPR/ePrivacy review workflow around what the website actually exposed during the scan.", href: "/gdpr", linkLabel: "Explore GDPR/ePrivacy review"
+  }),
+  report("california-overview", {
+    id: "california", group: "review", label: "CCPA / California", title: "A distinct California privacy perspective.",
+    description: "Review California posture, GPC response, sale/sharing choices and collection notices. Keep CCPA/CPRA questions distinct from the EU consent review while working from retained website evidence.",
+    highlights: ["California findings alongside the EU perspective", "Rights, notices and opt-out evidence in context"],
+    result: "Give teams a CCPA review workflow without treating every privacy framework as the same checklist.", href: "/ccpa", linkLabel: "Explore California privacy review"
+  }),
+  report("gpc", {
+    id: "gpc", group: "review", label: "GPC response", title: "See how a site responds to GPC.",
+    description: "Inspect Global Privacy Control delivery and compare retained activity with a separate baseline. Review advertising and analytics observations with their comparison window and coverage.",
+    highlights: ["Signal-delivery evidence and observed recipients", "Baseline-versus-GPC activity where comparable"],
+    result: "Move from “does it have an opt-out?” to an evidence-led review of the site’s response.", href: "/guides/test-global-privacy-control", linkLabel: "Explore GPC testing"
+  }),
+  report("california-notices", {
+    id: "notices", group: "review", label: "Notices & rights", title: "Connect privacy promises to collection.",
+    description: "Inspect notice topics, rights language, collection-purpose wording and named opt-out routes. See which passages were retained and which functionality still needs investigation.",
+    highlights: ["Sale/sharing, retention and rights disclosures", "Collection notices and choice-route inspection"],
+    result: "Help privacy teams locate the disclosure gaps and unresolved questions worth following up.", href: "/solutions/privacy-policy-risk-scanner", linkLabel: "Explore disclosure review"
+  }),
+  report("cmp-audit", {
+    id: "cmp", group: "review", label: "CMP implementation", title: "Your CMP manages choices. Check the behavior.",
+    description: "A consent banner is part of the implementation. Inspect its controls and the observed activity around a choice to help diagnose tag configuration, vendor loading and consent-flow issues.",
+    highlights: ["Individual CMP implementation checks", "Control visibility and after-choice observations"],
+    result: "Give agencies an independent view when reviewing a client’s existing consent setup.", href: "/guides/consent-enforcement-testing", linkLabel: "Review consent implementation"
+  }),
+  report("resource-evidence", {
+    id: "cookies", group: "behavior", label: "Cookies & storage", title: "Look inside the stored evidence.",
+    description: "Inspect retained cookies and browser storage with purpose, domain and service context. Open the technical details behind a resource to understand what triggered further review.",
+    highlights: ["Cookie and storage observations with attribution", "Structured resource evidence for developers"],
+    result: "Go beyond a cookie count to the details your team can investigate.", href: "/guides/third-party-cookie-checker", linkLabel: "Explore cookie and tracker review"
+  }),
+  report("inventory", {
+    id: "services", group: "behavior", label: "Services & requests", title: "Meet the third parties behind your page.",
+    description: "Explore observed services, purposes, requests and storage together. Follow a vendor into its resource evidence and policy mentions instead of reviewing disconnected lists.",
+    highlights: ["Advertising, analytics and other service identities", "Requests, storage and disclosure context"],
+    result: "Make the website’s third-party footprint easier to explain to a developer or client.", href: "/how-it-works#walkthrough", linkLabel: "Inspect the report walkthrough"
+  }),
+  report("timeline", {
+    id: "timeline", group: "behavior", label: "Before consent", title: "See what starts before the visitor chooses.",
+    description: "Put observed requests, storage and consent events in order. Use timing and the captured page context to investigate activity that appears before a consent choice.",
+    highlights: ["First-seen activity within the scan window", "Consent-surface timing beside browser events"],
+    result: "Give your team a sequence to investigate, not just a list of technologies.", href: "/guides/detect-tracking-before-consent", linkLabel: "Explore pre-consent tracking"
+  }),
+  report("reject", {
+    id: "choice-paths", group: "behavior", label: "Accept & Reject", title: "What really happens after Reject?",
+    description: "Review retained cookies and requests after eligible Accept or Reject clicks in separate fresh sessions. Distinguish the completed action, consent confirmation and observed activity.",
+    highlights: ["Separate Accept and Reject observations", "After-click request timing and retained cookies"],
+    result: "Help developers investigate consent gating, then retest after changing the configuration.", href: "/guides/reject-consent-tracking-test", linkLabel: "Explore the Reject review workflow"
+  }),
+  report("session-replay", {
+    id: "session-replay", group: "behavior", label: "Session replay", title: "Bring session-replay signals into view.",
+    description: "Inspect detected session-recording technology and its supporting evidence. Use correction steps to guide a review of vendor settings, consent gating and disclosures.",
+    highlights: ["Observed session-replay technology signals", "Evidence and correction steps in the same view"],
+    result: "A detected signal guides investigation; it does not establish what a vendor recorded.", href: "/releases/session-replay-detection", linkLabel: "Read the session-replay research"
+  }),
+  report("fingerprinting", {
+    id: "fingerprinting", group: "behavior", label: "Fingerprinting", title: "Privacy review beyond the cookie jar.",
+    description: "Inspect browser-API activity associated with device-identification and fingerprinting review. Open the retained evidence to understand the signal and investigate the script behind it.",
+    highlights: ["Browser-API observations beyond stored cookies", "Expandable technical evidence packets"],
+    result: "Help your team investigate identification behavior that a cookie-only inventory can miss.", href: "/how-it-works#walkthrough", linkLabel: "Explore the evidence walkthrough"
+  }),
+  report("policy-excerpts", {
+    id: "policy-evidence", group: "evidence", label: "Policy passages", title: "Read the passage behind the finding.",
+    description: "Open the retained policy viewer to inspect highlighted wording and its source. Keep the captured disclosure attached to the review, even when the live policy later changes.",
+    highlights: ["Highlighted policy text captured at scan time", "Source-linked evidence for disclosure review"],
+    result: "Give a DPO or client the passage to inspect, not just a generated summary.", href: "/releases/privacy-policy-evidence", linkLabel: "Explore retained policy evidence"
+  }),
+  report("destinations", {
+    id: "destinations", group: "evidence", label: "Data-flow context", title: "Follow the observed network destinations.",
+    description: "Review endpoint, country and network context beside a service identity. Distinguish observed server locations from company headquarters when preparing a data-flow investigation.",
+    highlights: ["Observed endpoint and network context", "Vendor identity alongside destination evidence"],
+    result: "Provide concrete technical inputs for your team’s broader privacy review.", href: "/how-it-works#walkthrough", linkLabel: "Inspect destination evidence"
+  }),
+  report("form-screenshots", {
+    id: "forms", group: "evidence", label: "Forms & fields", title: "See what your website asks people to share.",
+    description: "Inspect field labels, data categories and required states, with verified masked form screenshots when available. Review collection surfaces without filling or submitting forms.",
+    highlights: ["Field-level inventory and privacy review cues", "Masked visual evidence alongside form details"],
+    result: "Make data-minimization and collection-notice reviews more concrete.", href: "/guides/website-form-scanning", linkLabel: "Explore forms and screenshots"
+  }),
+  report("accessibility", {
+    id: "accessibility", group: "evidence", label: "Accessibility", title: "Find the element that needs attention.",
+    description: "Review automated accessibility observations with affected elements, measured values and WCAG references. Give developers specific evidence to support fixes and a broader manual accessibility review.",
+    highlights: ["Element-level evidence and WCAG context", "Accessibility findings beside privacy evidence"],
+    result: "Support accessibility and ADA-related review without presenting an automated scan as a legal determination.", href: "/how-it-works#walkthrough", linkLabel: "Inspect accessibility evidence"
+  }),
+  report("connection-security", {
+    id: "security", group: "evidence", label: "Connection security", title: "Check the connections carrying the page.",
+    description: "Review HTTPS, certificates, redirects, mixed content and observed form destinations. Bring the available transport evidence into the same website review.",
+    highlights: ["Five individual connection checks", "Supported observations and coverage in context"],
+    result: "Give developers a focused view of connection settings that deserve attention.", href: "/methodology", linkLabel: "Explore scan coverage"
+  }),
+  report("share-export", {
+    id: "handoff", group: "evidence", label: "Share & remediate", title: "Turn findings into a shared next step.",
+    description: "Share the report and its evidence with developers, DPOs or agency clients. Use correction steps to plan the investigation, assign work and review a new scan after changes.",
+    highlights: ["Shareable reports and Word report export", "Evidence-led remediation and retesting"],
+    result: "Keep the conversation connected to the observed website behavior.", href: "/contact-sales", linkLabel: "Discuss your agency workflow"
+  }),
   {
-    id: "overview", label: "Overview", category: "Your report", title: "Know where to look first.",
-    description: "Start with the page score, priority issues and a snapshot of the technologies your website uses. Open each finding to inspect its supporting evidence.",
-    highlights: ["Prioritized findings and evidence ratings", "Consent, policy and resource summaries"],
-    result: "This scan: 4 priority issues, 8 services and 10 cookie/storage items.", image: overview,
-    json: { scan: evidence.scan, projection: evidence.projection }, href: report(), linkLabel: "Explore the report"
+    id: "free-browser", group: "connect", label: "Free browser scan", title: "Start with a URL. See the evidence.",
+    description: "Run a free browser-based scan to start reviewing a public website. No code access or script installation on the target website is needed. Choose the scan route that fits your review.",
+    highlights: ["A free starting point for website privacy review", "Public-page observations with clear coverage"],
+    result: "Try CertScore.ai on a website you want to understand.", href: "/how-it-works#free-scan", linkLabel: "Start a free scan",
+    kind: "workflow", workflow: { title: "From public URL to reviewable evidence", steps: [["Choose a website", "Start with the public page you want to review."], ["Observe the page", "Capture supported browser and disclosure signals."], ["Inspect the report", "Explore findings, retained evidence and coverage."]], output: "A concrete starting point for your next privacy review." }
   },
   {
-    id: "consent", label: "Consent paths", category: "Visitor choice", title: "Look beyond the cookie banner.",
-    description: "Identify the CMP and visible Accept, Reject and Options controls. Separate after-click observations show what happened along eligible Accept and Reject paths.",
-    highlights: ["First-layer control visibility", "Click execution and consent confirmation shown separately"],
-    result: "This scan: activity remained after a confirmed Reject, including a Google request and a storage write.",
-    image: image("consent", 624, 541, "Test2 consent panel with OneTrust, observed Accept and Reject controls, and separate after-action results."),
-    json: { postRefusalObservation: evidence.postRefusalObservation }, href: report("#consent-review-evidence"), linkLabel: "Inspect consent evidence"
+    id: "full-site", group: "connect", label: "Multi-page reviews", title: "Take the review beyond the homepage.",
+    description: "Use plan-dependent full-site scans to extend the review across more public pages. Inspect page coverage and prioritize the findings that matter to your website or client engagement.",
+    highlights: ["Multi-page coverage and report summaries", "A shared review workflow for larger websites"],
+    result: "Match scan scope and page allowance to the work your team needs to do.", href: "/pricing", linkLabel: "Explore plans and page allowances",
+    kind: "workflow", workflow: { title: "A broader website review", steps: [["Set the scope", "Choose the website and available page allowance."], ["Review page coverage", "See which pages contributed retained observations."], ["Prioritize the work", "Bring page findings into the team’s review."]], output: "Full-site scanning is available on eligible plans." }
   },
   {
-    id: "storage", label: "Cookies & storage", category: "Browser activity", title: "See what is stored—and when.",
-    description: "Review cookies, local storage and session storage alongside their purpose, classification and first-seen timing. Follow a resource to its retained JSON evidence.",
-    highlights: ["Essential, non-essential and review classifications", "Cookie names, domains and service attribution"],
-    result: "This scan: _ga_TEST2 and _gat_TEST2 were classified as non-essential analytics cookies.",
-    image: image("cookies", 1170, 465, "Expanded Google Analytics service with two non-essential cookie rows and a retained request."),
-    href: report("#report-resource-inventory"), linkLabel: "Explore stored resources"
+    id: "monitoring", group: "connect", label: "Ongoing reviews", title: "Make privacy review a repeatable service.",
+    description: "Agencies can use repeat scans to review client websites after tag, CMP or policy changes. Discuss monitoring options to establish an appropriate cadence and scope for ongoing work.",
+    highlights: ["Repeat reviews after website changes", "Monitoring setup and cadence agreed before activation"],
+    result: "Give clients a reason to keep reviewing website behavior after the initial audit.", href: "/monitor-site", linkLabel: "Discuss monitoring options",
+    kind: "workflow", workflow: { title: "Review. Improve. Retest.", steps: [["Keep a baseline", "Retain the report and its original scan context."], ["Investigate changes", "Review tags, consent settings and disclosures."], ["Retest the website", "Compare new observations with the earlier evidence."]], output: "A repeatable process for developers, DPOs and agencies." }
   },
   {
-    id: "services", label: "Services & requests", category: "Browser activity", title: "Connect requests to the services behind them.",
-    description: "Explore advertising, analytics and session-replay services, their requests and embedded resources. Review first- or third-party relationships, policy mentions and available destination evidence.",
-    highlights: ["Vendor, product, purpose and request details", "Session replay and fingerprinting review signals"],
-    result: "This scan: Google Analytics, Meta, Clarity, Hotjar, FullStory and Mixpanel activity was retained.",
-    image: image("inventory", 1170, 614, "Actual service inventory with purpose, policy disclosure, timing, domains and site relationships."),
-    href: report("#report-resource-inventory"), linkLabel: "Inspect services and requests"
+    id: "mcp", group: "connect", label: "MCP for agents", title: "Give your AI agent website evidence.",
+    description: "Connect an MCP-compatible agent to CertScore.ai. Start with Light MCP for public scans, or connect Hosted OAuth for authorized workspace reports and history.",
+    highlights: ["Public scanning through Light MCP without an account", "Hosted OAuth for authorized workspace access"],
+    result: "Let an agent retrieve retained findings and evidence to support a meaningful review.", href: "/developers/mcp", linkLabel: "Connect an agent with MCP", kind: "code",
+    code: { label: "MCP · example workflow", content: 'Light MCP endpoint\nhttps://mcp.certscore.ai/mcp/light\n\n1. certscore_scan_site\n   { "url": "https://example.com" }\n\n2. certscore_get_scan_status\n   { "scanId": "<returned scanId>" }\n\n3. certscore_get_scan_bundle\n   {\n     "scanId": "<returned scanId>",\n     "detail": "findings",\n     "maxBytes": 8000\n   }\n\n// Follow the returned polling interval.\n// Usage and evidence-access limits apply.' }
   },
   {
-    id: "timing", label: "Timeline", category: "Browser activity", title: "Put consent and tracking in order.",
-    description: "A shared timeline places the consent surface, requests, storage and tracking signals in the observed page visit. Scan location and capture scope give the sequence context.",
-    highlights: ["First-seen activity relative to scan start", "Consent-surface timing and observation end"],
-    result: "This scan: the first third-party request appeared 1.88 seconds before the consent surface.",
-    image: image("timeline", 1170, 165, "Test2 timeline showing a third-party request at 0.67 seconds and the consent banner at 2.55 seconds."),
-    href: report(), linkLabel: "Follow the timeline"
+    id: "api", group: "connect", label: "REST API", title: "Bring website review into your application.",
+    description: "Create scans, follow their status and retrieve findings through the REST API. Use structured results to connect website privacy observations with your own review tools and workflows.",
+    highlights: ["Scan creation, status, findings and evidence resources", "EU-Germany, EU-Ireland and California scan origins"],
+    result: "Start with eligible anonymous scans; use authorized access for workspace and higher-volume workflows.", href: "/developers/quickstart", linkLabel: "Explore the API quickstart", kind: "code",
+    code: { label: "REST API · example requests", content: 'POST https://certscore.ai/api/v2/scans\nContent-Type: application/json\n\n{\n  "url": "https://example.com",\n  "freshness": "latest",\n  "scanFrom": "eu_ie"\n}\n\n// Use the returned scan ID and status link.\nGET /api/v2/scans/<scanId>/status\nGET /api/v2/scans/<scanId>/findings\nGET /api/v2/scans/<scanId>/report-evidence\n\n// Preserve coverage with displayed findings.' }
   },
   {
-    id: "gpc", label: "GPC", category: "California privacy", title: "See what changes with GPC.",
-    description: "Verify delivery of Global Privacy Control, then compare classified activity with a separate passive baseline. The report distinguishes a completed observation from a measurable response.",
-    highlights: ["Page-request and browser signal evidence", "Matched baseline-versus-GPC request counts"],
-    result: "This scan: advertising fell from 1 request to 0; analytics/replay stayed at 5 in the matched 250 ms window.",
-    image: image("gpc", 532, 517, "GPC report: response observed, advertising requests reduced from one to zero, analytics and replay stayed at five."),
-    json: { gpcResponse: evidence.gpcResponse }, href: report("#gpc-evidence"), linkLabel: "Inspect the GPC comparison"
-  },
-  {
-    id: "california", label: "CCPA / CPRA", category: "California privacy", title: "Bring privacy choices and notices into view.",
-    description: "Review Do Not Sell/Share, privacy-choice and cookie-settings evidence alongside retained notice passages on sale/sharing, purposes, retention, rights and opt-out methods.",
-    highlights: ["Evidence-backed choice links when verified", "Notice passages linked to their source policy"],
-    result: "This scan: 5 notice topics retained. Choice-link visibility was not verified; opt-out functionality was not tested.",
-    image: image("california", 532, 430, "Retained California notice passages from the test2 privacy policy, including sale/sharing and collection purposes."),
-    json: { privacyAuditEvidence: evidence.privacyAuditEvidence }, href: report("#california-privacy-evidence"), linkLabel: "Review California evidence"
-  },
-  {
-    id: "policy", label: "Policies", category: "Disclosures", title: "Follow disclosures back to their source.",
-    description: "Locate privacy and cookie policies, then review retained disclosure evidence for purposes, legal basis, retention, recipients, transfers and rights. Compare directly comparable policy promises with runtime facts where supported.",
-    highlights: ["Source-linked policy and transparency checks", "Observed evidence separated from unconfirmed coverage"],
-    result: "This scan: the privacy-policy surface was observed; several disclosure checks remain unconfirmed.",
-    image: image("policy", 624, 543, "Policy and transparency checklist showing the observed privacy-policy surface and unconfirmed disclosure checks."),
-    href: report(), linkLabel: "Review disclosure evidence"
-  },
-  {
-    id: "transport", label: "Transport", category: "Page safeguards", title: "Check how the page communicates.",
-    description: "Review HTTPS delivery, certificate validation, HTTP redirects, mixed content and observed form transport alongside the privacy findings.",
-    highlights: ["Retained TLS and certificate observations", "Individual results for five transport checks"],
-    result: "This scan: 4 positive transport checks. Form transport was limited because no form was observed.",
-    image: image("transport", 532, 492, "Transport checklist with four positive checks and a limited form-transport result."),
-    href: report(), linkLabel: "Inspect transport checks"
-  },
-  {
-    id: "collection", label: "Forms & embeds", category: "Page safeguards", title: "Understand the page’s collection surfaces.",
-    description: "Inspect forms and field structure, checkbox settings and masked form captures when available. Resource inventories also expose embedded frames and hidden outbound links for review.",
-    highlights: ["Read-only form inspection—no submissions", "Field details and capture coverage"],
-    result: "This scan: no forms, embedded frames or hidden links were observed. The JSON retains the completed form-inventory result.",
-    image: image("collection", 690, 204, "Actual resource summary showing zero forms, hidden links and embedded frames, alongside eight requests and ten cookie or storage items."), json: { appendix: evidence.appendix }, href: "/methodology", linkLabel: "Explore collection coverage"
-  },
-  {
-    id: "exports", label: "Share & monitor", category: "Team workflows", title: "Take the evidence into your workflow.",
-    description: "Share a report or export JSON, PDF and tracking CSV for your review. Plan-dependent full-site scans and monitoring extend the workflow to more pages and repeat checks.",
-    highlights: ["Shareable reports and structured exports", "Full-site coverage and recurring monitoring options"],
-    result: "This example covers one starting page. Its export keeps the scan identity, location and completion time.",
-    code: { label: "Actual report export · selected fields", content: JSON.stringify({ scan: evidence.scan }, null, 2) },
-    href: report(), linkLabel: "Open report and exports"
-  },
-  {
-    id: "mcp", label: "MCP", category: "Developer interfaces", title: "Give your AI tools website evidence.",
-    description: "Connect an MCP-compatible assistant to CertScore. Create or reuse an eligible scan, follow its status, then retrieve findings and paginated report evidence.",
-    highlights: ["Light MCP for public scanning", "Authenticated tools for workspace access"],
-    result: "Example workflow for test2.html. Tool access and scan allowances depend on the connection.",
-    code: { label: "MCP · example tool workflow", content: 'certscore_scan_site\n{\n  "url": "https://ergoveritas.com/test2.html"\n}\n\n// While the returned scan is active\ncertscore_get_scan_status\n{ "scanId": "<returned scanId>" }\n\n// Once completed\ncertscore_get_scan_bundle\n{\n  "scanId": "<returned scanId>",\n  "detail": "findings",\n  "maxBytes": 8000\n}' },
-    href: "/developers/mcp", linkLabel: "Explore MCP setup"
-  },
-  {
-    id: "api", label: "API & SDK", category: "Developer interfaces", title: "Build the report into your application.",
-    description: "Use the REST API or TypeScript SDK to create scans, poll status and retrieve findings and evidence. Keep scan identity and coverage with the results you display.",
-    highlights: ["Structured scan and evidence contracts", "Documented endpoints and TypeScript SDK"],
-    result: "Switch to JSON for selected fields from this scan’s real export. The request below is an API usage example.",
-    code: { label: "REST API · example scan request", content: 'POST https://certscore.ai/api/v2/scans\nContent-Type: application/json\n\n{\n  "url": "https://ergoveritas.com/test2.html",\n  "freshness": "latest",\n  "scanFrom": "california"\n}\n\nGET /api/v2/scans/<scanId>/status\nGET /api/v2/scans/<scanId>/findings\nGET /api/v2/scans/<scanId>/report-evidence' },
-    json: { scan: { id: evidence.scan.id, status: evidence.scan.status }, gpcResponse: evidence.gpcResponse },
-    href: "/developers/quickstart", linkLabel: "Explore API and SDK"
+    id: "sdk", group: "connect", label: "TypeScript SDK", title: "Build with typed scan results.",
+    description: "Use the CertScore.ai TypeScript SDK to create a scan, wait for completion and work with structured results. Bring EU and California posture, consent observations and evidence into your application.",
+    highlights: ["Typed resource clients and scan lifecycle helpers", "Documented integration examples for developers"],
+    result: "Use an appropriately scoped API key and retain coverage context with every result.", href: "/developers/sdk", linkLabel: "Explore the TypeScript SDK", kind: "code",
+    code: { label: "TypeScript SDK · example integration", content: 'import { CertScoreClient } from "@certscore/sdk";\n\nconst client = new CertScoreClient({\n  apiKey: process.env.CERTSCORE_API_KEY\n});\n\nconst scan = await client.scans.create(\n  "https://example.com",\n  { freshness: "latest", scanFrom: "eu_ie" }\n);\n\nconst completed = await client.scans.wait(scan);\n\nconsole.log(completed.postAcceptObservation);\nconsole.log(completed.postRefusalObservation);\nconsole.log(completed.gpcResponse);\n\n// Inspect completion and coverage before use.' }
   }
 ];

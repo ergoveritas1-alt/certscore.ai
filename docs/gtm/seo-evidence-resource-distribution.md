@@ -61,7 +61,7 @@ Additional publication-ready resources:
 - GPC testing: https://certscore.ai/guides/test-global-privacy-control
 - Analytics and pixel troubleshooting: https://certscore.ai/guides/google-analytics-meta-pixel-before-consent
 - Annotated owned-fixture report: https://certscore.ai/guides/consent-report-example
-- Editorial standards: https://certscore.ai/editorial-policy
+- Evidence methodology: https://certscore.ai/methodology#evidence
 
 Suggested technical-community draft (not sent):
 

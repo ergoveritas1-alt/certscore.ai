@@ -16,8 +16,8 @@ const lightEndpoint = "https://mcp.certscore.ai/mcp/light";
 const openAiMcpDemoPath = "/videos/openai-mcp-certscore-demo.mp4";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
 const firstRunPrompt = MCP_LIGHT_FIRST_REVIEW_PROMPT;
-const verificationPrompt = "List the available CertScore tools. Read certscore://example-report if resources are supported; otherwise call certscore_get_scan_bundle with scanId=9ba99a8c-b1ad-44c1-985f-92cef760ab40. Report the retained example’s original date and coverage. If unavailable, report that; do not create a new scan to test the connection.";
-const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
+const verificationPrompt = "List the available CertScore.ai tools. Read certscore://example-report if resources are supported; otherwise call certscore_get_scan_bundle with scanId=9ba99a8c-b1ad-44c1-985f-92cef760ab40. Report the retained example’s original date and coverage. If unavailable, report that; do not create a new scan to test the connection.";
+const agentDisclaimer = "CertScore.ai results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -35,7 +35,7 @@ export default function DeveloperMcpPage() {
       <div className="space-y-12">
         <aside aria-labelledby="marketplace-start" className="rounded-xl border border-sky-200 bg-sky-50 p-6">
           <h2 id="marketplace-start" className="text-xl font-semibold text-slate-950">Subscribed through AWS Marketplace?</h2>
-          <p className="mt-2 text-sm leading-7 text-slate-700">Marketplace MCP Light uses a CertScore account, an active AWS subscription and a Marketplace API key. Follow its dedicated guide for the correct endpoint, client settings and first scan.</p>
+          <p className="mt-2 text-sm leading-7 text-slate-700">Marketplace MCP Light uses a CertScore.ai account, an active AWS subscription and a Marketplace API key. Follow its dedicated guide for the correct endpoint, client settings and first scan.</p>
           <Link href="/marketplace/light/guide" className="mt-3 inline-flex font-semibold text-sky-800 underline underline-offset-4">Open the Marketplace quick-start guide →</Link>
         </aside>
         <section aria-labelledby="route-choice" className="rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
@@ -52,7 +52,7 @@ export default function DeveloperMcpPage() {
             </article>
             <article className="rounded-xl border border-slate-200 bg-white p-6">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Workspace access</p>
-              <h3 className="mt-2 text-xl font-semibold text-slate-950">CertScore Hosted OAuth — scan and reports</h3>
+              <h3 className="mt-2 text-xl font-semibold text-slate-950">CertScore.ai Hosted OAuth — scan and reports</h3>
               <p className="mt-3 text-sm leading-7 text-slate-600">Access previous scans and private reports through your authorized workspace, with its existing allowance.</p>
               <a className="mt-5 inline-flex rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-800" href="#hosted-oauth-start">Connect Hosted OAuth</a>
             </article>
@@ -80,12 +80,12 @@ export default function DeveloperMcpPage() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">OpenAI integration path</p>
               <h2 className="mt-2 text-2xl font-semibold text-slate-950" id="openai-mcp-demo-title">
-                See CertScore MCP tools run in ChatGPT
+                See CertScore.ai MCP tools run in ChatGPT
               </h2>
               <p className="mt-3 text-sm leading-7 text-slate-600">
                 This silent 2:47 recording demonstrates the OpenAI MCP integration path: a user asks ChatGPT for a public-site scan,
-                ChatGPT invokes CertScore tools, presents the evidence-backed observations and tool-call details, and opens the full
-                CertScore report.
+                ChatGPT invokes CertScore.ai tools, presents the evidence-backed observations and tool-call details, and opens the full
+                CertScore.ai report.
               </p>
               <a
                 className="mt-5 inline-flex rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
@@ -97,7 +97,7 @@ export default function DeveloperMcpPage() {
               </a>
             </div>
             <video
-              aria-label="CertScore OpenAI MCP integration demonstration"
+              aria-label="CertScore.ai OpenAI MCP integration demonstration"
               className="w-full rounded-lg bg-slate-950 shadow-sm"
               controls
               playsInline
@@ -110,12 +110,12 @@ export default function DeveloperMcpPage() {
         </section>
 
         <p className="text-sm text-sky-700"><Link href="/releases/mcp-hosted-oauth">New: connect your agent to your CertScore.ai workspace</Link></p>
-        <Section id="hosted-oauth-start" eyebrow="Workspace setup" title="CertScore Hosted OAuth — scan and reports">
+        <Section id="hosted-oauth-start" eyebrow="Workspace setup" title="CertScore.ai Hosted OAuth — scan and reports">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">Connect your agent to <code>https://mcp.certscore.ai/mcp</code> to scan public websites, retrieve reports and access previous scans. {MCP_OAUTH_ELIGIBILITY}</p>
           <ol className="mt-4 list-decimal space-y-2 pl-6 text-sm leading-7 text-slate-600">
             <li>Add the Hosted OAuth endpoint in your agent’s connectors settings. Use the Cursor configuration below when connecting Cursor.</li>
             <li>{MCP_OAUTH_AUTHORIZATION}</li>
-            <li>Ask: <code>Use CertScore to scan https://your-site.com and summarize the score, coverage, findings and report link.</code></li>
+            <li>Ask: <code>Use CertScore.ai to scan https://your-site.com and summarize the score, coverage, findings and report link.</code></li>
           </ol>
           <p className="mt-4 text-sm leading-7 text-slate-600">The agent should call <code>certscore_scan_site</code>, poll <code>certscore_get_scan_status</code> at the returned interval, then read <code>certscore_get_scan_bundle</code>. Reuse your existing connection to this endpoint instead of installing duplicate namespaces.</p>
         </Section>
@@ -123,10 +123,10 @@ export default function DeveloperMcpPage() {
         <Section id="agent-workflows" eyebrow="Use again" title="Reusable agent workflows">
           <p className="text-sm leading-7 text-slate-600">Hosts that support MCP prompts and resources can discover these alongside the scan/report tools. If your host displays tools only, paste the instructions below into its chat.</p>
           <h3 className="mt-4 font-semibold">Optional project instructions</h3>
-          <CodeBlock>{`When I request a launch, vendor or privacy review, use CertScore MCP Light for the public URL I provide. Use Hosted OAuth when workspace history or private reports are needed. Reuse a suitable retained result unless I request fresh observations. Poll active scans at the returned interval, then summarize the bundle with findings, coverage and report link. Inspect task-relevant workpapers when needed. Do not run unsolicited or scheduled scans.`}</CodeBlock>
+          <CodeBlock>{`When I request a launch, vendor or privacy review, use CertScore.ai MCP Light for the public URL I provide. Use Hosted OAuth when workspace history or private reports are needed. Reuse a suitable retained result unless I request fresh observations. Poll active scans at the returned interval, then summarize the bundle with findings, coverage and report link. Inspect task-relevant workpapers when needed. Do not run unsolicited or scheduled scans.`}</CodeBlock>
           <p className="mt-3 text-sm text-slate-600">Save this in your project instructions only if you want that workflow. MCP resource: <code>certscore://project-instructions</code>; prompt: <code>certscore_launch_review</code>.</p>
           <h3 className="mt-4 font-semibold">Compare retained scans</h3>
-          <CodeBlock>{`Compare CertScore scan [BEFORE_SCAN_ID] with [AFTER_SCAN_ID]. Fetch both bundles without creating a scan. Verify target, region, timestamps and coverage match. Summarize newly returned, persistent and no-longer-returned finding IDs. A finding missing from a later scan is not proof of resolution. Include both report links and limitations.`}</CodeBlock>
+          <CodeBlock>{`Compare CertScore.ai scan [BEFORE_SCAN_ID] with [AFTER_SCAN_ID]. Fetch both bundles without creating a scan. Verify target, region, timestamps and coverage match. Summarize newly returned, persistent and no-longer-returned finding IDs. A finding missing from a later scan is not proof of resolution. Include both report links and limitations.`}</CodeBlock>
           <p className="text-sm text-slate-600">Prompt: <code>certscore_compare_scans</code>, with <code>beforeScanId</code> and <code>afterScanId</code>.</p>
           <h3 className="mt-4 font-semibold">Turn findings into a checklist</h3>
           <p className="text-sm leading-7 text-slate-600">Ask for a proposed remediation checklist for your scan ID, with finding IDs, evidence links, suggested owner roles and manual verification steps. The <code>certscore_remediation_checklist</code> prompt uses retained findings; it does not modify your website or certify that a fix worked.</p>
@@ -135,7 +135,7 @@ export default function DeveloperMcpPage() {
           <p className="text-sm leading-7 text-slate-600">Call <code>certscore_get_connection_status</code> (or read <code>certscore://connection</code>) for current credential status, workspace access, create permission, remaining rolling quota and a recovery action. It creates no scan. The equivalent authenticated API is <code>GET /api/v2/auth/check?diagnostics=1</code>. Quota is a snapshot, not reserved capacity.</p>
           <p className="mt-3 text-sm leading-7 text-slate-600">{MCP_OAUTH_RECONNECT}</p>
           <a className="mt-4 inline-flex rounded border border-sky-300 px-4 py-2 font-semibold text-sky-800" href="https://claude.ai/customize/connectors">Open Claude connectors to reconnect</a>
-          <p className="mt-3 text-sm text-slate-600">Cursor: open MCP settings and use the existing CertScore entry. MCP recovery resource: <code>certscore://reconnect</code>. Workspace eligibility applies independently of host permission prompts.</p>
+          <p className="mt-3 text-sm text-slate-600">Cursor: open MCP settings and use the existing CertScore.ai entry. MCP recovery resource: <code>certscore://reconnect</code>. Workspace eligibility applies independently of host permission prompts.</p>
         </Section>
         <Section id="example-report" eyebrow="Preview the output" title="Read a retained example before scanning">
           <p className="text-sm leading-7 text-slate-600">This is an existing ErgoVeritas example, not a current scan of your website. The retained scan completed on September 12, 2026 at 20:26 UTC with partial coverage. Open the report for its score and detailed coverage limitations. It may be historical or unavailable; opening it does not request a fresh scan.</p>
@@ -161,8 +161,8 @@ export default function DeveloperMcpPage() {
 
         <Section id="privacy-workpapers" eyebrow="Existing scans" title="Review CCPA evidence and export the inventory">
           <p className="text-sm leading-7 text-slate-600">Use a completed scan ID to review retained evidence. The scan bundle includes <code>privacyAuditSummary</code> and GPC facts when available. For an inventory or export request, retrieve the tracking workpaper with the same scan ID.</p>
-          <CodeBlock>{`Review CertScore scan [SCAN_ID] with a CCPA/CPRA focus. Use the retained bundle. Lead with observed GPC delivery, site-recorded opt-out state and tracking activity where returned, including baseline/GPC request counts and their matched duration. Include observed Do Not Sell/Share controls and notice topics. Preserve the actual scan origin and existing score.`}</CodeBlock>
-          <CodeBlock>{`Export the tracking inventory for CertScore scan [SCAN_ID]. Use certscore_get_report_evidence_page with workpaper="tracking" and return its JSON and CSV download links. Use the existing scan; preserve workpaper="tracking" with any pagination cursor.`}</CodeBlock>
+          <CodeBlock>{`Review CertScore.ai scan [SCAN_ID] with a CCPA/CPRA focus. Use the retained bundle. Lead with observed GPC delivery, site-recorded opt-out state and tracking activity where returned, including baseline/GPC request counts and their matched duration. Include observed Do Not Sell/Share controls and notice topics. Preserve the actual scan origin and existing score.`}</CodeBlock>
+          <CodeBlock>{`Export the tracking inventory for CertScore.ai scan [SCAN_ID]. Use certscore_get_report_evidence_page with workpaper="tracking" and return its JSON and CSV download links. Use the existing scan; preserve workpaper="tracking" with any pagination cursor.`}</CodeBlock>
           <p className="mt-3 text-sm leading-7 text-slate-600">The workpaper covers the starting page. <code>download.url</code> returns JSON and <code>download.csvUrl</code> returns the inventory CSV. Private links expire after five minutes; keep them confidential and request a fresh link after expiry. Existing workspace/public access rules and read quotas apply.</p>
           <p className="mt-3 text-sm leading-7 text-slate-600">GPC facts can remain available when the paired comparison is indeterminate. Completed Accept/Reject execution and confirmed consent are separate results. Summarize returned after-click facts, and use canonical findings for score effects.</p>
           <h3 className="mt-4 font-semibold">Refresh an older integration</h3>
@@ -180,7 +180,7 @@ export default function DeveloperMcpPage() {
           <ApiReadRatePolicyDetails />
           <p className="mt-5 max-w-3xl text-sm leading-7 text-slate-600">
             Hosted MCP applies the policy before composite tool fan-out, so an over-limit bundle is rejected before it starts its
-            internal API reads. Local MCP receives the same protection from the underlying CertScore API.
+            internal API reads. Local MCP receives the same protection from the underlying CertScore.ai API.
           </p>
         </Section>
 
@@ -237,10 +237,10 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
             <p className="rounded-lg border border-slate-200 p-4 text-sm leading-6 text-slate-700"><code>certscore_get_scan_bundle</code> returns a completed report summary, projected findings, evidence references, coverage limits, and a report URL. Choose <code>detail=findings</code> for a concise answer or <code>detail=evidence</code> for evidence digests.</p>
             <p className="rounded-lg border border-slate-200 p-4 text-sm leading-6 text-slate-700"><code>certscore_get_report_evidence_page</code> pages through retained report evidence for a completed scan. Use its <code>cursor</code> to continue or its returned download links for the full report or tracking workpaper.</p>
           </div>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">CertScore tools return scan observations and already-projected findings. Use them to answer questions about observed cookies, trackers, consent controls, and retained evidence on a named site; use other sources for general web facts or legal advice.</p>
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">CertScore.ai tools return scan observations and already-projected findings. Use them to answer questions about observed cookies, trackers, consent controls, and retained evidence on a named site; use other sources for general web facts or legal advice.</p>
           <CodeBlock>{`Scan example.com and summarize pre-consent cookies and trackers. Include the scan region, timestamp, and any coverage limits.
 Check whether example.com presented a consent-management surface. Summarize the controls observed on that visit.
-For CertScore scan [SCAN_ID], retrieve the report evidence supporting the named finding. Keep the finding ID and evidence references together.`}</CodeBlock>
+For CertScore.ai scan [SCAN_ID], retrieve the report evidence supporting the named finding. Keep the finding ID and evidence references together.`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Example prompts" title="Launch, vendor, and audit reviews">
@@ -344,7 +344,7 @@ full      maxBytes=12000 or higher`}</CodeBlock>
 
         <div id="authenticated-mcp">
         <Section eyebrow="Authenticated remote setup" title="Hosted MCP — OAuth">
-          <p className="max-w-3xl text-sm leading-7 text-slate-600">Use this route for an OAuth-capable remote MCP client in production or team workflows. A CertScore account is required. The authorization flow grants only the approved scopes.</p>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">Use this route for an OAuth-capable remote MCP client in production or team workflows. A CertScore.ai account is required. The authorization flow grants only the approved scopes.</p>
           <CodeBlock>{`MCP endpoint:
 https://mcp.certscore.ai/mcp
 
@@ -361,10 +361,10 @@ https://certscore.ai/.well-known/oauth-authorization-server`}</CodeBlock>
 
         <p className="text-sm text-slate-600">Verified September 14, 2026: Claude web Hosted OAuth reconnect, authenticated tool discovery, scan reuse, completed status and bundle retrieval. Client-controlled tool approvals remain visible. Other client examples are configuration guidance, not blanket compatibility claims.</p>
         <Section eyebrow="Cursor configuration example" title="Hosted OAuth setup">
-          <p className="text-sm leading-7 text-slate-600">This Cursor configuration is an example. End-to-end compatibility has not been verified for this release. Use one connection named CertScore Hosted OAuth. The public client ID is not a secret. Follow the connection prompts in your client and sign in to CertScore.ai if requested. Client support is verified separately from the model selected inside a host.</p>
+          <p className="text-sm leading-7 text-slate-600">This Cursor configuration is an example. End-to-end compatibility has not been verified for this release. Use one connection named CertScore.ai Hosted OAuth. The public client ID is not a secret. Follow the connection prompts in your client and sign in to CertScore.ai if requested. Client support is verified separately from the model selected inside a host.</p>
           <CodeBlock>{`{
   "mcpServers": {
-    "CertScore Hosted OAuth": {
+    "CertScore.ai Hosted OAuth": {
       "url": "https://mcp.certscore.ai/mcp",
       "auth": {
         "CLIENT_ID": "certscore_cursor_hosted_oauth_v1",
@@ -378,7 +378,7 @@ https://certscore.ai/.well-known/oauth-authorization-server`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Authenticated local setup" title="Local MCP — scoped API key">
-          <p className="max-w-3xl text-sm leading-7 text-slate-600">Use this route for local stdio clients, backend automation, or environments where you manage credentials directly. A CertScore account and a scoped key are required.</p>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">Use this route for local stdio clients, backend automation, or environments where you manage credentials directly. A CertScore.ai account and a scoped key are required.</p>
           <CodeBlock>{`brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
 brew install --cask certscore-mcp`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">

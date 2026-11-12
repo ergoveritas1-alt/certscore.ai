@@ -8,7 +8,8 @@ import { AnalyticsConsentBanner } from "../components/analytics/analytics-consen
 import { DataLayerClickTracker } from "../components/analytics/data-layer-events";
 import { ProductAnalyticsTracker } from "../components/analytics/product-analytics-tracker";
 import { buildConsentBootstrapScript } from "../lib/analytics/consent-bootstrap";
-import { SITE_NAME, SITE_URL } from "../lib/seo";
+import { CORE_MARKETING_SUPPORT_EMAIL } from "../lib/marketing/core-positioning";
+import { SITE_NAME, SITE_ORGANIZATION_ID, SITE_URL, SITE_WEBSITE_ID } from "../lib/seo";
 import { getCertScoreSocialProfileUrls } from "../lib/social";
 
 const GOOGLE_TAG_ID = process.env.NODE_ENV === "production" ? "G-B6TQVX35ZB" : "";
@@ -25,7 +26,7 @@ export const metadata: Metadata = {
     default: SITE_NAME,
     template: `%s | ${SITE_NAME}`
   },
-  description: "CertScore.ai scans public websites for observable accessibility, privacy, and disclosure signals and tracks changes over time.",
+  description: "Evidence-led website privacy scanning for GDPR/ePrivacy and CCPA reviews. Inspect cookies, trackers, consent behavior and privacy disclosures with CertScore.ai.",
   applicationName: SITE_NAME,
   icons: {
     icon: "/icon.svg",
@@ -61,17 +62,27 @@ export default function RootLayout({ children }: RootLayoutProps) {
   const organizationSchema = {
     "@context": "https://schema.org",
     "@type": "Organization",
+    "@id": SITE_ORGANIZATION_ID,
     name: SITE_NAME,
+    legalName: "CertScore.ai, LLC",
     url: SITE_URL,
     logo: `${SITE_URL}/certscore-header-logo.png`,
+    contactPoint: {
+      "@type": "ContactPoint",
+      contactType: "customer support",
+      email: CORE_MARKETING_SUPPORT_EMAIL,
+      url: `${SITE_URL}/contact-sales`
+    },
     sameAs: getCertScoreSocialProfileUrls()
   };
   const websiteSchema = {
     "@context": "https://schema.org",
     "@type": "WebSite",
+    "@id": SITE_WEBSITE_ID,
     name: SITE_NAME,
     url: SITE_URL,
-    description: metadata.description
+    description: metadata.description,
+    publisher: { "@id": SITE_ORGANIZATION_ID }
   };
 
   return (

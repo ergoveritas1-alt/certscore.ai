@@ -21,7 +21,6 @@ const discoveryDocument = {
     url: "https://certscore.ai",
     supportEmail: "support@certscore.ai",
     supportUrl: "https://certscore.ai/contact",
-    trustUrl: "https://certscore.ai/trust",
     termsUrl: "https://certscore.ai/terms",
     privacyUrl: "https://certscore.ai/privacy"
   },
@@ -47,7 +46,6 @@ const discoveryDocument = {
     developerHub: "https://certscore.ai/developers",
     scannerSolutions: "https://certscore.ai/solutions",
     sitemap: "https://certscore.ai/sitemap.xml",
-    trustCenter: "https://certscore.ai/trust",
     robots: "https://certscore.ai/robots.txt"
   },
   scannerSolutions: {

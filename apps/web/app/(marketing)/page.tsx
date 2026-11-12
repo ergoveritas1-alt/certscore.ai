@@ -9,23 +9,22 @@ import { DomainScanForm } from "../../components/marketing/domain-scan-form";
 import { HomepageHeroCopy, HomepageScanPreferencesProvider } from "../../components/marketing/homepage-scan-preferences";
 import { SampleReportButton } from "../../components/marketing/sample-report-button";
 import { HomepageFindingsOverview } from "../../components/marketing/homepage-findings-overview";
-import { ScannerSolutionAnimation } from "../../components/marketing/scanner-solution-animation";
+import { HomepageReviewWorkflows } from "../../components/marketing/homepage-review-workflows";
+import { HOMEPAGE_REVIEW_WORKFLOWS } from "../../lib/marketing/homepage-review-workflows";
 import { ReleaseCard } from "../../components/releases/release-card";
 import { PendingButtonLink } from "../../components/ui/pending-link";
-import {
-  CORE_MARKETING_HOMEPAGE,
-  CORE_MARKETING_POSITIONING,
-  CORE_MARKETING_SUPPORT_EMAIL
-} from "../../lib/marketing/core-positioning";
 import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
 import { getPublishedReleases } from "../../lib/releases";
-import { createPageMetadata, SITE_URL } from "../../lib/seo";
+import { absoluteUrl, createPageMetadata, SITE_NAME, SITE_ORGANIZATION_ID, SITE_URL } from "../../lib/seo";
 
 const BOOK_DEMO_URL = "/contact-sales";
+const WEBSITE_PRIVACY_DESCRIPTION =
+  "CertScore.ai is an evidence-led website privacy scanner for DPOs, developers and web agencies reviewing GDPR/ePrivacy and CCPA concerns. Inspect cookies, trackers, consent behavior and privacy disclosures with retained evidence.";
+
 export const metadata: Metadata = {
   ...createPageMetadata({
     title: "Website Privacy Scanner: Cookies & Consent | CertScore.ai",
-    description: "Scan a public website for cookies, trackers, consent behavior, and privacy policy signals. Review retained evidence with CertScore.ai. Start a free scan.",
+    description: WEBSITE_PRIVACY_DESCRIPTION,
     path: "/"
   }),
   title: {
@@ -37,17 +36,17 @@ const personas = [
   {
     title: "Developers validating tracking behavior",
     detail:
-      "Run API-driven scans to confirm tags, pixels, cookies, and consent-state behavior without relying on manual QA alone."
+      "Inspect cookies, pixels and requests before consent and after eligible Accept or Reject clicks. Use the evidence to review tag triggers, CMP settings and vendor integrations, then retest."
   },
   {
-    title: "Agencies auditing client or competitor sites",
+    title: "Web agencies resolving client privacy issues",
     detail:
-      "Run white-label-ready scans that surface observable website behavior without depending on manual inspection alone."
+      "Build recurring website privacy reviews into your client service. Establish a baseline, turn findings into tasks, and share evidence from comparable rescans. Ask about portfolio and white-label options on Custom plans."
   },
   {
-    title: "Digital policy analysts reviewing public privacy surfaces",
+    title: "DPOs and privacy teams reviewing website behavior",
     detail:
-      "Review pre-consent cookies, storage, tracking, public disclosures, collection surfaces, and consent-control accessibility—plus what a site does after an eligible Accept or Reject interaction is confirmed."
+      "Investigate GDPR/ePrivacy and CCPA concerns with dated evidence. Compare observed vendors and consent behavior with privacy disclosures, coordinate fixes with your agency, and review what changed."
   },
   {
     title: "Teams reviewing third-party websites",
@@ -56,32 +55,6 @@ const personas = [
   }
 ];
 
-const scannerSolutions = [
-  {
-    href: "/solutions/gdpr-website-compliance-scanner",
-    title: "GDPR website scanner",
-    description:
-      "Review consent, cookie, tracking, policy, and disclosure signals for GDPR/ePrivacy workflows.",
-    animation: "trace" as const,
-    meta: "GDPR / ePrivacy"
-  },
-  {
-    href: "/solutions/cookie-consent-scanner",
-    title: "Cookie consent scanner",
-    description:
-      "Check cookie timing, CMP behavior, third-party cookies before consent, and what happens after a confirmed Accept or Reject.",
-    animation: "waterfall" as const,
-    meta: "Consent controls"
-  },
-  {
-    href: "/solutions/privacy-policy-risk-scanner",
-    title: "Privacy policy risk scanner",
-    description:
-      "Compare observable website behavior with privacy, cookie, vendor, and disclosure surfaces.",
-    animation: "policy" as const,
-    meta: "Policy surfaces"
-  }
-];
 
 function PersonaIcon({ index }: { index: number }) {
   const toneClassName =
@@ -130,22 +103,12 @@ export default async function MarketingHomePage() {
   const softwareApplicationSchema = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "CertScore.ai",
+    "@id": `${absoluteUrl("/")}#software`,
+    name: SITE_NAME,
     applicationCategory: "BusinessApplication",
-    operatingSystem: "Web",
-    description: "Scan a public website for cookies, trackers, consent behavior, and privacy policy signals. Review retained evidence with CertScore.ai. Start a free scan.",
-    url: CORE_MARKETING_HOMEPAGE,
-    provider: {
-      "@type": "Organization",
-      name: "CertScore.ai",
-      url: CORE_MARKETING_HOMEPAGE,
-      contactPoint: {
-        "@type": "ContactPoint",
-        contactType: "customer support",
-        email: CORE_MARKETING_SUPPORT_EMAIL,
-        url: "https://certscore.ai/contact"
-      }
-    }
+    description: WEBSITE_PRIVACY_DESCRIPTION,
+    url: absoluteUrl("/"),
+    provider: { "@id": SITE_ORGANIZATION_ID }
   };
   const findingRegistrySchema = {
     "@context": "https://schema.org",
@@ -164,7 +127,7 @@ export default async function MarketingHomePage() {
     "@context": "https://schema.org",
     "@type": "ItemList",
     name: "CertScore.ai scanner solution pages",
-    itemListElement: scannerSolutions.map((solution, index) => ({
+    itemListElement: HOMEPAGE_REVIEW_WORKFLOWS.map((solution, index) => ({
       "@type": "ListItem",
       position: index + 1,
       url: `${SITE_URL}${solution.href}`,
@@ -180,113 +143,66 @@ export default async function MarketingHomePage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(scannerSolutionsSchema) }} />
       <SiteHeader />
 
-      <section className="relative isolate overflow-hidden border-b border-sky-500/20 bg-[#020d20] text-white">
+      <section id="homepage-hero" className="relative isolate overflow-hidden border-b border-sky-500/20 bg-[#020d20] text-white">
         <div className="absolute inset-x-0 -top-10 bottom-0 -z-20" aria-hidden="true">
           <Image alt="" className="object-cover object-[62%_center]" fill priority unoptimized sizes="100vw" src="/marketing/hero/shield-report-compact.png" />
         </div>
         <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(1,10,27,0.06)_0%,rgba(1,10,27,0.02)_48%,rgba(1,10,27,0.12)_100%)]" aria-hidden="true" />
-        <div className="relative top-0 mx-auto grid min-h-0 max-w-6xl gap-8 px-4 py-10 sm:px-6 sm:py-20 lg:-top-5 lg:min-h-[595px] lg:grid-cols-[minmax(0,650px)_minmax(0,1fr)] lg:items-center lg:gap-8 lg:py-16">
-          <div className="relative z-20 max-w-[680px] space-y-7 sm:space-y-8 lg:-translate-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300">Evidence-led Website Privacy Scanner</p>
+        <div className="relative top-0 mx-auto grid min-h-[620px] max-w-6xl gap-8 px-4 py-10 sm:min-h-[640px] sm:px-6 sm:py-20 lg:-top-5 lg:min-h-[625px] lg:grid-cols-[minmax(0,650px)_minmax(0,1fr)] lg:items-center lg:gap-8 lg:py-16">
+          <div className="relative z-20 max-w-[680px] space-y-8 lg:-translate-y-1">
+            <p className="text-xs font-semibold leading-6 text-sky-300 sm:text-sm">Evidence-led CCPA &amp; GDPR/ePrivacy review</p>
             <h1 className="text-[2rem] font-bold leading-[1.08] tracking-[-0.035em] text-white sm:text-5xl lg:text-[3.5rem]">
               <span className="block">Website privacy <span className="text-[#178cff]">scanner.</span></span>
               <span className="block sm:whitespace-nowrap">See the evidence.</span>
             </h1>
-            <div className="max-w-[650px]">
-              <HomepageHeroCopy />
-            </div>
-            <div id="homepage-scan" className="max-w-[650px] scroll-mt-24 pt-2">
+            <div id="homepage-scan" className="max-w-[650px] scroll-mt-24 pt-6 sm:pt-10">
               <div className="rounded-[1.4rem] border border-sky-300/30 bg-slate-950/35 p-2 shadow-[0_20px_45px_rgba(2,132,199,0.16)] backdrop-blur-sm sm:p-2.5">
-                <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-200">Start your <span className="text-[#178cff]">free</span> scan. Enter a website URL</p>
-                <DomainScanForm buttonLabel="Scan a website" inputLabel="Website URL to scan" inputPlaceholder="Enter website here:" mode="full" requestSource="homepage" scanSource="homepage" variant="homepage-hero" />
+                <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-200">Enter a website URL to start</p>
+                <DomainScanForm buttonLabel="Run free scan" inputLabel="Website URL to scan" mode="full" requestSource="homepage" scanSource="homepage" variant="homepage-hero" />
+              </div>
+              <div className="mt-10 sm:mt-12">
+                <HomepageHeroCopy />
+              </div>
+              <div className="mt-7">
+                <SampleReportButton
+                  showArrow
+                  className="group min-h-12 rounded-xl border border-sky-300/50 bg-sky-500 px-6 font-semibold text-white shadow-[0_8px_24px_rgba(14,165,233,0.16)] hover:bg-sky-400 focus-visible:ring-sky-300"
+                />
               </div>
             </div>
-            <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-medium text-slate-100 shadow-[0_12px_28px_rgba(2,6,23,0.12)] backdrop-blur-sm sm:flex-nowrap sm:gap-x-6 sm:overflow-x-auto">
-              <span className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[13px]">
-                <svg viewBox="0 0 24 24" className="h-[19px] w-[19px] shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="9.25" /><path d="m8 12.2 2.5 2.5 5.5-6" />
-                </svg>
-                7-day trial
-              </span>
-              <span className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[13px]">
-                <svg viewBox="0 0 24 24" className="h-[19px] w-[19px] shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2.75" y="5.25" width="18.5" height="13.5" rx="1.25" /><path d="M3 9h18M7 14h3M3.5 3.5l17 17" />
-                </svg>
-                No credit card
-              </span>
-              <span className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[13px]">
-                <svg viewBox="0 0 24 24" className="h-[19px] w-[19px] shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="9.25" /><path d="M12 6.8V12l3.4 2.1" />
-                </svg>
-                Preview in seconds
-              </span>
-              <span className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[13px]">
-                <svg viewBox="0 0 24 24" className="h-[19px] w-[19px] shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m8.5 7-4 5 4 5" /><path d="m15.5 7 4 5-4 5" /><path d="m13.5 5-3 14" />
-                </svg>
-                API/SDK/MCP ready
-              </span>
-            </div>
-            <div className="relative flex flex-col gap-3 sm:flex-row">
-              <SampleReportButton
-                className="w-full border border-sky-400/50 bg-sky-500 text-white shadow-[0_12px_30px_rgba(14,165,233,0.22)] hover:bg-sky-400 focus-visible:ring-sky-300 sm:w-auto"
-              />
-              <PendingButtonLink
-                className="w-full border border-slate-500/70 bg-slate-900/45 text-white backdrop-blur-sm hover:border-sky-400/70 hover:bg-slate-800/70 focus-visible:ring-sky-300 sm:w-auto"
-                data-analytics-event="hero_book_demo_clicked"
-                href={BOOK_DEMO_URL}
-                idleContent="Schedule demo"
-                pendingContent="Opening..."
-                variant="secondary"
-              />
-            </div>
-            <p className="mt-5 text-sm text-slate-200">
-              <Link href="/insights/ai-lab-privacy-leaderboard-2026" className="text-sky-200 underline decoration-sky-400 underline-offset-4 hover:text-white">
-                Research: Privacy signals on 10 AI companies&apos; websites
-              </Link>
-            </p>
           </div>
         </div>
       </section>
 
       <HomepageFindingsOverview />
 
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-4 pb-12 pt-6 sm:px-6 sm:pb-14">
-          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-            <div className="max-w-3xl space-y-3">
-              <Badge tone="neutral">Scanner solutions</Badge>
-              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
-                Focused pages for the review workflow you need.
-              </h2>
-              <p className="text-sm leading-6 text-slate-600">
-                Start with the scanner category closest to the question: GDPR, cookie consent, or privacy policy risk. Each page explains observable public-web signals for human and agentic review, not legal conclusions.
-              </p>
-            </div>
-            <Link href="/solutions" className="text-sm font-semibold text-slate-900 transition hover:text-sky-700">
-              View all
-            </Link>
+      <section aria-labelledby="independent-review-heading" className="border-b border-slate-200 bg-slate-50">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+          <div className="max-w-3xl space-y-3">
+            <Badge tone="neutral">Independent website review</Badge>
+            <h2 id="independent-review-heading" className="text-3xl font-semibold tracking-tight text-slate-950">See what happens before and after a consent choice.</h2>
+            <p className="text-sm leading-6 text-slate-600">Give your DPO, developer and agency a shared starting point for investigating website privacy concerns.</p>
           </div>
-          <div className="mt-8 grid gap-6 lg:grid-cols-3">
-            {scannerSolutions.map((solution) => (
-              <Link key={solution.href} href={solution.href} className="group block">
-                <article className="h-full">
-                  <div className="relative aspect-[340/300] overflow-hidden rounded-lg border border-slate-200 bg-[#0b2340] shadow-[0_18px_40px_rgba(15,23,42,0.12)] transition group-hover:-translate-y-0.5 group-hover:shadow-[0_22px_48px_rgba(15,23,42,0.16)]">
-                    <ScannerSolutionAnimation type={solution.animation} />
-                  </div>
-                  <div className="pt-4">
-                    <p className="text-xs font-semibold text-slate-500">{solution.meta}</p>
-                    <h3 className="mt-2 text-xl font-semibold leading-tight tracking-tight text-slate-950 group-hover:text-sky-700">
-                      {solution.title}
-                    </h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{solution.description}</p>
-                  </div>
-                </article>
-              </Link>
-            ))}
+          <div className="mt-8 grid gap-5 md:grid-cols-2">
+            <Card className="border-slate-200 bg-white shadow-none">
+              <CardHeader><CardTitle className="text-xl">Your CMP manages choices. CertScore.ai checks observed behavior.</CardTitle></CardHeader>
+              <CardContent className="space-y-4 text-sm leading-6 text-slate-600">
+                <p>Already use a cookie banner or consent management platform? Inspect cookies, trackers and requests before consent and after eligible Accept or Reject clicks. Retained evidence helps your team investigate tag configuration, vendor loading and unexpected activity.</p>
+                <Link className="inline-block font-semibold text-sky-700 underline underline-offset-4" href="/guides/reject-consent-tracking-test">Review what happens after Reject</Link>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200 bg-white shadow-none">
+              <CardHeader><CardTitle className="text-xl">Public-page reviews. Nothing to install.</CardTitle></CardHeader>
+              <CardContent className="space-y-4 text-sm leading-6 text-slate-600">
+                <p>Start with a public website URL. No site script, SDK installation or code access is needed for a public-page scan. CertScore.ai observes browser behavior from the selected scan origin and retains evidence with clear coverage limits.</p>
+                <Link className="inline-block font-semibold text-sky-700 underline underline-offset-4" href="/sample-report">Explore the sample report layout</Link>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>
+
+      <HomepageReviewWorkflows />
 
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
@@ -294,7 +210,7 @@ export default async function MarketingHomePage() {
             <Badge tone="neutral">Personas</Badge>
             <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Who CertScore.ai is built for</h2>
             <p className="text-sm text-slate-600">
-              CertScore.ai is most useful for teams that need repeatable evidence about public website behavior.
+              DPOs, developers and web agencies can use the same evidence-led workflow for GDPR/ePrivacy and CCPA reviews: establish a baseline, investigate a finding, assign a fix, and rescan under comparable conditions.
             </p>
           </div>
 
