@@ -24,6 +24,13 @@ test("loc overrides country in both directions and explicit scan selection wins 
   assert.equal(resolveSampleScanFrom({ countryDefault: "california", locationOverride: "bad" }), "california");
 });
 
+test("the homepage uses the detected visitor region when a session suppresses the scan suggestion", () => {
+  assert.equal(resolveSampleScanFrom({ countryDefault: null, detectedLocation: "US" }), "california");
+  assert.equal(resolveSampleScanFrom({ countryDefault: null, detectedLocation: "EU" }), "eu_ie");
+  assert.equal(resolveSampleScanFrom({ countryDefault: null, detectedLocation: "US", locationOverride: "EU" }), "eu_ie");
+  assert.equal(resolveSampleScanFrom({ countryDefault: null, detectedLocation: "US", manualScanFrom: "eu_de" }), "eu_de");
+});
+
 test("audience copy follows visitor location independently of the selected scan region", () => {
   assert.equal(homepageAudienceText("US"), "CCPA and GDPR/ePrivacy review");
   assert.equal(homepageAudienceText("EU"), "GDPR/ePrivacy and CCPA review");
@@ -31,6 +38,6 @@ test("audience copy follows visitor location independently of the selected scan 
 
 test("both homepage heroes share the concise product explanation", () => {
   for (const location of ["US", "EU"] as const) {
-    assert.equal(homepageHeroText(location), "See what your websites collect—and what happens before and after consent.");
+    assert.equal(homepageHeroText(location), "Review website privacy risks - what happens before and after consent.");
   }
 });

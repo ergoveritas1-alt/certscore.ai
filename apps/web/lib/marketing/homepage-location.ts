@@ -14,11 +14,13 @@ export function isSampleScanFrom(value: unknown): value is SampleScanFrom {
 export function resolveSampleScanFrom(input: {
   manualScanFrom?: unknown;
   locationOverride?: unknown;
-  countryDefault: "california" | "eu_ie";
+  countryDefault: "california" | "eu_ie" | null;
+  detectedLocation?: HomepageLocation;
 }): SampleScanFrom {
   if (isSampleScanFrom(input.manualScanFrom)) return input.manualScanFrom;
   const location = parseHomepageLocation(input.locationOverride);
-  return location ? location === "US" ? "california" : "eu_ie" : input.countryDefault;
+  if (location) return location === "US" ? "california" : "eu_ie";
+  return input.countryDefault ?? (input.detectedLocation === "US" ? "california" : "eu_ie");
 }
 
 export function homepageAudienceText(location: HomepageLocation) {
@@ -28,5 +30,5 @@ export function homepageAudienceText(location: HomepageLocation) {
 }
 
 export function homepageHeroText(_location: HomepageLocation) {
-  return "See what your websites collect—and what happens before and after consent.";
+  return "Review website privacy risks - what happens before and after consent.";
 }

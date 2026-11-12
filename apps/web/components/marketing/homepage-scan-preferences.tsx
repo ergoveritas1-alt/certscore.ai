@@ -35,14 +35,18 @@ export function HomepageScanPreferencesProvider({ children }: { children: ReactN
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
-    let countryDefault: "california" | "eu_ie" = "eu_ie";
+    let countryDefault: "california" | "eu_ie" | null = null;
     let countryLocation: HomepageLocation = "EU";
     function applyLocation() {
       const override = parseHomepageLocation(new URLSearchParams(window.location.search).get("loc"));
       setLocationOverride(override);
       setLocation(override ?? countryLocation);
       if (!manuallySelected.current) {
-        setScanFrom(resolveSampleScanFrom({ locationOverride: override, countryDefault }));
+        setScanFrom(resolveSampleScanFrom({
+          locationOverride: override,
+          countryDefault,
+          detectedLocation: countryLocation,
+        }));
       }
       return override;
     }

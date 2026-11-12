@@ -17,7 +17,6 @@ import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
 import { getPublishedReleases } from "../../lib/releases";
 import { absoluteUrl, createPageMetadata, SITE_NAME, SITE_ORGANIZATION_ID, SITE_URL } from "../../lib/seo";
 
-const BOOK_DEMO_URL = "/contact-sales";
 const WEBSITE_PRIVACY_DESCRIPTION =
   "CertScore.ai is an evidence-led website privacy scanner for DPOs, developers and web agencies reviewing GDPR/ePrivacy and CCPA concerns. Inspect cookies, trackers, consent behavior and privacy disclosures with retained evidence.";
 
@@ -271,14 +270,14 @@ export default async function MarketingHomePage() {
                 Get a clearer read on website privacy diagnostics.
               </h2>
               <p className="max-w-3xl text-lg leading-8 text-slate-300">
-                Use CertScore.ai to observe pre-consent website behavior, detect tracking activity, review public policy surfaces, and monitor changes over time.
+                Use CertScore.ai to observe pre and post-consent website behavior, detect tracking activity, review public policy surfaces, and monitor changes over time.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <PendingButtonLink
                   className="w-full border-0 bg-[linear-gradient(135deg,#2f63ea_0%,#2454db_100%)] text-white shadow-[0_16px_32px_rgba(47,99,234,0.24)] hover:brightness-[1.04] sm:w-auto"
                   data-analytics-event="hero_book_demo_clicked"
-                  href={BOOK_DEMO_URL}
-                  idleContent="Schedule demo"
+                  href="/contact-sales"
+                  idleContent="Contact"
                   pendingContent="Opening..."
                 />
                 <SampleReportButton
