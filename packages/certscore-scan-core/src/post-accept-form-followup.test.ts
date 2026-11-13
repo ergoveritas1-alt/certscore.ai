@@ -4,13 +4,14 @@ import {createServer} from 'node:http';
 import {chromium} from 'playwright';
 import {runPostAcceptObserver} from './post-accept-observer';
 import {isPendingFormBootstrap} from './post-accept-form-load';
+import {postAcceptEvidencePacketSchema, projectPostAcceptEvidenceForReport} from '@certscore/contracts';
 
-test('form-only follow-up captures late frames without extending activity evidence', async t => {
+for (const [formDelay, images] of [[800, false], [800, true], [5000, false]] as const) test(`form-only follow-up retains forms arriving at ${formDelay}ms (images: ${images}) without extending activity evidence`, async t => {
  const server=createServer((req,res)=>{
   res.setHeader('content-type','text/html');
   if(req.url==='/form'){res.end('<form><label>Email<input type="email" name="email"></label></form>');return;}
   if(req.url==='/late'){res.end('ok');return;}
-  res.end(`<section role="dialog"><p>Choose cookie consent</p><button onclick="localStorage.setItem('choice','granted');this.parentElement.hidden=true;fetch('https://js-eu1.hsforms.net/forms/embed/v2.js');setTimeout(()=>{fetch('/late');for(let i=0;i<2;i++){let f=document.createElement('iframe');f.src='/form';document.body.appendChild(f)}},800)">Accept all</button></section>`);
+  res.end(`<section role="dialog"><p>Choose cookie consent</p><button onclick="localStorage.setItem('choice','granted');this.parentElement.hidden=true;fetch('https://js-eu1.hsforms.net/forms/embed/v2.js');setTimeout(()=>{fetch('/late');for(let i=0;i<2;i++){${images ? "let f=document.createElement('form');f.innerHTML='<label>Email<input type=email name=email></label>';document.body.appendChild(f)" : "let f=document.createElement('iframe');f.src='/form';document.body.appendChild(f)"}}},${formDelay})">Accept all</button></section>`);
  });
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const address=server.address();assert.ok(address&&typeof address!=='string');
  const browser=await chromium.launch({headless:true});const original=browser.newContext.bind(browser);
@@ -19,14 +20,24 @@ test('form-only follow-up captures late frames without extending activity eviden
   const packet=await runPostAcceptObserver({browser,url:`http://127.0.0.1:${address.port}/`,scanId:'tail:accept',parentScanId:'tail',
     recipe:{artifactVersion:'certscore.post_accept_action_recipe.v1',recipeId:'owned-tail',controlSelector:'button',confirmation:{kind:'local_storage_equals',key:'choice',expectedValue:'granted'}},
     actionSearchTimeoutMs:1000,confirmationTimeoutMs:500,observationWindowMs:500,resultBudgetMs:8000,
+    ...(images ? {productionProjectable:true, formSnapshotReviewer:async()=>({safeForDisplay:true})} : {}),
     interactionAuthorization:{kind:'loopback',authorizationId:'loopback_local_lab'}});
   assert.equal(packet.acceptanceRegistration.status,'confirmed');
+  if (formDelay === 800) assert.ok(packet.timing.totalMs < 5000, 'settled positive forms must not consume the entire optional worker allowance');
+  else assert.ok(packet.timing.totalMs >= formDelay, 'absence must not end optional sampling early');
   assert.equal(packet.formCapture?.version,'post_accept_form_capture.v4');
   assert.equal(packet.formCapture?.frames.reduce((n,f)=>n+f.forms.length,0),2);
   assert.ok(packet.formCapture!.window!.endedAtMs>packet.formCapture!.followup!.originalWindowEndedAtMs);
   assert.ok(packet.formCapture!.window!.endedAtMs<=packet.formCapture!.followup!.workerDeadlineAtMs);
   assert.equal(packet.observationWindowMs,500);
   assert.ok(!packet.network.requests.some(r=>r.sanitizedUrl.endsWith('/late')));
+  assert.ok(postAcceptEvidencePacketSchema.safeParse(packet).success);
+  const projection = projectPostAcceptEvidenceForReport({packet,packetSha256:'a'.repeat(64)});
+  if (images) {
+    assert.ok(packet.formSnapshotCapture?.contractVersion === 'certscore.post_accept_form_snapshots.v8');
+    assert.ok(projection.formSnapshotCapture);
+    assert.equal(packet.formSnapshotCapture.followup.captureDeadlineAtMs,packet.formCapture!.window!.endedAtMs);
+  }
  }finally{await browser.close();server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });
 

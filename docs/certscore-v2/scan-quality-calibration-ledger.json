@@ -1133,12 +1133,12 @@
     },
     "https://sits.com/en/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T17:51:07.279Z",
-      "lastContactAt": "2026-10-14T17:51:07.279Z",
+      "cooldownUntil": "2026-12-11T10:02:42.496Z",
+      "lastContactAt": "2026-11-13T10:02:42.496Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "One owner-authorized fresh localhost diagnostic scan 68e528ce-ff80-4dd3-99be-e9e951c2f535, validating protected screenshot review and breadth-before-detail capture. Valid prominence evidence, 11 services, 36 declarations, 3 categories, 13 contrast-affected elements and two checks for manual review. No retry or deployment. Global SITS hold unchanged; not a release calibration cohort.",
+      "note": "Owner-authorized localhost Accept/Reject regression verification on 2026-11-13, with explicit cooldown waiver and deployment hold. Receipts: artifacts/sits-local-action-verification/. Final apex scan 48ff621d-d4b5-4a3e-be11-9dc0e0766da4 joined both confirmed actions. Global SITS hold unchanged; targeted diagnostic, not a release calibration cohort.",
       "state": "cooldown",
       "url": "https://sits.com/en/"
     },
@@ -1339,12 +1339,12 @@
     },
     "https://sits.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-19T06:53:50.733Z",
-      "lastContactAt": "2026-10-22T06:53:50.733+00:00",
-      "lastContactSource": "owner_requested_post_reject_verification",
+      "cooldownUntil": "2026-12-11T10:44:39.207Z",
+      "lastContactAt": "2026-11-13T10:44:39.207Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner authorized one rerun per frozen source scan for POST/body/header verification; owner-ca-reject-proof-47-20261022. Permanent holds remain unchanged.",
+      "note": "Owner authorized two additional localhost consistency checks on 2026-11-13 with the existing cooldown waiver and deployment hold: 6c2ebb84-2f6f-4d28-9e7d-d9927c6f20b6 and 29462053-9121-4ff9-a997-8715071c9784. Both Accept and Reject confirmed and joined; both reports retained two forms and two images. Budgets unchanged. Global SITS hold unchanged; targeted diagnostics, not a release calibration cohort. Receipts: artifacts/sits-local-action-verification/.",
       "state": "cooldown",
       "url": "https://sits.com/"
     },
@@ -3122,7 +3122,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-11-07T18:18:04.472Z",
+  "updatedAt": "2026-11-13T10:45:37.142Z",
   "contactOnlyUrls": [
     "https://10tv.com/",
     "https://aacsb.edu/",

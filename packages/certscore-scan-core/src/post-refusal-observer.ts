@@ -474,6 +474,7 @@ export async function runPostRefusalObserver(
   let refusalRegisteredAtEpochMs: number | undefined;
   let selectedRecipe: PostRefusalActionRecipe | undefined;
   let actionControlProof: ConsentActionControlProof | undefined;
+  let networkObservationClosed = false;
   let afterActionCapture: PostRefusalEvidencePacket["afterActionCapture"];
   const confirmationDiagnostic = confirmationDiagnostics();
   let terminalDecisionEvidence: PostRefusalEvidencePacket["terminalDecisionEvidence"];
@@ -732,7 +733,7 @@ export async function runPostRefusalObserver(
     let mainNavigationRequestCount = 0;
     page.on("framenavigated", frame => { if (actionDispatched && frame === page?.mainFrame()) sourceDocumentChanged = true; });
     page.on("request", (request) => {
-      if (timing.observationEndedAtMs !== undefined) return;
+      if (networkObservationClosed || timing.observationEndedAtMs !== undefined) return;
       if (request.isNavigationRequest() && request.frame() === page?.mainFrame()) {
         mainNavigationRequestCount += 1;
       }
@@ -797,7 +798,7 @@ export async function runPostRefusalObserver(
             // Observe already-issued request metadata inside the existing window.
             // Pending/failed header reads stay unknown; never await them at publication.
             void request.allHeaders().then(headers => {
-              if (timing.observationEndedAtMs !== undefined || effectiveSignal?.aborted) return;
+              if (networkObservationClosed || timing.observationEndedAtMs !== undefined || effectiveSignal?.aborted) return;
               captured.measurementEvidence = measurementInput?inspectMeasurementRequest({ ...measurementInput, headers }):undefined;
               if(caRecipient)captured.californiaCollection=captureCaliforniaRejectRequest({...caInput,headers,httpStatus:captured.httpStatus})??undefined;
             }).catch(() => undefined);
@@ -823,12 +824,12 @@ export async function runPostRefusalObserver(
       const captured = [...preRegistrationRequests, ...postRegistrationRequests]
         .find((entry) => entry.requestId === requestId);
       if (!captured) return;
-      if (timing.observationEndedAtMs !== undefined || effectiveSignal?.aborted) return;
+      if (networkObservationClosed || timing.observationEndedAtMs !== undefined || effectiveSignal?.aborted) return;
       captured.httpStatus=response.status();
       const observedAtMs = elapsed(parentScanStartedAtMs);
       const afterClick = actionDispatched;
       const capture = response.headersArray().then((headers) => {
-        if (timing.observationEndedAtMs !== undefined || effectiveSignal?.aborted) return;
+        if (networkObservationClosed || timing.observationEndedAtMs !== undefined || effectiveSignal?.aborted) return;
         captured.responseCookieNamesSet = responseCookieNamesFromHeaders(headers);
         const writes: NonNullable<CapturedRequest["responseCookieWrites"]> = [];
         for (const header of headers.filter(row => row.name.toLowerCase() === "set-cookie").slice(0,24)) {
@@ -1645,6 +1646,10 @@ export async function runPostRefusalObserver(
         dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
         clickCompleted: interactionDiagnostics.click.outcome === "completed", signal: effectiveSignal, targetStillAuthorized,
       });
+      // Freeze before terminal diagnostics/storage reads, as in the confirmed path.
+      const observationEndedAtEpochMs = Date.now();
+      networkObservationClosed = true;
+      originDomStorageCapture?.finish();
       timing.observationMs = Math.max(0, Date.now() - captureStartedAtMs);
       if (stopReason !== "window_elapsed") limitations.push(`after_action_capture:${stopReason}`);
       cancellation();
@@ -1673,7 +1678,7 @@ export async function runPostRefusalObserver(
         ? await readActionWriteCapture<InstrumentedStorageWrite>(page, "__certscoreReadPostRefusalWrites") : {writes:[],metadata:undefined};
       const captureEndedAtMs = elapsed(parentScanStartedAtMs);
       const capturedWrites = writeCapture.writes.filter(write => write.observedAtEpochMs > actionDispatchedAtEpochMs &&
-        write.observedAtEpochMs <= parentScanStartedAtMs + captureEndedAtMs);
+        write.observedAtEpochMs <= observationEndedAtEpochMs);
       const classifiedWrites = capturedWrites.flatMap(write => {
         const row = classifyStorageWrite(write, parentScanStartedAtMs, actionDispatchedAtEpochMs, observationTargetUrl, postActionStorage ?? []);
         return row ? [row] : [];
@@ -2874,8 +2879,11 @@ async function waitForDeterministicRecipe(
   reportDiagnostic?: ResolverDiagnosticReporter,
   discovery?: ConsentActionDiscovery,
   inspectRegisteredOneTrustWhileLoading = false,
+  outerDeadlineAtMs?: number,
 ): Promise<DeterministicRecipeResolution> {
-  const deadlineAtMs = Date.now() + timeoutMs;
+  // A live candidate may use the remaining outer budget to finish the full
+  // uniqueness/stability sweep. A partial sweep never authorizes dispatch.
+  let deadlineAtMs = Date.now() + timeoutMs;
   let stableRecipeId: string | undefined;
   let stableSinceMs = 0;
   let sawAmbiguousActionableSet = false;
@@ -2954,6 +2962,7 @@ async function waitForDeterministicRecipe(
             await locatorHasViewportHitTarget(control, { deadlineAtMs: timeoutMs > 0 ? deadlineAtMs : undefined, signal, scope: scopeResolution.scope })
           ) {
             viewportHitTargetCount += 1;
+            if (outerDeadlineAtMs !== undefined) deadlineAtMs = outerDeadlineAtMs;
             actionable.push({ recipe, control });
           } else {
             viewportPendingRecipeIds.push(recipe.recipeId);
@@ -2975,6 +2984,7 @@ async function waitForDeterministicRecipe(
           labelMatchCount += 1;
           if (recipe.cmpId) matchedCmpIds.add(recipe.cmpId);
           matchedControlLabels.add(recipe.accessibleControl.intent);
+          if (outerDeadlineAtMs !== undefined) deadlineAtMs = outerDeadlineAtMs;
           actionable.push({ recipe, control: host.first() });
         }
         continue;
@@ -3007,6 +3017,7 @@ async function waitForDeterministicRecipe(
           if (!readiness.scopeInteractive) { scopeNotInteractive = true; continue; }
           if (locatorActionabilitySupportsVerifiedDispatch(readiness.actionability)) {
             viewportHitTargetCount += 1;
+            if (outerDeadlineAtMs !== undefined) deadlineAtMs = outerDeadlineAtMs;
             actionable.push({ recipe, control });
           } else {
             viewportPendingRecipeIds.push(recipe.recipeId);
@@ -3156,7 +3167,7 @@ async function waitForDeterministicOrCanonicalRecipe(
 
     const namedResolution = await waitForDeterministicRecipe(
       page, prioritizeConsentActionRecipes(recipes, runtimeRecipes, geometryCmpName),
-      namedBudgetMs, signal, reportDiagnostic, discovery,
+      namedBudgetMs, signal, reportDiagnostic, discovery, false, deadlineAtMs,
     );
     if (namedResolution.status === "found" || namedResolution.status === "aborted") return namedResolution;
     if (namedResolution.status === "ambiguous") sawAmbiguousResolution = true;

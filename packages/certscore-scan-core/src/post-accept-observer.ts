@@ -1242,7 +1242,7 @@ export async function runPostAcceptObserver(
         observedAtMs: elapsed(parentScanStartedAtMs, state.observedAtEpochMs ?? Date.now()),
         timestampBasis: state.observedAtEpochMs === undefined ? "verified_state_observed" : "instrumented_state_write" }; },
       { pass: () => confirmationDiagnostic.pass(false), reason: confirmationDiagnostic.reason, apiSnapshot:recordHubSpotRead },
-    ));
+    )).catch(() => { limitations.push("acceptance_confirmation_read_failed"); return undefined; });
     if (confirmedState) confirmationDiagnostic.reason("verified_decision");
     timing.confirmationMs = Math.max(0, Date.now() - confirmationStartedAtMs);
     if (clickError) {
@@ -1448,23 +1448,41 @@ export async function runPostAcceptObserver(
     // The storage read and optional masked-image completion are independent
     // same-session reads after the observation window. Overlap their browser
     // work so an image cannot spend the result's finalization allowance.
+    let snapshotFinishedAtMs = formSnapshotHandle ? undefined : observationEndedAtEpochMs;
     const terminalReads = Promise.all([
-      formSnapshotHandle?.finish() ?? Promise.resolve(undefined),
+      formSnapshotHandle?.finish().then(snapshot => {
+        snapshotFinishedAtMs = Date.now();
+        return snapshot;
+      }) ?? Promise.resolve(undefined),
       captureStorage(context, page, observationTargetUrl, limitations, graphCapture?.cookies,
         (d) => { storageCollectionDiagnostics.postAction = d; }).then(storage => ({
           storage, capturedAtMs: elapsed(parentScanStartedAtMs),
         })),
       readActionWriteCapture<InstrumentedStorageWrite>(page, "__certscoreReadPostAcceptWrites"),
     ]);
+    let formFollowupSettled = false;
     if (sharedFormEndAtMs !== undefined) {
-      await waitForDelay(Math.max(0,parentScanStartedAtMs+sharedFormEndAtMs-Date.now()),effectiveSignal).catch(()=>undefined);
+      while (!effectiveSignal?.aborted && Date.now() < parentScanStartedAtMs + sharedFormEndAtMs) {
+        // The image inventory may have found a later form after the last
+        // structured sample. Let the existing sampler catch up before ending.
+        if (snapshotFinishedAtMs !== undefined && formCaptureHandle?.finishSettledFollowup(snapshotFinishedAtMs)) {
+          formFollowupSettled = true;
+          break;
+        }
+        await waitForDelay(Math.min(50, Math.max(0, parentScanStartedAtMs + sharedFormEndAtMs - Date.now())), effectiveSignal).catch(() => undefined);
+      }
     }
     formCapture = formCaptureHandle?.finish();
     const [finishedSnapshot, storageRead, writeCapture] = await terminalReads;
     const instrumentedWrites = writeCapture.writes;
     sourceHookInstalledAtMs = writeCapture.metadata?.hookInstalledAtMs;
     const postActionStorage = storageRead.storage;
-    formSnapshotCapture = finishedSnapshot;
+    // Both collectors have finished inside the same shortened lifecycle.
+    // Retain their shared actual end; the packet still validates every image
+    // and inventory timestamp against it and the unchanged worker deadline.
+    formSnapshotCapture = formFollowupSettled && finishedSnapshot?.contractVersion === "certscore.post_accept_form_snapshots.v8" && formCapture?.window
+      ? {...finishedSnapshot, followup: {...finishedSnapshot.followup, captureDeadlineAtMs: formCapture.window.endedAtMs}}
+      : finishedSnapshot;
     timing.observationExitReason = observationResult.reason;
     observationCoverageSufficient = observationResult.completed;
     if (!observationResult.completed) {
@@ -1633,6 +1651,7 @@ async function waitForDeterministicRecipe(
   signal?: AbortSignal,
   discovery?: ConsentActionDiscovery,
   reportDiagnostic?: ResolverReporter,
+  outerDeadlineAtMs?: number,
 ): Promise<
   | {
       status: "found";
@@ -1642,7 +1661,9 @@ async function waitForDeterministicRecipe(
     }
   | { status: "not_found" | "ambiguous" | "aborted" }
 > {
-  const deadlineAtMs = Date.now() + timeoutMs;
+  // A live candidate may use the remaining outer budget to finish the full
+  // uniqueness sweep. A partial sweep never authorizes dispatch.
+  let deadlineAtMs = Date.now() + timeoutMs;
   let prioritizedRecipeId: string | undefined;
   do {
     if (signal?.aborted) return { status: "aborted" };
@@ -1684,6 +1705,7 @@ async function waitForDeterministicRecipe(
               !cmpRecipeRequiresViewportHitTarget(recipe.cmpId) ||
               await locatorHasViewportHitTarget(control, { deadlineAtMs: timeoutMs > 0 ? deadlineAtMs : undefined, signal, scope })
             ) {
+              if (outerDeadlineAtMs !== undefined) deadlineAtMs = outerDeadlineAtMs;
               matches.push({ recipe, control, scope });
             } else {
               viewportPendingRecipeIds.push(recipe.recipeId);
@@ -1700,6 +1722,7 @@ async function waitForDeterministicRecipe(
             await closedShadowAccessibleControlAvailable(page, recipe.accessibleControl)
           ) {
             selectorMatchCount += 1; visibleCount += 1; enabledCount += 1; labelMatchCount += 1;
+            if (outerDeadlineAtMs !== undefined) deadlineAtMs = outerDeadlineAtMs;
             matches.push({ recipe, control: host.first(), scope });
           }
           continue;
@@ -1730,6 +1753,7 @@ async function waitForDeterministicRecipe(
             const readiness = await inspectLocatorConsentReadiness(control, { deadlineAtMs: timeoutMs > 0 ? deadlineAtMs : undefined, signal, scope });
             if (!readiness.scopeInteractive) { scopeNotInteractive = true; continue; }
             if (locatorActionabilitySupportsVerifiedDispatch(readiness.actionability)) {
+              if (outerDeadlineAtMs !== undefined) deadlineAtMs = outerDeadlineAtMs;
               matches.push({ recipe, control, scope });
             } else {
               viewportPendingRecipeIds.push(recipe.recipeId);
@@ -1872,6 +1896,7 @@ async function waitForDeterministicOrCanonicalAcceptRecipe(
       signal,
       discovery,
       reportDiagnostic,
+      deadlineAtMs,
     );
     if (namedResolution.status === "found" || namedResolution.status === "aborted") {
       return namedResolution;

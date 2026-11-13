@@ -26,6 +26,7 @@ export function startPostAcceptFormCapture(input: {
   let mainDocumentBinding: PostAcceptFormCapture["frames"][number]["documentBinding"];
   const retained = new Map<string, { frame: Frame; epoch: number }>();
   const inspected = new Map<Frame, number>();
+  const stableForms = new Map<Frame, {epoch: number; signature: string; since: number; sampledAt: number}>();
   const inFlight = new Set<Frame>();
   // Three reusable sampling slots preserve the original concurrency and cadence.
   // Hidden helpers consume one sample, not a permanent place in the frame panel.
@@ -191,6 +192,11 @@ export function startPostAcceptFormCapture(input: {
       const nextFrames = [...capture.frames.filter(row => row.frameRef !== frameRef && retained.get(row.frameRef)?.frame !== frame), frameRow];
       if (Buffer.byteLength(JSON.stringify({...capture, frames:nextFrames})) > POST_ACCEPT_FORM_CAPTURE_MAX_BYTES - 200) { sampleReasons.add("capture_limit"); return; }
       capture.frames = nextFrames; retained.set(frameRef,{frame,epoch});
+      const signature = JSON.stringify(forms);
+      const previous = stableForms.get(frame);
+      if (sampleReasons.size || !forms.some(form => form.fields.length > 0)) stableForms.delete(frame);
+      else stableForms.set(frame, {epoch, signature, sampledAt: sampleStartedAtMs,
+        since: previous?.epoch === epoch && previous.signature === signature ? previous.since : sampleStartedAtMs});
     } catch { if (!frozen) sampleReasons.add("frame_unavailable"); }
   };
   const updateTerminalCoverage = (frames: Frame[]) => {
@@ -298,6 +304,28 @@ export function startPostAcceptFormCapture(input: {
       capture.window!.endedAtMs = input.endAtMs;
       capture.window!.terminalSampleCompleted = false;
       schedule();
+      return true;
+    },
+    finishSettledFollowup(snapshotFinishedAtMs: number): boolean {
+      if (!capture.followup || !active() || inFlight.size ||
+        Date.now() < captureClock + capture.followup.originalWindowEndedAtMs) return false;
+      const frames = page.frames();
+      if (!selectedFrames().every(frame => {
+        const sample = completed.get(frame);
+        return sample && sample.epoch === (epochs.get(frame) ?? 0) && sample.index === frames.indexOf(frame) &&
+          sample.startedAtMs >= Date.now() - 750;
+      })) return false;
+      const positive = capture.frames.filter(row => row.forms.some(form => form.fields.length > 0));
+      if (!positive.length || !positive.every(row => {
+        const binding = retained.get(row.frameRef);
+        const stable = binding && stableForms.get(binding.frame);
+        return stable && binding.epoch === stable.epoch && stable.epoch === (epochs.get(binding.frame) ?? 0) &&
+          stable.sampledAt >= Math.max(snapshotFinishedAtMs, captureClock + capture.followup!.originalWindowEndedAtMs) &&
+          stable.sampledAt - stable.since >= 500;
+      })) return false;
+      // End only the optional form sample. No completeness/absence is inferred.
+      deadline = Date.now();
+      capture.window!.endedAtMs = deadline - captureClock;
       return true;
     },
     finish(): PostAcceptFormCapture {
