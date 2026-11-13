@@ -796,6 +796,10 @@ test("timed-out Reject Path is retained as a score-neutral coverage limitation",
     completedAt: "2026-08-26T00:00:04.000Z",
     evidenceJoined: false,
     limitationCode: "reject_path_timeout",
+    pathLimitation: {
+      code: "result_deadline_exceeded",
+      message: "The Reject test did not deliver a verified result within its existing scan window. Post-Reject behavior was not assessed; initial control inspection is reported separately.",
+    },
     maxTailWaitMs: 6_000,
     status: "limited",
   });
@@ -817,7 +821,7 @@ test("timed-out Reject Path is retained as a score-neutral coverage limitation",
   const postRejectRow = checklist.find((row) => row.id === "post_reject_tracking_reduction");
   assert.ok(postRejectRow);
   assert.notEqual(postRejectRow.status, "Gap observed");
-  assert.match(JSON.stringify(postRejectRow), /independent Reject test did not finish within the scan window/);
+  assert.match(JSON.stringify(postRejectRow), /Reject test did not deliver a verified result within its existing scan window/);
 });
 
 test("complete no-Reject inventory makes Reject Path non-applicable without a coverage warning", () => {
@@ -834,6 +838,7 @@ test("complete no-Reject inventory makes Reject Path non-applicable without a co
     completedAt: "2026-08-26T00:00:02.000Z",
     evidenceJoined: false,
     limitationCode: "reject_control_not_observed",
+    pathLimitation: null,
     maxTailWaitMs: 6_000,
     status: "not_applicable",
   });
