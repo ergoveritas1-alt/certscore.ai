@@ -50,6 +50,12 @@ for (const action of ["accept", "reject"] as const) {
           assert.equal(registration.status, "unconfirmed");
           assert.equal(packet.decisionEvidence?.decision, "unknown");
           assert.equal(packet.decisionEvidence?.basis, "unverified");
+          if (mode === "slow_frame") {
+            const frozenDiagnostics = JSON.stringify(packet.interactionDiagnostics);
+            await new Promise(resolve => setTimeout(resolve,400));
+            assert.equal(JSON.stringify(packet.interactionDiagnostics),frozenDiagnostics,"Late scope results cannot mutate a returned packet");
+            assert.equal(clicks,0);
+          }
         }
       } finally {
         await browser.close(); server.closeAllConnections();
@@ -120,9 +126,16 @@ for (const action of ["accept", "reject"] as const) {
           const diagnostic = packet.interactionDiagnostics?.resolver?.snapshots.find(row => row.state === state);
           assert.ok(diagnostic, JSON.stringify(packet.interactionDiagnostics));
           assert.equal(diagnostic.actionableCount, 0);
-          assert.ok(diagnostic.cmpIds.includes("OneTrust"));
+          if (mode !== "slow_frame") assert.ok(diagnostic.cmpIds.includes("OneTrust"));
+          else assert.ok(diagnostic.cmpIds.every(id => id === "OneTrust"), "A timed-out sweep must not invent CMP identity");
           assert.equal(packet.decisionEvidence?.decision, "unknown");
           assert.equal(packet.decisionEvidence?.basis, "unverified");
+          if (mode === "slow_frame") {
+            const frozenDiagnostics = JSON.stringify(packet.interactionDiagnostics);
+            await new Promise(resolve => setTimeout(resolve,400));
+            assert.equal(JSON.stringify(packet.interactionDiagnostics),frozenDiagnostics,"Late scope results cannot mutate a returned packet");
+            assert.equal(clicks,0);
+          }
         }
       } finally {
         await browser.close(); server.closeAllConnections();

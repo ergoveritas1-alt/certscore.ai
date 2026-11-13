@@ -22,6 +22,13 @@ for (const action of ["accept", "reject"] as const) {
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();assert.ok(address && typeof address !== "string");
     const browser = await chromium.launch({headless:true});
+    let cleanupStarted = false;
+    const newContext = browser.newContext.bind(browser);
+    browser.newContext = async options => {
+      const context = await newContext(options), close = context.close.bind(context);
+      context.close = async () => { cleanupStarted = true; return close(); };
+      return context;
+    };
     const start = Date.now();
     const common = { scanId: `budget-${action}`, url: `http://127.0.0.1:${address.port}/`,
       interactionAuthorization: authorization, browser, resultBudgetMs: 250, actionSearchTimeoutMs: 500 };
@@ -37,7 +44,13 @@ for (const action of ["accept", "reject"] as const) {
       assert.ok(packet.limitations.some(reason=>reason.includes("budget_exhausted")));
       assert.equal(navigations,1);
       assert.ok(browser.isConnected());
+      assert.equal(cleanupStarted,true,"context shutdown starts before the bounded observer returns");
+      // The result deadline does not wait for a browser transport acknowledgement.
+      // Verify disposal independently, without granting the observer extra time.
+      const cleanupDeadline = Date.now() + 1000;
+      while (browser.contexts().length && Date.now() < cleanupDeadline) await new Promise(resolve => setTimeout(resolve,10));
       assert.equal(browser.contexts().length,0);
+      assert.ok(browser.isConnected());
     } finally { await browser.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve())); }
   });
 }

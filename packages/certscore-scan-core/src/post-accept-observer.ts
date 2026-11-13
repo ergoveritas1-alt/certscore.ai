@@ -854,8 +854,10 @@ export async function runPostAcceptObserver(
     void primeDeferredConsentReadiness(page, {deadlineAtMs:searchDeadline,
       signal:AbortSignal.any([effectiveSignal,deferredPrimingController.signal])}).catch(() => undefined);
     let previousSnapshot: string | undefined;
+    let resolverReportingClosed = false;
     let resolverAttempt = 0;
     const recordResolverSnapshot: ResolverReporter = (snapshot) => {
+      if (resolverReportingClosed) return;
       const signature = JSON.stringify(snapshot);
       if (signature === previousSnapshot) return;
       previousSnapshot = signature;
@@ -894,6 +896,14 @@ export async function runPostAcceptObserver(
           actionDiscovery,
           recordResolverSnapshot,
         )), {status:effectiveSignal.aborted ? "aborted" : "not_found"}, resolverReadDeadline, effectiveSignal);
+    if (resolution.status !== "found" && Date.now() >= resolverReadDeadline && !effectiveSignal.aborted &&
+      !diagnostics.resolver!.snapshots.some(snapshot => snapshot.state === "binding_budget_exhausted")) {
+      // The outer deadline can win before a slow scope reports its partial sweep.
+      // Retain the exhausted boundary without inventing observed CMP identity.
+      recordResolverSnapshot({source:"named_recipe",state:"binding_budget_exhausted",
+        selectorMatchCount:0,visibleCount:0,enabledCount:0,labelMatchCount:0,actionableCount:0,cmpIds:[],controlLabels:[]});
+    }
+    resolverReportingClosed = resolution.status !== "found";
     deferredPrimingController.abort();
     timing.resolverMs = Math.max(0, Date.now() - resolverStartedAtMs);
     if (resolution.status !== "found" && resolution.status !== "aborted" &&

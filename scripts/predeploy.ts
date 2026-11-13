@@ -340,7 +340,18 @@ const CONSENT_ACTION_SEMANTICS_CHECK: Check = {
     "packages/certscore-scan-core/src/post-accept-observer.test.ts",
     "packages/certscore-scan-core/src/post-accept-unconfirmed-freeze.test.ts",
     "packages/certscore-scan-core/src/post-action-owned-canary-pages.test.ts",
-    "packages/certscore-scan-core/src/post-refusal-observer.test.ts"],
+    "packages/certscore-scan-core/src/post-refusal-observer.test.ts",
+    "packages/certscore-scan-core/src/action-retained-failure-regression.test.ts",
+    "packages/certscore-contracts/src/retained-unconfirmed-actions.test.ts",
+    "apps/v2-dag-lambda/src/evidence-validation-failure.test.ts",
+    "packages/certscore-contracts/src/retained-german-choice-labels.test.ts",
+    "packages/certscore-scan-core/src/action-stalled-storage.test.ts",
+    "packages/certscore-scan-core/src/action-operation-boundary.test.ts",
+    "packages/certscore-scan-core/src/osano-instance-confirmation.test.ts",
+    "packages/certscore-scan-core/src/osano-consent-receipt.test.ts",
+    "apps/v2-dag-lambda/src/action-worker-checkpoints.test.ts",
+    "packages/certscore-scan-core/src/action-geometry-retained-regression.test.ts",
+  ],
 };
 
 const ACCESSIBILITY_AUDIT_CHECK: Check = {
