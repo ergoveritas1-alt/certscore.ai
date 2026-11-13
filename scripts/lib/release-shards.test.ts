@@ -49,7 +49,15 @@ test('cold eight-worker replay moves the measured commands and only splits the i
     task.command.includes('--filter=@website-signal-risk-scanner/validation-worker')));
   assert.ok(candidate.workers[3]!.some(task => task.parent === 'workspace-typecheck' &&
     task.command.includes('--filter=!@website-signal-risk-scanner/validation-worker')));
-  assert.ok(candidate.workers[4]!.some(task => task.key === 'consent-action-semantics:042d8c59af7473ec'));
+  const historicalConsentKey = 'consent-action-semantics:042d8c59af7473ec';
+  // New regression files change the command hash. Historical placement/timing
+  // must apply only while that exact measured command still exists.
+  if (baseline.workers.flat().some(task => task.key === historicalConsentKey)) {
+    assert.ok(candidate.workers[4]!.some(task => task.key === historicalConsentKey));
+  } else {
+    assert.ok(!candidate.workers.flat().some(task => task.key === historicalConsentKey));
+    assert.ok(candidate.workers.flat().some(task => task.command.includes('packages/certscore-scan-core/src/osano-consent-receipt.test.ts')));
+  }
   const unchanged = (plan: typeof candidate) => plan.workers.flat().filter(task => task.parent !== 'workspace-typecheck').map(task => task.key).sort();
   assert.deepEqual(unchanged(candidate), unchanged(baseline));
   assert.equal(candidate.workers.flat().length, baseline.workers.flat().length + 1);
