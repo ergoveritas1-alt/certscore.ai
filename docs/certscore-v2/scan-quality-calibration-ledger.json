@@ -321,8 +321,8 @@
     },
     "https://hubspot.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-12-11T21:32:48.759Z",
-      "lastContactAt": "2026-11-13T21:32:48.759Z",
+      "cooldownUntil": "2026-12-11T21:50:23.724Z",
+      "lastContactAt": "2026-11-13T21:50:23.724Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -770,8 +770,8 @@
     },
     "https://wordpress.org": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-12-11T21:30:43.134Z",
-      "lastContactAt": "2026-11-13T21:30:43.134Z",
+      "cooldownUntil": "2026-12-11T21:50:00.857Z",
+      "lastContactAt": "2026-11-13T21:50:00.857Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -816,8 +816,8 @@
     },
     "https://archonph.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-12-11T21:30:27.246Z",
-      "lastContactAt": "2026-11-13T21:30:27.246Z",
+      "cooldownUntil": "2026-12-11T21:49:43.849Z",
+      "lastContactAt": "2026-11-13T21:49:43.849Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
