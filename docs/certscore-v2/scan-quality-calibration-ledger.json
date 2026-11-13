@@ -3152,8 +3152,8 @@
     },
     "https://sanity.io/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-12-11T13:40:58.865Z",
-      "lastContactAt": "2026-11-13T13:40:58.865Z",
+      "cooldownUntil": "2026-12-11T16:46:22.573Z",
+      "lastContactAt": "2026-11-13T16:46:22.573Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -3162,7 +3162,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-11-13T13:41:43.286Z",
+  "updatedAt": "2026-11-13T16:50:46.579Z",
   "contactOnlyUrls": [
     "https://10tv.com/",
     "https://aacsb.edu/",
