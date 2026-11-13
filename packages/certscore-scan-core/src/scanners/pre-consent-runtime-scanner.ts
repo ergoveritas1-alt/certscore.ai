@@ -4734,13 +4734,25 @@ export async function preConsentRuntimeScanner(
       let resolvePixelWork!: () => void;
       const pixelWork = new Promise<void>(resolve => { resolvePixelWork = resolve; });
       formPixelWorkCompleted = false;
+      const imageStageMs = { bind_controls: 0, masked_pixels: 0, image_processing: 0, safety_review: 0 };
+      const imageStartedAtMs = Date.now();
       collectionSurfaceSnapshots = await captureCollectionSurfaceSnapshots(page, retainedCollectionSurfaceInventory,
         input.formSnapshotReviewer, input.signal, undefined, optionalDeadline - cleanupReserveMs, {
+          // Safety review uses immutable masked pixels and can overlap the
+          // existing cleanup reserve. The absolute image allowance is unchanged.
+          reviewDeadlineAtMs: optionalDeadline,
+          onCaptureTiming(stage, durationMs) { imageStageMs[stage] += durationMs; },
           onPixelWorkCompleted() { formPixelWorkCompleted = true; resolvePixelWork(); },
         });
       // Cleanup stays inside the existing image allowance. Required browser
       // evidence is already frozen and audited before any masking begins.
       if (!formPixelWorkCompleted) await boundedCleanup(pixelWork, Math.max(0, optionalDeadline - Date.now()));
+      recordInstantTiming(timingBreakdown, "pre-consent form images", JSON.stringify({
+        allowanceMs: allowance, elapsedMs: Date.now() - imageStartedAtMs, stageMs: imageStageMs,
+        forms: retainedCollectionSurfaceInventory.forms.length,
+        available: collectionSurfaceSnapshots.filter(snapshot => snapshot.status === "available").length,
+        pixelWorkCompleted: formPixelWorkCompleted,
+      }));
     }
     if (cmpInitialization) recordInstantTiming(timingBreakdown, "passive CMP initialization", JSON.stringify(cmpInitialization.snapshot()));
     if (captureConsentEvidence && retainedCmpRuntimeObservations.length) {

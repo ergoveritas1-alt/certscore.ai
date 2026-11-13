@@ -666,3 +666,78 @@ test("responsive form fitting preserves aspect ratio, full submit area, masks an
     assert.equal(await page.locator('input').first().inputValue(),'private-value');
   }finally{await browser.close();}
 });
+
+test("immutable image processing cannot block later form pixels inside the shared budget", async t => {
+  const browser = await chromium.launch({headless:true});
+  const page = await browser.newPage();
+  let release!: () => void;
+  const laterPixels = new Promise<void>(resolve => {release = resolve;});
+  try {
+    await page.route('**/*', route => route.abort());
+    await page.setContent(Array.from({length:4},(_,i)=>`<form style="width:300px;height:130px;border:1px solid black"><label>Field ${i}<input aria-label="Field ${i}" value="private"></label><p>Public notice ${i}</p></form>`).join(''));
+    const inventory = buildCollectionSurfaceInventory({pageUrl:page.url(),inspectedFieldCandidateCount:4,candidateScanTruncated:false,
+      rows:Array.from({length:4},(_,i)=>({groupKey:String(i),structure:'native_form' as const,elementType:'input' as const,inputType:'input',label:`Field ${i}`,required:false,disabled:false,readOnly:false,domOrder:i}))},Date.now());
+    const stats = sharp.prototype.stats;
+    let processed = 0, captures = 0, reviews = 0;
+    t.mock.method(sharp.prototype,'stats',async function(this:sharp.Sharp){
+      if (++processed===1) await laterPixels;
+      return stats.call(this);
+    });
+    const session=await page.context().newCDPSession(page), send=session.send.bind(session);
+    t.mock.method(session,'send',async (method:any,args:any)=>{
+      const result=await send(method,args);
+      if(method==='Page.captureScreenshot' && ++captures===2) release();
+      return result;
+    });
+    const snapshots=await captureCollectionSurfaceSnapshots(page,inventory,async()=>{reviews++;return {safeForDisplay:true};},undefined,session);
+    assert.deepEqual(snapshots.map(s=>s.status),Array(4).fill('available'));
+    assert.equal(reviews,4);
+    assert.equal(captures,4);
+    assert.equal(await page.locator('[data-certscore-form-capture]').count(),0);
+    assert.deepEqual(await page.locator('input').evaluateAll(xs=>xs.map(x=>(x as HTMLInputElement).value)),Array(4).fill('private'));
+  } finally {release();await browser.close();}
+});
+
+test("a completed masked crop can finish review in the cleanup reserve, but never after the absolute deadline", async () => {
+  const browser=await chromium.launch({headless:true});const page=await browser.newPage();
+  try {
+    await page.route('**/*',route=>route.abort());
+    await page.setContent('<form style="height:100px;width:300px"><label>Email<input type="email"></label><p>Privacy notice</p></form>');
+    const inventory=buildCollectionSurfaceInventory({pageUrl:page.url(),inspectedFieldCandidateCount:1,candidateScanTruncated:false,
+      rows:[{groupKey:'0',structure:'native_form',elementType:'input',inputType:'email',label:'Email',required:false,disabled:false,readOnly:false,domOrder:0}]},Date.now());
+    for(const late of [false,true]) {
+      const start=Date.now(),pixelDeadline=start+FORM_SNAPSHOT_BUDGET_MS-250,absolute=start+FORM_SNAPSHOT_BUDGET_MS;
+      const snapshots=await captureCollectionSurfaceSnapshots(page,inventory,async()=>{
+        await new Promise(resolve=>setTimeout(resolve,Math.max(0,(late?absolute+100:pixelDeadline+75)-Date.now())));
+        return {safeForDisplay:true};
+      },undefined,undefined,pixelDeadline,{reviewDeadlineAtMs:absolute});
+      assert.equal(snapshots[0]?.status,late?'unavailable':'available');
+      if(late) {const frozen=JSON.stringify(snapshots);await new Promise(resolve=>setTimeout(resolve,150));assert.equal(JSON.stringify(snapshots),frozen);assert.equal(snapshots[0]?.data,undefined);}
+    }
+  } finally {await browser.close();}
+});
+
+test("retained four-form inventory survives separate viewport crops without changing six controls", async () => {
+  const {readFile}=await import('node:fs/promises');
+  const inventory=JSON.parse(await readFile(new URL('../fixtures/sanity-preconsent-form-inventory-20261113.json',import.meta.url),'utf8'));
+  const browser=await chromium.launch({headless:true});const page=await browser.newPage();
+  try {
+    await page.route('**/*',route=>route.abort());
+    await page.setContent(`<style>form{width:326px;padding:12px;border:1px solid #555;margin-bottom:1200px}input,textarea{display:block}</style>
+      <form><h2>Studio</h2><label>Title<input type="text" value="private title"></label><label>Description<textarea aria-label="Description">private description</textarea></label><label>Image<input type="file"></label></form>
+      <form><h2>New Content Release</h2><label>Set publishing date<input type="date"></label><button>Run release</button></form>
+      <form><h2>Ask a question</h2><input aria-label="Ask the AI agent a question"><p>Public form context</p></form>
+      <form><h2>Newsletter</h2><input type="email" aria-label="Email address"><p>Privacy notice</p></form>`);
+    const before=JSON.stringify(inventory),start=Date.now();let pixelCompleted=false;
+    const images=await captureCollectionSurfaceSnapshots(page,inventory,async()=>({safeForDisplay:true}),undefined,undefined,
+      start+FORM_SNAPSHOT_BUDGET_MS-250,{reviewDeadlineAtMs:start+FORM_SNAPSHOT_BUDGET_MS,onPixelWorkCompleted(){pixelCompleted=true;}});
+    assert.deepEqual(images.map(s=>s.status),Array(4).fill('available'));
+    assert.equal(new Set(images.map(s=>s.sha256)).size,4);
+    assert.equal(JSON.stringify(inventory),before);
+    assert.equal(pixelCompleted,true);
+    assert.equal(await page.locator('input[type=text]').inputValue(),'private title');
+    assert.equal(await page.locator('textarea').inputValue(),'private description');
+    assert.equal(await page.evaluate(()=>scrollY),0);
+    assert.equal(await page.locator('[data-certscore-form-capture]').count(),0);
+  } finally {await browser.close();}
+});

@@ -253,42 +253,50 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
       // later form may exhaust the pixel window without invalidating this one.
       await onMaskedPixelsCaptured?.();
       if (pixelSignal.aborted || page.url() !== inventory.pageUrl || Date.now() >= deadline) { results.push(retain(unavailable("capture_budget_exhausted"))); continue; }
-      stage = "image_processing_failed";
-      onStage?.(`form_${formIndex}_mask_and_review`);
-      timingStartedAtMs = Date.now();
-      const { data, info } = await sharp(original, { limitInputPixels: 40_000_000 }).resize({ width: 640, height: 960, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 45 }).toBuffer({ resolveWithObject: true });
-      if (data.byteLength > 96 * 1024) { results.push(retain(unavailable("image_size_exceeded"))); continue; }
-      // Safety approval alone cannot make a blank/fully masked crop useful.
-      // Inspect only the final bounded, masked image. Exact uniformity avoids
-      // guessing from dimensions, field labels, or low-contrast visible detail.
-      const stats = await sharp(data, { limitInputPixels: 640 * 960 }).stats();
-      options?.onCaptureTiming?.("image_processing", Date.now() - timingStartedAtMs);
-      if (pixelSignal.aborted || reviewSignal.aborted || Date.now() >= deadline || page.url() !== inventory.pageUrl) {
-        results.push(retain(unavailable(pixelSignal.aborted || reviewSignal.aborted ? "capture_cancelled" : page.url() !== inventory.pageUrl ? "document_changed" : "capture_budget_exhausted"))); continue;
-      }
-      if (stats.channels.every(channel => channel.min === channel.max)) {
-        results.push(retain(unavailable("no_visible_context"))); continue;
-      }
-      const boundedSignal = AbortSignal.any([AbortSignal.timeout(Math.max(1, reviewDeadline - Date.now())), reviewSignal]);
-      onReviewStarted?.(formIndex);
-      const reviewStartedAtMs = Date.now();
+      // Browser binding and masked pixels are complete. Process this immutable
+      // crop while the renderer captures the next form; no page mutation or
+      // unreviewed image can escape through this independent task.
       results.push((async () => {
-        let onAbort: (() => void) | undefined;
+        let processingComplete = false;
         try {
-          const outcome = await Promise.race([
-            Promise.resolve().then(() => review({ bytes: data, mimeType: "image/jpeg", signal: boundedSignal })),
-            new Promise<never>((_, reject) => {
-              onAbort = () => reject(new Error("Form snapshot review deadline"));
-              boundedSignal.addEventListener("abort", onAbort, { once: true });
-              if (boundedSignal.aborted) onAbort();
-            }),
-          ]);
-          if (reviewSignal.aborted) return unavailable("capture_cancelled");
-          if (boundedSignal.aborted) return unavailable("review_timed_out");
-          if (page.url() !== inventory.pageUrl) return unavailable("document_changed");
-          return collectionSurfaceSnapshotSchema.parse(outcome.safeForDisplay ? { ...base, status: "available", width: info.width, height: info.height, sizeBytes: data.byteLength, sha256: hash(data), data: data.toString("base64") } : { ...base, status: "withheld", reason: "review_withheld" });
-        } catch { return unavailable(reviewSignal.aborted ? "capture_cancelled" : boundedSignal.aborted ? "review_timed_out" : "review_failed"); }
-        finally { options?.onCaptureTiming?.("safety_review", Date.now() - reviewStartedAtMs); onReviewFinished?.(formIndex); if (onAbort) boundedSignal.removeEventListener("abort", onAbort); }
+        onStage?.(`form_${formIndex}_mask_and_review`);
+        const processingStartedAtMs = Date.now();
+        const { data, info } = await sharp(original, { limitInputPixels: 40_000_000 }).resize({ width: 640, height: 960, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 45 }).toBuffer({ resolveWithObject: true });
+        if (data.byteLength > 96 * 1024) { return unavailable("image_size_exceeded"); }
+        // Safety approval alone cannot make a blank/fully masked crop useful.
+        // Inspect only the final bounded, masked image. Exact uniformity avoids
+        // guessing from dimensions, field labels, or low-contrast visible detail.
+        const stats = await sharp(data, { limitInputPixels: 640 * 960 }).stats();
+        options?.onCaptureTiming?.("image_processing", Date.now() - processingStartedAtMs);
+        if (pixelSignal.aborted || reviewSignal.aborted || Date.now() >= reviewDeadline || page.url() !== inventory.pageUrl) {
+          return unavailable(pixelSignal.aborted || reviewSignal.aborted ? "capture_cancelled" : page.url() !== inventory.pageUrl ? "document_changed" : "capture_budget_exhausted");
+        }
+        if (stats.channels.every(channel => channel.min === channel.max)) {
+          return unavailable("no_visible_context");
+        }
+        const boundedSignal = AbortSignal.any([AbortSignal.timeout(Math.max(1, reviewDeadline - Date.now())), reviewSignal]);
+        onReviewStarted?.(formIndex);
+        const reviewStartedAtMs = Date.now();
+        processingComplete = true;
+        return await (async () => {
+          let onAbort: (() => void) | undefined;
+          try {
+            const outcome = await Promise.race([
+              Promise.resolve().then(() => review({ bytes: data, mimeType: "image/jpeg", signal: boundedSignal })),
+              new Promise<never>((_, reject) => {
+                onAbort = () => reject(new Error("Form snapshot review deadline"));
+                boundedSignal.addEventListener("abort", onAbort, { once: true });
+                if (boundedSignal.aborted) onAbort();
+              }),
+            ]);
+            if (reviewSignal.aborted) return unavailable("capture_cancelled");
+            if (boundedSignal.aborted) return unavailable("review_timed_out");
+            if (page.url() !== inventory.pageUrl) return unavailable("document_changed");
+            return collectionSurfaceSnapshotSchema.parse(outcome.safeForDisplay ? { ...base, status: "available", width: info.width, height: info.height, sizeBytes: data.byteLength, sha256: hash(data), data: data.toString("base64") } : { ...base, status: "withheld", reason: "review_withheld" });
+          } catch { return unavailable(reviewSignal.aborted ? "capture_cancelled" : boundedSignal.aborted ? "review_timed_out" : "review_failed"); }
+          finally { options?.onCaptureTiming?.("safety_review", Date.now() - reviewStartedAtMs); onReviewFinished?.(formIndex); if (onAbort) boundedSignal.removeEventListener("abort", onAbort); }
+        })();
+        } catch { return unavailable(processingComplete ? "review_failed" : "image_processing_failed"); }
       })().then(retain));
     } catch (error) {
       if (options?.layoutRetryAllowed !== false && error instanceof Error &&
