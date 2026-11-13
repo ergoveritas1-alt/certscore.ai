@@ -244,13 +244,13 @@ function metricMeaning(e){
   'detail.gpc.california_collection':'Usable scans with a recorded California review finding for collection under GPC. This narrower subset requires supported sale/sharing-related activity, such as identifier syncing or audience collection, plus the retained policy’s evidence and processing checks.',
   privacy_policy:'Eligible scans with retained checklist evidence of a privacy notice.',
   'checklist.cookie_notice_policy_availability':'Eligible scans with retained checklist evidence of a cookie notice or policy.',
-  'checklist.outdated_transfer_framework_reference':'Share of readable reports that returned this conditional review signal. The separate assessment shows whether the retained-text check completed.',
+  'checklist.outdated_transfer_framework_reference':'Completed checks cover the verified policy text. Reports can flag a reference for review even when check completion is inconclusive or unavailable.',
   'sealed.operations.transfer_framework_check':'Share with a completed check on the verified policy scope. Qualifying signals and unknown coverage are counted separately.',
-  'sealed.operations.policy_text_receipt':'Complete producer receipts in the source shown. Receipt delivery and independent local verification of policy text are separate.',
+  'sealed.operations.policy_text_receipt':'Reports with a complete or limited producer verification receipt for policy text.',
   accessibility:'Usable scans with a completed automated page audit. Limited audits may still return useful findings. Completion is coverage, not an accessibility pass.',
   'accessibility.failed_rules':'Measured reports with one or more failed automated page rules. Missing measurements are excluded. A measured zero does not establish full accessibility.',
   'accessibility.review_rules':'Measured reports with one or more page rules needing manual review. These are unresolved checks, not confirmed failures. Missing measurements are excluded.',
-  'sealed.checklist.accessibility_consent_controls':'Reports marked Not testable for control-specific accessibility. This is missing assessment coverage, not proof that controls cannot be tested; a general page audit cannot fill it.',
+  'sealed.checklist.accessibility_consent_controls':'Reports with a control-specific accessibility verdict that records an issue, a review signal, or no issue observed.',
   cmp_provider:'Eligible scans with an identified CMP provider. Identification does not establish action support.',
   'customer_cmp_check.prominence':'Share of reportable scans where both first-layer controls were observed. The chart shows the recorded prominence assessment states.',
   'customer_cmp_check.prominence_valid_comparison':'Share of reportable scans with both first-layer controls observed and a verified visual comparison.',
@@ -271,11 +271,12 @@ function metricMeaning(e){
   'checklist.device_identification_fingerprinting_signal_observed':'Eligible reports with a recorded device-identification review verdict. This does not by itself confirm marketing fingerprinting.',
   'checklist.embedded_content_pre_consent':'Eligible reports with a recorded embedded-content review verdict before consent. Content loading alone does not establish tracking.',
   'checklist.pre_consent_cookies_storage':'Eligible reports with a Gap observed verdict for classified non-essential storage before consent. Partial concern remains separate.',
+  'checklist.post_reject_tracking_reduction':'Reports with a recorded outcome from the tracking review after Reject.',
   'checklist.pre_consent_third_party_tracking':'Eligible reports with a Gap observed tracking verdict before consent. Insufficient evidence and Not confirmed stay in the denominator.',
   'checklist.session_replay_fingerprinting_review':'Eligible reports with a recorded replay or behavioral-analytics review verdict. Other observed activity and timing uncertainty remain separate.',
   'checklist.social_media_embed_pre_consent':'Eligible reports with a Gap observed verdict for social/media provider activity before consent. Includes qualifying pixels, plugins and embeds.',
   'checklist.third_party_iframe_pre_consent':'Eligible reports with a Gap observed verdict for third-party iframe activity before consent. This is not a tracking classification.',
-  'sealed.checklist.cross_border_endpoint_review':'Eligible scans with an observed cross-border endpoint assessment.',
+  'sealed.checklist.cross_border_endpoint_review':'Reports with a recorded outcome from the cross-border endpoint review.',
   'sealed.checklist.sensitive_surfaces_third_party_tracking':'Eligible scans with an observed assessment of third-party tracking on sensitive surfaces.',
   'checklist.transport_security_form_transport':'Eligible scans with observed form-transport checklist evidence.',
   'checklist.transport_security_http_redirect':'Eligible scans with observed HTTP-to-HTTPS redirect checklist evidence.',
@@ -433,7 +434,6 @@ function cell(v,e,recordSource,compact=false,hero=null,notDispatched=false){
  if(e.id==='sealed.cmp_dispatch'&&v.counts.intentionally_omitted===v.denominator)return headline('Omitted by scan profile',v.denominator+' scans · no inventory worker scheduled');
  if(v.counts.unavailable===v.denominator&&notDispatched&&dispatchDependent.has(e.id))return headline('No dispatch recorded');
  if(v.counts.unavailable===v.denominator){
-  if(e.id==='checklist.outdated_transfer_framework_reference'||e.id==='verdict.outdated_transfer_framework_reference')return headline('No review signal returned');
   if(e.id==='sealed.operations.policy_text_receipt')return headline('No producer receipt delivered');
   if(e.id==='sealed.checklist.accessibility_consent_controls')return headline('No matched assessment');
   return headline('Unavailable',v.denominator+' eligible · '+unavailableDetail(e.id));
@@ -595,29 +595,62 @@ function transferReasonCoverage(day){
 function compactCoverageNote(attribute,summary,detail){
  return '<details class="minor coverage-note" '+attribute+'><summary title="'+esc(summary)+'">'+esc(summary)+'</summary><div>'+detail+'</div></details>';
 }
+const transferChecklistId='checklist.outdated_transfer_framework_reference';
+function transferFrameworkCounts(cohortDays){
+ const totals={reports:0,noSignal:0,signal:0,partialSignal:0,inconclusive:0,noText:0,unavailable:0,returned:0};
+ for(const day of cohortDays){
+  const report=day.metrics[transferChecklistId];
+  const check=day.metrics['sealed.operations.transfer_framework_check'];
+  const counts=check?.counts??{};
+  totals.reports+=report?.denominator??0;
+  totals.noSignal+=counts.checked_no_signal??0;
+  totals.signal+=counts.checked_review_signal??0;
+  totals.partialSignal+=counts.partial_review_signal??0;
+  totals.inconclusive+=(counts.inconclusive_policy_coverage??0)+(counts.inconclusive_matcher_limit??0);
+  totals.noText+=counts.not_assessed_no_eligible_text??0;
+  totals.unavailable+=check?(counts.unavailable??0):(report?.denominator??0);
+  totals.returned+=report?.counts.partial_concern??0;
+ }
+ return totals;
+}
+function transferFrameworkHeadline(counts){
+ const completed=counts.noSignal+counts.signal;
+ if(counts.unavailable===counts.reports)return 'Completed checks unknown';
+ return completed+' of '+counts.reports+' checks completed'+
+  (completed?' · '+counts.signal+' '+(counts.signal===1?'signal':'signals')+' found':'');
+}
+function transferFrameworkBreakdown(counts){
+ return [
+  counts.noSignal+' completed · no outdated reference detected in the policy text checked',
+  counts.signal+' completed · outdated reference flagged for review',
+  ...(counts.partialSignal?[counts.partialSignal+' flagged for review with partial policy coverage']:[]),
+  counts.inconclusive+' inconclusive · policy coverage incomplete or matcher limit reached',
+  counts.noText+' not assessed · no eligible policy text',
+  counts.unavailable+' assessment unavailable · completion could not be verified'
+ ].join('<br>');
+}
+function transferFrameworkReportSignals(counts){
+ return counts.returned+' of '+counts.reports+' reports flagged a reference for review';
+}
+function transferFrameworkCell(day){
+ const counts=transferFrameworkCounts([day]);
+ if(!counts.reports)return '<div class="value">No eligible data</div>';
+ return '<div class="value">'+esc(transferFrameworkHeadline(counts))+'</div>'+
+  compactCoverageNote('data-transfer-assessment-coverage','Assessment breakdown',
+   transferFrameworkBreakdown(counts)+transferReasonCoverage(day))+
+  '<div class="minor" data-transfer-signal-coverage>'+esc(transferFrameworkReportSignals(counts))+'</div>';
+}
+function transferFrameworkPeriod(){
+ const counts=transferFrameworkCounts(days);
+ if(!counts.reports)return '';
+ return compactCoverageNote('data-transfer-period','Period · '+transferFrameworkHeadline(counts),
+  transferFrameworkBreakdown(counts)+'<div data-transfer-period-signals>'+esc(transferFrameworkReportSignals(counts))+'</div>');
+}
 function policyEvidenceCoverage(day,entry,value){
  if(!value.denominator)return '';
  if(entry.id==='sealed.checklist.accessibility_consent_controls'&&(value.counts.unavailable??0)===value.denominator)
   return compactCoverageNote('data-control-accessibility-coverage','Why unavailable',
    'The audit has no generation-matched control accessibility assessment for these reports. Historical missing assessments remain unavailable. The current daily query requires this field and blocks if it cannot fit; the general page accessibility audit is separate.');
- if(entry.id==='checklist.outdated_transfer_framework_reference'){
-  const check=day.metrics['sealed.operations.transfer_framework_check'];
-  const counts=check?.counts??{};
-  const checkedSignal=counts.checked_review_signal??0,partialSignal=counts.partial_review_signal??0;
-  const completed=(counts.checked_no_signal??0)+checkedSignal;
-  const unknown=check?(counts.unavailable??0):value.denominator;
-  const denominator=check?.denominator??value.denominator;
-  const returnedSignals=value.counts.partial_concern??0;
-  const assessment=unknown===denominator?'Completed checks unknown · '+unknown+' reports without an assessment receipt':
-   'Completed checks '+completed+'/'+denominator+' · Qualifying matcher signals '+(checkedSignal+partialSignal)+
-   (partialSignal?' ('+partialSignal+' with partial coverage)':'')+'<br>'+
-   (counts.inconclusive_policy_coverage??0)+' insufficient policy coverage · '+(counts.inconclusive_matcher_limit??0)+' matcher limited · '+
-   (counts.not_assessed_no_eligible_text??0)+' not assessed · '+unknown+' unknown';
-  return compactCoverageNote('data-transfer-signal-coverage',returnedSignals+'/'+value.denominator+' review signals',
-   returnedSignals+' of '+value.denominator+' reports returned the conditional checklist signal.')+
-   compactCoverageNote('data-transfer-assessment-coverage',unknown===denominator?'Completed checks unknown':completed+'/'+denominator+' completed checks',
-    assessment+transferReasonCoverage(day));
- }
  if(entry.id!=='sealed.operations.policy_text_receipt')return '';
  const {counts}=value,missing=counts.unavailable??0;
  const local=day.metrics['sealed.policy_full_text']?.counts??{};
@@ -629,7 +662,7 @@ function policyEvidenceCoverage(day,entry,value){
   ' limited · '+(counts.no_verified_receipt_in_projection??0)+' explicitly without a verified receipt'+
   (full||partial?'<br>Separate local text verification · '+full+' complete · '+partial+' partial or unspecified':''));
 }
-function checklistVerdictCell(verdict,layout){
+function checklistVerdictCell(verdict,layout,showGapCount=false){
  if(!verdict.denominator)return '<div class="value">No eligible data</div>';
  if(!Object.keys(verdict.counts).some(state=>state!=='unavailable'&&state!=='unknown')){
   return '<div class="value">'+(verdict.counts.unknown?'Unknown':'Unavailable')+'</div>';
@@ -647,7 +680,7 @@ function checklistVerdictCell(verdict,layout){
   }
  }
  const heroValue=heroState==='review_signal'?heroCount+' ('+share(heroCount)+')':share(heroCount);
- return '<div class="value" data-checklist-verdict>'+heroTitle+' · '+heroValue+'</div><div class="states minor state-percentages checklist-verdicts">'+
+ return '<div class="value" data-checklist-verdict>'+(showGapCount?heroCount+(heroCount===1?' gap':' gaps')+' in '+verdict.denominator+' reports':heroTitle+' · '+heroValue)+'</div><div class="states minor state-percentages checklist-verdicts">'+
   breakdown.map(([state,title])=>{
    const count=verdict.counts[state]??0;
    return percentageLine(state,title,count+' ('+share(count)+')');
@@ -706,14 +739,49 @@ function optOutFunnelCell(day){
   (reasons||'<p>No conditional skip reason retained.</p>')+trace+'</details>'+optOutRejectionDetails(f);
 }
 const controlAccessibilityId='sealed.checklist.accessibility_consent_controls';
-function controlAccessibilityCell(value,entry){
- if(!value.denominator||value.counts.unavailable===value.denominator)return cell(value,entry);
- const share=count=>pct(100*count/value.denominator);
- const count=value.counts.not_testable??0;
- return '<div class="value" data-checklist-verdict>Not testable · '+share(count)+'</div>'+
+const reviewOutcomeStates=[
+ ['gap_observed','Gap observed'],['review_signal','Review signal'],['observed','Observed'],
+ ['not_observed','Not observed'],
+];
+const coverageHeadlines={
+ 'checklist.post_reject_tracking_reduction':{
+  metric:'verdict.post_reject_tracking_reduction',suffix:'had a review outcome',outcomes:reviewOutcomeStates,
+ },
+ 'sealed.checklist.cross_border_endpoint_review':{
+  metric:'sealed.verdict.cross_border_endpoint_review',suffix:'had a review outcome',outcomes:reviewOutcomeStates,
+ },
+ [controlAccessibilityId]:{
+  metric:'sealed.verdict.accessibility_consent_controls',suffix:'had a test result',outcomes:[
+   ['gap_observed','Issue flagged'],['review_signal','Needs review'],['not_observed','No issue observed'],
+  ],
+ },
+ 'sealed.operations.policy_text_receipt':{
+  metric:'sealed.operations.policy_text_receipt',suffix:'had verified receipts',outcomes:[
+   ['producer_verified_complete_receipt','Complete'],['producer_verified_limited_receipt','Limited'],
+  ],labels:{no_verified_receipt_in_projection:'No verified receipt in report'},
+ },
+};
+function assessmentOutcomeCell(value,definition,headlinePrefix=''){
+ if(!value.denominator)return '<div class="value">No eligible data</div>';
+ const {counts,denominator}=value;
+ const covered=definition.outcomes.reduce((sum,[state])=>sum+(counts[state]??0),0);
+ const entirelyUnavailable=(counts.unavailable??0)+(counts.unknown??0)===denominator;
+ const title=entirelyUnavailable?'Coverage unavailable':covered+' of '+denominator+' '+definition.suffix;
+ const titles=new Map(definition.outcomes);
+ for(const state of Object.keys(counts)){
+  if(!titles.has(state))titles.set(state,definition.labels?.[state]??label(state).replace(/^./,c=>c.toUpperCase()));
+ }
+ return '<div class="value" data-checklist-verdict>'+esc(headlinePrefix+title)+'</div>'+
   '<div class="states minor state-percentages checklist-verdicts">'+
-  Object.entries(value.counts).filter(([state])=>state!=='not_testable').map(([state,n])=>
-   percentageLine(state,label(state).replace(/^./,c=>c.toUpperCase()),n+' ('+share(n)+')')).join('')+'</div>';
+  [...titles].map(([state,name])=>percentageLine(state,name,String(counts[state]??0))).join('')+'</div>';
+}
+function rejectTrackingReduction(day,entry){
+ if(entry.id!=='detail.reject.verdict')return '';
+ const definition=coverageHeadlines['checklist.post_reject_tracking_reduction'];
+ const value=day.metrics[definition.metric];
+ if(!value?.denominator)return '';
+ return '<div class="minor" data-reject-reduction-coverage>'+
+  assessmentOutcomeCell(value,definition,'Tracking reduction after Reject · ')+'</div>';
 }
 function controlAccessibilityReasons(day){
  const dates=new Intl.DateTimeFormat('en-CA',{timeZone:data.timezone,year:'numeric',month:'2-digit',day:'2-digit'});
@@ -748,23 +816,24 @@ function renderTable(){const entries=data.tableEntries.filter(e=>$('group').valu
    days.map(day=>'<td>'+prominenceCoverageCell(day,true)+'</td>').join('')+'</tr>';
   continue;
  }
- html+='<tr data-table-kind="'+e.kind+'" data-table-id="'+esc(e.id)+'"><td><div class="metric-name"><strong>'+esc(e.label)+'</strong><button class="chart-button" data-chart-kind="'+e.kind+'" data-chart-id="'+esc(e.id)+'" aria-label="Chart '+esc(e.label)+'" aria-haspopup="dialog" aria-controls="chartPopover" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 3v18h18M6 15l5-6 5 3 5-7"/></svg></button></div><div class="minor metric-meaning" aria-label="What the percentage measures" title="'+esc(metricMeaning(e))+'">'+esc(metricMeaning(e))+'</div><details class="canonical-mapping"><summary>'+esc([...new Set(e.canonicalLinks.map(l=>l.recordLabel))].join(' · '))+'</summary>'+e.canonicalLinks.map(l=>'<p>'+esc(l.recordType)+'<br>'+esc(l.masterFieldIds.join(', '))+'<br>'+esc(l.relationship.replaceAll('_',' '))+': '+esc(l.basis)+'</p>').join('')+'<p>'+esc(e.denominator??'See the metric contract for eligible measurements.')+'</p></details>'+(e.scopeNote?'<details class="scope-note minor"><summary>Scope and overlap</summary><p>'+esc(e.scopeNote)+'</p></details>':'')+'</td>'+days.map(d=>{const v=stat(d,e.id,e.kind),mixed=Object.keys(v.series).length>1;
+ html+='<tr data-table-kind="'+e.kind+'" data-table-id="'+esc(e.id)+'"><td><div class="metric-name"><strong>'+esc(e.label)+'</strong><button class="chart-button" data-chart-kind="'+e.kind+'" data-chart-id="'+esc(e.id)+'" aria-label="Chart '+esc(e.label)+'" aria-haspopup="dialog" aria-controls="chartPopover" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 3v18h18M6 15l5-6 5 3 5-7"/></svg></button></div><div class="minor metric-meaning" aria-label="What the percentage measures" title="'+esc(metricMeaning(e))+'">'+esc(metricMeaning(e))+'</div><details class="canonical-mapping"><summary>'+esc([...new Set(e.canonicalLinks.map(l=>l.recordLabel))].join(' · '))+'</summary>'+e.canonicalLinks.map(l=>'<p>'+esc(l.recordType)+'<br>'+esc(l.masterFieldIds.join(', '))+'<br>'+esc(l.relationship.replaceAll('_',' '))+': '+esc(l.basis)+'</p>').join('')+'<p>'+esc(e.denominator??'See the metric contract for eligible measurements.')+'</p></details>'+(e.scopeNote?'<details class="scope-note minor"><summary>Scope and overlap</summary><p>'+esc(e.scopeNote)+'</p></details>':'')+(e.id===transferChecklistId?transferFrameworkPeriod():'')+'</td>'+days.map(d=>{const v=stat(d,e.id,e.kind),mixed=Object.keys(v.series).length>1;
 let headlineSource;
 const hero=e.kind==='metric'?tableStateHeadline(e,v):null;
 const layout=data.verdictLayouts[e.id],verdict=layout?d.metrics[layout.id]:null;
 const verdictSources=verdict?Object.entries(verdict.series):[];
-const body=e.id===optOutFunnelId?optOutFunnelCell(d):e.id===prominenceId?prominenceCoverageCell(d,false):e.id===controlAccessibilityId?
- (mixed?'<div class="value">Separate measurement groups</div>':controlAccessibilityCell(v,e)):verdict?
- (verdictSources.length>1?'<div class="value">Separate measurement groups</div>':checklistVerdictCell(verdict,layout)):
+const coverageHeadline=coverageHeadlines[e.id];
+const coverageValue=coverageHeadline?d.metrics[coverageHeadline.metric]:null;
+const body=coverageValue?assessmentOutcomeCell(coverageValue,coverageHeadline):e.id===transferChecklistId?transferFrameworkCell(d):e.id===optOutFunnelId?optOutFunnelCell(d):e.id===prominenceId?prominenceCoverageCell(d,false):verdict?
+ (verdictSources.length>1?'<div class="value">Separate measurement groups</div>':checklistVerdictCell(verdict,layout,e.id==='checklist.pre_consent_third_party_tracking')):
  technologyEstimateCell(d,e,v)||cell(v,e,mixed?source=>{headlineSource=source;}:undefined,true,hero,noDispatch(d));
-if(verdict)return '<td>'+body+(e.id===controlAccessibilityId?controlAccessibilityReasons(d):'')+policyEvidenceCoverage(d,e,v)+'<details class="series-list"><summary>'+
+if(verdict)return '<td>'+body+(e.id===controlAccessibilityId?controlAccessibilityReasons(d):'')+policyEvidenceCoverage(d,e,v)+rejectTrackingReduction(d,e)+'<details class="series-list"><summary>'+
  (verdictSources.length>1?'Separate sources':'Source / version')+' ('+verdictSources.length+')</summary>'+
  verdictSources.map(([source,part])=>'<div class="series-entry"><strong>'+esc(source)+'</strong>'+checklistVerdictCell(part,layout)+'</div>').join('')+
  '</details>'+supportingDetails(d,e)+'</td>';
 const heroCount=hero&&Object.keys(v.counts).some(state=>state!=='unavailable'&&state!=='unknown')?
  '<div class="minor">'+esc(hero[1])+': '+tableStateCount(v,hero[0])+'/'+v.denominator+' eligible retained rows</div>':'';
 const allStates=v.denominator>0&&e.kind==='metric'?'<div class="series-entry"><strong>All eligible rows</strong>'+heroCount+stateRows(v,e,false)+'</div>':'';
-return '<td>'+body+(e.id===controlAccessibilityId?controlAccessibilityReasons(d):'')+policyEvidenceCoverage(d,e,v)+choiceConfirmationGap(d,e)+gpcQuestionCounts(d,e)+'<details class="series-list"><summary>'+(mixed?'Separate sources':'Source / version')+' ('+Object.keys(v.series).length+')</summary>'+allStates+Object.entries(v.series).map(([s,p])=>'<div class="series-entry"><strong>'+esc(s)+'</strong>'+(s===headlineSource?' <span class="minor">· Shown above</span>':'')+(e.id===controlAccessibilityId?controlAccessibilityCell(p,e):cell(p,e))+'</div>').join('')+'</details>'+supportingDetails(d,e)+'</td>';}).join('')+'</tr>';}$('daily').innerHTML=html+'</tbody>';if(!tableInitialized){const scroller=$('daily').closest('.table-scroll');scroller.scrollLeft=scroller.scrollWidth;tableInitialized=true;}for(const b of $('daily').querySelectorAll('[data-chart-id]'))b.onclick=()=>selectChart(b.dataset.chartKind,b.dataset.chartId,b.getBoundingClientRect());}
+return '<td>'+body+(e.id===controlAccessibilityId?controlAccessibilityReasons(d):'')+policyEvidenceCoverage(d,e,v)+rejectTrackingReduction(d,e)+choiceConfirmationGap(d,e)+gpcQuestionCounts(d,e)+'<details class="series-list"><summary>'+(mixed?'Separate sources':'Source / version')+' ('+Object.keys(v.series).length+')</summary>'+allStates+Object.entries(v.series).map(([s,p])=>'<div class="series-entry"><strong>'+esc(s)+'</strong>'+(s===headlineSource?' <span class="minor">· Shown above</span>':'')+(cell(p,e))+'</div>').join('')+'</details>'+supportingDetails(d,e)+'</td>';}).join('')+'</tr>';}$('daily').innerHTML=html+'</tbody>';if(!tableInitialized){const scroller=$('daily').closest('.table-scroll');scroller.scrollLeft=scroller.scrollWidth;tableInitialized=true;}for(const b of $('daily').querySelectorAll('[data-chart-id]'))b.onclick=()=>selectChart(b.dataset.chartKind,b.dataset.chartId,b.getBoundingClientRect());}
 function position(){if(!anchor||$('chartPopover').hidden)return;const pop=$('chartPopover'),w=document.documentElement.clientWidth,h=innerHeight,space=w-anchor.right-22;pop.style.width=Math.min(580,space>=340?space:w-24)+'px';const rect=pop.getBoundingClientRect();pop.style.left=Math.max(12,Math.min(anchor.right+10,w-rect.width-12))+'px';pop.style.top=Math.max(12,Math.min(anchor.bottom-rect.height,h-rect.height-12))+'px';}
 function refreshPopover(){if($('chartPopover').hidden)return;$('chartPopoverTitle').textContent=$('trendTitle').textContent;const svg=$('trend').cloneNode(true);svg.removeAttribute('id');$('popoverGraph').replaceChildren(svg);$('popoverLegend').innerHTML=$('legend').innerHTML;for(const [a,b]of [['popoverState','chartState'],['popoverSource','chartSource']]){$(a).replaceChildren(...[...$(b).options].map(o=>o.cloneNode(true)));$(a).value=$(b).value;}const contract=selectedKind==='finding'?data.contracts?.findings:(selectedKind==='quantity'?data.contracts?.quantities:data.contracts?.metrics)?.find(c=>c.id===selectedMetric);$('contract').innerHTML=Object.entries(contract??{}).map(([k,v])=>'<dt>'+esc(k)+'</dt><dd>'+esc(typeof v==='string'?v:JSON.stringify(v))+'</dd>').join('');position();}
 function close(){ $('chartPopover').hidden=true;anchor=null;for(const b of document.querySelectorAll('[data-chart-id][aria-expanded="true"]'))b.setAttribute('aria-expanded','false');}

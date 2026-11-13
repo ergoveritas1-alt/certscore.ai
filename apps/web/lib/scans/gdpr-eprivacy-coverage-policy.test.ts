@@ -7419,6 +7419,7 @@ test("independent incomplete Reject action is not relabeled inapplicable by pass
   });
   assert.notEqual(outcomes.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.productionPosture, "not_applicable_no_reject_control");
   assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
+  assert.equal((outcomes.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.pathLimitation as {code: string})?.code, "passive_inspection_cutoff");
   assert.equal(
     outcomes.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.reportPresentation,
     "omit_no_actionable_reject_control",

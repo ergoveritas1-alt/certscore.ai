@@ -741,3 +741,58 @@ test("retained four-form inventory survives separate viewport crops without chan
     assert.equal(await page.locator('[data-certscore-form-capture]').count(),0);
   } finally {await browser.close();}
 });
+
+test("one stalled image review cannot discard sibling images or structured form evidence", async () => {
+  const browser=await chromium.launch({headless:true});const page=await browser.newPage();
+  let finishLate: ((value:{safeForDisplay:boolean})=>void)|undefined;
+  try {
+    await page.route('**/*',route=>route.abort());
+    await page.setContent([0,1,2].map(i=>`<form style="height:120px;width:320px"><label>Email ${i}<input type="email" value="private-${i}@example.test"></label><p>Privacy notice ${i}</p><button>Submit</button></form>`).join(''));
+    const inventory=buildCollectionSurfaceInventory({pageUrl:page.url(),inspectedFieldCandidateCount:3,candidateScanTruncated:false,
+      rows:[0,1,2].map(i=>({groupKey:String(i),structure:'native_form' as const,elementType:'input' as const,inputType:'email',label:`Email ${i}`,required:false,disabled:false,readOnly:false,domOrder:i}))},Date.now());
+    const before=JSON.stringify(inventory);let reviews=0;
+    const start=Date.now(),end=start+FORM_SNAPSHOT_BUDGET_MS;
+    const snapshots=await captureCollectionSurfaceSnapshots(page,inventory,async()=>{
+      if(reviews++===0)return new Promise(resolve=>{finishLate=resolve;});
+      return {safeForDisplay:true};
+    },undefined,undefined,end-250,{reviewDeadlineAtMs:end});
+    assert.equal(reviews,3);
+    assert.equal(snapshots.filter(x=>x.status==='available').length,2);
+    assert.equal(snapshots.filter(x=>x.status==='unavailable').length,1);
+    assert.equal(JSON.stringify(inventory),before);
+    const frozen=JSON.stringify(snapshots);finishLate?.({safeForDisplay:true});
+    await new Promise(resolve=>setTimeout(resolve,20));assert.equal(JSON.stringify(snapshots),frozen);
+    assert.deepEqual(await page.locator('input').evaluateAll(nodes=>nodes.map(n=>(n as HTMLInputElement).value)),[0,1,2].map(i=>`private-${i}@example.test`));
+  } finally {finishLate?.({safeForDisplay:false});await browser.close();}
+});
+
+test("localhost search-only forms preserve structured evidence when masking leaves no context", async () => {
+  const {createServer} = await import("node:http");
+  const server=createServer((_request,response)=>{response.setHeader("content-type","text/html");response.end('<section style="width:400px"><form style="margin:0;width:400px;height:32px"><input type="search" aria-label="Search site" value="private search query" style="box-sizing:border-box;width:100%;height:100%"></form></section>');});
+  await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
+  const address=server.address() as {port:number};
+  const origin=`http://127.0.0.1:${address.port}`;
+  const browser=await chromium.launch({headless:true});
+  try {
+    const page=await browser.newPage();
+    await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+    await page.goto(origin);
+    const inventory=buildCollectionSurfaceInventory({pageUrl:page.url(),inspectedFieldCandidateCount:1,candidateScanTruncated:false,
+      rows:[{groupKey:'search',structure:'native_form',elementType:'input',inputType:'search',label:'Search site',required:false,disabled:false,readOnly:false,domOrder:0}]},Date.now());
+    const before=JSON.stringify(inventory);
+    let reviews=0;
+    const reviewer=async()=>{reviews++;return {safeForDisplay:true};};
+    const absent=await captureCollectionSurfaceSnapshots(page,inventory,reviewer);
+    assert.equal(absent[0]?.reason,'no_visible_context');
+    assert.equal(absent[0]?.status,'unavailable');
+    assert.equal(absent[0]?.data,undefined);
+    assert.equal(reviews,0);
+    // A visible label is a separate positive fixture, not invented target evidence.
+    await page.locator('section').evaluate(section=>{const label=document.createElement('p');label.textContent='Search this site';section.prepend(label);});
+    const visible=await captureCollectionSurfaceSnapshots(page,inventory,reviewer);
+    assert.equal(visible[0]?.status,'available');
+    assert.equal(reviews,1);
+    assert.equal(JSON.stringify(inventory),before);
+    assert.equal(await page.locator('input').inputValue(),'private search query');
+  } finally {await browser.close();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+});

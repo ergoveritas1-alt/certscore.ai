@@ -590,9 +590,16 @@ active source pins before submitting the ECS task.
 Use the exact-ID cache tool's `--plan-pending` mode against the prior verified
 manifest and the new month window. Copy its `pendingRefreshIds` into
 `begin.json`. The daily plan starts with at most 56 IDs (hard ceiling 100).
-Reserve ceil(limit/2) slots for completed/completed_limited reports, ordered by
-oldest exact check; fill remaining slots by oldest exact check across every
-remaining status. This preserves fair failed-attempt rotation and all ancestry.
+Prioritize newly observed or changed ready report generations using the retained
+version, source hash and payload hash. Unchanged ready misses become eligible
+after 24 hours. Terminal publication failures and other misses rotate after
+72 hours, oldest exact check first in each group. Interleave the three groups
+with ready reports first so fitting the query preserves rotation.
+Pass the prior local `pending-continuity.json` via `--continuity` on planning and
+refresh when importing legacy pending entries. The cache carries the original
+selection receipt separately from the last exact check and latest inventory
+observation. An overlap row can inform a later plan while the current entry
+stays deferred.
 Run `export-mac-mini-delta.ts RUN --plan` locally with actual dates/container.
 The fitter removes only the planned tail until the override fits 8,000 bytes;
 all required receipts stay present. The transport and inventory retain original
@@ -859,7 +866,7 @@ The next existing scheduled refresh runs `verify-audit-receipt-delivery.ts` with
 that real release receipt and sealed dashboard, producing a separate delivery
 receipt. No post-release reportable scans stays pending; missing generation-bound
 policy receipts fails. Do not issue another query to fill the verification gap.
-The owner resumed deployment on November 10, 2026.
+The current explicit owner deployment hold remains active.
 
 Current implementation cost is $0. Forward comparison metadata is capped at
 512 bytes per materialization (at most 51.2 MB at 100,000 scans before compression)

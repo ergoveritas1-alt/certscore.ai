@@ -107,6 +107,7 @@ export type ExecutiveConsentControlProjection = {
 };
 
 export type ExecutiveRejectPathProjection = {
+  limitationMessage?: string;
   execution?: ChoicePathExecution;
   afterClickCoverage?: "complete" | "partial";
   registrationConfirmed?: boolean;
@@ -2318,6 +2319,12 @@ function formatRejectResolverMethod(resolverMethod: string) {
 export function CompactRejectPathCard(input: {
   projection?: ExecutiveRejectPathProjection | null;
 }) {
+  if (input.projection?.state === "incomplete" && !input.projection.afterClickCoverage) {
+    return <div className="rounded-md border border-zinc-200 p-3 text-xs text-zinc-600" data-reject-path-state="incomplete" data-testid="executive-reject-path-card">
+      <p className="font-semibold text-zinc-900">Independent Reject test · Incomplete</p>
+      <p className="mt-1">{input.projection.limitationMessage || "Post-Reject behavior was not assessed. This test does not establish whether a control was present in the initial inspection."}</p>
+    </div>;
+  }
   if (
     !input.projection
     || (input.projection.state === "incomplete" && !input.projection.afterClickCoverage)

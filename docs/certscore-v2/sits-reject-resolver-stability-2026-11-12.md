@@ -238,3 +238,50 @@ idempotent run key `sits-local-consistency-two-2026-11-13`; the repository ledge
 candidate changes only the apex contact and update time. Global holds remain.
 No deployment or production flag change occurred. Local recurring infrastructure
 increment is $0; bounded contact-ledger tasks are estimated below $0.05 one-off.
+
+## Production timing follow-up — November 13, 2026
+
+Production scan `4e354564-0683-4f7b-a6e1-2eb368b96eef` ran deployed revision
+`0ddf727a5`. Both action packets joined and both choices confirmed. The Accept
+packet recorded roughly 3.74 seconds through document commit and 10.78 seconds
+in the resolver, including document readiness and repeated geometry/named
+probes. Navigation itself took 79 ms. Accept dispatched at 15,103 ms and
+confirmed at 15,974 ms. The 3,006 ms activity observation began after additional
+corroboration work and ended at 19,764 ms. Terminal storage returned at
+20,873 ms and the packet was ready at 20,934 ms.
+
+The Lambda image trace shows 2,681 ms waiting for inventory. It found two forms
+with nine fields, then exhausted the remaining 320 ms on the first form's
+control binding. No image reached pixel capture or safety review. The saved
+report retained a six-field form from the independently verified structured
+sample and no images.
+
+The exact-URL passive Borlabs reveal was armed for the request URL, so the
+authorized redirected document could miss that early checkpoint. The retained
+packet cannot attribute the full resolver delay to this path. A local browser
+fixture reproduces it using a redirected, deferred Borlabs banner. Both action
+workers now arm the existing passive reveal on the exact authorized document
+after redirect binding, including when the CMP initializes later. The fixture
+fails to confirm either action on the deployed source and confirms each once
+on the corrected source.
+
+Accept starts form capture and activity observation without waiting on optional
+banner corroboration. It skips request classification and storage-write
+polling used solely for early exit when it must observe the full window. Network
+and write retention, semantic checks and the terminal read still apply.
+Terminal storage and write readbacks share the existing 250 ms finalization
+reserve. A stalled channel is reported unavailable while independent evidence
+can still be retained. Optional image cleanup no longer waits for a CDP detach
+acknowledgement before returning evidence. Image masking, safety review and
+same-document proofs still apply.
+
+The final intercepted Chromium fixture injects 3.5 seconds of setup, an
+11-second delayed CMP script, forms arriving 2.3 seconds after click and a
+terminal storage read that exceeds the deadline. Accept confirmed at 15,108 ms,
+observed the full 3,000 ms, and returned a projectable packet at 19,773 ms under
+the 20,000 ms budget. Both forms (six and three fields) and both masked images
+survived projection. Reject confirmed once in an independent context. The
+fixture intercepts all browser traffic and uses a deterministic safety reviewer.
+The form release gate passed 60 checks, the broader targeted set passed 22,
+and scan-core typechecking and build passed. These runs validate the controlled
+failure paths. No deployment or additional SITS contact was made.

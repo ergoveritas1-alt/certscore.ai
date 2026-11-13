@@ -675,7 +675,7 @@ test("overlong redirect URLs and document identities are safely bounded with sta
   assert.deepEqual(first, second);
 });
 
-test("2.2 retains a verified negative Reject state independently of incomplete Options", () => {
+test("2.2 retains a verified negative Reject and opt-out states independently of incomplete Options", () => {
   const input = baseInput();
   input.document!.canonicalDocumentToken = "doc-token";
   input.coverage = { status: "limited", requiredChannels: ["dom_inventory", "geometry"], completedChannels: ["geometry"], incompleteChannels: [] };
@@ -688,12 +688,21 @@ test("2.2 retains a verified negative Reject state independently of incomplete O
   assert.equal(assessment.controls.reject.inspection?.status, "complete");
   assert.equal(assessment.controls.accept.state, "not_observed");
   assert.equal(assessment.controls.options.state, "unknown");
+  assert.equal(assessment.controls.privacyOptOut.state, "not_observed");
+  assert.equal(assessment.controls.privacyOptOut.inspection?.status, "complete");
+  input.geometry.controlInspection!.candidates[0]!.unresolvedIntents.push("privacy_opt_out");
+  assert.equal(deriveConsentControlAssessment(input).controls.privacyOptOut.state, "unknown");
+  assert.equal(deriveConsentControlAssessment(input).controls.reject.state, "not_observed");
+  input.geometry.controlInspection!.candidates[0]!.unresolvedIntents.pop();
   assert.equal(consentControlAssessmentSchema.safeParse({ ...assessment, controls: { ...assessment.controls, reject: { ...assessment.controls.reject, inspection: undefined } } }).success, false);
   input.geometry.controlInspection!.structuralCoverage = "limited";
   assert.equal(deriveConsentControlAssessment(input).controls.reject.state, "unknown");
+  assert.equal(deriveConsentControlAssessment(input).controls.privacyOptOut.state, "unknown");
   input.geometry.controlInspection!.structuralCoverage = "complete";
+  assert.equal(deriveConsentControlAssessment(input).controls.privacyOptOut.state, "not_observed");
   input.document!.identityStatus = "mismatched";
   assert.equal(deriveConsentControlAssessment(input).controls.reject.state, "unknown");
+  assert.equal(deriveConsentControlAssessment(input).controls.privacyOptOut.state, "unknown");
 });
 
 test("current limited structural proof vetoes broad complete-empty absence but preserves positives", () => {

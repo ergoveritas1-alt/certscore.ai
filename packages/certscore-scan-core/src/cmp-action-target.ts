@@ -46,7 +46,9 @@ export async function consentScopeInteractionState(scope: ConsentActionControl, 
   return (await inspectConsentScopeInteraction(scope, timeoutMs)).state;
 }
 
-/** Preserve the existing gate and RPC, retaining only its fixed exclusion code. */
+/** Preserve the gate and RPC. A detached/replaced scope must not auto-wait
+ * through the action budget; unavailable reads yield to fresh discovery.
+ * This bounds selector acquisition, not browser execution or the outer budget. */
 export async function inspectConsentScopeInteraction(scope: ConsentActionControl, timeoutMs?: number): Promise<{
   state: "interactive" | "transparent" | "unavailable";
   exclusion?: ConsentScopeExclusion;
@@ -68,7 +70,7 @@ export async function inspectConsentScopeInteraction(scope: ConsentActionControl
     return current !== null ? "unavailable" as const : transparent ? "transparent" as const : "interactive" as const;
   };
   const reason = await ("elementHandle" in scope
-    ? scope.evaluate(read, undefined, timeoutMs === undefined ? undefined : {timeout: timeoutMs})
+    ? scope.evaluate(read, undefined, {timeout: Math.max(1, Math.min(100, timeoutMs ?? 100))})
     : scope.evaluate(read)).catch(() => "unavailable" as const);
   return reason === "interactive" ? {state: "interactive"} : {
     state: reason === "transparent" ? "transparent" : "unavailable",

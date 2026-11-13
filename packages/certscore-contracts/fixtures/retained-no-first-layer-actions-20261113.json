@@ -1,0 +1,444 @@
+[
+  {
+    "host": "archonph.com",
+    "scanId": "3c8a8de3-0c6e-4cd3-9123-36438b43d341",
+    "source": "artifacts/local-v2-dag-lambda-simulated/3c8a8de3-0c6e-4cd3-9123-36438b43d341/lanes/consent_proof/CanonicalEvidenceBundle.json",
+    "sourceSha256": "0ec8b9f1235c1d40458e48eb2072bd0df3cdc97ce559be4cfcde90b160d1434c",
+    "bundle": {
+      "url": "https://archonph.com/",
+      "startedAt": "2026-11-13T21:49:29.284Z",
+      "consentSurfaceInspection": {
+        "outcome": "actionable_surface_observed",
+        "coverageStatus": "limited",
+        "inspectionCompleted": false,
+        "inspectedPreInteraction": true,
+        "consentSurfaceObserved": true,
+        "actionableControlObserved": true,
+        "observedAtMs": 11759,
+        "evidenceSources": [
+          "consent_ui_observation",
+          "control_inventory",
+          "dom_snapshot",
+          "visual_capture"
+        ],
+        "evidenceChannels": [
+          {
+            "channel": "navigation_network",
+            "status": "observed",
+            "evidenceCount": 171,
+            "reasonCodes": []
+          },
+          {
+            "channel": "viewport_screenshot",
+            "status": "observed",
+            "evidenceCount": 2,
+            "reasonCodes": []
+          },
+          {
+            "channel": "dom_snapshot",
+            "status": "observed",
+            "evidenceCount": 1,
+            "reasonCodes": []
+          },
+          {
+            "channel": "accessibility_tree",
+            "status": "observed",
+            "evidenceCount": 1,
+            "reasonCodes": []
+          },
+          {
+            "channel": "page_script_inventory",
+            "status": "observed",
+            "evidenceCount": 2,
+            "reasonCodes": []
+          },
+          {
+            "channel": "cmp_runtime",
+            "status": "not_observed",
+            "evidenceCount": 0,
+            "reasonCodes": [
+              "no_cmp_runtime_signal"
+            ]
+          },
+          {
+            "channel": "geometry",
+            "status": "observed",
+            "evidenceCount": 2,
+            "reasonCodes": []
+          }
+        ],
+        "limitationKeys": [
+          "unresolved_visible_consent_decision"
+        ]
+      },
+      "consentUiObservations": [
+        {
+          "captureDiagnostic": {
+            "version": "consent_capture_diagnostic.v1",
+            "refreshPolicy": "final_consent_geometry_refresh.v3",
+            "observationId": "consent_ui_pre_consent",
+            "documentToken": "A5A4CB774A5CE7F99F7A2DA2D48E28C9",
+            "inventoryObservedAtMs": 11759,
+            "geometryObservedAtMs": 11759,
+            "geometryBinding": "matched",
+            "geometryMinusInventoryMs": 0,
+            "outcome": "skipped",
+            "skipReason": "not_refresh_candidate",
+            "eligibilityBlocker": "inventory_outcome_unsupported",
+            "attempted": false,
+            "elapsedMs": 0
+          },
+          "observationId": "consent_ui_pre_consent",
+          "observedAtMs": 11759,
+          "documentUrl": "https://archonph.com/",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "A5A4CB774A5CE7F99F7A2DA2D48E28C9"
+          },
+          "documentReadyState": "complete",
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "captureDiagnostics": {
+            "completedChannels": [
+              "dom_inventory",
+              "accessibility_tree",
+              "geometry"
+            ],
+            "timedOutChannels": [],
+            "failedChannels": []
+          },
+          "likelyPresent": true,
+          "basis": [
+            "inventory:rapid_first_layer_controls",
+            "canonical_locale_context_matched",
+            "single_canonical_control_intent_matched",
+            "canonical_consent_context:en:privacy",
+            "canonical_consent_context:it:privacy",
+            "canonical_consent_context:nl:privacy",
+            "canonical_consent_control:en:privacy_opt_out:privacy choices",
+            "control:do_not_sell_share:Privacy choices",
+            "recapture:post_settle_dom_inventory",
+            "settled_control_inventory_completed",
+            "inventory:accessibility_tree_controls",
+            "canonical_consent_context:en:cookies",
+            "canonical_consent_context:es:cookies",
+            "canonical_consent_context:de:cookies",
+            "canonical_consent_context:ja:Cookie",
+            "canonical_consent_context:fr:cookies",
+            "canonical_consent_context:pt:cookies",
+            "canonical_consent_context:it:cookie",
+            "canonical_consent_context:zh:Cookie",
+            "canonical_consent_context:nl:cookies",
+            "canonical_consent_context:vi:cookie",
+            "canonical_consent_context:id:cookie",
+            "canonical_consent_context:cs:cookies",
+            "canonical_consent_context:sv:cookies",
+            "canonical_consent_context:uk:cookie",
+            "canonical_consent_context:el:cookies",
+            "canonical_consent_context:ro:cookie",
+            "canonical_consent_context:da:cookies",
+            "canonical_consent_context:sk:cookies",
+            "canonical_consent_context:ca:cookies",
+            "canonical_consent_context:gl:cookies",
+            "canonical_consent_control:en:privacy_opt_out:your privacy choices",
+            "control:other:Dismiss",
+            "inventory:accessibility_tree",
+            "inventory:rapid_post_accessibility",
+            "inventory:rapid_after_accessibility",
+            "inventory:prioritized_early_channels",
+            "adaptive_gate_inventory:10s_without_cmp_runtime",
+            "geometry:confirmed_first_layer_controls",
+            "unresolved_visible_consent_decision",
+            "geometry:captured"
+          ],
+          "textExcerpt": "Products\nPublishers\nBrands & Agencies\nPartnerships\nCompany\nResources\nTR\nGET STARTED\nThe engine room of digital advertising.\nCertified by Google. Trusted by the platforms that define the industry. Since 2015.\nProprietary Ad Tech we own.\nProgrammatic and Direct. Under one roof.\nGoogle GCPP\nAmazon Ads\nMicrosoft\nArchon Unity\nArchon Cortex\nArchon Flash SSP\nArchon Genesis\n0B+\nAD REQUESTS / MONTH\n0\nBRANDS SERVED\n0\nCAMPAIGNS DELIVERED\nUnity\nRECLAIM UNSOLD\nCortex\nPRICE EVERY BID\nGenesis\nWIN THE AI ERA\nPROGRAMMATIC\nMonetization,\nengineered.\n40B+ ad requests / month\nDIRECT & PREMIUM SALES\nPremium reach,\ndelivered.\n400+ brands \u00b7 1,500+ campaigns\nWHERE THE MARKET MEETS\nSCROLL\nSCROLL AGAIN TO LEAVE THE SCENE \u2193\nSKIP INTRO \u2193\nSINCE 2015\n\u00b7\n40B+ AD REQUESTS/MO\n\u00b7\n80+ MARKETS\n\u00b7\n5 STREAMING PLATFORMS\n\u00b7\n14,000+ ADVERTISERS\n\u00b7\n100+ ENTERPRISE PUBLISHERS\nGOOGLE CERTIFIED PUBLISHING PARTNER\nAMAZON ADS VERIFIED PARTNER\nMICROSOFT ADVERTISING PARTNER\nMSN\nOSNtv\nWhich side of the auction are you on?\nSell side\nI MONETIZE INVENTORY\n\nWeb, app & gaming, HTML5 or CTV \u2014 pick your main path and see what's built for it. Run more than one? Start where the bigger revenue lives \u2014 one audit covers all of it.\n\nWeb\nApp & Gaming\nHTML5 Gaming\nCTV & Video\nBuy side\nI BUY MEDIA\n\nFive global streaming platforms, premium web and in-app inventory, Amazon Ads and Microsoft Advertising \u2014 from one desk.\n\nTalk to our team \u2192\nExplore the inventory\nFOR BRANDS & AGENCIES\nThe living room, the web and the app economy \u2014 one desk.\n\nThree buying lines, one desk: the region's premium streaming inventory, Amazon's purchase signals and Microsoft's incremental search audience \u2014 with premium web and in-app inventory at 40B+ directly-managed requests a month underneath. Campaigns typically live in 2\u20135 business days, told plainly \u2014 no rate-card games.\n\nPremium CTV & streaming\n\nFive global streaming platforms on a single insertion order; Prime Video's T\u00fcrkiye launch went live with 17 brands through our desk, 30+ campaigns completed since.\n",
+          "layerInspected": "first_layer",
+          "visibleChoiceLabels": [
+            "Privacy choices",
+            "Dismiss"
+          ],
+          "defaultToggleStatesObserved": null,
+          "nonEssentialDefaultsOff": null,
+          "defaultTogglePurposeLabels": [],
+          "necessaryPreferenceSelectionObserved": null,
+          "necessaryPreferenceLabels": [],
+          "precheckedOptionalPurposeCount": 0,
+          "precheckedOptionalPurposeLabels": [],
+          "acceptControlObserved": false,
+          "rejectControlObserved": false,
+          "managePreferencesControlObserved": false,
+          "controls": [
+            {
+              "label": "Privacy choices",
+              "actionType": "do_not_sell_share",
+              "tagName": "a",
+              "semanticallyInteractive": true,
+              "selectorHint": "#aphnb-pc",
+              "visible": true,
+              "matchedTerm": "privacy choices",
+              "matchedLocale": "en",
+              "matchStrength": "direct",
+              "classifierRegistryVersion": "consent-control-label-registry.v29",
+              "classifierReasonCodes": [
+                "matched_privacy_opt_out",
+                "match_strength_direct",
+                "context_satisfied"
+              ],
+              "linkDestination": "same_document"
+            },
+            {
+              "label": "Dismiss",
+              "actionType": "other",
+              "tagName": "button",
+              "semanticallyInteractive": true,
+              "selectorHint": "#aphnb-x",
+              "visible": true,
+              "semanticRole": "dismiss",
+              "confidence": 0.84,
+              "nearbyConsentText": "This site uses analytics and ad-measurement tags (Google, Microsoft, LinkedIn) to see how it performs.Privacy choices\u00d7 Privacy notice region aphnb",
+              "consentContextEvidence": "local_surface",
+              "matchedTerm": "dismiss",
+              "matchStrength": "direct",
+              "classifierRegistryVersion": "consent-control-label-registry.v29",
+              "classifierReasonCodes": [
+                "matched_dismiss",
+                "match_strength_direct"
+              ]
+            }
+          ],
+          "inventoryDiagnostics": {
+            "candidateContainerCount": 20,
+            "candidateControlCount": 101,
+            "retainedControlCount": 2,
+            "inspectedFrameCount": 0,
+            "inaccessibleFrameCount": 0,
+            "blockingInaccessibleFrameCount": 0,
+            "nonBlockingInaccessibleFrameCount": 0,
+            "nonBlockingInaccessibleFrameReasonCodes": [],
+            "inventorySources": [
+              "viewport",
+              "accessibility_tree"
+            ],
+            "candidateLabels": [
+              "Privacy choices",
+              "Your Privacy Choices",
+              "Dismiss",
+              "Continue \u2192",
+              "Skip the intro animation",
+              "Cookies",
+              "Archon Programmatic House",
+              "Products",
+              "Publishers",
+              "Brands & Agencies",
+              "Partnerships",
+              "Company",
+              "Resources",
+              "T\u00fcrk\u00e7e",
+              "Get started",
+              "Web",
+              "App & Gaming",
+              "HTML5 Gaming",
+              "CTV & Video",
+              "Talk to our team \u2192",
+              "Explore the inventory",
+              "CTV inventory \u2192",
+              "Amazon Ads \u2192",
+              "Microsoft Advertising \u2192"
+            ],
+            "rejectionReasons": [
+              "footer_nav_page_chrome",
+              "no_consent_context",
+              "hidden"
+            ],
+            "timingMarkers": [
+              "rapid_inventory_initial_completed",
+              "rapid_first_layer_inventory",
+              "rapid_snapshot",
+              "early_exit_controls_found",
+              "rapid_inventory_post_settle_completed",
+              "accessibility_tree_inventory_completed",
+              "rapid_inventory_post_accessibility_completed",
+              "immediate_inventory"
+            ]
+          },
+          "evidenceRefs": [
+            {
+              "refId": "dom_text_pre_consent",
+              "artifactId": "dom_text_pre_consent",
+              "path": "/Users/benmasek/WC01/artifacts/local-v2-dag-lambda-simulated/3c8a8de3-0c6e-4cd3-9123-36438b43d341/lanes/consent_proof/dom-text-pre-consent.txt"
+            }
+          ],
+          "confidence": 0.86
+        }
+      ]
+    }
+  },
+  {
+    "host": "wordpress.org",
+    "scanId": "fa9383b2-0511-4dfd-aa84-074097afc83f",
+    "source": "artifacts/local-v2-dag-lambda-simulated/fa9383b2-0511-4dfd-aa84-074097afc83f/lanes/consent_proof/CanonicalEvidenceBundle.json",
+    "sourceSha256": "ff266c5a2ca31428c1f7a7bba82b3b5d9e0b4b86302c2c2ab7bc16bdff25f360",
+    "bundle": {
+      "url": "https://wordpress.org/",
+      "startedAt": "2026-11-13T21:49:50.073Z",
+      "consentSurfaceInspection": {
+        "outcome": "no_surface_observed_complete_coverage",
+        "coverageStatus": "complete",
+        "inspectionCompleted": true,
+        "inspectedPreInteraction": true,
+        "consentSurfaceObserved": false,
+        "actionableControlObserved": false,
+        "observedAtMs": 10462,
+        "evidenceSources": [
+          "consent_ui_observation",
+          "dom_snapshot",
+          "visual_capture"
+        ],
+        "evidenceChannels": [
+          {
+            "channel": "navigation_network",
+            "status": "observed",
+            "evidenceCount": 47,
+            "reasonCodes": []
+          },
+          {
+            "channel": "viewport_screenshot",
+            "status": "observed",
+            "evidenceCount": 2,
+            "reasonCodes": []
+          },
+          {
+            "channel": "dom_snapshot",
+            "status": "observed",
+            "evidenceCount": 1,
+            "reasonCodes": []
+          },
+          {
+            "channel": "accessibility_tree",
+            "status": "observed",
+            "evidenceCount": 0,
+            "reasonCodes": []
+          },
+          {
+            "channel": "page_script_inventory",
+            "status": "observed",
+            "evidenceCount": 0,
+            "reasonCodes": []
+          },
+          {
+            "channel": "cmp_runtime",
+            "status": "not_observed",
+            "evidenceCount": 0,
+            "reasonCodes": [
+              "no_cmp_runtime_signal"
+            ]
+          },
+          {
+            "channel": "geometry",
+            "status": "observed",
+            "evidenceCount": 1,
+            "reasonCodes": []
+          }
+        ],
+        "limitationKeys": []
+      },
+      "consentUiObservations": [
+        {
+          "captureDiagnostic": {
+            "version": "consent_capture_diagnostic.v1",
+            "refreshPolicy": "final_consent_geometry_refresh.v3",
+            "observationId": "consent_ui_pre_consent",
+            "documentToken": "AE1E9ECC1A4C81B35E1D81E24871F682",
+            "inventoryObservedAtMs": 10462,
+            "geometryObservedAtMs": 10537,
+            "geometryBinding": "matched",
+            "geometryMinusInventoryMs": 75,
+            "outcome": "skipped",
+            "skipReason": "not_refresh_candidate",
+            "eligibilityBlocker": "geometry_current",
+            "attempted": false,
+            "elapsedMs": 0
+          },
+          "observationId": "consent_ui_pre_consent",
+          "observedAtMs": 10462,
+          "documentUrl": "https://wordpress.org/",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "AE1E9ECC1A4C81B35E1D81E24871F682"
+          },
+          "documentReadyState": "complete",
+          "captureStatus": "no_evidence",
+          "inventoryOutcome": "complete_empty",
+          "captureDiagnostics": {
+            "completedChannels": [
+              "dom_inventory",
+              "accessibility_tree",
+              "geometry"
+            ],
+            "timedOutChannels": [],
+            "failedChannels": []
+          },
+          "likelyPresent": false,
+          "basis": [
+            "insufficient_banner_keywords",
+            "recapture:post_settle_dom_inventory",
+            "settled_control_inventory_completed",
+            "recapture:post_settle_no_first_layer_controls",
+            "inventory:cheap_text_prefilter",
+            "canonical_multilingual_consent_recovery_hint",
+            "inventory:rapid_post_accessibility",
+            "inventory:rapid_after_accessibility",
+            "inventory:prioritized_early_channels",
+            "adaptive_gate_inventory:10s_without_cmp_runtime",
+            "geometry:no_visible_consent_surface",
+            "geometry:captured"
+          ],
+          "textExcerpt": "",
+          "layerInspected": "first_layer",
+          "visibleChoiceLabels": [],
+          "defaultToggleStatesObserved": null,
+          "nonEssentialDefaultsOff": null,
+          "defaultTogglePurposeLabels": [],
+          "necessaryPreferenceSelectionObserved": null,
+          "necessaryPreferenceLabels": [],
+          "precheckedOptionalPurposeCount": 0,
+          "precheckedOptionalPurposeLabels": [],
+          "acceptControlObserved": false,
+          "rejectControlObserved": false,
+          "managePreferencesControlObserved": false,
+          "controls": [],
+          "inventoryDiagnostics": {
+            "candidateContainerCount": 0,
+            "candidateControlCount": 0,
+            "retainedControlCount": 0,
+            "inspectedFrameCount": 0,
+            "inaccessibleFrameCount": 0,
+            "blockingInaccessibleFrameCount": 0,
+            "nonBlockingInaccessibleFrameCount": 0,
+            "nonBlockingInaccessibleFrameReasonCodes": [],
+            "inventorySources": [],
+            "candidateLabels": [],
+            "rejectionReasons": [],
+            "timingMarkers": [
+              "rapid_inventory_initial_completed",
+              "rapid_snapshot",
+              "rapid_inventory_post_settle_completed",
+              "cheap_text_prefilter_completed",
+              "accessibility_tree_inventory_completed",
+              "rapid_inventory_post_accessibility_completed",
+              "immediate_inventory"
+            ]
+          },
+          "evidenceRefs": [
+            {
+              "refId": "dom_text_pre_consent",
+              "artifactId": "dom_text_pre_consent",
+              "path": "/Users/benmasek/WC01/artifacts/local-v2-dag-lambda-simulated/fa9383b2-0511-4dfd-aa84-074097afc83f/lanes/consent_proof/dom-text-pre-consent.txt"
+            }
+          ],
+          "confidence": 0.58
+        }
+      ]
+    }
+  }
+]

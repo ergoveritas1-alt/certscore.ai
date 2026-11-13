@@ -2601,7 +2601,7 @@ test("runtime metadata retains the final worker document instead of an earlier n
   assert.deepEqual(merged.domSnapshots,[],"runtime metadata cannot become consent evidence");
 });
 
-test("ARO coordinator: an invoked unfinished Accept is canceled at the passive barrier", async () => {
+test("ARO coordinator: an invoked unfinished Accept adds no wait after required passive finalization", async () => {
   const priorFlag = process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
   const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
@@ -2714,29 +2714,6 @@ test("ARO coordinator: an invoked unfinished Reject adds no wait after required 
   }
 });
 
-test("ARO coordinator: Accept keeps its original cutoff during required finalization", async () => {
-  const priorFlag = process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
-  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
-  process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
-  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
-  let root: string | undefined;
-  try {
-    const scanId = "accept-original-finalization-cutoff";
-    const outcome = await runCoordinatorFixture({scanId,
-      consentBundle: coordinatorConsentBundle(scanId, {inspectionCompleted: false, limited: true}),
-      action: "completed_during_finalization", actionLane: "accept", dispatchDelayMs: 0});
-    root = outcome.artifactRoot;
-    assert.equal(outcome.bundle.postAcceptLaneOutcome?.status, "failed");
-    assert.equal(outcome.bundle.postAcceptEvidence, undefined);
-    assert.equal(outcome.result.artifactPointers.postAcceptPacketUri, undefined);
-    assert.ok(!outcome.result.phaseTimings?.some(row => row.label === "post_accept_barrier_join"));
-  } finally {
-    if (root) await rm(root, {recursive: true, force: true});
-    if (priorFlag === undefined) delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG]; else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = priorFlag;
-    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
-  }
-});
-
 for (const limited of [false, true]) {
   test(`ARO coordinator: Reject returned during required finalization survives passive disagreement (limited=${limited})`, async () => {
     const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
@@ -2792,6 +2769,67 @@ for (const invalidHash of [false, true]) {
     } finally {
       if (root) await rm(root, {recursive: true, force: true});
       if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]; else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
+      if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+    }
+  });
+}
+
+for (const limited of [false, true]) {
+  test(`ARO coordinator: Accept returned during required finalization survives passive disagreement (limited=${limited})`, async () => {
+    const priorFlag = process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+    const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
+    process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+    let root: string | undefined;
+    try {
+      const scanId = `accept-existing-finalization-${limited}`;
+      const outcome = await runCoordinatorFixture({scanId,
+        consentBundle: coordinatorConsentBundle(scanId, {inspectionCompleted: !limited, limited, acceptControlObserved: false}),
+        action: "completed_during_finalization", actionLane: "accept", dispatchDelayMs: 0});
+      root = outcome.artifactRoot;
+      assert.equal(outcome.actionCalls.length, 1);
+      assert.equal(outcome.bundle.postAcceptLaneOutcome?.status, "joined");
+      assert.equal(outcome.bundle.postAcceptLaneOutcome?.maxTailWaitMs, POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS);
+      assert.equal(outcome.bundle.postAcceptEvidence?.acceptanceRegistration.status, "confirmed");
+      assert.ok(outcome.bundle.consentUiObservations.every((row: any) => row.acceptControlObserved !== true), "independent success cannot rewrite passive first-layer evidence");
+      assert.ok(outcome.result.artifactMetadata.postAcceptPacketUri?.sha256);
+      assert.ok(!outcome.result.phaseTimings?.some(row => row.label === "post_accept_barrier_join"), "no await of an unfinished action worker");
+      const mainKey = new URL(outcome.result.artifactPointers.scanArtifactUri!).pathname.slice(1);
+      assert.equal(outcome.uploads.filter(key => key === mainKey).length, 1);
+    } finally {
+      if (root) await rm(root, {recursive: true, force: true});
+      if (priorFlag === undefined) delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG]; else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = priorFlag;
+      if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+    }
+  });
+}
+
+for (const invalidHash of [false, true]) {
+  test(`ARO coordinator: Accept finalization remains closed for ${invalidHash ? "checksum mismatch" : "a reply after the freeze"}`, async () => {
+    const priorFlag = process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+    const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
+    process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+    let root: string | undefined;
+    try {
+      const scanId = `accept-finalization-closed-${invalidHash}`;
+      const outcome = await runCoordinatorFixture({scanId,
+        consentBundle: coordinatorConsentBundle(scanId, {inspectionCompleted: false, limited: true}),
+        action: invalidHash ? "completed_during_finalization" : "completed_after_finalization",
+        invalidActionHash: invalidHash, actionLane: "accept", dispatchDelayMs: 0});
+      root = outcome.artifactRoot;
+      const before = await readFile(path.join(root, "CanonicalEvidenceBundle.json"));
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert.deepEqual(await readFile(path.join(root, "CanonicalEvidenceBundle.json")), before);
+      assert.equal(outcome.bundle.postAcceptLaneOutcome?.status, "failed");
+      assert.equal(outcome.bundle.postAcceptEvidence, undefined);
+      assert.equal(outcome.result.artifactPointers.postAcceptPacketUri, undefined);
+      assert.ok(!outcome.result.phaseTimings?.some(row => row.label === "post_accept_barrier_join"));
+      const mainKey = new URL(outcome.result.artifactPointers.scanArtifactUri!).pathname.slice(1);
+      assert.equal(outcome.uploads.filter(key => key === mainKey).length, 1);
+    } finally {
+      if (root) await rm(root, {recursive: true, force: true});
+      if (priorFlag === undefined) delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG]; else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = priorFlag;
       if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
     }
   });

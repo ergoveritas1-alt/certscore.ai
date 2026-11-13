@@ -1,0 +1,728 @@
+[
+  {
+    "scanId": "f90540c4-1b79-4333-8bd4-209eaa09db9d",
+    "bundleSha256": "46e3661004abb929e7488bd52a6b28456a44f835252007083db70c466b9f8542",
+    "textSha256": "70cdf866e774c5c87114eeb9ccad2e85fc50e99dcfc28b8064851d42d7390d4a",
+    "text": "Privacy Policy Last updated November 8, 2018 Blog Freely , is built to enforce your right to privacy by default. It retains as little data about you as possible, not even requiring an email address to sign up. However, if you do give us your email address, it is stored encrypted in our database. We salt and hash your account's password. We store log files, or data about what happens on our servers. We also use cookies to keep you logged in to your account. Beyond this, it's important that you trust whoever runs Blog Freely . Software can only do so much to protect you \u2014 your level of privacy protections will ultimately fall on the humans that run this particular service.",
+    "observation": {
+      "observationId": "policy_surface_7b16c052",
+      "sourceScanner": "policy_surface",
+      "scenario": "policy_surface_review",
+      "consentStateAtTime": "not_applicable",
+      "surfaceType": "privacy_policy",
+      "url": "/privacy",
+      "normalizedUrl": "https://blogfreely.net/privacy",
+      "linkText": "privacy",
+      "linkVisibility": "visible",
+      "accessibleNameSource": "text",
+      "linkSourcePageUrl": "https://blogfreely.net/",
+      "traversalDepth": 0,
+      "selectionReasonCodes": [],
+      "selector": "a",
+      "surroundingTextExcerpt": "ur blog\n\nLearn more...\n\nUsername\n\nblogfreely.net/your-username\n\nPassword\nEmail (optional)\nCreate blog\nBlog Freely\nabout\nprivacy\nblogfreely\nwriter's guide",
+      "discoveryMethod": "footer_link",
+      "status": "fetched",
+      "linkObservationState": "observed",
+      "documentFetchState": "fetched",
+      "documentEvaluationState": "usable",
+      "documentRole": "policy_document",
+      "documentRoleReasonCodes": [
+        "direct_privacy_document_without_index_evidence"
+      ],
+      "governingPolicyBodyAssessment": {
+        "contractVersion": "governing_policy_body_assessment.v1",
+        "state": "insufficient",
+        "canonicalContextTermCount": 2,
+        "documentTextChars": 679,
+        "evidenceBoundObservedTopicCount": 0,
+        "substantiveDisclosureSignalCount": 0,
+        "reasonCodes": [
+          "policy_body_target_owned",
+          "exact_privacy_policy_candidate",
+          "complete_policy_text_retention",
+          "policy_text_below_substantive_minimum",
+          "canonical_classifier_confirmed_standalone_policy_body",
+          "canonical_multilingual_policy_context_retained"
+        ]
+      },
+      "governingPolicySelection": {
+        "contractVersion": "governing_policy_selection.v1",
+        "state": "primary",
+        "rank": 1,
+        "score": 90,
+        "reasonCodes": [
+          "highest_ranked_eligible_governing_policy",
+          "target_controller_document",
+          "complete_policy_content_coverage",
+          "complete_policy_text_retention",
+          "direct_privacy_document_without_index_evidence"
+        ]
+      },
+      "documentFormat": "text",
+      "contentType": "text/html; charset=utf-8",
+      "compressedSizeBytes": 3386,
+      "decompressedSizeBytes": 3386,
+      "documentOwnerEntity": "Blog Freely",
+      "targetRelationship": "target_controller",
+      "ownershipConfidence": 0.98,
+      "ownershipReasonCodes": [
+        "same_registrable_domain_as_scan_target"
+      ],
+      "contentCoverage": {
+        "status": "complete",
+        "sourceTextChars": 679,
+        "extractedSectionCount": 2,
+        "retainedSectionCount": 2,
+        "retainedTableRowCount": 0,
+        "limitationKeys": []
+      },
+      "documentTextCoverage": {
+        "status": "complete",
+        "sourceTextChars": 679,
+        "retainedTextChars": 679,
+        "limitationKeys": []
+      },
+      "httpStatus": 200,
+      "finalUrl": "https://blogfreely.net/privacy",
+      "redirectChain": [
+        "https://blogfreely.net/privacy"
+      ],
+      "matchedLocale": "en",
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_privacy_policy",
+        "match_strength_equivalent",
+        "context_satisfied"
+      ],
+      "fetchable": true,
+      "clickable": true,
+      "mayLeadToConsentControls": false,
+      "title": "Blog Freely Privacy Policy",
+      "retrievedAt": "2026-11-12T22:35:57.928Z",
+      "directlyLinkedFromScannedPage": true,
+      "translationApplied": false,
+      "textExcerpt": "Privacy Policy Last updated November 8, 2018 Blog Freely , is built to enforce your right to privacy by default. It retains as little data about you as possible, not even requiring an email address to sign up. However, if you do give us your email address, it is stored encrypted in our database. We salt and hash your account's password. We store log files, or data about what happens on our servers. We also use cookies to keep you logged in to your account. Beyond this, it's important that you trust whoever runs Blog Freely . Software can only do so much to protect you \u2014 your level of privacy protections will ultimately fall on the humans that run this particular service.",
+      "boundedTextExcerptIds": [
+        "policy_excerpt_7b16c052_719f3322"
+      ],
+      "observedTopics": [
+        "cookies",
+        "data_retention"
+      ],
+      "article13DisclosureSignals": [],
+      "gdprTransparencyTopicCandidates": [],
+      "discardedArticle13DisclosureSignals": [],
+      "retainedPolicySections": [
+        {
+          "sourceUrl": "https://blogfreely.net/privacy",
+          "heading": "Privacy Policy",
+          "textExcerpt": "Last updated November 8, 2018 Blog Freely , is built to enforce your right to privacy by default. It retains as little data about you as possible, not even requiring an email address to sign up. However, if you do give us your email address, it is stored encrypted in our database. We salt and hash your account's password. We store log files, or data about what happens on our servers. We also use cookies to keep you logged in to your account. Beyond this, it's important that you trust whoever runs Blog Freely . Software can only do so much to protect you \u2014 your level of privacy protections will ultimately fall on the humans that run this particular service.",
+          "extractionMethod": "html_heading_hierarchy",
+          "sourceOffsetBasis": "sanitized_html",
+          "documentTextSha256": "1c23fcd4470d240dbe81250f78452bd4af5432db6798d5a14ea954f385b25518",
+          "evidenceTextSha256": "b7408c1b2c6b2aebdaf8c9c64270d30155f499b0376b80916dee41f7e74bbbc6",
+          "sourceTextChars": 1689,
+          "extractionState": "complete",
+          "charStart": 788,
+          "charEnd": 1689,
+          "quality": "strong"
+        },
+        {
+          "sourceUrl": "https://blogfreely.net/privacy",
+          "heading": "Policy body",
+          "textExcerpt": "Privacy Policy Last updated November 8, 2018 Blog Freely , is built to enforce your right to privacy by default. It retains as little data about you as possible, not even requiring an email address to sign up. However, if you do give us your email address, it is stored encrypted in our database. We salt and hash your account's password. We store log files, or data about what happens on our servers. We also use cookies to keep you logged in to your account. Beyond this, it's important that you trust whoever runs Blog Freely . Software can only do so much to protect you \u2014 your level of privacy protections will ultimately fall on the humans that run this particular service.",
+          "extractionMethod": "visible_text_heading",
+          "sourceOffsetBasis": "normalized_visible_text",
+          "documentTextSha256": "70cdf866e774c5c87114eeb9ccad2e85fc50e99dcfc28b8064851d42d7390d4a",
+          "evidenceTextSha256": "70cdf866e774c5c87114eeb9ccad2e85fc50e99dcfc28b8064851d42d7390d4a",
+          "sourceTextChars": 679,
+          "extractionState": "complete",
+          "charStart": 0,
+          "charEnd": 679,
+          "quality": "strong"
+        }
+      ],
+      "policyCookieDisclosures": [],
+      "retainedArticle13SectionEvidence": [
+        {
+          "coverageArea": "data_retention",
+          "selectedPolicySectionHeading": "Privacy Policy",
+          "selectedPolicySectionExcerpt": "Last updated November 8, 2018 Blog Freely , is built to enforce your right to privacy by default. It retains as little data about you as possible, not even requiring an email address to sign up. However, if you do give us your email address, it is stored encrypted in our database. We salt and hash your account's password. We store log files, or data about what happens on our servers. We also use cookies to keep you logged in to your account. Beyond this, it's important that you trust whoever runs Blog Freely . Software can only do so much to protect you \u2014 your level of privacy protections will ultimately fall on the humans that run this particular service.",
+          "selectedPolicySectionUrl": "https://blogfreely.net/privacy",
+          "sectionExtractionMethod": "html_heading_hierarchy",
+          "sourceOffsetBasis": "sanitized_html",
+          "sourceDocumentTextSha256": "1c23fcd4470d240dbe81250f78452bd4af5432db6798d5a14ea954f385b25518",
+          "evidenceTextSha256": "b7408c1b2c6b2aebdaf8c9c64270d30155f499b0376b80916dee41f7e74bbbc6",
+          "sourceCharStart": 788,
+          "sourceCharEnd": 1689,
+          "sectionExtractionState": "complete",
+          "evidenceSource": "deterministic",
+          "selectedEvidenceStrength": "limited",
+          "signalObserved": "not_confirmed",
+          "extractionLimitation": "section_retained_without_row_specific_disclosure"
+        },
+        {
+          "coverageArea": "data_subject_rights",
+          "selectedPolicySectionHeading": "Privacy Policy",
+          "selectedPolicySectionExcerpt": "Last updated November 8, 2018 Blog Freely , is built to enforce your right to privacy by default. It retains as little data about you as possible, not even requiring an email address to sign up. However, if you do give us your email address, it is stored encrypted in our database. We salt and hash your account's password. We store log files, or data about what happens on our servers. We also use cookies to keep you logged in to your account. Beyond this, it's important that you trust whoever runs Blog Freely . Software can only do so much to protect you \u2014 your level of privacy protections will ultimately fall on the humans that run this particular service.",
+          "selectedPolicySectionUrl": "https://blogfreely.net/privacy",
+          "sectionExtractionMethod": "html_heading_hierarchy",
+          "sourceOffsetBasis": "sanitized_html",
+          "sourceDocumentTextSha256": "1c23fcd4470d240dbe81250f78452bd4af5432db6798d5a14ea954f385b25518",
+          "evidenceTextSha256": "b7408c1b2c6b2aebdaf8c9c64270d30155f499b0376b80916dee41f7e74bbbc6",
+          "sourceCharStart": 788,
+          "sourceCharEnd": 1689,
+          "sectionExtractionState": "complete",
+          "evidenceSource": "deterministic",
+          "selectedEvidenceStrength": "limited",
+          "signalObserved": "not_confirmed",
+          "extractionLimitation": "section_retained_without_row_specific_disclosure"
+        },
+        {
+          "coverageArea": "processing_purposes",
+          "selectedPolicySectionHeading": "Privacy Policy",
+          "selectedPolicySectionExcerpt": "We store log files, or data about what happens on our servers. We also use cookies to keep you logged in to your account. Beyond this, it's important that you trust whoever runs Blog Freely . Software can only do so much to protect you \u2014 your level of privacy protections will ultimately fall on the humans that run this particular service.",
+          "selectedPolicySectionUrl": "https://blogfreely.net/privacy",
+          "sectionExtractionMethod": "html_heading_hierarchy",
+          "sourceOffsetBasis": "sanitized_html",
+          "sourceDocumentTextSha256": "1c23fcd4470d240dbe81250f78452bd4af5432db6798d5a14ea954f385b25518",
+          "evidenceTextSha256": "6f53fd17b3e118c41d3bfee2014db51cdef759dd074dda57eca492f550d377a8",
+          "sourceCharStart": 788,
+          "sourceCharEnd": 1689,
+          "sectionExtractionState": "complete",
+          "evidenceSource": "deterministic",
+          "selectedEvidenceStrength": "limited",
+          "signalObserved": "not_confirmed",
+          "extractionLimitation": "section_retained_without_row_specific_disclosure"
+        }
+      ],
+      "gdprTransparencyTopicCoverageDiagnostics": [
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "controller_contact",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "processing_purposes",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "legal_basis",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "recipients_or_vendor_categories",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "data_retention",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "data_subject_rights",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "international_transfers",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "dpo_contact",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "supervisory_authority",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "automated_decision_making_or_profiling",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        }
+      ],
+      "mentionedVendors": [],
+      "mentionedPurposes": [],
+      "mentionedRights": [],
+      "mentionedControls": [],
+      "lastUpdatedText": "Last updated November 8, 2018",
+      "evidenceRefs": [
+        {
+          "refId": "ref_policy_excerpt_7b16c052_719f3322",
+          "artifactId": "policy_excerpt_7b16c052_719f3322",
+          "eventType": "policy_surface",
+          "url": "https://blogfreely.net/privacy",
+          "excerpt": "Privacy Policy Last updated November 8, 2018 Blog Freely , is built to enforce your right to privacy by default. It retains as little data about you as possible, not even requiring an email address to sign up. However, if you do give us your email address, it is stored encrypted in our database. We salt and hash your account's password. We store log files, or data about what happens on our servers. We also use cookies to keep you logged in to your account. Beyond this, it's important that you trust whoever runs Blog Freely . Software can only do so much to protect you \u2014 your level of privacy protections will ultimately fall on the humans that run this particular service."
+        }
+      ],
+      "artifactRefs": [
+        {
+          "artifactId": "policy_excerpt_7b16c052_719f3322",
+          "artifactType": "other",
+          "path": "/tmp/certscore-v2-dag-lambda/f90540c4-1b79-4333-8bd4-209eaa09db9d/policy_excerpt_7b16c052_719f3322.txt",
+          "observedAtMs": 6211,
+          "sourceScanner": "policy_surface",
+          "scenario": "policy_surface_review",
+          "sensitivity": "redacted",
+          "redactionStatus": "redacted",
+          "relatedEventIds": [],
+          "label": "privacy_policy excerpt"
+        },
+        {
+          "artifactId": "policy_surface_text_7b16c052_719f3322",
+          "artifactType": "other",
+          "path": "/tmp/certscore-v2-dag-lambda/f90540c4-1b79-4333-8bd4-209eaa09db9d/policy_surface_text_7b16c052_719f3322.txt",
+          "observedAtMs": 6211,
+          "sourceScanner": "policy_surface",
+          "scenario": "policy_surface_review",
+          "sensitivity": "redacted",
+          "redactionStatus": "redacted",
+          "relatedEventIds": [],
+          "label": "privacy_policy normalized text"
+        }
+      ],
+      "assistMetadata": [],
+      "confidence": 0.76,
+      "directVsInferred": "direct"
+    }
+  },
+  {
+    "scanId": "c9f611e1-0981-4d00-97d6-fbacc9b56b95",
+    "bundleSha256": "6efaec53c56887782075287ca1e935d72edec66a9e6dd2219f5cf353ee3905f5",
+    "textSha256": "d943f4213c188d6d703ffa0e7fb19c48cd1bb0cd6530b882e1b6be6131b06e9d",
+    "text": "Privacy Policy Vimm's Lair uses cookies to store preferences such as search filters. Registration is optional and requires an e-mail address which is used solely for password recovery. Vimm's Lair will never share your e-mail address with anyone. California Consumer Privacy Act (\u201cCCPA\u201d) Under CCPA, Californian residents have the right to declare their preferences on the sale of data for advertising and marketing purposes. If you wish to change your preferences, click this link to launch our preference portal: We use third parties to provide monetization technologies for our site. You can review their privacy and cookie policy at https://www.publift.com/privacy-policy and https://www.publisher-collective.com/privacy-policy .",
+    "observation": {
+      "observationId": "policy_surface_7c1d780a",
+      "sourceScanner": "policy_surface",
+      "scenario": "policy_surface_review",
+      "consentStateAtTime": "not_applicable",
+      "surfaceType": "privacy_policy",
+      "url": "/privacy",
+      "normalizedUrl": "https://vimm.net/privacy",
+      "linkText": "Privacy policy",
+      "linkVisibility": "visible",
+      "accessibleNameSource": "text",
+      "linkSourcePageUrl": "https://vimm.net/",
+      "traversalDepth": 0,
+      "selectionReasonCodes": [],
+      "selector": "a",
+      "surroundingTextExcerpt": "ped providing .gdi files for Dreamcast discs so the Dreamcast Vault no longer includes them.\nPrevious news\nContact info\nPrivacy policy",
+      "discoveryMethod": "page_text_link",
+      "status": "fetched",
+      "linkObservationState": "observed",
+      "documentFetchState": "fetched",
+      "documentEvaluationState": "usable",
+      "documentRole": "policy_document",
+      "documentRoleReasonCodes": [
+        "direct_privacy_document_without_index_evidence"
+      ],
+      "governingPolicyBodyAssessment": {
+        "contractVersion": "governing_policy_body_assessment.v1",
+        "state": "insufficient",
+        "canonicalContextTermCount": 2,
+        "documentTextChars": 733,
+        "evidenceBoundObservedTopicCount": 0,
+        "substantiveDisclosureSignalCount": 0,
+        "reasonCodes": [
+          "policy_body_target_owned",
+          "exact_privacy_policy_candidate",
+          "complete_policy_text_retention",
+          "policy_text_below_substantive_minimum",
+          "substantive_privacy_signals",
+          "canonical_classifier_confirmed_standalone_policy_body",
+          "canonical_multilingual_policy_context_retained"
+        ]
+      },
+      "governingPolicySelection": {
+        "contractVersion": "governing_policy_selection.v1",
+        "state": "primary",
+        "rank": 1,
+        "score": 90,
+        "reasonCodes": [
+          "highest_ranked_eligible_governing_policy",
+          "target_controller_document",
+          "complete_policy_content_coverage",
+          "complete_policy_text_retention",
+          "direct_privacy_document_without_index_evidence"
+        ]
+      },
+      "documentFormat": "text",
+      "contentType": "text/html; charset=UTF-8",
+      "compressedSizeBytes": 16144,
+      "decompressedSizeBytes": 16144,
+      "documentOwnerEntity": "Vimm s Lair",
+      "targetRelationship": "target_controller",
+      "ownershipConfidence": 0.98,
+      "ownershipReasonCodes": [
+        "same_registrable_domain_as_scan_target"
+      ],
+      "contentCoverage": {
+        "status": "complete",
+        "sourceTextChars": 733,
+        "extractedSectionCount": 2,
+        "retainedSectionCount": 2,
+        "retainedTableRowCount": 0,
+        "limitationKeys": []
+      },
+      "documentTextCoverage": {
+        "status": "complete",
+        "sourceTextChars": 733,
+        "retainedTextChars": 733,
+        "limitationKeys": []
+      },
+      "httpStatus": 200,
+      "finalUrl": "https://vimm.net/privacy",
+      "redirectChain": [
+        "https://vimm.net/privacy"
+      ],
+      "matchedLocale": "en",
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_privacy_policy",
+        "match_strength_direct",
+        "context_satisfied"
+      ],
+      "fetchable": true,
+      "clickable": true,
+      "mayLeadToConsentControls": false,
+      "title": "Vimm's Lair: Privacy Policy",
+      "retrievedAt": "2026-11-13T02:22:15.968Z",
+      "directlyLinkedFromScannedPage": true,
+      "documentLanguage": "en-us",
+      "translationApplied": false,
+      "textExcerpt": "Privacy Policy Vimm's Lair uses cookies to store preferences such as search filters. Registration is optional and requires an e-mail address which is used solely for password recovery. Vimm's Lair will never share your e-mail address with anyone. California Consumer Privacy Act (\u201cCCPA\u201d) Under CCPA, Californian residents have the right to declare their preferences on the sale of data for advertising and marketing purposes. If you wish to change your preferences, click this link to launch our preference portal: We use third parties to provide monetization technologies for our site. You can review their privacy and cookie policy at https://www.publift.com/privacy-policy and https://www.publisher-collective.com/privacy-policy .",
+      "boundedTextExcerptIds": [
+        "policy_excerpt_7c1d780a_fb72f701"
+      ],
+      "observedTopics": [
+        "cookies",
+        "advertising",
+        "sale_or_share",
+        "california_privacy_rights",
+        "third_party_disclosures",
+        "processing_purposes",
+        "recipients_or_vendor_categories"
+      ],
+      "article13DisclosureSignals": [],
+      "gdprTransparencyTopicCandidates": [],
+      "discardedArticle13DisclosureSignals": [
+        {
+          "disclosureType": "recipients_or_vendor_categories",
+          "evidenceText": "their preferences on the sale of data for advertising and marketing purposes. If you wish to change your preferences, click this link to launch our preference portal: We use third parties to provide monetization technologies for our site.",
+          "rejectReason": "insufficient_row_specific_terms",
+          "confidence": 0.76,
+          "source": "deterministic"
+        }
+      ],
+      "retainedPolicySections": [
+        {
+          "sourceUrl": "https://vimm.net/privacy",
+          "heading": "Privacy Policy",
+          "textExcerpt": "Vimm's Lair uses cookies to store preferences such as search filters. Registration is optional and requires an e-mail address which is used solely for password recovery. Vimm's Lair will never share your e-mail address with anyone. California Consumer Privacy Act (\u201cCCPA\u201d) Under CCPA, Californian residents have the right to declare their preferences on the sale of data for advertising and marketing purposes. If you wish to change your preferences, click this link to launch our preference portal: We use third parties to provide monetization technologies for our site. You can review their privacy and cookie policy at https://www.publift.com/privacy-policy and https://www.publisher-collective.com/privacy-policy .",
+          "extractionMethod": "html_heading_hierarchy",
+          "sourceOffsetBasis": "sanitized_html",
+          "documentTextSha256": "4738e6d4adbe62a3362f496b2fb3638cc92b29e5a4bb5d39bd6cdb59fac35622",
+          "evidenceTextSha256": "69fa6a50fcc40a6ebdbe32a9a2907172f1367339e1598aa06eaeed0ff516e3bf",
+          "sourceTextChars": 4871,
+          "extractionState": "complete",
+          "charStart": 3626,
+          "charEnd": 4871,
+          "quality": "strong"
+        },
+        {
+          "sourceUrl": "https://vimm.net/privacy",
+          "heading": "Policy body",
+          "textExcerpt": "Privacy Policy Vimm's Lair uses cookies to store preferences such as search filters. Registration is optional and requires an e-mail address which is used solely for password recovery. Vimm's Lair will never share your e-mail address with anyone. California Consumer Privacy Act (\u201cCCPA\u201d) Under CCPA, Californian residents have the right to declare their preferences on the sale of data for advertising and marketing purposes. If you wish to change your preferences, click this link to launch our preference portal: We use third parties to provide monetization technologies for our site. You can review their privacy and cookie policy at https://www.publift.com/privacy-policy and https://www.publisher-collective.com/privacy-policy .",
+          "extractionMethod": "visible_text_heading",
+          "sourceOffsetBasis": "normalized_visible_text",
+          "documentTextSha256": "d943f4213c188d6d703ffa0e7fb19c48cd1bb0cd6530b882e1b6be6131b06e9d",
+          "evidenceTextSha256": "d943f4213c188d6d703ffa0e7fb19c48cd1bb0cd6530b882e1b6be6131b06e9d",
+          "sourceTextChars": 733,
+          "extractionState": "complete",
+          "charStart": 0,
+          "charEnd": 733,
+          "quality": "strong"
+        }
+      ],
+      "policyCookieDisclosures": [],
+      "retainedArticle13SectionEvidence": [
+        {
+          "coverageArea": "data_subject_rights",
+          "selectedPolicySectionHeading": "Privacy Policy",
+          "selectedPolicySectionExcerpt": "solely for password recovery. Vimm's Lair will never share your e-mail address with anyone. California Consumer Privacy Act (\u201cCCPA\u201d) Under CCPA, Californian residents have the right to declare their preferences on the sale of data for advertising and marketing purposes. If you wish to change your preferences, click this link to launch our preference portal: We use third parties to provide monetization technologies for our site. You can review their privacy and cookie policy at",
+          "selectedPolicySectionUrl": "https://vimm.net/privacy",
+          "sectionExtractionMethod": "html_heading_hierarchy",
+          "sourceOffsetBasis": "sanitized_html",
+          "sourceDocumentTextSha256": "4738e6d4adbe62a3362f496b2fb3638cc92b29e5a4bb5d39bd6cdb59fac35622",
+          "evidenceTextSha256": "c82791af880080d8fcc649ceea301955613c2da0bfd890a53f23f586c22a06e7",
+          "sourceCharStart": 3626,
+          "sourceCharEnd": 4871,
+          "sectionExtractionState": "complete",
+          "evidenceSource": "deterministic",
+          "selectedEvidenceStrength": "limited",
+          "signalObserved": "not_confirmed",
+          "extractionLimitation": "section_retained_without_row_specific_disclosure"
+        },
+        {
+          "coverageArea": "processing_purposes",
+          "selectedPolicySectionHeading": "Privacy Policy",
+          "selectedPolicySectionExcerpt": "If you wish to change your preferences, click this link to launch our preference portal: We use third parties to provide monetization technologies for our site. You can review their privacy and cookie policy at",
+          "selectedPolicySectionUrl": "https://vimm.net/privacy",
+          "sectionExtractionMethod": "html_heading_hierarchy",
+          "sourceOffsetBasis": "sanitized_html",
+          "sourceDocumentTextSha256": "4738e6d4adbe62a3362f496b2fb3638cc92b29e5a4bb5d39bd6cdb59fac35622",
+          "evidenceTextSha256": "286780076da1794b2128cf41a00ebad58647c1847b36285026b9bdd2611b2f00",
+          "sourceCharStart": 3626,
+          "sourceCharEnd": 4871,
+          "sectionExtractionState": "complete",
+          "evidenceSource": "deterministic",
+          "selectedEvidenceStrength": "limited",
+          "signalObserved": "not_confirmed",
+          "extractionLimitation": "section_retained_without_row_specific_disclosure"
+        },
+        {
+          "coverageArea": "recipients_or_vendor_categories",
+          "selectedPolicySectionHeading": "Privacy Policy",
+          "selectedPolicySectionExcerpt": "cookies to store preferences such as search filters. Registration is optional and requires an e-mail address which is used solely for password recovery. Vimm's Lair will never share your e-mail address with anyone. California Consumer Privacy Act (\u201cCCPA\u201d) Under CCPA, Californian residents have the right to declare their preferences on the sale of data for advertising and marketing purposes. If you wish to change your preferences, click this link to launch our preference portal: We use third parties to provide monetization technologies for our site. You can review their privacy and cookie policy at",
+          "selectedPolicySectionUrl": "https://vimm.net/privacy",
+          "sectionExtractionMethod": "html_heading_hierarchy",
+          "sourceOffsetBasis": "sanitized_html",
+          "sourceDocumentTextSha256": "4738e6d4adbe62a3362f496b2fb3638cc92b29e5a4bb5d39bd6cdb59fac35622",
+          "evidenceTextSha256": "83ba1892af8b84c6b9b3382e7f092045bccdc86ada39e394dcb018be6f8d153b",
+          "sourceCharStart": 3626,
+          "sourceCharEnd": 4871,
+          "sectionExtractionState": "complete",
+          "evidenceSource": "deterministic",
+          "selectedEvidenceStrength": "limited",
+          "signalObserved": "not_confirmed",
+          "extractionLimitation": "section_retained_without_row_specific_disclosure"
+        }
+      ],
+      "gdprTransparencyTopicCoverageDiagnostics": [
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "controller_contact",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "processing_purposes",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "legal_basis",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "recipients_or_vendor_categories",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "data_retention",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "data_subject_rights",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "international_transfers",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "dpo_contact",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "supervisory_authority",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        },
+        {
+          "contractVersion": "gdpr_transparency_topic_coverage_diagnostic.v2",
+          "topic": "automated_decision_making_or_profiling",
+          "evaluationState": "unknown",
+          "coverageState": "complete",
+          "documentRetentionState": "complete",
+          "sectionExtractionState": "complete",
+          "reasonCodes": [
+            "row_specific_disclosure_not_confirmed"
+          ]
+        }
+      ],
+      "mentionedVendors": [],
+      "mentionedPurposes": [
+        "advertising"
+      ],
+      "mentionedRights": [
+        "california_privacy_rights"
+      ],
+      "mentionedControls": [],
+      "evidenceRefs": [
+        {
+          "refId": "ref_policy_excerpt_7c1d780a_fb72f701",
+          "artifactId": "policy_excerpt_7c1d780a_fb72f701",
+          "eventType": "policy_surface",
+          "url": "https://vimm.net/privacy",
+          "excerpt": "Privacy Policy Vimm's Lair uses cookies to store preferences such as search filters. Registration is optional and requires an e-mail address which is used solely for password recovery. Vimm's Lair will never share your e-mail address with anyone. California Consumer Privacy Act (\u201cCCPA\u201d) Under CCPA, Californian residents have the right to declare their preferences on the sale of data for advertising and marketing purposes. If you wish to change your preferences, click this link to launch our preference portal: We use third parties to provide monetization technologies for our site. You can review their privacy and cookie policy at https://www.publift.com/privacy-policy and https://www.publisher-collective.com/privacy-policy ."
+        }
+      ],
+      "artifactRefs": [
+        {
+          "artifactId": "policy_excerpt_7c1d780a_fb72f701",
+          "artifactType": "other",
+          "path": "/tmp/certscore-v2-dag-lambda/c9f611e1-0981-4d00-97d6-fbacc9b56b95/policy_excerpt_7c1d780a_fb72f701.txt",
+          "observedAtMs": 7902,
+          "sourceScanner": "policy_surface",
+          "scenario": "policy_surface_review",
+          "sensitivity": "redacted",
+          "redactionStatus": "redacted",
+          "relatedEventIds": [],
+          "label": "privacy_policy excerpt"
+        },
+        {
+          "artifactId": "policy_surface_text_7c1d780a_fb72f701",
+          "artifactType": "other",
+          "path": "/tmp/certscore-v2-dag-lambda/c9f611e1-0981-4d00-97d6-fbacc9b56b95/policy_surface_text_7c1d780a_fb72f701.txt",
+          "observedAtMs": 7908,
+          "sourceScanner": "policy_surface",
+          "scenario": "policy_surface_review",
+          "sensitivity": "redacted",
+          "redactionStatus": "redacted",
+          "relatedEventIds": [],
+          "label": "privacy_policy normalized text"
+        }
+      ],
+      "assistMetadata": [],
+      "confidence": 0.76,
+      "directVsInferred": "direct"
+    }
+  }
+]

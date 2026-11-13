@@ -35,3 +35,11 @@ test("Accept failure copy distinguishes search failure, click, ambiguity and leg
 test("malformed capture metadata cannot invent a completed Accept interaction", () => {
   assert.doesNotMatch(acceptPathIncompleteReason({ afterActionCapture: { activationStatus: "completed" } }), /was clicked/);
 });
+
+ test("retained unconfirmed Accept explains confirmation separately from completed observation", async () => {
+  const {readFileSync} = await import("node:fs");
+  const rows = JSON.parse(readFileSync(new URL("../../../../../packages/certscore-contracts/fixtures/retained-unconfirmed-actions-20261113.json", import.meta.url), "utf8"));
+  for (const row of rows.filter((row: {action: string}) => row.action === "accept")) {
+    assert.match(acceptPathIncompleteReason(row.projection), /click and observation completed, but the consent decision could not be confirmed/);
+  }
+});

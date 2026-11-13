@@ -11,7 +11,7 @@ import {
   CompactRejectPathCard,
   ExecutiveSummaryCard
 } from "./executive-summary-card";
-import { ExecutiveSummaryCard as Scanso2ExecutiveSummaryCard } from "../scanso2/executive-summary-card";
+import { ExecutiveSummaryCard as Scanso2ExecutiveSummaryCard, CompactRejectPathCard as Scanso2CompactRejectPathCard } from "../scanso2/executive-summary-card";
 import { ADA_ACCESSIBILITY_FIXTURES } from "../../lib/scans/ada-accessibility.fixtures";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
@@ -4257,4 +4257,12 @@ test("ExecutiveSummaryCard switches to blocked-access language when no reliable 
   assert.doesNotMatch(html, /This run was blocked before it established a trustworthy public browsing path/);
   assert.doesNotMatch(html, /Regulatory findings/);
   assert.doesNotMatch(html, /Review lenses/);
+});
+
+test('incomplete Reject card displays a retained phase limitation without inventing control absence',()=>{
+ for (const Card of [CompactRejectPathCard, Scanso2CompactRejectPathCard]) {
+ const html=renderToStaticMarkup(createElement(Card,{projection:{evidenceRows:[],label:'Reject path limited',note:'Legacy generic note',observationWindowMs:null,resolverMethod:null,scoreEffect:'none',state:'incomplete',limitationMessage:'The Reject click completed, but the post-click observation was incomplete.'}}));
+ assert.match(html,/click completed, but the post-click observation was incomplete/);
+ assert.doesNotMatch(html,/Legacy generic note|No Reject control/);
+ }
 });

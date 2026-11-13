@@ -1526,6 +1526,8 @@ export function buildExecutiveRejectPathProjection(
     resolverMethod,
     scoreEffect: "none",
     state: "incomplete",
+    ...(getRecord(retained.pathLimitation) && getOptionalString(getRecord(retained.pathLimitation)!, "message")
+      ? {limitationMessage: getOptionalString(getRecord(retained.pathLimitation)!, "message")!} : {}),
     timelineEvents,
   };
 }

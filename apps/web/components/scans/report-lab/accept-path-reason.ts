@@ -1,3 +1,4 @@
+import { readChoicePathLimitation } from "../../../lib/scans/choice-path-execution";
 import { afterClickCoverage, afterClickSummary } from "../after-action-summary";
 
 export function acceptAfterClickSummary(projection: Record<string, unknown>): string {
@@ -16,7 +17,7 @@ export function acceptPathIncompleteReason(projection: Record<string, unknown>):
     return "More than one possible Accept control was found. No click was attempted because the target was ambiguous.";
   }
   if (diagnostics?.click?.outcome === "completed" || afterClickCoverage(projection, "accept")) {
-    return "The Accept control was clicked." + acceptAfterClickSummary(projection);
+    return (readChoicePathLimitation(projection, "accept")?.message ?? "The Accept control was clicked.") + acceptAfterClickSummary(projection);
   }
   if (diagnostics?.click?.outcome === "failed_before_dispatch") return "The Accept control was found, but the click could not be dispatched.";
   if (diagnostics?.click?.outcome === "failed_after_dispatch") return "An Accept click was dispatched; click completion was not recorded.";

@@ -226,6 +226,22 @@ loading tsx. `node scripts/release-node.mjs scripts/check-regional-web-bot-auth.
 The canonical deploy helper checks Node/pnpm, GitHub/AWS authentication, Docker
 and the existing country/ASN database freshness before expensive work.
 
+### Release checklist for daily audit sources
+
+Before merging a release that changes a pinned daily audit source, run the
+offline check from the local WC01 audit checkout with the candidate source bytes
+and its reviewed activation receipt in place:
+
+```sh
+node --import tsx -e 'const { verifyProgressPins } = require("./scripts/lib/audit-progress-pins.ts"); console.log(verifyProgressPins().length + " reviewed audit source pins verified")'
+```
+
+Save the command output and exit status with the release checks. If a source
+differs, review the exact change, record the old and new hashes, run the affected
+offline tests, and update the reviewed activation receipt before rechecking.
+This also verifies the canonical master catalog pins. The check uses local files
+only and does not authorize a deployment.
+
 Preflight builds package exports first, expanding reviewed package build wrappers
 so each compiler/export command runs once in dependency order. Unknown lifecycle
 commands fail before any build. Remaining work has at most two bounded lanes;

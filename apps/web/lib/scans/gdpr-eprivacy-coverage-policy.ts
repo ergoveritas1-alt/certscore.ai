@@ -8,7 +8,7 @@ import { retainedRejectClickCapture } from "./retained-reject-click-capture";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { summarizePostRejectActivity } from "./post-reject-finding-copy";
 import { projectPreconsentTrackingTiming } from "./preconsent-tracking-timing";
-import { readChoicePathExecution } from "./choice-path-execution";
+import { readChoicePathExecution, readChoicePathLimitation } from "./choice-path-execution";
 import { checklistRemediation } from "./checklist-remediation";
 import { readAccessibilityAudit } from "./accessibility-audit-evidence";
 import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
@@ -6429,6 +6429,8 @@ function derivePostRejectOutcomeFromEvidence(input: GdprEprivacyCoveragePolicyIn
     ? { afterActionCapture: actionProjection.data.afterActionCapture, sourcePacketSha256: actionProjection.data.packetSha256 }
     : {};
   const postRejectRetainedEvidence = {
+    pathLimitation: readChoicePathLimitation(input.runtimeArtifacts?.postRefusalEvidenceProjection, "reject",
+      rejectInteractionFailureClass ? {status: "failed", limitationCode: rejectInteractionFailureClass} : null),
     reportControlObserved: firstLayerChoiceEvidence.assessment?.controls.reject.state === "observed",
     ...afterClickEvidence,
     execution: readChoicePathExecution(input.runtimeArtifacts?.postRefusalEvidenceProjection, "reject"),

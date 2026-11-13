@@ -1,0 +1,177 @@
+{
+  "source": "artifacts/scan-completeness-20261113/final-reports.json",
+  "sourceSha256": "e1fccf7125e6e76d270f137b5c6b8f23319fed11ac470781149c09f0b7d2a3e7",
+  "cutoffs": [
+    {
+      "scanId": "037079c3-8f8f-41ed-a803-f011446b035e",
+      "action": "accept",
+      "coverage": {
+        "status": "limited",
+        "completedAt": "2026-11-13T21:30:27.207Z",
+        "maxTailWaitMs": 6000,
+        "evidenceJoined": false,
+        "limitationCode": "accept_path_incomplete_at_passive_barrier",
+        "pathLimitation": {
+          "code": "result_deadline_exceeded",
+          "message": "The Accept test did not deliver a verified result within its existing scan window. Post-Accept behavior was not assessed; initial control inspection is reported separately."
+        }
+      },
+      "timing": {
+        "coordinatorElapsedMs": 13838,
+        "evidenceJoined": false,
+        "invocationStartedAt": "2026-11-13T21:30:13.147Z",
+        "lane": "accept_observation",
+        "outcome": "failed",
+        "terminalOutcomeDeltaFromPassiveBarrierMs": 0,
+        "terminalOutcomeObservedAt": "2026-11-13T21:30:26.985Z",
+        "workerReportedCompletedAt": null,
+        "workerReportedHandlerDurationMs": null
+      },
+      "passiveBarrier": "2026-11-13T21:30:26.985Z",
+      "manifestSha256": "e1ef5310737abb723f794b0f599074ce3161707415691928261dfac9c0d61897"
+    },
+    {
+      "scanId": "69aee075-8270-4a15-8f3d-589b785dafa9",
+      "action": "accept",
+      "coverage": {
+        "status": "limited",
+        "completedAt": "2026-11-13T21:30:43.114Z",
+        "maxTailWaitMs": 6000,
+        "evidenceJoined": false,
+        "limitationCode": "accept_path_incomplete_at_passive_barrier",
+        "pathLimitation": {
+          "code": "result_deadline_exceeded",
+          "message": "The Accept test did not deliver a verified result within its existing scan window. Post-Accept behavior was not assessed; initial control inspection is reported separately."
+        }
+      },
+      "timing": {
+        "coordinatorElapsedMs": 9701,
+        "evidenceJoined": false,
+        "invocationStartedAt": "2026-11-13T21:30:33.314Z",
+        "lane": "accept_observation",
+        "outcome": "failed",
+        "terminalOutcomeDeltaFromPassiveBarrierMs": 0,
+        "terminalOutcomeObservedAt": "2026-11-13T21:30:43.015Z",
+        "workerReportedCompletedAt": null,
+        "workerReportedHandlerDurationMs": null
+      },
+      "passiveBarrier": "2026-11-13T21:30:43.015Z",
+      "manifestSha256": "b0c957d4803a6824f1ae18aa4f2c09a1681e56c4cd9778763f92cf2ed312a073"
+    },
+    {
+      "scanId": "69aee075-8270-4a15-8f3d-589b785dafa9",
+      "action": "reject",
+      "coverage": {
+        "status": "limited",
+        "completedAt": "2026-11-13T21:30:43.110Z",
+        "maxTailWaitMs": 8000,
+        "evidenceJoined": false,
+        "limitationCode": "reject_path_incomplete_at_passive_barrier",
+        "pathLimitation": {
+          "code": "result_deadline_exceeded",
+          "message": "The Reject test did not deliver a verified result within its existing scan window. Post-Reject behavior was not assessed; initial control inspection is reported separately."
+        }
+      },
+      "timing": {
+        "coordinatorElapsedMs": 10294,
+        "evidenceJoined": false,
+        "invocationStartedAt": "2026-11-13T21:30:32.816Z",
+        "lane": "reject_observation",
+        "outcome": "failed",
+        "terminalOutcomeDeltaFromPassiveBarrierMs": 95,
+        "terminalOutcomeObservedAt": "2026-11-13T21:30:43.110Z",
+        "workerReportedCompletedAt": null,
+        "workerReportedHandlerDurationMs": null
+      },
+      "passiveBarrier": "2026-11-13T21:30:43.015Z",
+      "manifestSha256": "b0c957d4803a6824f1ae18aa4f2c09a1681e56c4cd9778763f92cf2ed312a073"
+    }
+  ],
+  "image": {
+    "scanId": "7482db1b-cf8e-43a4-b074-837e340f822f",
+    "packetSha256": "4084ffba56194ec6aefebae4ec5c2ddc059bf5b84547d1bb0488b811cd41959f",
+    "diagnostics": {
+      "outcome": "completed",
+      "reasons": [
+        "no_visible_context"
+      ],
+      "version": "post_accept_form_image_diagnostics.v1",
+      "elapsedMs": 107,
+      "lastStage": "packet_validation",
+      "observedForms": 1,
+      "withheldImages": 0,
+      "availableImages": 0,
+      "unavailableImages": 1
+    },
+    "snapshots": [
+      {
+        "reason": "no_visible_context",
+        "status": "unavailable",
+        "formRef": "collection_form_0",
+        "pageUrl": "https://www.hubspot.com/",
+        "mimeType": "image/jpeg",
+        "capturedAt": "2026-11-13T21:32:39.118Z",
+        "valuesMasked": true,
+        "contractVersion": "certscore.collection-surface-snapshot.v1",
+        "sourceInventoryHash": "ac935c98fe9c922d643a186257f7ba85b6eaf10578aefa8e866c5672c9321f75"
+      }
+    ],
+    "inventory": {
+      "forms": [
+        {
+          "fields": [
+            {
+              "label": "Search HubSpot",
+              "review": {
+                "version": "collection-field-review.v1",
+                "category": "operational",
+                "preselectedMarketing": false
+              },
+              "disabled": false,
+              "fieldRef": "collection_form_0_field_0",
+              "readOnly": false,
+              "required": false,
+              "inputType": "search",
+              "confidence": 0.9,
+              "elementType": "input",
+              "controlIndex": 1,
+              "evidenceRefs": [
+                {
+                  "refId": "after_accept:ref_collection_surface_0_0",
+                  "eventType": "main_document_dom_control",
+                  "artifactId": "post_accept_form_inventory"
+                }
+              ],
+              "directVsInferred": "direct",
+              "semanticCategory": "search"
+            }
+          ],
+          "method": "get",
+          "formRef": "collection_form_0",
+          "pageUrl": "https://www.hubspot.com/",
+          "structure": "native_form",
+          "confidence": 0.92,
+          "surfaceType": "search",
+          "evidenceRefs": [
+            {
+              "refId": "after_accept:ref_collection_surface_form_0",
+              "eventType": "main_document_dom_form",
+              "artifactId": "post_accept_form_inventory"
+            }
+          ],
+          "actionHostname": "www.hubspot.com",
+          "fieldsTruncated": false,
+          "directVsInferred": "direct",
+          "actionRelationship": "self",
+          "retainedFieldCount": 1,
+          "candidateFieldCount": 1
+        }
+      ],
+      "phase": "after_accept",
+      "pageUrl": "https://www.hubspot.com/",
+      "coverage": "bounded_sample",
+      "sourceLane": "accept_observation",
+      "contractVersion": "certscore.post_accept_form_inventory.v1"
+    }
+  }
+}

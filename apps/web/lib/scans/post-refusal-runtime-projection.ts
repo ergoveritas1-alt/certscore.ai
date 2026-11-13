@@ -1,7 +1,7 @@
 import {assessRejectPotentialRisk} from "./california-potential-risk-policy";
 import {assessCaliforniaPostReject} from "./california-post-reject-policy";
 import { assessAfterRejectScoring } from "./after-reject-scoring-policy";
-import { readChoicePathExecution } from "./choice-path-execution";
+import { readChoicePathExecution, readChoicePathLimitation } from "./choice-path-execution";
 import type {
   PostRefusalLaneOutcome,
   PostRefusalReportProjection,
@@ -17,10 +17,12 @@ export function buildPostRefusalRuntimeProjection(
   projection: PostRefusalReportProjection | null,
   laneOutcome?: PostRefusalLaneOutcome | null,
 ) {
+  const pathLimitation = readChoicePathLimitation(projection, "reject", laneOutcome);
   const observationTruncated = projection?.limitations.includes("post_action_network_capture_truncated") === true;
   const coverageProjection = laneOutcome
     ? {
         completedAt: laneOutcome.completedAt,
+        pathLimitation,
         evidenceJoined: laneOutcome.evidenceJoined,
         limitationCode: laneOutcome.limitationCode ?? (observationTruncated ? "reject_observation_capture_truncated" : null),
         maxTailWaitMs: laneOutcome.maxTailWaitMs,
@@ -59,7 +61,7 @@ export function buildPostRefusalRuntimeProjection(
       refusalSignalContradictsAction: false,
       rejectInteractionConfirmed: false,
       rejectInteractionFailureClass: coverageProjection.limitationCode,
-      rejectInteractionFailureReason: limitationMessage,
+      rejectInteractionFailureReason: pathLimitation?.message ?? limitationMessage,
     };
     return {
       postRefusalObservationCoverage: coverageProjection,
@@ -106,7 +108,9 @@ export function buildPostRefusalRuntimeProjection(
   const activeFailureObserved = activityRows.length > 0 || projection.contradictionObserved;
   const persistenceOnly = persistedStorage.length > 0 && !activeFailureObserved;
   const reductionEvidence = {
+    rejectInteractionFailureReason: pathLimitation?.message ?? null,
     execution: readChoicePathExecution(projection, "reject"),
+    pathLimitation,
     concretePostRejectNonEssentialDetailsRetained: activityRows.length > 0,
     postRejectNonEssentialActivityRetained: activityRows.length > 0,
     postRejectNonEssentialRequestCount: activityRows.length,

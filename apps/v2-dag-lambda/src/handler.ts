@@ -2935,13 +2935,6 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     })
   );
   const passiveLaneBarrierCompletedAtMs = Date.now();
-  // Accept retains its existing passive-absence cutoff. Reject takes its
-  // terminal snapshot after the already-required passive finalization below;
-  // that work must never be delayed to wait for an independent action.
-  if ((postAcceptState.passiveAbsence || postAcceptState.passiveCoverageLimited) && actionLanePassiveAbsenceDisposition({ ...postAcceptState, passiveBarrierReached: true }) === "cancel_incomplete") {
-    postAcceptState.cancelledNoAccept = true;
-    postAcceptAbortController.abort(new Error("accept_path_incomplete_at_passive_barrier"));
-  }
   const workerBundles = await timeLambdaPhase(phaseTimings, "worker_bundle_download", async () => {
     const settled = await Promise.allSettled(workerResults.map((result) => earlyConsentReads.get(result) ?? readLocalV2DagLambdaWorkerBundle(result, {
       awsRegion: payload.awsRegion, s3GetClient: options.s3GetClient,
@@ -3089,16 +3082,22 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       gpcResponseAssessment,
     });
   }
-  // reject_join_existing_work.v1: keep an already-invoked Reject response
-  // available during required passive downloads, verification, merge and
-  // mirroring. Snapshot once here, before any action join. Passive absence or
-  // uncertainty must still add zero worker wait: unfinished work is cancelled,
-  // while a returned result uses the ordinary checksum/binding verification.
-  // Keep the original passive timestamp as the absolute eight-second deadline;
-  // this is neither a grace period nor a new result/publication path.
-  if ((postRefusalState.passiveAbsence || postRefusalState.passiveCoverageLimited) && actionLanePassiveAbsenceDisposition({ ...postRefusalState, passiveBarrierReached: true }) === "cancel_incomplete") {
-    postRefusalState.cancelledNoReject = true;
-    postRefusalAbortController.abort(new Error("reject_path_incomplete_at_passive_barrier"));
+  // action_join_existing_work.v1: an already-invoked action may return while
+  // required passive artifacts are downloaded, verified, merged and mirrored.
+  // Freeze both lanes here, before any action join. Passive disagreement adds
+  // no worker wait: unfinished work is cancelled; returned results still require
+  // ordinary packet verification within the original six/eight-second deadlines
+  // measured from passiveLaneBarrierCompletedAtMs, never from this later point.
+  for (const [state, controller, action] of [
+    [postAcceptState, postAcceptAbortController, "accept"],
+    [postRefusalState, postRefusalAbortController, "reject"],
+  ] as const) {
+    if ((state.passiveAbsence || state.passiveCoverageLimited) &&
+        actionLanePassiveAbsenceDisposition({ ...state, passiveBarrierReached: true }) === "cancel_incomplete") {
+      if (action === "accept") postAcceptState.cancelledNoAccept = true;
+      else postRefusalState.cancelledNoReject = true;
+      controller.abort(new Error(`${action}_path_incomplete_at_passive_barrier`));
+    }
   }
   // Accept and Reject have independent absolute post-passive deadlines and
   // are joined concurrently, including packet verification. This prevents

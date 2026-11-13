@@ -1,4 +1,4 @@
-import { readChoicePathExecution } from "./choice-path-execution";
+import { readChoicePathExecution, readChoicePathLimitation } from "./choice-path-execution";
 import type {
   PostAcceptLaneOutcome,
   PostAcceptReportProjection,
@@ -12,6 +12,7 @@ export function buildPostAcceptRuntimeProjection(
   projection: PostAcceptReportProjection | null,
   laneOutcome?: PostAcceptLaneOutcome | null,
 ) {
+  const pathLimitation = readChoicePathLimitation(projection, "accept", laneOutcome);
   const observationTruncated = projection?.limitations.some((limitation) =>
     limitation === "observation_window_aborted_after_confirmed_acceptance" ||
     limitation === "post_action_network_capture_truncated" ||
@@ -20,6 +21,7 @@ export function buildPostAcceptRuntimeProjection(
   const coverageProjection = laneOutcome
     ? {
         completedAt: laneOutcome.completedAt,
+        pathLimitation,
         evidenceJoined: laneOutcome.evidenceJoined,
         limitationCode: laneOutcome.limitationCode ??
           (observationTruncated ? "accept_observation_window_truncated" : null),
@@ -60,6 +62,7 @@ export function buildPostAcceptRuntimeProjection(
     : [];
   const behaviorProjection = {
     execution: readChoicePathExecution(projection, "accept"),
+    pathLimitation,
     acceptanceInteractionConfirmed: confirmed,
     acceptanceSignalContradictsAction: confirmed && projection.contradictionObserved,
     observationWindowMs: confirmed ? projection.observationWindowMs : null,

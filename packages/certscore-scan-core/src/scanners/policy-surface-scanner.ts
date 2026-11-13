@@ -1,3 +1,4 @@
+import { retainedPolicyBodyDeclarations } from "../policy-body-declarations";
 import { createPrivacyFrameContinuityProof } from "../privacy-frame-continuity";
 import { buildPrivacyChoiceDiagnostics, createPrivacyChoiceDomDiagnostics } from "../privacy-choice-diagnostics";
 import { canStartPolicyAnalysis, createPolicyAnalysisGate } from "../policy-analysis-gate";
@@ -3012,6 +3013,7 @@ async function processPolicyCandidate({
     evidenceBoundObservedTopicCount,
     substantiveDisclosureSignalCount,
     targetRelationship: ownership.targetRelationship,
+    documentOwnerEntity: ownership.documentOwnerEntity,
     text: retainedVisibleText,
     title,
   });
@@ -6914,6 +6916,7 @@ export function assessGoverningPolicyBodyEvidence(input: {
   targetRelationship?: PolicySurfaceObservation["targetRelationship"];
   text: string;
   title?: string;
+  documentOwnerEntity?: string;
 }): NonNullable<PolicySurfaceObservation["governingPolicyBodyAssessment"]> {
   const canonicalContextTermCount = canonicalPolicyBodyContextTermCount(input.title, input.text);
   const targetOwned = input.targetRelationship === "target_controller" ||
@@ -6969,14 +6972,22 @@ export function assessGoverningPolicyBodyEvidence(input: {
   const retainedTitleClassification = classifyPrivacySurface({ linkText: input.title ?? "" });
   const retainedPrivacyTitle = retainedTitleClassification.surfaceType === "privacy_policy" &&
     retainedTitleClassification.matchStrength === "direct";
+  // Notice identity is independent of the stricter omission-analysis floor.
+  // Use bounded same-clause subject/data declarations, not site-specific wording.
+  const declarations = retainedPolicyBodyDeclarations(input.text, input.documentOwnerEntity);
+  const bodyNoticeLabel = retainedPrivacyTitle || PRIVACY_EVIDENCE_LOCALE_REGISTRY.some(entry =>
+    entry.privacyPolicyLabels.some(label => input.text.slice(0, 600).normalize("NFKC").toLowerCase().includes(label.normalize("NFKC").toLowerCase())));
+  const shortConcreteNotice = input.documentTextChars >= 250 &&
+    input.documentTextChars < MIN_SUBSTANTIVE_POLICY_TEXT_CHARS && input.documentTextChars === input.text.length &&
+    classifierConfirmedStandalonePolicyCandidate && bodyNoticeLabel && !consentShellWithoutDisclosure && declarations.eligible;
   const visitorScopeExcluded = retainedPolicyExplicitlyExcludesWebsiteVisitors(input.text);
   const codeOrMarkup = looksLikeArticle13CodeOrConfigText(input.text);
   const state = !codeOrMarkup && !visitorScopeExcluded && targetOwned &&
       exactPolicyCandidate &&
       textCoverageComplete &&
-      (minimumBodyRetained || shortSubstantiveBodyRetained) &&
+      (minimumBodyRetained || shortSubstantiveBodyRetained || shortConcreteNotice) &&
       input.documentSubstance.matchesExpectedSurface &&
-      substantiveEvidence
+      (substantiveEvidence || shortConcreteNotice)
     ? "substantive" as const
     : !codeOrMarkup && !visitorScopeExcluded && retainedPrivacyTitle && exactPolicyCandidate &&
         textCoverageComplete &&
@@ -7004,6 +7015,7 @@ export function assessGoverningPolicyBodyEvidence(input: {
       textCoverageComplete ? "complete_policy_text_retention" : "policy_text_retention_incomplete",
       minimumBodyRetained ? "minimum_substantive_policy_text_retained" : "policy_text_below_substantive_minimum",
       shortSubstantiveBodyRetained && !minimumBodyRetained ? "short_substantive_policy_body.v1" : null,
+      shortConcreteNotice ? "short_document_bound_notice.v2" : null,
       substantiveAssessment ? input.documentSubstance.reasonCode : null,
       classifierConfirmedStandalonePolicyCandidate && substantiveEvidence
         ? "canonical_classifier_confirmed_standalone_policy_body"

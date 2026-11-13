@@ -125,8 +125,8 @@ try{
  },controlAccessibility);
  if(controlSample>=0){
   const cell=metricCell(controlAccessibility,controlSample);
-  assert.equal(await cell.locator(':scope > .value').textContent(),'Not testable · 93.3%');
-  assert.equal(await cell.locator(':scope > .checklist-verdicts [data-state="not_observed"]').textContent(),'Not observed: 6 (6.7%)');
+  assert.equal(await cell.locator(':scope > .value').textContent(),'6 of 90 had a test result');
+  assert.equal(await cell.locator(':scope > .checklist-verdicts [data-state="not_observed"]').textContent(),'No issue observed: 6');
   assert.match(await cell.locator('.control-coverage').textContent(),/0\/90 reports with a detailed assessment receipt/);
   const fixtureId=await page.evaluate(()=>{
    const row=window.__auditDashboard.data.rows.find(r=>r.reportable&&new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date(r.createdAt))==='2026-11-09');
@@ -151,26 +151,8 @@ try{
    for(const [index,day] of days.entries()){
     const verdict=day.metrics[layout.id],cell=row.cells[index+1];
     const headline=cell.querySelector(':scope > .value').textContent;
-    if(id==='sealed.checklist.accessibility_consent_controls'){
-     const metric=day.metrics[id];
-     const percent=count=>{
-      const rate=100*count/metric.denominator;
-      return (Number.isInteger(rate)?rate:rate.toFixed(1))+'%';
-     };
-     const expected=Object.keys(metric.series).length>1?'Separate measurement groups':
-      metric.denominator===0?'No eligible data':
-      metric.counts.unavailable===metric.denominator?'No matched assessment':
-      'Not testable · '+percent(metric.counts.not_testable??0);
-     checks.push({id,date:day.date,actual:headline,expected});
-     if(expected.startsWith('Not testable')){
-      for(const [state,count] of Object.entries(metric.counts)){
-       if(state==='not_testable')continue;
-       const line=cell.querySelector(':scope > .checklist-verdicts > [data-state="'+state+'"] .state-line-value');
-       checks.push({id,date:day.date,actual:line?.textContent,expected:count+' ('+percent(count)+')'});
-      }
-     }
-     continue;
-    }
+    if(['sealed.checklist.accessibility_consent_controls','sealed.checklist.cross_border_endpoint_review',
+     'checklist.post_reject_tracking_reduction'].includes(id))continue;
     if(Object.keys(verdict.series).length>1){
      checks.push({id,date:day.date,actual:headline,expected:'Separate measurement groups'});
      continue;
@@ -183,7 +165,8 @@ try{
     };
     const gap=counts.gap_observed??0,partial=counts.review_signal??0;
     checks.push({id,date:day.date,actual:headline,expected:layout.hero==='observed'?'Observed · '+percent(counts.observed??0):
-     layout.hero==='gap_observed'?'Gap observed · '+percent(gap):'Partial concern · '+partial+' ('+percent(partial)+')'});
+     layout.hero==='gap_observed'?(id==='checklist.pre_consent_third_party_tracking'?
+      gap+(gap===1?' gap':' gaps')+' in '+verdict.denominator+' reports':'Gap observed · '+percent(gap)):'Partial concern · '+partial+' ('+percent(partial)+')'});
     const breakdown=[...(layout.hero==='observed'?[['gap_observed','Gap observed']]:[]),
      ...(layout.hero!=='review_signal'?[['review_signal','Partial concern']]:[]),['not_observed','Not observed'],
      ['insufficient_evidence','Insufficient evidence'],['not_confirmed','Not confirmed']];
@@ -446,25 +429,78 @@ try{
     verifiedLocal:day.metrics['sealed.policy_full_text']?.counts.verified_full_text??0,
     checkDenominator:check?.denominator??metric.denominator,unknownChecks:check?(checkCounts.unavailable??0):metric.denominator,
     completedChecks:(checkCounts.checked_no_signal??0)+(checkCounts.checked_review_signal??0),
-    matcherSignals:(checkCounts.checked_review_signal??0)+(checkCounts.partial_review_signal??0)}];
+    completedSignals:checkCounts.checked_review_signal??0,
+    inconclusive:(checkCounts.inconclusive_policy_coverage??0)+(checkCounts.inconclusive_matcher_limit??0),
+    noText:checkCounts.not_assessed_no_eligible_text??0}];
   }));
  });
+ const periodTotals={eligible:0,signals:0,completedChecks:0,completedSignals:0,inconclusive:0,noText:0,unknownChecks:0};
  for(const {index,id,eligible,missing,signals,complete,limited,explicitNoReceipt,verifiedLocal,
-  checkDenominator,unknownChecks,completedChecks,matcherSignals} of policyPresentation){
-  const transfer=id.startsWith('checklist.');
+  checkDenominator,unknownChecks,completedChecks,completedSignals,inconclusive,noText} of policyPresentation){
   const cell=metricCell(id,index);
-  if(missing===eligible)assert.equal(await cell.locator(':scope > .value').textContent(),
-   transfer?'No review signal returned':'No producer receipt delivered');
-  const note=await cell.locator(transfer?'[data-transfer-signal-coverage]':'[data-policy-receipt-coverage]').textContent();
-  if(transfer){
-   assert.ok(note.includes(signals+' of '+eligible+' reports returned the conditional checklist signal'));
+  if(id.startsWith('checklist.')){
+   const headline=unknownChecks===checkDenominator?'Completed checks unknown':
+    completedChecks+' of '+eligible+' checks completed'+
+     (completedChecks?' · '+completedSignals+' '+(completedSignals===1?'signal':'signals')+' found':'');
+   assert.equal(await cell.locator(':scope > .value').textContent(),headline);
+   assert.equal(await cell.locator('[data-transfer-signal-coverage]').textContent(),
+    signals+' of '+eligible+' reports flagged a reference for review');
    const coverage=await cell.locator('[data-transfer-assessment-coverage]').textContent();
-   if(unknownChecks===checkDenominator)assert.ok(coverage.includes('Completed checks unknown · '+unknownChecks));
-   else assert.ok(coverage.includes('Completed checks '+completedChecks+'/'+checkDenominator+' · Qualifying matcher signals '+matcherSignals));
+   for(const detail of [
+    (completedChecks-completedSignals)+' completed · no outdated reference detected in the policy text checked',
+    completedSignals+' completed · outdated reference flagged for review',
+    inconclusive+' inconclusive · policy coverage incomplete or matcher limit reached',
+    noText+' not assessed · no eligible policy text',
+    unknownChecks+' assessment unavailable · completion could not be verified',
+   ])assert.ok(coverage.includes(detail),detail);
+   for(const [key,value] of Object.entries({eligible,signals,completedChecks,completedSignals,inconclusive,noText,unknownChecks}))
+    periodTotals[key]+=value;
   }else{
+   if(missing===eligible)assert.equal(await cell.locator(':scope > .value').textContent(),'Coverage unavailable');
+   const note=await cell.locator('[data-policy-receipt-coverage]').textContent();
    assert.ok(note.includes((eligible-missing)+'/'+eligible+' reportable scans with a producer receipt result'));
    assert.ok(note.includes(complete+' complete · '+limited+' limited · '+explicitNoReceipt+' explicitly without a verified receipt'));
    if(verifiedLocal)assert.ok(note.includes('Separate local text verification · '+verifiedLocal+' complete'));
+  }
+ }
+ if(periodTotals.eligible){
+  const period=page.locator('[data-transfer-period]');
+  assert.equal(await period.locator('[data-transfer-period-signals]').textContent(),
+   periodTotals.signals+' of '+periodTotals.eligible+' reports flagged a reference for review');
+  const summary=await period.textContent();
+  assert.ok(summary.includes(periodTotals.inconclusive+' inconclusive'));
+  assert.ok(summary.includes(periodTotals.unknownChecks+' assessment unavailable'));
+  assert.ok(summary.includes(periodTotals.noText+' not assessed'));
+  assert.ok(summary.includes((periodTotals.completedChecks-periodTotals.completedSignals)+' completed · no outdated reference detected'));
+ }
+ const headlineCoverage=await page.evaluate(()=>{
+  const {data,days}=window.__auditDashboard;
+  const review=['gap_observed','review_signal','observed','not_observed'];
+  const rows=[
+   ['detail.reject.verdict','verdict.post_reject_tracking_reduction',review,'had a review outcome'],
+   ['sealed.checklist.cross_border_endpoint_review','sealed.verdict.cross_border_endpoint_review',review,'had a review outcome'],
+   ['sealed.checklist.accessibility_consent_controls','sealed.verdict.accessibility_consent_controls',['gap_observed','review_signal','not_observed'],'had a test result'],
+   ['sealed.operations.policy_text_receipt','sealed.operations.policy_text_receipt',['producer_verified_complete_receipt','producer_verified_limited_receipt'],'had verified receipts'],
+  ];
+  return rows.flatMap(([id,source,states,suffix])=>{
+   if(!data.tableEntries.some(entry=>entry.id===id))return [];
+   return days.flatMap((day,index)=>{
+    const value=day.metrics[source];
+    if(!value?.denominator)return [];
+    const covered=states.reduce((sum,state)=>sum+(value.counts[state]??0),0);
+    const missing=(value.counts.unknown??0)+(value.counts.unavailable??0);
+    return [{id,index,expected:missing===value.denominator?'Coverage unavailable':
+     covered+' of '+value.denominator+' '+suffix,counts:value.counts}];
+   });
+  });
+ });
+ for(const {id,index,expected,counts} of headlineCoverage){
+  const reduction=id==='detail.reject.verdict';
+  const outer=metricCell(id,index);
+  const cell=reduction?outer.locator('[data-reject-reduction-coverage]'):outer;
+  assert.equal(await cell.locator(':scope > .value').textContent(),(reduction?'Tracking reduction after Reject · ':'')+expected,id);
+  for(const [state,count] of Object.entries(counts)){
+   assert.equal(await cell.locator(':scope > .checklist-verdicts [data-state="'+state+'"] .state-line-value').textContent(),String(count),id);
   }
  }
  checks.policyEvidenceAvailability=true;
@@ -501,8 +537,9 @@ try{
   }
  });
  if(mixedTransferCoverage){
-  assert.ok(mixedTransferCoverage.text.includes('Completed checks 2/'+mixedTransferCoverage.eligible+' · Qualifying matcher signals 2 (1 with partial coverage)'));
-  assert.ok(mixedTransferCoverage.text.includes((mixedTransferCoverage.eligible-3)+' unknown'));
+  assert.ok(mixedTransferCoverage.text.includes('1 completed · outdated reference flagged for review'));
+  assert.ok(mixedTransferCoverage.text.includes('1 flagged for review with partial policy coverage'));
+  assert.ok(mixedTransferCoverage.text.includes((mixedTransferCoverage.eligible-3)+' assessment unavailable'));
   assert.ok(mixedTransferCoverage.text.includes('Completion reason detail 2/'+mixedTransferCoverage.eligible+' · '+(mixedTransferCoverage.eligible-2)+' unavailable'));
   assert.ok(mixedTransferCoverage.text.includes('policy evidence lane degraded: 1'));
   assert.ok(mixedTransferCoverage.text.includes('projected document not checked: 1'));
@@ -563,7 +600,7 @@ try{
  const rateExamples=await page.evaluate(()=>{
   const dashboard=window.__auditDashboard;
   return ['metrics','findings'].map(kind=>dashboard.days.flatMap((day,index)=>
-   Object.entries(day[kind]).filter(([id,v])=>dashboard.data.tableEntries.some(entry=>entry.id===id)&&id!=='customer_cmp_check.prominence'&&!dashboard.data.verdictLayouts[id]&&!/^(?:sealed\.)?(?:execution|click|registration)\./.test(id)&&!/^detail\.(accept|reject)\.(activity_all|verdict)$/.test(id)&&!['control.accept','control.reject'].includes(id)&&id!=='sealed.choice_evidence.paired_cmp'&&!['gpc_delivery','detail.gpc.session_collection','detail.gpc.california_collection','detail.gpc.cmp_receipt'].includes(id)&&v.source==='mixed_sources'&&Object.values(v.series).some(p=>Number.isFinite(p.rate))&&
+   Object.entries(day[kind]).filter(([id,v])=>dashboard.data.tableEntries.some(entry=>entry.id===id)&&id!=='customer_cmp_check.prominence'&&id!=='checklist.outdated_transfer_framework_reference'&&id!=='sealed.operations.policy_text_receipt'&&id!=='checklist.post_reject_tracking_reduction'&&!dashboard.data.verdictLayouts[id]&&!/^(?:sealed\.)?(?:execution|click|registration)\./.test(id)&&!/^detail\.(accept|reject)\.(activity_all|verdict)$/.test(id)&&!['control.accept','control.reject'].includes(id)&&id!=='sealed.choice_evidence.paired_cmp'&&!['gpc_delivery','detail.gpc.session_collection','detail.gpc.california_collection','detail.gpc.cmp_receipt'].includes(id)&&v.source==='mixed_sources'&&Object.values(v.series).some(p=>Number.isFinite(p.rate))&&
     (kind==='findings'||Object.keys(v.counts).some(state=>state!=='unknown'&&state!=='unavailable'))&&
     (!/^(?:customer_cmp_check|sealed\.cmp_check)\./.test(id)||
      Object.keys(v.counts).some(state=>!['not_assessed','incomplete','partially_assessed','unavailable'].includes(state))))

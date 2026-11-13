@@ -9907,3 +9907,41 @@ test("audit comparison metadata survives materialization and persistence only wi
     assert.equal(rejected.runtimeArtifacts?.auditComparison,null);
   }
 });
+
+test("retained short governing notices reach the report without granting omission coverage", async () => {
+  const {dedupePolicySurfaces, summarizePolicySurfaces} = await import('./local-v2-dag-report');
+  const {assessGoverningPolicyBodyEvidence, assessPolicyDocumentSubstance} = await import('../../../../packages/certscore-scan-core/src/scanners/policy-surface-scanner');
+  const fixtures = JSON.parse(readFileSync(new URL('../../../../packages/certscore-scan-core/src/test-fixtures/short-policy-retained.json', import.meta.url), 'utf8'));
+  for (const row of fixtures) {
+    const surface = structuredClone(row.observation);
+    const host = new URL(surface.finalUrl).hostname;
+    const ref = surface.artifactRefs.find((ref: {artifactId: string}) => ref.artifactId.startsWith('policy_surface_text_'));
+    const summarize = () => summarizePolicySurfaces(dedupePolicySurfaces([surface], host), host, {
+      policyTextEvidenceContext: {
+        scanId: row.scanId, generatedAt: surface.retrievedAt,
+        sourceBundle: {schemaVersion: 'certscore.v2.alpha.1', verificationStatus: 'verified', sha256: row.bundleSha256},
+        artifactsById: new Map([[ref.artifactId, {artifactId: ref.artifactId, fileName: path.basename(ref.path),
+          text: row.text, sha256: row.textSha256, sizeBytes: Buffer.byteLength(row.text), verificationStatus: 'verified'}]]),
+      },
+    });
+    assert.equal(summarize().privacyPolicyPresent, false, 'historical assessment remains historical');
+    surface.governingPolicyBodyAssessment = assessGoverningPolicyBodyEvidence({
+      candidate: {normalizedUrl: surface.normalizedUrl, deterministicSurfaceType: surface.surfaceType,
+        deterministicClassifierReasonCodes: surface.classifierReasonCodes} as never,
+      text: row.text, title: surface.title, documentOwnerEntity: surface.documentOwnerEntity, documentTextChars: row.text.length,
+      documentTextCoverageStatus: surface.documentTextCoverage.status, targetRelationship: surface.targetRelationship,
+      documentSubstance: assessPolicyDocumentSubstance({surfaceType: surface.surfaceType, text: row.text, title: surface.title, finalUrl: surface.finalUrl}),
+      evidenceBoundObservedTopicCount: 0, substantiveDisclosureSignalCount: 0,
+    });
+    const result = summarize();
+    assert.equal(result.privacyPolicyPresent, true);
+    assert.equal(result.evaluatedPrivacyPolicySurfaceCount, 1);
+    assert.ok(result.article13CoverageAssessments.every(row => row.status === 'insufficient_retained_evidence'));
+    assert.ok(result.article13CoverageAssessments.some(row => row.reasonCodes.includes('policy_text_below_absence_coverage_minimum_length')), JSON.stringify(result.policyTextEvidenceProjection));
+    surface.targetRelationship = 'unrelated';
+    assert.equal(summarize().privacyPolicyPresent, false);
+    surface.targetRelationship = row.observation.targetRelationship;
+    surface.governingPolicySelection.state = 'ineligible';
+    assert.equal(summarize().privacyPolicyPresent, false);
+  }
+});

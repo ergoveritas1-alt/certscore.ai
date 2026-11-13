@@ -74,7 +74,7 @@ class DeltaTests(unittest.TestCase):
             source,prior,inv=self.fixture(root,rows)
             prior_manifest=prior/'cache-manifest.json'
             previous=delta.read(prior_manifest)
-            old_inventory={**delta.read(inv),'end':previous['end']}
+            old_inventory={**delta.read(inv),'end':'2026-10-24T14:00:00Z'}
             original=prior/'delta-inventory.json'
             old_bytes=json.dumps(old_inventory).encode()
             original.write_bytes(old_bytes)
@@ -95,11 +95,11 @@ class DeltaTests(unittest.TestCase):
             for scan_id in ids[100:]:
                 self.assertEqual(missing[scan_id]['selectionInventory'],old_ref)
                 self.assertFalse(missing[scan_id]['remoteMetadataChecked'])
-            next_plan=delta.pending_plan(delta.pending_exports(manifest),start,end)
+            next_plan=delta.pending_plan(delta.pending_exports(manifest),start,delta.utc('2026-10-29T14:00:00Z'))
             self.assertEqual(next_plan['pendingRefreshIds'][:8],ids[100:])
 
     def test_completed_reservation_and_oldest_check_rotation_preserve_all_ids(self):
-        pending={str(i):dict(scanId=str(i),scanCreatedAt='2026-10-26T12:00:00Z',lastExactCheckUtc='2026-10-27T12:00:00Z' if i<141 else '2026-10-28T12:00:00Z',productionStatus='failed' if i<141 else 'completed') for i in range(157)}
+        pending={str(i):dict(scanId=str(i),scanCreatedAt='2026-10-26T12:00:00Z',lastExactCheckUtc='2026-10-27T12:00:00Z' if i<141 else '2026-10-28T12:00:00Z',productionStatus='failed' if i<141 else 'completed', observedReadyGeneration=None if i<141 else ('v1','a'*64,'b'*64)) for i in range(157)}
         start,end=delta.utc('2026-10-01T00:00:00Z'),delta.utc('2026-11-01T00:00:00Z')
         plan=delta.pending_plan(pending,start,end,56)
         self.assertEqual(sum(pending[i]['productionStatus']=='completed' for i in plan['pendingRefreshIds']),16)
@@ -111,5 +111,51 @@ class DeltaTests(unittest.TestCase):
         self.assertFalse(first_failed.intersection(second['pendingRefreshIds']))
         self.assertEqual(delta.pending_plan(pending,start,end,0)['pendingRefreshIds'],[])
         with self.assertRaises(ValueError):delta.pending_plan(pending,start,end,101)
+
+    def test_new_ready_generation_seen_in_overlap_waits_for_selected_recheck(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = pathlib.Path(t)
+            original = self.row(NEW, status='completed', originalRequestId='original-request',
+                                projection_status='ready', projection_version='v1', projection_payload_sha256='b'*64)
+            changed = {**original, 'projection_payload_sha256':'c'*64}
+            source, prior, inv = self.fixture(root, [changed])
+            previous = delta.read(prior/'cache-manifest.json')
+            old_file = prior/'inventory.json'
+            old_file.write_text(json.dumps({**delta.read(inv), 'end':previous['end'], 'rows':[original]}))
+            old_ref = {'file':str(old_file), 'bytes':old_file.stat().st_size, 'sha256':delta.digest(old_file.read_bytes())}
+            previous['directInventory'] = old_ref
+            previous['receipts'].append({'scanId':NEW,'state':'source_unavailable'})
+            (prior/'cache-manifest.json').write_text(json.dumps(previous))
+            inv.write_text(json.dumps({**delta.read(inv), 'pendingRefreshIds':[]}))
+            real_stat = pathlib.Path.stat
+            def stat(path, *args, **kwargs):
+                if path.is_relative_to(source):
+                    raise AssertionError('Deferred overlap must not touch the archive')
+                return real_stat(path, *args, **kwargs)
+            with mock.patch.object(pathlib.Path, 'stat', stat):
+                manifest = self.run_refresh(root, source, prior, inv)
+            entry = delta.pending_exports(manifest)[NEW]
+            self.assertEqual(entry['originalSelectionInventory'], old_ref)
+            self.assertEqual(entry['selectionInventory'], old_ref)
+            self.assertEqual(entry['observedSelectionInventory'], manifest['directInventory'])
+            self.assertNotEqual(entry['checkedReadyGeneration'], entry['observedReadyGeneration'])
+            start, end = delta.utc(manifest['start']), delta.utc(manifest['end'])
+            self.assertEqual(delta.pending_plan({NEW:entry}, start, end, 56)['pendingRefreshIds'], [NEW])
+            entry['checkedReadyGeneration'] = entry['observedReadyGeneration']
+            entry['lastExactCheckUtc'] = manifest['end']
+            self.assertEqual(delta.pending_plan({NEW:entry}, start, end, 56)['deferredPendingIds'], [NEW])
+            entry['checkedReadyGeneration'] = None
+            self.assertEqual(delta.pending_plan({NEW:entry}, start, end, 56)['pendingRefreshIds'], [NEW])
+
+            next_inventory = root/'next.json'
+            next_end = end + delta.datetime.timedelta(days=1)
+            next_inventory.write_text(json.dumps({**delta.read(inv), 'end':next_end.isoformat(), 'pendingRefreshIds':[NEW]}))
+            rechecked = delta.refresh(source, root.resolve()/'next-cache', start, next_end, root.resolve()/'out', next_inventory)
+            after = delta.pending_exports(rechecked)[NEW]
+            self.assertEqual(rechecked['pendingRechecks']['recheckedCount'], 1)
+            self.assertEqual(after['originalSelectionInventory'], old_ref)
+            self.assertEqual(after['lastExactCheckUtc'], next_end.isoformat())
+            self.assertEqual(after['observedReadyGeneration'], after['checkedReadyGeneration'])
+            self.assertEqual(delta.pending_plan({NEW:after}, start, next_end, 56)['pendingRefreshIds'], [])
 
 if __name__=='__main__':unittest.main()
