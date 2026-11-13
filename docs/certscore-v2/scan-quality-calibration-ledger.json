@@ -3152,8 +3152,8 @@
     },
     "https://sanity.io/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-12-11T17:24:08.406Z",
-      "lastContactAt": "2026-11-13T17:24:08.406Z",
+      "cooldownUntil": "2026-12-11T22:00:06.550Z",
+      "lastContactAt": "2026-11-13T22:00:06.550Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
