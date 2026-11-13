@@ -2,22 +2,36 @@ import type { Page } from "playwright";
 
 /** Runs in the document, both at registered lifecycle checkpoints and during
  * existing inventory reads. The marker is document-local, never visitor state. */
-function revealInDocument(exactTargetUrl?: string): boolean {
+function revealInDocument(target?: string | { url: string }): boolean {
+  const exactTargetUrl = typeof target === "string" ? target : target?.url;
   if (window !== window.top || (exactTargetUrl && location.href !== exactTargetUrl)) return false;
-  const target = window as unknown as {
-    __certscoreBorlabsPassiveReveal?: boolean;
-    borlabsCookieConfig?: { settings?: { dialogShowDialog?: boolean; dialogShowDialogAfterUserInteraction?: boolean } };
-    BorlabsCookie?: { Consents?: { hasConsent?: unknown } };
+  const hooks = {
+    reveal() {
+      if (exactTargetUrl && location.href !== exactTargetUrl) return false;
+      const target = window as unknown as {
+        __certscoreBorlabsPassiveReveal?: boolean;
+        borlabsCookieConfig?: { settings?: { dialogShowDialog?: boolean; dialogShowDialogAfterUserInteraction?: boolean } };
+        BorlabsCookie?: { Consents?: { hasConsent?: unknown } };
+      };
+      const settings = target.borlabsCookieConfig?.settings;
+      if (settings?.dialogShowDialog !== true || settings.dialogShowDialogAfterUserInteraction !== true ||
+        typeof target.BorlabsCookie?.Consents?.hasConsent !== "function") return false;
+      if (target.__certscoreBorlabsPassiveReveal) return true;
+      const max = (document.scrollingElement?.scrollHeight ?? 0) - innerHeight;
+      if (max < 1) return false;
+      scrollTo({ top: scrollY < max ? scrollY + 1 : scrollY - 1, left: scrollX, behavior: "instant" });
+      target.__certscoreBorlabsPassiveReveal = true;
+      return true;
+    },
+    checkpoint() { requestAnimationFrame(hooks.reveal); },
   };
-  const settings = target.borlabsCookieConfig?.settings;
-  if (settings?.dialogShowDialog !== true || settings.dialogShowDialogAfterUserInteraction !== true ||
-    typeof target.BorlabsCookie?.Consents?.hasConsent !== "function") return false;
-  if (target.__certscoreBorlabsPassiveReveal) return true;
-  const max = (document.scrollingElement?.scrollHeight ?? 0) - innerHeight;
-  if (max < 1) return false;
-  scrollTo({ top: scrollY < max ? scrollY + 1 : scrollY - 1, left: scrollX, behavior: "instant" });
-  target.__certscoreBorlabsPassiveReveal = true;
-  return true;
+  if (hooks.reveal()) return true;
+  if (typeof target === "object") {
+    window.addEventListener("borlabs-cookie-after-init", hooks.checkpoint, { once: true });
+    document.addEventListener("DOMContentLoaded", hooks.checkpoint, { once: true });
+    window.addEventListener("load", hooks.checkpoint, { once: true });
+  }
+  return false;
 }
 
 /** Observe the configured interaction-deferred dialog as soon as the CMP is
@@ -43,4 +57,9 @@ export async function installBorlabsDeferredDialogReveal(page: Page, exactTarget
 /** Existing bounded inventory fallback for already-loaded documents. */
 export async function revealBorlabsDeferredDialog(page: Page): Promise<boolean> {
   return page.evaluate(revealInDocument, undefined).catch(() => false);
+}
+
+/** Arm the passive reveal after the redirected document passes authorization. */
+export async function armResolvedBorlabsDeferredDialogReveal(page: Page, exactTargetUrl: string): Promise<void> {
+  await page.evaluate(revealInDocument, { url: exactTargetUrl }).catch(() => undefined);
 }

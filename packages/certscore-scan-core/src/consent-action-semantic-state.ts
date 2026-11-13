@@ -24,6 +24,7 @@ export type ActionStateWrite = {
 };
 
 export type SemanticState = {
+  osanoReceiptEvidence?: import("@certscore/contracts").OsanoReceiptEvidence;
   oneTrustGroupEvidence?: OneTrustGroupEvidence;
   cookieYesLegacyReceiptEvidence?: import("@certscore/contracts").CookieYesLegacyReceiptEvidence;
   complianzReceiptEvidence?: import("@certscore/contracts").ComplianzReceiptEvidence;

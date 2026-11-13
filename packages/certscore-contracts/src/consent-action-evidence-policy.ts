@@ -1,3 +1,4 @@
+import {osanoReceiptEvidenceSchema,osanoReceiptDecision} from "./osano-consent-receipt";
 import { complianzReceiptEvidenceSchema, complianzReceiptDecision } from "./complianz-consent-state";
 import { cookieYesLegacyReceiptEvidenceSchema, cookieYesLegacyReceiptDecision } from "./cookieyes-legacy-consent-state";
 import { z } from "zod";
@@ -71,6 +72,7 @@ export const consentDecisionEvidenceSchema = z.object({
   tcfApiSource: z.enum(["addEventListener", "getTCData"]).optional(),
   oneTrustGroupEvidence: oneTrustGroupEvidenceSchema.optional(),
   complianzReceiptEvidence: complianzReceiptEvidenceSchema.optional(),
+  osanoReceiptEvidence: osanoReceiptEvidenceSchema.optional(),
   cookieYesLegacyReceiptEvidence: cookieYesLegacyReceiptEvidenceSchema.optional(),
 }).strict().superRefine((evidence, context) => {
   if (evidence.basis === "verified_state" && (!evidence.observedStateSha256 || evidence.observedAtMs === undefined || !evidence.timestampBasis)) {
@@ -81,6 +83,13 @@ export const consentDecisionEvidenceSchema = z.object({
   }
   if (evidence.tcfPurposeEvidence && (evidence.basis !== "verified_state" || !evidence.tcfApiSource || evidence.oneTrustGroupEvidence)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "TCF purpose encoding requires verified API-source provenance." });
+  }
+  if (evidence.osanoReceiptEvidence) {
+    const proof=evidence.osanoReceiptEvidence;
+    if(evidence.basis!=="verified_state"||evidence.timestampBasis!=="instrumented_state_write"||
+      evidence.oneTrustGroupEvidence||evidence.complianzReceiptEvidence||evidence.cookieYesLegacyReceiptEvidence||evidence.tcfPurposeEvidence||evidence.tcfApiSource||
+      evidence.observedStateSha256!==proof.stateSha256||evidence.decision!==osanoReceiptDecision(proof))
+      context.addIssue({code:z.ZodIssueCode.custom,message:"Osano decisions require exclusive complete receipt proof."});
   }
   if (evidence.complianzReceiptEvidence) {
     const proof = evidence.complianzReceiptEvidence;

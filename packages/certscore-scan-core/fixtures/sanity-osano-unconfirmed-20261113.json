@@ -1,0 +1,572 @@
+[
+  {
+    "scanId": "69497b22-a710-4f19-8b23-34ebd32e6827",
+    "action": "accept",
+    "packetSha256": "4377b45efe3015a7bcc738fc5cd5ffe63a2e4a11c6890d32d2f7d8ae8043868f",
+    "packetSizeBytes": 221059,
+    "apiObservations": [
+      {
+        "phase": "baseline",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      },
+      {
+        "phase": "initial",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      },
+      {
+        "phase": "terminal",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      }
+    ],
+    "reasons": [
+      "opposite_or_mixed_decision"
+    ]
+  },
+  {
+    "scanId": "69497b22-a710-4f19-8b23-34ebd32e6827",
+    "action": "reject",
+    "packetSha256": "070e652014262827f8bc6469e53946db8cdf52bdc38bff960f2357e3b31bd86a",
+    "packetSizeBytes": 168358,
+    "apiObservations": [
+      {
+        "phase": "baseline",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      },
+      {
+        "phase": "initial",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      },
+      {
+        "phase": "terminal",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      }
+    ],
+    "reasons": [
+      "api_saved_event_unverified"
+    ]
+  },
+  {
+    "scanId": "205964a1-5708-4676-b35d-2c4216b4dbd9",
+    "action": "accept",
+    "packetSha256": "1ff5aa58a2a3c8a691a46b87799fcd7a563c10e5694738881a522f2a66e758e8",
+    "packetSizeBytes": 108885,
+    "apiObservations": [
+      {
+        "phase": "baseline",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      },
+      {
+        "phase": "initial",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      },
+      {
+        "phase": "terminal",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      }
+    ],
+    "reasons": [
+      "opposite_or_mixed_decision"
+    ]
+  },
+  {
+    "scanId": "205964a1-5708-4676-b35d-2c4216b4dbd9",
+    "action": "reject",
+    "packetSha256": "2f976d4070020693f414e6f88e8ea71701a07d0eb0c3f0eb24a240f9304a629e",
+    "packetSizeBytes": 168245,
+    "apiObservations": [
+      {
+        "phase": "baseline",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      },
+      {
+        "phase": "initial",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      },
+      {
+        "phase": "terminal",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      }
+    ],
+    "reasons": [
+      "api_saved_event_unverified"
+    ]
+  },
+  {
+    "scanId": "f215e8d9-b00a-42c0-84b6-68f72fd92425",
+    "action": "accept",
+    "packetSha256": "660eb225fcce05303b019c3635f652c5170cf54112ebed2937d7ab52d4fb5081",
+    "packetSizeBytes": 228919,
+    "apiObservations": [
+      {
+        "phase": "baseline",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      },
+      {
+        "phase": "initial",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      },
+      {
+        "phase": "terminal",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      }
+    ],
+    "reasons": [
+      "opposite_or_mixed_decision"
+    ]
+  },
+  {
+    "scanId": "f215e8d9-b00a-42c0-84b6-68f72fd92425",
+    "action": "reject",
+    "packetSha256": "093c02e90968adbc31e0f7276070dae3f0433a5aaa777ca63c0893ac4fff5ec7",
+    "packetSizeBytes": 171142,
+    "apiObservations": [
+      {
+        "phase": "baseline",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      },
+      {
+        "phase": "initial",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      },
+      {
+        "phase": "terminal",
+        "valueSha256": "49e4d7861e68ccc5482c70cf93c07220a11e3fe9fdda384c4fdde67f5e7e28f1",
+        "facts": [
+          {
+            "pathSha256": "53a8bc3d28fd321fbb6a8a29638e59c35f39dab7aacea17c4ab0178cb52b9f5e",
+            "value": false
+          },
+          {
+            "pathSha256": "4e9de49e434da22361495e897ff985458e91b307b6cc3a29e633ffe389436564",
+            "value": false
+          },
+          {
+            "pathSha256": "41054d6a7725565a75365cebebc335277f6fa136660ecaea79793a43ec2dfd6f",
+            "value": false
+          },
+          {
+            "pathSha256": "f6f742dd26da3fbaa6b0b0712a2f625656b6e26fcbf534b6ac05a172c4d279d3",
+            "value": "DENY"
+          },
+          {
+            "pathSha256": "45a5c190ecc11308d2758f18e8c331b0f5526dc538e9cb9c797f3400a231dbde",
+            "value": "DENY"
+          }
+        ],
+        "decision": "denied",
+        "eventSequence": 0
+      }
+    ],
+    "reasons": [
+      "api_saved_event_unverified"
+    ]
+  }
+]

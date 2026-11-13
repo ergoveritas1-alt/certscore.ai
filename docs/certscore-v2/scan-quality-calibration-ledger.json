@@ -3119,10 +3119,50 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://go.dev/"
+    },
+    "https://olx.pl/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-11T12:29:32.526Z",
+      "lastContactAt": "2026-11-13T12:29:32.526Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://olx.pl/"
+    },
+    "https://flic.kr/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-11T12:34:35.819Z",
+      "lastContactAt": "2026-11-13T12:34:35.819Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://flic.kr/"
+    },
+    "https://transip.eu/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-11T12:28:51.035Z",
+      "lastContactAt": "2026-11-13T12:28:51.035Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://transip.eu/"
+    },
+    "https://sanity.io/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-11T13:40:58.865Z",
+      "lastContactAt": "2026-11-13T13:40:58.865Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sanity.io/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-11-13T10:45:37.142Z",
+  "updatedAt": "2026-11-13T13:41:43.286Z",
   "contactOnlyUrls": [
     "https://10tv.com/",
     "https://aacsb.edu/",
@@ -3168,6 +3208,7 @@
     "https://ferris.edu/",
     "https://fidoalliance.org/",
     "https://findaya.co.id/",
+    "https://flic.kr/",
     "https://flixcar.com/",
     "https://freedownloadmanager.org/",
     "https://fretebras.com.br/",
@@ -3210,6 +3251,7 @@
     "https://nintendo.it/",
     "https://novelfire.net/",
     "https://observador.pt/",
+    "https://olx.pl/",
     "https://onebit.cz/",
     "https://open-meteo.com/",
     "https://ovid.com/",
@@ -3230,6 +3272,7 @@
     "https://roboflow.com/",
     "https://routenote.com/",
     "https://runna.com/",
+    "https://sanity.io/",
     "https://securid.com/",
     "https://seiska.fi/",
     "https://sered.net/",
@@ -3252,6 +3295,7 @@
     "https://termly.io/",
     "https://tesorf.com/",
     "https://theworks.co.uk/",
+    "https://transip.eu/",
     "https://tresensa.com/",
     "https://tripadvisor.com.au/",
     "https://trustarc.com/",

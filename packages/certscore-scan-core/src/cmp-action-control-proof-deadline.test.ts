@@ -233,3 +233,17 @@ test("the final observer dispatch guard rejects an expired wall-clock budget eve
   assert.throws(() => assertConsentActionDispatchAllowed(f.request.page, signal, undefined, 1100), /dispatch_budget_exhausted/);
   assert.doesNotThrow(() => assertConsentActionDispatchAllowed(f.request.page, signal));
 });
+
+// Retained olx.pl reject worker fb8bdf7c-2304-4abb-bd7c-7262048934ee:
+// final elementHandle timed out after the locator had reported a visible control.
+// The same binding boundary is shared by Accept and Reject.
+for (const action of ["accept", "reject"] as const) test(`${action}: final handle timeout is unavailable proof, not a worker exception`, async () => {
+  const f = proofFixture();
+  let reads = 0;
+  const control = {elementHandle: async () => {reads++; throw new Error("locator.elementHandle: Timeout 100ms exceeded");}} as unknown as Locator;
+  const result = await buildConsentActionControlProof({...f.request, action, control, bindElement: true, deadlineAtMs: Date.now() + 1000});
+  assert.deepEqual(result, {status: "label_unverifiable", reason: "resolved_control_unavailable"});
+  assert.equal(reads, 1);
+  assert.equal(f.callbacks(), 0);
+  assert.deepEqual(f.commands, []);
+});

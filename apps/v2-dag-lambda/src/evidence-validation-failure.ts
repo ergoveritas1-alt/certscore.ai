@@ -14,6 +14,7 @@ const safeFields = new Set([
   "visualCapture", "notes", "controls", "domBinding", "documentIdentity", "source", "token",
   "gpcImpactCapture", "gpcImpactSemanticObservation", "gpcObservationSession", "semanticObservation", "gppDiagnostics", "stateTransitions",
   "terminalDecisionEvidence", "observedActionSourceProof", "mainDocumentWriteCoverage",
+  "interactionDiagnostics", "navigation", "redirectResolution", "redirectCount",
 ]);
 
 // Exact schema-owned messages may select a fixed diagnostic code. Neither the

@@ -1,3 +1,4 @@
+import {validateOsanoReceiptEnvelope,validateOsanoReceiptProjection} from "./osano-consent-receipt";
 import { validateCookieYesLegacyReceiptEnvelope, validateCookieYesLegacyProjectionProof } from "./cookieyes-legacy-consent-state";
 import { consentScopeExclusionSchema } from "./consent-scope-exclusion";
 import {consentReceiptAvailabilitySchema,summarizeConsentReceiptAvailability} from "./consent-receipt-availability";
@@ -403,7 +404,9 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
         "unsafe_redirect_target",
       ]).optional(),
       finalExactTargetSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-      redirectCount: z.number().int().min(0).max(8),
+      // Failed authorization can observe more hops than the action allowance.
+      // Retain that count without making the failure packet itself invalid.
+      redirectCount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
       requestedTargetSha256: z.string().regex(/^[a-f0-9]{64}$/),
       status: z.enum(["resolved", "failed"]),
     }).optional(),
@@ -442,6 +445,7 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
     diagnostics.navigation.redirectResolution?.status === "resolved" &&
     (
       diagnostics.navigation.redirectResolution.failureReason !== undefined ||
+      diagnostics.navigation.redirectResolution.redirectCount > 8 ||
       diagnostics.navigation.redirectResolution.finalExactTargetSha256 === undefined
     )
   ) {
@@ -608,6 +612,12 @@ const postRefusalEvidencePacketBaseSchema = z.object({
       frameIdentitySha256:packet.actionControlProof && "frameIdentitySha256" in packet.actionControlProof ? packet.actionControlProof.frameIdentitySha256 : undefined,
     }, context);
     validateCookieYesLegacyReceiptEnvelope(evidence?.cookieYesLegacyReceiptEvidence, {
+      startedAt:packet.startedAt, completedAt:packet.completedAt, dispatchedAtMs:packet.refusalRegistration.actionDispatchedAtMs,
+      observedAtMs:evidence?.observedAtMs,
+      cmpId:packet.actionControlProof?.cmpId,
+      frameIdentitySha256:packet.actionControlProof && "frameIdentitySha256" in packet.actionControlProof ? packet.actionControlProof.frameIdentitySha256 : undefined,
+    }, context);
+    validateOsanoReceiptEnvelope(evidence?.osanoReceiptEvidence, {
       startedAt:packet.startedAt, completedAt:packet.completedAt, dispatchedAtMs:packet.refusalRegistration.actionDispatchedAtMs,
       observedAtMs:evidence?.observedAtMs,
       cmpId:packet.actionControlProof?.cmpId,
@@ -1355,6 +1365,7 @@ export const postRefusalReportProjectionSchema = z.object({
   });
   for (const evidence of [projection.decisionEvidence, projection.terminalDecisionEvidence?.evidence]) {
     validateCookieYesLegacyProjectionProof(evidence?.cookieYesLegacyReceiptEvidence, projection, context);
+    validateOsanoReceiptProjection(evidence?.osanoReceiptEvidence, projection, context);
   }
   const evidence = projection.decisionEvidence;
   const coverage = projection.captureCoverage;

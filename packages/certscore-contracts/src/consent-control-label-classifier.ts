@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v28";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v29";
 
 export type ConsentControlIntent =
   | "accept"
@@ -544,6 +544,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "nur essenzielle akzeptieren", "necessary_only"),
     ...direct("reject", "optionale cookies ablehnen"),
     ...direct("reject", "nicht erforderliche cookies ablehnen"),
+    ...direct("reject", "nicht wesentliche cookies ablehnen"),
     ...direct("reject", "alle nicht notwendigen ablehnen"),
     ...direct("reject", "marketing cookies ablehnen"),
     ...direct("reject", "statistik cookies ablehnen"),

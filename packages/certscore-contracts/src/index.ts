@@ -3943,3 +3943,5 @@ export * from "./opt-out-dispatch-rejection";
 export * from "./gpc-cmp-pair-coverage";
 
 export * from "./control-accessibility-assessment";
+
+export * from "./osano-consent-receipt";

@@ -1,3 +1,6 @@
+import {captureOsanoReceiptBaseline,readVerifiedOsanoReceipt,type OsanoReceiptBaseline} from "./osano-consent-receipt.js";
+import {requireWithinActionBoundary, ActionOperationStopped} from "./action-operation-boundary.js";
+import {readWithinActionBoundary as readWithinAcceptDeadline} from "./action-operation-boundary.js";
 import { isPendingFormBootstrap } from "./post-accept-form-load.js";
 import { installDeferredConsentReadiness, primeDeferredConsentReadiness, waitForDeferredConsentReadiness } from "./deferred-consent-readiness.js";
 import { createConsentActionFrameBinding } from "./consent-action-frame-binding.js";
@@ -10,7 +13,7 @@ import { installOneTrustSdkSourceCapture } from "./onetrust-sdk-source.js";
 import { confirmationDiagnostics } from "./consent-confirmation-diagnostics.js";
 import { firstVerifiedConsentRead } from "./consent-confirmation-read.js";
 import { createConsentCookieReadGate } from "./consent-cookie-read-gate.js";
-import { installBorlabsDeferredDialogReveal } from "./borlabs-passive-dialog-reveal.js";
+import { armResolvedBorlabsDeferredDialogReveal, installBorlabsDeferredDialogReveal } from "./borlabs-passive-dialog-reveal.js";
 import { waitForConsentDocumentOrNamedControl, isRegisteredLoadingConsentRecipe } from "./consent-document-readiness.js";
 import { appendResolverDiagnostic, canonicalResolverDiagnostic } from "./consent-action-resolver-diagnostics.js";
 import { buildObservedActionSourceProof } from "./observed-action-source-proof.js";
@@ -118,6 +121,7 @@ type ResolverReporter = (snapshot: ResolverSnapshot) => void;
 const POST_ACCEPT_SOURCE = "post_accept_observer";
 const MAX_REQUESTS = 96;
 const MAX_STORAGE_ITEMS = 96;
+const ACCEPT_RESULT_FINALIZATION_RESERVE_MS = 250;
 export const POST_ACCEPT_EARLY_SIGNAL_SETTLE_MS = 350;
 const NON_ESSENTIAL_PURPOSES = new Set([
   "advertising",
@@ -193,6 +197,8 @@ export interface PostAcceptActionRecipe {
 }
 
 export interface PostAcceptObserverInput {
+  /** Bounded operational diagnostics; never consent evidence. */
+  onDiagnosticStage?: (stage: string) => void;
   formSnapshotReviewer?: FormSnapshotReviewer;
   runtimeGraph?: { scanId: string; mode: "capture_only" | "project" };
   scanId: string;
@@ -278,6 +284,7 @@ type ConfirmationBaseline =
       kind: "cmp_api_consent_state_changed";
       canonicalState?: string;
       configurationSha256?: string;
+      osanoReceiptBaseline?: OsanoReceiptBaseline;
       eventSequence: number;
       apiRead?: ExistingApiRead;
     }
@@ -299,6 +306,7 @@ type ConfirmationState = {
   oneTrustGroupEvidence?: SemanticState["oneTrustGroupEvidence"];
   cookieYesLegacyReceiptEvidence?: SemanticState["cookieYesLegacyReceiptEvidence"];
   complianzReceiptEvidence?: SemanticState["complianzReceiptEvidence"];
+  osanoReceiptEvidence?: SemanticState["osanoReceiptEvidence"];
   tcfApiSource?: "addEventListener" | "getTCData";
   tcfPurposeEvidence?: ActionTcfData["purposeEvidence"];
   observedAtEpochMs?: number;
@@ -336,6 +344,7 @@ export async function runPostAcceptObserver(
     authorizedExactTargetUrl = normalizeTargetUrl(input.url);
   }
 
+  const stage = (name: string) => { try { input.onDiagnosticStage?.(name); } catch { /* Diagnostics cannot alter the action. */ } };
   const branchStartedAtMs = Date.now();
   const parentScanStartedAtMs = input.scanStartedAtMs ?? branchStartedAtMs;
   const resultBudgetMs = boundedMs(input.resultBudgetMs, 0, 0, 30_000);
@@ -366,6 +375,7 @@ export async function runPostAcceptObserver(
     }
     return resultBudgetDeadlineAtMs;
   };
+  let deferredPrimingController: AbortController | undefined;
   const sourceFrameBinding = createConsentActionFrameBinding();
   const baseSignal = resultBudgetDeadlineAtMs === undefined
     ? input.signal
@@ -373,6 +383,18 @@ export async function runPostAcceptObserver(
       ? AbortSignal.any([input.signal, resultBudgetAbortController.signal])
       : resultBudgetAbortController.signal;
   const effectiveSignal = AbortSignal.any([sourceFrameBinding.signal, ...(baseSignal ? [baseSignal] : [])]);
+  const captureConfirmationBaseline = (...args: Parameters<typeof readCaptureConfirmationBaseline>) => operation(() => readCaptureConfirmationBaseline(...args));
+  const operation = <T>(read:()=>Promise<T>, disposeLate?:(value:T)=>void|Promise<unknown>) =>
+    requireWithinActionBoundary(read,resultBudgetDeadlineAtMs ?? Infinity,effectiveSignal,disposeLate).catch(error => {
+      if (error instanceof ActionOperationStopped) { stage("boundary_exhausted"); resultBudgetAbortController.abort(error); }
+      throw error;
+    });
+  const captureStorage = async (...args: Parameters<typeof collectStorageSnapshot>) => {
+    args[6] ??= {deadlineAtMs: resultBudgetDeadlineAtMs ?? Infinity, signal: effectiveSignal};
+    const snapshot = await collectStorageSnapshot(...args);
+    if (resultBudgetDeadlineAtMs !== undefined && Date.now() >= resultBudgetDeadlineAtMs) { stage("boundary_exhausted"); resultBudgetAbortController.abort(new ActionOperationStopped()); }
+    return snapshot;
+  };
   const dispatchDelayMs = boundedMs(input.dispatchDelayMs, 0, 0, 10_000);
   const observationWindowMs = boundedMs(
     input.observationWindowMs,
@@ -492,6 +514,7 @@ export async function runPostAcceptObserver(
     postAcceptTcfState?: PostRefusalTcfState;
     observations?: PostAcceptObservation[];
   }) => {
+    stage("finalization");
     if (resultBudgetExhausted) {
       cancellation();
       observationCoverageSufficient = false;
@@ -624,8 +647,9 @@ export async function runPostAcceptObserver(
         registration: unconfirmedRegistration("aborted", "abort_requested_before_navigation"),
       });
     }
+    stage("browser_launch");
     if (!browser) {
-      browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
+      browser = await operation(() => chromium.launch(chromiumLaunchOptions({ headless: true })), value => value.close());
       ownsBrowser = true;
     }
     if (cancellation()) {
@@ -639,12 +663,17 @@ export async function runPostAcceptObserver(
         registration: unconfirmedRegistration("aborted", reason),
       });
     }
-    context = await browser.newContext({ ...chromiumContextOptions(), ignoreHTTPSErrors: false });
-    await installWebBotAuthRoute(context);
+    stage("context_setup");
+    context = await operation(() => browser!.newContext({ ...chromiumContextOptions(), ignoreHTTPSErrors: false }), value => value.close());
+    await operation(() => installWebBotAuthRoute(context!));
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
-      await installPublicNetworkGuardRoute(context);
+      await operation(() => installPublicNetworkGuardRoute(context!));
     }
-    page = await context.newPage();
+    stage("page_setup");
+    page = await operation(() => context!.newPage(), value => value.close());
+    const setupPage = page;
+    await operation(async () => {
+      const page = setupPage;
     passiveCmpCapture = installCmpPassiveDiagnostics(page);
     receiptCapture = installConsentReceiptCapture(page,{scanId:input.scanId,action:'accept',clockOriginAtEpochMs:parentScanStartedAtMs,signal:effectiveSignal});
     oneTrustSdkCapture = installOneTrustSdkSourceCapture(page);
@@ -660,6 +689,7 @@ export async function runPostAcceptObserver(
     });
     actionDiscovery = await installConsentActionDiscovery(page);
     await installStorageWriteProbe(page);
+    });
     let mainNavigationRequestCount = 0;
     page.on("framenavigated", frame => { if (actionDispatched && frame === page?.mainFrame()) sourceDocumentChanged = true; });
     page.on("request", (request) => {
@@ -707,6 +737,7 @@ export async function runPostAcceptObserver(
     page.on("requestfinished", markCompleted);
     page.on("requestfailed", markCompleted);
 
+    stage("navigation");
     const navigationStartedAtMs = Date.now();
     try {
       const navigationTimeoutMs = remainingResultBudgetMs(15_000);
@@ -755,6 +786,7 @@ export async function runPostAcceptObserver(
     }
     timing.navigationMs = Math.max(0, Date.now() - navigationStartedAtMs);
 
+    stage("target_binding");
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
       const resolutionStartedAtMs = Date.now();
       const settled = await waitForPassiveRedirectSettle(
@@ -805,9 +837,22 @@ export async function runPostAcceptObserver(
       });
     }
     diagnostics.navigation.finalUrlAuthorized = true;
+    if (authorizedExactTargetUrl && normalizeTargetUrl(input.url) !== authorizedExactTargetUrl && !effectiveSignal?.aborted) {
+      // Start the passive reveal alongside resolution. The page-side exact URL
+      // check prevents a subsequent navigation from inheriting this setup.
+      void armResolvedBorlabsDeferredDialogReveal(page, authorizedExactTargetUrl);
+    }
 
+
+    stage("resolver");
     const resolverStartedAtMs = Date.now();
-    await primeDeferredConsentReadiness(page).catch(() => undefined);
+    const searchDeadline = resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs);
+    deferredPrimingController = new AbortController();
+    // Optional loader priming must never serialize ordinary control discovery.
+    // Abort its pending read before leaving resolution so it cannot move the
+    // pointer later during baseline capture or the authorized click.
+    void primeDeferredConsentReadiness(page, {deadlineAtMs:searchDeadline,
+      signal:AbortSignal.any([effectiveSignal,deferredPrimingController.signal])}).catch(() => undefined);
     let previousSnapshot: string | undefined;
     let resolverAttempt = 0;
     const recordResolverSnapshot: ResolverReporter = (snapshot) => {
@@ -816,25 +861,25 @@ export async function runPostAcceptObserver(
       previousSnapshot = signature;
       appendResolverDiagnostic(diagnostics.resolver!, snapshot, ++resolverAttempt, Date.now() - resolverStartedAtMs);
     };
-    const searchDeadline = resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs);
-    const readiness = actionSearchTimeoutMs === 0 ? {documentReady:true,resolution:undefined} :
-      await waitForConsentDocumentOrNamedControl<AcceptRecipeResolution>({page,deadlineAtMs:searchDeadline,signal:effectiveSignal,discovery:actionDiscovery,
+    const resolverReadDeadline = actionSearchTimeoutMs === 0 ? resultBudgetDeadlineAtMs ?? Infinity : searchDeadline;
+    const readiness = await readWithinAcceptDeadline(async () => actionSearchTimeoutMs === 0 ? {documentReady:true,resolution:undefined} :
+      await waitForConsentDocumentOrNamedControl<AcceptRecipeResolution>({page:page!,deadlineAtMs:searchDeadline,signal:effectiveSignal,discovery:actionDiscovery,
         probe:async (sliceMs,probeSignal)=>{
           const active=await resolveActiveRuntimeRecipes(page!,recipes,actionDiscovery);
           if(active.length!==1 || !isRegisteredLoadingConsentRecipe(active[0]!,"accept"))return undefined;
           const candidate=await waitForDeterministicRecipe(page!,active,sliceMs,probeSignal,actionDiscovery,recordResolverSnapshot);
           return candidate.status==="found" && candidate.scope===page ? candidate : undefined;
-        }});
+        }}), {documentReady:false, resolution:undefined as AcceptRecipeResolution | undefined}, resolverReadDeadline, effectiveSignal);
     const documentReady=readiness.documentReady;
     const searchEnded=effectiveSignal?.aborted || (actionSearchTimeoutMs>0 && Date.now()>=searchDeadline);
     if ((!documentReady || searchEnded) && !readiness.resolution) recordResolverSnapshot({ source: "named_recipe", state: documentReady ? "binding_budget_exhausted" : "document_loading",
       selectorMatchCount: 0, visibleCount: 0, enabledCount: 0, labelMatchCount: 0, actionableCount: 0, cmpIds: [], controlLabels: [] });
     const searchRemaining = () => actionSearchTimeoutMs === 0 ? 0 : Math.max(1, searchDeadline - Date.now());
-    let resolution: AcceptRecipeResolution = readiness.resolution ?? ((!documentReady || searchEnded)
+    let resolution: AcceptRecipeResolution = await readWithinAcceptDeadline<AcceptRecipeResolution>(async () => readiness.resolution ?? ((!documentReady || searchEnded)
       ? { status: effectiveSignal?.aborted ? "aborted" : "not_found" }
       : input.allowCanonicalAcceptDiscovery
       ? await waitForDeterministicOrCanonicalAcceptRecipe(
-          page,
+          page!,
           recipes,
           searchRemaining(),
           effectiveSignal,
@@ -842,13 +887,14 @@ export async function runPostAcceptObserver(
           recordResolverSnapshot,
         )
       : await waitForDeterministicRecipe(
-          page,
+          page!,
           recipes,
           searchRemaining(),
           effectiveSignal,
           actionDiscovery,
           recordResolverSnapshot,
-        ));
+        )), {status:effectiveSignal.aborted ? "aborted" : "not_found"}, resolverReadDeadline, effectiveSignal);
+    deferredPrimingController.abort();
     timing.resolverMs = Math.max(0, Date.now() - resolverStartedAtMs);
     if (resolution.status !== "found" && resolution.status !== "aborted" &&
       actionSearchTimeoutMs > 0 && timing.resolverMs >= actionSearchTimeoutMs) {
@@ -899,6 +945,7 @@ export async function runPostAcceptObserver(
     let control = resolution.control;
     let confirmationScope = resolution.scope;
     if (boundControlDispatch) sourceFrameBinding.bind(page, confirmationScope);
+    stage("storage_baseline");
     const preActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, undefined, (d) => { storageCollectionDiagnostics.preAction = d; });
     const preActionCapturedAtMs = elapsed(parentScanStartedAtMs);
     if (cancellation()) {
@@ -912,6 +959,7 @@ export async function runPostAcceptObserver(
       });
     }
 
+    stage("control_readiness");
     let actionabilityError: unknown;
     let useVerifiedGeometryDispatch = false;
     const actionReadinessDeadline = Date.now() + (input.allowCanonicalAcceptDiscovery ? 3_000 : 2_500);
@@ -1030,6 +1078,7 @@ export async function runPostAcceptObserver(
         preActionCapturedAtMs, preActionStorage, requests: classifyRequests(retainedRequests(), parentScanStartedAtMs)});
     }
 
+    stage("confirmation_baseline");
     let confirmationBaseline = await captureConfirmationBaseline(
       context,
       page,
@@ -1042,6 +1091,7 @@ export async function runPostAcceptObserver(
       const reason = oneTrustBaselineLimitation(confirmationBaseline.oneTrustBaseline);
       if (reason) limitations.push(reason);
     }
+    stage("control_proof");
     let proofResolution = await buildConsentActionControlProof({
       bindElement: boundControlDispatch,
       deadlineAtMs: resultBudgetDeadlineAtMs,
@@ -1172,6 +1222,7 @@ export async function runPostAcceptObserver(
     actionControlProof = proofResolution.proof;
     boundControlElement = proofResolution.boundElement;
     sourceFrameBinding.setElement(boundControlElement, resultBudgetDeadlineAtMs);
+    stage("click");
     let actionDispatchedAtEpochMs = Date.now();
     let actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
     let clickError: unknown;
@@ -1224,6 +1275,7 @@ export async function runPostAcceptObserver(
         exactTargetUrl: normalizeTargetUrl(authorizedExactTargetUrl ?? observationTargetUrl),
         parentScanStartedAtMs, actionDispatchedAtMs, windowMs: remainingResultBudgetMs(observationWindowMs), signal: effectiveSignal, documentChangedBeforeStart: actionDocumentChanged });
     }
+    stage("confirmation");
     const confirmationStartedAtMs = Date.now();
     const confirmedState = await sourceFrameBinding.read(remainingResultBudgetMs(confirmationTimeoutMs), confirmationBudgetMs => waitForAcceptanceConfirmation(
       context!,
@@ -1238,6 +1290,7 @@ export async function runPostAcceptObserver(
         decision: state.decision, basis: "verified_state", observedStateSha256: state.stateHash,
         ...(state.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:state.cookieYesLegacyReceiptEvidence} : {}),
         ...(state.complianzReceiptEvidence ? {complianzReceiptEvidence:state.complianzReceiptEvidence} : {}),
+        ...(state.osanoReceiptEvidence ? {osanoReceiptEvidence:state.osanoReceiptEvidence} : {}),
         ...(state.oneTrustGroupEvidence ? { oneTrustGroupEvidence: state.oneTrustGroupEvidence } : {}),
         observedAtMs: elapsed(parentScanStartedAtMs, state.observedAtEpochMs ?? Date.now()),
         timestampBasis: state.observedAtEpochMs === undefined ? "verified_state_observed" : "instrumented_state_write" }; },
@@ -1360,6 +1413,7 @@ export async function runPostAcceptObserver(
       ...(confirmedState.tcfApiSource ? { tcfApiSource: confirmedState.tcfApiSource } : {}),
       ...(confirmedState.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:confirmedState.cookieYesLegacyReceiptEvidence} : {}),
       ...(confirmedState.complianzReceiptEvidence ? {complianzReceiptEvidence:confirmedState.complianzReceiptEvidence} : {}),
+      ...(confirmedState.osanoReceiptEvidence ? {osanoReceiptEvidence:confirmedState.osanoReceiptEvidence} : {}),
       ...(confirmedState.oneTrustGroupEvidence ? { oneTrustGroupEvidence: confirmedState.oneTrustGroupEvidence } : {}),
       observedStateSha256: confirmedState.stateHash,
       observedAtMs: acceptanceRegisteredAtMs, timestampBasis: confirmedState.observedAtEpochMs === undefined
@@ -1381,12 +1435,14 @@ export async function runPostAcceptObserver(
       observedStateHash: confirmedState.stateHash,
       corroboratingOnly: false,
     }];
-    if (selectedRecipe.bannerSelector &&
-      !await locatorIsVisible(page, selectedRecipe.bannerSelector, selectedRecipe.bannerFrameUrl)) {
-      witnesses.push({
-        witnessType: "banner_transition",
-        observedAtMs: acceptanceRegisteredAtMs,
-        corroboratingOnly: true,
+    let bannerTransitionAtMs: number | undefined;
+    if (selectedRecipe.bannerSelector) {
+      // This corroboration is independent of the verified state. Do not
+      // postpone form capture or the activity window behind a renderer read.
+      void locatorIsVisible(page, selectedRecipe.bannerSelector, selectedRecipe.bannerFrameUrl).then(visible => {
+        if (!visible && !effectiveSignal.aborted && !sourceDocumentChanged && targetStillAuthorized()) {
+          bannerTransitionAtMs = elapsed(parentScanStartedAtMs);
+        }
       });
     }
     const registration: PostAcceptRegistration = {
@@ -1413,7 +1469,7 @@ export async function runPostAcceptObserver(
       const bootstrap = postActionRequests.find(row=>isPendingFormBootstrap(row.request.url()));
       const originalWindowEndedAtMs=acceptanceRegisteredAtMs+observationWindowMs;
       const workerDeadlineAtMs=resultBudgetDeadlineAtMs-parentScanStartedAtMs;
-      const endAtMs=Math.min(originalWindowEndedAtMs+8000,workerDeadlineAtMs-250);
+      const endAtMs=Math.min(originalWindowEndedAtMs+8000,workerDeadlineAtMs-ACCEPT_RESULT_FINALIZATION_RESERVE_MS);
       if (!bootstrap || Date.now()>=parentScanStartedAtMs+originalWindowEndedAtMs ||
         !formCaptureHandle?.followThrough({originalWindowEndedAtMs,endAtMs,workerDeadlineAtMs,triggerRequestId:bootstrap.requestId})) return;
       sharedFormEndAtMs=endAtMs;
@@ -1432,6 +1488,7 @@ export async function runPostAcceptObserver(
       confirmedState,
       getCapturedRequests: () => retainedRequests(),
       observationWindowMs,
+      requireFullWindow: Boolean(formCaptureHandle || input.requireFullConfiguredWindow),
       page,
       parentScanStartedAtMs,
       acceptanceRegisteredAtEpochMs,
@@ -1449,16 +1506,24 @@ export async function runPostAcceptObserver(
     // same-session reads after the observation window. Overlap their browser
     // work so an image cannot spend the result's finalization allowance.
     let snapshotFinishedAtMs = formSnapshotHandle ? undefined : observationEndedAtEpochMs;
+    const terminalReadDeadlineAtMs = resultBudgetDeadlineAtMs === undefined
+      ? Infinity : resultBudgetDeadlineAtMs - ACCEPT_RESULT_FINALIZATION_RESERVE_MS;
     const terminalReads = Promise.all([
       formSnapshotHandle?.finish().then(snapshot => {
         snapshotFinishedAtMs = Date.now();
         return snapshot;
       }) ?? Promise.resolve(undefined),
       captureStorage(context, page, observationTargetUrl, limitations, graphCapture?.cookies,
-        (d) => { storageCollectionDiagnostics.postAction = d; }).then(storage => ({
+        (d) => { storageCollectionDiagnostics.postAction = d; },
+        { deadlineAtMs: terminalReadDeadlineAtMs, signal: effectiveSignal }).then(storage => ({
           storage, capturedAtMs: elapsed(parentScanStartedAtMs),
         })),
-      readActionWriteCapture<InstrumentedStorageWrite>(page, "__certscoreReadPostAcceptWrites"),
+      readWithinAcceptDeadline(
+        () => readActionWriteCapture<InstrumentedStorageWrite>(page!, "__certscoreReadPostAcceptWrites"),
+        { writes: [] },
+        terminalReadDeadlineAtMs,
+        effectiveSignal,
+      ),
     ]);
     let formFollowupSettled = false;
     if (sharedFormEndAtMs !== undefined) {
@@ -1477,6 +1542,9 @@ export async function runPostAcceptObserver(
     const instrumentedWrites = writeCapture.writes;
     sourceHookInstalledAtMs = writeCapture.metadata?.hookInstalledAtMs;
     const postActionStorage = storageRead.storage;
+    if (bannerTransitionAtMs !== undefined && bannerTransitionAtMs <= timing.observationEndedAtMs) {
+      witnesses.push({ witnessType: "banner_transition", observedAtMs: bannerTransitionAtMs, corroboratingOnly: true });
+    }
     // Both collectors have finished inside the same shortened lifecycle.
     // Retain their shared actual end; the packet still validates every image
     // and inventory timestamp against it and the unchanged worker deadline.
@@ -1593,7 +1661,17 @@ export async function runPostAcceptObserver(
       ...(postAcceptTcfState ? { postAcceptTcfState } : {}),
       observations,
     });
+  } catch (error) {
+    if (!(error instanceof ActionOperationStopped)) throw error;
+    resultBudgetAbortController.abort(error);
+    cancellation();
+    limitations.push("observer_browser_operation_boundary_exhausted");
+    return await finalize({resolverFound:false, resolverReason:"observer_browser_operation_boundary_exhausted",
+      registration:unconfirmedRegistration("aborted","observer_browser_operation_boundary_exhausted"),
+      requests:classifyRequests(retainedRequests(),parentScanStartedAtMs)});
   } finally {
+    stage("cleanup");
+    deferredPrimingController?.abort();
     sourceFrameBinding.dispose();
     // Finalization already froze the optional sample. Cleanup must run even if
     // a capture-side failure interrupted packet construction.
@@ -1607,8 +1685,12 @@ export async function runPostAcceptObserver(
     passiveCmpCapture?.finish();
     receiptCapture?.finish();
     oneTrustSdkCapture?.dispose();
-    await context?.close().catch(() => undefined);
-    if (ownsBrowser) await browser?.close().catch(() => undefined);
+    // Initiate cleanup even after abort, but do not let transport shutdown hold
+    // an already-frozen packet beyond the existing result deadline.
+    const cleanupDeadline = Math.min(resultBudgetDeadlineAtMs ?? Infinity, Date.now() + 250);
+    const closingContext = context?.close().catch(() => undefined);
+    const closingBrowser = ownsBrowser ? browser?.close().catch(() => undefined) : undefined;
+    await readWithinAcceptDeadline(() => Promise.all([closingContext, closingBrowser]).then(() => undefined), undefined, cleanupDeadline);
   }
 }
 
@@ -2109,6 +2191,7 @@ async function waitForCanonicalAcceptControlRecipe(
         signal,
         discovery,
         reportDiagnostic,
+        outerDeadlineAtMs ?? deadlineAtMs,
       );
       if (resolved.status === "found" && Date.now() >= (outerDeadlineAtMs ?? deadlineAtMs)) {
         bindingState("binding_budget_exhausted");
@@ -2288,7 +2371,7 @@ function selectorScopes(page: Page, childFrameUrl?: string): Array<Page | Frame>
   return [page, ...page.frames().filter((frame) => frame !== page.mainFrame())];
 }
 
-async function captureConfirmationBaseline(
+async function readCaptureConfirmationBaseline(
   context: BrowserContext,
   page: Page,
   confirmationScope: Page | Frame,
@@ -2352,10 +2435,14 @@ async function captureConfirmationBaseline(
     };
   }
   if (confirmation.kind === "cmp_api_consent_state_changed") {
-    const snapshot = await readCmpApiConsentSnapshot(confirmationScope, confirmation.provider);
+    const [snapshot, osanoReceiptBaseline] = await Promise.all([
+      readCmpApiConsentSnapshot(confirmationScope, confirmation.provider),
+      confirmation.provider === "osano" ? captureOsanoReceiptBaseline(context, confirmationScope, control) : undefined,
+    ]);
     return {
       kind: confirmation.kind,
       canonicalState: snapshot?.canonicalState,
+      ...(osanoReceiptBaseline ? {osanoReceiptBaseline} : {}),
       configurationSha256: snapshot?.configurationSha256,
       eventSequence: snapshot?.eventSequence ?? 0,
       ...(snapshot ? {apiRead:{snapshot,readAtEpochMs:Date.now()}} : {}),
@@ -2398,6 +2485,7 @@ async function waitForAcceptanceConfirmation(
   onDecisionObserved?: (state: SemanticState) => void,
   diagnostics?: { pass: () => void; reason: (reason: import("@certscore/contracts").ConsentConfirmationReason) => void; apiSnapshot?: (snapshot: import("./cmp-api-consent-state").CmpApiConsentSnapshot | undefined) => void },
 ): Promise<ConfirmationState | undefined> {
+  let osanoReceiptAttempted = false;
   if (confirmation.kind === "canonical_accept_transition") {
     if (baseline.kind !== "canonical_accept_transition" || !baseline.controlVisible || !baseline.surfacePresent) return undefined;
     const deadlineAtMs = Date.now() + timeoutMs;
@@ -2417,6 +2505,7 @@ async function waitForAcceptanceConfirmation(
         return { stateHash: state.stateHash, key: state.key, observedAtEpochMs: state.observedAtEpochMs,
           ...(state.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:state.cookieYesLegacyReceiptEvidence} : {}),
           ...(state.complianzReceiptEvidence ? {complianzReceiptEvidence:state.complianzReceiptEvidence} : {}),
+          ...(state.osanoReceiptEvidence ? {osanoReceiptEvidence:state.osanoReceiptEvidence} : {}),
           witnessType: "canonical_acceptance_state",
           expectedState: "canonical_granted_consent_decision_written_after_action" };
       }
@@ -2493,6 +2582,7 @@ async function waitForAcceptanceConfirmation(
             stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
             ...(semantic.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:semantic.cookieYesLegacyReceiptEvidence} : {}),
             ...(semantic.complianzReceiptEvidence ? {complianzReceiptEvidence:semantic.complianzReceiptEvidence} : {}),
+            ...(semantic.osanoReceiptEvidence ? {osanoReceiptEvidence:semantic.osanoReceiptEvidence} : {}),
             ...(semantic.oneTrustGroupEvidence ? { oneTrustGroupEvidence: semantic.oneTrustGroupEvidence } : {}),
             witnessType: "cmp_cookie_state", expectedState: "canonical_cmp_granted_decision_after_action",
           };
@@ -2511,6 +2601,7 @@ async function waitForAcceptanceConfirmation(
             stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
             ...(semantic.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:semantic.cookieYesLegacyReceiptEvidence} : {}),
             ...(semantic.complianzReceiptEvidence ? {complianzReceiptEvidence:semantic.complianzReceiptEvidence} : {}),
+            ...(semantic.osanoReceiptEvidence ? {osanoReceiptEvidence:semantic.osanoReceiptEvidence} : {}),
             ...(semantic.oneTrustGroupEvidence ? { oneTrustGroupEvidence: semantic.oneTrustGroupEvidence } : {}),
             witnessType: "cmp_cookie_state", expectedState: "canonical_cmp_granted_decision_after_action",
           };
@@ -2532,6 +2623,17 @@ async function waitForAcceptanceConfirmation(
           key: confirmation.provider,
           expectedState: "all_configurable_purposes_granted_after_accept",
         };
+      }
+      // A complete fresh cookie receipt can witness an unexposed duplicate
+      // store. Never override a fresh contradictory/malformed API event, a
+      // changed API binding, or an unsupported TCF scope.
+      if (!osanoReceiptAttempted && confirmation.provider === "osano" && baseline.osanoReceiptBaseline && snapshot &&
+        snapshot.eventSequence === baseline.eventSequence && snapshot.configurationSha256 === baseline.configurationSha256) {
+        osanoReceiptAttempted = true;
+        const receipt = await readVerifiedOsanoReceipt(context, confirmationScope, baseline.osanoReceiptBaseline, actionDispatchedAtEpochMs, diagnostics?.reason);
+        if (receipt) onDecisionObserved?.(receipt);
+        if (receipt?.decision === "granted") return {...receipt, witnessType:"cmp_cookie_state", expectedState:"canonical_cmp_granted_decision_after_action"};
+        if (receipt) diagnostics?.reason("opposite_or_mixed_decision");
       }
     } else if (
       confirmation.kind === "tcf_purposes_granted_or_cmp_cookie_changed" &&
@@ -2562,6 +2664,7 @@ async function waitForAcceptanceConfirmation(
         return {stateHash:decoded.stateHash,key:decoded.key,observedAtEpochMs:decoded.observedAtEpochMs,
           ...(decoded.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:decoded.cookieYesLegacyReceiptEvidence} : {}),
           ...(decoded.complianzReceiptEvidence ? {complianzReceiptEvidence:decoded.complianzReceiptEvidence} : {}),
+          ...(decoded.osanoReceiptEvidence ? {osanoReceiptEvidence:decoded.osanoReceiptEvidence} : {}),
           ...(decoded.oneTrustGroupEvidence ? {oneTrustGroupEvidence:decoded.oneTrustGroupEvidence}:{}),
           witnessType:"cmp_cookie_state",expectedState:"canonical_cmp_granted_decision_after_action"};
       });
@@ -2591,6 +2694,7 @@ async function waitForAcceptanceConfirmation(
           return {stateHash:decoded.stateHash,key:decoded.key,observedAtEpochMs:decoded.observedAtEpochMs,
             ...(decoded.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:decoded.cookieYesLegacyReceiptEvidence} : {}),
             ...(decoded.complianzReceiptEvidence ? {complianzReceiptEvidence:decoded.complianzReceiptEvidence} : {}),
+            ...(decoded.osanoReceiptEvidence ? {osanoReceiptEvidence:decoded.osanoReceiptEvidence} : {}),
             ...(decoded.oneTrustGroupEvidence?{oneTrustGroupEvidence:decoded.oneTrustGroupEvidence}:{}),
             witnessType:"cmp_storage_state",expectedState:"canonical_cmp_granted_decision_after_action"};
         }
@@ -2642,6 +2746,7 @@ async function waitForPostAcceptObservation(input: {
   confirmedState: ConfirmationState;
   getCapturedRequests: () => CapturedRequest[];
   canExitEarly?: () => boolean;
+  requireFullWindow?: boolean;
   observationWindowMs: number;
   page: Page;
   onObservationTick?: () => void;
@@ -2687,7 +2792,7 @@ async function waitForPostAcceptObservation(input: {
 
     // Keep yielding while optional images overlap the original window. An
     // expired early-signal deadline must not create a zero-delay busy loop.
-    const canExitEarly = input.canExitEarly?.() ?? true;
+    const canExitEarly = !input.requireFullWindow && (input.canExitEarly?.() ?? true);
     const currentDeadlineAtMs = canExitEarly
       ? earlyExitDeadlineAtMs ?? observationDeadlineAtMs : observationDeadlineAtMs;
     if (Date.now() - lastTcfPollAtMs >= 100) {
@@ -2707,6 +2812,12 @@ async function waitForPostAcceptObservation(input: {
       }
     }
 
+    // The terminal snapshot collects these same sources. A fixed window has
+    // no use for early-exit polling that competes with form reads and pixels.
+    if (input.requireFullWindow) {
+      await waitForDelay(Math.min(25, Math.max(0, observationDeadlineAtMs - Date.now())), input.signal).catch(() => undefined);
+      continue;
+    }
     const requests = classifyRequests(
       input.getCapturedRequests(),
       input.parentScanStartedAtMs,
@@ -2781,6 +2892,7 @@ async function pollWithinPostAcceptObservationDeadline<T>(
     waitForDelay(Math.min(250, remainingMs)).then(() => timeoutValue),
   ]);
 }
+
 
 function buildObservations(input: {
   acceptanceRegisteredAtMs: number;
@@ -2858,37 +2970,35 @@ function classifyRequests(
   });
 }
 
-async function captureStorage(
+async function collectStorageSnapshot(
   context: BrowserContext,
   page: Page,
   targetUrl: string,
   limitations: string[],
   onCookies?: (cookies: unknown[]) => void,
   onDiagnostics?: (diagnostics: ActionStorageCollectionDiagnostics) => void,
+  boundary?: { deadlineAtMs: number; signal?: AbortSignal },
 ): Promise<PostRefusalStorageItem[]> {
-  let pageStorageAvailable = true;
-  const pageStorage = await page.evaluate(() => {
+  const readPageStorage = () => page.evaluate(() => {
     let localStorage: Array<[string, string]> = [];
     let sessionStorage: Array<[string, string]> = [];
     let localStorageAvailable = true; let sessionStorageAvailable = true;
     try { localStorage = Object.entries(window.localStorage).slice(0, 385); } catch { localStorageAvailable = false; }
     try { sessionStorage = Object.entries(window.sessionStorage).slice(0, 385); } catch { sessionStorageAvailable = false; }
     return { localStorage, sessionStorage, localStorageAvailable, sessionStorageAvailable };
-  }).catch(() => {
-    pageStorageAvailable = false;
-    return { localStorage: [] as Array<[string, string]>, sessionStorage: [] as Array<[string, string]>, localStorageAvailable: false, sessionStorageAvailable: false };
-  });
+  }).catch(() => undefined);
+  const readCookies = () => context.cookies().catch(() => undefined);
+  const [pageStorage, rawCookies] = boundary ? await Promise.all([
+    readWithinAcceptDeadline(readPageStorage, undefined, boundary.deadlineAtMs, boundary.signal),
+    readWithinAcceptDeadline(readCookies, undefined, boundary.deadlineAtMs, boundary.signal),
+  ]) : [await readPageStorage(), await readCookies()] as const;
   let snapshotUrl = new URL(targetUrl);
   try { snapshotUrl = new URL(page.url()); } catch {}
   const hostname = snapshotUrl.hostname;
   const origin = snapshotUrl.origin;
-  let cookiesAvailable = true;
-  const rawCookies = await context.cookies().catch(() => {
-    cookiesAvailable = false;
-    limitations.push("cookie_snapshot_unavailable");
-    return [];
-  });
-  const normalized = normalizeActionStorageSnapshot({ cookies: rawCookies, localStorage: pageStorage?.localStorage, sessionStorage: pageStorage?.sessionStorage });
+  const cookiesAvailable = rawCookies !== undefined;
+  if (!cookiesAvailable) limitations.push("cookie_snapshot_unavailable");
+  const normalized = normalizeActionStorageSnapshot({ cookies: rawCookies ?? [], localStorage: pageStorage?.localStorage, sessionStorage: pageStorage?.sessionStorage });
   if (normalized.droppedCookies > 0 && !limitations.includes("cookie_snapshot_invalid_entries")) limitations.push("cookie_snapshot_invalid_entries");
   if (normalized.droppedLocalStorage > 0 && !limitations.includes("local_storage_snapshot_invalid_entries")) limitations.push("local_storage_snapshot_invalid_entries");
   if (normalized.droppedSessionStorage > 0 && !limitations.includes("session_storage_snapshot_invalid_entries")) limitations.push("session_storage_snapshot_invalid_entries");
@@ -2943,8 +3053,8 @@ async function captureStorage(
   });
   const diagnostics = actionStorageCollectionDiagnostics({
     cookies: { ...channel(normalized.cookies.length, normalized.droppedCookies, cookiesAvailable), retainedCount: retainedCount("cookie") },
-    localStorage: { ...channel(normalized.localStorage.length, normalized.droppedLocalStorage, pageStorageAvailable && pageStorage.localStorageAvailable), retainedCount: retainedCount("local_storage") },
-    sessionStorage: { ...channel(normalized.sessionStorage.length, normalized.droppedSessionStorage, pageStorageAvailable && pageStorage.sessionStorageAvailable), retainedCount: retainedCount("session_storage") },
+    localStorage: { ...channel(normalized.localStorage.length, normalized.droppedLocalStorage, pageStorage?.localStorageAvailable === true), retainedCount: retainedCount("local_storage") },
+    sessionStorage: { ...channel(normalized.sessionStorage.length, normalized.droppedSessionStorage, pageStorage?.sessionStorageAvailable === true), retainedCount: retainedCount("session_storage") },
   });
   onDiagnostics?.(diagnostics);
   return retainedItems;
@@ -3300,11 +3410,15 @@ async function waitForDelay(delayMs: number, signal?: AbortSignal) {
   if (delayMs <= 0) return;
   await new Promise<void>((resolve, reject) => {
     if (signal?.aborted) return reject(signal.reason ?? new Error("Post-Accept observation aborted."));
-    const timer = setTimeout(resolve, delayMs);
-    timer.unref?.();
-    signal?.addEventListener("abort", () => {
+    const abort = () => {
       clearTimeout(timer);
-      reject(signal.reason ?? new Error("Post-Accept observation aborted."));
-    }, { once: true });
+      reject(signal?.reason ?? new Error("Post-Accept observation aborted."));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, delayMs);
+    timer.unref?.();
+    signal?.addEventListener("abort", abort, { once: true });
   });
 }

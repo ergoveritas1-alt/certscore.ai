@@ -90,3 +90,10 @@ test('Reject packet invariants get fixed diagnostic codes without rejected value
  ]});
  const r=evidenceValidationFailure(error)!;assert.match(r.message,/custom:protocol_identity_binding/);assert.match(r.message,/custom:california_body_header_dispositions/);assert.doesNotMatch(r.message,/private|must retain|must bind/);
  });
+
+test("redirect overflow diagnostics retain schema field names without rejected URLs", () => {
+  const error = Object.assign(new Error("private target"), {name:"ZodError",issues:[{
+    path:["interactionDiagnostics","navigation","redirectResolution","redirectCount"],code:"too_big",message:"private target"}]});
+  assert.equal(evidenceValidationFailure(error)?.message,
+    "Evidence validation failed: interactionDiagnostics.navigation.redirectResolution.redirectCount (too_big)");
+});

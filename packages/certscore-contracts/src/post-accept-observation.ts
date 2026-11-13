@@ -1,3 +1,4 @@
+import {validateOsanoReceiptEnvelope,validateOsanoReceiptProjection} from "./osano-consent-receipt";
 import { postAcceptFormImageDiagnosticsSchema } from "./post-accept-form-snapshots";
 import { validateCookieYesLegacyReceiptEnvelope, validateCookieYesLegacyProjectionProof } from "./cookieyes-legacy-consent-state";
 import {consentReceiptAvailabilitySchema,summarizeConsentReceiptAvailability} from "./consent-receipt-availability";
@@ -341,6 +342,12 @@ const postAcceptEvidencePacketBaseSchema = z.object({
       frameIdentitySha256:packet.actionControlProof && "frameIdentitySha256" in packet.actionControlProof ? packet.actionControlProof.frameIdentitySha256 : undefined,
     }, context);
     validateCookieYesLegacyReceiptEnvelope(evidence?.cookieYesLegacyReceiptEvidence, {
+      startedAt:packet.startedAt, completedAt:packet.completedAt, dispatchedAtMs:packet.acceptanceRegistration.actionDispatchedAtMs,
+      observedAtMs:evidence?.observedAtMs,
+      cmpId:packet.actionControlProof?.cmpId,
+      frameIdentitySha256:packet.actionControlProof && "frameIdentitySha256" in packet.actionControlProof ? packet.actionControlProof.frameIdentitySha256 : undefined,
+    }, context);
+    validateOsanoReceiptEnvelope(evidence?.osanoReceiptEvidence, {
       startedAt:packet.startedAt, completedAt:packet.completedAt, dispatchedAtMs:packet.acceptanceRegistration.actionDispatchedAtMs,
       observedAtMs:evidence?.observedAtMs,
       cmpId:packet.actionControlProof?.cmpId,
@@ -795,6 +802,7 @@ export const postAcceptReportProjectionSchema = z.object({
   });
   for (const evidence of [projection.decisionEvidence, projection.terminalDecisionEvidence?.evidence]) {
     validateCookieYesLegacyProjectionProof(evidence?.cookieYesLegacyReceiptEvidence, projection, context);
+    validateOsanoReceiptProjection(evidence?.osanoReceiptEvidence, projection, context);
   }
   const evidence = projection.decisionEvidence;
   const coverage = projection.captureCoverage;

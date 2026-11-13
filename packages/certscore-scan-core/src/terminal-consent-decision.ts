@@ -8,6 +8,7 @@ type VerifiedState = {
   tcfApiSource?: ConsentDecisionEvidence["tcfApiSource"];
   oneTrustGroupEvidence?: ConsentDecisionEvidence["oneTrustGroupEvidence"];
   cookieYesLegacyReceiptEvidence?: ConsentDecisionEvidence["cookieYesLegacyReceiptEvidence"];
+  osanoReceiptEvidence?: ConsentDecisionEvidence["osanoReceiptEvidence"];
   complianzReceiptEvidence?: ConsentDecisionEvidence["complianzReceiptEvidence"];
 };
 
@@ -55,6 +56,7 @@ export function terminalConsentDecisionRead(input: {
             ...(state.tcfPurposeEvidence ? { tcfPurposeEvidence: state.tcfPurposeEvidence } : {}),
             ...(state.tcfApiSource ? { tcfApiSource: state.tcfApiSource } : {}),
             ...(state.cookieYesLegacyReceiptEvidence ? {cookieYesLegacyReceiptEvidence:state.cookieYesLegacyReceiptEvidence} : {}),
+            ...(state.osanoReceiptEvidence ? {osanoReceiptEvidence:state.osanoReceiptEvidence} : {}),
             ...(state.complianzReceiptEvidence ? {complianzReceiptEvidence:state.complianzReceiptEvidence} : {}),
             ...(state.oneTrustGroupEvidence ? { oneTrustGroupEvidence: state.oneTrustGroupEvidence } : {}),
           },

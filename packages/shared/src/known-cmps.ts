@@ -1108,7 +1108,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       provider: "osano",
     },
     rejectControlSelectors: [".osano-cm-deny-all"],
-    recipeVersion: "v2",
+    recipeVersion: "v3",
     role: "consent management platform",
     standards: ["gpc"],
     urlPatterns: [/osano/i]

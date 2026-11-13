@@ -301,7 +301,9 @@ function startPostAcceptFormSnapshots(input: FormSnapshotInput & ({
       if (!result) console.warn("[post-accept-form-snapshot-incomplete]", JSON.stringify({stage, stageTimingsMs, elapsedMs:Date.now()-stageStartedAtMs, changed, aborted:signal.aborted, deadlineExpired:Date.now() >= captureDeadlineAtMs, lateFormExtensionActive, inventory:inventoryDiagnostics, snapshots:snapshotDiagnostics}));
       done = true;
       if (!cdp) void documentBinding?.then(({session}) => session.detach()).catch(() => {});
-      await cdp?.detach().catch(() => {});
+      // No evidence depends on the detach acknowledgement. The observer
+      // closes the context even if the browser protocol stops responding.
+      void cdp?.detach().catch(() => {});
     }
   })();
   return {

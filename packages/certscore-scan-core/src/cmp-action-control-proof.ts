@@ -216,8 +216,12 @@ export async function buildConsentActionControlProof(input: ConsentActionControl
     let element: ElementHandle<HTMLElement | SVGElement> | null = null;
     let retained = false;
     try {
-      await guard.read(() => (input.control as Locator).elementHandle({timeout: Math.max(1,
-        Math.min(100, (input.deadlineAtMs ?? Date.now() + 100) - Date.now()))}).then(value => {element = value;}));
+      const available = await guard.read(() => (input.control as Locator).elementHandle({timeout: Math.max(1,
+        Math.min(100, (input.deadlineAtMs ?? Date.now() + 100) - Date.now()))})
+        .then(value => {element = value; return true;}, () => false));
+      // A disappearing control or bounded browser-read failure supplies no
+      // proof. Preserve the deadline/abort checkpoint and never retry a click.
+      if (!available) return {status: "label_unverifiable", reason: "resolved_control_unavailable"};
       if (!element) return {status: "label_unverifiable", reason: "resolved_control_detached"};
       const result = await buildConsentActionControlProofWithinBoundary({...input, control: element}, guard);
       guard.checkpoint();

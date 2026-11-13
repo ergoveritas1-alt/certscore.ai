@@ -40,7 +40,7 @@ test('deferred loader first-move suppression is primed without a consent click',
   window.moves=0;window.clicks=0;window.addEventListener('click',()=>window.clicks++);
   window.addEventListener('mousemove',()=>{if(++window.moves===2)setTimeout(()=>window.dispatchEvent(new Event('rocket-allScriptsLoaded')),50)});
   </script>`}));
-  await page.goto('https://fixture.test/');await primeDeferredConsentReadiness(page);
+  await page.goto('https://fixture.test/');await primeDeferredConsentReadiness(page,{deadlineAtMs:Date.now()+1000});
   assert.equal(await waitForDeferredConsentReadiness({page,control:page.getByRole('button'),cmpId:'Borlabs Cookie',deadlineAtMs:Date.now()+700}),true);
   assert.ok(await page.evaluate(()=>(window as any).moves)>=2);
   assert.equal(await page.evaluate(()=>(window as any).clicks),0);

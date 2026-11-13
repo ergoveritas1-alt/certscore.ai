@@ -15,7 +15,7 @@ import { saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, saleS
 import {activeSaleSharingCanaryCampaign,assertSaleSharingCanary,consumeSaleSharingCanary,type SaleSharingCanaryCampaign,type SaleSharingCanaryLedger} from "@certscore/contracts";
 import {createSaleSharingCanaryStore} from "./sale-sharing-canary-store";
 import { cmpPreferenceBudgetMs, cmpPreferenceDispatchSchema, cmpPreferencesEvidenceSchema, CMP_PREFERENCE_JOIN_MS, CMP_PREFERENCE_POLICY_VERSION, type CmpPreferenceDispatch } from "@certscore/contracts";
-import { actionWorkerCheckpoints } from "./action-worker-checkpoints.js";
+import { actionWorkerCheckpoints, retainedActionStage } from "./action-worker-checkpoints.js";
 import { assertOriginalRuntimeVisitForReport, buildRuntimeVisitEligibilityDiagnostic, hasRepresentativeRuntimeEvidence } from "./runtime-representative-evidence.js";
 import { createOpenAiScreenshotSafetyClassifier as createFormSnapshotSafetyClassifier } from "./screenshot-safety";
 import { FULL_SITE_PAGE_DISPATCH } from "./full-site-dispatch-contract.js";
@@ -2407,6 +2407,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
     }
     const { runPostAcceptObserver } = await import("@certscore/scan-core/post-accept-observer");
     return runPostAcceptObserver({
+      onDiagnosticStage: stage => { void checkpoint.stage(stage); },
       formSnapshotReviewer: createFormSnapshotSafetyClassifier(),
       runtimeGraph: payload.runtimeGraph,
       onActionDispatchCommitted: () => { void checkpoint("action_dispatched"); },
@@ -5445,6 +5446,8 @@ async function writeAndUploadFailureDiagnostic(input: {
     diagnosticUploadStartedAt: new Date().toISOString(),
     handlerElapsedMs: Date.now() - input.handlerStartedAt.getTime(),
     egressPreflight,
+    lastActionStage: retainedActionStage(phaseRecord.lastStage),
+    interruptedActionStage: retainedActionStage(phaseRecord.interruptedStage),
     lastCheckpoint: checkpoints.at(-1) ?? null,
     phaseCheckpoints: checkpoints,
     productionFindingIntegration: false,
