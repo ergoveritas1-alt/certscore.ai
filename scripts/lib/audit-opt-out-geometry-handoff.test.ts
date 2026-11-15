@@ -59,7 +59,8 @@ async function extractInLocalPostgres(directory: string, payloads: unknown[]) {
   const bin = execFileSync("pg_config", ["--bindir"], { encoding: "utf8" }).trim();
   const data = path.join(directory, "pg-data");
   const resultPath = path.join(directory, "extract.hex");
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("PG")));
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) if (key.startsWith("PG")) delete env[key];
   execFileSync(path.join(bin, "initdb"), ["--no-locale", "--auth=trust", "-D", data], { env, timeout: 15_000 });
   const literal = (value: string) => "'" + value.replaceAll("'", "''") + "'";
   const rows = payloads.map((payload, index) => `(${index},${literal(JSON.stringify(payload))}::jsonb)`);
