@@ -1165,3 +1165,15 @@ test("retained unknown first-party cookie names cannot create tracking proof",()
     assert.equal(hasPreconsentSequenceEvidence(evidence),false,cookieName);
   }
 });
+
+// Retained production scan 02c70240-c2b3-402d-99d7-75233b670b28.
+// Query values were redacted; generic content ID below is synthetic adversarial coverage.
+test("Leiden async carousel is not identity synchronization, including generic content IDs", () => {
+  for (const suffix of ["?redacted=1", "?id=content"]) {
+    const url = "https://www.universiteitleiden.nl/async/spotlightcarousel" + suffix;
+    assert.equal(hasConcreteRtbCookieSyncEvidence({rtb_cookie_sync_evidence: [{
+      hostname: "www.universiteitleiden.nl", pathSample: "/async/spotlightcarousel",
+      requestUrl: url, queryKeysSample: ["id"], category: "identity_sync", reason: "sync_path"
+    }], runtimeRequestUrls: [url]}), false);
+  }
+});

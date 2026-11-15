@@ -5,7 +5,19 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v29";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v31";
+
+/** OneTrust's banner wrapper can repeat the labels of descendant controls. */
+export function isOneTrustConsentBannerWrapper(element: {
+  tagName?: unknown;
+  role?: unknown;
+  selectorHint?: unknown;
+  containerSelectorHint?: unknown;
+}): boolean {
+  return element.tagName === "div" &&
+    (element.role == null || element.role === "dialog" || element.role === "region") &&
+    element.selectorHint === "#onetrust-banner-sdk" && element.containerSelectorHint === element.selectorHint;
+}
 
 export type ConsentControlIntent =
   | "accept"
@@ -147,7 +159,16 @@ const it = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ lo
 const nl = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "nl", ...term }));
 const pl = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "pl", ...term }));
 
+const DUTCH_SALE_OPT_OUT_LABELS = [
+  "verkoop mijn persoonlijke informatie niet",
+  "verkoop mijn persoonlijke informatie niet, opent het dialoogvenster van het voorkeurencentrum",
+];
+const NORMALIZED_DUTCH_SALE_OPT_OUT_LABELS = new Set(DUTCH_SALE_OPT_OUT_LABELS.map(normalizeConsentControlText));
+
 export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
+  // Retained OneTrust banner and its matching Dutch accessibility label.
+  ...nl(DUTCH_SALE_OPT_OUT_LABELS.map((phrase): TermInput => ({phrase, intent: "privacy_opt_out", strength: "direct",
+    exactLabelOnly: true, requiresConsentContext: true, observationOnly: true}))),
   // Retained Church of England preference control; observation only, no opening grant.
   { locale: "en", phrase: "set cookie preferences", intent: "options", strength: "direct",
     exactLabelOnly: true, requiresConsentContext: true, observationOnly: true },
@@ -1192,6 +1213,10 @@ function classifyConsentControlLabelInternal(
       normalizeConsentControlText(candidate) === normalizeConsentControlText(value)
     ) === index);
   if (fields.length > 1) {
+    const dutchSaleLabels = fields.filter(label => NORMALIZED_DUTCH_SALE_OPT_OUT_LABELS.has(normalizeConsentControlText(label)));
+    if (dutchSaleLabels.length > 0 && dutchSaleLabels.length !== fields.length) {
+      return unknown(["visible_accessible_intent_conflict"]);
+    }
     const classifications = fields.map((label) => classifyConsentControlLabelInternal({
       ...input, label, ariaLabel: undefined, title: undefined, value: undefined,
     }));
@@ -1313,6 +1338,23 @@ function classifyConsentControlLabelInternal(
   // An instruction negating a necessary-only choice is not a refusal choice.
   if (/^(?:i )?do not accept (?:only (?:essential|necessary|required)|(?:essential|necessary|required) only)(?: cookies)?$/i.test(normalizedLabel)) {
     return unknown(["negated_consent_choice"]);
+  }
+  // The retained AdOpt dialog supplies the object of this short imperative.
+  if (input.usage !== "action" && normalizedLabel === "não venda" && hasConsentContext &&
+      input.scopeKind === "dialog" && input.scopeText?.trim() &&
+      noticeContext.includes("controle sua privacidade") &&
+      noticeContext.includes("desenvolvido por adopt") &&
+      noticeContext.includes("usamos cookies para compartilhar dados de análise publicidade dados de usuários e personalização de anúncios com o google")) {
+    return {
+      intent: "privacy_opt_out",
+      semanticRole: "unknown",
+      confidence: 0.9,
+      matchedTerm: "não venda",
+      matchedLocale: "pt",
+      matchStrength: "direct",
+      reasonCodes: ["matched_privacy_opt_out", "observation_only_label", "adopt_sale_control_context", "match_strength_direct", "context_satisfied"],
+      contextSatisfied: true,
+    };
   }
   if (input.usage === "action" && CONSENT_CONTROL_PHRASE_REGISTRY.some(term =>
       term.observationOnly && term.variant === "necessary_only" && term.exactLabelOnly &&

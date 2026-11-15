@@ -60,6 +60,40 @@ test("retained Dolby, Rijksmuseum, Pigu and Matas labels use exact contextual ob
   }
 });
 
+test("retained AdOpt Não venda is an opt-out observation within its data-sharing dialog", () => {
+  const scopeText = "Controle sua privacidade AdOpt Nosso site usa cookies para melhorar a navegação. " +
+    "Usamos cookies para compartilhar dados de análise, publicidade, dados de usuários e personalização de anúncios com o Google. " +
+    "Política de Privacidade - Política de Cookies Desenvolvido por AdOpt Minhas opções Não venda Aceitar";
+  const input = {label: "Não venda", scopeKind: "dialog" as const, scopeText, hasConsentContext: true};
+  const result = classifyConsentControlLabel({...input, usage: "observation"});
+  assert.equal(result.intent, "privacy_opt_out");
+  assert.ok(result.reasonCodes.includes("observation_only_label"));
+  for (const altered of [
+    {...input, usage: "action" as const},
+    {...input, scopeText: undefined, contextText: scopeText},
+    {...input, scopeKind: "paragraph" as const},
+    {...input, scopeText: "Controle sua privacidade. Desenvolvido por AdOpt. Não venda."},
+    {...input, label: "Não venda?"},
+    {...input, ariaLabel: "Accept all cookies"},
+  ]) {
+    assert.equal(classifyConsentControlLabel(altered).intent, "unknown");
+  }
+});
+
+test("retained Dutch sale opt-out and its accessibility label support observation only", () => {
+  const label = "Verkoop mijn persoonlijke informatie niet";
+  const ariaLabel = `${label}, Opent het dialoogvenster van het voorkeurencentrum`;
+  const input = {label, ariaLabel, hasConsentContext: true, localeHints: ["nl" as const]};
+  const result = classifyConsentControlLabel({...input, usage: "observation"});
+  assert.equal(result.intent, "privacy_opt_out");
+  assert.equal(result.matchedLocale, "nl");
+  assert.ok(result.reasonCodes.includes("observation_only_label"));
+  assert.equal(classifyConsentControlLabel({...input, usage: "action"}).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({...input, hasConsentContext: false}).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({...input, label: `Waarom: ${label}?`, ariaLabel: undefined}).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({...input, ariaLabel: "Accepteer alle cookies"}).intent, "unknown");
+});
+
 test("category qualifier not essential cookies preserves the explicit consent verb", () => {
   for (const [label, intent] of [
     ["Reject All Not Essential Cookies", "reject"],

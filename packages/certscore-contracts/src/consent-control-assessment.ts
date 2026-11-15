@@ -3,7 +3,7 @@ import { californiaPrivacyReviewSchema } from "./california-privacy-review";
 import { saleSharingPresenceLinks, privacyChoicePresenceTitle } from "./privacy-choice-presence";
 import { CONTROL_INSPECTION_POLICY, CONTROL_INSPECTION_POLICIES, consentControlInspectionSchema, initialConsentSelectionSchema, isControlInspectionComplete, type InitialConsentSelection, type ConsentControlInspection } from "./consent-control-inspection";
 import { z } from "zod";
-import {consentCaptureDiagnosticSchema, type ConsentCaptureDiagnostic} from "./consent-capture-diagnostic";
+import {consentCaptureDiagnosticSchema, firstLayerOptOutGeometryDiagnosticSchema, type ConsentCaptureDiagnostic} from "./consent-capture-diagnostic";
 import { consentControlVisualComparisonSchema, type ConsentControlVisualComparison } from "./consent-control-visual-comparison";
 import { CONSENT_CONTROL_LABEL_REGISTRY_VERSION } from "./consent-control-label-classifier";
 import { CONSENT_CONTROL_CAPTURE_POLICY_VERSION, isConsentControlInteractionEligible } from "./consent-control-evidence-policy";
@@ -89,6 +89,11 @@ export const consentControlAssessmentContradictionSchema = z.object({
   affectedFields: z.array(assessmentControlFieldSchema).max(5),
 });
 
+const optOutGeometryEvidenceSchema = z.object({
+  sourceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  data: firstLayerOptOutGeometryDiagnosticSchema,
+}).strict();
+
 export const consentControlAssessmentSchema = z.object({
   artifactType: z.literal("consent_control_assessment"),
   artifactVersion: consentControlAssessmentVersionSchema,
@@ -129,6 +134,7 @@ export const consentControlAssessmentSchema = z.object({
   }),
   coverage: z.object({
     captureDiagnostic: consentCaptureDiagnosticSchema.optional(),
+    firstLayerOptOutGeometry: optOutGeometryEvidenceSchema.optional(),
     status: z.enum(["complete", "limited", "none", "not_applicable"]),
     requiredChannels: z.array(assessmentChannelSchema).max(8),
     completedChannels: z.array(assessmentChannelSchema).max(8),
@@ -156,6 +162,11 @@ export const consentControlAssessmentSchema = z.object({
       assessment.document.identityStatus !== "matched" || !assessment.document.canonicalDocumentToken ||
       assessment.coverage.captureDiagnostic.documentToken !== assessment.document.canonicalDocumentToken)) {
     context.addIssue({code: z.ZodIssueCode.custom, message: "Capture diagnostics require the assessment's canonical document binding."});
+  }
+  if (assessment.coverage.firstLayerOptOutGeometry &&
+      (assessment.coverage.captureDiagnostic?.geometryBinding !== "matched" ||
+        assessment.coverage.captureDiagnostic.geometryObservedAtMs === null)) {
+    context.addIssue({code: z.ZodIssueCode.custom, message: "Opt-out geometry requires a bound checkpoint."});
   }
   const california = assessment.californiaPrivacyReview;
   if (california && (assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||
@@ -271,6 +282,7 @@ export type ConsentControlAssessmentChannel = z.infer<typeof assessmentChannelSc
 export type ConsentControlAssessmentGeometry = {
   visualComparison?: ConsentControlVisualComparison;
   controlInspection?: ConsentControlInspection;
+  firstLayerOptOutGeometry?: z.infer<typeof optOutGeometryEvidenceSchema>;
   /** Retained typed inspection was present but could not be verified. */
   inspectionInvalid?: boolean;
   artifactVersion?: string | null;
@@ -753,6 +765,11 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     parsedDiagnostic.data.observationId === latestObservation.observationId &&
     parsedDiagnostic.data.inventoryObservedAtMs === latestObservation.observedAtMs
       ? parsedDiagnostic.data : undefined;
+  const parsedOptOutGeometry = optOutGeometryEvidenceSchema.safeParse(input.geometry?.firstLayerOptOutGeometry);
+  const firstLayerOptOutGeometry = parsedOptOutGeometry.success && inspectionDocumentBound &&
+    latestObservation?.layerInspected === "first_layer" && captureDiagnostic?.geometryBinding === "matched" &&
+    captureDiagnostic.geometryObservedAtMs !== null && captureDiagnostic.geometryObservedAtMs === input.geometry?.observedAtMs
+      ? parsedOptOutGeometry.data : undefined;
   const visualComparison = visual && input.visualEvidence?.status === "available" && !assessmentBlocked &&
     documentStatus === "matched" && surfaceStatus === "observed_actionable" && inspectionDocumentBound &&
     inspectionCurrent && input.geometry?.assessmentStatus === "complete" &&
@@ -795,6 +812,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     controls: firstLayerResults,
     coverage: {
       ...(captureDiagnostic ? {captureDiagnostic} : {}),
+      ...(firstLayerOptOutGeometry ? {firstLayerOptOutGeometry} : {}),
       status: assessmentBlocked
         ? "none"
         : assessmentComplete

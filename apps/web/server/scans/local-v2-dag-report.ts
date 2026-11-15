@@ -5253,6 +5253,15 @@ export function firstPromotionGradePreconsentRequestMs(rows: Array<Record<string
   );
 }
 
+/** Cookie carriage is not proof that the request destination is Google Analytics. */
+export function hasRequestLocalGoogleAnalyticsAnchor(url: string | null, collectionEndpointObserved: boolean) {
+  if (!url) return false;
+  if (resolveVendorObservations([{ type: "request", url }]).some(row => row.product === "Google Analytics")) return true;
+  try {
+    return collectionEndpointObserved && ["/g/collect", "/collect", "/j/collect"].includes(new URL(url).pathname);
+  } catch { return false; }
+}
+
 export function classifyRetainedRequestActivity(input: {
   category: string;
   collectionEndpointObserved: boolean;
@@ -5271,7 +5280,7 @@ export function classifyRetainedRequestActivity(input: {
   if (
     isCanonicalIdSyncEndpoint(hostname) ||
     /identifier_sync|identity_resolution|cookie_sync/.test(relevance) ||
-    /(?:user|id|cookie)[_-]?sync|sync(?:\.gif|\/)|setuid|getuid/i.test(url)
+    /(?:^|\/)(?:(?:user|id|cookie)[_-]?sync|sync(?:\.gif)?|setuid|getuid)(?:[/?#]|$)/i.test(url)
   ) {
     return "identifier_synchronization";
   }
@@ -5994,7 +6003,10 @@ export function buildMaterializedLocalV2Detail(
   ) =>
     // Resolver matches are event-bound. A cookie on the document's hostname
     // must not classify unrelated navigation, stylesheet, or script requests.
-    candidates.find((vendor) => vendor.matchedEventIds.has(event.eventId)) ?? null;
+    candidates.find((vendor) => vendor.matchedEventIds.has(event.eventId) &&
+      (vendor.vendorName !== "Google Analytics" || "cookieName" in event ||
+        hasRequestLocalGoogleAnalyticsAnchor(requestUrl(event as (typeof networkEvents)[number]),
+          "collectionEndpointObserved" in event && event.collectionEndpointObserved === true))) ?? null;
   const thirdPartyRequestCount = countCanonicalNetworkEvents(thirdPartyRequests);
   // Customer-facing cookie totals use canonical domain + path + name identity.
   // Raw Set-Cookie and browser-snapshot events remain available as evidence.

@@ -2962,6 +2962,7 @@ async function waitForDeterministicRecipe(
     let scopeAmbiguous = false;
     const viewportPendingRecipeIds: string[] = [];
     let scopeNotInteractive = false;
+    let incompleteScopedSweep = false;
     const matchedCmpIds = new Set<string>();
     const matchedControlLabels = new Set<string>();
     const reportIncompleteSweep = () => reportDiagnostic?.({ source: "named_recipe", state: "binding_budget_exhausted",
@@ -2970,7 +2971,7 @@ async function waitForDeterministicRecipe(
     const recipesForAttempt = prioritizedRecipeId
       ? recipes.filter((recipe) => recipe.recipeId === prioritizedRecipeId)
       : recipes;
-    for (const unboundRecipe of recipesForAttempt) {
+    recipeSweep: for (const unboundRecipe of recipesForAttempt) {
       if (signal?.aborted) return { status: "aborted" };
       if (timeoutMs > 0 && Date.now() >= deadlineAtMs) { reportIncompleteSweep(); return { status: sawAmbiguousActionableSet || actionable.length > 1 || scopeAmbiguous ? "ambiguous" : "not_found" }; }
       const frameUrls = unboundRecipe.controlFrameUrl ? [unboundRecipe.controlFrameUrl]
@@ -2996,7 +2997,18 @@ async function waitForDeterministicRecipe(
         const control = await resolveScopedAccessibleControl(
           scopeResolution.scope,
           recipe.accessibleControl,
+          timeoutMs > 0 ? deadlineAtMs : undefined,
+          signal,
         );
+        if (control === "ambiguous") {
+          reportDiagnostic?.(emptyResolverSnapshot("named_recipe", "scope_ambiguous"));
+          return {status: "ambiguous"};
+        }
+        if (control === "incomplete") {
+          incompleteScopedSweep = true;
+          actionable = [];
+          break recipeSweep;
+        }
         if (control) {
           selectorMatchCount += 1;
           visibleCount += 1;
@@ -3097,7 +3109,8 @@ async function waitForDeterministicRecipe(
                       : viewportHitTargetCount === 0 && viewportPendingRecipeIds.length > 0
                       ? "control_not_hit_target"
                       : "geometry_unavailable";
-    reportDiagnostic?.({
+    if (incompleteScopedSweep) reportIncompleteSweep();
+    else reportDiagnostic?.({
       source: "named_recipe",
       state: diagnosticState,
       selectorMatchCount,
@@ -3135,7 +3148,7 @@ async function waitForDeterministicRecipe(
       // Preserve every exact actionability requirement. This merely avoids
       // rescanning the full CMP recipe registry while one uniquely identified
       // animated control is waiting to become a viewport hit target.
-      prioritizedRecipeId = viewportPendingRecipeIds.length === 1
+      prioritizedRecipeId = !incompleteScopedSweep && viewportPendingRecipeIds.length === 1
         ? viewportPendingRecipeIds[0]
         : undefined;
     }

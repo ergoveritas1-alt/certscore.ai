@@ -34,7 +34,7 @@ export function preferredPreConsentScreenshotRef(
   return eligible[0]?.path;
 }
 
-/** Keep the packet and its current visible candidates bound to one verified loader. */
+/** Bind the context image to its loader, preserving existing A/R/O image associations. */
 export function bindConsentGeometryScreenshot(
   geometry: ConsentControlGeometryArtifact,
   screenshot: ScreenshotArtifact,
@@ -43,6 +43,10 @@ export function bindConsentGeometryScreenshot(
   const previousRef = geometry.screenshotArtifactRef;
   geometry.screenshotArtifactRef = screenshot.path;
   for (const candidate of geometry.candidates) {
+    if (candidate.layer === "first_layer" && candidate.actionType === "do_not_sell_share") {
+      delete candidate.screenshotArtifactRef;
+      continue;
+    }
     if (candidate.layer === "first_layer" && candidate.decisionStatus === "confirmed_visible" &&
         (!candidate.screenshotArtifactRef || candidate.screenshotArtifactRef === previousRef)) {
       candidate.screenshotArtifactRef = screenshot.path;

@@ -1,6 +1,6 @@
 import { classifyConsentControlLabel } from "@certscore/contracts";
 import type { CDPSession, Frame, Locator, Page } from "playwright";
-import { consentScopePermitsInteraction } from "./cmp-action-target.js";
+import { inspectConsentScopeInteraction } from "./cmp-action-target.js";
 import type { ConsentProofReadGuard } from "./cmp-action-control-proof.js";
 import type { ConsentControlReadOptions } from "./cmp-control-actionability.js";
 
@@ -62,7 +62,7 @@ function eligibleIntent(label: string, intent: "accept" | "reject") {
   return classification.variant !== "reject_with_subscription";
 }
 
-async function accessibleLabels(locator: Locator) {
+async function accessibleLabels(locator: Locator, timeout: number) {
   return locator.evaluate((element) => {
     const html = element as HTMLElement;
     return [
@@ -72,39 +72,55 @@ async function accessibleLabels(locator: Locator) {
       html.innerText,
       element.textContent,
     ].filter((value): value is string => Boolean(value?.trim()));
-  }).catch(() => [] as string[]);
+  }, undefined, { timeout }).catch(() => undefined);
 }
 
 export async function resolveScopedAccessibleControl(
   scope: Page | Frame,
   resolution: CmpAccessibleActionResolution,
-): Promise<Locator | undefined> {
+  deadlineAtMs = Infinity,
+  signal?: AbortSignal,
+): Promise<Locator | "ambiguous" | "incomplete" | undefined> {
+  const stopped = () => signal?.aborted || Date.now() >= deadlineAtMs;
+  const readTimeout = () => Math.max(1, Math.min(100, deadlineAtMs - Date.now()));
   if (resolution.kind !== "scoped_accessible_control") return undefined;
+  if (stopped()) return "incomplete";
   const containers = scope.locator(resolution.scopeSelector);
-  if (await containers.count().catch(() => 0) !== 1) return undefined;
+  const containerCount = await containers.count().catch(() => undefined);
+  if (containerCount === undefined || stopped()) return "incomplete";
+  if (containerCount !== 1) return undefined;
   const container = containers.first();
-  if (!await consentScopePermitsInteraction(container)) return undefined;
+  const containerInteraction = await inspectConsentScopeInteraction(container, readTimeout());
+  if (containerInteraction.exclusion?.reason === "unavailable" || stopped()) return "incomplete";
+  if (containerInteraction.state !== "interactive") return undefined;
   const controls = container.getByRole("button");
   const matches: Locator[] = [];
-  const rawCount = await controls.count().catch(() => 0);
-  if (rawCount > 24) return undefined;
-  const count = rawCount;
+  const count = await controls.count().catch(() => undefined);
+  if (count === undefined || stopped()) return "incomplete";
+  if (count > 24) return undefined;
   for (let index = 0; index < count; index += 1) {
+    if (stopped()) return "incomplete";
     const control = controls.nth(index);
-    const [visible, enabled, scopePermitsInteraction, labels] = await Promise.all([
-      control.isVisible().catch(() => false),
-      control.isEnabled().catch(() => false),
-      consentScopePermitsInteraction(control),
-      accessibleLabels(control),
+    // Hydration can remove a counted button before these reads. Bound locator
+    // acquisition and discard the entire incomplete uniqueness sweep so the
+    // caller can inspect the new inventory within its existing search window.
+    const timeout = readTimeout();
+    const [visible, enabled, interaction, labels] = await Promise.all([
+      control.isVisible().catch(() => undefined),
+      control.isEnabled({ timeout }).catch(() => undefined),
+      inspectConsentScopeInteraction(control, timeout),
+      accessibleLabels(control, timeout),
     ]);
+    if (stopped() || visible === undefined || enabled === undefined || labels === undefined ||
+      interaction.exclusion?.reason === "unavailable") return "incomplete";
     if (
       visible &&
       enabled &&
-      scopePermitsInteraction &&
+      interaction.state === "interactive" &&
       labels.some((label) => eligibleIntent(label, resolution.intent))
     ) matches.push(control);
   }
-  return matches.length === 1 ? matches[0] : undefined;
+  return matches.length > 1 ? "ambiguous" : matches[0];
 }
 
 export async function closedShadowAccessibleControlAvailable(

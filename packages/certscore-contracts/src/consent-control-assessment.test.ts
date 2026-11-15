@@ -106,26 +106,40 @@ test("capture diagnostics preserve all three control states and bind the exact o
         inventoryOutcome: state === "unknown" ? "partial" : state === "observed" ? "complete_with_controls" : "complete_empty",
         completedChannels: state === "unknown" ? [] : ["dom_inventory", "geometry"],
         controls: state === "observed" ? [candidate({intent, label: {accept: "Accept all", reject: "Reject all", options: "Cookie settings"}[intent]})] : []}];
+      input.geometry = {documentId: input.document!.canonicalDocumentId, documentToken: "loader", observedAtMs: 50};
       const before = deriveConsentControlAssessment(input);
       assert.equal(before.controls[intent].state, state);
       const diagnostic: ConsentCaptureDiagnostic = {version: "consent_capture_diagnostic.v1", refreshPolicy: "final_consent_geometry_refresh.v3",
         observationId: "o", documentToken: "loader", inventoryObservedAtMs: 100, geometryObservedAtMs: 50,
         geometryBinding: "matched", geometryMinusInventoryMs: -50, outcome: "budget_unavailable", skipReason: null, attempted: false, elapsedMs: 0};
+      input.geometry.firstLayerOptOutGeometry = {sourceSha256: "a".repeat(64), data: {
+          version: "first_layer_opt_out_geometry_diagnostic.v1", structuralCoverage: "limited",
+          captureCoverage: {inventoryTruncated: false, documentReadyState: "complete", mainFrameAvailable: true,
+            documentAndFramesStable: true, frameCount: 2, capturedFrameCount: 1},
+          framesAtStart: 2, frameOutcomes: ["captured", "timed_out"], retainedCandidateCount: 1, inspectedCandidateCount: 1,
+          unresolvedOptOutCount: 1, classifiedOptOutCount: 0, otherUnresolvedCount: 0,
+          candidates: [{ordinal: 0, frameSlot: 0, role: "unknown", coverage: "unresolved_opt_out", confirmedVisible: false}],
+      }};
       input.observations[0]!.captureDiagnostic = diagnostic;
       const after = deriveConsentControlAssessment(input);
       assert.deepEqual(after.controls, before.controls);
-      const {captureDiagnostic: retainedDiagnostic, ...coverage} = after.coverage;
+      const {captureDiagnostic: retainedDiagnostic, firstLayerOptOutGeometry, ...coverage} = after.coverage;
       assert.deepEqual(coverage, before.coverage);
       assert.deepEqual(after.limitations, before.limitations);
       assert.deepEqual(retainedDiagnostic, diagnostic);
+      assert.deepEqual(firstLayerOptOutGeometry, input.geometry.firstLayerOptOutGeometry);
       assert.notEqual(after.provenance.sourceHash, before.provenance.sourceHash);
       assert.deepEqual(consentControlAssessmentSchema.parse(JSON.parse(JSON.stringify(after))), after);
       for (const patch of [{documentToken: "other"}, {observationId: "other"}, {inventoryObservedAtMs: 101, geometryMinusInventoryMs: -51}]) {
         input.observations[0]!.captureDiagnostic = {...diagnostic, ...patch};
         assert.equal(deriveConsentControlAssessment(input).coverage.captureDiagnostic, undefined);
+        assert.equal(deriveConsentControlAssessment(input).coverage.firstLayerOptOutGeometry, undefined);
       }
+      input.observations[0]!.captureDiagnostic = {...diagnostic, geometryObservedAtMs: 51, geometryMinusInventoryMs: -49};
+      assert.equal(deriveConsentControlAssessment(input).coverage.firstLayerOptOutGeometry, undefined);
       assert.equal(consentControlAssessmentSchema.safeParse({...after, coverage: {...after.coverage, captureDiagnostic: {...diagnostic, documentToken: "other"}}}).success, false);
       delete input.observations[0]!.captureDiagnostic;
+      delete input.geometry.firstLayerOptOutGeometry;
       assert.deepEqual(deriveConsentControlAssessment(input), before);
     }
   }

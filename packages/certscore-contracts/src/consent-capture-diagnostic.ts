@@ -1,4 +1,62 @@
 import {z} from "zod";
+import {consentControlInspectionSchema} from "./consent-control-inspection";
+
+const inspection = consentControlInspectionSchema.innerType().shape;
+const capturedFrame = (outcome: string) => outcome === "captured" || outcome === "truncated";
+export const optOutGeometryFrameOutcomeSchema = z.enum(["captured", "truncated", "timed_out", "failed", "pending_read"]);
+export type OptOutGeometryFrameOutcome = z.infer<typeof optOutGeometryFrameOutcomeSchema>;
+export const FIRST_LAYER_OPT_OUT_GEOMETRY_SAMPLE_LIMIT = 4;
+export const FIRST_LAYER_OPT_OUT_GEOMETRY_MAX_BYTES = 1400;
+
+/** Frame slots index the existing read plan, with slot zero for the main
+ * frame. Candidate ordinals refer to the same private geometry artifact. */
+export const firstLayerOptOutGeometryDiagnosticSchema = z.object({
+  version: z.literal("first_layer_opt_out_geometry_diagnostic.v1"),
+  structuralCoverage: inspection.structuralCoverage,
+  captureCoverage: inspection.captureCoverage.strict(),
+  framesAtStart: z.number().int().min(1).max(10_000),
+  frameOutcomes: z.array(optOutGeometryFrameOutcomeSchema).min(1).max(12),
+  retainedCandidateCount: inspection.retainedCandidateCount,
+  inspectedCandidateCount: inspection.retainedCandidateCount,
+  unresolvedOptOutCount: inspection.retainedCandidateCount,
+  classifiedOptOutCount: inspection.retainedCandidateCount,
+  otherUnresolvedCount: inspection.retainedCandidateCount,
+  candidates: z.array(z.object({
+    ordinal: z.number().int().min(0).max(159),
+    frameSlot: z.number().int().min(0).max(11),
+    role: inspection.candidates.element.shape.role,
+    coverage: z.enum(["unresolved_opt_out", "classified_opt_out", "other_unresolved"]),
+    confirmedVisible: z.boolean(),
+  }).strict()).max(FIRST_LAYER_OPT_OUT_GEOMETRY_SAMPLE_LIMIT),
+}).strict().superRefine((value, context) => {
+  const counts = {
+    unresolved_opt_out: value.unresolvedOptOutCount,
+    classified_opt_out: value.classifiedOptOutCount,
+    other_unresolved: value.otherUnresolvedCount,
+  };
+  const coverage = value.captureCoverage;
+  const validFrames = value.frameOutcomes.length === Math.min(value.framesAtStart, 12) &&
+    value.frameOutcomes.filter(capturedFrame).length === coverage.capturedFrameCount &&
+    (!coverage.mainFrameAvailable || capturedFrame(value.frameOutcomes[0] ?? "")) &&
+    (!value.frameOutcomes.includes("truncated") || coverage.inventoryTruncated) &&
+    (value.structuralCoverage !== "complete" || (
+      coverage.documentAndFramesStable && coverage.mainFrameAvailable && coverage.documentReadyState === "complete" &&
+      !coverage.inventoryTruncated && coverage.frameCount === value.framesAtStart &&
+      coverage.frameCount === coverage.capturedFrameCount
+    ));
+  const total = value.unresolvedOptOutCount + value.classifiedOptOutCount + value.otherUnresolvedCount;
+  const validCandidates = value.inspectedCandidateCount <= value.retainedCandidateCount &&
+    total <= value.inspectedCandidateCount &&
+    value.candidates.length === Math.min(total, FIRST_LAYER_OPT_OUT_GEOMETRY_SAMPLE_LIMIT) &&
+    new Set(value.candidates.map(candidate => candidate.ordinal)).size === value.candidates.length &&
+    value.candidates.every(candidate => candidate.ordinal < value.retainedCandidateCount &&
+      capturedFrame(value.frameOutcomes[candidate.frameSlot] ?? "")) &&
+    Object.entries(counts).every(([reason, count]) => value.candidates.filter(candidate => candidate.coverage === reason).length <= count);
+  if (!validFrames || !validCandidates || JSON.stringify(value).length > FIRST_LAYER_OPT_OUT_GEOMETRY_MAX_BYTES) {
+    context.addIssue({code: "custom", message: "Opt-out diagnostic must bind bounded candidate samples and frame capture outcomes."});
+  }
+});
+export type FirstLayerOptOutGeometryDiagnostic = z.infer<typeof firstLayerOptOutGeometryDiagnosticSchema>;
 
 /** Scheduling metadata only. It cannot establish control presence or absence. */
 export const consentCaptureDiagnosticSchema = z.object({

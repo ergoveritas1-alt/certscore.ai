@@ -32,7 +32,7 @@ test("resolves a visible accessible control in a boxless open-shadow scope", asy
     shadow.innerHTML = '<button aria-label="Accept all cookies">Accept all</button>';
   </script>`, async (page) => {
     const control = await resolveScopedAccessibleControl(page, accept);
-    assert.ok(control);
+    assert.ok(control && typeof control !== "string");
     assert.equal(await control.getAttribute("aria-label"), "Accept all cookies");
   });
 });
@@ -51,7 +51,7 @@ test("rejects a control under a hidden or inert ancestor", async () => {
 
 test("fails closed when two eligible controls are present", async () => {
   await withPage(`<!doctype html><div id="scope"><button aria-label="Accept all cookies">Accept all</button><button aria-label="Accept all cookies">Accept all</button></div>`, async (page) => {
-    assert.equal(await resolveScopedAccessibleControl(page, accept), undefined);
+    assert.equal(await resolveScopedAccessibleControl(page, accept), "ambiguous");
   });
 });
 

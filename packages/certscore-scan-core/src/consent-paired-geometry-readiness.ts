@@ -51,10 +51,12 @@ export function isPairedConsentGeometryReady(input: {
   const positive = geometry.candidates.filter(row => row.layer === "first_layer" && row.decisionStatus === "confirmed_visible");
   if (!positive.some(row => ["accept_all", "reject_all", "manage_preferences"].includes(row.actionType))) return false;
   // The observation contract has no per-control frame binding. Limit this
-  // optimization to an exact, unambiguous main-frame control inventory.
+  // optimization to an exact, unambiguous main-frame control inventory. The
+  // opt-out still needs a DOM match, but its page image is context only.
   if (controls.length === 0 || controls.length !== positive.length || positive.some(candidate =>
     candidate.frameContext.frameKind !== "main_frame" || candidate.frameContext.frameUrl !== input.pageUrl ||
-    candidate.screenshotArtifactRef !== geometry.screenshotArtifactRef)) return false;
+    (candidate.screenshotArtifactRef !== geometry.screenshotArtifactRef &&
+      !(candidate.actionType === "do_not_sell_share" && candidate.screenshotArtifactRef === undefined)))) return false;
   const matched = new Set<string>();
   for (const control of controls) {
     if (!control.selectorHint || !control.tagName) return false;

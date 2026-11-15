@@ -908,7 +908,7 @@ export function classifyRtbCookieSyncEvidenceRow(row: Record<string, unknown>): 
       pathSample
     );
   const hasSyncPattern =
-    /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(`${hostname} ${urlSample}`) ||
+    /(?:^|[/.])(?:sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid)(?:[/.?#]|$)/i.test(`${hostname} ${urlSample}`) ||
     syncEndpointPathShape ||
     /redirect_sync|identifier_query|known_sync_(?:host|endpoint)/i.test(reason);
   if (!hostname.includes(".") || !hasSyncPattern) {
@@ -992,7 +992,7 @@ export function hasConcreteRtbCookieSyncEvidence(rawEvidence: Record<string, unk
     try {
       const parsed = new URL(url);
       const text = `${parsed.hostname} ${parsed.pathname}`;
-      return /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(text) &&
+      return /(?:^|[/.])(?:sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid)(?:[/.?#]|$)/i.test(text) &&
         [...parsed.searchParams.keys()].some((key) => RTB_IDENTIFIER_QUERY_KEY_PATTERN.test(key));
     } catch {
       return false;

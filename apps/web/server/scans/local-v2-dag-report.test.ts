@@ -2178,6 +2178,12 @@ test("classifies script loading, ad collection, and identifier synchronization s
     resourceType: "fetch",
     url: "https://gateway.umami.is/api/send"
   }), "tracker_beacon", "a canonical vendor fetch endpoint is collection evidence");
+  // Retained production scan 02c70240-c2b3-402d-99d7-75233b670b28:
+  // /async/spotlightcarousel was incorrectly classified by the substring sync/.
+  assert.equal(classifyRetainedRequestActivity({ category: "analytics",
+    collectionEndpointObserved: false, resourceType: "xhr",
+    url: "https://www.universiteitleiden.nl/async/spotlightcarousel?redacted=1"
+  }), "library");
   assert.equal(retainedRequestEssentiality("library"), "unknown");
   assert.equal(retainedRequestEssentiality("ad_request"), "non_essential");
 });
@@ -9944,4 +9950,13 @@ test("retained short governing notices reach the report without granting omissio
     surface.governingPolicySelection.state = 'ineligible';
     assert.equal(summarize().privacyPolicyPresent, false);
   }
+});
+
+test("Leiden first-party script cookie carriage does not establish a Google Analytics endpoint", async () => {
+  const { hasRequestLocalGoogleAnalyticsAnchor } = await loadLocalV2DagReport();
+  assert.equal(hasRequestLocalGoogleAnalyticsAnchor("https://www.universiteitleiden.nl/design-1.0/scripts/lib/jquery.js", false), false);
+  assert.equal(hasRequestLocalGoogleAnalyticsAnchor("https://www.universiteitleiden.nl/async/spotlightcarousel", false), false);
+  assert.equal(hasRequestLocalGoogleAnalyticsAnchor("https://gtm.universiteitleiden.nl/g/collect", true), true);
+  assert.equal(hasRequestLocalGoogleAnalyticsAnchor("https://gtm.universiteitleiden.nl/g/collect", false), false);
+  assert.equal(hasRequestLocalGoogleAnalyticsAnchor("https://www.google-analytics.com/g/collect", true), true);
 });

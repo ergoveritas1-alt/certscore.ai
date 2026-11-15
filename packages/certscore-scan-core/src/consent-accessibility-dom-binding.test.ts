@@ -25,6 +25,37 @@ test("same-loader URL transitions cannot merge native controls into a different 
  const same=mergeConsentUiObservations(valid,{...valid,observedAtMs:30},'fixture');assert.equal(same.controls.length,1);
 });
 
+test("a later incomplete read cannot carry native opt-out controls into an unbound consent observation", () => {
+  const control = {label: "Your Privacy Choices", actionType: "do_not_sell_share" as const, tagName: "button",
+    selectorHint: "ax:1", visible: true, visibilityEvidence: "box_model_verified" as const,
+    consentContextEvidence: "local_surface" as const, classifierReasonCodes: [],
+    domBinding: {version: "ax_backend_dom_binding.v1" as const, axNodeId: "1", backendNodeId: 1, nodeType: 1 as const,
+      tagName: "button", documentUrl: document.url, documentIdentity: document.identity}};
+  const input = {documentUrl: document.url, documentIdentity: document.identity, text: "We use cookies", scanStartedAtMs: Date.now()};
+  const bound = {...buildConsentUiObservationFromEvidence({...input, controls: [control]}), observedAtMs: 100};
+  const empty = buildConsentUiObservationFromEvidence({...input, controls: [], fallbackBasis: ["bounded_capture_timeout_or_failure"]});
+  assert.ok(consentUiObservationSchema.safeParse(bound).success);
+  for (const missingBinding of [{documentIdentity: undefined}, {documentUrl: undefined}]) {
+    const later = {...empty, ...missingBinding, observedAtMs: 200};
+    const merged = mergeConsentUiObservations(bound, later, "fixture");
+    assert.deepEqual(merged.controls, []);
+    assert.deepEqual(merged.visibleChoiceLabels, []);
+    assert.equal(merged.captureStatus, "incomplete");
+    assert.equal(merged.inventoryOutcome, "document_mismatch");
+    assert.equal(merged.layerInspected, "unknown");
+    assert.ok(consentUiObservationSchema.safeParse(merged).success);
+    const recovered = mergeConsentUiObservations({...later, observedAtMs: 90}, bound, "fixture");
+    assert.equal(recovered.controls[0]?.domBinding?.documentIdentity.token, document.identity.token);
+    assert.ok(consentUiObservationSchema.safeParse(recovered).success);
+  }
+  const sameDocument = mergeConsentUiObservations(bound, {...empty, observedAtMs: 200}, "fixture");
+  assert.equal(sameDocument.controls[0]?.domBinding?.documentIdentity.token, document.identity.token);
+  assert.ok(consentUiObservationSchema.safeParse(sameDocument).success);
+  const noGo = mergeConsentUiObservations(bound, {...empty, observedAtMs: 200, documentIdentity: undefined, inventoryOutcome: "no_go"}, "fixture");
+  assert.equal(noGo.inventoryOutcome, "no_go");
+  assert.deepEqual(noGo.controls, []);
+});
+
 test("native AX binding requires exact backend identity and bounded element metadata", async () => {
   for (const mode of ["valid", "wrong-node", "text-node", "invalid-tag", "failed"]) {
     let calls = 0;

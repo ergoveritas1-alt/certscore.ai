@@ -11380,20 +11380,27 @@ export function mergeConsentUiObservations(
 ): ConsentUiObservation {
   const currentDocumentToken = current.documentIdentity?.token;
   const candidateDocumentToken = candidate.documentIdentity?.token;
+  // Native AX controls already bind an exact URL and loader. An incomplete
+  // inventory cannot borrow those controls or inherit the earlier binding.
+  const nativeMergeUnbound = (!currentDocumentToken || !candidateDocumentToken || !current.documentUrl || !candidate.documentUrl) &&
+    (current.controls.some(control => control.domBinding) || candidate.controls.some(control => control.domBinding));
   if (
-    currentDocumentToken &&
-    candidateDocumentToken &&
-    (currentDocumentToken !== candidateDocumentToken || current.documentIdentity?.source !== candidate.documentIdentity?.source) ||
-    current.documentUrl && candidate.documentUrl && current.documentUrl !== candidate.documentUrl
+    nativeMergeUnbound ||
+    (currentDocumentToken && candidateDocumentToken &&
+      (currentDocumentToken !== candidateDocumentToken || current.documentIdentity?.source !== candidate.documentIdentity?.source)) ||
+    (current.documentUrl && candidate.documentUrl && current.documentUrl !== candidate.documentUrl)
   ) {
     const latestDocumentObservation = candidate.observedAtMs >= current.observedAtMs
       ? candidate
       : current;
+    const latestUnbound = nativeMergeUnbound && (!latestDocumentObservation.documentIdentity?.token || !latestDocumentObservation.documentUrl);
     return {
       ...latestDocumentObservation,
+      ...(latestUnbound && latestDocumentObservation.inventoryOutcome !== "no_go"
+        ? { captureStatus: "incomplete", inventoryOutcome: "document_mismatch", layerInspected: "unknown" } : {}),
       basis: unique([
         ...latestDocumentObservation.basis,
-        "document_identity_transition_discarded_other_document_evidence",
+        latestUnbound ? "inventory:native_ax_document_mismatch" : "document_identity_transition_discarded_other_document_evidence",
       ]),
     };
   }

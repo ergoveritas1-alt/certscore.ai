@@ -1776,10 +1776,11 @@ async function waitForDeterministicRecipe(
       cmpIds: [...matchedCmpIds], controlLabels: [...matchedControlLabels] });
     const viewportPendingRecipeIds: string[] = [];
     let scopeNotInteractive = false;
+    let incompleteScopedSweep = false;
     const recipesForAttempt = prioritizedRecipeId
       ? recipes.filter((recipe) => recipe.recipeId === prioritizedRecipeId)
       : recipes;
-    for (const recipe of recipesForAttempt) {
+    recipeSweep: for (const recipe of recipesForAttempt) {
       if (signal?.aborted) return { status: "aborted" };
       // Never claim uniqueness from a truncated multi-recipe sweep.
       if (timeoutMs > 0 && Date.now() >= deadlineAtMs) { reportIncompleteSweep(); return { status: "not_found" }; }
@@ -1787,7 +1788,19 @@ async function waitForDeterministicRecipe(
         if (signal?.aborted) return { status: "aborted" };
         if (timeoutMs > 0 && Date.now() >= deadlineAtMs) { reportIncompleteSweep(); return { status: "not_found" }; }
         if (recipe.accessibleControl?.kind === "scoped_accessible_control") {
-          const control = await resolveScopedAccessibleControl(scope, recipe.accessibleControl);
+          const control = await resolveScopedAccessibleControl(scope, recipe.accessibleControl,
+            timeoutMs > 0 ? deadlineAtMs : undefined, signal);
+          if (control === "ambiguous") {
+            reportDiagnostic?.({source: "named_recipe", state: "scope_ambiguous", selectorMatchCount,
+              visibleCount, enabledCount, labelMatchCount, actionableCount: 0,
+              cmpIds: recipe.cmpId ? [recipe.cmpId] : [], controlLabels: []});
+            return {status: "ambiguous"};
+          }
+          if (control === "incomplete") {
+            incompleteScopedSweep = true;
+            matches = [];
+            break recipeSweep;
+          }
           if (control) {
             selectorMatchCount += 1;
             visibleCount += 1;
@@ -1859,7 +1872,8 @@ async function waitForDeterministicRecipe(
     // A final frame read can finish after the search slice. Its partial sweep
     // is diagnostic only; it cannot establish a unique actionable control.
     if (timeoutMs > 0 && Date.now() >= deadlineAtMs) { reportIncompleteSweep(); return { status: "not_found" }; }
-    reportDiagnostic?.({ source: "named_recipe",
+    if (incompleteScopedSweep) reportIncompleteSweep();
+    else reportDiagnostic?.({ source: "named_recipe",
       state: matches.length > 1 ? "multiple_actionable" : matches.length === 1 ? "single_actionable"
         : selectorMatchCount === 0 ? "selector_absent" : visibleCount === 0 ? "control_hidden"
           : enabledCount === 0 ? "control_disabled" : labelMatchCount === 0 ? "label_mismatch"
@@ -1878,7 +1892,7 @@ async function waitForDeterministicRecipe(
     // only that registered recipe until it becomes a real hit target. If the
     // candidate disappears or becomes non-unique, return to the full registry
     // on the next attempt; no selector, label, or geometry rule is relaxed.
-    prioritizedRecipeId = viewportPendingRecipeIds.length === 1
+    prioritizedRecipeId = !incompleteScopedSweep && viewportPendingRecipeIds.length === 1
       ? viewportPendingRecipeIds[0]
       : undefined;
     if (Date.now() >= deadlineAtMs) break;

@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
-import { cmpPreferencesEvidenceSchema, consentControlAssessmentSchema, deriveConsentSurfaceInspectionOutcome, type CanonicalEvidenceBundle } from "@certscore/contracts";
+import { cmpPreferencesEvidenceSchema, consentControlAssessmentSchema, deriveConsentSurfaceInspectionOutcome, type CanonicalEvidenceBundle, type FirstLayerOptOutGeometryDiagnostic } from "@certscore/contracts";
 import { deriveLaneOwnedConsentSurfaceInspection, deriveMaterializedConsentControlAssessment, deriveWs01ConsentControlAssessment } from "./consent-control-assessment-projector";
 import { projectCaliforniaPrivacyReview } from "./california-privacy-review-projection";
+import { bindNarrowGeometry } from "./gdpr-narrow-geometry";
+import { projectPublicFirstLayerConsentEvidence } from "../../lib/scans/public-first-layer-consent-evidence";
 
 test("materialized consent retains exact query and fragment for its California child while document comparison stays normalized", () => {
   const finalUrl="https://redirect-fixture.test/?locale=en#/overview";
@@ -156,6 +159,98 @@ function geometry(candidates: Array<Record<string, unknown>>, summary: {
     },
   };
 }
+
+test("binds a legacy independent recovery's verified opt-out to its own document", () => {
+  const label = "Do Not Sell My Personal Information";
+  const selectorHint = "#consent-privacy-opt-out";
+  const documentIdentity = {source: "cdp_loader_id" as const, token: "recovery-loader"};
+  const textPath = "artifacts/dom-text-pre-consent-recovery.txt";
+  const textId = "dom_text_pre_consent_recovery";
+  const candidate = {
+    candidateId: "candidate-opt-out", actionType: "do_not_sell_share", matchStrength: "direct", tagName: "button",
+    label, selectorHint, layer: "first_layer", decisionStatus: "confirmed_visible", enabled: true,
+    intersectsViewport: true, boundingBox: {width: 180, height: 32}, consentContextConfirmed: true,
+    frameContext: {frameKind: "main_frame", frameUrl: "https://oxfam.org/en"},
+  };
+  const source = bundle([{actionType: "do_not_sell_share", matchStrength: "direct", label, selectorHint, tagName: "button", visible: true}]);
+  source.domSnapshots[0]!.documentIdentity = {source: "cdp_loader_id", token: "initial-loader"};
+  source.domSnapshots.push({...source.domSnapshots[0]!, artifactId: textId, path: textPath, capturedAtMs: 8_730, documentIdentity: undefined});
+  Object.assign(source.consentUiObservations[0]!, {
+    documentUrl: source.url, documentIdentity, observedAtMs: 8_610, inventoryOutcome: "complete_with_controls",
+    basis: ["recovery:independent_consent_capture_completed"],
+    captureDiagnostics: {completedChannels: ["dom_inventory", "geometry"], failedChannels: [], timedOutChannels: []},
+    evidenceRefs: [{artifactId: textId, refId: textId, path: textPath}, {artifactId: "consent_control_geometry",
+      refId: "consent_control_geometry_evidence", path: "artifacts/ConsentControlGeometryEvidence.json"}],
+  });
+  const artifact = {
+    ...geometry([candidate]), documentIdentity, access: {status: "loaded", httpStatus: 200},
+    controlInspection: {version: "control_specific_inspection.v2", structuralCoverage: "complete", retainedCandidateCount: 1,
+      captureCoverage: {inventoryTruncated: false, documentReadyState: "complete", mainFrameAvailable: true,
+        documentAndFramesStable: true, frameCount: 1, capturedFrameCount: 1}, reasonCodes: [],
+      candidates: [{candidateId: candidate.candidateId, role: "decision", unresolvedIntents: []}]},
+  };
+  const assessment = deriveMaterializedConsentControlAssessment({bundle: source, consentControlGeometryEvidence: artifact, noGo: false});
+  assert.equal(assessment.document.canonicalDocumentToken, documentIdentity.token);
+  assert.equal(assessment.controls.privacyOptOut.state, "observed");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.coverage.status, "limited");
+  const publicEvidence = projectPublicFirstLayerConsentEvidence(assessment, source.scanId);
+  assert.equal(publicEvidence?.privacyOptOutControlObserved, true);
+  assert.equal(publicEvidence?.privacyOptOutControlInventoryComplete, false);
+
+  for (const problem of ["missing reference", "different loader", "different selector", "newer document", "stale geometry", "no-go"]) {
+    const negative = structuredClone(source);
+    const wrongArtifact = structuredClone(artifact);
+    if (problem === "missing reference") negative.consentUiObservations[0]!.evidenceRefs.pop();
+    if (problem === "different loader") wrongArtifact.documentIdentity.token = "wrong-loader";
+    if (problem === "different selector") wrongArtifact.candidates[0]!.selectorHint = "#different-control";
+    if (problem === "newer document") negative.domSnapshots.at(-1)!.documentIdentity = {source: "cdp_loader_id", token: "newer-loader"};
+    if (problem === "stale geometry") wrongArtifact.observedAtMs = 8_600;
+    const result = deriveMaterializedConsentControlAssessment({bundle: negative,
+      consentControlGeometryEvidence: wrongArtifact, noGo: problem === "no-go"});
+    assert.equal(result.controls.privacyOptOut.state, "unknown", problem);
+  }
+});
+
+test("persists the original opt-out geometry diagnostic only with verified bytes and the matching observation", () => {
+  const source = bundle([]);
+  const observation = source.consentUiObservations[0]!;
+  const documentIdentity = {source: "cdp_loader_id" as const, token: "loader"};
+  Object.assign(source.domSnapshots[0]!, {documentIdentity});
+  Object.assign(observation, {documentIdentity, documentUrl: source.url, captureDiagnostic: {
+    version: "consent_capture_diagnostic.v1", refreshPolicy: "final_consent_geometry_refresh.v3",
+    observationId: observation.observationId, documentToken: "loader", inventoryObservedAtMs: observation.observedAtMs,
+    geometryObservedAtMs: 5_000, geometryBinding: "matched", geometryMinusInventoryMs: -1_500,
+    outcome: "timed_out", skipReason: null, attempted: true, elapsedMs: 1_100,
+  }});
+  const data: FirstLayerOptOutGeometryDiagnostic = {
+    version: "first_layer_opt_out_geometry_diagnostic.v1", structuralCoverage: "limited",
+    captureCoverage: {inventoryTruncated: false, documentReadyState: "complete", mainFrameAvailable: true,
+      documentAndFramesStable: true, frameCount: 2, capturedFrameCount: 1},
+    framesAtStart: 2, frameOutcomes: ["captured", "timed_out"],
+    retainedCandidateCount: 0, inspectedCandidateCount: 0, unresolvedOptOutCount: 0, classifiedOptOutCount: 0,
+    otherUnresolvedCount: 0, candidates: [],
+  };
+  const payload = {...geometry([]), observedAtMs: 5_000, artifactVersion: "consent_control_geometry.v1", documentIdentity,
+    controlInspection: {version: "control_specific_inspection.v4", structuralCoverage: "limited",
+      captureCoverage: data.captureCoverage, reasonCodes: [], retainedCandidateCount: 0, candidates: []},
+    firstLayerOptOutGeometry: data};
+  const bytes = JSON.stringify(payload);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const sizeBytes = Buffer.byteLength(bytes);
+  const bound = bindNarrowGeometry(payload, {scanId: source.scanId, auxiliaryArtifacts: [
+    {fileName: "ConsentControlGeometryEvidence.json", sha256, sizeBytes},
+  ]}, sha256, sizeBytes)!;
+  const assess = (raw: Record<string, unknown>) => deriveMaterializedConsentControlAssessment({
+    bundle: source, consentControlGeometryEvidence: raw, finalUrl: source.url, noGo: false,
+  });
+  const baseline = assess(payload);
+  const retained = assess(bound);
+  assert.deepEqual(retained.controls, baseline.controls);
+  assert.deepEqual(retained.coverage.firstLayerOptOutGeometry, {sourceSha256: sha256, data});
+  assert.equal(baseline.coverage.firstLayerOptOutGeometry, undefined);
+  assert.equal(assess({...bound, observedAtMs: 5_001}).coverage.firstLayerOptOutGeometry, undefined);
+});
 
 test("Oxfam A/R/O remains observed when a later same-document state is collapsed", () => {
   const assessment = deriveMaterializedConsentControlAssessment({
@@ -1692,6 +1787,64 @@ test("verified independent consent binding is not overwritten by a later runtime
   assert.deepEqual(b, before);
 });
 
+test("verified legacy consent evidence survives a later unbound apex recovery snapshot", () => {
+  const finalUrl = "https://www.fixture.example/";
+  const requested = "https://fixture.example/";
+  const label = "Do Not Sell or Share My Personal Information";
+  const selectorHint = "#onetrust-pc-btn-handler";
+  const documentIdentity = {source: "cdp_loader_id" as const, token: "consent-loader"};
+  const {b} = independentConsentLaneFixture();
+  b.url = b.normalizedUrl = requested;
+  const lane = b.scanLaneRuns?.[0];
+  assert.ok(lane);
+  lane.executionOutcome = "degraded";
+  lane.accessOutcome = "representative_page";
+  lane.challengeDetected = false;
+  lane.startedAt = "2026-07-27T18:04:00.000Z";
+  lane.completedAt = "2026-07-27T18:04:09.000Z";
+  b.startedAt = lane.startedAt;
+  Object.assign(b.domSnapshots[0]!, {url: finalUrl, documentIdentity, capturedAtMs: 8_755});
+  b.domSnapshots.push({...b.domSnapshots[0]!, url: requested, artifactId: "dom_text_pre_consent_recovery",
+    capturedAtMs: 9_100, documentIdentity: undefined});
+  Object.assign(b.consentUiObservations[0]!, {documentUrl: finalUrl, documentIdentity, observedAtMs: 8_730,
+    inventoryOutcome: "complete_with_controls", captureDiagnostics: {completedChannels: ["dom_inventory", "geometry"],
+      failedChannels: [], timedOutChannels: []}, controls: [{actionType: "do_not_sell_share", label, selectorHint,
+      matchStrength: "direct", tagName: "button", visible: true}]});
+  const raw = {...geometry([{candidateId: "opt-out", actionType: "do_not_sell_share", matchStrength: "direct",
+    layer: "first_layer", label, selectorHint, tagName: "button", decisionStatus: "confirmed_visible",
+    consentContextConfirmed: true, enabled: true, intersectsViewport: true, boundingBox: {width: 200, height: 40},
+    frameContext: {frameKind: "main_frame", frameUrl: finalUrl}}]),
+    pageUrl: finalUrl, documentIdentity, capturedAt: "2026-07-27T18:04:08.700Z", access: {status: "loaded", httpStatus: 200}};
+  const sizeBytes = Buffer.byteLength(JSON.stringify(raw));
+  const sha256 = createHash("sha256").update(JSON.stringify(raw)).digest("hex");
+  const proof = bindNarrowGeometry(raw, {scanId: b.scanId, auxiliaryArtifacts: [{fileName: "ConsentControlGeometryEvidence.json", sha256, sizeBytes}]},
+    sha256, sizeBytes);
+  const assess = (bundle = b, geometry = proof, final = requested, noGo = false) =>
+    deriveMaterializedConsentControlAssessment({bundle, consentControlGeometryEvidence: geometry, finalUrl: final, noGo,
+      consentSurfaceInspection: completeInspection("actionable_surface_observed", true)});
+  const positive = assess();
+  assert.equal(positive.scan.finalUrl, finalUrl);
+  assert.equal(positive.controls.privacyOptOut.state, "observed");
+  assert.equal(positive.controls.reject.state, "unknown");
+  assert.equal(positive.coverage.status, "limited");
+  assert.equal(projectPublicFirstLayerConsentEvidence(positive, b.scanId)?.privacyOptOutControlObserved, true);
+  assert.equal(assess(b, raw).controls.privacyOptOut.state, "unknown");
+  assert.equal(assess(b, {...proof, capturedAt: "2026-07-27T18:04:08.710Z"}).controls.privacyOptOut.state, "unknown");
+  assert.equal(assess(b, proof, requested, true).controls.privacyOptOut.state, "unknown");
+  const different = structuredClone(b);
+  different.domSnapshots.at(-1)!.documentIdentity = {source: "cdp_loader_id", token: "new-loader"};
+  assert.equal(assess(different).controls.privacyOptOut.state, "unknown");
+  const wrongControl = structuredClone(b);
+  wrongControl.consentUiObservations[0]!.controls[0]!.selectorHint = "#other-control";
+  assert.equal(assess(wrongControl).controls.privacyOptOut.state, "unknown");
+  const prematureRecovery = structuredClone(b);
+  prematureRecovery.domSnapshots.at(-1)!.capturedAtMs = 8_800;
+  assert.equal(assess(prematureRecovery).controls.privacyOptOut.state, "unknown");
+  const otherRoute = structuredClone(b);
+  otherRoute.domSnapshots.at(-1)!.url = requested + "other";
+  assert.equal(assess(otherRoute, proof, requested + "other").controls.privacyOptOut.state, "unknown");
+});
+
 test("v3 preference diagnostics survive full consent materialization independently of first-layer controls", () => {
   const { b, g } = independentConsentLaneFixture();
   const initial = deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: g, noGo: false });
@@ -1772,6 +1925,27 @@ test("a static privacy heading cannot become opt-out evidence while real consent
     assert.notEqual(result.controls.privacyOptOut.state,"observed",tagName);
     assert.ok(!result.evidence.some(row=>row.label==="Privacy choices"));
   }
+});
+
+test("a retained OneTrust banner wrapper is never a first-layer opt-out control", () => {
+  const source = bundle([{actionType: "accept_all", label: "Accept All", tagName: "button", visible: true}]);
+  const documentIdentity = {source: "cdp_loader_id" as const, token: "onetrust-document"};
+  source.domSnapshots[0]!.documentIdentity = documentIdentity;
+  Object.assign(source.consentUiObservations[0]!, {documentIdentity, documentUrl: source.url});
+  const wrapper = {candidateId: "banner-wrapper", tagName: "div", role: null, actionType: "do_not_sell_share",
+    label: "Your Privacy Choices This site and its vendors use cookies. See Your Privacy Choices in the footer.",
+    selectorHint: "#onetrust-banner-sdk", containerSelectorHint: "#onetrust-banner-sdk", semanticallyInteractive: true,
+    enabled: true, layer: "first_layer", decisionStatus: "confirmed_visible"};
+  const assess = (rows: Array<Record<string, unknown>>) => deriveMaterializedConsentControlAssessment({bundle: source,
+    consentControlGeometryEvidence: {...geometry(rows), documentIdentity}, noGo: false,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true)});
+  const result = assess([wrapper]);
+  assert.equal(result.controls.privacyOptOut.state, "unknown");
+  assert.equal(result.controls.accept.state, "observed");
+  assert.equal(projectPublicFirstLayerConsentEvidence(result, source.scanId)?.privacyOptOutControlObserved, null);
+  const realButton = {...wrapper, candidateId: "real-opt-out", tagName: "button", label: "Your Privacy Choices",
+    selectorHint: "#onetrust-pc-btn-handler"};
+  assert.equal(assess([wrapper, realButton]).controls.privacyOptOut.state, "observed");
 });
 
 test("a degraded representative positive consent capture preserves its verified primary document, without admitting failed or empty visits",async()=>{

@@ -4,8 +4,13 @@ import {
   classifyConsentInspectionRole,
   isInitialNecessaryOnlySelection,
   isInitialSelectionSubmit,
+  isOneTrustConsentBannerWrapper,
   isRelevantConsentInspectionCandidate,
   CONTROL_INSPECTION_POLICY,
+  FIRST_LAYER_OPT_OUT_GEOMETRY_SAMPLE_LIMIT,
+  firstLayerOptOutGeometryDiagnosticSchema,
+  type FirstLayerOptOutGeometryDiagnostic,
+  type OptOutGeometryFrameOutcome,
   type ConsentControlInspection,
   type InitialConsentSelection,
   classifyConsentControlLinkDestination,
@@ -213,6 +218,7 @@ export interface ConsentControlGeometryArtifact {
   documentIdentity?: BrowserDocumentIdentity;
   capturedAt: string;
   captureTiming?: {version: "consent_geometry_capture_timing.v1"; mainFrameCompletedAt: string; completedAt: string};
+  firstLayerOptOutGeometry?: FirstLayerOptOutGeometryDiagnostic;
   mainFrameVisualCapture?: ConsentMainFrameVisualCapture;
   viewport: {
     width: number;
@@ -264,6 +270,7 @@ interface RawGeometryContainer {
 
 interface RawGeometryCandidate {
   frameUrl: string;
+  captureFrameSlot?: number;
   localeHint?: string;
   label: string;
   linkHref?: string;
@@ -394,11 +401,13 @@ export async function captureConsentControlGeometry(
   };
   const initialPageUrl = page.url();
   const mainFrame = page.mainFrame();
-  const childFrames = page.frames().filter(frame => frame !== mainFrame)
+  const initialFrames = page.frames();
+  const childFrames = initialFrames.filter(frame => frame !== mainFrame)
     .map(frame => ({frame, priority: cmpFramePriority(frame.url())}))
     .sort((left, right) => right.priority - left.priority)
     .slice(0, 11);
   const frames = [mainFrame, ...childFrames.map(({frame}) => frame)];
+  const frameOutcomes = frames.map<OptOutGeometryFrameOutcome>(() => "failed");
   // Frame captures run concurrently, so dividing the deadline by the number
   // of frames unnecessarily starves the canonical document on frame-heavy
   // pages. Keep every read bounded by the caller's wall-clock allowance while
@@ -419,7 +428,10 @@ export async function captureConsentControlGeometry(
   page.on("framenavigated", onNavigation);
   const [captureResults, retainedCookieNames] = await Promise.all([Promise.all(frames.map(async (frame, frameIndex) => {
     try {
-      if (options.avoidOverlappingFrameReads && pendingActionGeometryReads.has(frame)) return undefined;
+      if (options.avoidOverlappingFrameReads && pendingActionGeometryReads.has(frame)) {
+        frameOutcomes[frameIndex] = "pending_read";
+        return undefined;
+      }
       if (options.avoidOverlappingFrameReads) pendingActionGeometryReads.add(frame);
       // Hold the slot until the actual browser RPC settles, not until the
       // caller's timeout. Do not share its result with a later capture: the
@@ -432,6 +444,8 @@ export async function captureConsentControlGeometry(
       const result = frameTimeoutMs
         ? await promiseWithTimeout(capture, frameTimeoutMs)
         : await capture;
+      frameOutcomes[frameIndex] = result ? result.inventoryLimited ? "truncated" : "captured" :
+        frameTimeoutMs ? "timed_out" : "failed";
       return result ? { capture: result, frameIndex, completedAtMs: Date.now(), frameRevision: options.readFrameRevision?.() } : undefined;
     } catch {
       return undefined;
@@ -442,9 +456,8 @@ export async function captureConsentControlGeometry(
   );
   const mainFrameResult = successfulCaptures.find((result) => result.frameIndex === 0);
   const mainFrameCapture = mainFrameResult?.capture;
-  const captures = successfulCaptures.map((result) => result.capture);
   const expectedPageUrl = page.url();
-  const raw = mergeRawGeometryCaptures(captures, expectedPageUrl, frameInput);
+  const raw = mergeRawGeometryCaptures(successfulCaptures, expectedPageUrl, frameInput);
   const cookieNames = retainedCookieNames ?? raw.cookieNames;
   const cmp = buildCmpEvidence({ ...raw, cookieNames });
   const containers = raw.containers.map((container, index): ConsentControlContainerEvidence => ({
@@ -495,6 +508,11 @@ export async function captureConsentControlGeometry(
       ...summary.limitations,
     ].slice(0, 12);
   }
+  const firstLayerOptOutGeometry = options.documentIdentity?.source === "cdp_loader_id" &&
+    !mainFrameNavigatedDuringCapture && initialPageUrl === expectedPageUrl &&
+    (!mainFrameCapture || mainFrameCapture.pageUrl === expectedPageUrl)
+    ? summarizeFirstLayerOptOutGeometry(controlInspection, candidates, raw.candidates, initialFrames.length, frameOutcomes)
+    : undefined;
 
   return {
     artifactVersion: "consent_control_geometry.v1",
@@ -520,6 +538,7 @@ export async function captureConsentControlGeometry(
     capturedAt: new Date(mainFrameResult?.completedAtMs ?? Date.now()).toISOString(),
     ...(mainFrameResult ? {captureTiming: {version: "consent_geometry_capture_timing.v1" as const,
       mainFrameCompletedAt: new Date(mainFrameResult.completedAtMs).toISOString(), completedAt: new Date().toISOString()}} : {}),
+    ...(firstLayerOptOutGeometry ? {firstLayerOptOutGeometry} : {}),
     viewport: mainFrameCapture?.viewport ?? { width: 0, height: 0 },
     screenshotArtifactRef: options.screenshotArtifactRef,
     cmp,
@@ -528,6 +547,41 @@ export async function captureConsentControlGeometry(
     controlInspection,
     summary,
   };
+}
+
+function summarizeFirstLayerOptOutGeometry(
+  inspection: ConsentControlInspection,
+  candidates: ConsentControlCandidateEvidence[],
+  rawCandidates: RawGeometryCandidate[],
+  framesAtStart: number,
+  frameOutcomes: OptOutGeometryFrameOutcome[],
+): FirstLayerOptOutGeometryDiagnostic | undefined {
+  type Sample = FirstLayerOptOutGeometryDiagnostic["candidates"][number];
+  const unresolved: Sample[] = [], classified: Sample[] = [], otherUnresolved: Sample[] = [];
+  for (const proof of inspection.candidates) {
+    const ordinal = Number(proof.candidateId.slice("candidate_".length));
+    const candidate = candidates[ordinal];
+    const frameSlot = rawCandidates[ordinal]?.captureFrameSlot;
+    if (!candidate || frameSlot === undefined) return undefined;
+    const sample = {ordinal, frameSlot, role: proof.role, confirmedVisible: candidate.decisionStatus === "confirmed_visible"};
+    if (proof.unresolvedIntents.includes("privacy_opt_out")) {
+      unresolved.push({...sample, coverage: "unresolved_opt_out"});
+    } else if (candidate.actionType === "do_not_sell_share") {
+      classified.push({...sample, coverage: "classified_opt_out"});
+    } else if (proof.unresolvedIntents.length) {
+      otherUnresolved.push({...sample, coverage: "other_unresolved"});
+    }
+  }
+  const result = firstLayerOptOutGeometryDiagnosticSchema.safeParse({
+    version: "first_layer_opt_out_geometry_diagnostic.v1",
+    structuralCoverage: inspection.structuralCoverage,
+    captureCoverage: inspection.captureCoverage,
+    framesAtStart, frameOutcomes,
+    retainedCandidateCount: inspection.retainedCandidateCount, inspectedCandidateCount: inspection.candidates.length,
+    unresolvedOptOutCount: unresolved.length, classifiedOptOutCount: classified.length, otherUnresolvedCount: otherUnresolved.length,
+    candidates: [...unresolved, ...classified, ...otherUnresolved].slice(0, FIRST_LAYER_OPT_OUT_GEOMETRY_SAMPLE_LIMIT),
+  });
+  return result.success ? result.data : undefined;
 }
 
 function classifyConsentControlPlacements(
@@ -788,13 +842,14 @@ function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<
 }
 
 function mergeRawGeometryCaptures(
-  captures: RawGeometryCapture[],
+  results: Array<{capture: RawGeometryCapture; frameIndex: number}>,
   fallbackPageUrl: string,
   limits: {
     candidateLimit: number;
     containerLimit: number;
   },
 ): RawGeometryCapture {
+  const captures = results.map(result => result.capture);
   const main = captures[0];
   const merged: RawGeometryCapture = {
     inventoryLimited: captures.some(c => c.inventoryLimited),
@@ -809,11 +864,12 @@ function mergeRawGeometryCaptures(
     containers: [],
     candidates: [],
   };
-  for (const capture of captures) {
+  for (const {capture, frameIndex} of results) {
     const containerOffset = merged.containers.length;
     merged.containers.push(...capture.containers);
     merged.candidates.push(...capture.candidates.map((candidate) => ({
       ...candidate,
+      captureFrameSlot: frameIndex,
       containerIndex: typeof candidate.containerIndex === "number"
         ? candidate.containerIndex + containerOffset
         : undefined,
@@ -932,9 +988,11 @@ function buildCandidateEvidence(
         ? { ...baseClassification, variant: "save_preferences",
             reasonCodes: [...baseClassification.reasonCodes, "initial_selection_inspection_incomplete", "observation_only_label"] }
         : baseClassification;
-  const actionType = actionTypeForClassification(classification, candidate);
+  const bannerWrapper = candidate.layer === "first_layer" && classification.intent === "privacy_opt_out" &&
+    isOneTrustConsentBannerWrapper(candidate);
+  const actionType = bannerWrapper ? "other" : actionTypeForClassification(classification, candidate);
   const diagnosticClassifications = diagnosticClassificationsForCandidate(candidate);
-  const reasons: string[] = [];
+  const reasons = bannerWrapper ? ["one_trust_consent_banner_wrapper"] : [];
   const decisionStatus = decisionStatusForCandidate(candidate, actionType, classification, reasons);
   return {
     candidateId: `candidate_${index}`,
@@ -972,7 +1030,9 @@ function buildCandidateEvidence(
     clippedByScrollableAncestor: candidate.clippedByScrollableAncestor,
     scrollableAncestor: candidate.scrollableAncestor,
     occlusion: candidate.occlusion,
-    screenshotArtifactRef,
+    // The page image is contextual. It does not verify that a first-layer
+    // opt-out found by the DOM read was visible when those pixels were taken.
+    screenshotArtifactRef: actionType === "do_not_sell_share" && candidate.layer === "first_layer" ? undefined : screenshotArtifactRef,
     matchedTerm: classification.matchedTerm,
     matchedLocale: classification.matchedLocale,
     matchStrength: classification.matchStrength,
