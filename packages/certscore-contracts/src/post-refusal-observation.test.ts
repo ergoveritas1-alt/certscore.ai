@@ -127,6 +127,26 @@ function confirmedPacket() {
   };
 }
 
+test("post-click navigation requires the exact packet target and a verified packet hash for projection", () => {
+  const base = confirmedPacket();
+  const target = "a".repeat(64);
+  const postClickNavigation = { scope: "main_frame", outcome: "main_frame_navigated", elapsedAfterClickMs: 1 };
+  const input = { ...base, exactTargetSha256: target,
+    actionControlProof: { ...base.actionControlProof, authorizedTargetSha256: target },
+    interactionDiagnostics: {
+      navigation: { outcome: "completed", documentCommitted: true, finalUrlAuthorized: true },
+      click: { outcome: "completed", reResolvedBeforeDispatch: false, confirmationCheckedAfterError: false },
+      postClickNavigation,
+    },
+  };
+  const packet = postRefusalEvidencePacketSchema.parse(input);
+  const bound = projectPostRefusalEvidenceForReport({ packet, packetSha256: "b".repeat(64) });
+  assert.deepEqual(bound.interactionDiagnostics?.postClickNavigation, postClickNavigation);
+  assert.equal(projectPostRefusalEvidenceForReport({ packet }).interactionDiagnostics?.postClickNavigation, undefined);
+  assert.equal(postRefusalEvidencePacketSchema.safeParse({ ...input, exactTargetSha256: "f".repeat(64) }).success, false);
+  assert.equal(postRefusalEvidencePacketSchema.safeParse({ ...input, exactTargetSha256: undefined }).success, false);
+});
+
 test("Reject packet and report projection preserve bounded collection diagnostics", () => {
   const diagnostics = { policyVersion: "action_storage_collection_diagnostics.v1" as const,
     cookies: { status: "empty" as const, retainedCount: 0, droppedCount: 0, sampleLimit: 96 },

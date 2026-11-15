@@ -349,10 +349,10 @@ const postClickNavigationSchema = z.object({
 
 export function validatePostClickNavigation(
   evidence: z.infer<typeof postClickNavigationSchema> | undefined,
-  source: { targetSha256?: string; frameIdentitySha256?: string; dispatchAtMs?: number; readyAtMs: number },
+  source: { targetSha256?: string; exactTargetSha256?: string; frameIdentitySha256?: string; dispatchAtMs?: number; readyAtMs: number },
   context: z.RefinementCtx,
 ) {
-  if (evidence && (!source.targetSha256 || source.dispatchAtMs === undefined ||
+  if (evidence && (!source.targetSha256 || source.targetSha256 !== source.exactTargetSha256 || source.dispatchAtMs === undefined ||
     (evidence.scope === "control_frame" && !source.frameIdentitySha256) ||
     source.dispatchAtMs + (evidence.elapsedAfterClickMs ?? 0) > source.readyAtMs)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["interactionDiagnostics", "postClickNavigation"],
@@ -646,6 +646,7 @@ const postRefusalEvidencePacketBaseSchema = z.object({
     clickOutcome:packet.interactionDiagnostics?.click.outcome},context);
   validatePostClickNavigation(packet.interactionDiagnostics?.postClickNavigation, {
     targetSha256: packet.actionControlProof?.authorizedTargetSha256,
+    exactTargetSha256: packet.exactTargetSha256,
     frameIdentitySha256: packet.actionControlProof?.frameIdentitySha256,
     dispatchAtMs: packet.refusalRegistration.actionDispatchedAtMs, readyAtMs: packet.timing.readyAtMs,
   }, context);

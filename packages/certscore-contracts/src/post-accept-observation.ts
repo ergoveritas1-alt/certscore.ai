@@ -337,6 +337,7 @@ const postAcceptEvidencePacketBaseSchema = z.object({
     clickOutcome:packet.interactionDiagnostics?.click.outcome},context);
   validatePostClickNavigation(packet.interactionDiagnostics?.postClickNavigation, {
     targetSha256: packet.actionControlProof?.authorizedTargetSha256,
+    exactTargetSha256: packet.exactTargetSha256,
     frameIdentitySha256: packet.actionControlProof?.frameIdentitySha256,
     dispatchAtMs: packet.acceptanceRegistration.actionDispatchedAtMs, readyAtMs: packet.timing.readyAtMs,
   }, context);
