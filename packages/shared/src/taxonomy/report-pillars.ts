@@ -3012,12 +3012,12 @@ export const REPORT_UNIFIED_FINDINGS = [
   }),
   defineReportUnifiedFinding({
     id: "accept_reject_outcomes_indistinguishable",
-    label: "Accept and Reject produced indistinguishable retained activity",
+    label: "Shared observed activity after Accept and Reject",
     owner: "enforcement_outcomes_after_user_choice",
     mirrors: ["third_party_network_cookie_surface"],
     overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"],
     signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.accept_reject_outcomes_indistinguishable" }],
-    aliases: ["Accept and Reject outcomes indistinguishable", "Consent choice outcomes matched"]
+    aliases: ["Accept and Reject produced indistinguishable retained activity", "Accept and Reject outcomes indistinguishable", "Consent choice outcomes matched"]
   }),
   defineReportUnifiedFinding({
     id: "acceptance_signal_contradicts_action",

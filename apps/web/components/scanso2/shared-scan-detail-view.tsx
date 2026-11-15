@@ -3,7 +3,7 @@ import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition"
 
 import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
 import type { ReactNode } from "react";
-import { afterClickCoverage, afterClickSummary } from "./after-action-summary";
+import { afterClickCoverage, afterClickSummary, earlyRegisteredObservation } from "./after-action-summary";
 import { InventoryResourceProvider, InventoryResourceRow, InventoryResourceMobile } from "./inventory-resource-details";
 import Link from "next/link";
 import {
@@ -1441,14 +1441,16 @@ export function buildExecutiveRejectPathProjection(
     ? retained.preConsentStorageNotClearedItems.map(getRecord).filter((row): row is Record<string, unknown> => Boolean(row))
     : [];
   const contradictionObserved = retained.refusalSignalContradictsAction === true;
-  const observationWindowMs = getOptionalFiniteNumber(retained, "observationWindowMs");
   const resolverMethod = getOptionalString(retained, "resolverMethod");
   const captureCoverage = afterClickCoverage(retained, "reject");
   const parsedExecution = choicePathExecutionSchema.safeParse(retained.execution);
   const execution = parsedExecution.success ? parsedExecution.data : undefined;
   const registrationConfirmed = execution?.consentConfirmed ?? retained.rejectInteractionConfirmed === true;
+  const earlyObservation = registrationConfirmed ? earlyRegisteredObservation(retained.registeredObservationCompletion, "reject") : undefined;
+  const observationWindowMs = earlyObservation?.requiredWindowMs ?? getOptionalFiniteNumber(retained, "observationWindowMs");
   const afterClickNote = afterClickSummary(retained, "reject");
-  const customerFacingNote = omitScoreMechanicsFromCustomerCopy(item.note) + afterClickNote;
+  const customerFacingNote = omitScoreMechanicsFromCustomerCopy(item.note) + afterClickNote +
+    (earlyObservation ? ` ${earlyObservation.note}` : "");
   const timelineEvents = activityRows
     .map(formatRejectTimelineEvent)
     .filter((event): event is NonNullable<typeof event> => Boolean(event))

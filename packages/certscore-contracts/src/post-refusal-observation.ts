@@ -333,7 +333,43 @@ export const postRefusalObservationSchema = z.object({
   evidenceKeys: z.array(z.string().max(160)).max(12).default([]),
 });
 
+const postClickNavigationSchema = z.object({
+  scope: z.enum(["main_frame", "control_frame", "unverified_control_frame"]),
+  outcome: z.enum(["main_frame_navigated", "control_frame_navigated", "control_frame_detached",
+    "none_observed", "interrupted", "scope_unverified"]),
+  elapsedAfterClickMs: z.number().int().nonnegative().max(60_000).optional(),
+}).strict().refine(value => {
+  const observed = value.outcome === "main_frame_navigated" || value.outcome === "control_frame_navigated" ||
+    value.outcome === "control_frame_detached";
+  return observed === (value.elapsedAfterClickMs !== undefined) &&
+    ((value.outcome !== "control_frame_navigated" && value.outcome !== "control_frame_detached") || value.scope === "control_frame") &&
+    (value.outcome !== "none_observed" || value.scope !== "unverified_control_frame") &&
+    (value.outcome !== "scope_unverified" || value.scope === "unverified_control_frame");
+}, "A navigation event requires a matching scope and click-relative timestamp.");
+
+export function validatePostClickNavigation(
+  evidence: z.infer<typeof postClickNavigationSchema> | undefined,
+  source: { targetSha256?: string; frameIdentitySha256?: string; dispatchAtMs?: number; readyAtMs: number },
+  context: z.RefinementCtx,
+) {
+  if (evidence && (!source.targetSha256 || source.dispatchAtMs === undefined ||
+    (evidence.scope === "control_frame" && !source.frameIdentitySha256) ||
+    source.dispatchAtMs + (evidence.elapsedAfterClickMs ?? 0) > source.readyAtMs)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["interactionDiagnostics", "postClickNavigation"],
+      message: "Post-click navigation must bind to the retained target, frame, and action clock." });
+  }
+}
+
+export function projectActionInteractionDiagnostics(
+  diagnostics: PostRefusalInteractionDiagnostics | undefined, packetSha256: string | undefined,
+): PostRefusalInteractionDiagnostics | undefined {
+  if (!diagnostics?.postClickNavigation || packetSha256) return diagnostics;
+  const { postClickNavigation: _, ...unbound } = diagnostics;
+  return unbound;
+}
+
 export const postRefusalInteractionDiagnosticsSchema = z.object({
+  postClickNavigation: postClickNavigationSchema.optional(),
   resolver: z.object({
     snapshots: z.array(z.object({
       attempt: z.number().int().positive().max(10_000),
@@ -441,6 +477,11 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
     }).optional(),
   }),
 }).superRefine((diagnostics, context) => {
+  if (diagnostics.postClickNavigation && (diagnostics.click.outcome !== "completed" ||
+    !diagnostics.navigation.finalUrlAuthorized || !diagnostics.navigation.documentCommitted)) {
+    context.addIssue({code: z.ZodIssueCode.custom, path: ["postClickNavigation"],
+      message: "Post-click navigation requires a completed click on the authorized target."});
+  }
   if (
     diagnostics.navigation.redirectResolution?.status === "resolved" &&
     (
@@ -603,6 +644,11 @@ const postRefusalEvidencePacketBaseSchema = z.object({
     targetSha256:packet.actionControlProof?.authorizedTargetSha256,frameIdentitySha256:packet.actionControlProof?.frameIdentitySha256,
     dispatchedAtMs:packet.refusalRegistration.actionDispatchedAtMs,readyAtMs:packet.timing.readyAtMs,completedAt:packet.completedAt,
     clickOutcome:packet.interactionDiagnostics?.click.outcome},context);
+  validatePostClickNavigation(packet.interactionDiagnostics?.postClickNavigation, {
+    targetSha256: packet.actionControlProof?.authorizedTargetSha256,
+    frameIdentitySha256: packet.actionControlProof?.frameIdentitySha256,
+    dispatchAtMs: packet.refusalRegistration.actionDispatchedAtMs, readyAtMs: packet.timing.readyAtMs,
+  }, context);
   validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
   for (const evidence of [packet.decisionEvidence, packet.terminalDecisionEvidence?.evidence]) {
     validateComplianzReceiptEnvelope(evidence?.complianzReceiptEvidence, {
@@ -1498,7 +1544,9 @@ export function projectPostRefusalEvidenceForReport(input: {
       preActionStorage: packet.storage.preAction,
       postActionStorage: packet.storage.postAction,
     },
-    ...(packet.interactionDiagnostics ? { interactionDiagnostics: packet.interactionDiagnostics } : {}),
+    ...(packet.interactionDiagnostics ? {
+      interactionDiagnostics: projectActionInteractionDiagnostics(packet.interactionDiagnostics, input.packetSha256),
+    } : {}),
     ...(retainedActionTiming ? { retainedActionTiming } : {}),
     registeredObservationCompletion: retainRegisteredObservationCompletion({
       action: "reject", registeredAtMs: packet.refusalRegistration.refusalRegisteredAtMs,

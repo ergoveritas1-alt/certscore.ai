@@ -36,6 +36,24 @@ test("malformed capture metadata cannot invent a completed Accept interaction", 
   assert.doesNotMatch(acceptPathIncompleteReason({ afterActionCapture: { activationStatus: "completed" } }), /was clicked/);
 });
 
+test("unconfirmed Accept explains a document change only with a matching retained receipt", () => {
+  const empty = { retained: 0, available: 0, unavailable: 0, limited: 0, valueProof: 0 };
+  const phase = { receipts: empty, configuration: empty };
+  const packetSha256 = "a".repeat(64);
+  const receipt = { policyVersion: "consent_receipt_availability.v1", diagnosticOnly: true, action: "accept",
+    sourcePacketSha256: packetSha256, coverage: "retained_observations_only", documentStable: false, cancelled: false,
+    observationsTruncated: true, processingLimited: false, phases: { baseline: phase, initial: phase, terminal: phase } };
+  const projection = { packetSha256, registrationStatus: "unconfirmed",
+    interactionDiagnostics: { click: { outcome: "completed" } }, receiptAvailability: receipt };
+  assert.match(acceptPathIncompleteReason(projection), /page navigated after the click/);
+  for (const receiptAvailability of [
+    undefined, { ...receipt, action: "reject" }, { ...receipt, documentStable: true },
+    { ...receipt, sourcePacketSha256: "b".repeat(64) },
+  ]) {
+    assert.doesNotMatch(acceptPathIncompleteReason({ ...projection, receiptAvailability }), /page navigated/);
+  }
+});
+
  test("retained unconfirmed Accept explains confirmation separately from completed observation", async () => {
   const {readFileSync} = await import("node:fs");
   const rows = JSON.parse(readFileSync(new URL("../../../../../packages/certscore-contracts/fixtures/retained-unconfirmed-actions-20261113.json", import.meta.url), "utf8"));

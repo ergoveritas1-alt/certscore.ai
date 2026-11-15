@@ -526,6 +526,9 @@ export async function runPostAcceptObserver(
     captureCoverage.requestsDroppedBeforeAction += Math.max(0, preActionRequests.length + postActionRequests.length - retainedRequests().length);
     formCapture ??= formCaptureHandle?.finish();
     const completedAtMs = Date.now();
+    if (fields.registration.actionDispatchedAtMs !== undefined && diagnostics.navigation.finalUrlAuthorized && diagnostics.navigation.documentCommitted) {
+      diagnostics.postClickNavigation = receiptCapture?.navigationEvidence(diagnostics.click.outcome, actionControlProof?.authorizedTargetSha256, completedAtMs);
+    }
     const consentReceiptCapture=receiptCapture?.finish(selectedRecipe?.controlFrameUrl?undefined:{
       targetSha256:actionControlProof?.authorizedTargetSha256,frameIdentitySha256:actionControlProof?.frameIdentitySha256,
       clickOutcome:diagnostics.click.outcome},completedAtMs);
@@ -1252,7 +1255,9 @@ export async function runPostAcceptObserver(
           assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs);
           actionDispatchedAtEpochMs = Date.now();
           actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
-          receiptCapture?.dispatch(actionDispatchedAtEpochMs);
+          receiptCapture?.dispatch(actionDispatchedAtEpochMs, selectedRecipe?.controlFrameUrl
+            ? {controlFrame: actionControlProof?.frameIdentitySha256 && "page" in confirmationScope ? confirmationScope : undefined}
+            : undefined);
           actionDispatched = true;
           graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
         },

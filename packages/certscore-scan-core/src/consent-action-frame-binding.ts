@@ -52,6 +52,7 @@ export function createConsentActionFrameBinding() {
   };
   return {
     signal: controller.signal,
+    get boundFrame() {return selected;},
     get current() {return !controller.signal.aborted && !pending;},
     assertCurrent() {if (controller.signal.aborted || pending) throw new Error("consent_action_source_document_unverified");},
     setElement(value: ElementHandle<HTMLElement | SVGElement> | undefined, deadlineAtMs?: number) {

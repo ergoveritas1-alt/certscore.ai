@@ -4,7 +4,7 @@ import {EventEmitter} from 'node:events';
 import {createServer} from 'node:http';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import test from 'node:test';
-import {chromium,type Page} from 'playwright';
+import {chromium,type Frame,type Page} from 'playwright';
 import {postAcceptEvidencePacketSchema,postRefusalEvidencePacketSchema,projectPostAcceptEvidenceForReport,projectPostRefusalEvidenceForReport} from '@certscore/contracts';
 import {projectReceiptValue,installConsentReceiptCapture,receiptCaptureToken,retainReceiptCookies,retainReceiptApi} from './consent-receipt-capture.js';
 import {runPostAcceptObserver} from './post-accept-observer.js';
@@ -26,6 +26,65 @@ test('receipt extraction keeps category facts without raw identifiers, keys, met
 });
 
 function fake(){const page=new EventEmitter() as EventEmitter&{url:()=>string;mainFrame:()=>object;context:()=>object};let url='https://fixture.example/';const frame={},context={};page.url=()=>url;page.mainFrame=()=>frame;page.context=()=>context;return{page:page as unknown as Page,frame,context,navigate:(next=url)=>{url=next;page.emit('framenavigated',frame);}};}
+
+test('post-click navigation retains the first event from the bound control frame without retaining receipt values', t => {
+  const f = fake();
+  const events = f.page as unknown as EventEmitter;
+  const controlFrame = { isDetached: () => false } as Frame;
+  const unrelatedFrame = { isDetached: () => false } as Frame;
+  const controller = new AbortController();
+  let now = 1300;
+  t.mock.method(Date, 'now', () => now);
+  const capture = installConsentReceiptCapture(f.page, { scanId: 'owned', action: 'reject', clockOriginAtEpochMs: 1000, signal: controller.signal });
+  const target = hash('target');
+  events.emit('framenavigated', f.frame);
+  assert.equal(capture.navigationEvidence('completed', target, now), undefined);
+  capture.dispatch(now, { controlFrame });
+  now = 1310;
+  events.emit('framenavigated', unrelatedFrame);
+  assert.deepEqual(capture.navigationEvidence('completed', target, now), { scope: 'control_frame', outcome: 'none_observed' });
+  now = 1346;
+  events.emit('framedetached', controlFrame);
+  controller.abort();
+  now = 1513;
+  f.navigate();
+  assert.deepEqual(capture.navigationEvidence('completed', target, now),
+    { scope: 'control_frame', outcome: 'control_frame_detached', elapsedAfterClickMs: 46 });
+  assert.equal(capture.navigationEvidence('failed_after_dispatch', target, now), undefined);
+  assert.equal(capture.navigationEvidence('completed', undefined, now), undefined);
+  assert.equal(capture.finish(), undefined);
+  assert.equal(events.listenerCount('framenavigated'), 0);
+  assert.equal(events.listenerCount('framedetached'), 0);
+  const secondCapture = installConsentReceiptCapture(f.page, { scanId: 'owned', action: 'reject', clockOriginAtEpochMs: 1000 });
+  secondCapture.dispatch(now, { controlFrame });
+  now += 20;
+  events.emit('framenavigated', controlFrame);
+  assert.deepEqual(secondCapture.navigationEvidence('completed', target, now),
+    { scope: 'control_frame', outcome: 'control_frame_navigated', elapsedAfterClickMs: 20 });
+  secondCapture.finish();
+});
+
+test('post-click navigation distinguishes same-URL events, unknown frame scope, and interruption', t => {
+  let now = 2000;
+  t.mock.method(Date, 'now', () => now);
+  const f = fake(), controller = new AbortController();
+  const capture = installConsentReceiptCapture(f.page, { scanId: 'owned', action: 'accept', clockOriginAtEpochMs: 1000, signal: controller.signal });
+  const target = hash('target');
+  capture.dispatch(now, {});
+  assert.deepEqual(capture.navigationEvidence('completed', target, now), { scope: 'unverified_control_frame', outcome: 'scope_unverified' });
+  now = 2546;
+  f.navigate();
+  assert.deepEqual(capture.navigationEvidence('completed', target, now),
+    { scope: 'unverified_control_frame', outcome: 'main_frame_navigated', elapsedAfterClickMs: 546 });
+  assert.deepEqual(capture.navigationEvidence('completed', target, 2320), { scope: 'unverified_control_frame', outcome: 'interrupted' });
+  capture.finish();
+  const interrupted = installConsentReceiptCapture(f.page, { scanId: 'owned', action: 'accept', clockOriginAtEpochMs: 1000, signal: controller.signal });
+  interrupted.dispatch(now, {});
+  controller.abort();
+  f.navigate();
+  assert.deepEqual(interrupted.navigationEvidence('completed', target, now), { scope: 'unverified_control_frame', outcome: 'interrupted' });
+  interrupted.finish();
+});
 for(const mode of ['stable','navigation','cancel','wrong_frame','wrong_cookie_scope','overflow','cpu_budget','late_reply']as const){
  test(`receipt capture lifecycle and bounds: ${mode}`,t=>{
   const f=fake(),controller=new AbortController(),origin=Date.now()-100;

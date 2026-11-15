@@ -1,3 +1,4 @@
+import { consentReceiptAvailabilitySchema } from "@certscore/contracts";
 import { readChoicePathLimitation } from "../../../lib/scans/choice-path-execution";
 import { afterClickCoverage, afterClickSummary } from "../after-action-summary";
 
@@ -17,7 +18,14 @@ export function acceptPathIncompleteReason(projection: Record<string, unknown>):
     return "More than one possible Accept control was found. No click was attempted because the target was ambiguous.";
   }
   if (diagnostics?.click?.outcome === "completed" || afterClickCoverage(projection, "accept")) {
-    return (readChoicePathLimitation(projection, "accept")?.message ?? "The Accept control was clicked.") + acceptAfterClickSummary(projection);
+    const receipt = consentReceiptAvailabilitySchema.safeParse(projection.receiptAvailability);
+    const legacyDocumentChanged = !Object.hasOwn(diagnostics ?? {}, "postClickNavigation") &&
+      projection.registrationStatus === "unconfirmed" && receipt.success &&
+      receipt.data.action === "accept" && receipt.data.sourcePacketSha256 === projection.packetSha256 &&
+      !receipt.data.documentStable;
+    return (readChoicePathLimitation(projection, "accept")?.message ?? "The Accept control was clicked.") +
+      (legacyDocumentChanged ? " The page navigated after the click, leaving the consent receipt unverified for the original page." : "") +
+      acceptAfterClickSummary(projection);
   }
   if (diagnostics?.click?.outcome === "failed_before_dispatch") return "The Accept control was found, but the click could not be dispatched.";
   if (diagnostics?.click?.outcome === "failed_after_dispatch") return "An Accept click was dispatched; click completion was not recorded.";

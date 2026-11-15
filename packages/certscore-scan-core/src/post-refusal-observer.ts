@@ -552,6 +552,9 @@ export async function runPostRefusalObserver(
   }): Promise<PostRefusalEvidencePacket> => {
     cancellation();
     const completedAtMs = Date.now();
+    if (fields.registration.actionDispatchedAtMs !== undefined && interactionDiagnostics.navigation.finalUrlAuthorized && interactionDiagnostics.navigation.documentCommitted) {
+      interactionDiagnostics.postClickNavigation = receiptCapture?.navigationEvidence(interactionDiagnostics.click.outcome, actionControlProof?.authorizedTargetSha256, completedAtMs);
+    }
     const consentReceiptCapture=receiptCapture?.finish(selectedRecipe?.controlFrameUrl?undefined:{
       targetSha256:actionControlProof?.authorizedTargetSha256,frameIdentitySha256:actionControlProof?.frameIdentitySha256,
       clickOutcome:interactionDiagnostics.click.outcome},completedAtMs);
@@ -957,6 +960,8 @@ export async function runPostRefusalObserver(
                     }
                   : headedNavigation ?? interactionDiagnostics.navigation,
                 click: headedPacket.interactionDiagnostics?.click ?? interactionDiagnostics.click,
+                ...(headedSucceeded && headedPacket.interactionDiagnostics?.postClickNavigation
+                  ? { postClickNavigation: headedPacket.interactionDiagnostics.postClickNavigation } : {}),
               },
               limitations: [...headedPacket.limitations, retryLimitation].slice(0, 24),
             });
@@ -1588,7 +1593,8 @@ export async function runPostRefusalObserver(
           assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs);
           actionDispatchedAtEpochMs = Date.now();
           actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
-          receiptCapture?.dispatch(actionDispatchedAtEpochMs);
+          receiptCapture?.dispatch(actionDispatchedAtEpochMs, selectedRecipe?.controlFrameUrl
+            ? {controlFrame: actionControlProof?.frameIdentitySha256 ? sourceFrameBinding.boundFrame : undefined} : undefined);
           actionDispatched = true;
           graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
         },

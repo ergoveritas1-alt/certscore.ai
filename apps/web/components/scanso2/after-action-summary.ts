@@ -1,1 +1,1 @@
-export { afterClickCoverage, afterClickSummary, afterClickCoverageLabel } from "../scans/after-action-summary";
+export { afterClickCoverage, afterClickSummary, afterClickCoverageLabel, earlyRegisteredObservation } from "../scans/after-action-summary";

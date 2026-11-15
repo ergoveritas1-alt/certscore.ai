@@ -30,6 +30,30 @@ for (const action of ["accept", "reject"] as const) {
     ]) assert.equal(projectRetainedActionTimeline({ ...projection, ...patch }, observedControlAssessment, action), null);
     assert.equal(projectRetainedActionTimeline(projection, observedControlAssessment, action === "accept" ? "reject" : "accept"), null);
   });
+
+  test(`${action}: evidence-satisfied completion reports actual duration from confirmation on a click-relative timeline`, () => {
+    const base = completedActionProjection(action);
+    const projection = {
+      ...base, status: "confirmed_observation", registrationStatus: "confirmed", observationCount: 1, observationWindowMs: 8000,
+      productionProjectable: true, evidenceDisposition: "confirmed", indeterminateReason: null,
+      captureCoverage: { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 },
+      ...(action === "accept" ? { acceptanceExercised: true, acceptanceRegisteredAtMs: 300 }
+        : { refusalExercised: true, refusalRegisteredAtMs: 300 }),
+      decisionEvidence: { policyVersion: "semantic_consent_registration.v2", decision: action === "accept" ? "granted" : "denied",
+        basis: "verified_state", observedStateSha256: "b".repeat(64), observedAtMs: 300, timestampBasis: "verified_state_observed" },
+      registeredObservationCompletion: { policyVersion: "registered_action_observation_completion.v1", action,
+        startedAtMs: 300, completedAtMs: 1100, requiredWindowMs: 8000, termination: "evidence_satisfied" },
+    };
+    const result = projectRetainedActionTimeline(projection, observedControlAssessment, action)!;
+    assert.equal(result.events[1]?.atMs, 200);
+    assert.equal(result.events.at(-1)?.atMs, 1000);
+    assert.equal(result.events.at(-1)?.label, "Observation ended early");
+    assert.match(result.events.at(-1)?.detail ?? "", /After confirmation, observation ended at 0\.8s.*maximum was 8s/);
+    const laterCapture = { ...projection, afterActionCapture: { ...base.afterActionCapture, captureEndedAtMs: 1300 } };
+    const separate = projectRetainedActionTimeline(laterCapture, observedControlAssessment, action)!;
+    assert.deepEqual(separate.events.slice(-2).map(event => [event.atMs, event.label]),
+      [[1000, "Observation ended early"], [1200, "Observation end"]]);
+  });
 }
 
 test("confirmed Reject uses retained registration and completion offsets, never the configured window as an end timestamp", () => {

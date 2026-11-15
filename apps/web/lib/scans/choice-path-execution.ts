@@ -2,8 +2,23 @@ import {
   assessChoicePathExecution,
   postAcceptReportProjectionSchema,
   postRefusalReportProjectionSchema,
+  registeredObservationCompletionSchema,
   type ChoicePathExecution,
 } from "@certscore/contracts";
+
+/** Actual post-confirmation duration when the worker stopped after observing qualifying evidence. */
+export function earlyRegisteredObservation(value: unknown, action: "accept" | "reject") {
+  const parsed = registeredObservationCompletionSchema.safeParse(value);
+  if (!parsed.success || parsed.data.action !== action || parsed.data.termination !== "evidence_satisfied") return undefined;
+  const { startedAtMs, completedAtMs, requiredWindowMs } = parsed.data;
+  const durationMs = completedAtMs - startedAtMs;
+  if (durationMs >= requiredWindowMs) return undefined;
+  const seconds = (milliseconds: number) => Math.round(milliseconds / 10) / 100;
+  return {
+    requiredWindowMs,
+    note: `After confirmation, observation ended at ${seconds(durationMs)}s when qualifying evidence was recorded. The configured maximum was ${seconds(requiredWindowMs)}s.`,
+  };
+}
 
 /** Canonical operational assessment of persisted typed evidence, including v1
  * records. Never changes registration, findings, scoring, or the stored record. */
@@ -53,14 +68,22 @@ export function readChoicePathLimitation(
   }
   const projection = parsed.data;
   const execution = projection.execution ?? assessChoicePathExecution(projection, action);
+  const navigation = projection.packetSha256 && projection.actionControlProof?.action === action &&
+    projection.actionControlProof.authorizedTargetSha256 ? projection.interactionDiagnostics?.postClickNavigation : undefined;
+  let navigationMessage = "";
+  if (!execution.consentConfirmed && navigation?.elapsedAfterClickMs !== undefined) {
+    const event = navigation.outcome === "main_frame_navigated" ? "The page navigated"
+      : navigation.outcome === "control_frame_navigated" ? "The control’s frame navigated" : "The control’s frame was detached";
+    navigationMessage = ` ${event} ${navigation.elapsedAfterClickMs} ms after the click.`;
+  }
   if (execution.observationCompleted && execution.consentConfirmed) return null;
   if (execution.observationCompleted) return {
     code: "consent_state_unconfirmed" as const,
-    message: `The ${label} click and observation completed, but the consent decision could not be confirmed.`,
+    message: `The ${label} click and observation completed, but the consent decision could not be confirmed.${navigationMessage}`,
   };
   if (execution.clickCompleted) return {
     code: "observation_incomplete" as const,
-    message: `The ${label} click completed, but the post-click observation was incomplete.`,
+    message: `The ${label} click completed, but the post-click observation was incomplete.${navigationMessage}`,
   };
   if (!projection.resolver?.found) return {
     code: "control_unresolved" as const,

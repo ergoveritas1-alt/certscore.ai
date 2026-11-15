@@ -1,6 +1,6 @@
 import { postAcceptReportProjectionSchema, postRefusalReportProjectionSchema, reconcilePostAcceptFormInventory } from "@certscore/contracts";
 import { isAfterActionReportEligible } from "./after-action-report-eligibility";
-import { readChoicePathExecution } from "./choice-path-execution";
+import { earlyRegisteredObservation, readChoicePathExecution } from "./choice-path-execution";
 import type { RuntimeObservationTimelineEvent } from "../../components/scans/runtime-observation-sections";
 
 export type ActionTimelineProjection = {
@@ -18,11 +18,14 @@ export function projectRetainedActionTimeline(value: unknown, assessment: unknow
   const execution = readChoicePathExecution(projection, action);
   if (!execution?.clickCompleted) return null;
   const completion = projection.registeredObservationCompletion;
+  const early = execution.consentConfirmed && execution.observationCompleted
+    ? earlyRegisteredObservation(completion, action) : undefined;
   const capture = projection.afterActionCapture;
   const timing = projection.retainedActionTiming;
   if (!capture && !timing && !execution.consentConfirmed) return null;
   const start = timing?.actionDispatchedAtMs ?? capture?.actionDispatchedAtMs ?? completion?.startedAtMs;
-  const end = timing?.observationEndedAtMs ?? capture?.captureEndedAtMs ?? completion?.completedAtMs;
+  const captureEnd = timing?.observationEndedAtMs ?? capture?.captureEndedAtMs;
+  const end = captureEnd ?? completion?.completedAtMs;
   if (start === undefined || (end !== undefined && end < start)) return null;
   const usesClickClock = !!timing || !!capture;
   const coverage = execution.observationCompleted ? "complete" : "limited";
@@ -66,9 +69,12 @@ export function projectRetainedActionTimeline(value: unknown, assessment: unknow
       if (count) add(capturedAtMs - start, "Forms captured", `${count} form${count === 1 ? "" : "s"} retained after the Accept click`);
     }
   }
-  const exactCaptureEnd = timing?.observationEndedAtMs !== undefined || capture?.captureEndedAtMs !== undefined;
-  if (end !== undefined) add(end - start, coverage === "complete" ? exactCaptureEnd ? "Observation end" : "Worker complete" : "Capture stopped",
-    coverage === "complete" ? exactCaptureEnd ? "Retained action capture closed" : "Retained action worker completed" : "Limited capture");
+  const earlyEnd = early && completion ? completion.completedAtMs : undefined;
+  if (early && earlyEnd !== undefined) add(earlyEnd - start, "Observation ended early", early.note);
+  if (end !== undefined && end !== earlyEnd) {
+    add(end - start, coverage === "complete" ? (captureEnd !== undefined ? "Observation end" : "Worker complete") : "Capture stopped",
+      coverage === "complete" ? (captureEnd !== undefined ? "Retained action capture closed" : "Retained action worker completed") : "Limited capture");
+  }
   events.sort((a, b) => a.atMs - b.atMs);
   return { coverage, clockLabel: usesClickClock ? `Times from the ${label} click` : `Times from confirmed ${label}`, events };
 }

@@ -1,4 +1,5 @@
 import { afterActionCaptureSchema } from "@certscore/contracts";
+export { earlyRegisteredObservation } from "../../lib/scans/choice-path-execution";
 
 /** Display already-retained after-click facts without treating them as granted consent. */
 export function afterClickCoverage(projection: Record<string, unknown>, action: "accept" | "reject"): "complete" | "partial" | undefined {

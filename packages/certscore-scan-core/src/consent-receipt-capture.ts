@@ -2,7 +2,7 @@ import {matchesCanonicalCmpCookieName} from './cmp-cookie-name.js';
 import {captureExactCookieWrite} from './exact-cookie-write-capture.js';
 import {createHash} from 'node:crypto';
 import type {BrowserContext,Frame,Page} from 'playwright';
-import {consentReceiptCaptureSchema,type ConsentReceiptCapture,type ConsentReceiptObservation} from '@certscore/contracts';
+import {consentReceiptCaptureSchema,type ConsentReceiptCapture,type ConsentReceiptObservation,type PostRefusalInteractionDiagnostics} from '@certscore/contracts';
 import type {CmpApiConsentProvider,CmpApiConsentSnapshot,PartialApiReceipt} from './cmp-api-consent-state.js';
 import type {ActionStateWrite} from './consent-action-semantic-state.js';
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
@@ -70,13 +70,49 @@ export function receiptCaptureToken(scope:Page|Frame|BrowserContext):Token|undef
  return;}catch{return;}
 }
 export function installConsentReceiptCapture(page:Page,input:{scanId:string;action:'accept'|'reject';clockOriginAtEpochMs:number;signal?:AbortSignal}){
+ type NavigationEvidence = NonNullable<PostRefusalInteractionDiagnostics['postClickNavigation']>;
  let epoch={},closed=false,invalid=false,phase:ConsentReceiptObservation['phase']='baseline',dispatched:number|undefined;
+ let scope: NavigationEvidence['scope'] = 'main_frame';
+ let actionFrame: Frame | undefined;
+ let firstEvent: Pick<NavigationEvidence,'outcome'|'elapsedAfterClickMs'> | undefined;
  let rows:ConsentReceiptObservation[]=[],truncated=false,limited=false,spent=0;
  const inspections={baseline:0,initial:0,terminal:0};const seen=new Set<string>();
- const navigation=(frame:Frame)=>{if(frame!==page.mainFrame()||closed)return;epoch={};rows=[];seen.clear();if(dispatched!==undefined)invalid=true;};
+ const recordNavigation = (outcome: NavigationEvidence['outcome']) => {
+  if (dispatched !== undefined && !firstEvent && !input.signal?.aborted) {
+   firstEvent = {outcome, elapsedAfterClickMs: Date.now() - dispatched};
+  }
+ };
+ const navigation=(frame:Frame)=>{
+  if(closed)return;
+  if(frame!==page.mainFrame()){
+   if(frame===actionFrame)recordNavigation('control_frame_navigated');
+   return;
+  }
+  epoch={};rows=[];seen.clear();
+  if(dispatched!==undefined){invalid=true;recordNavigation('main_frame_navigated');}
+ };
+ const detach = (frame: Frame) => {if (!closed && frame === actionFrame) recordNavigation('control_frame_detached');};
  page.on('framenavigated',navigation);
+ page.on('framedetached',detach);
  const handle={token():Token|undefined{if(closed||invalid||input.signal?.aborted)return;if(spent>=4){limited=true;return;}return{capture:handle,epoch,phase,url:page.url()};},
-  phase(value:ConsentReceiptObservation['phase']){phase=value;},dispatch(at:number){dispatched=at;phase='initial';},
+  phase(value:ConsentReceiptObservation['phase']){phase=value;},
+  dispatch(at:number, framed?:{controlFrame?:Frame}){
+   dispatched=at;phase='initial';
+   const frame=framed?.controlFrame;
+   actionFrame=frame&&frame!==page.mainFrame()&&!frame.isDetached()?frame:undefined;
+   scope=framed?(actionFrame?'control_frame':'unverified_control_frame'):'main_frame';
+  },
+  navigationEvidence(clickOutcome: string, targetSha256: string | undefined, frozenAt: number): NavigationEvidence | undefined {
+   if (closed || dispatched === undefined || clickOutcome !== 'completed' || !targetSha256) return;
+   if (firstEvent?.elapsedAfterClickMs !== undefined) {
+    const elapsed=firstEvent.elapsedAfterClickMs;
+    // Wall-clock reversals cannot establish a click-relative timestamp.
+    if (elapsed < 0 || elapsed > 60_000 || dispatched + elapsed > frozenAt) return {scope, outcome:'interrupted'};
+    return {scope, ...firstEvent};
+   }
+   if (frozenAt < dispatched || input.signal?.aborted) return {scope, outcome:'interrupted'};
+   return {scope, outcome:scope==='unverified_control_frame'?'scope_unverified':'none_observed'};
+  },
   // A permanently ineligible cookie branch may keep one diagnostic read per
   // invocation. Skipped intermediate snapshots must remain incomplete evidence.
   markObservationsTruncated(){if(!closed)truncated=true;},
@@ -118,7 +154,7 @@ export function installConsentReceiptCapture(page:Page,input:{scanId:string;acti
    }catch{limited=true;}finally{spent+=performance.now()-start;}
   },
   finish(binding?:{targetSha256?:string;frameIdentitySha256?:string;clickOutcome?:string},at=Date.now()):ConsentReceiptCapture|undefined{
-   if(closed)return;closed=true;page.off('framenavigated',navigation);if(captures.get(page)===handle)captures.delete(page);if(captures.get(page.context())===handle)captures.delete(page.context());
+   if(closed)return;closed=true;page.off('framenavigated',navigation);page.off('framedetached',detach);if(captures.get(page)===handle)captures.delete(page);if(captures.get(page.context())===handle)captures.delete(page.context());
    if(dispatched===undefined||!binding?.targetSha256||binding.clickOutcome!=='completed')return;
    const parsed=consentReceiptCaptureSchema.safeParse({policyVersion:'consent_receipt_capture.v1',diagnosticOnly:true,scanId:input.scanId,action:input.action,
     authorizedTargetSha256:binding.targetSha256,...(binding.frameIdentitySha256?{frameIdentitySha256:binding.frameIdentitySha256}:{}),

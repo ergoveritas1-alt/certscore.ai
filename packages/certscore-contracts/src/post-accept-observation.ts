@@ -25,6 +25,8 @@ const packetRuntimeGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenc
 import {
   postRefusalInteractionAuthorizationSchema,
   postRefusalInteractionDiagnosticsSchema,
+  projectActionInteractionDiagnostics,
+  validatePostClickNavigation,
   postRefusalNetworkRequestSchema,
   postRefusalResolverSchema,
   postRefusalStorageItemSchema,
@@ -333,6 +335,11 @@ const postAcceptEvidencePacketBaseSchema = z.object({
     targetSha256:packet.actionControlProof?.authorizedTargetSha256,frameIdentitySha256:packet.actionControlProof?.frameIdentitySha256,
     dispatchedAtMs:packet.acceptanceRegistration.actionDispatchedAtMs,readyAtMs:packet.timing.readyAtMs,completedAt:packet.completedAt,
     clickOutcome:packet.interactionDiagnostics?.click.outcome},context);
+  validatePostClickNavigation(packet.interactionDiagnostics?.postClickNavigation, {
+    targetSha256: packet.actionControlProof?.authorizedTargetSha256,
+    frameIdentitySha256: packet.actionControlProof?.frameIdentitySha256,
+    dispatchAtMs: packet.acceptanceRegistration.actionDispatchedAtMs, readyAtMs: packet.timing.readyAtMs,
+  }, context);
   validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
   for (const evidence of [packet.decisionEvidence, packet.terminalDecisionEvidence?.evidence]) {
     validateComplianzReceiptEnvelope(evidence?.complianzReceiptEvidence, {
@@ -926,7 +933,9 @@ export function projectPostAcceptEvidenceForReport(input: {
     completedAt: packet.completedAt,
     resolver: packet.resolver,
     resolverDurationMs: packet.timing.resolverMs,
-    ...(packet.interactionDiagnostics ? { interactionDiagnostics: packet.interactionDiagnostics } : {}),
+    ...(packet.interactionDiagnostics ? {
+      interactionDiagnostics: projectActionInteractionDiagnostics(packet.interactionDiagnostics, input.packetSha256),
+    } : {}),
     ...(packet.actionControlProof ? { actionControlProof: packet.actionControlProof } : {}),
     evidenceDisposition: evidenceDisposition.disposition,
     indeterminateReason: evidenceDisposition.reasonCode,

@@ -170,6 +170,29 @@ test("executive Reject projection formats only the canonical checklist outcome",
   });
 });
 
+test("executive Reject projection distinguishes early post-confirmation completion from the configured maximum", async () => {
+  const { buildExecutiveRejectPathProjection } = await import("./shared-scan-detail-view");
+  const completion = { policyVersion: "registered_action_observation_completion.v1", action: "reject",
+    startedAtMs: 10_638, completedAtMs: 12_249, requiredWindowMs: 8_000, termination: "evidence_satisfied" };
+  const item = (registeredObservationCompletion: unknown, rejectInteractionConfirmed = true) => makePostRejectChecklistItem({
+    status: "Review signal",
+    retainedEvidence: { observationWindowMs: 8_000, rejectInteractionConfirmed, registeredObservationCompletion },
+  });
+  const result = buildExecutiveRejectPathProjection(item(completion));
+  assert.equal(result?.observationWindowMs, 8_000);
+  assert.match(result?.note ?? "", /observation ended at 1\.61s when qualifying evidence was recorded/);
+  assert.match(result?.note ?? "", /configured maximum was 8s/);
+  for (const invalid of [
+    item({ ...completion, action: "accept" }),
+    item({ ...completion, termination: "window_elapsed" }),
+    item(completion, false),
+  ]) {
+    const projected = buildExecutiveRejectPathProjection(invalid);
+    assert.equal(projected?.observationWindowMs, 8_000);
+    assert.doesNotMatch(projected?.note ?? "", /qualifying evidence was recorded/);
+  }
+});
+
 test("executive Reject projection identifies an independently retained TCF contradiction", async () => {
   const { buildExecutiveRejectPathProjection } = await import("./shared-scan-detail-view");
   const projected = buildExecutiveRejectPathProjection(makePostRejectChecklistItem({

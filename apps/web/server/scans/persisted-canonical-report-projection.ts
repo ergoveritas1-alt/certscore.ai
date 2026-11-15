@@ -1,4 +1,5 @@
 import {hasVerifiedCustomerGpcEvidence} from "../../lib/scans/gpc-customer-policy";
+import { getReportUnifiedFinding } from "@website-signal-risk-scanner/shared";
 import { preserveRetainedRejectClickCapture } from "../../lib/scans/retained-reject-click-capture";
 import { projectConsentControlReport, type ConsentControlReport } from "../../lib/scans/consent-control-report";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../../lib/scans/after-action-report-eligibility";
@@ -138,6 +139,10 @@ export function getPersistedCanonicalReportProjection(
   );
 
   const customerFindings = (rows: UnifiedFindingDisplayPacket[]) => rows.flatMap(row => {
+    if (row.unifiedFindingId === "accept_reject_outcomes_indistinguishable") {
+      const label = getReportUnifiedFinding(row.unifiedFindingId)?.label;
+      if (label) return [{ ...row, title: label, presentation: { ...row.presentation, findingName: label } }];
+    }
     if (row.unifiedFindingId !== "gpc_response") return [row];
     return row.details?.family === "privacy_signal" && row.details.kind === "gpc_response" && hasVerifiedCustomerGpcEvidence(row.details.assessment)
       ? [{...row,scoreEffects:row.scoreEffects?.filter(effect=>effect.appliesTo === "california_posture") ?? []}] : [];
