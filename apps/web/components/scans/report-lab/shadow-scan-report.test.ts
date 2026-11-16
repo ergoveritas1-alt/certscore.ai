@@ -230,7 +230,9 @@ test("report header actions and section spacing match the compact report treatme
   assert.match(source, /Indeterminate · limited comparison coverage/);
   assert.match(source, /import \{ DisclosureChevron,.*from "\.\.\/report-finding-row"/);
   const findingRowSource = await readFile("apps/web/components/scans/report-finding-row.tsx", "utf8");
-  assert.match(findingRowSource, /export function DisclosureChevron/);
+  assert.match(findingRowSource, /export \{ DisclosureChevron \} from "\.\/finding-disclosure-summary"/);
+  const disclosureSource = await readFile("apps/web/components/scans/finding-disclosure-summary.tsx", "utf8");
+  assert.match(disclosureSource, /export function DisclosureChevron/);
   assert.doesNotMatch(source, /rotate-45|>\+<\/span>/);
   assert.doesNotMatch(choicePathSource, /Confirmed outcomes retained after first-layer consent choices/);
   assert.match(choicePathSource, /mt-3 border-t border-zinc-300 pt-2\.5/);
