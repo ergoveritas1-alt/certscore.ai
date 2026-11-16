@@ -41,9 +41,8 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.match(source, /getReportableGdprEprivacyCoverageItems\(checklistRows, \{/);
   assert.match(source, /GDPR_TRANSPARENCY_REPORT_ROW_ID_SET\.has\(row\.id\)/);
   assert.match(source, /deriveGdprEprivacyCoverageChecklistRowRationale\(item\)/);
-  assert.match(source, /buildRuntimeInventoryProjectionFromScan/);
-  assert.match(source, /buildChecklistConcernTopFindings\(reportableChecklistRows\)/);
-  assert.match(source, /selectCanonicalHighPriorityFindings/);
+  assert.match(source, /projectReportRuntimeInventory\(scanRecord, reviewedPolicies\)/);
+  assert.match(source, /projectReportPriorityFindings\(reportableChecklistRows, canonical\.ownerUnifiedFindings\)/);
   assert.match(source, /buildExecutiveTimelineEvents/);
   assert.match(source, /buildExecutiveRejectPathProjection/);
   assert.match(source, /item\.id === "post_reject_tracking_reduction"/);
@@ -56,7 +55,7 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.match(source, /certscore_overall/);
   assert.match(source, /local_v2_dag_scan_core_duration_ms/);
   assert.match(source, /durationFromTimestamps\(scanRecord\.scan\)/);
-  assert.match(source, /\["cmp_vendor_name", "cmpVendorName"\]/);
+  assert.match(source, /retainedConsentVendor\(scanRecord\)/);
   assert.doesNotMatch(report, /report\.inventory\.find\(\(row\) => \/consent\|cookie compliance/);
   assert.match(report, /FindingRow.*from "\.\.\/report-finding-row"/);
   assert.match(findingRow, /RegulatoryChecklistEvidenceDetails/);
@@ -70,8 +69,7 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.match(report, /Policy discovery or document retrieval was incomplete/);
   assert.doesNotMatch(report, />Privacy surfaces</);
   assert.doesNotMatch(report, /observedPrivacyRows/);
-  assert.match(report, /observedGdprTransparencyRows/);
-  assert.match(report, /\{observedGdprTransparencyRows\} observed · \{report\.gdprTransparencyRows\.length\} checks/);
+  assert.match(report, /<GdprEprivacyCoverageSummary rows=\{report\.gdprTransparencyRows\} policyUrls=\{privacyUrls\}/);
   assert.match(report, /<CompactRejectPathCard projection=\{report\.rejectPath\} \/>/);
   assert.match(report, /data-testid="timeline-reject-path-card"/);
   assert.match(report, /data-testid=\{isAccept \? "post-accept-path-result" : "post-reject-timeline"\}/);
@@ -84,7 +82,7 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.doesNotMatch(report, /After optional cookies and tracking were rejected/);
   assert.doesNotMatch(report, /Optional request suppressed/);
   assert.doesNotMatch(report, /unchanged stored presence remains a separate review-only signal/);
-  assert.match(source, /item\.id === "post_reject_tracking_reduction"[\s\S]*Non-essential activity after confirmed Reject/);
+  assert.match(source, /buildExecutiveRejectPathProjection\(\s*reportableChecklistRows\.find\(\(item\) => item\.id === "post_reject_tracking_reduction"\)/);
   assert.match(report, /mode === "authenticated"/);
   assert.match(report, /-mx-5[^"\n]*lg:-mx-10/);
 });

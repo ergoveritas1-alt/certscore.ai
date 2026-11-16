@@ -48,9 +48,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
-      "sha256": "e7f017eee677d5e017da10e8d69f908b13ac08c3aa49a63c2ea451e88732c951",
-      "bytes": 114149,
-      "review": "Three-way reconciliation preserves integrated report/form fixes and adds owner-requested canonical output parity. Static source reviewed for generation binding and public evidence safety."
+      "sha256": "143a2fcf1f4c6ad298c43149b34f0ee32935b18be7de9d7a368790b720c1f76d",
+      "bytes": 113815,
+      "review": "The retained report now builds its executive consent and tracking tiles from the same report projection, preserving report identity and source binding."
     },
     {
       "file": "apps/web/components/scans/site-integrity-evidence.tsx",
