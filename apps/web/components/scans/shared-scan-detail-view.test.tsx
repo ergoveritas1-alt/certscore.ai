@@ -286,6 +286,9 @@ test("active timeline report surfaces canonical Accept and Reject projections in
   const model = readFileSync("apps/web/components/scans/report-lab/timeline-report-model.ts", "utf8");
   const report = readFileSync("apps/web/components/scans/report-lab/shadow-scan-report.tsx", "utf8");
 
+  const priorityProjection = readFileSync("apps/web/lib/scans/report-priority-projection.ts", "utf8");
+  const evidenceFinding = readFileSync("apps/web/components/scans/detailed-evidence-finding.tsx", "utf8");
+
   assert.match(model, /buildExecutiveRejectPathProjection\([\s\S]*item\.id === "post_reject_tracking_reduction"[\s\S]*\)/);
   assert.match(model, /buildAcceptPathProjection\(\{ \.\.\.runtimeArtifacts, consentControlAssessment: retainedConsentAssessment\(scanRecord\) \}, canonical\.ownerUnifiedFindings\)/);
   assert.match(model, /"acceptance_signal_contradicts_action"/);
@@ -305,20 +308,21 @@ test("active timeline report surfaces canonical Accept and Reject projections in
   assert.doesNotMatch(report, /data-testid="post-reject-activity-inventory"/);
   assert.doesNotMatch(report, /<PostRejectActivityInventory report=\{report\} \/>/);
   assert.match(report, /Choice path results/);
-  // Baseline UI uses a three-line collapsed summary that fully expands with its evidence row.
-  assert.match(report, /text-xs leading-5 text-zinc-600[^\n]*\[-webkit-line-clamp:3\][^\n]*group-open\/evidence-row:\[-webkit-line-clamp:unset\]/);
+  assert.match(report, /<DetailedEvidenceFinding[^\n]+summary=\{row\.summary\}/);
+  assert.match(evidenceFinding, /<details[\s\S]*<summary[\s\S]*\{copy\.summary\}[\s\S]*<\/summary>/);
   assert.doesNotMatch(report, /After optional cookies and tracking were rejected/);
   assert.doesNotMatch(report, /Offsets begin when the cookie banner/);
   assert.doesNotMatch(report, /First-seen timestamps place retained third-party requests/);
   assert.doesNotMatch(report, /Expected after Reject:/);
-  assert.match(report, /group-open\/evidence-row:\[display:block\]/);
   assert.doesNotMatch(report, /min-w-\[48rem\]/);
   assert.doesNotMatch(report, /Requests and storage writes after Reject/);
-  assert.match(report, /report\.transportRows\.filter\(\(row\) => row\.status === "Observed"\)\.length\} positive · \{report\.transportRows\.length\} checks/);
-  assert.match(model, /describePostRejectFinding/);
-  assert.match(model, /Same non-essential identifier remained stored after Reject/);
-  assert.match(model, /isPersistenceOnlyRejectEvidence/);
-  assert.match(model, /replace\(\/Post-choice tracking reduction\/gi, postRejectCopy\.title\)/);
+  assert.match(report, /observedTransportRows = report\.transportRows\.filter\(\(row\) => row\.status === "Observed"\)\.length/);
+  assert.match(report, /\{observedTransportRows\} of \{report\.transportRows\.length\} observed/);
+  assert.match(model, /reportPriorityEvidenceRow\(item\)/);
+  assert.match(priorityProjection, /describePostRejectFinding/);
+  assert.match(priorityProjection, /Same non-essential identifier remained stored after Reject/);
+  assert.match(priorityProjection, /isPersistenceOnlyRejectEvidence/);
+  assert.match(priorityProjection, /replace\(\/Post-choice tracking reduction\/gi, postRejectCopy\.title\)/);
   assert.doesNotMatch(model, /buildExecutiveRejectPathProjection\(scanRecord\.runtimeArtifacts/);
 });
 
@@ -1207,9 +1211,12 @@ function makeReviewPacket(overrides: Record<string, unknown>) {
       validationCount: 0
     },
     concernContext: {
+      assertionLevels: [],
       evidenceStrengthFlags: [],
+      externalSurfacingEligibilities: [],
       negativeEvidenceFlags: [],
-      originTypes: []
+      originTypes: [],
+      promotionEligibilities: []
     },
     evidence: {
       counts: {},
