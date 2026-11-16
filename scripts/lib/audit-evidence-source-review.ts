@@ -174,9 +174,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/server/scans/cms-security-projection.ts",
-      "sha256": "b9123e9876c461162169b1f3b10ca6f9cae6e85ef9fde8933b55263d53b95e1b",
-      "bytes": 4763,
-      "review": "Three-way reconciliation preserves integrated report/form fixes and adds owner-requested canonical output parity. Static source reviewed for generation binding and public evidence safety."
+      "sha256": "b82e2636ca7e7ab4269ca864734c962dcd333dd31dfb8c89cf5c14be02fba5bf",
+      "bytes": 6953,
+      "review": "Astra High local review: the CMS companion must match the original runtime worker digest, exact terminal capture and uninterrupted same-document pre-consent evidence. Existing CMS signals and scoring retain their prior contracts."
     },
     {
       "file": "apps/web/server/scans/technology-inventory-projection.ts",

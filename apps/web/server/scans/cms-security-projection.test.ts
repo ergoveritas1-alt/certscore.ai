@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assessCmsSignals, compareCmsVersions, cmsSecurityProjectionSchema, resolveCmsEvidence, type CanonicalEvidenceBundle } from "@certscore/contracts";
-import { projectCmsSecurity } from "./cms-security-projection";
+import { assessCmsSecurityProjection, projectCmsSecurity } from "./cms-security-projection";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { projectCmsSecurityPriority } from "../../lib/scans/cms-security-report";
@@ -373,4 +373,66 @@ test("v4 declared whole branch follows canonical score-neutral lifecycle path an
     assert.equal(cmsSecurityProjectionSchema.safeParse(historical).success, true);
     assert.equal(projectCmsSecurityPriority(packetsFor(historical)), null);
   }
+});
+
+test("CMS metadata on a verified redirect landing remains measured and mismatch is explicit", () => {
+  for (const [submitted, landed] of [
+    ["https://dailymail.co.uk/", "https://www.dailymail.com/ushome/index.html"],
+    ["https://dnsv5.com/", "https://www.dnspod.cn/"],
+  ] as const) {
+    const bundle = cmsBundle(["WordPress 6.8"]);
+    bundle.url = submitted;
+    bundle.normalizedUrl = submitted;
+    bundle.runtimeMetadataSnapshots![0]!.url = landed;
+    assert.equal(assessCmsSecurityProjection(bundle, source, landed).projection?.documentUrl, landed);
+    assert.equal(assessCmsSecurityProjection(bundle, source, submitted).reason, "cms_document_mismatch");
+    bundle.runtimeMetadataSnapshots![0]!.siteMetadata = undefined;
+    assert.equal(assessCmsSecurityProjection(bundle, source, landed).reason, "cms_metadata_missing");
+    bundle.runtimeMetadataSnapshots![0]!.capturedAtMs = Number.MAX_SAFE_INTEGER;
+    assert.equal(assessCmsSecurityProjection(bundle, source, landed).reason, "cms_capture_time_invalid");
+  }
+});
+
+test("a verified earlier same-document CMS snapshot supplies metadata without changing the terminal anchor", () => {
+  const bundle = cmsBundle(["WordPress 6.8.2"]);
+  const landed = "https://www.dnspod.cn/";
+  bundle.url = "https://dnsv5.com/";
+  bundle.runtimeEvidenceClock = {
+    contractVersion: "certscore.runtime-evidence-clock.v1", laneId: "runtime_evidence", scanId: bundle.scanId,
+    targetUrl: bundle.url, startedAt: bundle.startedAt, completedAt: bundle.completedAt,
+    source: { sha256: "b".repeat(64), sizeBytes: 500 },
+  };
+  bundle.scanLaneRuns = [{ laneId: "runtime_evidence" }] as CanonicalEvidenceBundle["scanLaneRuns"];
+  const snapshot = { ...bundle.runtimeMetadataSnapshots![0]!, url: landed,
+    documentIdentity: { source: "cdp_loader_id" as const, token: "runtime-redirect-loader" } };
+  const { artifactId, capturedAtMs, url, documentIdentity, siteMetadata } = snapshot;
+  bundle.runtimeCmsMetadataSnapshot = {
+    contractVersion: "certscore.runtime-cms-metadata.v1", artifactId, capturedAtMs, url, documentIdentity,
+    runtimeSourceSha256: bundle.runtimeEvidenceClock.source.sha256,
+    terminalArtifactId: "terminal", terminalCapturedAtMs: 1500,
+    consentStateAtTime: "pre_consent", siteMetadata: siteMetadata!,
+  };
+  bundle.runtimeMetadataSnapshots = [{ ...snapshot, artifactId: "terminal", capturedAtMs: 1500, documentIdentity: { ...documentIdentity }, siteMetadata: undefined }];
+  const assessment = assessCmsSecurityProjection(bundle, source, landed);
+  assert.equal(assessment.projection?.assessment.detections[0]?.version, "6.8.2");
+  assert.equal(assessment.projection?.evidenceRef, artifactId);
+  assert.equal(assessment.projection?.capturedAt, "2026-09-17T00:00:01.000Z");
+  assert.equal(bundle.runtimeMetadataSnapshots[0]!.siteMetadata, undefined);
+
+  const mutations: Array<(b: CanonicalEvidenceBundle) => void> = [
+    b => { b.runtimeCmsMetadataSnapshot!.url = landed + "?different=1"; },
+    b => { b.runtimeCmsMetadataSnapshot!.documentIdentity.token = "previous-navigation"; },
+    b => { b.runtimeCmsMetadataSnapshot!.capturedAtMs = 1500; },
+    b => { b.runtimeMetadataSnapshots = undefined; },
+    b => { b.runtimeEvidenceClock = undefined; },
+    b => { b.runtimeEvidenceClock!.source.sha256 = "c".repeat(64); },
+    b => { b.runtimeMetadataSnapshots![0]!.artifactId = "different-terminal"; },
+    b => { b.runtimeMetadataSnapshots![0]!.capturedAtMs = 1700; },
+  ];
+  for (const change of mutations) {
+    const changed = structuredClone(bundle);
+    change(changed);
+    assert.equal(assessCmsSecurityProjection(changed, source, landed).projection, null);
+  }
+  assert.equal(assessCmsSecurityProjection(bundle, undefined, landed).projection, null);
 });

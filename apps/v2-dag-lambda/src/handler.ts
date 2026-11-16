@@ -1,4 +1,5 @@
-import { parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
+import { retainRuntimeCmsMetadataSnapshot } from "@certscore/contracts";
+import { CANONICAL_ARTIFACT_MAX_DECODED_BYTES, parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { assessGpcCmpStateComparison } from "@certscore/scan-core/gpc-cmp-state-comparison";
 import { isLoopbackPostRefusalTarget } from "@certscore/scan-core/post-refusal-target-authorization";
 import { runtimeEvidenceClockSchema } from "@certscore/contracts";
@@ -1627,6 +1628,12 @@ function writeCompactJson(filePath: string, value: unknown) {
 }
 
 export function serializeCanonicalEvidenceBundle(value: unknown) {
+  if (value && typeof value === "object" && "runtimeCmsMetadataSnapshot" in value &&
+      value.runtimeCmsMetadataSnapshot && Buffer.byteLength(JSON.stringify(value)) > CANONICAL_ARTIFACT_MAX_DECODED_BYTES) {
+    // Optional CMS metadata must not push the original evidence past its existing logical byte cap.
+    const { runtimeCmsMetadataSnapshot: _cms, ...otherEvidence } = value;
+    return serializeCanonicalEvidenceArtifact(otherEvidence);
+  }
   return serializeCanonicalEvidenceArtifact(value);
 }
 
@@ -4768,6 +4775,11 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     ...runtimeEvidence.modulesRun,
     ...policyEvidence.modulesRun,
   ]);
+  const runtimeMetadataSnapshots = [...runtimeEvidence.domSnapshots].sort((a, b) => b.capturedAtMs - a.capturedAtMs).slice(0, 1);
+  const runtimeCmsMetadataSnapshot = runtimeEvidenceClock && retainRuntimeCmsMetadataSnapshot(
+    runtimeEvidence.domSnapshots, runtimeMetadataSnapshots[0],
+    Date.parse(runtimeEvidence.completedAt) - Date.parse(runtimeEvidence.startedAt), runtimeEvidenceClock.source.sha256,
+  );
   const merged = {
     ...consentProof,
     runtimeEvidenceClock,
@@ -4817,7 +4829,8 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     screenshots: consentProof.screenshots,
     domSnapshots: consentProof.domSnapshots,
     // Runtime descriptive metadata must not replace consent-owned DOM evidence.
-    runtimeMetadataSnapshots: [...runtimeEvidence.domSnapshots].sort((a,b)=>b.capturedAtMs-a.capturedAtMs).slice(0, 1),
+    runtimeMetadataSnapshots,
+    runtimeCmsMetadataSnapshot,
     normalizedVendorObservations: runtimeEvidence.normalizedVendorObservations,
     observedJourneys: runtimeEvidence.observedJourneys,
     artifactRefs,

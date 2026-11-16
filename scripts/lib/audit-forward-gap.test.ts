@@ -173,3 +173,22 @@ test('registered terminal witnesses survive compact delivery and require full ma
   assert.equal(state({...projection,actionControlProof:{...projection.actionControlProof,authorizedTargetSha256:target==='f'.repeat(64)?'e'.repeat(64):'f'.repeat(64)}})?.value,'unverified');
  }
 });
+
+test('new Accept diagnostics are optional and bound to the single original result receipt',()=>{
+ const key='sealed.priority_evidence.accept_path_reason',hash='a'.repeat(64);
+ const r={...record({acceptPathDiagnostic:[hash,'control_proof_deadline_exceeded'],postAcceptEvidenceProjection:{execution:{clickCompleted:false}}}),
+  events:[{eventType:'v2_lambda_result.received',metadataJson:{artifactMetadata:{scanArtifactUri:{sha256:hash}}}}]};
+ assert.equal(choiceSummaryAudit(choiceSummaryFromRecord(r),id).states[key],'control_proof_deadline_exceeded');
+ assert.equal(choiceSummaryAudit(choiceSummaryFromRecord({...r,events:[]}),id).states[key],undefined);
+ assert.equal(choiceSummaryAudit(choiceSummaryFromRecord({...r,events:[...r.events,...r.events]}),id).states[key],undefined);
+ const good=priorityEvidenceFromRecord(r);
+ const invalid={...good,acceptPath:'unrecognized_reason'};
+ const extraField={...r,runtimeArtifacts:{...r.runtimeArtifacts,acceptPathDiagnostic:[...r.runtimeArtifacts.acceptPathDiagnostic,'extra']}};
+ assert.equal(choiceSummaryAudit(choiceSummaryFromRecord(extraField),id).states[key],undefined);
+ assert.equal(priorityCoverageStates({...good,accept:['unexpected-packet']},id)[key],undefined);
+ assert.equal(priorityCoverageStates({...good,coverage:['eligibility_unknown',...good.coverage.slice(1)]},id)[key],undefined);
+ assert.equal(priorityCoverageStates(invalid,id)[key],undefined);
+ assert.equal(priorityCoverageStates(invalid,id)['sealed.priority_evidence.accept']?.value,'no_completed_click');
+ r.runtimeArtifacts.postAcceptEvidenceProjection.execution.clickCompleted=true;
+ assert.equal(choiceSummaryAudit(choiceSummaryFromRecord(r),id).states[key],undefined);
+});

@@ -24,7 +24,7 @@ import { isConsentControlInteractionEligible } from "@certscore/contracts";
 import { readGpcActivityComparison } from "../../lib/scans/gpc-activity-comparison";
 import { ReportPublicationInvariantError } from "./report-publication-invariant";
 import { projectFormDestinations } from "./form-destination-projection";
-import { projectCmsSecurity } from "./cms-security-projection";
+import { assessCmsSecurityProjection } from "./cms-security-projection";
 import { projectSiteIntegrity } from "./site-integrity-projection";
 import { projectOriginBoundBrowserStorage } from "./pre-consent-browser-storage-projection";
 import { retainedCookieInventoryIdentity } from "../../lib/scans/retained-cookie-inventory-identity";
@@ -6417,10 +6417,18 @@ export function buildMaterializedLocalV2Detail(
           : {}),
       })
     : null;
-  const postAcceptRuntimeProjection = buildPostAcceptRuntimeProjection(
+  const { acceptPathDiagnostic, ...postAcceptRuntimeProjection } = buildPostAcceptRuntimeProjection(
     postAcceptReportProjection,
     bundle.postAcceptLaneOutcome,
   );
+  const diagnosticSource = bundle.scanId === scanRecord.scan.id ? options.policyTextEvidenceContext?.sourceBundle : undefined;
+  const diagnosticSourceHash = diagnosticSource?.verificationStatus === "verified" &&
+    /^[a-f0-9]{64}$/.test(diagnosticSource.sha256 ?? "") ? diagnosticSource.sha256 : undefined;
+  // A joined packet has its own parent identity even when the containing bundle is verified.
+  const acceptDiagnosticBound = !bundle.postAcceptEvidence || bundle.postAcceptEvidence.parentScanId === bundle.scanId;
+  const cms = runtimeEvidenceReportable
+    ? assessCmsSecurityProjection(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl) : null;
+  const cmsDiagnostic = runtimeEvidenceReportable ? cms?.reason : "cms_runtime_unavailable";
   const inheritedRuntimeArtifacts = providedScanNoGoAssessment || localV2NoGo
     ? { ...(scanRecord.runtimeArtifacts ?? {}) }
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
@@ -6455,7 +6463,10 @@ export function buildMaterializedLocalV2Detail(
     formSnapshots: verifiedFormSnapshots(bundle).map(({ snapshot: { data: _data, ...metadata } }) => metadata),
     siteIntegrity: runtimeEvidenceReportable ? projectSiteIntegrity(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl) : null,
     formDestinations: runtimeEvidenceReportable ? projectFormDestinations(bundle, options.policyTextEvidenceContext?.sourceBundle) : null,
-    cmsSecurity: runtimeEvidenceReportable ? projectCmsSecurity(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl) : null,
+    cmsSecurity: cms?.projection ?? null,
+    cmsProjectionDiagnostic: diagnosticSourceHash && !localV2NoGo && cmsDiagnostic ? [diagnosticSourceHash, cmsDiagnostic] : null,
+    acceptPathDiagnostic: diagnosticSourceHash && !localV2NoGo && acceptDiagnosticBound && acceptPathDiagnostic
+      ? [diagnosticSourceHash, acceptPathDiagnostic] : null,
     siteMetadata: projectSiteMetadata(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl),
     runtimeEvidenceGraphProjection: projectRuntimeEvidenceGraphs({
       bundle, scanId: scanRecord.scan.id, source: options.policyTextEvidenceContext?.sourceBundle,

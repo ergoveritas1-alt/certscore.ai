@@ -5,6 +5,7 @@ import {parseCanonicalEvidenceArtifact} from '@certscore/contracts/dist/canonica
 import {extractExportRow} from './audit-progress-export';
 import {applyChoiceSummary,choiceSummaryFromRecord,choiceMetricRegistry} from './audit-progress-choice';
 import {applyRetainedOptOutExtracts} from './audit-progress-opt-out';
+import {ACCEPT_PATH_DIAGNOSTIC_KEY} from './audit-progress-priority-evidence';
 import {CONTROL_ACCESSIBILITY_KEYS,isControlAccessibilityExtract,readControlAccessibilityDetail} from './audit-progress-control-accessibility';
 import {checklistEvidence,returnedState} from './audit-progress-contracts';
 import {localDay,type ProgressRow} from './audit-progress';
@@ -86,7 +87,7 @@ export function verifyChoiceEvidence(data:ChoiceInput){
  for(let i=0;i<proof.length;i++)for(const key of new Set([...Object.keys(proof[i]!.states),...Object.keys(data.rows[i]!.states)]))if(choiceKey(key)){
   // Missing and explicit unavailable are the same coverage state, never zero or success.
   assert.equal(data.rows[i]!.states[key]??'unavailable',proof[i]!.states[key]??'unavailable',`Choice source state ${proof[i]!.scanId}/${key}`);comparisons++;
-  if((key.startsWith('sealed.operations.')||key==='sealed.priority_evidence.cmp')&&proof[i]!.states[key]){
+  if((key.startsWith('sealed.operations.')||key==='sealed.priority_evidence.cmp'||key===ACCEPT_PATH_DIAGNOSTIC_KEY)&&proof[i]!.states[key]){
    assert.equal(data.rows[i]!.metricSources?.[key],proof[i]!.metricSources?.[key],`Choice evidence source scope ${proof[i]!.scanId}/${key}`);comparisons++;
   }
  }

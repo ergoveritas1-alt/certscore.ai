@@ -5,15 +5,26 @@ import {verifyProgressPins} from './lib/audit-progress-pins';
 import {existsSync,linkSync,readFileSync,statSync,unlinkSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
-import {runProdDbSqlOneoff} from './lib/audit-prod-db-bounded';
+import {prepareSqlOverride,runProdDbSqlOneoff} from './lib/audit-prod-db-bounded';
 import snapshotLimits from './lib/audit-progress-snapshot-limits.json';
 const [root='',mode,...extra]=process.argv.slice(2);
 if(!root||extra.length||(mode!==undefined&&mode!=='--recover'&&mode!=='--plan'))throw Error('Supply an audit run containing begin.json, with --recover for an existing task');
 const recovering=mode==='--recover';
+const marker='MACMINI_DELTA_IDS';
 const b=JSON.parse(readFileSync(root+'/begin.json','utf8'));
 const plannedPending:string[]=b.pendingRefreshIds??[];
 let pending=plannedPending;
 const privacyFormRequested = b.includePrivacyFormReceipts === true;
+const forwardCoverageDiagnostics = b.includeForwardCoverageDiagnostics === true;
+if (b.includeForwardCoverageDiagnostics !== undefined && typeof b.includeForwardCoverageDiagnostics !== 'boolean') {
+ throw Error('The frozen forward coverage diagnostics setting must be boolean');
+}
+
+function verifyContainer(sql:string) {
+ const {containerName}=prepareSqlOverride({marker,readOnly:true,sql});
+ if(b.containerName!==undefined&&containerName!==b.containerName)throw Error('Actual ECS container differs from the frozen daily query');
+ return containerName;
+}
 
 function saveOutput(file:string, contents:string) {
  const temporary = file + '.' + randomUUID() + '.tmp';
@@ -27,10 +38,11 @@ function saveOutput(file:string, contents:string) {
 
 async function main(){
  verifyProgressPins();
- const marker='MACMINI_DELTA_IDS',readOnly=true;
+ const readOnly=true;
  if(mode==='--plan'){
   const plan=fitAuditDeltaQuery(b,marker);
   console.log(JSON.stringify({planningOnly:true,pendingRefreshIds:plan.pendingRefreshIds,deferredPendingIds:plan.deferredPendingIds,
+   containerName:verifyContainer(plan.selected.sql),forwardCoverageDiagnosticsProjected:forwardCoverageDiagnostics,
    override:plan.selected.override,querySha256:createHash('sha256').update(plan.selected.sql).digest('hex')}));return;
  }
  const inventoryFile=path.join(root,'delta-inventory.json');
@@ -52,9 +64,12 @@ async function main(){
   technicalCounts=transport.technicalCountsProjected===true;
   trackingReviews=transport.trackingReviewsProjected===true;
   if(transport.choiceAuditVersion!==CHOICE_AUDIT_VERSION||transport.pendingTargetCount!==pending.length||
-     transport.privacyFormProjected!==privacyFormRequested||transport.fits!==true)throw Error('Recovery transport does not match the frozen daily query');
+     transport.privacyFormProjected!==privacyFormRequested||transport.fits!==true||
+     (transport.forwardCoverageDiagnosticsProjected??false)!==forwardCoverageDiagnostics)throw Error('Recovery transport does not match the frozen daily query');
   sql=readFileSync(sqlFile,'utf8');
   if(sql!==buildAuditDeltaQuery({...b,pendingRefreshIds:pending},operations,privacyFormRequested,controlAccessibility,californiaReject,technicalCounts,trackingReviews,policyReceipt,comparisonMetadata))throw Error('Recovery SQL differs from the frozen query');
+  const containerName=verifyContainer(sql);
+  if(transport.containerName!==undefined&&transport.containerName!==containerName)throw Error('Recovery ECS container differs from the frozen daily query');
  }else{
   if(b.priorSnapshot&&statSync(path.join(b.priorSnapshot,'dashboard.json')).size>snapshotLimits['dashboard.json']){
    throw Error('Prior dashboard exceeds the local snapshot byte bound; no task started');
@@ -63,6 +78,7 @@ async function main(){
   const {selected,expanded}=plan;
   pending=plan.pendingRefreshIds;
   ({sql,operations,policyReceipt,controlAccessibility}=selected);
+  const containerName=verifyContainer(sql);
   writeFileSync(transportFile,JSON.stringify({choiceAuditVersion:CHOICE_AUDIT_VERSION,pendingTargetCount:pending.length,plannedPendingIds:plannedPending,pendingRefreshIds:pending,deferredPendingIds:plan.deferredPendingIds,comparisonMetadataProjected:true,
    operationsEvidenceProjected:operations||policyReceipt,operationsEvidenceScope:'policy_provenance_only',
    policyReceiptProjected:policyReceipt,operationsEvidenceTransport:policyReceipt?'bounded_policy_receipt_column':'choice_summary',
@@ -71,6 +87,7 @@ async function main(){
    cmpPairBlockersProjected:operations||controlAccessibility,
    californiaRejectCoverageProjected:true,
    technicalCountsProjected:true,
+   forwardCoverageDiagnosticsProjected:forwardCoverageDiagnostics,containerName,
    trackingReviewsProjected:true,
    privacyFormRequested,privacyFormProjected:selected.privacyForm,
    privacyFormOmissionReason:privacyFormRequested&&!selected.privacyForm?'ecs_launch_override_limit':null,
@@ -85,7 +102,7 @@ async function main(){
  }else saveOutput(outputFile,output);
  const rows=output.split(/\r?\n/).filter(l=>l.startsWith('{')).map(l=>JSON.parse(l));
  if(rows.length>5000||new Set(rows.map(r=>r.scanId)).size!==rows.length||rows.some(r=>r.cohort_total!==rows.length||r.isMacMini!==true||(!pending.includes(r.scanId)&&Date.parse(r.created_at)<Date.parse(b.overlapStartUtc))||Date.parse(r.created_at)>=Date.parse(b.windowEndUtc)))throw Error('Incomplete, duplicate or out-of-scope ID inventory');
- assertCurrentPriorityExtraction(rows);
+ assertCurrentPriorityExtraction(rows,forwardCoverageDiagnostics);
  if(comparisonMetadata&&rows.some(row=>!Object.hasOwn(row,'auditComparison')))throw Error('Daily query omitted comparison metadata');
  if(californiaReject&&rows.some(row=>!Object.hasOwn(row,'caReject')))throw Error('Daily query omitted the California Reject coverage column');
  if(technicalCounts&&rows.some(row=>!Object.hasOwn(row,'technicalCounts')))throw Error('Daily query omitted the technical counts column');
@@ -94,7 +111,8 @@ async function main(){
   if(rows.some(row=>!Object.hasOwn(row,'policyReceipt')))throw Error('Daily query omitted the producer policy receipt column');
   for(const row of rows)row.policyReceipt=auditPolicyProvenanceSchema.safeParse(row.policyReceipt).data??null;
  }
- const payload={version:'certscore.mac-mini-direct-id-inventory.v1',readOnly:true,choiceAuditVersion:CHOICE_AUDIT_VERSION,scope:'Original-creator-verified Mac mini scan IDs in bounded recent window; not full production inventory',start:b.overlapStartUtc,end:b.windowEndUtc,pendingRefreshIds:pending,plannedPendingIds:plannedPending,deferredPendingIds:plannedPending.slice(pending.length),querySha256:createHash('sha256').update(sql).digest('hex'),rows};
+ const payload={version:'certscore.mac-mini-direct-id-inventory.v1',readOnly:true,choiceAuditVersion:CHOICE_AUDIT_VERSION,scope:'Original-creator-verified Mac mini scan IDs in bounded recent window; not full production inventory',start:b.overlapStartUtc,end:b.windowEndUtc,pendingRefreshIds:pending,plannedPendingIds:plannedPending,deferredPendingIds:plannedPending.slice(pending.length),querySha256:createHash('sha256').update(sql).digest('hex'),
+  ...(forwardCoverageDiagnostics?{forwardCoverageDiagnosticsProjected:true}:{}),rows};
  const stored={...payload,policyProvenanceOmissionReason:undefined as string|undefined,controlAccessibilityOmissionReason:undefined as string|undefined};
  let inventory = JSON.stringify(stored, null, 2) + '\n';
  if (operations && Buffer.byteLength(inventory) > 32_000_000) {

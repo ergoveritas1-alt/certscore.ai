@@ -1,3 +1,4 @@
+import {ACCEPT_PATH_DIAGNOSTIC_REASONS} from "../../apps/web/lib/scans/post-accept-runtime-projection";
 import { gpcCmpPairBlockerSchema } from '../../packages/certscore-contracts/src/gpc-cmp-pair-coverage';
 /** Audit-only projection of compact facts from a ready persisted generation. */
 import { z } from "zod";
@@ -77,14 +78,20 @@ const actionReceipt = z.object({
   registeredCompletion: z.unknown().optional(), registeredTiming: z.unknown().optional(),
 }).strict();
 const pairReceipt = z.object({ packet: z.unknown(), response: z.unknown() }).strict();
+const acceptDiagnosticReason = z.enum(ACCEPT_PATH_DIAGNOSTIC_REASONS);
 const receipt = z.object({
   version: z.literal("certscore.audit-priority-evidence.v1"),
   accept: z.unknown(), reject: z.unknown(), cmp: z.unknown(),
   coverage: z.tuple([z.enum(["eligible_source","no_completed_click","eligibility_unknown","source_missing"]),z.enum(["eligible_source","no_completed_click","eligibility_unknown","source_missing"]),z.string().min(1).max(64)]).optional(),
   transport: z.enum(["included","size_bound"]).optional(),
+  acceptPath: z.unknown().optional(),
 }).strict();
 
+export const ACCEPT_PATH_DIAGNOSTIC_KEY = "sealed.priority_evidence.accept_path_reason";
+
 export const PRIORITY_EVIDENCE_METRICS = [
+  {id:ACCEPT_PATH_DIAGNOSTIC_KEY,label:"Accept non-completion reason",group:"A/R verdicts",
+   denominator:"Reportable scans with a source-bound Accept diagnostic. Completed clicks have no non-completion reason.",success:[]},
   ...(["accept","reject","cmp"] as const).map(lane=>({id:`sealed.priority_evidence.${lane}`,label:`${lane==='cmp'?'Paired CMP':lane==='accept'?'Accept terminal':'Reject terminal'} evidence delivery`,group:lane==='cmp'?'GPC details':'A/R verdicts',denominator:'Reportable scans with a priority coverage receipt; missing receipts remain unavailable',success:[]})),
   ...(["accept", "reject"] as const).map(action => ({
     id: `sealed.terminal.audit_${action}`,
@@ -192,6 +199,11 @@ export function priorityCoverageStates(value:unknown,scanId:string,cmpBlockerOmi
    :lane==='cmp'&&gpcCmpPairBlockerSchema.safeParse(status).success?'certscore.gpc-cmp-pair-blocker.v1':'certscore.audit-priority-coverage.v1';
   states['sealed.priority_evidence.'+lane]={value:status,scope};
  }
+ const diagnostic=acceptDiagnosticReason.safeParse(p.data.acceptPath).data;
+ const acceptCoverage=states["sealed.priority_evidence.accept"]?.value;
+ if(diagnostic && (acceptCoverage==="source_missing" || acceptCoverage==="no_completed_click")) {
+  states[ACCEPT_PATH_DIAGNOSTIC_KEY]={value:diagnostic,scope:"certscore.accept-path-diagnostic.v1"};
+ }
  return states;
 }
 
@@ -260,14 +272,19 @@ const terminalSql=(key:string)=>{
 };
 const cmp=runtimePath('gpcCmpStateComparison');
 const sourceStateSql=(key:string)=>{const root=runtimePath(key);return `case when jsonb_typeof(${root})='object' then case ${path(root,'execution','clickCompleted')} when 'true'::jsonb then 'eligible_source' when 'false'::jsonb then 'no_completed_click' else 'eligibility_unknown' end else 'source_missing' end`;};
-export function priorityEvidenceSql(includeCmpBlocker=false) {
+export function priorityEvidenceSql(includeCmpBlocker=false,includeAcceptPath=false) {
+ const acceptDiagnostic=runtimePath('acceptPathDiagnostic');
+ const acceptPath=includeAcceptPath?`, 'acceptPath',(select case when jsonb_typeof(d)='array' then
+  case when jsonb_array_length(d)=2 and r1.h~'^[0-9a-f]{64}$' and d->>0=r1.h and jsonb_typeof(d->1)='string' then left(d->>1,40) end
+  end from (select ${acceptDiagnostic} d) da)`:'';
+
  const missingCmp=includeCmpBlocker
   ? `coalesce(left(${runtimePath()}->>'gpcCmpPairBlocker',64),'source_missing')`
   : "'source_missing'";
  return `jsonb_build_object('version','certscore.audit-priority-evidence.v1',
  'accept',${terminalSql('postAcceptEvidenceProjection')},'reject',${terminalSql('postRefusalEvidenceProjection')},
  'cmp',case when jsonb_typeof(${cmp})='object' then jsonb_build_array(${tuple(cmp,cmpFields)},${tuple(runtimePath('gpcResponseAssessment'),gpcFields)}) end,
- 'coverage',jsonb_build_array(${sourceStateSql('postAcceptEvidenceProjection')},${sourceStateSql('postRefusalEvidenceProjection')},case when jsonb_typeof(${cmp})='object' then 'source_present' else ${missingCmp} end),'transport','included')`;
+ 'coverage',jsonb_build_array(${sourceStateSql('postAcceptEvidenceProjection')},${sourceStateSql('postRefusalEvidenceProjection')},case when jsonb_typeof(${cmp})='object' then 'source_present' else ${missingCmp} end),'transport','included'${acceptPath})`;
 }
 export const PRIORITY_EVIDENCE_SQL=priorityEvidenceSql();
 const get=(v:any,p:string)=>p.split('.').reduce((a,k)=>a&&typeof a==='object'?a[k]:undefined,v);
@@ -276,7 +293,12 @@ const sourceState=(v:any)=>v&&typeof v==='object'&&!Array.isArray(v)?v.execution
 export function priorityEvidenceFromRecord(record:any){
  const r=record.runtimeArtifacts??{},accept=r.postAcceptEvidenceProjection,reject=r.postRefusalEvidenceProjection,pair=r.gpcCmpStateComparison;
  const hasPair=pair&&typeof pair==='object'&&!Array.isArray(pair);
- return {version:'certscore.audit-priority-evidence.v1',accept:accept?.execution?.clickCompleted===true?compact(accept,actionFields):null,reject:reject?.execution?.clickCompleted===true?compact(reject,actionFields):null,cmp:hasPair?[compact(pair,cmpFields),compact(r.gpcResponseAssessment,gpcFields)]:null,coverage:[sourceState(accept),sourceState(reject),hasPair?'source_present':gpcCmpPairBlockerSchema.safeParse(r.gpcCmpPairBlocker).data??'source_missing'],transport:'included'};
+ const events=Array.isArray(record.events)?record.events.filter((event:any)=>event?.eventType==='v2_lambda_result.received'):[];
+ const expected=events.length===1?events[0].metadataJson?.artifactMetadata?.scanArtifactUri?.sha256:undefined;
+ const diagnostic=Array.isArray(r.acceptPathDiagnostic)&&r.acceptPathDiagnostic.length===2&&r.acceptPathDiagnostic[0]===expected&&
+  typeof expected==='string'&&/^[a-f0-9]{64}$/.test(expected)?acceptDiagnosticReason.safeParse(r.acceptPathDiagnostic[1]).data:undefined;
+
+ return {version:'certscore.audit-priority-evidence.v1',accept:accept?.execution?.clickCompleted===true?compact(accept,actionFields):null,reject:reject?.execution?.clickCompleted===true?compact(reject,actionFields):null,cmp:hasPair?[compact(pair,cmpFields),compact(r.gpcResponseAssessment,gpcFields)]:null,coverage:[sourceState(accept),sourceState(reject),hasPair?'source_present':gpcCmpPairBlockerSchema.safeParse(r.gpcCmpPairBlocker).data??'source_missing'],transport:'included',...(diagnostic?{acceptPath:diagnostic}:{})};
 }
 /** PostgreSQL jsonb textual spacing is larger than JSON.stringify; budget for both transports. */
 export function jsonbBytes(value:any):number{

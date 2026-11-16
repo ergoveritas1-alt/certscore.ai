@@ -10,7 +10,7 @@ import { gzipSync } from 'node:zlib';
 
 const exec = promisify(execFile);
 
-test('daily export recovers transient polling and resumes only the original task', async () => {
+for (const forwardCoverageDiagnostics of [false,true]) test(`daily export resumes only the original task (forward diagnostics: ${forwardCoverageDiagnostics})`, async () => {
   const run = mkdtempSync(path.join(tmpdir(), 'audit-delta-recovery-'));
   try {
     const start = '2026-11-06T00:00:00Z';
@@ -21,7 +21,14 @@ test('daily export recovers transient polling and resumes only the original task
       status: 'completed',
       isMacMini: true,
       cohort_total: 1,
-      choice_audit: { version: 'certscore.audit-choice-summary.v2', availability: 'size_bound' },
+      choice_audit: forwardCoverageDiagnostics ? {
+        version: 'certscore.audit-choice-summary.v2',
+        priorityEvidence: {
+          version:'certscore.audit-priority-evidence.v1',accept:null,reject:null,cmp:null,
+          coverage:['no_completed_click','source_missing','source_missing'],transport:'included',
+          acceptPath:'target_navigation_failed',
+        },
+      } : { version: 'certscore.audit-choice-summary.v2', availability: 'size_bound' },
       auditComparison: null,
       caReject: null,
       technicalCounts: null,
@@ -44,10 +51,13 @@ test('daily export recovers transient polling and resumes only the original task
       const h=createHash('sha256').update('recovery-pending-'+i).digest('hex');
       return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20,32)}`;
     });
-    writeFileSync(path.join(run, 'begin.json'), JSON.stringify({
+    const beginFile=path.join(run,'begin.json');
+    const begin={
       overlapStartUtc: start, windowEndUtc: end, newScanStartUtc: start,
-      includePrivacyFormReceipts: true, pendingRefreshIds: planned,
-    }));
+      includePrivacyFormReceipts: true, pendingRefreshIds: planned,containerName:'psql',
+      ...(forwardCoverageDiagnostics?{includeForwardCoverageDiagnostics:true}:{}),
+    };
+    writeFileSync(beginFile,JSON.stringify(begin));
     const compressed = gzipSync(JSON.stringify(row) + '\n');
     const messages = [
       '__MACMINI_DELTA_IDS_START__',
@@ -101,15 +111,28 @@ switch (call) {
     }
     env.PATH = run + path.delimiter + env.PATH;
     const command = ['--import', 'tsx', 'scripts/export-mac-mini-delta.ts', run];
+    const plan=JSON.parse((await exec(process.execPath,[...command,'--plan'],{env})).stdout);
+    assert.equal(plan.forwardCoverageDiagnosticsProjected,forwardCoverageDiagnostics);
+    assert.equal(plan.containerName,'psql');
+    assert.equal(plan.override.fits,true);
+    await assert.rejects(exec(process.execPath,[...command,'--plan'],
+      {env:{...env,CALIBRATION_DB_ECS_CONTAINER:'different-psql'}}),/Actual ECS container differs/);
     await exec(process.execPath, command, { env });
     const inventory = path.join(run, 'delta-inventory.json');
     const first = readFileSync(inventory, 'utf8');
     assert.deepEqual(JSON.parse(first).rows, [row]);
     const saved=JSON.parse(first);
+    assert.equal(saved.forwardCoverageDiagnosticsProjected,forwardCoverageDiagnostics||undefined);
+    assert.equal(saved.querySha256,plan.querySha256);
     assert.ok(saved.pendingRefreshIds.length<100&&saved.pendingRefreshIds.length>0);
     assert.deepEqual([...saved.pendingRefreshIds,...saved.deferredPendingIds],planned);
     // In this fixture, simulate an interruption after saving raw task output.
     rmSync(inventory);
+    if (forwardCoverageDiagnostics) {
+      writeFileSync(beginFile,JSON.stringify({...begin,includeForwardCoverageDiagnostics:false}));
+      await assert.rejects(exec(process.execPath,[...command,'--recover'],{env}),/Recovery transport does not match/);
+      writeFileSync(beginFile,JSON.stringify(begin));
+    }
     await exec(process.execPath, [...command, '--recover'], { env });
     assert.equal(readFileSync(inventory, 'utf8'), first);
     assert.deepEqual(readFileSync(calls, 'utf8').trim().split('\n'), [

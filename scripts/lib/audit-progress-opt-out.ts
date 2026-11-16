@@ -1,5 +1,7 @@
+import {CMS_PROJECTION_UNAVAILABLE_REASONS} from "../../apps/web/server/scans/cms-security-projection";
 import {readAuditComparisonDelivery} from '../../packages/certscore-contracts/src/audit-comparison';
 import {applyChoiceSummary, CHOICE_AUDIT_VERSION, LEGACY_CHOICE_AUDIT_VERSION} from './audit-progress-choice';
+import {ACCEPT_PATH_DIAGNOSTIC_KEY,priorityCoverageStates} from './audit-progress-priority-evidence';
 import {applyControlAccessibility,applyTrackingReviews,TRACKING_REVIEW_REF} from './audit-progress-control-accessibility';
 import {readCaliforniaRejectCoverage} from './audit-california-reject-coverage';
 import {operationsEvidenceStates} from './audit-progress-operations-evidence';
@@ -20,15 +22,32 @@ export type OptOutReceipt={file:string;sha256:string;bytes:number};
 const digest=(b:Buffer)=>createHash('sha256').update(b).digest('hex');
 const DIRECT_ID_INVENTORY_VERSION='certscore.mac-mini-direct-id-inventory.v1';
 
-function cmpBlockerOmittedByQuery(file:string,input:{version?:string;choiceAuditVersion?:string;querySha256?:string}):boolean {
-  if(input.version!==DIRECT_ID_INVENTORY_VERSION||input.choiceAuditVersion!==CHOICE_AUDIT_VERSION||path.basename(file)!=='delta-inventory.json')return false;
+// The daily archive export has no creator ID or private payload digest. The
+// bounded inventory supplies both for the exact ready report generation.
+// Keep this join local to diagnostics and leave the archive row's provenance intact.
+function archiveMatchesDiagnosticGeneration(row:ProgressRow):boolean {
+  const ref=row.refs.find(ref=>ref.role==='hash_verified_bot_archive_export');
+  if(!ref||path.basename(ref.file)!==row.scanId+'.json')return false;
+  if(statSync(ref.file).size>6*1024*1024)throw Error('Diagnostic archive source exceeds export byte bound');
+  const bytes=readFileSync(ref.file);
+  if(digest(bytes)!==ref.sha256)throw Error('Diagnostic archive source hash mismatch');
+  const report=JSON.parse(bytes.toString('utf8'));
+  return report.scanId===row.scanId&&(!report.scan_id||report.scan_id===row.scanId)&&
+    Date.parse(report.timestamps?.createdAt)===Date.parse(row.createdAt)&&
+    report.meta?.reportProjectionVersion===row.projectionVersion&&
+    report.meta?.reportProjectionSourceHash===row.publicProjectionSourceHash&&
+    ['completed','completed_limited'].includes(report.scanStatus)&&report.resultDisposition!=='no_go';
+}
+
+function retainedDailyQuery(file:string,input:{version?:string;choiceAuditVersion?:string;querySha256?:string}):string|null {
+  if(input.version!==DIRECT_ID_INVENTORY_VERSION||input.choiceAuditVersion!==CHOICE_AUDIT_VERSION||path.basename(file)!=='delta-inventory.json')return null;
   const sqlFile=path.join(path.dirname(file),'delta-inventory.sql');
   // Historical receipts can lack the SQL. They provide no proof of omission.
-  if(!input.querySha256||!existsSync(sqlFile))return false;
+  if(!input.querySha256||!existsSync(sqlFile))return null;
   if(statSync(sqlFile).size>128_000)throw Error('Audit query SQL exceeds byte bound');
   const bytes=readFileSync(sqlFile);
   if(digest(bytes)!==input.querySha256)throw Error('Audit query SQL hash mismatch');
-  return /case when jsonb_typeof\(\(p\.report_projection_payload#>'\{runtimeArtifacts,gpcCmpStateComparison\}'\)\)='object' then 'source_present' else 'source_missing' end\),\s*'transport',\s*'included'\)/.test(bytes.toString('utf8'));
+  return bytes.toString('utf8');
 }
 // Reuse canonical field validators. The extract deliberately omits labels, CMP inventories,
 // policy text and runtime packets; it is not a full assessment or a new evidence packet.
@@ -114,6 +133,7 @@ function applyPolicyReceipt(row:ProgressRow,value:unknown):boolean {
 }
 
 export const TECHNICAL_COUNT_UNAVAILABLE_REASONS=['source_missing','source_unverified','source_binding_mismatch','source_schema_incomplete','original_source_binding_unavailable'] as const;
+const specificCmsReason=(value:unknown):boolean=>(CMS_PROJECTION_UNAVAILABLE_REASONS as readonly unknown[]).includes(value);
 export function applyTechnicalCounts(row:ProgressRow,value:unknown):boolean {
   if(value==null)return false;
   if(!Array.isArray(value)||value.length!==2)throw Error('Invalid technical count receipt');
@@ -125,11 +145,15 @@ export function applyTechnicalCounts(row:ProgressRow,value:unknown):boolean {
   for(const record of records){
     if(record.value===null)continue;
     if(typeof record.value==='string'){
-      if(!(TECHNICAL_COUNT_UNAVAILABLE_REASONS as readonly string[]).includes(record.value))throw Error('Unknown technical count unavailable reason');
+      if(!(TECHNICAL_COUNT_UNAVAILABLE_REASONS as readonly string[]).includes(record.value) &&
+          !(record.hasCatalogue && (CMS_PROJECTION_UNAVAILABLE_REASONS as readonly string[]).includes(record.value)))throw Error('Unknown technical count unavailable reason');
       for(const key of record.keys){
         if(row.measurements?.[key]!==undefined)throw Error('Conflicting measured/unavailable technical count '+key);
         const existing=row.technicalCountUnavailable?.reasons[key];
-        if(existing&&existing!==record.value)throw Error('Conflicting technical count unavailable reason '+key);
+        // A receipt from before diagnostic transport can only say source_missing.
+        if(record.hasCatalogue&&record.value==='source_missing'&&specificCmsReason(existing))continue;
+        if(existing&&existing!==record.value&&!(record.hasCatalogue&&existing==='source_missing'&&specificCmsReason(record.value)))
+          throw Error('Conflicting technical count unavailable reason '+key);
         (row.technicalCountUnavailable??={version:"certscore.technical-count-availability.v1",reasons:{}}).reasons[key]=record.value;
       }
       measured=true; // A delivered diagnostic also needs the exact inventory reference.
@@ -163,18 +187,42 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
   if(receipts.length>64)throw Error('At most 64 retained opt-out sources required');
   const byId=new Map(rows.map(r=>[r.scanId,r])),matched=new Map<string,{state:string;source:string}>();
   const cmpGenerations=new Map<string,{creator:string;payloadSha256:string;omitted:boolean}>();
+  const diagnosticGenerations=new Map<string,{creator:string;payloadSha256:string;diagnostic:boolean;conflict:boolean}>();
   const summary={sources:receipts.length,inspected:0,matched:0,added:0,alreadyRetained:0,unmatchedOrUnavailable:0};
   for(const receipt of receipts){
     const file=realpathSync(receipt.file);if(statSync(file).size>32_000_000)throw Error('Control extract exceeds byte bound');
     const bytes=readFileSync(file);if(bytes.length!==receipt.bytes||digest(bytes)!==receipt.sha256)throw Error('Control extract hash/size mismatch');
     const input=JSON.parse(bytes.toString('utf8'));
     if(![OPT_OUT_EXTRACT_VERSION,'certscore.mac-mini-direct-id-inventory.v1'].includes(input.version)||input.readOnly!==true||!Array.isArray(input.rows)||input.rows.length>5000)throw Error('Unsupported read-only control extract');
-    const cmpBlockerOmitted=cmpBlockerOmittedByQuery(file,input);
+    const query=retainedDailyQuery(file,input);
+    const archiveDiagnostics=input.forwardCoverageDiagnosticsProjected===true;
+    if(archiveDiagnostics&&(!query?.includes("'cmsProjectionDiagnostic'")||!query.includes("'acceptPath'")))
+      throw Error('Missing frozen daily query for forward CMS and Accept diagnostics');
+    const cmpBlockerOmitted=Boolean(query&&/case when jsonb_typeof\(\(p\.report_projection_payload#>'\{runtimeArtifacts,gpcCmpStateComparison\}'\)\)='object' then 'source_present' else 'source_missing' end\),\s*'transport',\s*'included'(?:\)|,\s*'acceptPath',)/.test(query));
     const seen=new Set<string>();
     for(const extract of input.rows){
       summary.inspected++;if(seen.has(extract.scanId))throw Error('Duplicate control-extract scan');seen.add(extract.scanId);
       const row=byId.get(extract.scanId),result=row?retainedOptOutState(extract,row):null;
       if(row&&retainedGenerationMatches(extract,row)){
+        const direct=input.version===DIRECT_ID_INVENTORY_VERSION;
+        const priority=extract.choice_audit?.version===CHOICE_AUDIT_VERSION ? extract.choice_audit.priorityEvidence : undefined;
+        const acceptReason=typeof priority?.acceptPath==='string'&&
+          Boolean(priorityCoverageStates(priority,row.scanId)[ACCEPT_PATH_DIAGNOSTIC_KEY]);
+        const cmsReason=Array.isArray(extract.technicalCounts)&&specificCmsReason(extract.technicalCounts[1]);
+        const archive=row.originProof==='mac_mini_archive';
+        const creatorVerified=row.originProof==='original_credential_verified'&&row.originRequestId===extract.originalRequestId;
+        const diagnosticBound=direct&&(creatorVerified||archiveDiagnostics&&archive&&
+          (acceptReason||cmsReason)&&archiveMatchesDiagnosticGeneration(row));
+        if(direct&&(archive||creatorVerified)){
+          const {originalRequestId:creator,projection_payload_sha256:payloadSha256}=extract;
+          const prior=diagnosticGenerations.get(row.scanId);
+          const diagnostic=diagnosticBound&&(acceptReason||cmsReason);
+          const conflict=Boolean(prior&&(prior.conflict||prior.creator!==creator||prior.payloadSha256!==payloadSha256));
+          if(conflict&&(diagnostic||prior?.diagnostic))throw Error('Conflicting generation-bound Accept diagnostic payload or CMS diagnostic provenance');
+          diagnosticGenerations.set(row.scanId,{creator,payloadSha256,diagnostic:diagnostic||prior?.diagnostic===true,conflict});
+        }
+        const technicalCounts=cmsReason&&!diagnosticBound
+          ? [extract.technicalCounts[0],'source_missing'] : extract.technicalCounts;
         if(input.version==='certscore.mac-mini-direct-id-inventory.v1'&&extract.auditComparison!=null&&
           (row.originProof!=='original_credential_verified'||row.originRequestId===extract.originalRequestId)){
           const comparison=readAuditComparisonDelivery(extract.auditComparison);
@@ -195,7 +243,7 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
         }
         if(input.version==='certscore.mac-mini-direct-id-inventory.v1'&&
           (row.originProof!=='original_credential_verified'||row.originRequestId===extract.originalRequestId)&&
-          applyTechnicalCounts(row,extract.technicalCounts)&&!row.refs.some(r=>r.file===file&&r.role===TECHNICAL_COUNT_REF)){
+          applyTechnicalCounts(row,technicalCounts)&&!row.refs.some(r=>r.file===file&&r.role===TECHNICAL_COUNT_REF)){
           row.refs.push({file,sha256:receipt.sha256,role:TECHNICAL_COUNT_REF});
         }
         if(input.version==='certscore.mac-mini-direct-id-inventory.v1'&&row.states['click.reject']==='completed'&&
@@ -214,7 +262,8 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
               throw Error('Conflicting generation-bound CMP transport');
             cmpGenerations.set(row.scanId,{...generation,omitted:generation.omitted||prior?.omitted===true});
           }
-          applyChoiceSummary(row,extract.choice_audit,`persisted_choice_extract/${row.projectionVersion}`,cmpBlockerOmitted);
+          applyChoiceSummary(row,extract.choice_audit,`persisted_choice_extract/${row.projectionVersion}`,cmpBlockerOmitted,
+            diagnosticBound&&row.states['click.accept']!=='completed');
           if(row.states['sealed.opt_out.coverage']==='available'&&!row.refs.some(r=>r.file===file&&r.role==='generation_matched_choice_extract'))
             row.refs.push({file,sha256:receipt.sha256,role:'generation_matched_choice_extract'});
         }

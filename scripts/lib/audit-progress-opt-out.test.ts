@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,writeFileSync,readFileSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -8,6 +8,9 @@ import fixture from '../../apps/web/lib/scans/test-fixtures/dollar-general-conse
 import {retainedOptOutState,historicalOptOutSql,applyRetainedOptOutExtracts,OPT_OUT_EXTRACT_VERSION} from './audit-progress-opt-out';
 import type {ProgressRow} from './audit-progress';
 import {verifyChoiceEvidence} from './audit-progress-choice-verification';
+import {CHOICE_AUDIT_VERSION,choiceSummaryFromRecord} from './audit-progress-choice';
+import {buildAuditDeltaQuery} from './audit-delta-query';
+import {extractExportRow} from './audit-progress-export';
 const id=fixture.assessment.scan.scanId;
 const row=():ProgressRow=>({scanId:id,site:'dollargeneral.com',createdAt:'2026-10-29T12:00:00Z',region:'us-west-1',producer:'unknown',profile:'unknown',assessmentVersion:'pulse-public-v10',projectionVersion:'scan-report-projection-v27',publicProjectionSourceHash:'a'.repeat(64),originRequestId:'archive',states:{'control.privacyOptOut':'unavailable'},findings:[],findingInventory:true,reportable:true,refs:[]});
 const extract=()=>({scanId:id,isMacMini:true,isCanary:false,originalRequestId:'original',publicationRequestStatus:'ready',status:'completed',created_at:'2026-10-29T12:00:00.000123Z',projection_source_hash:'a'.repeat(64),projection_payload_sha256:'b'.repeat(64),projection_version:'scan-report-projection-v27',projection_status:'ready',control_assessment:structuredClone(fixture.assessment)});
@@ -112,4 +115,104 @@ test('the independent producer receipt survives a size-bound choice summary and 
  }
  const conflicting=direct({...selected,policyReceipt:{...value,text:'producer_verified_limited_receipt'}});
  assert.throws(()=>applyRetainedOptOutExtracts([matched],[conflicting]),/Conflicting generation-bound policy receipt/);
+});
+
+test('Accept stop diagnostics require matching original creator and consistent ready payload across deliveries',()=>{
+ const key='sealed.priority_evidence.accept_path_reason',hash='a'.repeat(64);
+ const candidate={...extract(),choice_audit:choiceSummaryFromRecord({
+  scan:{id},snapshot:{consentControlAssessment:fixture.assessment},
+  runtimeArtifacts:{acceptPathDiagnostic:[hash,'dispatch_guard_rejected'],postAcceptEvidenceProjection:{execution:{clickCompleted:false}}},
+  events:[{eventType:'v2_lambda_result.received',metadataJson:{artifactMetadata:{scanArtifactUri:{sha256:hash}}}}],
+ })};
+ const input=(r:unknown)=>receipt([r],'certscore.mac-mini-direct-id-inventory.v1');
+ const verified=()=>({...row(),originProof:'original_credential_verified',originRequestId:'original'});
+ const matched=verified();
+ applyRetainedOptOutExtracts([matched],[input(candidate)]);
+ assert.equal(matched.states[key],'dispatch_guard_rejected');
+ for(const [report, e] of [
+  [row(),candidate],
+  [verified(),{...candidate,originalRequestId:'other-creator'}],
+  [verified(),{...candidate,projection_payload_sha256:null}],
+ ] as const){
+  applyRetainedOptOutExtracts([report],[input(e)]);
+  assert.equal(report.states[key],undefined);
+ }
+ assert.throws(()=>applyRetainedOptOutExtracts([verified()],[input(candidate),
+  input({...candidate,projection_payload_sha256:'c'.repeat(64)})]),/Conflicting generation-bound Accept diagnostic payload/);
+ const withoutReason={...candidate,choice_audit:choiceSummaryFromRecord({
+  scan:{id},snapshot:{consentControlAssessment:fixture.assessment},
+  runtimeArtifacts:{postAcceptEvidenceProjection:{execution:{clickCompleted:false}}},
+ })};
+ for(const choice_audit of [withoutReason.choice_audit,undefined,{version:'future_summary'}]){
+  const omitted=input({...withoutReason,choice_audit,projection_payload_sha256:'c'.repeat(64)});
+  for(const order of [[input(candidate),omitted],[omitted,input(candidate)]])
+   assert.throws(()=>applyRetainedOptOutExtracts([verified()],order),/Conflicting generation-bound Accept diagnostic payload/);
+ }
+ const repeat=verified();
+ applyRetainedOptOutExtracts([repeat],[input(withoutReason),input(candidate)]);
+ assert.equal(repeat.states[key],'dispatch_guard_rejected');
+});
+
+test('the daily archive path replays both diagnostics against the exact frozen query and report generation',()=>{
+ const directory=mkdtempSync(path.join(tmpdir(),'forward-coverage-'));
+ const sha=(value:string)=>createHash('sha256').update(value).digest('hex');
+ const cms='cms_document_mismatch',accept='target_navigation_failed';
+ const key='sealed.priority_evidence.accept_path_reason';
+ const exportFile=path.join(directory,id+'.json');
+ const archive={
+  scanId:id,scanStatus:'completed',domain:'dollargeneral.com',
+  timestamps:{createdAt:row().createdAt},
+  meta:{reportProjectionVersion:row().projectionVersion,reportProjectionSourceHash:row().publicProjectionSourceHash},
+ };
+ const publicRef={file:exportFile,sha256:sha(JSON.stringify(archive)),role:'hash_verified_bot_archive_export'};
+ const daily=():ProgressRow=>({...extractExportRow(archive,publicRef),originProof:'mac_mini_archive'});
+ const legacy={...extract(),technicalCounts:[null,'source_missing']};
+ const forward={...extract(),technicalCounts:[null,cms],choice_audit:choiceSummaryFromRecord({
+  scan:{id},snapshot:{consentControlAssessment:fixture.assessment},
+  runtimeArtifacts:{acceptPathDiagnostic:['a'.repeat(64),accept],postAcceptEvidenceProjection:{execution:{clickCompleted:false}}},
+  events:[{eventType:'v2_lambda_result.received',metadataJson:{artifactMetadata:{scanArtifactUri:{sha256:'a'.repeat(64)}}}}],
+ })};
+ const sql=buildAuditDeltaQuery({overlapStartUtc:'2026-10-28T00:00:00Z',windowEndUtc:'2026-10-30T00:00:00Z',
+  includeForwardCoverageDiagnostics:true},false,true,true,true,true,true,true,true);
+ const sqlFile=path.join(directory,'delta-inventory.sql');
+ const file=path.join(directory,'delta-inventory.json');
+ const save=(e:unknown)=> {
+  const bytes=JSON.stringify({version:'certscore.mac-mini-direct-id-inventory.v1',readOnly:true,choiceAuditVersion:CHOICE_AUDIT_VERSION,
+   forwardCoverageDiagnosticsProjected:true,querySha256:sha(sql),rows:[e]});
+  writeFileSync(file,bytes);return {file,sha256:sha(bytes),bytes:Buffer.byteLength(bytes)};
+ };
+ try {
+  writeFileSync(exportFile,JSON.stringify(archive));writeFileSync(sqlFile,sql);
+  const source=save(forward),older=receipt([legacy],'certscore.mac-mini-direct-id-inventory.v1');
+  for(const receipts of [[older,source],[source,older]]){
+   const matched=daily();
+   applyRetainedOptOutExtracts([matched],receipts);
+   assert.equal(matched.states[key],accept);
+   assert.equal(matched.technicalCountUnavailable?.reasons['technology.detections'],cms);
+   assert.equal(matched.measurements?.['technology.detections'],undefined);
+   assert.equal(matched.originProof,'mac_mini_archive');
+   assert.equal(matched.originRequestId,daily().originRequestId);
+   assert.equal(matched.states['click.accept'],daily().states['click.accept']);
+   assert.equal(verifyChoiceEvidence({rows:[matched],optOutExtracts:receipts}).sourceMismatchCount,0);
+  }
+  for(const patch of [{projection_payload_sha256:'c'.repeat(64)},{originalRequestId:'other-creator'}]){
+   const conflict=receipt([{...legacy,...patch}],'certscore.mac-mini-direct-id-inventory.v1');
+   for(const order of [[conflict,source],[source,conflict]])
+    assert.throws(()=>applyRetainedOptOutExtracts([daily()],order),/Conflicting generation-bound Accept diagnostic payload or CMS diagnostic provenance/);
+  }
+  const exactCreatorButWrongGeneration=save({...forward,projection_source_hash:'f'.repeat(64)});
+  const mismatch=daily();
+  applyRetainedOptOutExtracts([mismatch],[exactCreatorButWrongGeneration]);
+  assert.equal(mismatch.states[key],undefined);
+  assert.equal(mismatch.technicalCountUnavailable,undefined);
+  const restored=save(forward);
+  const clicked=daily();
+  clicked.states['click.accept']='completed';
+  applyRetainedOptOutExtracts([clicked],[restored]);
+  assert.equal(clicked.states[key],undefined);
+  writeFileSync(exportFile,JSON.stringify({...archive,scanStatus:'failed'}));
+  assert.throws(()=>applyRetainedOptOutExtracts([daily()],[restored]),/Diagnostic archive source hash mismatch/);
+  writeFileSync(sqlFile,sql+' ');
+  assert.throws(()=>applyRetainedOptOutExtracts([daily()],[restored]),/Audit query SQL hash mismatch/);
+ }finally{rmSync(directory,{recursive:true,force:true});}
 });

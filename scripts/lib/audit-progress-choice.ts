@@ -7,7 +7,7 @@ import {legacyOptOutExecutionOutcome,saleSharingOptOutEvidenceSchema,saleSharing
 import {OPT_OUT_DISPATCH_STATES,retainedOptOutDispatch} from '../../packages/certscore-contracts/src/privacy-capture-profile';
 import {conditionalOptOutDecisionSchema,retainedConditionalOptOutDecision} from '../../packages/certscore-contracts/src/conditional-opt-out-decision';
 import {gpcCmpPairBlockerSchema} from '../../packages/certscore-contracts/src/gpc-cmp-pair-coverage';
-import {CMP_BLOCKER_NOT_PROJECTED,CMP_DELIVERY_KEY,PRIORITY_EVIDENCE_METRICS, priorityEvidenceSql, priorityEvidenceStates, priorityCoverageStates, withBoundedPriority, jsonbBytes} from './audit-progress-priority-evidence';
+import {ACCEPT_PATH_DIAGNOSTIC_KEY,CMP_BLOCKER_NOT_PROJECTED,CMP_DELIVERY_KEY,PRIORITY_EVIDENCE_METRICS, priorityEvidenceSql, priorityEvidenceStates, priorityCoverageStates, withBoundedPriority, jsonbBytes} from './audit-progress-priority-evidence';
 import {OPERATIONS_EVIDENCE_METRICS, operationsEvidenceFromRecord, operationsEvidenceStates} from './audit-progress-operations-evidence';
 import {projectOptOutLaneOutcome} from '../../apps/web/server/scans/opt-out-lane-projection';
 import type {ProgressRow,Metric} from './audit-progress';
@@ -101,7 +101,10 @@ const boundedReceiptSql=(value:string,keys:string[])=>`(select case when jsonb_t
  case when octet_length(v::text)<=2048 and (v - array[${keys.map(k=>`'${k}'`).join(',')}])='{}'::jsonb then v end end from (select ${value} v) q)`;
 const conditionalPath="e#>'{metadataJson,artifactVerification,conditionalOptOutDecision}'";
 const dispatchPath="e#>>'{metadataJson,artifactVerification,optOutDispatch}'";
-const dispatchReceiptSql=()=>`select
+const dispatchReceiptSql=(diagnostics=false)=>`select
+ ${diagnostics?`case when count(*)=1 and p.report_projection_status='ready' and not o."isCanary"
+ and p.report_projection_payload#>>'{scan,id}'=s.id::text
+ then max(e#>>'{metadataJson,artifactMetadata,scanArtifactUri,sha256}') end h,`:""}
  case when count(*)=1 then max(case when ${dispatchPath} in (${OPT_OUT_DISPATCH_STATES.map(s=>`'${s}'`).join(',')}) then ${dispatchPath} end) end as dispatch,
  case when count(*)=1 then max((${boundedReceiptSql(conditionalPath,Object.keys(conditionalOptOutDecisionSchema.innerType().shape))})::text)::jsonb end as conditional
  from jsonb_array_elements(case when jsonb_typeof(p.report_projection_payload->'events')='array' then p.report_projection_payload->'events' else '[]'::jsonb end) e
@@ -124,7 +127,7 @@ const choiceAuditSql=`jsonb_build_object('version','${CHOICE_AUDIT_VERSION}',
 
 // A fixed per-row transport cap keeps the existing one-query output bounded.
 // Short SQL aliases preserve the reserved launch headroom for 100 pending IDs.
-export function choiceAuditSqlForTransport(includeOperations:boolean,includeCmpBlocker=includeOperations){
+export function choiceAuditSqlForTransport(includeOperations:boolean,includeCmpBlocker=includeOperations,includeDiagnostics=false){
  const suffix=includeOperations?', o1':'';
  // Only the private fixed-shape receipt may leave the ready payload.
  const policyColumn=includeOperations?`,(select case when p.report_projection_status='ready'
@@ -134,7 +137,7 @@ export function choiceAuditSqlForTransport(includeOperations:boolean,includeCmpB
    and (v->'binding')-array['scanId','createdAt','generation','sourceHash']='{}'::jsonb then v end end
   from (select p.report_projection_payload->'auditPolicyProvenance' v) q) as o1`:'';
  return `(with bc as materialized (
- select ${choiceAuditSql} as s, ${priorityEvidenceSql(includeCmpBlocker)} as j${policyColumn} from (${dispatchReceiptSql()}) r1,
+ select ${choiceAuditSql} as s, ${priorityEvidenceSql(includeCmpBlocker,includeDiagnostics)} as j${policyColumn} from (${dispatchReceiptSql(includeDiagnostics)}) r1,
  lateral (select a.value->'californiaPrivacyReview' ca) j
  ), bo as materialized (
  select s, octet_length(s::text)>8192 as x,
@@ -253,7 +256,7 @@ export function choiceSummaryAudit(value:unknown,scanId:string,policyBinding?:Au
 }
 const isDetailedCmpAbsence=(value:string|undefined)=>value==='source_missing'||gpcCmpPairBlockerSchema.safeParse(value).success;
 
-export function applyChoiceSummary(row:ProgressRow,value:unknown,source:string,cmpBlockerOmitted=false){
+export function applyChoiceSummary(row:ProgressRow,value:unknown,source:string,cmpBlockerOmitted=false,acceptPathBound=false){
  if(!row.reportable)return;
  const policyBinding=row.projectionVersion==='scan-report-projection-v27'&&row.publicProjectionSourceHash
   ? {scanId:row.scanId,createdAt:row.createdAt,generation:row.projectionVersion,sourceHash:row.publicProjectionSourceHash} as const
@@ -271,6 +274,7 @@ export function applyChoiceSummary(row:ProgressRow,value:unknown,source:string,c
  for(const [id,v] of Object.entries(result.states)){
   // Transport diagnostics describe the query, not a replay of a full local record.
   if(id.startsWith('sealed.priority_evidence.')&&source.startsWith('persisted_report_choice_summary/'))continue;
+  if(id===ACCEPT_PATH_DIAGNOSTIC_KEY&&!acceptPathBound)continue;
   const prior=row.states[id];
   if(id===CMP_DELIVERY_KEY&&v===CMP_BLOCKER_NOT_PROJECTED&&isDetailedCmpAbsence(prior))continue;
   const fillsOmittedBlocker=id===CMP_DELIVERY_KEY&&prior===CMP_BLOCKER_NOT_PROJECTED&&isDetailedCmpAbsence(v);

@@ -1,7 +1,9 @@
+import retainedUnconfirmedActions from "../../../../packages/certscore-contracts/fixtures/retained-unconfirmed-actions-20261113.json";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
   postAcceptEvidencePacketSchema,
+  postAcceptReportProjectionSchema,
   projectPostAcceptEvidenceForReport,
   type PostAcceptEvidencePacket,
 } from "@certscore/contracts";
@@ -445,4 +447,57 @@ test("registered contextual activation preserves canonical proof without fabrica
   assert.deepEqual(result.concerns, []);
   assert.deepEqual(result.candidates, []);
   assert.deepEqual(result.displayPackets, []);
+});
+
+test("retained observer stop reasons survive projection without implying Accept dispatch", () => {
+  const cases = [
+    ["target_navigation_failed", [], "target_navigation_failed"],
+    ["multiple_deterministic_accept_controls_found", [], "ambiguous_control"],
+    ["deterministic_accept_control_not_found", ["resolver_search_budget_exhausted"], "control_search_deadline_exceeded"],
+    ["deterministic_accept_control_not_found", [], "control_unresolved"],
+    ["label_unverifiable", ["resolved_control_scope_not_interactive"], "control_scope_not_interactive"],
+    ["label_unverifiable", ["control_proof_deadline_exhausted"], "control_proof_deadline_exceeded"],
+    ["deferred_consent_handlers_not_ready", [], "deferred_consent_not_ready"],
+    ["dispatch_guard_failed_before_action", [], "dispatch_guard_rejected"],
+    ["abort_requested_during_control_resolution", [], "cancelled_before_click"],
+    ["observer_browser_operation_boundary_exhausted", [], "observer_budget_exhausted"],
+    ["observer_result_budget_exhausted_before_action", [], "observer_budget_exhausted"],
+    ["unavailable", [], "control_unresolved"],
+    ["redirect_target_not_authorized", [], "target_authorization_rejected"],
+  ] as const;
+  const base = packet();
+  for (const [reason, limitations, expected] of cases) {
+    const input = packet({
+      productionProjectable: false,
+      resolver: { ...base.resolver, found: false, confidence: 0, reason },
+      actionControlProof: undefined,
+      acceptanceRegistration: { status: "not_attempted", acceptanceExercised: false, reason, witnesses: [] },
+      limitations: [...limitations],
+      interactionDiagnostics: {
+        navigation: { outcome: "completed", documentCommitted: true, finalUrlAuthorized: false },
+        click: { outcome: "not_attempted", reResolvedBeforeDispatch: false, confirmationCheckedAfterError: false },
+      },
+    });
+    const projected = projectPostAcceptEvidenceForReport({ packet: input, packetSha256: "b".repeat(64) });
+    const runtime = buildPostAcceptRuntimeProjection(projected);
+    assert.equal(runtime.acceptPathDiagnostic, expected, reason);
+    assert.equal(projected.execution?.clickCompleted, false);
+    assert.equal(projected.acceptanceExercised, false);
+    assert.equal(projected.productionProjectable, false);
+  }
+  const unboundClick = projectPostAcceptEvidenceForReport({ packet: packet({
+    interactionDiagnostics: {
+      navigation: { outcome: "completed", documentCommitted: true, finalUrlAuthorized: true },
+      click: { outcome: "completed", reResolvedBeforeDispatch: false, confirmationCheckedAfterError: false },
+    },
+  }) });
+  assert.equal(unboundClick.execution?.clickCompleted, false, "the packet digest is unavailable");
+  assert.equal(buildPostAcceptRuntimeProjection(unboundClick).acceptPathDiagnostic, null,
+    "an unbound retained click signal cannot establish a pre-click stop");
+  assert.equal(buildPostAcceptRuntimeProjection(null).acceptPathDiagnostic, null);
+  const completed = retainedUnconfirmedActions.find(entry => entry.domain === "shell.com" && entry.action === "accept");
+  const completedProjection = postAcceptReportProjectionSchema.parse(completed?.projection);
+  assert.equal(completedProjection.actionControlProof?.accessibleLabel, "Accept optional cookies");
+  assert.equal(completedProjection.execution?.clickCompleted, true);
+  assert.equal(buildPostAcceptRuntimeProjection(completedProjection).acceptPathDiagnostic, null);
 });

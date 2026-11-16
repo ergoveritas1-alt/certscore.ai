@@ -2,7 +2,7 @@ import { redHatCanaryFixture } from "./test-fixtures/redhat-canary";
 import redHatPacketFixture from '../../../packages/certscore-contracts/src/test-fixtures/redhat-terminal-choice.json';
 import {CONDITIONAL_OPT_OUT_CAPTURE_PROFILE} from "@certscore/contracts";
 import {conditionalConsentFixture} from "./test-fixtures/conditional-opt-out";
-import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
+import { CANONICAL_ARTIFACT_MAX_DECODED_BYTES, parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import {derivePolicySurfaceInspectionOutcome} from "@certscore/contracts";
 import { PRESENCE_ONLY_CAPTURE_PROFILE, PRESENCE_ONLY_WORKER_LANES } from "@certscore/contracts";
 import {exactRouteEvidenceFixture} from "../../../packages/certscore-contracts/src/sale-sharing-exact-route.fixture";
@@ -5980,4 +5980,65 @@ test('ordinary Red Hat scans flow from verified consent through production claim
    assert.equal(result.uploads.filter(p=>p.endsWith('/LocalV2DagLambdaManifest.json')).length,1);
   } finally {await rm(result.artifactRoot,{recursive:true,force:true});}
  } finally {keys.forEach((k,i)=>{if(old[i]===undefined)delete process.env[k];else process.env[k]=old[i];});}
+});
+
+test("runtime CMS metadata survives a later lightweight snapshot without replacing terminal evidence", async () => {
+  const id = "runtime-cms-metadata-redirect";
+  const original = {
+    artifactId: "runtime-cms-source", capturedAtMs: 100, path: "/tmp/runtime-cms.txt",
+    url: "https://www.dailymail.com/ushome/index.html",
+    documentIdentity: { source: "cdp_loader_id" as const, token: "runtime-committed-loader" },
+    pagePhase: "network_idle" as const, consentStateAtTime: "pre_consent" as const,
+    siteMetadata: { contractVersion: "certscore.site-metadata.v1" as const, title: "Fixture", language: "en",
+      generators: ["WordPress 6.8"], wordpressAssetObserved: true },
+  };
+  const latest = { ...original, artifactId: "runtime-terminal", path: "/tmp/terminal.txt", capturedAtMs: 200,
+    textExcerpt: "Public landing page", siteMetadata: undefined };
+  const clockSource = { sha256: "a".repeat(64), sizeBytes: 500 };
+  const merge = (domSnapshots: CanonicalEvidenceBundle["domSnapshots"]) => mergeLocalV2DagLambdaEvidenceLaneBundles({
+    artifactRoot: "/tmp/metadata-lanes", scanId: id, runtimeEvidenceSource: clockSource,
+    consentProof: canonicalBundleFixture(id), policyEvidence: canonicalBundleFixture(id),
+    runtimeEvidence: canonicalBundleFixture(id, {
+      startedAt: "2026-11-16T00:00:00Z", completedAt: "2026-11-16T00:00:02Z", domSnapshots,
+      scanLaneRuns: [laneRunFixture("runtime_evidence", "runtime-fixture")],
+      runtimeCoverage: { coverageStatus: "usable", fallbackModesUsed: [], limitationKeys: [], notes: [], silentEmpty: false,
+        observationCounts: { cookieEvents: 0, cookiesBeforeConsent: 0, networkEvents: 1, normalizedVendors: 0, observedJourneys: 0, thirdPartyRequests: 0 } },
+    }),
+  });
+  const merged = merge([original, latest]);
+  assert.equal(merged.runtimeMetadataSnapshots?.length, 1);
+  assert.equal(merged.runtimeMetadataSnapshots?.[0]?.artifactId, latest.artifactId);
+  assert.equal(merged.runtimeMetadataSnapshots?.[0]?.siteMetadata, undefined);
+  assert.equal(merged.runtimeCmsMetadataSnapshot?.artifactId, original.artifactId);
+  assert.equal(merged.runtimeCmsMetadataSnapshot?.runtimeSourceSha256, clockSource.sha256);
+  assert.equal(merged.runtimeCmsMetadataSnapshot?.terminalArtifactId, latest.artifactId);
+  assert.deepEqual(merged.runtimeCmsMetadataSnapshot?.siteMetadata.generators, ["WordPress 6.8"]);
+  assert.deepEqual(merged.domSnapshots, []);
+  const { projectCmsSecurity } = await import("../../web/server/scans/cms-security-projection");
+  const projected = projectCmsSecurity(merged, { verificationStatus: "verified", sha256: "b".repeat(64) }, latest.url);
+  assert.equal(projected?.capturedAt, "2026-11-16T00:00:00.100Z");
+  assert.equal(projected?.evidenceRef, original.artifactId);
+  assert.equal(projected?.assessment.detections[0]?.product, "wordpress");
+  const interim = { ...latest, artifactId: "interim", capturedAtMs: 150 };
+  assert.equal(merge([original, interim, latest]).runtimeCmsMetadataSnapshot?.artifactId, original.artifactId);
+  for (const invalid of [
+    [original, { ...interim, url: latest.url + "?other-route" }, latest],
+    [original, { ...interim, documentIdentity: { ...interim.documentIdentity, token: "other-loader" } }, latest],
+    [original, { ...interim, consentStateAtTime: "post_accept" as const }, latest],
+    [{ ...original, documentIdentity: { ...original.documentIdentity, token: "different-loader" } }, latest],
+    [{ ...original, url: original.url + "?different=1" }, latest],
+    [original, latest, { ...latest, artifactId: "conflict", url: "https://other.example/" }],
+    [original, { ...original, artifactId: "conflicting-earlier-artifact" }, latest],
+    [{ ...original, siteMetadata: { ...original.siteMetadata, generators: Array(8).fill("é".repeat(160)),
+      cmsAssets: Array(6).fill("https://www.dailymail.com/" + "a".repeat(470)) } }, latest],
+  ]) assert.equal(merge(invalid).runtimeCmsMetadataSnapshot, undefined);
+});
+
+test("optional runtime CMS metadata yields to the existing canonical artifact byte limit", () => {
+  const base = { fixtureContent: "x".repeat(CANONICAL_ARTIFACT_MAX_DECODED_BYTES - 60) };
+  const input = { ...base, runtimeCmsMetadataSnapshot: { fixtureContent: "y".repeat(80) } };
+  assert.ok(Buffer.byteLength(JSON.stringify(base)) < CANONICAL_ARTIFACT_MAX_DECODED_BYTES);
+  assert.ok(Buffer.byteLength(JSON.stringify(input)) > CANONICAL_ARTIFACT_MAX_DECODED_BYTES);
+  assert.equal(serializeCanonicalEvidenceBundle(input), JSON.stringify(base));
+  assert.ok(input.runtimeCmsMetadataSnapshot);
 });

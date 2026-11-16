@@ -15,6 +15,8 @@ const DELTA_OVERRIDE_HEADROOM_BYTES = 192;
 export function buildAuditDeltaQuery(b:any,includeOperations:boolean,includePrivacyForm=false,includeControlAccessibility=false,includeCaliforniaReject=false,includeTechnicalCounts=false,includeTrackingReviews=false,includePolicyReceipt=false,includeComparison=false):string{
 const origin=botOriginWindowSql(b.overlapStartUtc,b.windowEndUtc);
 const pending:string[]=b.pendingRefreshIds??[];
+// The run freezes this setting after verification of the diagnostic producers.
+const diagnostics=b.includeForwardCoverageDiagnostics===true;
 if(!Array.isArray(pending)||pending.length>100||new Set(pending).size!==pending.length||pending.some(id=>!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(id)))throw Error('At most 100 distinct pending scan UUIDs required');
 function innerSql(value:string){
  const marker='select row_to_json(result) from (';
@@ -40,11 +42,11 @@ select row_to_json(r) from (
  ${includeComparison?`case when not o."isCanary" and p.report_projection_status='ready' and p.report_projection_payload#>>'{scan,id}'=s.id::text and octet_length((p.report_projection_payload#>'{runtimeArtifacts,auditComparison}')::text)<=512
  then p.report_projection_payload#>'{runtimeArtifacts,auditComparison}' end "auditComparison",`:''}
  ${OPT_OUT_EXTRACT_SQL} control_assessment,
- ${choiceAuditSqlForTransport(includeOperations,includeControlAccessibility||includeOperations)} choice_audit,
+ ${choiceAuditSqlForTransport(includeOperations,includeControlAccessibility||includeOperations,diagnostics)} choice_audit,
  ${includeControlAccessibility?`case when not o."isCanary" and p.report_projection_payload#>>'{scan,id}'=s.id::text then ${CONTROL_ACCESSIBILITY_SQL} end "controlAccessibility",`:''}
  ${includePrivacyForm ? `case when not o."isCanary" then p.report_projection_payload->>'auditPrivacyForm' end "auditPrivacyForm",` : ''}
  ${includeCaliforniaReject ? `${CALIFORNIA_REJECT_COVERAGE_SQL} "caReject",` : ''}
- ${includeTechnicalCounts ? `${technicalCountsSql()} "technicalCounts",` : ''}
+ ${includeTechnicalCounts ? `${technicalCountsSql(diagnostics)} "technicalCounts",` : ''}
  ${includeTrackingReviews ? `case when not o."isCanary" and p.report_projection_payload#>>'{scan,id}'=s.id::text then ${TRACKING_REVIEW_SQL} end "trackingReviews",` : ''}
  ${includePolicyReceipt ? policyReceiptSql : ''}
  count(*) over() cohort_total
@@ -66,7 +68,7 @@ return sql.replace(/'(?:''|[^'])*'|"(?:""|[^"])*"|\s*[(),]\s*|\s+/g,
 const policyReceipt="p.report_projection_payload->'auditPolicyProvenance'";
 const policyReceiptSql=`case when not o."isCanary" and p.report_projection_status='ready' and octet_length((${policyReceipt})::text)<=${MAX_AUDIT_POLICY_PROVENANCE_BYTES} then ${policyReceipt} end "policyReceipt",`;
 
-export function technicalCountsSql(){
+export function technicalCountsSql(diagnostics=false){
  const fields=[
   ['siteIntegrity','{observation,links}'],
   ['cmsSecurity','{assessment,detections}','{assessment,matches}'],
@@ -78,7 +80,8 @@ export function technicalCountsSql(){
   const arrays=paths.map(path=>`jsonb_typeof(${ref}#>'${path}')='array'`).join(' and ');
   const catalogue=i===1?`${ref}#>>'{assessment,catalogueVersion}'`:null;
   const catalogueGuard=catalogue?` and length(${catalogue})<80`:'';
-  return `case when ${ref} is null or ${ref}='null'::jsonb then to_jsonb('source_missing'::text)
+  const missing=i===1&&diagnostics?`coalesce(case when jsonb_typeof(z)='array' then case when jsonb_array_length(z)=2 and z->>0=h and jsonb_typeof(z->1)='string' then to_jsonb(left(z->>1,40)) end end,'"source_missing"'::jsonb)`:"to_jsonb('source_missing'::text)";
+  return `case when ${ref} is null or ${ref}='null'::jsonb then ${missing}
    when ${ref}->>'verificationStatus' is distinct from 'verified' then to_jsonb('source_unverified'::text)
    when ${ref}->>'scanId' is distinct from s.id::text or ${ref}->>'sourceHash' is distinct from h then to_jsonb('source_binding_mismatch'::text)
    when length(${ref}->>'contractVersion')<80 and ${arrays}${catalogueGuard}
@@ -88,7 +91,7 @@ export function technicalCountsSql(){
  return `coalesce((select jsonb_build_array(${values}) from
   (select p.report_projection_payload->'runtimeArtifacts' a) v,
   lateral (select jsonb_path_query_array(p.report_projection_payload,'$.events[*] ? (@.eventType == "v2_lambda_result.received")') e) w,
-  lateral (select ${sources},e#>>'{0,metadataJson,artifactMetadata,scanArtifactUri,sha256}' h) t
+  lateral (select ${sources},e#>>'{0,metadataJson,artifactMetadata,scanArtifactUri,sha256}' h${diagnostics?",a->'cmsProjectionDiagnostic' z":""}) t
   where p.report_projection_status='ready' and not o."isCanary"
   and p.report_projection_payload#>>'{scan,id}'=s.id::text and e->1 is null and h~'^[0-9a-f]{64}$'),
   '["original_source_binding_unavailable","original_source_binding_unavailable"]'::jsonb)`;
@@ -120,9 +123,11 @@ export function fitAuditDeltaQuery(b:any,marker:string){
  throw Error('Required query exceeds planning cap even with zero pending IDs; no task started');
 }
 /** Current query contract only; historical manifests keep their original readable versions. */
-export function assertCurrentPriorityExtraction(rows:any[]){
+export function assertCurrentPriorityExtraction(rows:any[],forwardDiagnostics=false){
  for(const row of rows)if(['completed','completed_limited'].includes(row.status)){
   const summary=row.choice_audit;
   if(summary?.version!==CHOICE_AUDIT_VERSION||summary.availability!=='size_bound'&&!hasPriorityCoverage(summary.priorityEvidence)&&jsonbBytes({...summary,priorityEvidence:'size_bound'})<=8192)throw Error('Current completed-row query omitted v2 priority coverage diagnostics');
+  const priority=summary.priorityEvidence;
+  if(forwardDiagnostics&&priority&&typeof priority==='object'&&!Object.hasOwn(priority,'acceptPath'))throw Error('Current query omitted the Accept non-completion diagnostic slot');
  }
 }

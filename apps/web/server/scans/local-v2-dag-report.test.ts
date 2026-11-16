@@ -9960,3 +9960,36 @@ test("Leiden first-party script cookie carriage does not establish a Google Anal
   assert.equal(hasRequestLocalGoogleAnalyticsAnchor("https://gtm.universiteitleiden.nl/g/collect", false), false);
   assert.equal(hasRequestLocalGoogleAnalyticsAnchor("https://www.google-analytics.com/g/collect", true), true);
 });
+
+test("the Accept stop diagnostic requires the joined packet to belong to the verified parent", async () => {
+  const { buildMaterializedLocalV2Detail } = await loadLocalV2DagReport();
+  const { postAcceptEvidencePacketSchema } = await import("@certscore/contracts");
+  const { gpcRuntimeFixture } = require("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
+  const bundle = gpcRuntimeFixture({ enabled: false }) as CanonicalEvidenceBundle;
+  const record = makeScanRecord();
+  record.scan = { ...record.scan, id: bundle.scanId, createdAt: bundle.startedAt };
+  const hash = "a".repeat(64);
+  const options = { policyTextEvidenceContext: { scanId: bundle.scanId, generatedAt: bundle.completedAt, localOutDir: null,
+    sourceBundle: { verificationStatus: "verified" as const, sha256: hash, uri: "s3://fixture/original.json",
+      sizeBytes: 1, schemaVersion: bundle.schemaVersion }, artifactsById: new Map() } };
+  const reason = "dispatch_guard_failed_before_action";
+  const packet = postAcceptEvidencePacketSchema.parse({
+    artifactVersion: "certscore.post_accept_evidence.v1", artifactOnly: true, productionProjectable: false,
+    scanId: bundle.scanId, parentScanId: bundle.scanId, targetUrl: bundle.url, normalizedUrl: bundle.url,
+    observationBranch: "accept_only", phase: "post_action", consentAction: "accept",
+    startedAt: bundle.startedAt, completedAt: bundle.completedAt,
+    resolver: { found: false, method: "cmp_registry_recipe", recipeId: "canonical-control:accept:fixture", confidence: 0, reason },
+    acceptanceRegistration: { status: "not_attempted", acceptanceExercised: false, reason, witnesses: [] },
+    observationWindowMs: 0,
+    timing: { dispatchDelayMs: 0, navigationMs: 0, resolverMs: 0, confirmationMs: 0, observationMs: 0, totalMs: 0, readyAtMs: 0 },
+    network: { requests: [], postAcceptNonEssentialRequests: [], activeRequestIdsAtAcceptanceRegistration: [] },
+    storage: { preAction: [], postAction: [], writesAfterAccept: [], itemsCreatedOrChangedAfterAccept: [] },
+    observations: [], cancellation: { requested: false, outcome: "not_requested" }, limitations: [],
+  });
+  bundle.postAcceptEvidence = packet;
+  const sameScan = buildMaterializedLocalV2Detail(record, bundle, options);
+  assert.deepEqual(sameScan.runtimeArtifacts?.acceptPathDiagnostic, [hash, "dispatch_guard_rejected"]);
+  const otherParent = buildMaterializedLocalV2Detail(record, { ...bundle,
+    postAcceptEvidence: { ...packet, parentScanId: "another-scan" } }, options);
+  assert.equal(otherParent.runtimeArtifacts?.acceptPathDiagnostic, null);
+});

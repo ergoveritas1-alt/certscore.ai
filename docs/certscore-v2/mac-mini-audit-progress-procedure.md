@@ -601,6 +601,13 @@ selection receipt separately from the last exact check and latest inventory
 observation. An overlap row can inform a later plan while the current entry
 stays deferred.
 Run `export-mac-mini-delta.ts RUN --plan` locally with actual dates/container.
+After rollout verification covers the runtime CMS retention and web report
+materializer changes for CMS and Accept, freeze
+`includeForwardCoverageDiagnostics: true` in each fresh `begin.json` before
+planning. Retain that rollout proof with the run. Before that verification,
+leave the setting off. This is a local query option. The plan and transport
+record the option and resolved ECS container. Recovery verifies the option
+and exact started SQL alongside the IDs.
 The fitter removes only the planned tail until the override fits 8,000 bytes;
 all required receipts stay present. The transport and inventory retain original
 planned IDs, effective targets and additionally deferred IDs. Recovery verifies
@@ -614,6 +621,16 @@ opt-out action summary and exact canonical GPC/opt-out IDs with surfaced state.
 No policy excerpts, request payloads, cookies, raw worker packets or new findings
 are collected. Preserve the existing eight-day/5,000-row/45-second query limits,
 32 MB extract cap and 64-receipt history cap. Oversized summaries stay unavailable.
+The forward CMS and Accept diagnostics use the original result-event bundle
+digest and the ready projection. For a daily archive row, verify the export
+bytes and join the exact scan, time, report version and source hash to the
+frozen original-creator inventory, including its payload digest. Conflicting
+creator IDs or payload digests block the diagnostic join. Keep the archive's
+provenance classification and the public click state. Where a legacy receipt
+had `source_missing` for the same payload, a verified CMS reason can explain
+that gap in the new snapshot. Report CMS unavailable reasons and Accept
+non-completion reasons by Los Angeles date and report version. Missing
+historical evidence stays unavailable.
 
 The optional `priorityEvidence` section in v2 carries compact terminal
 Accept/Reject and paired GPC/CMP facts from the same ready report generation.

@@ -153,7 +153,7 @@ const FORWARD_MEASURES:Record<string,string[]>={
  'control.reject':[],
  'control.options':[],
  'sealed.control.privacyOptOut':['sealed.opt_out.scope','sealed.opt_out.basis','sealed.opt_out.signal_scope','sealed.opt_out.signal_basis','sealed.opt_out.policy_methods'],
- 'click.accept':['execution.accept','sealed.priority_evidence.accept'],
+ 'click.accept':['execution.accept','sealed.priority_evidence.accept','sealed.priority_evidence.accept_path_reason'],
  'registration.accept':['sealed.terminal.audit_accept'],
  'detail.accept.activity_all':[],
  'detail.accept.verdict':['detail.accept.projectable','detail.accept.reason','detail.accept.stop','accept.requests','accept.storage_writes'],
