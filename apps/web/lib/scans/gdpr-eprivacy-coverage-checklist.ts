@@ -280,7 +280,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "transport_security_tls_certificate",
-    label: "Valid SSL/TLS certificate",
+    label: "SSL/TLS certificate validation",
     explanation: "Whether a strict TLS probe verified the HTTPS origin certificate separately from the normal scanner runtime.",
     findingIds: [],
     defaultFindingStatus: "Gap observed",
@@ -289,7 +289,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "transport_security_http_redirect",
-    label: "HTTP redirects to HTTPS",
+    label: "HTTP-to-HTTPS redirect behavior",
     explanation: "Whether an explicit HTTP-origin probe redirected to HTTPS.",
     findingIds: [],
     defaultFindingStatus: "Gap observed",
@@ -516,7 +516,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "outdated_transfer_framework_reference",
-    label: "Outdated transfer framework referenced",
+    label: "Transfer framework reference — context review",
     explanation: "Whether a retained transfer-framework reference was invalidated, superseded or not yet effective at the scan date. Separate from transfer disclosure presence.",
     findingIds: [],
     defaultFindingStatus: "Review signal",

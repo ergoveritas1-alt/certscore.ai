@@ -7,6 +7,13 @@ export function adminScanMinutesSince(lastScanAt: string | null | undefined, ref
   return Number.isFinite(elapsed) && elapsed >= 0 ? Math.floor(elapsed / 60_000) : null;
 }
 
+export function formatAdminScanAge(totalMinutes: number) {
+  if (totalMinutes < 60) return `${totalMinutes} min`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes === 0 ? `${hours} hr` : `${hours} hr ${minutes} min`;
+}
+
 export const ADMIN_SCAN_ACTIVITY_PERIODS = ["1h", "4h", "12h", "24h", "7d", "30d", "31d", "1y", "all"] as const;
 export type AdminScanActivityPeriod = typeof ADMIN_SCAN_ACTIVITY_PERIODS[number];
 

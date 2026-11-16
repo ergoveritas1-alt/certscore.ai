@@ -14,7 +14,7 @@ Object.assign(globalThis, { React });
 const finding = { title: "Retained finding", rank: 1, summary: "Retained observation.", status: "Partial concern" as const,
   focus: "", vendors: [], evidence: [], evidenceJson: {}, correctionSteps: [] };
 
-test("every mapped top issue has a collapsed applicability note next to its regulation in the selected mode", () => {
+test("every mapped top issue retains collapsed applicability and jurisdiction-specific reference context", () => {
   let contexts = 0;
   for (const topic of REGULATORY_REVIEW_TOPICS) for (const reviewFocus of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
     const context = topic.contexts[reviewFocus];
@@ -32,7 +32,13 @@ test("every mapped top issue has a collapsed applicability note next to its regu
       assert.match(disclosure[2]!, /What to check/);
       assert.doesNotMatch(disclosure[2]!, /From this scan/);
       assert.doesNotMatch(disclosure[2]!, /data-applicability-key="unmapped"/);
-      assert.ok(html.indexOf(context.ruleUrl) < html.indexOf('aria-label="Regulatory applicability"'));
+      if (topic.id === "california-collection-review") {
+        assert.match(html, /Related guidance · California collection review/);
+      } else {
+        const header = html.slice(0, html.indexOf("<summary"));
+        assert.match(header, /aria-label="Relevant law"/);
+        assert.match(header, reviewFocus === "ccpa_cpra" ? /cppa\.ca\.gov.*\.pdf#page=/ : /eur-lex\.europa\.eu\/eli\//);
+      }
       if (context.cases.length) assert.ok(html.indexOf('aria-label="Regulatory applicability"') < html.indexOf("Related enforcement"));
       if (reviewFocus === "ccpa_cpra") {
         assert.match(disclosure[2]!, /CPPA · CCPA coverage/);
@@ -47,7 +53,7 @@ test("every mapped top issue has a collapsed applicability note next to its regu
     }
     contexts++;
   }
-  assert.equal(contexts, 39);
+  assert.equal(contexts, 42);
 });
 
 test("each selected issue has exactly one note, including accessibility, in both modes", () => {

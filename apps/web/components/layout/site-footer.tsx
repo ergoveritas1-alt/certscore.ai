@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useId } from "react";
 import { AnalyticsPreferencesButton } from "../analytics/analytics-consent-banner";
 import { SocialFollowLinks } from "../releases/social-follow-links";
 import { FOOTER_COPYRIGHT_COPY, FOOTER_DISCLAIMER_COPY } from "./footer-copy";
@@ -71,6 +72,8 @@ type SiteFooterProps = {
 };
 
 export function SiteFooter({ hideDisclaimer = false, wide = true, highContrast = false }: SiteFooterProps = {}) {
+  // A streamed report and its loading fallback can briefly render both footers.
+  const navigationGroup = `footer-navigation-${useId()}`;
   return (
     <footer className={`border-t border-slate-200 bg-white ${highContrast ? "[&_.text-slate-400]:text-slate-600" : ""}`}>
       <div className={`mx-auto py-8 text-sm text-slate-600 sm:py-10 ${wide ? "max-w-[90rem] px-5 lg:px-10" : "max-w-6xl px-4 sm:px-6"}`}>
@@ -87,7 +90,7 @@ export function SiteFooter({ hideDisclaimer = false, wide = true, highContrast =
         </div>
         <nav aria-label="Footer navigation" className="divide-y divide-slate-100 sm:hidden">
           {footerSections.map((section) => (
-            <details key={section.title} name="footer-navigation-group" open={section.title === "Product"} className="group/footer">
+            <details key={section.title} name={navigationGroup} open={section.title === "Product"} className="group/footer">
               <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between rounded py-4 font-semibold text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
                 {section.title}
                 <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4 text-slate-500 transition group-open/footer:rotate-180">

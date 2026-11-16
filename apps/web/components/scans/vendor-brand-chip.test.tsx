@@ -63,3 +63,10 @@ test("VendorBrandLogo renders a known CMP logo and stays empty when no logo is a
   assert.match(knownHtml, /\/vendor-logos\/onetrust\.png/);
   assert.equal(unknownHtml, "");
 });
+
+test("bundled-only logos use local assets and skip favicon lookup", () => {
+  const renderLogo = (label: string) => renderToStaticMarkup(createElement(VendorBrandLogo, { label, bundledOnly: true }));
+  assert.match(renderLogo("Adobe Analytics / Experience Cloud"), /<img alt=""[^>]*src="\/vendor-logos\/adobe\.png"/);
+  assert.equal(renderLogo("Stripe"), "");
+  assert.equal(renderLogo("unknown.example"), "");
+});

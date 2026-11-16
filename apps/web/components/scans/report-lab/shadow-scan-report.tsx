@@ -34,7 +34,8 @@ import { SitewideEvidenceCard } from "../sitewide-evidence-card";
 import { FullSiteIdentity } from "../full-site-identity";
 import { FullSiteExecutiveSummary } from "../full-site-executive-summary";
 import { ReportInventoryNavigation } from "../report-inventory-navigation";
-import { ReportInventorySummary } from "../report-inventory-summary";
+import { ConsentTrackingSummary } from "../consent-tracking-summary";
+import { buildConsentTrackingOverview } from "../../../lib/scans/consent-tracking-overview";
 import { ReportPageEventTimeline } from "../report-page-event-timeline";
 import { isAfterAcceptForm } from "../../../lib/scans/collection-surface-table-row";
 import { SitePriorityReview } from "../site-priority-review";
@@ -1253,7 +1254,7 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
         <div className="mt-3 flex justify-end sm:col-start-2 sm:row-start-1 sm:mt-0 sm:w-full sm:max-w-xl sm:justify-self-end"><ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} /></div>
       </div>
     </header>
-    <FullSiteExecutiveSummary reportIdentity={{scanId: report.scan.id, documentUrl: report.scan.url, sourceHash: report.californiaPrivacyReview?.sourceHash}} reviewFocus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} californiaScore={report.californiaScore} inventorySummary={<ReportInventorySummary formCountStatus={report.formsSummary ? report.formsSummary.countStatus : "not_captured"} formsSummary={report.formsSummary} forms={report.collectionTableRows} formCount={report.metrics.forms} metrics={report.inventorySummary ?? []} siteIntegrity={report.siteIntegritySummary ?? (report.siteIntegrity ? { findings: [report.siteIntegrity], coverage: [{ pageId: report.scan.id, url: report.siteIntegrity.evidence.observation.documentUrl, homepage: true, status: report.siteIntegrity.evidence.observation.truncated ? "limited" : "captured" }] } : undefined)} />} score={{ value: report.score.value, priorityReview, scoredPages: 1, deductions: report.scoreExplanation?.score === report.score.value ? report.scoreExplanation.deductions : undefined }} pending={false} scannedPages={1}
+    <FullSiteExecutiveSummary reportIdentity={{scanId: report.scan.id, documentUrl: report.scan.url, sourceHash: report.californiaPrivacyReview?.sourceHash}} reviewFocus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} californiaScore={report.californiaScore} inventorySummary={<ConsentTrackingSummary tiles={buildConsentTrackingOverview(report, report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode))} />} score={{ value: report.score.value, priorityReview, scoredPages: 1, deductions: report.scoreExplanation?.score === report.score.value ? report.scoreExplanation.deductions : undefined }} pending={false} scannedPages={1}
       actions={<ShadowReportShareMenu key="share-report" reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
       snapshot={<SignalSnapshot siteOverview={Boolean(report.fullSite)} report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} homepageHighlightExpansion={report.assessmentHighlightExpansion} />
     <SitePriorityReview reportIdentity={{scanId: report.scan.id, documentUrl: report.scan.url, sourceHash: report.californiaPrivacyReview?.sourceHash}} californiaAssessment={report.californiaPrivacyReview} reviewFocus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} findings={priorityReview} pending={false} sitewideAvailable scannedPages={1} />

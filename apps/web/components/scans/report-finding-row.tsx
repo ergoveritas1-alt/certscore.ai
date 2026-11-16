@@ -1,6 +1,6 @@
 "use client";
 import { projectRejectPresenceDetails, factualCustomerEvidence } from "../../lib/scans/reject-presence-details";
-import React, { type ReactNode } from "react";
+import React, { useRef, type ReactNode } from "react";
 import { EvidenceStatusBadge, type EvidenceBadgeTone } from "./evidence-status-badge";
 import type { SitePriorityFinding } from "../../lib/scans/full-site-priority-review";
 import { VendorBrandChip } from "./vendor-brand-chip";
@@ -12,21 +12,13 @@ import { topFindingReaderSummary, topFindingWhyItMatters } from "../../lib/scans
 import { ENFORCEMENT_REVIEWED_AT, regulatoryReviewContext } from "../../lib/scans/regulatory-review-catalog";
 import type { ReportReviewFocus } from "@certscore/api-contracts";
 import { FindingApplicabilityNote } from "./finding-applicability-note";
-import { FindingDisclosureSummary } from "./finding-disclosure-summary";
+import { DisclosureChevron, FindingDisclosureSummary } from "./finding-disclosure-summary";
+import { findingApplicabilityContext } from "../../lib/scans/finding-applicability-context";
+import { accessibilityFindingReferences, regulatoryFindingReferences } from "../../lib/scans/finding-references";
+import { FindingReferenceLine, FindingReferenceSource } from "./finding-reference-line";
 const monoClass = "font-mono tabular-nums";
 
-export function DisclosureChevron({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={`h-4 w-4 shrink-0 transition-transform ${className}`}
-      fill="none"
-      viewBox="0 0 20 20"
-    >
-      <path d="m6 8 4 4 4-4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
-    </svg>
-  );
-}
+export { DisclosureChevron } from "./finding-disclosure-summary";
 
 export function StatusBadge({ status, priority }: { status: ShadowEvidenceStatus; priority?: "high" }) {
   const label = priority === "high" && status === "Observed" ? "Review" : status;
@@ -136,41 +128,40 @@ export function EvidenceTools({
   );
 }
 
-export function FindingRow({ finding, dense = false, priority = false, pages, observations, idPrefix = "", regulatoryContext, reviewFocus = "gdpr_eprivacy" }: { regulatoryContext?: ReturnType<typeof regulatoryReviewContext>; reviewFocus?: ReportReviewFocus; finding: ShadowFinding; dense?: boolean; priority?: boolean; pages?: Array<{id: string; url: string; homepage: boolean}>; observations?: SitePriorityFinding["observations"]; idPrefix?: string }) {
+export function FindingRow({ finding, dense = false, priority = false, pages, observations, idPrefix = "", reviewFocus = "gdpr_eprivacy" }: { reviewFocus?: ReportReviewFocus; finding: ShadowFinding; dense?: boolean; priority?: boolean; pages?: Array<{id: string; url: string; homepage: boolean}>; observations?: SitePriorityFinding["observations"]; idPrefix?: string }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
   const combinedOptOut = finding.id === "california_privacy_choice_not_observed" && Boolean(finding.evidenceJson.combinedGpcAssessment);
-  const combinedContext = priority && combinedOptOut ? regulatoryReviewContext(finding.id, reviewFocus, true) : null;
-  const context = regulatoryContext ?? (priority ? combinedContext ?? regulatoryReviewContext(finding.id, reviewFocus) : null);
+  const context = priority ? regulatoryReviewContext(finding.id, reviewFocus, combinedOptOut) : null;
+  const applicability = priority ? findingApplicabilityContext(finding.id, reviewFocus, finding.evidenceJson.presentationGroup) : null;
+  const mappedReferences = context ? regulatoryFindingReferences(context.rule) : [];
+  const regulatoryReferences = !mappedReferences.length && applicability?.citationRule
+    ? regulatoryFindingReferences(applicability.citationRule) : mappedReferences;
+  const references = regulatoryReferences.length || !priority
+    ? regulatoryReferences : accessibilityFindingReferences(finding.id, finding.evidenceJson);
   const evidenceAnchor = findingEvidenceAnchor(finding.id, finding.evidenceJson.presentationGroup);
   const readerSummary = priority || finding.id === "gpc_response" ? topFindingReaderSummary(finding) : finding.summary;
-  const why = combinedContext?.why ?? context?.why ?? (priority ? topFindingWhyItMatters(finding) : null);
-  return (
-    <details className={`group border-b border-zinc-200 last:border-b-0 ${priority ? "transition-colors hover:bg-zinc-50 open:bg-white" : ""}`} id={`${idPrefix}${finding.id}`}>
-      <summary className={`grid cursor-pointer list-none gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden ${priority ? "relative grid-cols-[2.25rem_minmax(0,1fr)] items-start px-2 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto_auto] sm:px-3" : dense ? "grid-cols-[2rem_minmax(0,1fr)_auto] py-4" : "grid-cols-[2.5rem_minmax(0,1fr)] py-4 sm:grid-cols-[3rem_minmax(0,1fr)_auto_auto]"}`}>
-        <span className={`${monoClass} font-semibold ${priority ? "inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 text-xs text-zinc-600" : "text-sm text-zinc-400"}`}>{String(finding.rank).padStart(2, "0")}</span>
-        <span className={`min-w-0 ${priority ? "pr-7 sm:pr-0" : ""}`}>
-          <span className={`${dense ? "text-sm" : "text-base"} block font-semibold text-zinc-950`}>{finding.title}{pages?.length ? <span className="ml-2 inline-block text-xs font-normal text-zinc-500">{pages.length === 1 && pages[0]?.homepage ? "Starting page" : `${pages.length} ${pages.length === 1 ? "page" : "pages"}`}</span> : null}</span>
-          {!dense ? <span className={`${priority ? "mt-0.5 text-xs leading-5 text-zinc-500 sm:pr-4" : "mt-1 text-sm leading-6 text-zinc-600"} overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] group-open:[display:block] group-open:[-webkit-line-clamp:unset]`}>{readerSummary}</span> : null}
-          {why ? <span className={`block max-w-3xl text-zinc-700 ${combinedOptOut ? "mt-1 text-xs leading-5" : "mt-2 text-sm leading-6"}`}><span className="font-semibold text-zinc-900">Why it matters: </span>{why}</span> : null}
-          {!dense ? <span className="mt-3 inline-flex sm:hidden"><StatusBadge status={finding.status} priority={finding.priority} /></span> : null}
-        </span>
-        {!dense && finding.focus ? <span className={`${priority ? "hidden self-start rounded-md border border-zinc-200 bg-white px-2 py-1 text-[0.65rem] font-semibold uppercase text-zinc-500 lg:block" : "hidden self-start text-xs font-medium text-zinc-500 sm:block"}`}>{finding.focus}</span> : null}
-        <span className={priority ? "absolute right-2 top-3 flex items-center gap-2 sm:static" : dense ? "flex items-start gap-2" : "hidden items-start gap-2 sm:flex"}>
-          {!dense ? <span className={priority ? "hidden sm:inline-flex" : ""}><StatusBadge status={finding.status} priority={finding.priority} /></span> : null}
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">
-            <span aria-hidden="true" className="hidden text-xs font-medium sm:inline"><span className="group-open:hidden">Show details</span><span className="hidden group-open:inline">Hide details</span></span>
-            <DisclosureChevron className="group-open:rotate-180" />
-          </span>
-        </span>
-      </summary>
-      <div className={`${dense ? "pl-0 sm:pl-11" : priority ? "px-3 sm:pl-[4.75rem] sm:pr-4" : "pl-0 sm:pl-12"} pb-6`}>
+  const why = context?.why ?? (priority ? topFindingWhyItMatters(finding) : null);
+  const id = `${idPrefix}${finding.id}`;
+  const rank = String(finding.rank).padStart(2, "0");
+  const badge = <StatusBadge status={finding.status} priority={finding.priority} />;
+  const detailsContent = (
+      <div className={`${dense ? "pl-0 sm:pl-11" : priority ? "px-3 sm:pl-16 sm:pr-4" : "pl-0 sm:pl-12"} pb-6`}>
         {dense ? <p className="mb-3 max-w-3xl text-sm leading-6 text-zinc-600">{readerSummary}</p> : null}
         {priority && finding.id !== "gpc_response" && readerSummary !== finding.summary ? <p className="mb-4 max-w-3xl text-sm leading-6 text-zinc-600"><span className="font-semibold text-zinc-900">Assessment detail: </span>{finding.summary}</p> : null}
-        {context || priority ? <div className="mb-4 rounded-lg border border-sky-100 bg-sky-50/40 px-4 py-3">
-          {context ? <a href={context.ruleUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">{context.rule} ↗</a> : null}
+        {priority || pages?.length ? <div className="mb-4 divide-y divide-zinc-200 border-y border-zinc-200">
           {priority ? <FindingApplicabilityNote findingId={finding.id} reviewFocus={reviewFocus} presentationGroup={finding.evidenceJson.presentationGroup} /> : null}
-          {context?.examples.length ? <details className="group/finding-disclosure mt-3">
+          {context && !mappedReferences.length ? <p className="py-2"><a href={context.ruleUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">Related guidance · {context.rule} ↗</a></p> : null}
+          {references.length > 2 ? <details className="group/finding-disclosure">
+            <FindingDisclosureSummary>Additional references</FindingDisclosureSummary>
+            <ul className="space-y-3 pb-4 pt-1 text-xs leading-5 text-zinc-700">{references.slice(2).map(reference => <li key={reference.label}>
+              <p className="font-semibold text-zinc-950">{reference.label}</p>
+              <p>{reference.explanation}</p>
+              <FindingReferenceSource reference={reference} />
+            </li>)}</ul>
+          </details> : null}
+          {context?.examples.length ? <details className="group/finding-disclosure">
             <FindingDisclosureSummary>Related enforcement</FindingDisclosureSummary>
-            <div className="mt-3 space-y-4">{context.examples.map(example => <article key={example.id}>
+            <div className="space-y-4 pb-4 pt-1">{context.examples.map(example => <article key={example.id}>
               <p className="text-sm font-semibold">{example.name} <span className="font-normal text-zinc-500">· {example.date.slice(0, 4)}</span></p>
               <p className="mt-1 text-xs text-zinc-500">{example.authority}</p>
               <p className="mt-2 text-sm leading-6 text-zinc-700">{example.conduct}</p>
@@ -179,11 +170,11 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
               <a className="mt-2 inline-block text-xs text-sky-800 underline underline-offset-2" href={example.url} target="_blank" rel="noreferrer">Read the official case ↗</a>
             </article>)}<p className="text-xs text-zinc-500">Examples reviewed {ENFORCEMENT_REVIEWED_AT}.</p></div>
           </details> : null}
+          {pages?.length ? <details className="group/finding-disclosure">
+            <FindingDisclosureSummary>Affected pages</FindingDisclosureSummary>
+            <ul className="max-h-36 space-y-1 overflow-auto pb-4 pt-1 text-sm">{pages.map(page => <li key={page.id}><a className="break-all text-sky-700 underline" href={page.url} target="_blank" rel="noreferrer">{page.url}</a>{page.homepage ? " · Starting page" : ""}</li>)}</ul>
+          </details> : null}
         </div> : null}
-        {pages?.length ? <details className="group/finding-disclosure mb-4 border-b border-zinc-200 pb-3">
-          <FindingDisclosureSummary>Affected pages</FindingDisclosureSummary>
-          <ul className="mt-3 max-h-36 space-y-1 overflow-auto text-sm">{pages.map(page => <li key={page.id}><a className="break-all text-sky-700 underline" href={page.url} target="_blank" rel="noreferrer">{page.url}</a>{page.homepage ? " · Starting page" : ""}</li>)}</ul>
-        </details> : null}
         {observations?.length ? <div className="mb-4 space-y-3">{observations.map(observation => <section key={observation.id} className="border-l-2 border-sky-300 pl-3">
           <h3 className="text-sm font-semibold">{observation.title}</h3><p className="mt-1 text-sm text-zinc-600">{observation.summary}</p>
           <p className="mt-1 text-xs text-zinc-500">{observation.pages.length === 1 && observation.pages[0]?.homepage ? "Starting page only" : observation.pages.length ? `${observation.pages.length} pages with this observation` : "Page attribution unavailable"}</p>
@@ -204,6 +195,59 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
           {finding.correctionSteps.length ? <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6 text-zinc-600">{finding.correctionSteps.map((step, index) => <li key={`${index}:${step}`}>{step}</li>)}</ol> : <p className="mt-4 text-sm text-zinc-600">Review the supporting evidence for this finding.</p>}
         </>} /></div>
       </div>
-    </details>
   );
+
+  if (priority) return <article id={id} className="group/priority-finding relative cursor-pointer border-b border-zinc-200 transition-colors last:border-b-0 hover:bg-zinc-50 has-[>details[open]]:bg-white"
+    onClick={event => {
+      const { currentTarget, target } = event;
+      if (event.defaultPrevented || !(target instanceof Element) || !currentTarget.contains(target)) return;
+      const control = target.closest("a, button, summary, input, label, select, textarea, [popover], [contenteditable], [role=button], [role=link]");
+      if (control && currentTarget.contains(control)) return;
+      const selection = currentTarget.ownerDocument.getSelection();
+      if (selection && !selection.isCollapsed && selection.containsNode(currentTarget, true)) return;
+      const details = detailsRef.current;
+      if (details) details.open = !details.open;
+    }}>
+    <div data-finding-header className="grid grid-cols-[2.25rem_minmax(0,1fr)] items-start gap-3 px-2 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:pl-3 sm:pr-14">
+      <span className={`${monoClass} inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600`}>{rank}</span>
+      <div className="min-w-0">
+        <h3 className="pr-10 text-base font-semibold text-zinc-950 sm:pr-0">{finding.title}</h3>
+        <FindingReferenceLine references={references.slice(0, 2)} scope={applicability?.scopeCheck ?? ""} />
+        {!dense ? <p className="mt-0.5 line-clamp-3 text-xs leading-5 text-zinc-600 group-has-[>details[open]]/priority-finding:line-clamp-none">{readerSummary}</p> : null}
+        {why ? <p className={`mt-1 max-w-3xl text-zinc-700 ${combinedOptOut ? "text-xs leading-5" : "text-sm leading-5"}`}><span className="font-semibold text-zinc-900">Why it matters: </span>{why}</p> : null}
+        {!dense ? <span className="mt-2 inline-flex sm:hidden">{badge}</span> : null}
+      </div>
+      {!dense ? <div className="hidden items-start gap-2 sm:flex">
+        {finding.focus ? <span className="hidden rounded-md border border-zinc-200 bg-white px-2 py-1 text-[0.65rem] font-semibold uppercase text-zinc-500 lg:block">{finding.focus}</span> : null}
+        {badge}
+      </div> : null}
+    </div>
+    <details ref={detailsRef} className="group/finding-details">
+      <summary className="absolute right-2 top-2 inline-flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 sm:right-3 [&::-webkit-details-marker]:hidden">
+        <span className="sr-only"><span className="group-open/finding-details:hidden">Show details</span><span className="hidden group-open/finding-details:inline">Hide details</span></span>
+        <DisclosureChevron className="group-open/finding-details:rotate-180" />
+      </summary>
+      {detailsContent}
+    </details>
+  </article>;
+
+  return <details className="group border-b border-zinc-200 last:border-b-0" id={id}>
+    <summary className={`grid cursor-pointer list-none gap-3 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden ${dense ? "grid-cols-[2rem_minmax(0,1fr)_auto]" : "grid-cols-[2.5rem_minmax(0,1fr)] sm:grid-cols-[3rem_minmax(0,1fr)_auto_auto]"}`}>
+      <span className={`${monoClass} text-sm font-semibold text-zinc-400`}>{rank}</span>
+      <span className="min-w-0">
+        <span className={`${dense ? "text-sm" : "text-base"} block font-semibold text-zinc-950`}>{finding.title}</span>
+        {!dense ? <span className="mt-1 line-clamp-3 text-sm leading-6 text-zinc-600 group-open:line-clamp-none">{readerSummary}</span> : null}
+        {!dense ? <span className="mt-3 inline-flex sm:hidden">{badge}</span> : null}
+      </span>
+      {!dense && finding.focus ? <span className="hidden self-start text-xs font-medium text-zinc-500 sm:block">{finding.focus}</span> : null}
+      <span className={dense ? "flex items-start gap-2" : "hidden items-start gap-2 sm:flex"}>
+        {!dense ? badge : null}
+        <span className="inline-flex items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">
+          <span aria-hidden="true" className="hidden text-xs font-medium sm:inline"><span className="group-open:hidden">Show details</span><span className="hidden group-open:inline">Hide details</span></span>
+          <DisclosureChevron className="group-open:rotate-180" />
+        </span>
+      </span>
+    </summary>
+    {detailsContent}
+  </details>;
 }

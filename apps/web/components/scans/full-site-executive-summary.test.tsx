@@ -8,8 +8,47 @@ import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-e
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { buildSitePriorityReview } from "../../lib/scans/full-site-priority-review";
 import { buildExecutiveOverview } from "./report-lab/executive-overview-copy";
+import { ConsentTrackingSummary } from "./consent-tracking-summary";
 
 const score = {version: "test", value: 29, assessedNonEssentialStorage: 9, scoredPages: 10, limitedPages: 0, scope: "Retained evidence", priorityReview: [], sources: []};
+
+test("the consent overview displays missing counts as NA, plain form counts, and visible classification markers", () => {
+  const tiles = renderToStaticMarkup(<ConsentTrackingSummary tiles={[
+    { id: "before", label: "Before choice", count: 0, unit: "flagged requests", state: "recorded", breakdown: { nonEssential: 0, review: 0 } },
+    { id: "accept", label: "After Accept", count: 44, unit: "non-essential requests", state: "partial", breakdown: { nonEssential: 44 } },
+    { id: "reject", label: "After Reject", count: null, unit: "non-essential requests", state: "unavailable" },
+    { id: "forms", label: "Forms", count: 1, unit: "observed forms", state: "partial" },
+  ]} />);
+  assert.match(tiles, /title="No verified count"[^>]*>NA</);
+  assert.match(tiles, /title="0">0</);
+  assert.match(tiles, /title="1">1</);
+  assert.match(tiles, /title="44">44</);
+  assert.match(tiles, /<span class="sr-only">flagged requests<\/span>/);
+  assert.match(tiles, /<span class="sr-only">non-essential requests<\/span>/);
+  assert.match(tiles, /title="44 non-essential">44 non-essential</);
+  assert.match(tiles, />observed forms<\/span>/);
+  assert.match(tiles, /rounded-full bg-rose-500[^>]*><\/span><span title="0 non-essential"/);
+  assert.match(tiles, /rounded-full bg-amber-500[^>]*><\/span><span title="0 review"/);
+  assert.doesNotMatch(tiles, /Unavailable|≥/);
+});
+
+test("consent tiles offer a disclosure only when there are details to show", () => {
+  const html = renderToStaticMarkup(<ConsentTrackingSummary tiles={[
+    { id: "reject", label: "After Reject", count: null, unit: "requests", state: "unavailable", metrics: [{ label: "Requests", value: null }] },
+    { id: "services", label: "Services", count: 0, unit: "identified services", state: "recorded", services: [] },
+    { id: "accept", label: "After Accept", count: null, unit: "requests", state: "partial", notes: ["The target changed during capture."] },
+    { id: "before", label: "Before consent", count: 0, unit: "requests", state: "recorded", metrics: [{ label: "Distinct requests", value: 0 }] },
+  ]} />);
+
+  for (const id of ["reject", "services"]) {
+    const tile = html.match(new RegExp(`<div id="[^"]+-${id}"[^>]*>(.*?)</div>`))?.[1];
+    assert.ok(tile);
+    assert.doesNotMatch(tile, /<svg|aria-expanded/);
+  }
+  for (const id of ["accept", "before"]) {
+    assert.match(html, new RegExp(`<button id="[^"]+-${id}" type="button" aria-expanded="false"[^>]*>.*?<svg`));
+  }
+});
 
 test("page and site scores preserve findings without displaying deduction amounts", () => {
   for (const complete of [true, false]) {

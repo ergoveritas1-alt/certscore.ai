@@ -36,3 +36,18 @@ test("click-only inventories preserve unknown classification and do not promote 
   assert.equal(projectActionResourceInventory({...input,projection,assessment:undefined}),null);
   assert.equal(projectActionResourceInventory({...input,projection:{...projection,packetSha256:undefined}}),null);
 });
+
+test("a full after-click clock with verified navigation remains a partial choice observation", () => {
+  const projection = afterRejectClickProjection("advertising");
+  const counted = projectActionResourceInventory({ ...input, projection: {
+    ...projection,
+    interactionDiagnostics: {
+      ...projection.interactionDiagnostics,
+      postClickNavigation: { scope: "main_frame", outcome: "main_frame_navigated", elapsedAfterClickMs: 45 },
+    },
+  } });
+  assert.equal(counted?.measurement?.documentChanged, true);
+  assert.equal(counted?.measurement?.requestCoverage, "limited");
+  assert.equal(counted?.measurement?.elapsedMs, 510);
+  assert.equal(counted?.inventory.resources[0]?.inventoryEvidence, "Non-essential");
+});

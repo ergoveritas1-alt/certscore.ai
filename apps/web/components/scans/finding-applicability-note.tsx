@@ -8,9 +8,9 @@ export function FindingApplicabilityNote({ findingId, reviewFocus, presentationG
   findingId: string; reviewFocus: ReportReviewFocus; presentationGroup?: unknown;
 }) {
   const note = findingApplicabilityContext(findingId, reviewFocus, presentationGroup);
-  return <details className="group/finding-disclosure mt-3" aria-label="Regulatory applicability">
+  return <details className="group/finding-disclosure" aria-label="Regulatory applicability">
     <FindingDisclosureSummary>Applicability</FindingDisclosureSummary>
-    <div className="mt-2 space-y-3 rounded-lg border border-sky-100 bg-white p-3 text-sm leading-6 text-zinc-600" data-applicability-key={note.key ?? "unmapped"}>
+    <div className="space-y-3 pb-4 pt-1 text-sm leading-6 text-zinc-600" data-applicability-key={note.key ?? "unmapped"}>
       <div>
         <h4 className="font-semibold text-zinc-900">When this matters</h4>
         <p className="mt-1 max-w-3xl">{note.when}</p>

@@ -153,6 +153,6 @@ function InventoryQuickSignals({ counts }: { counts?: InventoryAssessmentCounts 
   </span>;
 }
 
-function ClassificationCounts({ counts }: { counts?: InventoryAssessmentCounts }) {
-  return counts ? <dl className="mt-3 space-y-1.5 text-[11px] tabular-nums">{classifications.filter(([, key]) => counts[key] != null).map(([label, key, description]) => <div key={key} className="flex items-start justify-between gap-2"><dt title={description} className="flex shrink-0 items-start gap-1.5 whitespace-nowrap text-slate-600"><span aria-hidden="true" className={`mt-1 h-2 w-2 shrink-0 rounded-full ${classificationColors[key]}`} />{label}</dt><dd className="shrink-0 text-zinc-700">{counts[key]}</dd></div>)}</dl> : <p className="mt-3 text-xs text-zinc-500">Classification unavailable.</p>;
+export function ClassificationCounts({ counts, showUnavailable = false }: { counts?: Partial<InventoryAssessmentCounts>; showUnavailable?: boolean }) {
+  return counts ? <dl className="mt-3 space-y-1.5 text-[11px] tabular-nums">{classifications.filter(([, key]) => showUnavailable || counts[key] != null).map(([label, key, description]) => <div key={key} className="flex items-start justify-between gap-2"><dt title={description} className="flex min-w-0 items-start gap-1.5 text-slate-600"><span aria-hidden="true" className={`mt-1 h-2 w-2 shrink-0 rounded-full ${classificationColors[key]}`} />{label}</dt><dd className="shrink-0 text-zinc-700">{counts[key]?.toLocaleString("en-US") ?? "NA"}</dd></div>)}</dl> : <p className="mt-3 text-xs text-zinc-500">{showUnavailable ? "Classification · NA" : "Classification unavailable."}</p>;
 }

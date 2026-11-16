@@ -3,6 +3,7 @@ import { postAcceptReportProjectionSchema, postRefusalReportProjectionSchema } f
 import { crawlDisplayUrl, type CrawlOccurrence } from "@website-signal-risk-scanner/shared";
 import { isAfterActionReportEligible } from "./after-action-report-eligibility";
 import { readChoicePathExecution } from "./choice-path-execution";
+import type { ChoicePathExecution } from "@certscore/contracts";
 import { buildSinglePageResourceInventory, type SinglePageResourceInventory } from "./single-page-resource-inventory";
 import type { ReviewedPolicy } from "./full-site-resource-context";
 
@@ -12,6 +13,15 @@ export type ActionResourceInventory = {
   note: string;
   clockLabel: string;
   captureCoverage?: {status: "complete" | "limited"; omittedNodes: number; omittedEdges: number};
+  measurement?: {
+    execution: ChoicePathExecution;
+    requestCoverage: "complete" | "limited";
+    storageSnapshotRetained: boolean;
+    elapsedMs?: number;
+    elapsedAfterConfirmationMs?: number;
+    stopReason?: "evidence_satisfied" | "aborted" | "target_changed" | "click_uncertain";
+    documentChanged?: boolean;
+  };
 };
 
 /** Descriptive inventory from validated persisted action evidence. Never recalculate
@@ -25,7 +35,10 @@ export function projectActionResourceInventory(input: {
     : postRefusalReportProjectionSchema.safeParse(input.projection);
   if (!parsed.success || !parsed.data.packetSha256) return null;
   const p = parsed.data;
-  if (!readChoicePathExecution(p, input.action)?.clickCompleted) return null;
+  const execution = readChoicePathExecution(p, input.action);
+  if (!execution?.clickCompleted) return null;
+  const documentChanged = p.receiptAvailability?.documentStable === false ||
+    p.interactionDiagnostics?.postClickNavigation?.elapsedAfterClickMs !== undefined;
   const capture = p.afterActionCapture;
   const scoring = "scoringEvidence" in p ? p.scoringEvidence : undefined;
   const start = capture?.actionDispatchedAtMs ?? scoring?.actionDispatchedAtMs ?? p.retainedActionTiming?.actionDispatchedAtMs;
@@ -47,7 +60,8 @@ export function projectActionResourceInventory(input: {
     } });
   };
   const requests = capture ? p.afterActionRequests : scoring?.requests;
-  const end = capture?.captureEndedAtMs ?? p.retainedActionTiming?.observationEndedAtMs;
+  const completion = p.registeredObservationCompletion;
+  const end = capture?.captureEndedAtMs ?? p.retainedActionTiming?.observationEndedAtMs ?? completion?.completedAtMs;
   if (requests) {
     for (const row of requests) {
       if (start === undefined || row.startedAtMs < start || (end !== undefined && row.startedAtMs > end)) continue;
@@ -81,6 +95,16 @@ export function projectActionResourceInventory(input: {
   return {
     inventory: buildSinglePageResourceInventory(input.pageId, [], null, input.reviewedPolicies, entries), scope,
     clockLabel: start !== undefined ? `Times from the ${input.action === "accept" ? "Accept" : "Reject"} click` : `Times from confirmed ${input.action === "accept" ? "Accept" : "Reject"}`,
+    measurement: {
+      execution,
+      requestCoverage: requests && execution.observationCompleted && !documentChanged ? "complete" : "limited",
+      storageSnapshotRetained: capture ? capture.storageSnapshotRetained && !!p.afterActionStorage : scoring?.postActionCapturedAtMs !== undefined,
+      ...(documentChanged ? { documentChanged: true } : {}),
+      ...(end !== undefined && end >= clockStart ? { elapsedMs: end - clockStart } : {}),
+      ...(completion && start !== undefined ? { elapsedAfterConfirmationMs: completion.completedAtMs - completion.startedAtMs } : {}),
+      ...(capture && capture.stopReason !== "window_elapsed" ? { stopReason: capture.stopReason }
+        : completion?.termination === "evidence_satisfied" ? { stopReason: completion.termination } : {}),
+    },
     note: scope === "activity_sample"
       ? "Retained non-essential activity sample only; full request and storage inventories were not retained in this report. Counts are sample counts."
       : "Retained requests starting after the click and the post-action storage snapshot. Counts cover this bounded capture; storage presence does not establish a new write. Embedded-frame inventory was not retained for this phase.",

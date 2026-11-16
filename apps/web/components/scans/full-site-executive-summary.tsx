@@ -39,13 +39,16 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
   useEffect(() => {
     const grid = panesRef.current;
     if (!grid) return;
-    // Keep the collapsed baseline when a disclosure opens so the opposite pane stays put.
+    // Align the panes using their collapsed heights so opening a disclosure cannot move the opposite pane.
     const measure = () => {
       if (!window.matchMedia("(min-width: 768px)").matches) { setCollapsedHeight(0); return; }
       if (grid.querySelector("details[open]")) return;
       const heights = Array.from(grid.children, pane => {
         const children = Array.from(pane.children);
-        return children.reduce((sum, child) => sum + child.getBoundingClientRect().height, 0)
+        return children.reduce((sum, child) => {
+          const expanded = child.querySelector("[data-overview-expanded-content]");
+          return sum + child.getBoundingClientRect().height - (expanded?.getBoundingClientRect().height ?? 0);
+        }, 0)
           + parseFloat(getComputedStyle(pane).rowGap) * Math.max(0, children.length - 1);
       });
       setCollapsedHeight(Math.ceil(Math.max(...heights)));

@@ -21,6 +21,7 @@ export function findingApplicabilityContext(id: string, focus: ReportReviewFocus
   const entry = FINDING_APPLICABILITY_REGISTRY.find(row => row.findingIds.includes(key) && row.modes.includes(focus));
   if (!entry) return {
     key: null,
+    citationRule: undefined,
     when: "This issue does not have a mapped regulatory obligation in this review mode.",
     checks: ["Identify the relevant obligation, operator, visitor jurisdiction and activity before drawing a legal conclusion."],
     scopeCheck: "Selecting a review mode or scan location does not establish applicability.",
@@ -33,5 +34,5 @@ export function findingApplicabilityContext(id: string, focus: ReportReviewFocus
     { label: "US Department of Justice · ADA web accessibility", url: "https://www.ada.gov/resources/web-guidance/" },
     { label: "US Department of Justice · Title II web rule and dates", url: "https://www.ada.gov/resources/2024-03-08-web-rule/" },
   );
-  return { key: entry.key, when: entry.when, checks: entry.checks, scopeCheck: scopeChecks[entry.scope], sources };
+  return { key: entry.key, when: entry.when, checks: entry.checks, scopeCheck: scopeChecks[entry.scope], sources, citationRule: entry.citationRule };
 }

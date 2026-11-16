@@ -1,8 +1,9 @@
 "use client";
 
 import { INVENTORY_CLASSIFICATION_ORDER } from "../../lib/scans/inventory-resource-semantics";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { TableScrollHint } from "./compact-scroll-hint";
+import { useTableRowLimit } from "./use-table-row-limit";
 import { matchesInventoryResource } from "../../lib/scans/inventory-search";
 import type { SinglePageResourceInventory as Inventory } from "../../lib/scans/single-page-resource-inventory";
 import type { ShadowReportData } from "./report-lab/shadow-report-data";
@@ -22,7 +23,7 @@ export function SinglePageResourceInventory({ inventory, report, phaseLabel = "P
   const setView = navigation?.setView ?? setLocalView;
   const [sort, setSort] = useState<{key: "priority" | "name"; descending: boolean}>({key: "priority", descending: false});
   const [collapseVersion, setCollapseVersion] = useState(0);
-  const tableRef = useRef<HTMLDivElement>(null);
+  const rowLimit = useTableRowLimit(5, 5);
   const priorities: readonly string[] = INVENTORY_CLASSIFICATION_ORDER;
   const rank = (value: string) => { const index = priorities.indexOf(value); return index < 0 ? priorities.length : index; };
   const kind = navigation?.kind ?? "all";
@@ -46,10 +47,10 @@ export function SinglePageResourceInventory({ inventory, report, phaseLabel = "P
       <div className="flex shrink-0 items-center gap-2"><button type="button" className="h-8 rounded px-2 text-xs text-sky-700 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600" onClick={() => setCollapseVersion(value => value + 1)}>Collapse all</button><CopyJsonButton label="Copy entire resource table as JSON" payload={JSON.stringify({resources: inventory.resources, services: inventory.services}, null, 2)} className="inline-flex h-8 w-8 items-center justify-center rounded border border-zinc-200 text-sky-700"/></div>
     </div>
     <div className="group/scroll">
-    <div ref={tableRef} className="max-h-[376px] overflow-auto rounded border border-zinc-200" role="region" aria-label="Scrollable resource inventory" tabIndex={0}>
+    <div ref={rowLimit.ref} style={rowLimit.style} className="max-h-[376px] overflow-auto rounded border border-zinc-200" role="region" aria-label="Scrollable resource inventory" tabIndex={0}>
       {view === "services" ? <FullSiteServices collapseVersion={collapseVersion} services={services} pageName={pageName} pageChoices={[{ id: report.scan.id, url: report.scan.url, source: "homepage", status: "completed", limitation: null, httpStatus: null, graphSource: undefined }]} homepageGraph={initialVisit ? report.runtimeEvidenceGraph : undefined}/>
         : <InventoryResourceProvider projection={initialVisit ? report.runtimeEvidenceGraph : undefined}><table className="w-full text-left text-xs"><caption className="sr-only">Retained {phaseLabel.toLowerCase()} resources</caption><thead className="sticky top-0 z-10 bg-zinc-50 text-[10px] uppercase tracking-wider text-zinc-500"><tr>{["Observations", "Type", "Name", "Priority", "Purpose", "Policy disclosure", "Location", "First seen", "Domain", "Site relationship", "Page", "JSON"].map(label => <th key={label} className="h-10 whitespace-nowrap border-b px-3" aria-sort={(label === "Name" && sort.key === "name") || (label === "Priority" && sort.key === "priority") ? sort.descending ? "descending" : "ascending" : undefined}><div className="flex items-center gap-1">{label === "Name" || label === "Priority" ? <button type="button" className="flex items-center gap-1 rounded uppercase tracking-wider hover:text-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500" onClick={() => toggleSort(label === "Name" ? "name" : "priority")}>{label}<span aria-hidden="true">{sort.key === label.toLowerCase() ? sort.descending ? "↓" : "↑" : "↕"}</span></button> : label}{label === "Priority" ? <InventoryPriorityHelp/> : null}</div></th>)}</tr></thead><tbody>{!resources.length ? <tr><td colSpan={12} className="px-4 py-6 text-center text-slate-500">{filtered ? "No resources of this type observed." : "No resources observed."}</td></tr> : null}{resources.map(row => <ServiceResourceRows key={row.key} row={row} serviceContext={row.context} pageName={pageName} collapseVersion={collapseVersion}/>)}</tbody></table></InventoryResourceProvider>}
-    </div><div className="flex flex-wrap items-center justify-between gap-x-3"><TableScrollHint scrollRef={tableRef} noun={view} /><p className="mt-0.5 text-[11px] leading-4 text-zinc-500">{view === "services" ? `${serviceCount} distinct ${serviceCount === 1 ? "service" : "services"}, including child services and unattributed resources` : `${resources.length} distinct ${resources.length === 1 ? "resource" : "resources"}`}</p></div>
+    </div><div className="flex flex-wrap items-center justify-between gap-x-3"><TableScrollHint scrollRef={rowLimit.ref} noun={view} /><p className="mt-0.5 text-[11px] leading-4 text-zinc-500">{view === "services" ? `${serviceCount} distinct ${serviceCount === 1 ? "service" : "services"}, including child services and unattributed resources` : `${resources.length} distinct ${resources.length === 1 ? "resource" : "resources"}`}</p></div>
     </div>
   </section>;
 }

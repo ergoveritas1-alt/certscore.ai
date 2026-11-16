@@ -6,6 +6,7 @@ import { FindingRow } from "./report-finding-row";
 import { SitePriorityReview } from "./site-priority-review";
 import { FindingRow as AlternateFindingRow } from "../scanso2/report-finding-row";
 import { evidenceRowAnchor, findingEvidenceAnchor } from "../../lib/scans/report-evidence-navigation";
+import { REGULATORY_PREVIEW_FINDINGS, ACCESSIBILITY_PREVIEW } from "../../app/dev-fixtures/regulatory-review/preview-data";
 
 test("a top issue orders affected pages and items, recommended fixes, then JSON evidence", () => {
   const page = { id: "home", url: "https://example.com/", homepage: true };
@@ -87,3 +88,45 @@ test("combined opt-out findings stay compact in the report flow with GPC evidenc
   assert.equal(html.split(summary).length-1,1,"Summary appears once in the finding");
   assert.doesNotMatch(html,/Review the business’s activities|Assessment detail:|deductionPoints|scoreEffects|15 points|deduct/i);
 });
+
+test("GDPR/ePrivacy citations appear under the title outside the finding disclosure", () => {
+  const finding = REGULATORY_PREVIEW_FINDINGS.find(row => row.evidenceJson.topicId === "post-refusal")!;
+  const html = renderToStaticMarkup(<FindingRow priority finding={{ ...finding, focus: "", vendors: [] }} pages={finding.pages} />);
+  const header = html.slice(0, html.indexOf("<summary"));
+  assert.match(header, /<h3[^>]*>HubSpot and LinkedIn activity after Reject<\/h3><div role="group" aria-label="Relevant law"/);
+  assert.match(header, /<button[^>]*popoverTarget="[^"]+"[^>]*>ePrivacy Art\. 5\(3\)<\/button>/i);
+  assert.match(header, /<button[^>]*>GDPR Arts\. 6–7<\/button>/);
+  assert.doesNotMatch(header, /Starting page|CCPA|11 CCR/);
+  assert.match(html, /Affected pages[\s\S]*example\.com\/[\s\S]*Starting page/);
+  assert.match(html, /Regulatory applicability/);
+  assert.match(html, /Related enforcement/);
+});
+
+test("California GPC prioritizes an exact statute and signal regulation and retains the extra opt-out provision", () => {
+  const finding = REGULATORY_PREVIEW_FINDINGS.find(row => row.id === "gpc_response")!;
+  const html = renderToStaticMarkup(<FindingRow priority reviewFocus="ccpa_cpra" finding={{ ...finding, focus: "", vendors: [] }} />);
+  const header = html.slice(0, html.indexOf("<summary"));
+  const expanded = html.slice(html.indexOf("<summary"));
+  assert.match(header, /<button[^>]*>CCPA §1798\.135<\/button>/);
+  assert.match(header, /<button[^>]*>11 CCR §7025<\/button>/);
+  assert.match(header, /20260101_ccpa_statute\.pdf#page=15/);
+  assert.match(header, /ccpa_statute_eff_20260101\.pdf#page=44/);
+  assert.doesNotMatch(header, /7026|GDPR|ePrivacy/);
+  assert.match(expanded, /Additional references[\s\S]*11 CCR §7026/);
+  assert.doesNotMatch(expanded, /CCPA §1798\.135|11 CCR §7025/);
+});
+
+test("technical references require a supported mapping in the selected mode or a matching retained rule", () => {
+  const transport = REGULATORY_PREVIEW_FINDINGS.find(row => row.evidenceJson.topicId === "transport")!;
+  const collection = REGULATORY_PREVIEW_FINDINGS.find(row => row.id === "california_collection_review")!;
+  const render = (finding: SiteFinding, reviewFocus: "gdpr_eprivacy" | "ccpa_cpra") =>
+    renderToStaticMarkup(<FindingRow priority reviewFocus={reviewFocus} finding={{ ...finding, focus: "", vendors: [] }} />);
+  assert.match(render(transport, "gdpr_eprivacy"), /<button[^>]*>GDPR Art\. 32<\/button>/);
+  assert.doesNotMatch(render(transport, "ccpa_cpra"), /Relevant law|GDPR Art\. 32/);
+  assert.doesNotMatch(render(collection, "ccpa_cpra"), /Relevant law/);
+  assert.match(render(collection, "ccpa_cpra"), /Related guidance · California collection review/);
+  assert.match(render(ACCESSIBILITY_PREVIEW, "ccpa_cpra"), /Relevant standard[\s\S]*WCAG SC 1\.4\.3[\s\S]*WCAG22\/#contrast-minimum/);
+  assert.doesNotMatch(render({ ...ACCESSIBILITY_PREVIEW, evidenceJson: { presentationGroup: "accessibility" } }, "gdpr_eprivacy"), /Relevant standard/);
+});
+
+type SiteFinding = (typeof REGULATORY_PREVIEW_FINDINGS)[number];

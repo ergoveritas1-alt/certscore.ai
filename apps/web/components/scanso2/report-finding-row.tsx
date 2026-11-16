@@ -132,14 +132,14 @@ export function FindingRow({ finding, dense = false, priority = false, pages, id
       <div className={`${dense ? "pl-0 sm:pl-11" : priority ? "px-3 sm:pl-[4.75rem] sm:pr-4" : "pl-0 sm:pl-12"} pb-6`}>
         {dense ? <p className="mb-3 max-w-3xl text-sm leading-6 text-zinc-600">{finding.summary}</p> : null}
         {priority && readerSummary !== finding.summary ? <p className="mb-4 max-w-3xl text-sm leading-6 text-zinc-600"><span className="font-semibold text-zinc-900">Assessment detail: </span>{finding.summary}</p> : null}
-        {priority ? <div className="mb-4 rounded-lg border border-sky-100 bg-sky-50/40 px-4 py-3">
-          {context ? <a href={context.ruleUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">{context.rule} ↗</a> : null}
-          <FindingApplicabilityNote findingId={finding.id} reviewFocus="gdpr_eprivacy" presentationGroup={finding.evidenceJson.presentationGroup} />
+        {priority || pages?.length ? <div className="mb-4 divide-y divide-zinc-200 border-y border-zinc-200">
+          {context ? <p className="py-2"><a href={context.ruleUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">{context.rule} ↗</a></p> : null}
+          {priority ? <FindingApplicabilityNote findingId={finding.id} reviewFocus="gdpr_eprivacy" presentationGroup={finding.evidenceJson.presentationGroup} /> : null}
+          {pages?.length ? <details className="group/finding-disclosure">
+            <FindingDisclosureSummary>Affected pages</FindingDisclosureSummary>
+            <ul className="max-h-36 space-y-1 overflow-auto pb-4 pt-1 text-sm">{pages.map(page => <li key={page.id}><a className="break-all text-sky-700 underline" href={page.url} target="_blank" rel="noreferrer">{page.url}</a>{page.homepage ? " · Homepage" : ""}</li>)}</ul>
+          </details> : null}
         </div> : null}
-        {pages?.length ? <details className="group/finding-disclosure mb-4 border-b border-zinc-200 pb-3">
-          <FindingDisclosureSummary>Affected pages</FindingDisclosureSummary>
-          <ul className="mt-3 max-h-36 space-y-1 overflow-auto text-sm">{pages.map(page => <li key={page.id}><a className="break-all text-sky-700 underline" href={page.url} target="_blank" rel="noreferrer">{page.url}</a>{page.homepage ? " · Homepage" : ""}</li>)}</ul>
-        </details> : null}
         {finding.vendors.length > 0 ? (
           <div className="mb-4 flex flex-wrap gap-2">
             {finding.vendors.map((vendor, index) => <VendorBrandChip key={`${vendor}:${index}`} label={vendor} showMeta={false} />)}

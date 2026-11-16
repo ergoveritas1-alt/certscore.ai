@@ -125,11 +125,12 @@ function getVendorLogoUrl(mark: VendorBrandMark, label: string) {
 }
 
 export function VendorBrandLogo(input: {
+  bundledOnly?: boolean;
   className?: string;
   label: string;
 }) {
   const mark = getVendorBrandMark(input.label);
-  const logoUrl = getVendorLogoUrl(mark, input.label);
+  const logoUrl = input.bundledOnly ? mark.logoPath : getVendorLogoUrl(mark, input.label);
 
   if (!logoUrl) {
     return null;

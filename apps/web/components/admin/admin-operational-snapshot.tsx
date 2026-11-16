@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { AdminDocumentGetForm } from "./admin-document-get-form";
+import { formatAdminScanAge } from "../../lib/admin/admin-scan-activity";
 import {
   ADMIN_OPERATIONAL_METRIC_DEFINITIONS,
   ADMIN_OPERATIONAL_SNAPSHOT_PERIODS,
@@ -100,7 +101,7 @@ export function AdminOperationalSnapshot({
           <div>
             <CardTitle>Operational snapshot</CardTitle>
             <p className="mt-0.5 text-xs text-slate-500" data-snapshot-results>{subtitle} · Pacific time · <span className={healthClass}>{health.label}</span></p>
-            {refreshedAt ? <p className="mt-1 text-xs text-slate-500" data-snapshot-results>Data refreshed at {refreshedAt}{minutesSinceLastScan != null ? <> · <span className="font-bold text-emerald-700" title="Time since the latest matching physical scan activity, as of this data refresh.">{minutesSinceLastScan} min since last scan</span></> : null}</p> : null}
+            {refreshedAt ? <p className="mt-1 text-xs text-slate-500" data-snapshot-results>Data refreshed at {refreshedAt}{minutesSinceLastScan != null ? <> · <span className="font-bold text-emerald-700" title="Time since the latest matching physical scan activity, as of this data refresh.">{formatAdminScanAge(minutesSinceLastScan)} since last scan</span></> : null}</p> : null}
           </div>
           <PeriodForm action={basePath} className="flex items-center gap-2" method="get">
             {Object.entries(searchParams).map(([key, value]) => key === "page" || key === "period" || key === "snapshot" || key === periodName || !value ? null : <input key={key} name={key} type="hidden" value={value} />)}

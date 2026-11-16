@@ -57,7 +57,11 @@ export const REGULATORY_PREVIEW_FINDINGS: SitePriorityFinding[] = REGULATORY_REV
 }));
 export const ACCESSIBILITY_PREVIEW: SitePriorityFinding = {
   id: "accessibility_priority_group", rank: 2, title: "Low text contrast", summary: "Low-contrast text was detected in the illustrative accessibility result.",
-  status: "Observed", priority: "high", evidence: ["Illustrative accessibility result."], evidenceJson: { fixture: true, presentationGroup: "accessibility" },
+  status: "Observed", priority: "high", evidence: ["Illustrative accessibility result."],
+  evidenceJson: { fixture: true, presentationGroup: "accessibility", findings: [{
+    id: "visual_contrast_accessibility_issue",
+    evidenceJson: { evidenceDetails: { accessibilityEvidence: { axeEvidence: [{ ruleId: "color-contrast" }] } } },
+  }] },
   correctionSteps: ["Increase the affected text contrast and check readability."], pages: [{ id: "preview-page", url: "https://example.com/", homepage: true }],
 };
 // Deliberately not imported by production selection or rendering. These need new canonical assessments.

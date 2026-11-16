@@ -1,0 +1,1293 @@
+{
+  "provenance": "Hash-verified public export summaries only. Original action packets and configuration bytes were not found locally; packet hashes are references, not independently verified packet contents.",
+  "source": "artifacts/daily-scan-audit/runs/20261114T160623Z-scheduled-v10/cache/cache-manifest.json",
+  "rows": [
+    {
+      "scanId": "6c37a9b6-2c4f-4e75-90d6-9ddf67082f77",
+      "domain": "datahive.ai",
+      "action": "accept",
+      "exportSha256": "c08ca47d34aae2f0629533426e1ae5f663e42db6a0cc350645c3da49cc78a352",
+      "sourcePacketSha256": "8a2a43a93f5251bc38ef6697ec4a5f4c7081af61b4bb0b7cc2c3fed6da5ac152",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "8a2a43a93f5251bc38ef6697ec4a5f4c7081af61b4bb0b7cc2c3fed6da5ac152",
+        "action": "accept",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": false,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "no_registered_complete_decision"
+      ]
+    },
+    {
+      "scanId": "8ee5b608-ec91-4fe3-8714-f02b80ab632f",
+      "domain": "a2hosting.com",
+      "action": "accept",
+      "exportSha256": "1eb543def8b7d976b80dc0a58cc19ad5ec657480853b947d8cf1adfb37217787",
+      "sourcePacketSha256": "9d6e49bbe9c6c7ab11be09359964dd09a92fbd612ba01b5047f0236f647925bc",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "9d6e49bbe9c6c7ab11be09359964dd09a92fbd612ba01b5047f0236f647925bc",
+        "action": "accept",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": true,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 1,
+              "available": 0,
+              "unavailable": 1,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 2,
+              "available": 1,
+              "unavailable": 1,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "receipt_missing",
+        "receipt_ambiguous"
+      ]
+    },
+    {
+      "scanId": "bd4c00ae-7d56-4d4d-9d67-c9d01675e8f7",
+      "domain": "care.com",
+      "action": "accept",
+      "exportSha256": "4964e57a9296dd8f62ffc6fc313d4fd44ad069d216102ac1ac93635cde86b341",
+      "sourcePacketSha256": "12f878e4fd38844bc0553e51afbd663570fbd8dd530abdc840a9a84acd627eb3",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "12f878e4fd38844bc0553e51afbd663570fbd8dd530abdc840a9a84acd627eb3",
+        "action": "accept",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": true,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 2,
+              "available": 2,
+              "unavailable": 0,
+              "limited": 1,
+              "valueProof": 2
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "sdk_document_changed",
+        "configuration_malformed"
+      ]
+    },
+    {
+      "scanId": "bd4c00ae-7d56-4d4d-9d67-c9d01675e8f7",
+      "domain": "care.com",
+      "action": "reject",
+      "exportSha256": "4964e57a9296dd8f62ffc6fc313d4fd44ad069d216102ac1ac93635cde86b341",
+      "sourcePacketSha256": "17dfa6ed490b2b2e416784f2a3495ba5da409e7ce082fff0cd8fce7889b2320c",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "17dfa6ed490b2b2e416784f2a3495ba5da409e7ce082fff0cd8fce7889b2320c",
+        "action": "reject",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": true,
+        "processingLimited": false,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 6,
+              "available": 6,
+              "unavailable": 0,
+              "limited": 5,
+              "valueProof": 6
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "sdk_document_changed",
+        "configuration_malformed"
+      ]
+    },
+    {
+      "scanId": "10cb0f1b-db56-4d26-987c-3d7d62afd5f7",
+      "domain": "figshare.com",
+      "action": "accept",
+      "exportSha256": "f201af9aa06ff63aed50c12ac22cca1aca58c416518d2672cb55020eaf41100b",
+      "sourcePacketSha256": "b9f5dc85e48820ba7bff4567c1075705b4ba368998e79624ef95299830b434e4",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "b9f5dc85e48820ba7bff4567c1075705b4ba368998e79624ef95299830b434e4",
+        "action": "accept",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": false,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "no_registered_complete_decision"
+      ]
+    },
+    {
+      "scanId": "10cb0f1b-db56-4d26-987c-3d7d62afd5f7",
+      "domain": "figshare.com",
+      "action": "reject",
+      "exportSha256": "f201af9aa06ff63aed50c12ac22cca1aca58c416518d2672cb55020eaf41100b",
+      "sourcePacketSha256": "c489e4b3e26823728c6d4899cd122a4374e0b9eeee7822224681712c04d8a248",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "c489e4b3e26823728c6d4899cd122a4374e0b9eeee7822224681712c04d8a248",
+        "action": "reject",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": false,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "no_registered_complete_decision"
+      ]
+    },
+    {
+      "scanId": "884d0850-3e8f-4ee4-892e-ee4103cbf4c5",
+      "domain": "virginmediao2.co.uk",
+      "action": "accept",
+      "exportSha256": "82f8a7893f2b9111c77e421763c37d6b24a62fef9365b17111fbef94d7e1c8bf",
+      "sourcePacketSha256": "148c530002b788f64087da826e95b53f86e46fd473cc5475d09598d18c77f800",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "148c530002b788f64087da826e95b53f86e46fd473cc5475d09598d18c77f800",
+        "action": "accept",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": false,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 2,
+              "available": 2,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 2
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "receipt_format_unsupported",
+        "no_registered_complete_decision"
+      ]
+    },
+    {
+      "scanId": "45663cc5-bc61-4889-8a6a-a7e0cda360ea",
+      "domain": "taboola.com",
+      "action": "accept",
+      "exportSha256": "f454780b851353aee71fcf04096f5f823ec6cb1a460f726e97fcc156816c68ba",
+      "sourcePacketSha256": "9b067ca6d683cd8437fbcc2c67fe227e412f5e5c662c2cb20f8ba1017af11e21",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "9b067ca6d683cd8437fbcc2c67fe227e412f5e5c662c2cb20f8ba1017af11e21",
+        "action": "accept",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": false,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "no_fresh_decision"
+      ]
+    },
+    {
+      "scanId": "45663cc5-bc61-4889-8a6a-a7e0cda360ea",
+      "domain": "taboola.com",
+      "action": "reject",
+      "exportSha256": "f454780b851353aee71fcf04096f5f823ec6cb1a460f726e97fcc156816c68ba",
+      "sourcePacketSha256": "cbcd01b8330333bde6cef47bd601bc66cadaa41c3661cdb42d2f793994e41cba",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "cbcd01b8330333bde6cef47bd601bc66cadaa41c3661cdb42d2f793994e41cba",
+        "action": "reject",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": true,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 2,
+              "available": 2,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 2
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "receipt_format_unsupported"
+      ]
+    },
+    {
+      "scanId": "76195406-0a73-48c7-98ab-b8eddcbf3299",
+      "domain": "2k.com",
+      "action": "accept",
+      "exportSha256": "42673f317c4f30fcd5a8db8c9942ffcefff400bdbbed2481e6409ff1727e7c06",
+      "sourcePacketSha256": "3a3f321c6a0ec8a94e43329fb46e95759d6d20be74e142c28fc485a913384214",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "3a3f321c6a0ec8a94e43329fb46e95759d6d20be74e142c28fc485a913384214",
+        "action": "accept",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": true,
+        "processingLimited": true,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 6,
+              "available": 6,
+              "unavailable": 0,
+              "limited": 5,
+              "valueProof": 6
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "sdk_unreviewed",
+        "group_universe_incomplete"
+      ]
+    },
+    {
+      "scanId": "76195406-0a73-48c7-98ab-b8eddcbf3299",
+      "domain": "2k.com",
+      "action": "reject",
+      "exportSha256": "42673f317c4f30fcd5a8db8c9942ffcefff400bdbbed2481e6409ff1727e7c06",
+      "sourcePacketSha256": "7582f1c99ad549232dbb22d380d733697a4ef0452c484f614e1b983af3308370",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "7582f1c99ad549232dbb22d380d733697a4ef0452c484f614e1b983af3308370",
+        "action": "reject",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": true,
+        "processingLimited": true,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 6,
+              "available": 6,
+              "unavailable": 0,
+              "limited": 5,
+              "valueProof": 6
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "sdk_unreviewed",
+        "group_universe_incomplete"
+      ]
+    },
+    {
+      "scanId": "cfe32826-7bfe-4408-936d-122164f49354",
+      "domain": "jwplayer.com",
+      "action": "accept",
+      "exportSha256": "81aa463b9ba8604ad296fefc455ceb12b220cd1afa2d2b2b2057f2ca47d7b390",
+      "sourcePacketSha256": "4b97a1313c34b75fba8fa3a92df708debd6f48988fa903431eca872f0bae778b",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "4b97a1313c34b75fba8fa3a92df708debd6f48988fa903431eca872f0bae778b",
+        "action": "accept",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": true,
+        "processingLimited": true,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 1,
+              "valueProof": 1
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 6,
+              "available": 6,
+              "unavailable": 0,
+              "limited": 5,
+              "valueProof": 6
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "category_hierarchy_unsupported",
+        "group_universe_incomplete"
+      ]
+    },
+    {
+      "scanId": "c009d349-2f9c-4a25-b628-af074d0c7f44",
+      "domain": "betterhelp.com",
+      "action": "accept",
+      "exportSha256": "4ebfbdc0bd47792ff211e9232a0340161589e59fd68f4470478c8e599ee6855a",
+      "sourcePacketSha256": "41ad00a5ad8725b2c84e558fda15c20cf0793bafb370c217c59b9f9437f932c5",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "41ad00a5ad8725b2c84e558fda15c20cf0793bafb370c217c59b9f9437f932c5",
+        "action": "accept",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": false,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "configuration_missing",
+        "no_registered_complete_decision"
+      ]
+    },
+    {
+      "scanId": "9bfb7231-9fb7-4360-b280-3c729ca59468",
+      "domain": "chargepoint.com",
+      "action": "accept",
+      "exportSha256": "aa9c90f3519a6a1d12b820391d6312765f6ed5f06774320c76d49f9cdb1a707c",
+      "sourcePacketSha256": "8f3943127083bd40f12bced70264061dc3dbfec526256fe4cdac96bc3391d538",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "8f3943127083bd40f12bced70264061dc3dbfec526256fe4cdac96bc3391d538",
+        "action": "accept",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": true,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            },
+            "configuration": {
+              "retained": 1,
+              "available": 1,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 1
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "sdk_unreviewed",
+        "group_universe_incomplete"
+      ]
+    },
+    {
+      "scanId": "71a05647-812c-4ee3-a860-2ce5153966db",
+      "domain": "audible.co.uk",
+      "action": "reject",
+      "exportSha256": "713f600cca5e8373b3a1cb65b0e7554ce47d45b99ee49a62b093d502d2b1c83e",
+      "sourcePacketSha256": "efd3fe3b90e70fc5032d2408a2ab7cc3b2798b8d0cb8b348cbf4788058ca91e9",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "efd3fe3b90e70fc5032d2408a2ab7cc3b2798b8d0cb8b348cbf4788058ca91e9",
+        "action": "reject",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": true,
+        "processingLimited": true,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 1,
+              "available": 0,
+              "unavailable": 1,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 7,
+              "available": 7,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 7
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "receipt_format_unsupported"
+      ]
+    },
+    {
+      "scanId": "f4847fab-ee44-49db-9f58-98c48f08488c",
+      "domain": "iza.org",
+      "action": "accept",
+      "exportSha256": "917a526fa241e55b5b3378e08b0acbedeb49d0d3c6b403d0b23ab2480c34f135",
+      "sourcePacketSha256": "7f74eb3011737723ae8d1c985805910e0f7669c8b64ff6d6f8c327224e40f13e",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "7f74eb3011737723ae8d1c985805910e0f7669c8b64ff6d6f8c327224e40f13e",
+        "action": "accept",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": false,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "no_registered_complete_decision"
+      ]
+    },
+    {
+      "scanId": "d9af96c9-1dde-4497-ac5d-f5d93fa25040",
+      "domain": "unibo.it",
+      "action": "reject",
+      "exportSha256": "341ef9b8d30584db908240244b13169e5fafb81f2ad6497ab073b314e78d70ab",
+      "sourcePacketSha256": "a6d1d4453c98a15325ac8edcb6734321f950fa9393a08d801b6fb7860607728e",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "a6d1d4453c98a15325ac8edcb6734321f950fa9393a08d801b6fb7860607728e",
+        "action": "reject",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": false,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "no_registered_complete_decision"
+      ]
+    },
+    {
+      "scanId": "4dfff875-830d-4899-92d9-8f38f893388e",
+      "domain": "webglobe.cz",
+      "action": "accept",
+      "exportSha256": "ac4149c183251e8a55b580e15ccc8b4f2ebed9e3f21c229ce25ee94abfcf065b",
+      "sourcePacketSha256": "2a9f113da55fcebe0fee93271c99c82dc7bff1b048f3de792f7b025bfaab6ddc",
+      "availability": {
+        "policyVersion": "consent_receipt_availability.v1",
+        "diagnosticOnly": true,
+        "sourcePacketSha256": "2a9f113da55fcebe0fee93271c99c82dc7bff1b048f3de792f7b025bfaab6ddc",
+        "action": "accept",
+        "coverage": "retained_observations_only",
+        "documentStable": true,
+        "cancelled": false,
+        "observationsTruncated": false,
+        "processingLimited": false,
+        "phases": {
+          "baseline": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "initial": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          },
+          "terminal": {
+            "receipts": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            },
+            "configuration": {
+              "retained": 0,
+              "available": 0,
+              "unavailable": 0,
+              "limited": 0,
+              "valueProof": 0
+            }
+          }
+        }
+      },
+      "diagnosticReasons": [
+        "no_registered_complete_decision"
+      ]
+    }
+  ]
+}

@@ -75,12 +75,12 @@ test("all context scenarios render with truthful jurisdiction, evidence and inde
     assert.equal(html.includes("Related enforcement"), context.examples.length > 0);
   }
 });
-test("California overview and priority list omit EU-only findings while retaining accessibility in one top-issue count", () => {
+test("California overview and priority list omit EU-only findings while retaining one accessibility review item", () => {
   const html = renderToStaticMarkup(<FullSiteExecutiveSummary score={{value:82, priorityReview:[postReject,ACCESSIBILITY_PREVIEW],scoredPages:1}} californiaScore={{policyVersion:"california-regulatory-posture.v1",score:86,scope:"starting_page",coverage:"bounded",assessmentSourceHash:"a".repeat(64),deductions:[]}} pending={false} scannedPages={1} reviewFocus="ccpa_cpra" homepageVerdict="EU-only tracking after Reject" />);
   assert.match(html, /California score 86 out of 100/);
   assert.doesNotMatch(html, /California-specific scoring/);
   assert.doesNotMatch(html, /82 out of 100/);
-  assert.match(html, /1 top issue/);
+  assert.match(html, /0 priority findings · 1 review item/);
   assert.doesNotMatch(html, /other issue|report-other-issues/);
   assert.doesNotMatch(html, /EU-only tracking after Reject/);
   assert.doesNotMatch(html, /No CCPA\/CPRA priority issues/);

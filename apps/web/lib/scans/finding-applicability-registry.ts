@@ -1,4 +1,5 @@
 import type { ReportReviewFocus } from "@certscore/api-contracts";
+import { regulatoryChecklistFindingIds } from "./regulatory-review-catalog";
 
 /** Editorial guidance for existing projected findings. No evidence classification,
  * applicability verdict, finding selection, or scoring belongs in this registry. */
@@ -13,6 +14,7 @@ export type ApplicabilityEntry = {
   readonly when: string;
   readonly checks: readonly string[];
   readonly sources: readonly ApplicabilitySource[];
+  readonly citationRule?: string;
 };
 const gdpr = { label: "GDPR · relevant articles", url: "https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng" };
 const eprivacy = { label: "ePrivacy · Article 5(3)", url: "https://eur-lex.europa.eu/eli/dir/2002/58/2009-12-19/eng" };
@@ -21,10 +23,10 @@ const ca = { label: "CPPA · CCPA regulations", url: "https://cppa.ca.gov/regula
 const rights = { label: "EDPB · individual rights", url: "https://www.edpb.europa.eu/sme/be-compliant/respect-individuals-rights_en" };
 const both = ["gdpr_eprivacy", "ccpa_cpra"] as const;
 function eu(key: string, ids: string[], when: string, checks: string[], device = false, sources: ApplicabilitySource[] = []): ApplicabilityEntry {
-  return { key, findingIds: ids.map(id => `regulatory_gap__gdpr_eprivacy__${id}`), modes: ["gdpr_eprivacy"], scope: device ? "eprivacy" : "gdpr", when, checks, sources: [device ? eprivacy : gdpr, ...sources] };
+  return { key, findingIds: regulatoryChecklistFindingIds(...ids), modes: ["gdpr_eprivacy"], scope: device ? "eprivacy" : "gdpr", when, checks, sources: [device ? eprivacy : gdpr, ...sources] };
 }
-function california(key: string, findingIds: string[], when: string, checks: string[]): ApplicabilityEntry {
-  return { key, findingIds, modes: ["ccpa_cpra"], scope: "california", when, checks, sources: [ca] };
+function california(key: string, findingIds: string[], when: string, checks: string[], citationRule?: string): ApplicabilityEntry {
+  return { key, findingIds, modes: ["ccpa_cpra"], scope: "california", when, checks, sources: [ca], citationRule };
 }
 
 export const FINDING_APPLICABILITY_REGISTRY: readonly ApplicabilityEntry[] = [
@@ -54,7 +56,7 @@ export const FINDING_APPLICABILITY_REGISTRY: readonly ApplicabilityEntry[] = [
     ["Match the failed destination to the choice offered.", "Check whether alternatives cover the same data and recipients; cookie settings are not automatically a sale/sharing opt-out."]),
   california("california-policy", ["regulatory_gap__gdpr_eprivacy__privacy_notice_availability"],
     "A covered business must make its privacy policy available and describe its data practices and applicable rights (§7011).",
-    ["Check the public policy route and collection-specific notices.", "Confirm operator ownership and service coverage; a CMP or vendor policy is not a substitute."]),
+    ["Check the public policy route and collection-specific notices.", "Confirm operator ownership and service coverage; a CMP or vendor policy is not a substitute."], "CCPA regulations §7011"),
   california("california-collection-review", ["california_collection_review"],
     "Collection under a privacy choice warrants examining purpose and recipient roles before deciding whether a sale/sharing duty is involved.",
     ["Identify the communicated GPC or Reject choice and collecting recipients; cookie rejection is not automatically a California opt-out.", "Resolve purpose through service settings and processing arrangements; collection alone does not establish sale/sharing."]),
@@ -63,7 +65,7 @@ export const FINDING_APPLICABILITY_REGISTRY: readonly ApplicabilityEntry[] = [
     ["Use the control wording and context to establish what was rejected.", "Match later collection to that choice, recipient purposes, sale/sharing representations and request restrictions."]),
   california("california-gpp", ["gpp_propagation_inconsistency"],
     "Conflicting downstream privacy signals can affect how an applicable GPC sale/sharing opt-out is communicated to recipients (§7025).",
-    ["Compare supported GPP fields with GPC and the exact request or same-document CMP evidence.", "Check recipient use of those fields; inconsistency alone proves neither sale/sharing nor refusal of the opt-out."]),
+    ["Compare supported GPP fields with GPC and the exact request or same-document CMP evidence.", "Check recipient use of those fields; inconsistency alone proves neither sale/sharing nor refusal of the opt-out."], "CCPA regulations §7025"),
   eu("post-refusal", ["post_reject_tracking_reduction"],
     "Refusal matters for operations that require consent under the applicable national ePrivacy rules or rely on GDPR consent.",
     ["Match Reject to the retained cookies and services; distinguish snapshot presence from a write or read.", "Check purpose and exemptions; stored presence alone does not establish active use."], true, [consent]),
@@ -76,7 +78,7 @@ export const FINDING_APPLICABILITY_REGISTRY: readonly ApplicabilityEntry[] = [
   eu("refusal-control", ["reject_all_path_availability"],
     "Where consent is required, people need a meaningful opportunity to refuse the relevant optional processing.",
     ["Compare refusal and acceptance: steps, prominence and ability to decline optional purposes.", "Check first-layer and deeper-path evidence separately; a Settings label alone does not establish refusal access."], true, [consent]),
-  eu("consent-choice", ["consent_choice_quality"],
+  eu("consent-choice", ["consent_choice_quality", "consent_optional_defaults_on", "consent_browsing_as_consent"],
     "An interface used to obtain consent must support a free, specific, informed and unambiguous choice.",
     ["Check wording, defaults, separate purposes and consequences of declining.", "Check whether unrelated processing is required for access and whether a genuine choice remains."], false, [consent]),
   eu("withdrawal", ["preference_withdrawal_control"],
@@ -94,6 +96,9 @@ export const FINDING_APPLICABILITY_REGISTRY: readonly ApplicabilityEntry[] = [
   eu("cookie-notice", ["cookie_notice_policy_availability"],
     "People need clear information about relevant storage/access and its purposes when a consent choice is requested.",
     ["Check information available at the choice, including linked details.", "Compare disclosed purposes and parties with observations; layered notices can replace a separate Cookie Policy."], true),
+  eu("reviewed-notice-omissions", ["reviewed_notice_omissions"],
+    "Articles 12–14 address how people receive understandable information about the processing of their personal data.",
+    ["Check which disclosure is required for the processing and whether the data were obtained from the individual.", "Review the complete notice and any linked layers for the specific disclosure flagged by the assessment."]),
   eu("privacy-notice", ["privacy_notice_availability"],
     "GDPR transparency duties concern how people receive information about the relevant personal-data processing (Articles 12–14).",
     ["Check notice timing at collection, or Article 14 timing and exceptions for indirectly obtained data.", "Review the operator’s service-specific notice and supplements; a vendor notice is not a substitute."], false, [rights]),

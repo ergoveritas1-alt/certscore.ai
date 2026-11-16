@@ -3,10 +3,14 @@ import React, { useEffect, useState } from "react";
 import type { ShadowReportData } from "./report-lab/shadow-report-data";
 import { ReportPageEventTimeline, type ReportEvidencePhase } from "./report-page-event-timeline";
 import { SinglePageResourceInventory } from "./single-page-resource-inventory";
+import { useReportInventoryNavigation } from "./report-inventory-navigation";
 
 /** A single phase owns the timeline, inventory rows and all breakdown tallies. */
 export function ReportPhaseEvidence({ report, initialFallback }: { report: ShadowReportData; initialFallback?: React.ReactNode }) {
-  const [selected, setSelected] = useState<ReportEvidencePhase>("pre-consent");
+  const [local, setLocal] = useState<ReportEvidencePhase>("pre-consent");
+  const navigation = useReportInventoryNavigation();
+  const selected = navigation?.phase ?? local;
+  const setSelected = navigation?.setPhase ?? setLocal;
   const phase = selected === "accept" && !report.actionTimelines?.accept || selected === "reject" && !report.actionTimelines?.reject || selected === "gpc" && !report.gpcTimeline ? "pre-consent" : selected;
   const [gpc, setGpc] = useState<{scanId:string; value:import("../../lib/scans/action-resource-inventory").ActionResourceInventory | null; error?:boolean} | null>(null);
   const [retry, setRetry] = useState(0);

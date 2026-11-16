@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminScanMinutesSince, adminScanActivityOperationalStatus, ADMIN_SCAN_ACTIVITY_PERIODS, adminScanActivityHref, adminScanActivityWindow, resolveAdminScanActivityPeriod } from "./admin-scan-activity";
+import { adminScanMinutesSince, adminScanActivityOperationalStatus, ADMIN_SCAN_ACTIVITY_PERIODS, adminScanActivityHref, adminScanActivityWindow, formatAdminScanAge, resolveAdminScanActivityPeriod } from "./admin-scan-activity";
 
 test("last-scan minutes use the refresh instant across time zones and preserve unknown timestamps", () => {
   const refreshed = "2026-10-30T12:03:29-07:00";
@@ -9,6 +9,14 @@ test("last-scan minutes use the refresh instant across time zones and preserve u
   assert.equal(adminScanMinutesSince(null, refreshed), null);
   assert.equal(adminScanMinutesSince("invalid", refreshed), null);
   assert.equal(adminScanMinutesSince("2026-10-30T20:00:00Z", refreshed), null);
+});
+
+test("last-scan age shows hours and remaining minutes", () => {
+  assert.equal(formatAdminScanAge(0), "0 min");
+  assert.equal(formatAdminScanAge(59), "59 min");
+  assert.equal(formatAdminScanAge(60), "1 hr");
+  assert.equal(formatAdminScanAge(91), "1 hr 31 min");
+  assert.equal(formatAdminScanAge(125), "2 hr 5 min");
 });
 
 test("legacy conflicting scopes resolve to the explicit table period; new pages default to 24h", () => {
