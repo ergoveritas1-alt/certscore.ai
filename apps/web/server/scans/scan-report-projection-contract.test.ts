@@ -91,6 +91,8 @@ test("persisted display projection is bounded, checksum-verified, and scan-bound
     scan: {
       completedAt: "2026-07-30T19:22:39.000Z",
       id: "5eb8e37d-7eac-4c45-bb4b-3c31c239a2df",
+      scanFromLabel: "EU-IR",
+      scanFromValue: "eu_ie",
       status: "completed"
     },
     snapshot: {
@@ -140,7 +142,11 @@ test("persisted display projection is bounded, checksum-verified, and scan-bound
       report_projection_version: SCAN_REPORT_PROJECTION_VERSION
     }
   });
-  assert.equal(hydrated?.scan.id, scanRecord.scan.id);
+  assert.ok(hydrated);
+  assert.equal(hydrated.scan.id, scanRecord.scan.id);
+  assert.equal(hydrated.scan.scanFromLabel, "EU-IE");
+  assert.equal(hydrated.scan.scanFromValue, "eu_ie");
+  assert.deepEqual(transportedPayload.scan, scanRecord.scan);
 
   assert.equal(readPersistedScanReportProjection({
     scan: scanRecord.scan,

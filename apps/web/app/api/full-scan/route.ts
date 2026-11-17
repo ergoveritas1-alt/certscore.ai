@@ -229,7 +229,10 @@ export async function POST(request: Request) {
         : provenance;
       const existingClientScan = await findScanByClientRequestId(clientRequestId);
       if (existingClientScan) {
-        return NextResponse.json(
+        if (existingClientScan.organization_id !== null) {
+          return NextResponse.json({ error: "Scan submission unavailable." }, { status: 404 });
+        }
+        const response = NextResponse.json(
           {
             queuedCount: 1,
             reusedExistingScan: false,
@@ -238,6 +241,8 @@ export async function POST(request: Request) {
           },
           { headers: { "Cache-Control": "no-store" }, status: 202 }
         );
+        await addAnonymousScanClaimCookie(response, existingClientScan.id);
+        return response;
       }
 
       const anonymousScan = await createAnonymousFullScan({
@@ -299,9 +304,7 @@ export async function POST(request: Request) {
           status: "reusedExistingScan" in anonymousScan && anonymousScan.reusedExistingScan ? 200 : 202
         }
       );
-      if ("mode" in anonymousScan && anonymousScan.mode !== "preview") {
-        await addAnonymousScanClaimCookie(response, anonymousScan.scan.id);
-      }
+      await addAnonymousScanClaimCookie(response, anonymousScan.scan.id);
       return response;
     }
 

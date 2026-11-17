@@ -2,6 +2,7 @@ import { estimateFullSiteProgress, type FullSiteProgress } from "../../lib/scans
 import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
 import React from "react";
 import Link from "next/link";
+import { SCAN_FROM_DEFINITIONS } from "@website-signal-risk-scanner/shared/scan-location";
 
 export type FullSiteScanNoticeData = {
   scanId: string;
@@ -19,7 +20,7 @@ function scanTime(value: string | Date) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles", timeZoneName: "short" }).format(new Date(value));
 }
 const regions: Record<string, string> = {
-  "eu-west-1": "🇮🇪 EU-IR · Ireland", "eu-central-1": "🇩🇪 EU-DE · Frankfurt", "us-west-1": "California", "us-west-2": "US West · Oregon",
+  "eu-west-1": `🇮🇪 ${SCAN_FROM_DEFINITIONS.eu_ie.label} · Ireland`, "eu-central-1": "🇩🇪 EU-DE · Frankfurt", "us-west-1": "California", "us-west-2": "US West · Oregon",
 };
 
 export function FullSiteScanNotice({ scan, statusStale = false, reportPage = false }: { scan: FullSiteScanNoticeData; statusStale?: boolean; reportPage?: boolean }) {

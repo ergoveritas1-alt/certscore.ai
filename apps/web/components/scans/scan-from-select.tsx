@@ -2,6 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { SCAN_FROM_DEFINITIONS } from "@website-signal-risk-scanner/shared/scan-location";
 import { FullSiteControls, type FullSiteFormValue } from "./full-site-controls";
 import { createPortal } from "react-dom";
 import type { LocalV2ScanProfile } from "./scan-submit-progress";
@@ -11,7 +12,7 @@ export const SCAN_FROM_OPTIONS = [
   {
     description: "Run from CertScore.ai's Dublin Lambda scanner.",
     flag: "🇮🇪",
-    label: "EU-IR",
+    label: SCAN_FROM_DEFINITIONS.eu_ie.label,
     value: "eu_ie"
   },
   {

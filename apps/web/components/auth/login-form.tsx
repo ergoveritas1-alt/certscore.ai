@@ -4,18 +4,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useActionState, useEffect, useRef, useState } from "react";
+import { safeAuthReturnPath } from "../../lib/auth-return-path";
 import { submitCredentialsAction } from "../../server/auth-flows/credentials-actions";
 import { initialCredentialsActionState, type CredentialsActionState } from "../../server/auth-flows/action-state";
 
 type AuthMode = CredentialsActionState["mode"];
-
-function getSafeRedirectPath(nextPath: string | null) {
-  if (nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")) {
-    return nextPath;
-  }
-
-  return "/app";
-}
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -81,7 +74,7 @@ export function LoginForm(input?: {
   footerMode?: "default" | "hidden";
 }) {
   const searchParams = useSearchParams();
-  const nextPath = getSafeRedirectPath(searchParams?.get("next") ?? null);
+  const nextPath = safeAuthReturnPath(searchParams?.get("next"));
   const isPromotion = nextPath.split(/[?#]/)[0] === "/black-friday/activate";
   const isMarketplaceLight = nextPath.split(/[?#]/)[0] === "/marketplace/light";
   const allowCreateAccount = input?.allowCreateAccount ?? true;
@@ -112,6 +105,11 @@ export function LoginForm(input?: {
   const [actionState, formAction, isPending] = useActionState(submitCredentialsAction, initialCredentialsActionState);
   const fieldErrors = actionState.mode === mode ? actionState.fieldErrors : {};
   const actionError = actionState.mode === mode ? actionState.error : null;
+  const { redirectTo } = actionState;
+
+  useEffect(() => {
+    if (redirectTo) window.location.replace(redirectTo);
+  }, [redirectTo]);
 
   useEffect(() => {
     if (!allowCreateAccount && mode === "create_account") {
@@ -164,7 +162,7 @@ export function LoginForm(input?: {
 
   const isCreateAccount = mode === "create_account";
   const isCreatePasswordStep = isCreateAccount && createStep === 2;
-  const isSubmitting = isPending;
+  const isSubmitting = isPending || Boolean(redirectTo);
   const actionMatchesCurrentEmail = submittedEmail === email.trim().toLowerCase();
   const currentAccountRecovery = actionMatchesCurrentEmail ? actionState.accountRecovery : null;
   const currentActionError = actionMatchesCurrentEmail ? actionError : null;

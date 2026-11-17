@@ -72,6 +72,9 @@ test("retained 401 stays unscored through persistence, checksum-verified read, t
       assert.match(html, /Sign-in required/);
       assert.match(html, /Not scored/);
       assert.match(html, /HTTP 401/);
+      assert.equal([...html.matchAll(/placeholder="Scan next website"/g)].length, 1);
+      assert.ok(html.indexOf('placeholder="Scan next website"') < html.indexOf('aria-label="Scan access limitation"'));
+      assert.doesNotMatch(html, /aria-label="Share report"|href="mailto:|report-export\?/);
       assert.doesNotMatch(html, /Overall score|100\/100|Executive overview|INDUSTRY BENCHMARK|Top issues needing attention|Evidence index|Cookies and trackers timeline/);
     }
   }
@@ -106,6 +109,7 @@ test("a failed runtime visit renders directly from its terminal snapshot without
     assert.match(html, /Starting-page capture incomplete/);
     assert.match(html, /Not scored/);
     assert.match(html, /retained a page title but no readable page text/);
+    assert.doesNotMatch(html, /aria-label="Share report"|href="mailto:|report-export\?/);
     assert.doesNotMatch(html, /Evidence index|Overall score|Top issues needing attention/);
   }
 });

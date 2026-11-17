@@ -1,6 +1,7 @@
 import { MAX_AUDIT_POLICY_PROVENANCE_BYTES, auditPolicyProvenanceSchema } from '../../../../packages/certscore-contracts/src/audit-policy-provenance';
 import { hasTerminalReportPublicationFailure } from "./report-publication-read-state";
 import { createHash } from "node:crypto";
+import { SCAN_FROM_DEFINITIONS } from "@website-signal-risk-scanner/shared/scan-location";
 import { withScanReportDisposition } from "../../lib/scans/scan-report-disposition";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import type { PersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
@@ -292,9 +293,13 @@ export function readPersistedScanReportProjection(
   ) {
     return null;
   }
-  const { auditPrivacyForm: _privateAudit, auditPolicyProvenance: _privatePolicy, ...report } = payload;
+  const { auditPrivacyForm: _privateAudit, auditPolicyProvenance: _privatePolicy, ...report } = payload as ScanDetailResponse & { auditPrivacyForm?: string; auditPolicyProvenance?: unknown };
   return withScanReportDisposition({
-    ...(report as ScanDetailResponse),
+    ...report,
+    // Update the old Ireland display label after verifying the retained payload.
+    scan: report.scan.scanFromLabel === "EU-IR"
+      ? { ...report.scan, scanFromLabel: SCAN_FROM_DEFINITIONS.eu_ie.label }
+      : report.scan,
     // Set only after the immutable payload passes byte, hash and identity checks.
     reportPublication: { requestStatus: scanRecord.reportPublication?.requestStatus ?? null, snapshotPersisted: true, projectionVerified: true },
     snapshot: {

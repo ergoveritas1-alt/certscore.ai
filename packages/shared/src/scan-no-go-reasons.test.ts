@@ -9,6 +9,18 @@ import {
   projectExternalScanNoGo,
 } from "./scan-no-go-reasons";
 
+test("a retained one-button shopping interstitial describes the page that was visible", () => {
+  const assessment = { decision: "no_go", reasonCodes: ["captcha_or_challenge"] };
+  const project = (keyVisualEvidence: string) => projectExternalScanNoGo({
+    scanNoGoAssessment: assessment, visualAccessReview: { key_visual_evidence: [keyVisualEvidence] },
+  })?.noGo;
+  const intermediate = project("Klicke auf die Schaltfläche unten, um mit dem Einkauf fortzufahren Weiter shoppen Unsere AGB Datenschutzerklärung");
+  assert.equal(intermediate?.reasonCode, "captcha_or_challenge");
+  assert.equal(intermediate?.title, "An intermediate page appeared before the storefront");
+  assert.match(intermediate?.explanation ?? "", /Weiter shoppen/);
+  assert.match(project("Enter the characters you see in the image.")?.title ?? "", /verification challenge/);
+});
+
 test("every canonical scan no-go reason has complete customer and snapshot presentation", () => {
   assert.deepEqual(Object.keys(SCAN_NO_GO_REASON_PRESENTATIONS).sort(), [...SCAN_NO_GO_REASON_CODES].sort());
   for (const code of SCAN_NO_GO_REASON_CODES) {

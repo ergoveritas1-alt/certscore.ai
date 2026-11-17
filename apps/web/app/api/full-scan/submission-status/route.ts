@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser, getDashboardContext } from "../../../../server/auth";
 import { isBetterAuthConfigurationError } from "../../../../server/better-auth/env";
 import { findScanByClientRequestId } from "../../../../server/scans/client-request";
+import { addAnonymousScanClaimCookie } from "../../../../server/scans/anonymous-scan-claims";
 import { validRequestId } from "./request-id";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
     });
   }
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     queuedCount: 1,
     recoveredSubmission: true,
     reusedExistingScan: false,
@@ -42,4 +43,6 @@ export async function GET(request: Request) {
     headers: { "Cache-Control": "no-store" },
     status: 200
   });
+  if (!organizationId && scan.organization_id === null) await addAnonymousScanClaimCookie(response, scan.id);
+  return response;
 }

@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { Button } from "@website-signal-risk-scanner/ui";
-import type { ScanFrom } from "@website-signal-risk-scanner/shared";
+import { SCAN_FROM_DEFINITIONS, type ScanFrom } from "@website-signal-risk-scanner/shared/scan-location";
 import {
   upsertOrganizationSettingsAction,
   type UpsertOrganizationSettingsActionState
@@ -13,7 +13,7 @@ const SCAN_LOCATION_OPTIONS = [
   {
     city: "Dublin",
     flag: "🇮🇪",
-    label: "EU-IR",
+    label: SCAN_FROM_DEFINITIONS.eu_ie.label,
     value: "eu_ie"
   },
   {

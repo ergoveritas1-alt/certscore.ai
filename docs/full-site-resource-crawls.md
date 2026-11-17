@@ -94,7 +94,7 @@ The shared PostgreSQL admission transaction locks canonical registrable-site
 keys, reserves distinct target slots, applies the smallest active concurrency
 limit and largest requested/robots wait, and checks shared backoff. Both enqueue
 reservations and worker starts are paced. This applies across organizations,
-workers and EU-DE, EU-IR and California queues. It can be stricter than the ideal
+workers and EU-DE, EU-IE and California queues. It can be stricter than the ideal
 requested schedule under cold starts or queue delay. Wait is between starts, not
 after completion and not network latency. Queued homepage audits fence new crawl
 starts; the durable homepage publisher waits for already-admitted child workers

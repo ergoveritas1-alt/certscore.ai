@@ -115,14 +115,15 @@ const navItems = [
   { href: "/app/feedback", label: "Feedback", icon: FeedbackIcon }
 ] as const;
 
-type AppShellProps = {
-  children: ReactNode;
+type AppHeaderProps = {
   isPlatformAdmin?: boolean;
   canManageCompany?: boolean;
   organizationName: string;
   plan: string;
   userEmail: string;
 };
+
+type AppShellProps = AppHeaderProps & { children: ReactNode };
 
 function isItemActive(pathname: string, href: string) {
   if (href === "/app/signals") {
@@ -149,14 +150,13 @@ const DEV_INSTANCE_BRANCH = process.env.NEXT_PUBLIC_DEV_GIT_BRANCH;
 const DEV_INSTANCE_PATH = process.env.NEXT_PUBLIC_DEV_WORKTREE_PATH;
 const DEV_INSTANCE_PORT = process.env.NEXT_PUBLIC_DEV_PORT;
 
-export function AppShell({
-  children,
+export function AppHeader({
   organizationName,
   plan,
   userEmail,
   isPlatformAdmin = false,
   canManageCompany = false
-}: AppShellProps) {
+}: AppHeaderProps) {
   const pathname = usePathname() ?? "";
   const scanReportPathActive = isScanReportPath(pathname);
   const scanViewHref = resolveScanViewHref(scanReportPathActive ? pathname : null);
@@ -182,147 +182,155 @@ export function AppShell({
   }, [pathname]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <div className="flex min-h-screen flex-col">
-        <header className="sticky top-0 z-[80] border-b border-slate-800 bg-slate-950 text-white">
-          <div className="mx-auto w-full max-w-[90rem] px-5 pb-3 pt-2 lg:px-10">
-            {process.env.NODE_ENV === "development" && DEV_INSTANCE_LABEL ? (
-              <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-300/10 px-3 py-2 font-mono text-[11px] text-amber-100">
-                <span className="rounded-full border border-amber-300/30 bg-amber-300/15 px-2 py-0.5 uppercase tracking-[0.2em] text-amber-200">
-                  {DEV_INSTANCE_LABEL}
-                </span>
-                <span>{DEV_INSTANCE_BRANCH ?? "unknown-branch"}</span>
-                <span>port {DEV_INSTANCE_PORT ?? "?"}</span>
-                {DEV_INSTANCE_PATH ? <span className="truncate text-amber-50/80">{DEV_INSTANCE_PATH}</span> : null}
-              </div>
-            ) : null}
-            <div className="flex items-center justify-between gap-2 sm:gap-3">
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <div className="relative">
+    <header className="sticky top-0 z-[80] border-b border-slate-800 bg-slate-950 text-white">
+      <div className="mx-auto w-full max-w-[90rem] px-5 pb-3 pt-2 lg:px-10">
+        {process.env.NODE_ENV === "development" && DEV_INSTANCE_LABEL ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-300/10 px-3 py-2 font-mono text-[11px] text-amber-100">
+            <span className="rounded-full border border-amber-300/30 bg-amber-300/15 px-2 py-0.5 uppercase tracking-[0.2em] text-amber-200">
+              {DEV_INSTANCE_LABEL}
+            </span>
+            <span>{DEV_INSTANCE_BRANCH ?? "unknown-branch"}</span>
+            <span>port {DEV_INSTANCE_PORT ?? "?"}</span>
+            {DEV_INSTANCE_PATH ? <span className="truncate text-amber-50/80">{DEV_INSTANCE_PATH}</span> : null}
+          </div>
+        ) : null}
+        <div className="flex items-center justify-between gap-2 sm:gap-3">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="relative">
+            <button
+              type="button"
+              data-analytics-feature="app_navigation"
+              data-analytics-id="navigation:toggle"
+              aria-label={navigationOpen ? "Close navigation" : "Open navigation"}
+              aria-expanded={navigationOpen}
+              aria-haspopup="menu"
+              onClick={() => setNavigationOpen((value) => !value)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-slate-200 transition hover:border-slate-700 hover:bg-slate-800 hover:text-white"
+            >
+              {navigationOpen ? <CloseIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
+            </button>
+            {navigationOpen ? (
+              <>
                 <button
+                  data-analytics-id="navigation:dismiss"
+                  aria-label="Close navigation"
+                  className="fixed inset-0 z-[90] cursor-default bg-transparent"
+                  onClick={() => setNavigationOpen(false)}
                   type="button"
-                  data-analytics-feature="app_navigation"
-                  data-analytics-id="navigation:toggle"
-                  aria-label={navigationOpen ? "Close navigation" : "Open navigation"}
-                  aria-expanded={navigationOpen}
-                  aria-haspopup="menu"
-                  onClick={() => setNavigationOpen((value) => !value)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-slate-200 transition hover:border-slate-700 hover:bg-slate-800 hover:text-white"
+                />
+                <nav
+                  aria-label="Account navigation"
+                  className="absolute left-0 top-full z-[100] mt-2 max-h-[calc(100dvh-5rem)] w-[min(19rem,calc(100vw-2.5rem))] overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-2 shadow-[0_24px_60px_rgba(2,6,23,0.55)]"
                 >
-                  {navigationOpen ? <CloseIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
-                </button>
-                {navigationOpen ? (
-                  <>
-                    <button
-                      data-analytics-id="navigation:dismiss"
-                      aria-label="Close navigation"
-                      className="fixed inset-0 z-[90] cursor-default bg-transparent"
-                      onClick={() => setNavigationOpen(false)}
-                      type="button"
-                    />
-                    <nav
-                      aria-label="Account navigation"
-                      className="absolute left-0 top-full z-[100] mt-2 max-h-[calc(100dvh-5rem)] w-[min(19rem,calc(100vw-2.5rem))] overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-2 shadow-[0_24px_60px_rgba(2,6,23,0.55)]"
-                    >
-                      <div className="border-b border-slate-800 px-3 py-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Navigation</p>
-                      </div>
-                      <div className="mt-1 space-y-1">
-                        {scopedNavItems.map((item) => {
-                          const active = isItemActive(pathname, item.href);
-                          const Icon = item.icon;
-                          return (
-                            <Link
-                              data-analytics-feature="app_navigation"
-                              data-analytics-id={`navigation:${item.label.toLowerCase().replaceAll(" ", "_")}`}
-                              aria-current={active ? "page" : undefined}
-                              className={[
-                                "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition",
-                                active
-                                  ? "border-slate-700 bg-slate-800 text-white"
-                                  : "border-transparent text-slate-300 hover:border-slate-800 hover:bg-slate-900 hover:text-white"
-                              ].join(" ")}
-                              href={item.href}
-                              key={item.href}
-                              onClick={() => setNavigationOpen(false)}
-                              prefetch={false}
-                            >
-                              <Icon className="h-5 w-5 shrink-0" />
-                              <span>{item.label}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </nav>
-                  </>
-                ) : null}
-                </div>
-                <div className="hidden h-[33px] shrink-0 items-center overflow-hidden sm:flex">
-                  <Image
-                    src="/certscore_blk_logo.png"
-                    alt="CertScore.ai"
-                    width={33}
-                    height={33}
-                    className="rounded-[1.2rem] border border-slate-800 bg-slate-900/80"
-                    priority
-                  />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-[14px] font-medium leading-tight text-white">{displayOrganizationName}</p>
-                    <span className="inline-flex shrink-0 rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-amber-300">
-                      {displayPlan}
-                    </span>
+                  <div className="border-b border-slate-800 px-3 py-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Navigation</p>
                   </div>
-                </div>
-              </div>
-
-              <div className="flex shrink-0 items-center gap-2">
-                <ScanUsageIndicator />
-                <div className="relative">
-                  <button
-                    type="button"
-                    aria-label="Account menu"
-                    data-analytics-id="navigation:account_menu"
-                    aria-expanded={accountMenuOpen}
-                    aria-haspopup="menu"
-                    onClick={() => setAccountMenuOpen((value) => !value)}
-                    className="flex items-center rounded-full border border-slate-800 bg-slate-900 px-1.5 py-1.5 text-left transition hover:border-slate-700 hover:bg-slate-900"
-                  >
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-300 text-sm font-semibold uppercase text-slate-950">
-                      {userInitial}
-                    </span>
-                  </button>
-
-                  {accountMenuOpen ? (
-                    <div className="absolute right-0 z-[120] mt-0 w-52 overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 p-2 shadow-[0_24px_60px_rgba(2,6,23,0.65)]">
-                      <div className="space-y-1">
+                  <div className="mt-1 space-y-1">
+                    {scopedNavItems.map((item) => {
+                      const active = isItemActive(pathname, item.href);
+                      const Icon = item.icon;
+                      return (
                         <Link
-                          data-analytics-id="navigation:account_settings"
-                          href="/app/settings"
-                          onClick={() => setAccountMenuOpen(false)}
-                          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-200 transition hover:bg-slate-900 hover:text-white"
+                          data-analytics-feature="app_navigation"
+                          data-analytics-id={`navigation:${item.label.toLowerCase().replaceAll(" ", "_")}`}
+                          aria-current={active ? "page" : undefined}
+                          className={[
+                            "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition",
+                            active
+                              ? "border-slate-700 bg-slate-800 text-white"
+                              : "border-transparent text-slate-300 hover:border-slate-800 hover:bg-slate-900 hover:text-white"
+                          ].join(" ")}
+                          href={item.href}
+                          key={item.href}
+                          onClick={() => setNavigationOpen(false)}
+                          prefetch={false}
                         >
-                          <SettingsIcon className="h-4 w-4 shrink-0" />
-                          <span>Settings</span>
+                          <Icon className="h-5 w-5 shrink-0" />
+                          <span>{item.label}</span>
                         </Link>
-                        <form action="/logout" method="post">
-                          <button
-                            type="submit"
-                            className="flex w-full items-center gap-3 rounded-xl bg-slate-900 px-3 py-2.5 text-sm text-slate-100 transition hover:bg-slate-800 hover:text-white"
-                          >
-                            <LogoutIcon className="h-4 w-4 shrink-0" />
-                            <span>Log out</span>
-                          </button>
-                        </form>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
+                      );
+                    })}
+                  </div>
+                </nav>
+              </>
+            ) : null}
+            </div>
+            <div className="hidden h-[33px] shrink-0 items-center overflow-hidden sm:flex">
+              <Image
+                src="/certscore_blk_logo.png"
+                alt="CertScore.ai"
+                width={33}
+                height={33}
+                className="rounded-[1.2rem] border border-slate-800 bg-slate-900/80"
+                priority
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="truncate text-[14px] font-medium leading-tight text-white">{displayOrganizationName}</p>
+                <span className="inline-flex shrink-0 rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-amber-300">
+                  {displayPlan}
+                </span>
               </div>
             </div>
           </div>
-        </header>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <ScanUsageIndicator />
+            <div className="relative">
+              <button
+                type="button"
+                aria-label="Account menu"
+                data-analytics-id="navigation:account_menu"
+                aria-expanded={accountMenuOpen}
+                aria-haspopup="menu"
+                onClick={() => setAccountMenuOpen((value) => !value)}
+                className="flex items-center rounded-full border border-slate-800 bg-slate-900 px-1.5 py-1.5 text-left transition hover:border-slate-700 hover:bg-slate-900"
+              >
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-300 text-sm font-semibold uppercase text-slate-950">
+                  {userInitial}
+                </span>
+              </button>
+
+              {accountMenuOpen ? (
+                <div className="absolute right-0 z-[120] mt-0 w-52 overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 p-2 shadow-[0_24px_60px_rgba(2,6,23,0.65)]">
+                  <div className="space-y-1">
+                    <Link
+                      data-analytics-id="navigation:account_settings"
+                      href="/app/settings"
+                      onClick={() => setAccountMenuOpen(false)}
+                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-200 transition hover:bg-slate-900 hover:text-white"
+                    >
+                      <SettingsIcon className="h-4 w-4 shrink-0" />
+                      <span>Settings</span>
+                    </Link>
+                    <form action="/logout" method="post">
+                      <button
+                        type="submit"
+                        className="flex w-full items-center gap-3 rounded-xl bg-slate-900 px-3 py-2.5 text-sm text-slate-100 transition hover:bg-slate-800 hover:text-white"
+                      >
+                        <LogoutIcon className="h-4 w-4 shrink-0" />
+                        <span>Log out</span>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+export function AppShell({ children, ...headerProps }: AppShellProps) {
+  const scanReportPathActive = isScanReportPath(usePathname() ?? "");
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white">
+      <div className="flex min-h-screen flex-col">
+        <AppHeader {...headerProps} />
 
         <div className="flex min-h-0 min-w-0 flex-1 overflow-x-hidden bg-slate-50">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">

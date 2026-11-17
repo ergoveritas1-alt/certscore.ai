@@ -23,7 +23,7 @@ export const mcpGptSafePulseDetailSchema = z.enum(["tiny", "standard", "summary"
 export const mcpPulseFormatSchema = z.enum(["json", "markdown"]);
 export const mcpPulseFreshnessSchema = z.enum(["latest", "refresh"]);
 // Keep MCP geo execution contexts aligned with the API v2 scanner fleet.
-// EU-Ireland is exposed as `eu_ie` (the product UI labels it EU-IR).
+// EU-Ireland is exposed as `eu_ie` (the product UI labels it EU-IE).
 export const mcpScanFromSchema = apiV2ScanFromSchema;
 
 export const mcpCreateScanInputSchema = {

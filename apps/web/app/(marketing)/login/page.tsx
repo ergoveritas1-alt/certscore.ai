@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 type LoginPageProps = {
   searchParams?: Promise<{
     next?: string;
+    intent?: string;
   }>;
 };
 
@@ -36,7 +37,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const requestHost = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
   const allowGoogle = isGoogleAuthEnabled() && isGoogleAuthAllowedForHost(requestHost);
   const allowCreateAccount = isPublicAccountCreationEnabled();
-  const isMarketplaceLight = getSafeRedirectPath(resolvedSearchParams?.next).split(/[?#]/)[0] === "/marketplace/light";
+  const returnPath = getSafeRedirectPath(resolvedSearchParams?.next).split(/[?#]/)[0] ?? "";
+  const isMarketplaceLight = returnPath === "/marketplace/light";
+  const isReport = /^\/(?:scan|scano|app\/(?:scans|scanso|scanso2))\/[^/]+\/?$/.test(returnPath);
+  const isSharingReport = isReport && resolvedSearchParams?.intent === "share_report";
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_15%_15%,rgba(14,165,233,0.12),transparent_34%),radial-gradient(circle_at_85%_85%,rgba(121,190,52,0.1),transparent_30%),#f8fafc]">
@@ -51,6 +55,16 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               <p className="mt-2">Keep using this browser. If the setup handoff expires, choose <strong>Set up your account</strong> in AWS Marketplace again.</p>
               <Link className="mt-2 inline-block font-medium text-sky-800 underline underline-offset-4" href="/marketplace/light/guide">Read the setup guide</Link>
             </aside>}
+            {isSharingReport ? (
+              <aside aria-label="Share this report" className="mb-6 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-slate-700">
+                <p className="font-semibold text-sky-900">Continue to share your report</p>
+                <p className="mt-1">After {allowCreateAccount ? "signing in or creating an account" : "signing in"}, you’ll return to this report. Select Share to continue.</p>
+              </aside>
+            ) : isReport && (
+              <p className="mb-6 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-slate-700">
+                {allowCreateAccount ? "Sign in or create an account" : "Sign in"} to view, share, or download this report.
+              </p>
+            )}
             <LoginForm allowCreateAccount={allowCreateAccount} allowGoogle={allowGoogle} footerMode="default" />
           </CardContent>
         </Card>

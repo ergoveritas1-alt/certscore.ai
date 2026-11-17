@@ -5,8 +5,7 @@ import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
 import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
-import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
-import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
+import { buildScanReportUnifiedFindings, deriveVisualAccessLimitationNotice, SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
 import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
@@ -259,6 +258,7 @@ async function ScanDetailReportContent({
     ? `/api/scans/${scanRecord.scan.id}/visual-evidence/${encodeURIComponent(visualEvidenceArtifact.id)}`
     : null;
   const homepageScreenshotState = getHomepageScreenshotState(displayScanRecord.runtimeArtifacts);
+  const isNoGoReport = Boolean(deriveVisualAccessLimitationNotice(displayScanRecord.runtimeArtifacts));
 
   return (
     <ScanReportRescanTransition>
@@ -284,9 +284,10 @@ async function ScanDetailReportContent({
                   domainLabel={scanDomainLabel}
                   scanId={displayScanRecord.scan.id}
                   visualEvidenceHref={visualEvidenceHref}
+                  visualEvidenceOnly={isNoGoReport}
                   visualEvidenceWithheldReason={homepageScreenshotState?.status === "withheld" ? homepageScreenshotState.reason : null}
                 />
-                <ReportDownloadActions scanId={displayScanRecord.scan.id} canExportPdf={canManageCompanyLogo({ isPlatformAdmin, membershipRole: membership.role })} />
+                {!isNoGoReport && <ReportDownloadActions scanId={displayScanRecord.scan.id} canExportPdf={canManageCompanyLogo({ isPlatformAdmin, membershipRole: membership.role })} />}
               </div>
               <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                 <DomainScanForm

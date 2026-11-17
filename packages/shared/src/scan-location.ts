@@ -40,7 +40,7 @@ export const SCAN_FROM_DEFINITIONS = {
   },
   eu_ie: {
     description: "Dublin Lambda scanner",
-    label: "EU-IR",
+    label: "EU-IE",
     requestedGeo: {
       countryCode: "IE",
       provider: "aws-default",

@@ -1,3 +1,4 @@
+import { SCAN_FROM_DEFINITIONS } from "@website-signal-risk-scanner/shared/scan-location";
 import styles from "./scanner-solution-animation.module.css";
 
 export type ScannerSolutionAnimationType = "policy" | "trace" | "waterfall";
@@ -87,7 +88,7 @@ function TraceAnimation() {
       <g>
         <g transform="translate(100 40)"><rect width="13" height="28" fill="#169b62" /><rect x="13" width="13" height="28" fill="#ffffff" /><rect x="26" width="13" height="28" fill="#ff883e" /></g>
         <rect x="100" y="40" width="39" height="28" fill="none" stroke="#0b2340" strokeWidth="1.2" />
-        <text x="119.5" y="83" textAnchor="middle" fontSize="12.5" fill="#ffffff" fontFamily="monospace" fontWeight="600">EU-IR</text>
+        <text x="119.5" y="83" textAnchor="middle" fontSize="12.5" fill="#ffffff" fontFamily="monospace" fontWeight="600">{SCAN_FROM_DEFINITIONS.eu_ie.label}</text>
       </g>
       <g>
         <g transform="translate(216 52)"><rect width="39" height="9.33" fill="#2b2b2b" /><rect y="9.33" width="39" height="9.33" fill="#dd0000" /><rect y="18.66" width="39" height="9.34" fill="#ffce00" /></g>

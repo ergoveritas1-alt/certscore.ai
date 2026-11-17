@@ -14,6 +14,7 @@ export type CredentialsActionState = {
     password?: string;
   };
   mode: AuthMode;
+  redirectTo?: string;
 };
 
 export const initialCredentialsActionState: CredentialsActionState = {

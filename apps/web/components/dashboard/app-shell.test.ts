@@ -27,7 +27,7 @@ test("authenticated mobile header stays on one row and preserves compact navigat
 
   assert.match(source, /flex items-center justify-between gap-2 sm:gap-3/);
   assert.match(source, /hidden h-\[33px\] shrink-0 items-center overflow-hidden sm:flex/);
-  assert.match(source, /hidden rounded-full[^"\n]*md:inline-flex/);
+  assert.match(source, /inline-flex shrink-0 rounded-full[^"\n]*">\s*\{displayPlan\}/);
   assert.match(source, /w-\[min\(19rem,calc\(100vw-2\.5rem\)\)\]/);
   assert.match(source, /max-h-\[calc\(100dvh-5rem\)\][^"\n]*overflow-y-auto/);
 });

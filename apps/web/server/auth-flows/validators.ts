@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { safeAuthReturnPath } from "../../lib/auth-return-path";
 import { AUTH_MIN_PASSWORD_LENGTH } from "./constants";
 import type { AuthMode } from "./types";
 
@@ -12,7 +13,7 @@ export const credentialsSchema = z.object({
   next: z
     .string()
     .optional()
-    .transform((value) => (typeof value === "string" ? getSafeRedirectPath(value) : "/app")),
+    .transform(safeAuthReturnPath),
   password: z.string().min(AUTH_MIN_PASSWORD_LENGTH, `Password must be at least ${AUTH_MIN_PASSWORD_LENGTH} characters.`)
 });
 
@@ -29,14 +30,6 @@ export const passwordResetSchema = z.object({
   password: z.string().min(AUTH_MIN_PASSWORD_LENGTH, `Password must be at least ${AUTH_MIN_PASSWORD_LENGTH} characters.`),
   token: z.string().trim().min(1, "That reset link is invalid or expired.")
 });
-
-export function getSafeRedirectPath(nextPath: string | null) {
-  if (nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")) {
-    return nextPath;
-  }
-
-  return "/app";
-}
 
 export function getAuthMode(value: FormDataEntryValue | null): AuthMode {
   return value === "create_account" ? "create_account" : "sign_in";

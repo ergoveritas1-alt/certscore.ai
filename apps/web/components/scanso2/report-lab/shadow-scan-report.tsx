@@ -1763,7 +1763,7 @@ export function ShadowScanReport({
   report=scopeReportPresentation(report);
   const homepageContent = report.resultDisposition === "no_go" ? (
     <main className="mx-auto max-w-7xl space-y-8 px-5 py-10 lg:px-10">
-      <ReportIdentity enhancedActions allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />
+      <ReportIdentity enhancedActions hideShare allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />
       <section aria-label="Scan access limitation" className="rounded-xl border border-amber-200 bg-amber-50 p-6">
         <p className={reportEyebrow}>Scan not representative · Not scored</p>
         <h2 className={`mt-3 ${reportSectionTitle}`}>{report.noGo.title}</h2>

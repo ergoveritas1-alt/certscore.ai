@@ -16,6 +16,7 @@ import { ACCESSIBILITY_REPORT_LABEL, accessibilityIssueCountLabel } from "../../
 import { EvidenceHeaderStatus, evidenceSectionRecap } from "../evidence-header-status";
 import { EvidenceSectionHeader } from "../evidence-section-header";
 import { ScanCompletedEvent } from "../../analytics/data-layer-events";
+import { ScanProgressReportVisible } from "../scan-progress-report-visible";
 import { ViewerTimestamp } from "../../time/viewer-timestamp";
 import { FormDestinationEvidence } from "../form-destination-evidence";
 import { CmsSecurityEvidence } from "../cms-security-evidence";
@@ -93,6 +94,7 @@ import {
 } from "./shadow-report-data";
 
 type ShadowScanReportProps = {
+  header?: ReactNode;
   canExportPdf?: boolean;
   reviewFocus?: unknown;
   fullSiteNotice?: FullSiteScanNoticeData | null;
@@ -1684,6 +1686,7 @@ function VariantBody({
 }
 
 export function ShadowScanReport({
+  header,
   canExportPdf = false,
   reviewFocus,
   fullSiteNotice,
@@ -1698,7 +1701,7 @@ export function ShadowScanReport({
     scan: { ...sourceReport.scan, reportUrl: reportUrlWithFocus(sourceReport.scan.reportUrl ?? `/scan/${sourceReport.scan.id}`, focus) } });
   const homepageContent = report.resultDisposition === "no_go" ? (
     <main className="mx-auto max-w-7xl space-y-8 px-5 py-10 lg:px-10">
-      <ReportIdentity enhancedActions allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />
+      <ReportIdentity enhancedActions hideShare allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />
       <section aria-label="Scan access limitation" className="rounded-xl border border-amber-200 bg-amber-50 p-6">
         <p className={reportEyebrow}>Scan not representative · Not scored</p>
         <h2 className={`mt-3 ${reportSectionTitle}`}>{report.noGo.title}</h2>
@@ -1742,13 +1745,17 @@ export function ShadowScanReport({
   }
 
   return (
+    <ReportPdfAccessProvider allowed={canExportPdf}>
+    {header}
     <div className="min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950">
+      <ScanProgressReportVisible scanId={report.scan.id} trackTiming={report.resultDisposition !== "no_go"} />
       {completionEvent}
-      <SiteHeader mobilePrimaryAction="sign-in" wide />
+      {!header && <SiteHeader mobilePrimaryAction="sign-in" wide />}
       {reportContent}
       {report.resultDisposition !== "no_go" ? <ReportEvidenceHashNavigation /> : null}
       {reportDisclaimer}
       <SiteFooter hideDisclaimer wide />
     </div>
+    </ReportPdfAccessProvider>
   );
 }

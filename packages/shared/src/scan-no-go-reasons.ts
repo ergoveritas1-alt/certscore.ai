@@ -593,15 +593,17 @@ export function projectExternalScanNoGo(
   ].map(boundedPublicEvidenceExcerpt).find((value): value is string => Boolean(value));
   const captureEvidence = presentation.code === "runtime_capture_unverified"
     ? runtimeCaptureEvidenceExcerpt(plainRecord(assessment.supportingSignals)) : null;
+  const shoppingInterstitial = presentation.code === "captcha_or_challenge" &&
+    /Klicke auf die Schaltfläche unten, um mit dem Einkauf fortzufahren\s+Weiter shoppen/i.test(visualEvidence ?? "");
   return {
     resultDisposition: "no_go",
     noGo: {
       reasonCode: presentation.isUnknown ? "unknown" : presentation.code,
-      title: presentation.customerTitle,
-      explanation: presentation.explanation,
-      summary: presentation.reportSummary,
+      title: shoppingInterstitial ? "An intermediate page appeared before the storefront" : presentation.customerTitle,
+      explanation: shoppingInterstitial ? "The captured page displayed a “Weiter shoppen” (Continue shopping) button." : presentation.explanation,
+      summary: shoppingInterstitial ? "The scan ended on that intermediate page." : presentation.reportSummary,
       limitationKind: presentation.limitationKind,
-      recommendedNextAction: presentation.recommendedNextAction,
+      recommendedNextAction: shoppingInterstitial ? "Try a page that opens directly, or scan another website." : presentation.recommendedNextAction,
       retryLikelyToHelp: presentation.retryLikelyToHelp,
       ...(captureEvidence || visualEvidence ? { evidenceExcerpt: captureEvidence ?? visualEvidence } : {}),
     },

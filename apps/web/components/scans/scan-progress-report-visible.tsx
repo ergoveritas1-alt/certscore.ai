@@ -3,9 +3,10 @@
 import { useEffect } from "react";
 import { clearActiveScanSession } from "../../lib/scans/active-scan-session";
 
-export function ScanProgressReportVisible({ scanId }: { scanId: string }) {
+export function ScanProgressReportVisible({ scanId, trackTiming = true }: { scanId: string; trackTiming?: boolean }) {
   useEffect(() => {
     clearActiveScanSession(scanId);
+    if (!trackTiming) return;
     const key = `certscore.scanTerminalDetectedAt.${scanId}`;
     const detectedAt = Number.parseInt(window.sessionStorage.getItem(key) ?? "", 10);
     if (!Number.isFinite(detectedAt)) return;
@@ -16,6 +17,6 @@ export function ScanProgressReportVisible({ scanId }: { scanId: string }) {
       scanId,
     });
     navigator.sendBeacon?.("/api/scan-progress-events", new Blob([body], { type: "application/json" }));
-  }, [scanId]);
+  }, [scanId, trackTiming]);
   return null;
 }

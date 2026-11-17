@@ -42,6 +42,11 @@ export async function addAnonymousScanClaimCookie(response: Response, scanId: st
   response.headers.append("Set-Cookie", `${ANONYMOUS_SCAN_CLAIM_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(CLAIM_MAX_AGE_MS / 1000)}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`);
 }
 
+export async function hasAnonymousScanClaim(scanId: string) {
+  const cookieStore = await cookies();
+  return decodeClaims(cookieStore.get(ANONYMOUS_SCAN_CLAIM_COOKIE)?.value).includes(scanId);
+}
+
 export async function claimAnonymousScansForUser(userId: string) {
   const cookieStore = await cookies();
   const scanIds = decodeClaims(cookieStore.get(ANONYMOUS_SCAN_CLAIM_COOKIE)?.value);

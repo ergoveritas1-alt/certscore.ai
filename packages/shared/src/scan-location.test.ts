@@ -15,7 +15,7 @@ test("normalizes scan-from values", () => {
 });
 
 test("formats scan-from labels and geo targets", () => {
-  assert.equal(formatScanFromLabel("eu_ie"), "EU-IR");
+  assert.equal(formatScanFromLabel("eu_ie"), "EU-IE");
   assert.deepEqual(getScanFromDefinition("eu_de").requestedGeo, {
     countryCode: "DE",
     provider: "aws-default",

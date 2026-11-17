@@ -8,9 +8,9 @@ export default function PublicScanLoading() {
       <SiteHeader />
       <section className="mx-auto flex min-h-[calc(100vh-9rem)] max-w-6xl items-center justify-center px-6 py-16">
         <ScanReportLoadingCard
-          description="The report is ready; we’re loading its retained findings and evidence."
-          title="Loading report"
-          variant="report"
+          description="Checking the scan status."
+          title="Loading scan"
+          variant="status"
         />
       </section>
       <SiteFooter />

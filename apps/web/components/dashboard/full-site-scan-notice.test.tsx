@@ -28,7 +28,7 @@ test("stopped and unknown crawls do not claim to be running", () => {
 
 test("scan summary shows recorded settings without earlier results", () => {
  const html = renderToStaticMarkup(<FullSiteScanNotice scan={scan} />);
- for (const text of ["Ireland", "10 pages", "4 pages", "5 sec", "5:50 PM PDT"]) assert.ok(html.includes(text), text);
+ for (const text of ["EU-IE · Ireland", "10 pages", "4 pages", "5 sec", "5:50 PM PDT"]) assert.ok(html.includes(text), text);
  assert.doesNotMatch(html, /Earlier results|Homepage report/);
 });
 

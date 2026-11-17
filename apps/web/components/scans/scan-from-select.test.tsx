@@ -62,7 +62,7 @@ test("ScanFromSelect renders scan-from choices before option toggles", () => {
   assert.equal(source.indexOf("menuOptions.map") < source.indexOf(">Fresh re-scan<"), true);
 });
 
-test("ScanFromSelect defaults to EU-IR and keeps the Chrome browser option last", () => {
+test("ScanFromSelect defaults to EU-IE and keeps the Chrome browser option last", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       allowRestrictedScanOptions: true,
@@ -84,7 +84,7 @@ test("ScanFromSelect maps legacy default values to the selectable regional defau
   );
 
   assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_ie"/);
-  assert.match(html, /EU-IR/);
+  assert.match(html, /EU-IE/);
   assert.doesNotMatch(html, /Default production scan/);
 });
 
@@ -96,7 +96,7 @@ test("ScanFromSelect keeps the scan-from field button free of a trailing caret",
     })
   );
 
-  assert.match(html, /EU-IR/);
+  assert.match(html, /EU-IE/);
   assert.doesNotMatch(html, /m5\.5 7\.5 4\.5 4\.5 4\.5-4\.5/);
 });
 
@@ -121,7 +121,7 @@ test("ScanFromSelect exposes every public region while hiding internal controls 
 
   assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_ie"/);
   assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="true"/);
-  assert.match(html, /EU-IR/);
+  assert.match(html, /EU-IE/);
   assert.doesNotMatch(html, /Chrome browser/);
   assert.doesNotMatch(html, /Run via Lambda/);
 });

@@ -401,11 +401,17 @@ function isCurrentPageDestination(destination: string) {
 }
 
 export function getScanSubmitDestination(mode: ScanMode, payload: ScanSubmitPayload) {
-  if (mode === "preview") {
-    return payload.previewUrl ?? null;
+  const destination = mode === "preview"
+    ? payload.previewUrl ?? null
+    : payload.scanUrl ?? (payload.scanId ? `/app/scans/${payload.scanId}` : null);
+  if (!destination || !payload.scanId) return destination;
+  const reportPath = `/scan/${encodeURIComponent(payload.scanId)}`;
+  const progressPath = `${reportPath}/progress`;
+  // A submission saved before the progress page was removed can still be in this tab.
+  if (destination.split(/[?#]/, 1)[0] === progressPath) {
+    return reportPath + destination.slice(progressPath.length);
   }
-
-  return payload.scanUrl ?? (payload.scanId ? `/app/scans/${payload.scanId}` : null);
+  return destination;
 }
 
 export function restrictLocalExtensionScanFrom(input: {
@@ -549,6 +555,10 @@ function StandardDomainScanForm({
     const activeScan = readActiveScanSession();
     if (!activeScan) return;
 
+    const destination = getScanSubmitDestination("full", {
+      scanId: activeScan.scanId,
+      scanUrl: activeScan.destination,
+    });
     let cancelled = false;
     const controller = new AbortController();
     fetch(`/api/scan-status/${encodeURIComponent(activeScan.scanId)}?includeFindings=0`, {
@@ -563,8 +573,8 @@ function StandardDomainScanForm({
         const status = payload.scan?.status;
         const terminal = status === "completed" || status === "completed_limited" || status === "failed" || status === "canceled" || status === "cancelled" || status === "expired" || status === "rate_limited";
         const unsuccessfulTerminal = status === "failed" || status === "canceled" || status === "cancelled" || status === "expired" || status === "rate_limited";
-        if (status && !unsuccessfulTerminal) {
-          router.replace(activeScan.destination);
+        if (status && !unsuccessfulTerminal && destination) {
+          router.replace(destination);
         } else if (terminal) {
           clearActiveScanSession(activeScan.scanId);
         }

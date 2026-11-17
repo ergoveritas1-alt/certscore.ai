@@ -40,6 +40,20 @@ function getRegistrationCompletionRedirect(nextPath: string) {
   }
 }
 
+function completeCredentialsAction(
+  destination: string,
+  mode: CredentialsActionState["mode"],
+  accept: string | null
+): CredentialsActionState {
+  // Next.js omits the fragment from client-side Server Action redirects.
+  // A document navigation preserves the anchor and lets the browser scroll to it.
+  if (destination.includes("#") && !accept?.includes("text/html")) {
+    return { ...initialCredentialsActionState, mode, redirectTo: destination };
+  }
+
+  redirect(destination);
+}
+
 function getBetterAuthErrorCode(error: unknown) {
   if (!error || typeof error !== "object") {
     return null;
@@ -145,7 +159,7 @@ export async function submitCredentialsAction(
       });
       await claimAnonymousScansForUser(provisioned.user.id);
       await writeAuthCookies(authHeaders);
-      redirect(getRegistrationCompletionRedirect(values.next));
+      return completeCredentialsAction(getRegistrationCompletionRedirect(values.next), mode, headerStore.get("accept"));
     }
 
     const { response, headers: authHeaders } = await getAuth().api.signInEmail({
@@ -167,7 +181,7 @@ export async function submitCredentialsAction(
     await claimAnonymousScansForUser(bootstrapped.user.id);
 
     await writeAuthCookies(authHeaders);
-    redirect(values.next);
+    return completeCredentialsAction(values.next, mode, headerStore.get("accept"));
   } catch (error) {
     if (isRedirectError(error)) {
       throw error;

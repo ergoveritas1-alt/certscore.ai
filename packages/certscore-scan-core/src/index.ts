@@ -1,7 +1,7 @@
 import {retainGpcRecoveryLedger} from "./gpc-navigation-recovery";
 export { buildGpcCmpStateComparison } from "./gpc-cmp-state-comparison.js";
 import { serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
-import { isBoundRuntimeAuthenticationPage, boundRuntimeDocumentStatus, CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage } from "@certscore/contracts";
+import { isBoundRuntimeAuthenticationPage, boundRuntimeDocumentStatus, CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage, hasRepresentativeRuntimeText } from "@certscore/contracts";
 import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
 import { collectionRecipientPriorities } from "./collection-recipient-retention.js";
 import {gpcProofEventPriorities} from "./gpc-proof-retention.js";
@@ -2635,7 +2635,7 @@ export function buildScanNoGoAssessment(input: {
     ...input.consentUiObservations.map((observation) => boundedScanNoGoText(observation.textExcerpt)),
   ].filter((text): text is string => Boolean(text)));
   const longestText = [...textCandidates].sort((left, right) => right.length - left.length)[0] ?? "";
-  const longestDomText = [...domTextCandidates].sort((left, right) => right.length - left.length)[0] ?? "";
+  const longestRetainedDomText = [...domTextCandidates].sort((left, right) => right.length - left.length)[0] ?? "";
   const consentSurfaceTexts = input.consentUiObservations
     .map((observation) => boundedScanNoGoText(observation.textExcerpt))
     .filter((text): text is string => Boolean(text));
@@ -2651,9 +2651,13 @@ export function buildScanNoGoAssessment(input: {
     observation.visibleChoiceLabels.length > 0 ||
     observation.controls.some((control) => control.visible)
   );
-  const terminalRuntimeSnapshot = [...input.domSnapshots]
+  const retainedPageSnapshots = [...input.domSnapshots]
     .filter(snapshot => snapshot.artifactId !== "dom_blocking_frame_challenge" && !snapshot.blockingFrameChallenge)
-    .sort((a, b) => b.capturedAtMs - a.capturedAtMs)[0];
+    .sort((a, b) => b.capturedAtMs - a.capturedAtMs);
+  const startingPageSnapshot = retainedPageSnapshots.find(snapshot =>
+    snapshot.artifactId === "dom_text_pre_consent" && snapshot.consentStateAtTime === "pre_consent");
+  const terminalRuntimeSnapshot = startingPageSnapshot?.runtimeDocumentCapture
+    ? startingPageSnapshot : retainedPageSnapshots[0];
   const usesBoundRuntimeCapture = Boolean(terminalRuntimeSnapshot?.runtimeDocumentCapture);
   const mainDocumentStatus = terminalRuntimeSnapshot?.runtimeDocumentCapture
     ? boundRuntimeDocumentStatus(terminalRuntimeSnapshot) ?? null
@@ -2665,10 +2669,6 @@ export function buildScanNoGoAssessment(input: {
   const successfulFirstPartyResponses = input.networkResponseEvents.filter((event) =>
     event.firstParty === true && (event.status ?? 0) >= 200 && (event.status ?? 0) < 400
   ).length;
-  const substantiveDomWordCount = longestDomText.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
-  const substantiveRetainedDomVolumeObserved =
-    longestDomText.length >= 180 &&
-    substantiveDomWordCount >= 24;
   const screenshotStructure = inspectRetainedScreenshotStructure(representativeScreenshots);
   const visuallySubstantiveScreenshotObserved = screenshotStructure?.visuallySubstantive === true;
   const visuallyBlankScreenshotObserved = screenshotStructure?.visuallyBlank === true;
@@ -2677,30 +2677,53 @@ export function buildScanNoGoAssessment(input: {
   // mentions blocking or challenge behavior without representing page state.
   // Only fall back to consent-surface text when no settled DOM text survived.
   const terminalDomText = usesBoundRuntimeCapture && mainDocumentStatus === null ? undefined : terminalRuntimeSnapshot?.textExcerpt;
-  const boundAuthenticationPage = Boolean(terminalRuntimeSnapshot &&
-    isBoundRuntimeAuthenticationPage(terminalRuntimeSnapshot) &&
-    !input.domSnapshots.some(snapshot => snapshot.capturedAtMs === terminalRuntimeSnapshot.capturedAtMs &&
+  const terminalDocumentConflict = terminalRuntimeSnapshot && input.domSnapshots.some(snapshot =>
+    snapshot.capturedAtMs === terminalRuntimeSnapshot.capturedAtMs &&
       (snapshot.url !== terminalRuntimeSnapshot.url ||
-        snapshot.documentIdentity?.token !== terminalRuntimeSnapshot.documentIdentity?.token)));
+        snapshot.documentIdentity?.token !== terminalRuntimeSnapshot.documentIdentity?.token));
+  const boundAuthenticationPage = Boolean(terminalRuntimeSnapshot && !terminalDocumentConflict &&
+    isBoundRuntimeAuthenticationPage(terminalRuntimeSnapshot));
+  const retainedDomPageState = classifyScanNoGoText(longestRetainedDomText);
+  const terminalText = boundedScanNoGoText(terminalDomText) ?? "";
+  const terminalWordCount = terminalText.split(/\s+/).filter(word => /[\p{L}\p{N}]/u.test(word)).length;
+  const terminalTextState = terminalText === longestRetainedDomText
+    ? retainedDomPageState : classifyScanNoGoText(terminalText);
+  // An earlier challenge can be longer than the storefront that replaces it.
+  // Prefer the terminal capture only when it proves the active challenge or
+  // positively verifies representative content for the requested site.
+  const useTerminalDomEvidence = terminalRuntimeSnapshot && !terminalDocumentConflict &&
+    terminalRuntimeSnapshot.artifactId === "dom_text_pre_consent" &&
+    terminalRuntimeSnapshot.consentStateAtTime === "pre_consent" &&
+    usesBoundRuntimeCapture && mainDocumentStatus !== null &&
+    (terminalTextState?.reasonCode === "captcha_or_challenge" ||
+      (retainedDomPageState?.reasonCode === "captcha_or_challenge" && !terminalTextState &&
+        mainDocumentStatus >= 200 && mainDocumentStatus < 300 &&
+        terminalText.length >= 180 && terminalWordCount >= 24 &&
+        hasRepresentativeRuntimeText(terminalRuntimeSnapshot) &&
+        matchesScanTargetHost(terminalRuntimeSnapshot.url, input.normalizedUrl))) &&
+    domSnapshotArtifactSchema.safeParse(terminalRuntimeSnapshot).success;
+  const assessmentDomText = useTerminalDomEvidence ? terminalText : longestRetainedDomText;
+  const assessmentDomPageState = useTerminalDomEvidence ? terminalTextState : retainedDomPageState;
+  const substantiveDomWordCount = assessmentDomText === terminalText ? terminalWordCount
+    : assessmentDomText.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
+  const substantiveRetainedDomVolumeObserved = assessmentDomText.length >= 180 && substantiveDomWordCount >= 24;
   const brandedErrorPageState: ClassifiedNoGoPageState | null =
     boundAuthenticationPage
       ? { confidence: 0.97, evidenceText: "The verified runtime document was a Google sign-in screen.",
           hardTerminal: true, reasonCode: "authentication_required", visualPageState: "access_blocked" }
       : classifyBrandedRuntimeError(terminalDomText);
-  const textPageCandidate = brandedErrorPageState ?? (longestDomText
-    ? classifyScanNoGoText(longestDomText)
+  const textPageCandidate = brandedErrorPageState ?? (assessmentDomText
+    ? assessmentDomPageState
     : classifyScanNoGoText(longestText));
   const textPageState = usesBoundRuntimeCapture && textPageCandidate?.reasonCode === "loading_or_stalled"
     ? null : textPageCandidate;
   const consentSurfaceTextPageState = classifyScanNoGoText(longestConsentSurfaceText);
   const substantiveDomTextObserved =
-    !brandedErrorPageState && !classifyScanNoGoText(longestDomText) &&
-    longestDomText.length >= 180 &&
-    substantiveDomWordCount >= 24;
+    !brandedErrorPageState && !assessmentDomPageState && substantiveRetainedDomVolumeObserved;
   const substantiveCapturedPageTextObserved =
     substantiveDomTextObserved ||
     (
-      !longestDomText &&
+      !assessmentDomText &&
       !consentSurfaceTextPageState &&
       longestConsentSurfaceText.length >= 180 &&
       consentSurfaceWordCount >= 24
@@ -2782,7 +2805,7 @@ export function buildScanNoGoAssessment(input: {
       }
     : null;
   const settledPageState = pageState ?? visualBlankPageState;
-  const nearlyEmptyPage = longestDomText.length <= 40 && substantiveDomWordCount <= 6;
+  const nearlyEmptyPage = assessmentDomText.length <= 40 && substantiveDomWordCount <= 6;
   const sparseSecondLookRetained = representativeScreenshots.some((artifact) =>
     artifact.artifactId === "screenshot_pre_consent_no_go_confirmation"
   );
@@ -2793,7 +2816,7 @@ export function buildScanNoGoAssessment(input: {
   const temporallyConfirmedSparsePage =
     assessSparsePage &&
     ((mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400) || committedVisualPageRetained) &&
-    longestDomText.length <= 60 &&
+    assessmentDomText.length <= 60 &&
     substantiveDomWordCount <= 10 &&
     sparseSecondLookRetained;
   const sparseSuccessfulPage =
@@ -2811,7 +2834,7 @@ export function buildScanNoGoAssessment(input: {
       moduleRun.errors.some((error) => /(?:module budget|bounded partial evidence|runtime.*partial)/i.test(error))
     ) &&
     representativeScreenshots.length === 0 &&
-    longestDomText.length <= 60 &&
+    assessmentDomText.length <= 60 &&
     substantiveDomWordCount <= 10 &&
     input.policySurfaceObservations.length === 0 &&
     input.networkEvents.length <= 4 &&
@@ -2856,7 +2879,7 @@ export function buildScanNoGoAssessment(input: {
     mainDocumentStatus !== null &&
     mainDocumentStatus >= 200 &&
     mainDocumentStatus < 400;
-  const accessBlockMarkerCount = countAccessBlockTextMarkers(longestDomText || longestText);
+  const accessBlockMarkerCount = countAccessBlockTextMarkers(assessmentDomText || longestText);
   const likelyIncidentalAccessBlockText =
     textPageState?.reasonCode === "access_denied_or_forbidden_page" &&
     !blockedMainDocument &&
@@ -2961,7 +2984,7 @@ export function buildScanNoGoAssessment(input: {
       documentStatusBlocked: blockedMainDocument,
       expectedOriginReached: mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400,
       mainDocumentStatus,
-      substantiveDomTextObserved: longestDomText.length >= 180 && substantiveDomWordCount >= 24,
+      substantiveDomTextObserved: substantiveRetainedDomVolumeObserved,
       substantiveRetainedDomVolumeObserved,
       substantiveWordCount: substantiveDomWordCount,
       successfulFirstPartyResponses,
@@ -2992,6 +3015,19 @@ export function buildScanNoGoAssessment(input: {
     scanNoGoAssessment,
     visualAccessReview,
   };
+}
+
+function matchesScanTargetHost(capturedUrl: string, requestedUrl: string | undefined) {
+  if (!requestedUrl) return false;
+  try {
+    const captured = new URL(capturedUrl);
+    const requested = new URL(requestedUrl);
+    return ["http:", "https:"].includes(requested.protocol) && !requested.username && !requested.password &&
+      captured.hostname.replace(/^www\./, "") === requested.hostname.replace(/^www\./, "") &&
+      captured.port === requested.port;
+  } catch {
+    return false;
+  }
 }
 
 type RetainedScreenshotStructure = {

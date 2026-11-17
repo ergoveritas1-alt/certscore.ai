@@ -65,6 +65,22 @@ test("getScanSubmitDestination falls back to authenticated scan route when only 
   );
 });
 
+test("new, recovered, and reused submissions go straight to the scan route", () => {
+  const scanId = "9b0b7a54-a12e-4522-9887-c47757e9f38f";
+  const scanUrl = `/scan/${scanId}`;
+  for (const extra of [{}, { recoveredSubmission: true }, { reusedExistingScan: true }]) {
+    const payload = { scanId, scanUrl, ...extra };
+    assert.equal(getScanSubmitDestination("full", payload), scanUrl);
+  }
+  assert.equal(getScanSubmitDestination("preview", { scanId, previewUrl: scanUrl }), scanUrl);
+  const workspaceUrl = `/app/scans/${scanId}`;
+  assert.equal(getScanSubmitDestination("full", { scanId, scanUrl: workspaceUrl }), workspaceUrl);
+  assert.equal(
+    getScanSubmitDestination("full", { scanId, scanUrl: `${scanUrl}/progress?recentScanReused=1` }),
+    `${scanUrl}?recentScanReused=1`
+  );
+});
+
 test("getScanSubmitDestination uses previewUrl for preview scans", () => {
   assert.equal(
     getScanSubmitDestination("preview", {

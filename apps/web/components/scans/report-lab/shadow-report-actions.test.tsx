@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ReportPdfAccessProvider, ShadowReportShareMenu } from "./shadow-report-actions";
+import { ReportGuestShareProvider, ReportPdfAccessProvider, ShadowReportShareMenu } from "./shadow-report-actions";
 
 function markup(allowed: boolean, fullSite = false) {
   return renderToStaticMarkup(<ReportPdfAccessProvider allowed={allowed}>
@@ -29,6 +29,27 @@ test("public or regular viewers keep lightweight sharing without an unavailable 
   assert.match(body, /CertScore.ai scan report/);
   assert.doesNotMatch(body, /format=pdf|workspace header/);
   assert.doesNotMatch(html, /Download PDF report/);
+});
+
+test("signed-out readers get a dismissible Share prompt that returns to the top of the report", () => {
+  const reportUrl = "/scan/scan-1?reviewFocus=ccpa_cpra#report-overview";
+  for (const allowCreateAccount of [true, false]) {
+    const html = renderToStaticMarkup(<ReportGuestShareProvider allowCreateAccount={allowCreateAccount}>
+      <ShadowReportShareMenu reportUrl={reportUrl} scanId="scan-1" siteLabel="example.test" />
+    </ReportGuestShareProvider>);
+    assert.match(html, /aria-haspopup="dialog"/);
+    assert.match(html, /Sign in to share this report/);
+    assert.match(html, /You’ll be able to view and share this report once signed in\./);
+    assert.match(html, /Keep reading/);
+    assert.doesNotMatch(html, /Close Share dialog|mailto:|report-export|Share report link/);
+    const authLinks = [...html.matchAll(/href="(\/login\?[^\"]+)"/g)].map(match => new URL(match[1]!.replaceAll("&amp;", "&"), "https://certscore.ai"));
+    assert.equal(authLinks.length, allowCreateAccount ? 2 : 1);
+    assert.deepEqual(authLinks.map(link => link.searchParams.get("mode")), allowCreateAccount ? [null, "create_account"] : [null]);
+    for (const link of authLinks) {
+      assert.equal(link.searchParams.get("intent"), "share_report");
+      assert.equal(link.searchParams.get("next"), "/scan/scan-1?reviewFocus=ccpa_cpra#top");
+    }
+  }
 });
 
 test("Share menus retain the report downloads without tracking workpaper options", () => {

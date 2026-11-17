@@ -605,6 +605,53 @@ test("localized commerce security interstitial is a no-go", async () => {
   }
 });
 
+test("a later verified storefront supersedes the earlier commerce challenge", () => {
+  const challenge = ("Klicke auf die Schaltfläche unten, um mit dem Einkauf fortzufahren Weiter shoppen. " +
+    "Unsere AGB Datenschutzerklärung. ").repeat(4);
+  const storefront = "Welcome to our public storefront. Browse laptops, phones, shoes, tools, gifts, books, games, toys, furniture, kitchen items, clothing, fitness gear, pet supplies, and new arrivals. Search our catalog or explore the latest deals.";
+  const url = "https://www.amazon.de/";
+  const snapshot = (textExcerpt: string, capturedAtMs: number, token: string): DomSnapshotArtifact => ({
+    artifactId: "dom_text_pre_consent", capturedAtMs, path: "dom.txt", url,
+    pagePhase: "network_idle", consentStateAtTime: "pre_consent", textExcerpt,
+    documentIdentity: { source: "cdp_loader_id", token },
+    runtimeDocumentCapture: { version: "runtime_document_capture.v1", response: {
+      status: 200, documentToken: token, origin: "https://www.amazon.de",
+      requestUrlSha256: "a".repeat(64), route: "committed",
+    } },
+  });
+  const initial = snapshot(challenge, 100, "interstitial-loader");
+  const final = snapshot(storefront, 200, "storefront-loader");
+  const evidence = { ...scanEvidence({ screenshots: [] }), normalizedUrl: "https://amazon.de/",
+    domSnapshots: [initial, final] };
+  assert.notEqual(buildScanNoGoAssessment(evidence)?.scanNoGoAssessment.decision, "no_go");
+
+  const laterConsentVisit = { ...initial, artifactId: "dom_consent_baseline", capturedAtMs: 300, runtimeDocumentCapture: undefined };
+  assert.notEqual(buildScanNoGoAssessment({
+    ...evidence, domSnapshots: [initial, final, laterConsentVisit],
+  })?.scanNoGoAssessment.decision, "no_go");
+  const withChallengeTraffic = buildScanNoGoAssessment({
+    ...evidence, networkEvents: [...evidence.networkEvents, { url: "https://www.amazon.de/request-challenge" } as NetworkEvent],
+  });
+  assert.equal(withChallengeTraffic?.primaryReasonCode, "potential_security_challenge");
+  assert.equal(withChallengeTraffic?.scanNoGoAssessment.decision, "continue_with_diagnostics");
+  assert.equal(withChallengeTraffic?.scanNoGoAssessment.supportingSignals.substantiveCapturedPageTextObserved, true);
+
+  for (const rejected of [
+    { ...final, documentIdentity: { source: "cdp_loader_id" as const, token: "another-loader" } },
+    { ...final, textExcerpt: "Loading…" },
+    { ...final, url: "https://other.example/", runtimeDocumentCapture: {
+      ...final.runtimeDocumentCapture!, response: { ...final.runtimeDocumentCapture!.response!, origin: "https://other.example" },
+    } },
+  ]) {
+    assert.equal(buildScanNoGoAssessment({ ...evidence, domSnapshots: [initial, rejected] })?.primaryReasonCode, "captcha_or_challenge");
+  }
+
+  assert.equal(buildScanNoGoAssessment({ ...evidence, domSnapshots: [
+    snapshot(storefront.repeat(4), 100, "storefront-loader"),
+    snapshot(challenge.slice(0, 110), 200, "interstitial-loader"),
+  ] })?.primaryReasonCode, "captcha_or_challenge");
+});
+
 test("settled challenge text outranks generic words embedded in consent probe scripts", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-challenge-dom-priority-"));
   try {

@@ -240,9 +240,10 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
                     domainLabel={publicScanDomainLabel}
                     scanId={displayScanRecord.scan.id}
                     visualEvidenceHref={visualEvidenceHref}
+                    visualEvidenceOnly={isNoGoReport}
                     visualEvidenceWithheldReason={homepageScreenshotState?.status === "withheld" ? homepageScreenshotState.reason : null}
                   />
-                  <ReportDownloadActions scanId={displayScanRecord.scan.id} />
+                  {!isNoGoReport && <ReportDownloadActions scanId={displayScanRecord.scan.id} />}
                 </div>
                 <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                   <DomainScanForm

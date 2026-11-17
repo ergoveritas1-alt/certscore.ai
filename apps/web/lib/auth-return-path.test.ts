@@ -7,5 +7,9 @@ test('OAuth destination survives sign-in retry without losing PKCE or state',()=
  assert.equal(new URL(authRetryPath('google_sign_in_failed',path),'https://certscore.ai').searchParams.get('next'),path);
 });
 test('auth returns reject cross-origin and backslash/control paths',()=>{
- for(const path of ['https://evil.test','//evil.test','/\\evil.test','/\nevil.test']) assert.equal(safeAuthReturnPath(path),'/app');
+ for(const path of ['https://evil.test','//evil.test','/\\evil.test','/\nevil.test','/.//evil.test#section']) assert.equal(safeAuthReturnPath(path),'/app');
+});
+test('auth returns preserve a scan review focus and section anchor',()=>{
+ const path='/scan/example?reviewFocus=gdpr_eprivacy#gdpr-eprivacy-evidence';
+ assert.equal(safeAuthReturnPath(path),path);
 });

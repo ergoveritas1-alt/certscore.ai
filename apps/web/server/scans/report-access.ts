@@ -20,6 +20,18 @@ export async function requireReportUser(returnPath: string, getUser: ReadUser = 
   return user;
 }
 
+export async function requireReportViewer(scanId: string, returnPath: string) {
+  const user = await readUser();
+  if (user) return { signedIn: true as const };
+  const { hasAnonymousScanClaim } = await import("./anonymous-scan-claims");
+  if (await hasAnonymousScanClaim(scanId)) {
+    const { getAnonymousScanStatusProjection } = await import("./scan-status-projection");
+    const scan = await getAnonymousScanStatusProjection(scanId);
+    if (scan) return { signedIn: false as const, scan };
+  }
+  redirect(`/login?${new URLSearchParams({ next: safeAuthReturnPath(returnPath) })}`);
+}
+
 /** Browser report endpoints require the same validated session as the report page.
  * API keys and cookie presence alone do not grant browser-report access. */
 export async function reportApiAccessError(getUser: ReadUser = readUser): Promise<Response | null> {

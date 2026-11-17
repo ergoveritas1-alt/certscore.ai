@@ -6,9 +6,9 @@ export const MASTER_SOURCE_REVIEW={
   "sources": [
     {
       "file": "apps/web/app/(marketing)/scan/[scanId]/page.tsx",
-      "sha256": "f3e470a56917392039e2ae179fcb68845ff15b73b71a2383454f14d389ac74a2",
-      "bytes": 8197,
-      "review": "Owner-requested active-account guard runs before report reads. Findings, scores and historical projections are unchanged; access and branding regressions pass."
+      "sha256": "fa6f93e44c528f0382c869f30f7623ad3c73eeae4202cb0dfa7b340d04fdb9a5",
+      "bytes": 11354,
+      "review": "A scan claim limits signed-out viewing to the initiating browser. This route shows progress and the completed result, preserves the Share sign-in requirement, and checks authorization before offering PDF export."
     },
     {
       "file": "apps/web/app/app/scans/[scanId]/page.tsx",
@@ -48,9 +48,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
-      "sha256": "143a2fcf1f4c6ad298c43149b34f0ee32935b18be7de9d7a368790b720c1f76d",
-      "bytes": 113815,
-      "review": "The retained report now builds its executive consent and tracking tiles from the same report projection, preserving report identity and source binding."
+      "sha256": "0dbb903c6e01c47c64850b74963873c0d716448e3aabf7620e77ed5ed22550f8",
+      "bytes": 114155,
+      "review": "The Share menu receives the existing PDF capability. Unscored results hide Share and keep the standard next-scan control in the report header."
     },
     {
       "file": "apps/web/components/scans/site-integrity-evidence.tsx",
