@@ -1,3 +1,4 @@
+import { reportApiAccessError } from "../../../../../server/scans/report-access";
 import { loadPersistedScanReportProjection } from "../../../../../server/scans/scan-report-projection";
 import { getPublicScanStatusProjection } from "../../../../../server/scans/scan-status-projection";
 import { loadSinglePageFormSnapshot } from "../../../../../server/scans/local-v2-dag-report";
@@ -8,6 +9,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, context: { params: Promise<{ scanId: string }> }) {
+  const accessError = await reportApiAccessError();
+  if (accessError) return accessError;
   const { scanId } = await context.params;
   if (!/^[a-f0-9-]{36}$/i.test(scanId)) return new Response(null, { status: 400 });
   const throttled = await enforceApiV2ScanReadThrottle({ request: runtimeGraphQuotaRequest(request), requestId: crypto.randomUUID(), scanId, route: "form-snapshot", profile: "terminal", detail: "evidence" });

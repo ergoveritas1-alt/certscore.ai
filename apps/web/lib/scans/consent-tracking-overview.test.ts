@@ -7,7 +7,7 @@ import { afterRejectClickProjection } from "./test-fixtures/after-reject-scoring
 import { observedControlAssessment } from "./test-fixtures/observed-control-assessment";
 import { SHADOW_REPORT } from "../../components/scans/report-lab/shadow-report-data";
 import { gpcProductFixture } from "./test-fixtures/gpc-product";
-import { saleSharingOptOutEvidenceSchema } from "@certscore/contracts";
+import { saleSharingOptOutEvidenceSchema, postAcceptReportProjectionSchema, postRefusalReportProjectionSchema } from "@certscore/contracts";
 import type { CaliforniaPrivacyReview } from "@certscore/contracts";
 
 const empty = { nonEssential: 0, review: 0, unclassified: 0, contextual: 0, essential: 0 };
@@ -24,13 +24,13 @@ const formsSummary = {
   afterAcceptCapture: "unavailable", countStatus: "captured",
 } as const;
 
-test("GDPR combines mutually exclusive request groups, keeps unknown purpose separate and scopes GPC out", () => {
+test("GDPR combines distinct flagged resource groups, excludes unknown purpose and scopes GPC out", () => {
   const metric = { ...emptyMetric, overview: { ...emptyMetric.overview, distinctResources: 96227, distinctStorage: 4,
     distinctClassifications: { ...emptyMetric.overview.distinctClassifications,
       requests: { ...empty, nonEssential: 84593, review: 11625, unclassified: 9 }, storage: { ...empty, review: 4 } } } };
   const tiles = buildConsentTrackingOverview({ scan, inventorySummary: [metric] }, "gdpr_eprivacy");
   assert.deepEqual(tiles.map(tile => tile.id), ["before", "accept", "reject", "services", "storage", "forms"]);
-  assert.equal(tiles[0]?.count, 96218);
+  assert.equal(tiles[0]?.count, 96222);
   assert.equal(tiles[0]?.metrics?.[0]?.counts?.unclassified, 9);
   assert.equal(tiles[0]?.metrics?.[1]?.counts?.review, 4);
 });
@@ -47,6 +47,28 @@ test("verified zero flags can coexist with requests, and complete after-click ob
   assert.equal(tiles[4]?.count, null);
   assert.equal(tiles[5]?.count, 0);
   assert.equal(tiles[5]?.facts?.[1]?.value, "NA");
+});
+
+test("retained baseline storage reviews contribute to flagged items without changing canonical report data", () => {
+  const metric = { ...emptyMetric, value: 45, overview: { ...emptyMetric.overview,
+    distinctResources: 45, distinctStorage: 3,
+    distinctClassifications: { ...emptyMetric.overview.distinctClassifications,
+      requests: { ...empty, contextual: 12, unclassified: 33 }, storage: { ...empty, essential: 1, review: 2 } } } };
+  const report = { scan, inventorySummary: [metric],
+    score: { value: 88 }, postureScores: { gdprEprivacy: { score: 88 }, ccpaCpra: { score: 96 } },
+    findings: [{ id: "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage", status: "Partial concern" },
+      { id: "semantic_labeling_accessibility_issue", status: "Observed" }] };
+  const unchanged = structuredClone(report);
+  const tiles = buildConsentTrackingOverview(report, "gdpr_eprivacy");
+  assert.equal(tiles[0]?.count, 2);
+  assert.equal(tiles[0]?.unit, "flagged items");
+  assert.deepEqual(tiles[0]?.breakdown, { nonEssential: 0, review: 2 });
+  assert.deepEqual(tiles.slice(1, 3).map(tile => tile.label), ["After Accept click", "After Reject click"]);
+  assert.equal(tiles[3]?.label, "Services before consent");
+  assert.equal(tiles[3]?.count, 0);
+  assert.equal(tiles[4]?.count, 3);
+  assert.equal(tiles[4]?.storageReviewCount, 2);
+  assert.deepEqual(report, unchanged);
 });
 
 test("incomplete capture preserves positive Reject activity but suppresses a misleading empty zero", () => {
@@ -84,6 +106,54 @@ test("California uses dedicated GPC evidence and keeps Reject and site opt-out s
   assert.equal(unavailable[4]?.state, "not_tested");
   assert.deepEqual(unavailable[4]?.notes, []);
   assert.equal(unavailable[5]?.evidence, undefined);
+});
+
+test("Accept and Reject include distinct storage with requests without counting repetitions or unknowns", () => {
+  for (const id of ["accept", "reject"] as const) {
+    const base = completedActionProjection(id);
+    const request = afterRejectClickProjection().afterActionRequests![0]!;
+    const cookie = { storageType: "cookie", name: "example", identityBasis: "cookie_name_domain_path_partition",
+      identityHash: "e".repeat(64), valueHash: "f".repeat(64), purpose: "analytics", nonEssential: true };
+    const projection = { ...base, afterActionCapture: { ...base.afterActionCapture,
+      requestIds: [request.requestId, "repeat"],
+      requestAncestry: [request.requestId, "repeat"].map(requestId => ({ requestId, rootStartedAtMs: request.rootStartedAtMs })),
+    }, afterActionRequests: [request, { ...request, requestId: "repeat" }],
+      afterActionStorage: [cookie, cookie, { ...cookie, identityHash: "d".repeat(64), nonEssential: false, purpose: "unknown" }] };
+    const original = structuredClone(projection);
+    (id === "accept" ? postAcceptReportProjectionSchema : postRefusalReportProjectionSchema).parse(projection);
+    const capture = projectActionResourceInventory({ ...input, action: id, projection });
+    assert.ok(capture);
+    const tile = buildConsentTrackingOverview({ scan, actionInventories: { [id]: capture } }, "gdpr_eprivacy").find(tile => tile.id === id)!;
+    assert.equal(tile.count, 2);
+    assert.equal(tile.unit, "flagged items");
+    assert.deepEqual(tile.breakdown, { nonEssential: 2 });
+    assert.equal(tile.metrics?.[0]?.value, 1);
+    assert.equal(tile.metrics?.[1]?.value, 2);
+    assert.equal(tile.metrics?.[1]?.counts?.unclassified, 1);
+    assert.deepEqual(projection, original);
+
+    // A partial storage-only positive observation remains visible.
+    const partial = projectActionResourceInventory({ ...input, action: id, projection: {
+      ...projection, afterActionRequests: [], afterActionCapture: { ...base.afterActionCapture, stopReason: "aborted" },
+    } });
+    assert.ok(partial);
+    const partialTile = buildConsentTrackingOverview({ scan, actionInventories: { [id]: partial } }, "gdpr_eprivacy").find(tile => tile.id === id)!;
+    assert.equal(partialTile.count, 1);
+    assert.equal(partialTile.state, "partial");
+    assert.equal(partialTile.breakdown?.review, undefined);
+  }
+});
+
+test("baseline flagged items include classified frames and storage, excluding essential and contextual resources", () => {
+  const metric = { ...emptyMetric, overview: { ...emptyMetric.overview, distinctStorage: 7, distinctEmbeds: 4,
+    distinctClassifications: { requests: { ...empty, nonEssential: 1, review: 2, unclassified: 6 },
+      storage: { ...empty, nonEssential: 1, review: 1, essential: 5 },
+      embeds: { ...empty, nonEssential: 1, review: 1, contextual: 2 } } } };
+  for (const focus of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
+    const tile = buildConsentTrackingOverview({ scan, inventorySummary: [metric] }, focus)[0]!;
+    assert.equal(tile.count, 7);
+    assert.deepEqual(tile.breakdown, { nonEssential: 3, review: 4 });
+  }
 });
 
 test("a verified California opt-out reports its own bounded advertising sample, including zero", () => {

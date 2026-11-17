@@ -1,3 +1,4 @@
+import { requireReportUser, reportReturnPath } from "../../../../server/scans/report-access";
 import { canManageCompanyLogo } from "../../../../server/company/policy";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
@@ -91,6 +92,9 @@ function ScanDetailLoadingState({ statusProjection }: { statusProjection: ScanSt
 }
 
 export default async function ScanDetailPage({ params, searchParams }: ScanDetailPageProps) {
+  const reportParams = await params;
+  const reportSearch = await searchParams;
+  await requireReportUser(reportReturnPath(`/app/scanso/${encodeURIComponent(reportParams.scanId)}`, reportSearch));
   const [{ scanId }, { membership, organization, user }] = await Promise.all([
     params,
     withServerTiming("app.scan_detail.context", () => getDashboardContext())

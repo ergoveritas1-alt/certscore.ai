@@ -20,7 +20,10 @@ test("closed checklist details use a canonical generation-bound lazy read", asyn
   assert.match(detailRoute, /status\.reportGeneration !== generation/);
   assert.match(detailRoute, /getPersistedCanonicalReportProjection/);
   assert.match(detailRoute, /hydrateChecklistPolicyEvidence/);
-  assert.match(detailRoute, /public, max-age=31536000, immutable/);
-  assert.match(projection, /COMPLETED_REPORT_CACHE_MAX_ENTRIES = 8/);
+  assert.match(detailRoute, /reportApiAccessError/);
+  assert.match(detailRoute, /private, no-store/);
+  assert.doesNotMatch(detailRoute, /public, max-age/);
+  assert.match(projection, /COMPLETED_REPORT_CACHE_MAX_ENTRIES = \d+/);
+  assert.match(projection, /while \(completedReportProjectionCache.size > COMPLETED_REPORT_CACHE_MAX_ENTRIES\)/);
   assert.match(projection, /primeCompletedReportProjectionCache/);
 });

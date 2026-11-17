@@ -6,7 +6,7 @@ import { LoginForm } from "../../../components/auth/login-form";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { isGoogleAuthAllowedForHost, isGoogleAuthEnabled } from "../../../lib/env";
 import { isPublicAccountCreationEnabled } from "../../../server/access-control";
-import { getCurrentUser } from "../../../server/auth";
+import { getFreshCurrentUser } from "../../../server/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,7 @@ function getSafeRedirectPath(nextPath: string | undefined) {
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const user = await getCurrentUser();
+  const user = await getFreshCurrentUser();
   const resolvedSearchParams = await searchParams;
 
   if (user) {

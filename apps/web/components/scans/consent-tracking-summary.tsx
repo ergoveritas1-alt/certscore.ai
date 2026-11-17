@@ -13,7 +13,7 @@ const format = (count: number) => count.toLocaleString("en-US");
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 const compactMobile = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 0 });
 const statusLabel = { recorded: "Recorded", partial: "Partial", not_tested: "Not tested", unavailable: "NA" } as const;
-const tileDescription = "The first tile adds non-essential requests and requests whose classification needs review. Non-essential means the retained evidence supports that classification. Review means the classification needs further checking. Cookies, storage and unknown-purpose requests are counted separately. Zero means none were observed in the measured scope. NA means there is no verified count. Partial counts describe only retained observations. Legal compliance and noncompliance require separate review.";
+const tileDescription = "Before consent or choice, After Accept and After Reject count distinct retained requests, cookies, storage and frames classified as non-essential or needing classification review, where those classifications were retained. Non-essential means the retained evidence supports that classification. Review means the classification needs further checking. Essential, contextual and unknown-purpose items are excluded from flagged items. Zero means none were observed in the measured scope. NA means there is no verified count. Partial counts describe only retained observations. Legal compliance and noncompliance require separate review.";
 
 function ClassificationSignal({ count, review = false }: { count: number; review?: boolean }) {
   const label = review ? "review" : "non-essential";
@@ -54,6 +54,9 @@ export function ConsentTrackingSummary({ tiles }: { tiles: ConsentTrackingTile[]
         const open = active?.id === tile.id;
         const expandable = hasTileDetails(tile, Boolean(navigation));
         const counts = tile.count !== null ? tile.breakdown : undefined;
+        const inlineUnit = Boolean(counts) || tile.id === "storage" || tile.id === "forms";
+        const storageReview = tile.count !== null && tile.storageReviewCount !== undefined && tile.storageReviewCount > 0
+          ? `${format(tile.storageReviewCount)} ${tile.storageReviewCount === 1 ? "needs" : "need"} classification review` : null;
         const tileClass = "flex min-h-[85px] min-w-0 flex-col justify-center px-3 py-2.5 text-left sm:px-4";
         const content = <>
           <span className="flex items-center justify-between gap-1.5 text-xs font-semibold leading-4 text-slate-700">
@@ -64,7 +67,7 @@ export function ConsentTrackingSummary({ tiles }: { tiles: ConsentTrackingTile[]
               {expandable ? <DisclosureChevron className={open ? "rotate-180 text-sky-700" : "text-slate-500"} /> : null}
             </span>
           </span>
-          <span className="mt-1 flex min-h-7 items-baseline">
+          <span className="mt-1 flex min-h-7 items-baseline gap-1.5">
             {tile.count === null ? <abbr title="No verified count" className="text-base font-medium leading-7 text-slate-600 no-underline">NA</abbr> : <>
               <span className="shrink-0 text-2xl font-semibold leading-7 tracking-tight text-slate-950 tabular-nums" title={format(tile.count)}>
                 {tile.count >= 100000 ? <>
@@ -72,14 +75,14 @@ export function ConsentTrackingSummary({ tiles }: { tiles: ConsentTrackingTile[]
                   <span className="sr-only xl:not-sr-only">{format(tile.count)}</span>
                 </> : format(tile.count)}
               </span>
-              {counts ? <span className="sr-only">{tile.unit}</span> : null}
+              {inlineUnit ? <span className="text-[10px] font-normal leading-4 text-slate-500">{tile.unit}</span> : null}
             </>}
           </span>
           <span className="mt-0.5 block min-h-4 text-[10px] leading-4 text-slate-600">
-            {counts ? <span className="flex flex-wrap items-center gap-x-1.5 whitespace-nowrap text-[9px] tabular-nums xl:gap-x-2 xl:text-[10px]">
-              <ClassificationSignal count={counts.nonEssential} />
-              {counts.review !== undefined ? <ClassificationSignal count={counts.review} review /> : null}
-            </span> : tile.count !== null ? tile.unit : tile.state === "partial" ? "No verified count" : null}
+            {counts ? tile.count === 0 ? null : <span className="flex flex-wrap items-center gap-x-1.5 whitespace-nowrap text-[9px] tabular-nums xl:gap-x-2 xl:text-[10px]">
+              {counts.nonEssential > 0 ? <ClassificationSignal count={counts.nonEssential} /> : null}
+              {counts.review !== undefined && counts.review > 0 ? <ClassificationSignal count={counts.review} review /> : null}
+            </span> : storageReview ?? (tile.count !== null ? inlineUnit || tile.id === "services" ? null : tile.unit : tile.state === "partial" ? "No verified count" : null)}
           </span>
         </>;
         if (!expandable) return <div key={tile.id} id={`${id}-${tile.id}`} className={`${tileClass} bg-white`}>{content}</div>;

@@ -1,3 +1,4 @@
+import { reportApiAccessError } from "../../../../../server/scans/report-access";
 import { streamFullSiteReport } from "../../../../../server/scans/full-site-report-stream";
 import { loadFullSiteFormSnapshot } from "../../../../../server/scans/full-site-forms";
 import { readFullSiteOptions } from "../../../../../server/scans/full-site-options";
@@ -13,6 +14,8 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ scanId: string }> },
 ) {
+  const accessError = await reportApiAccessError();
+  if (accessError) return accessError;
   if (!(await readFullSiteOptions()).allowed) return new Response(null, { status: 404 });
   const { scanId } = await context.params;
   if (!/^[a-f0-9-]{36}$/i.test(scanId))

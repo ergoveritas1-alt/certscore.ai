@@ -1,4 +1,5 @@
 import { retainedPolicyBodyDeclarations } from "../policy-body-declarations";
+import { nonGoverningPolicyDocumentReason, type NonGoverningPolicyReason } from "../policy-document-purpose";
 import { createPrivacyFrameContinuityProof } from "../privacy-frame-continuity";
 import { buildPrivacyChoiceDiagnostics, createPrivacyChoiceDomDiagnostics } from "../privacy-choice-diagnostics";
 import { canStartPolicyAnalysis, createPolicyAnalysisGate } from "../policy-analysis-gate";
@@ -2821,6 +2822,23 @@ async function processPolicyCandidate({
     text: analysisVisibleText,
   });
   if (!textQuality.usable || !documentSubstance.matchesExpectedSurface || guessedThinPrivacyDocument) {
+    // Keep the fetched candidate and its source, but do not extract disclosures
+    // or chase supposed policy supplements from an identified article/product.
+    // This is capture-only: historical packets and report reads are unchanged.
+    if (documentSubstance.reasonCode.startsWith("policy_document_purpose.v1-")) {
+      return {
+        observation: observationFromCandidate(effectiveCandidate, {
+          status: "failed", documentRole: "unknown",
+          documentRoleReasonCodes: [documentSubstance.reasonCode],
+          httpStatus: fetched.status, finalUrl: fetchedFinalUrl,
+          redirectChain: policyFetchRedirectChain(fetched),
+          fetchFailureReason: "insufficient_policy_text", title,
+          textExcerpt: boundedExcerpt(analysisVisibleText, []),
+          confidence: Math.max(0.35, Math.min(0.55, candidate.deterministicScore)),
+        }),
+        artifactRefs: [], secondaryCandidates: [],
+      };
+    }
     const childSelection = await selectOneHopPolicyIndexChildren({
       diagnostics: fetchCaches.diagnostics,
       input,
@@ -3244,6 +3262,7 @@ export function policyDocumentMatchesExpectedSurface(input: {
 export type PolicyDocumentSubstanceAssessment = {
   matchesExpectedSurface: boolean;
   reasonCode:
+    | NonGoverningPolicyReason
     | "consent_settings_shell"
     | "application_error_shell"
     | "multilingual_policy_reviewable"
@@ -3274,6 +3293,10 @@ export function assessPolicyDocumentSubstance(input: {
     title: input.title,
   })) {
     return { matchesExpectedSurface: false, reasonCode: "soft_404" };
+  }
+  if (["privacy_policy", "cookie_policy", "california_notice", "notice_at_collection"].includes(input.surfaceType)) {
+    const nonGoverning = nonGoverningPolicyDocumentReason(input);
+    if (nonGoverning) return { matchesExpectedSurface: false, reasonCode: nonGoverning };
   }
   // An HTTP 200 application error plus navigation is not a policy body.
   // Keep substantive policies containing incidental error/help wording eligible.

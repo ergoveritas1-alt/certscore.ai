@@ -26,9 +26,19 @@ test('short complete standalone notices use distinct retained disclosure proof i
  const assessment=assessGoverningPolicyBodyEvidence(input);
  assert.equal(assessment.state,'substantive');
  assert.ok(assessment.reasonCodes.includes('short_substantive_policy_body.v1'));
- for(const patch of [{targetRelationship:'unknown' as const},{documentTextCoverageStatus:'truncated' as const},
-   {evidenceBoundObservedTopicCount:1,substantiveDisclosureSignalCount:1},{documentTextChars:900}])
+ for(const patch of [{targetRelationship:'unknown' as const},{documentTextCoverageStatus:'truncated' as const},{documentTextChars:900}])
    assert.equal(assessGoverningPolicyBodyEvidence({...input,...patch}).state,'insufficient');
+ // Sparse topic counts do not invalidate the later document-bound notice path:
+ // this complete body has two distinct first-person processing declarations.
+ const sparseTopics={evidenceBoundObservedTopicCount:1,substantiveDisclosureSignalCount:1};
+ const concreteNotice=assessGoverningPolicyBodyEvidence({...input,...sparseTopics});
+ assert.equal(concreteNotice.state,'substantive');
+ assert.ok(concreteNotice.reasonCodes.includes('short_document_bound_notice.v2'));
+ assert.ok(!concreteNotice.reasonCodes.includes('short_substantive_policy_body.v1'));
+ const oneDeclaration='Privacy Policy. We collect personal information to provide our service. '.repeat(18);
+ const insufficient=assessGoverningPolicyBodyEvidence({...input,...sparseTopics,text:oneDeclaration,
+   documentTextChars:oneDeclaration.length,documentSubstance:assessPolicyDocumentSubstance({surfaceType:'privacy_policy',text:oneDeclaration})});
+ assert.equal(insufficient.state,'insufficient','duplicated vocabulary cannot replace independent declaration proof');
  const shell=('Privacy Policy. Read our privacy policy. Navigation Contact Products Careers. ').repeat(20);
  assert.equal(assessGoverningPolicyBodyEvidence({...input,text:shell,documentTextChars:shell.length,documentSubstance:assessPolicyDocumentSubstance({surfaceType:'privacy_policy',text:shell}),evidenceBoundObservedTopicCount:0,substantiveDisclosureSignalCount:0}).state,'insufficient');
 });

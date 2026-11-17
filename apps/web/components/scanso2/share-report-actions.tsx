@@ -1,5 +1,7 @@
 "use client";
 
+import { authorizeCurrentReportShare } from "../scans/report-share-access";
+
 import React, { useActionState, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { sendReportEmailAction, type SendReportEmailActionState } from "../../server/scans/email-report";
@@ -345,6 +347,7 @@ export function ShareReportActions({
   }
 
   async function copyValue(value: string) {
+    await authorizeCurrentReportShare();
     try {
       if (!value || !navigator.clipboard) {
         setCopyState("failed");
@@ -385,7 +388,7 @@ export function ShareReportActions({
               className={iconActionClassName()}
               data-analytics-cta-type="email"
               data-analytics-event="report_cta_clicked"
-              onClick={() => setIsEmailDialogOpen(true)}
+              onClick={async () => { await authorizeCurrentReportShare(); setIsEmailDialogOpen(true); }}
               title="Email report"
             >
               <EmailIcon />
@@ -638,6 +641,7 @@ export function AgentSummaryActions({ domainLabel, scanId }: ShareReportActionsP
   }, []);
 
   async function copyValue(value: string, label: string) {
+    await authorizeCurrentReportShare();
     try {
       if (!value || !navigator.clipboard) {
         setCopyState({ label, status: "failed" });

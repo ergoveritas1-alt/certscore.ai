@@ -15,6 +15,7 @@ export type ConsentTrackingTile = {
   unit: string;
   state: "recorded" | "partial" | "not_tested" | "unavailable";
   choiceUnconfirmed?: boolean;
+  storageReviewCount?: number;
   breakdown?: { nonEssential: number; review?: number };
   metrics?: Totals[];
   notes?: string[];
@@ -37,6 +38,17 @@ function observationCount(count: number | undefined, state: ConsentTrackingTile[
   return count !== undefined && (state === "recorded" || count > 0) ? count : null;
 }
 
+// Sum resource classifications, not services, events, findings or score effects.
+// Omitted review counts remain unavailable rather than becoming a verified zero.
+function flaggedItems(groups: Array<Partial<InventoryAssessmentCounts> | undefined>) {
+  const retained = groups.filter(group => group?.nonEssential !== undefined || group?.review !== undefined);
+  if (!retained.length) return undefined;
+  const nonEssential = retained.reduce((sum, group) => sum + (group?.nonEssential ?? 0), 0);
+  const review = retained.some(group => group?.review !== undefined)
+    ? retained.reduce((sum, group) => sum + (group?.review ?? 0), 0) : undefined;
+  return { count: nonEssential + (review ?? 0), breakdown: { nonEssential, ...(review !== undefined ? { review } : {}) } };
+}
+
 export function buildConsentTrackingOverview(report: OverviewInput, focus: ReportReviewFocus): ConsentTrackingTile[] {
   const california = focus === "ccpa_cpra";
   const baselineMetric = report.inventorySummary?.find(metric => inventoryMetricLabel(metric.label) === requests);
@@ -55,11 +67,12 @@ export function buildConsentTrackingOverview(report: OverviewInput, focus: Repor
   const inventoryNames = overview?.identifiedServiceNames ?? [];
   const hasBaselineInventory = Boolean(overview || baselineTotals.some(metric => metric.value != null || metric.counts));
   const baselineCounts = overview?.distinctClassifications?.requests;
+  const baselineFlags = overview?.distinctClassifications ? flaggedItems(Object.values(overview.distinctClassifications)) : undefined;
   const baselineState = baselineCounts ? "recorded" : "unavailable";
   const before: ConsentTrackingTile = {
     id: "before", label: california ? "Before choice" : "Before consent",
-    count: baselineCounts ? baselineCounts.nonEssential + baselineCounts.review : null,
-    unit: "flagged requests", state: baselineState, breakdown: baselineCounts,
+    count: baselineFlags?.count ?? null,
+    unit: "flagged items", state: baselineState, breakdown: baselineFlags?.breakdown,
     metrics: baselineTotals, services: inventoryNames, evidence: hasBaselineInventory ? "pre-consent" : undefined,
     notes: hasBaselineInventory ? [overview ? "Counts represent distinct retained resources. Services group requests, cookies and storage, and frames."
       : "The full request classification was not captured. Other retained inventory counts are shown below.",
@@ -67,10 +80,10 @@ export function buildConsentTrackingOverview(report: OverviewInput, focus: Repor
   };
   const baselineServices = new Set(report.resourceInventory?.services.filter(service => service.context.identity).map(service => service.key));
   const actions = (["accept", "reject"] as const).map((id): ConsentTrackingTile => {
-    const label = id === "accept" ? "After Accept" : "After Reject";
+    const label = id === "accept" ? "After Accept click" : "After Reject click";
     const path = id === "accept" ? report.acceptPath : report.rejectPath;
     const capture = report.actionInventories?.[id];
-    if (!capture) return { id, label, count: null, unit: "non-essential requests", state: "unavailable",
+    if (!capture) return { id, label, count: null, unit: "flagged items", state: "unavailable",
       notes: path?.note ? [path.note] : undefined, evidence: report.actionTimelines?.[id] ? id : undefined };
     const action = buildNetworkInventoryOverview(capture.inventory.services);
     const proof = capture.measurement;
@@ -87,19 +100,21 @@ export function buildConsentTrackingOverview(report: OverviewInput, focus: Repor
       click_uncertain: "Capture stopped because click completion was uncertain.",
     })[proof.stopReason];
     const samplesStorage = action.distinctStorage > 0 || proof?.storageSnapshotRetained;
+    const metrics: Totals[] = [
+      { label: "Distinct requests", value: action.distinctResources, counts: req ? { nonEssential: req.nonEssential, unclassified: req.unclassified } : undefined },
+      { label: storage, value: samplesStorage ? action.distinctStorage : null,
+        counts: samplesStorage && action.distinctClassifications ? {
+          nonEssential: action.distinctClassifications.storage.nonEssential,
+          unclassified: action.distinctClassifications.storage.unclassified,
+        } : undefined },
+      { label: frames, value: null },
+    ];
+    const flags = flaggedItems(metrics.map(metric => metric.counts));
     return {
-      id, label, count: observationCount(req?.nonEssential, states), unit: "non-essential requests", state: states,
+      id, label, count: observationCount(flags?.count, states), unit: "flagged items", state: states,
       choiceUnconfirmed: proof?.execution.clickCompleted && !proof.execution.consentConfirmed,
-      breakdown: req ? { nonEssential: req.nonEssential } : undefined,
-      metrics: [
-        { label: "Distinct requests", value: action.distinctResources, counts: req ? { nonEssential: req.nonEssential, unclassified: req.unclassified } : undefined },
-        { label: storage, value: samplesStorage ? action.distinctStorage : null,
-          counts: samplesStorage && action.distinctClassifications ? {
-            nonEssential: action.distinctClassifications.storage.nonEssential,
-            unclassified: action.distinctClassifications.storage.unclassified,
-          } : undefined },
-        { label: frames, value: null },
-      ],
+      breakdown: flags?.breakdown,
+      metrics,
       notes: [`${capture.note} ${capture.clockLabel}.`, ...(stop ? [stop] : []),
         ...(proof?.documentChanged ? ["The page or control frame changed during the capture. Treat the counts as a partial view of this choice."] : []),
         ...(path?.note && states === "partial" ? [path.note] : []),
@@ -124,10 +139,11 @@ export function buildConsentTrackingOverview(report: OverviewInput, focus: Repor
       ...forms.map(row => `${row.form.title || row.form.surfaceType.replaceAll("_", " ")} · ${row.form.retainedFieldCount} fields${isAfterAcceptForm(row) ? " · After Accept" : ""}`)],
   };
   if (!california) return [before, ...actions,
-    { id: "services", label: "Services", count: overview?.identifiedServices ?? null, unit: "identified services",
+    { id: "services", label: "Services before consent", count: overview?.identifiedServices ?? null, unit: "identified services",
       state: overview ? "recorded" : "unavailable", services: inventoryNames, evidence: overview?.identifiedServices ? "pre-consent" : undefined },
     { id: "storage", label: storage, count: storageCount || null,
       unit: overview ? "distinct items" : "retained items", state: storageCount ? overview ? "recorded" : "partial" : "unavailable",
+      storageReviewCount: baselineTotals[1]?.counts?.review,
       metrics: baselineTotals.slice(1), evidence: storageCount ? "pre-consent" : undefined }, formTile];
 
   const privacy = report.californiaPrivacyReview;

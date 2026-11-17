@@ -1,3 +1,4 @@
+import { reportApiAccessError } from "../../../../../server/scans/report-access";
 import { resolveReportReviewFocus } from "../../../../../lib/scans/report-review-focus";
 import {loadGpcResourceInventory} from "../../../../../server/scans/gpc-resource-inventory";
 import { readFullSiteOptions } from "../../../../../server/scans/full-site-options";
@@ -51,6 +52,8 @@ async function loadReportBrandLogo(headerTheme: ReportHeaderTheme) {
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
+  const accessError = await reportApiAccessError();
+  if (accessError) return accessError;
   const { scanId } = await context.params;
   if (!/^[a-f0-9-]{36}$/i.test(scanId)) return error(400, "Invalid scan ID.");
   const format = request.nextUrl.searchParams.get("format") ?? "json";

@@ -1,3 +1,4 @@
+import { requireReportUser, reportReturnPath } from "../../../../server/scans/report-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -53,8 +54,9 @@ function getPublicScanDomainLabel(domainHostname: string | null) {
   return domainHostname?.trim() || "Public website";
 }
 
-export async function generateMetadata({ params }: PublicScanDetailPageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: PublicScanDetailPageProps): Promise<Metadata> {
   const { scanId } = await params;
+  await requireReportUser(reportReturnPath(`/scano/${encodeURIComponent(scanId)}`, await searchParams));
   if (process.env.NODE_ENV !== "production" && scanId === SHADOW_REPORT_SCAN_ID) {
     return {
       title: { absolute: `Previous report for ${SHADOW_REPORT.scan.host} | CertScore.ai` },
@@ -110,10 +112,11 @@ const RECENT_SCAN_REUSED_MESSAGE =
 
 export default async function PublicScanDetailPage({ params, searchParams }: PublicScanDetailPageProps) {
   const { scanId } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  await requireReportUser(reportReturnPath(`/scano/${encodeURIComponent(scanId)}`, resolvedSearchParams));
   if (process.env.NODE_ENV !== "production" && scanId === SHADOW_REPORT_SCAN_ID) {
     redirect(SHADOW_REPORT_SOURCE_URL);
   }
-  const resolvedSearchParams = searchParams ? await searchParams : {};
   const recentScanReused = resolvedSearchParams.recentScanReused === "1";
   const fromLightMcpDemo = resolvedSearchParams.source === "mcp-light-demo";
   const statusProjection = await getPublicScanStatusProjection(scanId);

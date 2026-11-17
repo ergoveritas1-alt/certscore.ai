@@ -14,22 +14,29 @@ const score = {version: "test", value: 29, assessedNonEssentialStorage: 9, score
 
 test("the consent overview displays missing counts as NA, plain form counts, and visible classification markers", () => {
   const tiles = renderToStaticMarkup(<ConsentTrackingSummary tiles={[
-    { id: "before", label: "Before choice", count: 0, unit: "flagged requests", state: "recorded", breakdown: { nonEssential: 0, review: 0 } },
-    { id: "accept", label: "After Accept", count: 44, unit: "non-essential requests", state: "partial", breakdown: { nonEssential: 44 } },
-    { id: "reject", label: "After Reject", count: null, unit: "non-essential requests", state: "unavailable" },
+    { id: "before", label: "Before choice", count: 0, unit: "flagged items", state: "recorded", breakdown: { nonEssential: 0, review: 0 } },
+    { id: "accept", label: "After Accept", count: 44, unit: "flagged items", state: "partial", breakdown: { nonEssential: 44 } },
+    { id: "reject", label: "After Reject", count: null, unit: "flagged items", state: "unavailable" },
     { id: "forms", label: "Forms", count: 1, unit: "observed forms", state: "partial" },
   ]} />);
   assert.match(tiles, /title="No verified count"[^>]*>NA</);
   assert.match(tiles, /title="0">0</);
   assert.match(tiles, /title="1">1</);
   assert.match(tiles, /title="44">44</);
-  assert.match(tiles, /<span class="sr-only">flagged requests<\/span>/);
-  assert.match(tiles, /<span class="sr-only">non-essential requests<\/span>/);
+  assert.equal((tiles.match(/<span class="text-\[10px\] font-normal leading-4 text-slate-500">flagged items<\/span>/g) ?? []).length, 2);
+  assert.match(tiles, /title="0">0<\/span><span class="text-\[10px\] font-normal leading-4 text-slate-500">flagged items<\/span><\/span>/);
   assert.match(tiles, /title="44 non-essential">44 non-essential</);
   assert.match(tiles, />observed forms<\/span>/);
-  assert.match(tiles, /rounded-full bg-rose-500[^>]*><\/span><span title="0 non-essential"/);
-  assert.match(tiles, /rounded-full bg-amber-500[^>]*><\/span><span title="0 review"/);
+  assert.doesNotMatch(tiles, /title="0 non-essential"|title="0 review"/);
   assert.doesNotMatch(tiles, /Unavailable|≥/);
+});
+
+test("positive flagged totals show only positive classification subcounts", () => {
+  const html = renderToStaticMarkup(<ConsentTrackingSummary tiles={[
+    { id: "before", label: "Before consent", count: 2, unit: "flagged items", state: "recorded", breakdown: { nonEssential: 0, review: 2 } },
+  ]} />);
+  assert.doesNotMatch(html, /title="0 non-essential"/);
+  assert.match(html, /title="2 review">2 review</);
 });
 
 test("consent tiles offer a disclosure only when there are details to show", () => {
@@ -47,6 +54,17 @@ test("consent tiles offer a disclosure only when there are details to show", () 
   }
   for (const id of ["accept", "before"]) {
     assert.match(html, new RegExp(`<button id="[^"]+-${id}" type="button" aria-expanded="false"[^>]*>.*?<svg`));
+  }
+});
+
+test("storage classification review count is visible without changing the inventory total", () => {
+  for (const review of [undefined, 0, 1, 2]) {
+    const html = renderToStaticMarkup(<ConsentTrackingSummary tiles={[
+      { id: "storage", label: "Cookies & storage", count: 3, unit: "distinct items", state: "recorded", storageReviewCount: review },
+    ]} />);
+    assert.match(html, /title="3">3</);
+    if (review) assert.match(html, new RegExp(`>${review} ${review === 1 ? "needs" : "need"} classification review</span>`));
+    else assert.doesNotMatch(html, /classification review<\/span>/);
   }
 });
 

@@ -1,0 +1,522 @@
+{
+  "product": "CertScore.ai",
+  "scanId": "9b0b7a54-a12e-4522-9887-c47757e9f38f",
+  "reviewDate": "2026-11-16",
+  "source": {
+    "tool": "certscore_get_report_evidence_page",
+    "section": "policy",
+    "reviewFocus": "gdpr_eprivacy",
+    "snapshot": "41a88ea99e8302040253db95b98ae52558d5a2486379a5f98e9f9ecee8ec8863",
+    "exportComplete": true
+  },
+  "conclusion": "Retained educational/article and product text received positive policy/disclosure credit. This is more than an unresolved discovery candidate.",
+  "confirmedIssues": [
+    {
+      "rows": [
+        "privacy_notice_availability",
+        "legal_basis_disclosure_observed",
+        "international_transfers_disclosure"
+      ],
+      "sourceUrl": "https://decareto.com/website-privacy/tracking",
+      "basis": "The retained passage identifies an authored article dated May 23, 2023. General tracking/legal guidance is used as target policy disclosure evidence."
+    },
+    {
+      "rows": [
+        "cookie_notice_policy_availability"
+      ],
+      "sourceUrls": [
+        "https://decareto.com/website-privacy/tracking",
+        "https://decareto.com/gdpr/compliance-check"
+      ],
+      "basis": "Observed durable cookie disclosure credit references the article and a product page; retained privacy-notice evidence quotes agency sales/generator copy."
+    }
+  ],
+  "limits": [
+    "The original retained result event, manifest, evidence bundle, diagnostics and four policy text artifacts were retrieved with read-only AWS access. Every downloaded artifact was checked against its retained SHA-256 and size.",
+    "The original HTML and rendered recovery were not repeated. The retained 435-character real notice shell does not establish the absence of a governing privacy policy.",
+    "The new exclusion is conservative: corroborated English article/product identities are recognized; unmatched or ambiguous documents retain existing treatment. Canonical multilingual notice titles remain eligible."
+  ],
+  "codeInspection": {
+    "substanceGuard": "packages/certscore-scan-core/src/scanners/policy-surface-scanner.ts:3264 accepts privacy-topic matches and cookie vocabulary; it is not a document-role exclusion for educational articles.",
+    "governingBody": "packages/certscore-scan-core/src/scanners/policy-surface-scanner.ts:6909 evaluates candidate identity, ownership, completeness and substantive evidence. Same-domain ownership is not itself proof of a governing notice.",
+    "projection": "apps/web/lib/scans/gdpr-eprivacy-coverage-policy.ts:8943 projects positive policy-surface/topic evidence into Observed rows."
+  },
+  "recommendedFollowUp": [
+    "Review the local correction and validation record before separately authorizing deployment.",
+    "After separate deployment authorization, verify a new result; do not rewrite this historical scan."
+  ],
+  "actions": {
+    "labelingOnly": false,
+    "policyCodeChanged": true,
+    "canonicalFindingsChanged": false,
+    "scoresChanged": false,
+    "newScan": false,
+    "productionWrites": false,
+    "deployed": false,
+    "incrementalRecurringCostUsdPerMonth": "estimated below 0.10 at 100000 scans, within existing budgets; local-only work has no recurring cost",
+    "baselineRepairRecurringCostUsdPerMonth": 0
+  },
+  "retainedReportEntries": [
+    {
+      "path": "/consentRows",
+      "value": [
+        {
+          "correctionSteps": [],
+          "evidenceRefs": [
+            "Evidence: cookie policy or cookie disclosure surface retained",
+            "Not confirmed: granular named-cookie inventory",
+            "Not confirmed: cookie preference interface",
+            "Policy URL: https://decareto.com/website-privacy/tracking",
+            "Policy URL: https://decareto.com/gdpr/compliance-check"
+          ],
+          "id": "cookie_notice_policy_availability",
+          "status": "Observed",
+          "summary": "Observed in scan evidence; A durable cookie disclosure surface was retained in the tested context; a granular named-cookie inventory or preference interface was not confirmed.",
+          "title": "Cookie notice / cookie policy availability"
+        }
+      ]
+    },
+    {
+      "path": "/findings",
+      "value": [
+        {
+          "correctionSteps": [
+            "In DevTools Network, filter each listed hostname/path, reload with site data cleared, and open its Initiator stack. Locate the originating tag, inline script, embed or CMS/plugin configuration; search source files for the hostname if no initiator was retained. Record each integration's purpose and required consent category with the privacy owner. Move consent-dependent initialization behind the CMP's confirmed category state: default optional loaders and storage writers to off, and start them only after the matching category is granted. Remove unconditional page-load triggers and duplicate hard-coded tags. A banner, consent cookie, or denied-storage flag alone does not prevent a request. Apply the same gate to deferred callbacks, SPA route changes, timers and retries. For replay tools, exclude sensitive pages and mask inputs; verify with non-sensitive test values in staging. A script download does not prove what was recorded. Do not delete essential or consent-decision storage indiscriminately. Publish the approved source/CMP changes and clear caches. Re-test: Use three independent fresh sessions: no choice, confirmed Reject, and confirmed Accept. For each relevant category, compare the listed requests and storage writes over equal windows at least as long as the retained comparison. Consent-dependent collection must not start before a grant or after refusal, and should work after the applicable grant. Inspect payloads and replay masking separately; retain sanitized Network logs and re-scan the same URL."
+          ],
+          "evidence": [
+            "GDPR / ePrivacy: Pre-consent storage classification review",
+            "Cookies or browser storage were observed before consent, but the scan could not determine whether every item was essential or non-essential."
+          ],
+          "focus": "Pre-consent runtime",
+          "id": "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
+          "rank": 1,
+          "status": "Partial concern",
+          "summary": "Cookies or browser storage were retained before consent. First retained item: PHPSESSID (decareto.com): unknown, first observed 2.667s after scan start. Essentiality was not confirmed for every item.",
+          "title": "Pre-consent storage classification review",
+          "vendors": []
+        },
+        {
+          "correctionSteps": [
+            "Repair labels, accessible names, role/ARIA usage, and semantic structure for the retained axe examples, then rerun the accessibility scan."
+          ],
+          "evidence": [
+            "Semantic labeling accessibility issue"
+          ],
+          "focus": "Accessibility",
+          "id": "accessibility_priority_group",
+          "priority": "high",
+          "rank": 2,
+          "status": "Observed",
+          "summary": "Review automated accessibility findings and retained examples in Detailed evidence.",
+          "title": "Accessibility issues",
+          "vendors": []
+        }
+      ]
+    },
+    {
+      "path": "/gdprTransparencyRows",
+      "value": []
+    },
+    {
+      "path": "/gdprTransparencyRows/0",
+      "value": {}
+    },
+    {
+      "path": "/gdprTransparencyRows/0/correctionSteps",
+      "value": []
+    },
+    {
+      "path": "/gdprTransparencyRows/0/evidenceRefs",
+      "value": [
+        "Excerpt: As an agency, you can share reports directly with clients and use the privacy policy generator to create privacy policies in 24 languages. All identified issues are clearly documented, prioritised and accompanied by specific recommendations for action. This turns the GDPR check into a practical basis for action in design, development, project management and compliance. Boost your revenue by offering clients comprehensive advice on website data protection and compliance from a single source. Boost sales 100% white-l",
+        "Evidence: privacy policy surface retained",
+        "Policy URL: https://decareto.com/website-privacy/tracking",
+        "Policy URL: https://decareto.com/gdpr/compliance-check"
+      ]
+    },
+    {
+      "path": "/gdprTransparencyRows/0/id",
+      "value": "privacy_notice_availability"
+    },
+    {
+      "path": "/gdprTransparencyRows/0/policyEvidence",
+      "value": {
+        "capturedAt": "Nov 16, 2026, 10:19:53 PM UTC",
+        "documentTitle": "Privacy notice link/surface discovered",
+        "sections": [
+          {
+            "excerpt": "Eckhard Schneider Published by Decareto \u00b7 4min read \u00b7 May 23, 2023 Table of Contents Tracking website visits is important for optimizing websites and online marketing. It provides conclusions about which topics work particularly well on the website and which marketing measures lead to results. We show you how to implement tracking in a privacy-compliant manner. As we all know, there are two sides to every coin. From the user\u2019s point of view, tracking is quite annoying. Why should the website operator be able to know which websites a private person has visited. However, from the website operator\u2019s point of view, there is hardly any other way to optimize the website and constantly adapt it to the users\u2019 needs. The user\u2019s interest in protecting his personal data is therefore in conflict with the website operator\u2019s interest in the best possible and, above all, economically successful performance of his website. When is tracking allowed? As with any processing activity of personal data, tracking also needs a legal basis, especially if cookies are used to identify the visitor in the process.",
+            "heading": "Matched retained passage"
+          },
+          {
+            "excerpt": "As with any processing activity of personal data, tracking also needs a legal basis, especially if cookies are used to identify the visitor in the process. For some time, the legitimate interest of the site operator according to Art. 6 (1) f DSGVO was considered sufficient for this purpose. Since the Telecommunications Telemedia Data Protection Act, or TTDSG for short, came into force, the user\u2019s consent to the storage of a cookie required for tracking is now required, Section 25 (1) sentence 1 TTDSG. Only for cookies that are technically necessary for the operation of the website, there is an exception. For them, the consent requirement does not apply. Since tracking on a website is not technically necessary, consent of the visitor must always be obtained in principle before processing. Tracking may only be \u201carmed\u201d after consent has been given and cookies may be set accordingly. [lead_magnet_teaser]",
+            "heading": "Supporting retained passage 2"
+          },
+          {
+            "excerpt": "To circumvent the obligation to consent to cookies, many tracking tools now use canvas fingerprinting to identify the visitor. This involves giving the user\u2019s browser a hidden text to display. Based on various parameters, such as the operating system, the browser, the graphics card and installed fonts, the user can be recognized with a very high degree of probability. Although canvas fingerprinting is not a cookie, the same rules apply here. This is because the regulations from the TTDSG are explicitly formulated in an open manner and refer in Section 25 (1) TTDSG to access to information \u201cthat is already stored in the terminal equipment\u201d. Therefore, consent must also be obtained before canvas fingerprinting.",
+            "heading": "Supporting retained passage 3"
+          },
+          {
+            "excerpt": "In fact, tracking without consent is conceivable. For example, if cookies are not used and fingerprinting is only carried out via the data which the browser supplies anyway with each page call, such as the user agent, the browser language, or the anonymized IP address. Since no cookies are set, the TTDSG is no longer relevant. If there is no personal reference, the provisions of the GDPR no longer must be observed. The Conference of Independent Federal and State Data Protection Authorities (DSK) also follows this opinion. In addition, the product used for tracking must not process the data in insecure third countries, such as the USA.",
+            "heading": "Supporting retained passage 4"
+          },
+          {
+            "excerpt": "In the meantime, many data protection authorities came of the opinion that the use of Google Analytics violates the GDPR, and that processing is not permitted even with consent. The Austrian data protection authority was the pioneer regarding this opinion. In the meantime, the French and Italian data protection authorities have joined this legal opinion. The reasoning is as follows: When Google Analytics is used, data flows to the USA. However, the USA is not considered a safe third country under data protection law. In addition, Google Analytics does not ensure an adequate level of protection within the meaning of Article 44 of the GDPR in the view of the authorities. In particular, the data would only be anonymized in the USA. In the meantime, however, the situation has changed. With the new Google Analytics version GA4, anonymization no longer takes place in the USA, but on servers in Europe. Google has also adopted the new EU standard contractual clauses in its terms and conditions. This has significantly improved the level of data protection. Nevertheless, it can be assumed that the data protection authorities will continue to dislike Google Analytics in principle.",
+            "heading": "Supporting retained passage 5"
+          }
+        ],
+        "sourceUrl": "https://decareto.com/website-privacy/tracking"
+      }
+    },
+    {
+      "path": "/gdprTransparencyRows/0/status",
+      "value": "Observed"
+    },
+    {
+      "path": "/gdprTransparencyRows/0/summary",
+      "value": "Observed in policy-surface evidence; Privacy notice evidence was retained in public policy-surface evidence; policy surface: https://decareto.com/website-privacy/tracking and https://decareto.com/gdpr/compliance-check; 24545 policy-text characters retained."
+    },
+    {
+      "path": "/gdprTransparencyRows/0/title",
+      "value": "Privacy notice link/surface discovered"
+    },
+    {
+      "path": "/gdprTransparencyRows/1",
+      "value": {
+        "correctionSteps": [],
+        "evidenceRefs": [
+          "Evidence: Legal basis disclosure",
+          "Excerpt: When is tracking allowed? As with any processing activity of personal data, tracking also needs a legal basis, especially if cookies are used to identify the visitor in the process. For some time, the legitimate interest of the site operator according to Art. 6 (1) f DSGVO was considered sufficient for this purpose.",
+          "Locale: en",
+          "Policy URL: https://decareto.com/website-privacy/tracking"
+        ],
+        "id": "legal_basis_disclosure_observed",
+        "policyEvidence": {
+          "capturedAt": "Nov 16, 2026, 10:19:53 PM UTC",
+          "documentTitle": "Legal basis disclosure",
+          "sections": [
+            {
+              "excerpt": "When is tracking allowed? As with any processing activity of personal data, tracking also needs a legal basis, especially if cookies are used to identify the visitor in the process. For some time, the legitimate interest of the site operator according to Art. 6 (1) f DSGVO was considered sufficient for this purpose.",
+              "heading": "Matched retained passage"
+            }
+          ],
+          "sourceUrl": "https://decareto.com/website-privacy/tracking"
+        },
+        "status": "Observed",
+        "summary": "Policy text included matching disclosure evidence: \"When is tracking allowed? As with any processing activity of personal data, tracking also needs a legal basis, especially if cookies are used to...[more evidence available]\"",
+        "title": "Legal basis disclosure"
+      }
+    },
+    {
+      "path": "/gdprTransparencyRows/2",
+      "value": {
+        "correctionSteps": [],
+        "evidenceRefs": [],
+        "id": "retention_disclosure_observed",
+        "status": "Not confirmed",
+        "summary": "Not confirmed by scan evidence; No production-approved topic match was established. This neutral result does not establish that the disclosure is absent.",
+        "title": "Retention disclosure"
+      }
+    },
+    {
+      "path": "/gdprTransparencyRows/3",
+      "value": {
+        "correctionSteps": [],
+        "evidenceRefs": [],
+        "id": "controller_contact_disclosure",
+        "status": "Not confirmed",
+        "summary": "Not confirmed by scan evidence; No production-approved topic match was established. This neutral result does not establish that the disclosure is absent.",
+        "title": "Controller/contact disclosure"
+      }
+    },
+    {
+      "path": "/gdprTransparencyRows/4",
+      "value": {
+        "correctionSteps": [],
+        "evidenceRefs": [],
+        "id": "processing_purposes_disclosure",
+        "status": "Not confirmed",
+        "summary": "Not confirmed by scan evidence; No production-approved topic match was established. This neutral result does not establish that the disclosure is absent.",
+        "title": "Processing purposes disclosure"
+      }
+    },
+    {
+      "path": "/gdprTransparencyRows/5",
+      "value": {
+        "correctionSteps": [],
+        "evidenceRefs": [],
+        "id": "recipients_vendor_categories_disclosure",
+        "status": "Not confirmed",
+        "summary": "Not confirmed by scan evidence; No production-approved topic match was established. This neutral result does not establish that the disclosure is absent.",
+        "title": "Recipients/vendor categories disclosed"
+      }
+    },
+    {
+      "path": "/gdprTransparencyRows/6",
+      "value": {
+        "correctionSteps": [],
+        "evidenceRefs": [],
+        "id": "data_subject_rights_disclosure",
+        "status": "Not confirmed",
+        "summary": "Not confirmed by scan evidence; No production-approved topic match was established. This neutral result does not establish that the disclosure is absent.",
+        "title": "Data subject rights disclosure"
+      }
+    },
+    {
+      "path": "/gdprTransparencyRows/7",
+      "value": {
+        "correctionSteps": [],
+        "evidenceRefs": [
+          "Evidence: International transfer disclosure",
+          "Excerpt: Google has also adopted the new EU standard contractual clauses in its terms and conditions. This has significantly improved the level of data protection. Nevertheless, it can be assumed that the data protection authorities will continue to dislike Google Analytics in principle.",
+          "Locale: en",
+          "Policy URL: https://decareto.com/website-privacy/tracking"
+        ],
+        "id": "international_transfers_disclosure",
+        "policyEvidence": {
+          "capturedAt": "Nov 16, 2026, 10:19:53 PM UTC",
+          "documentTitle": "International transfer disclosure",
+          "sections": [
+            {
+              "excerpt": "Google has also adopted the new EU standard contractual clauses in its terms and conditions. This has significantly improved the level of data protection. Nevertheless, it can be assumed that the data protection authorities will continue to dislike Google Analytics in principle.",
+              "heading": "Matched retained passage"
+            }
+          ],
+          "sourceUrl": "https://decareto.com/website-privacy/tracking"
+        },
+        "status": "Observed",
+        "summary": "Policy text included matching international-transfer disclosure evidence: \"Google has also adopted the new EU standard contractual clauses in its terms and conditions. This has significantly improved the level of data...[more evidence available]\"",
+        "title": "International transfer disclosure"
+      }
+    },
+    {
+      "path": "/gdprTransparencyRows/8",
+      "value": {
+        "correctionSteps": [],
+        "evidenceRefs": [],
+        "id": "dpo_contact_point_disclosure",
+        "status": "Not confirmed",
+        "summary": "Not confirmed by scan evidence; No production-approved topic match was established. This neutral result does not establish that the disclosure is absent.",
+        "title": "DPO contact point (where applicable)"
+      }
+    },
+    {
+      "path": "/gdprTransparencyRows/9",
+      "value": {
+        "correctionSteps": [],
+        "evidenceRefs": [],
+        "id": "supervisory_authority_complaint_disclosure",
+        "status": "Not confirmed",
+        "summary": "Not confirmed by scan evidence; No production-approved topic match was established. This neutral result does not establish that the disclosure is absent.",
+        "title": "Supervisory authority complaint"
+      }
+    },
+    {
+      "path": "/gdprTransparencyRows/10",
+      "value": {
+        "correctionSteps": [],
+        "evidenceRefs": [],
+        "id": "automated_decision_making_profiling_disclosure",
+        "status": "Not confirmed",
+        "summary": "Not confirmed by scan evidence; No production-approved topic match was established. This neutral result does not establish that the disclosure is absent.",
+        "title": "Profiling / automated decisions disclosure"
+      }
+    },
+    {
+      "path": "/policySurfaceCoverage",
+      "value": "complete"
+    },
+    {
+      "path": "/postureScores",
+      "value": {
+        "ccpaCpra": {
+          "coverage": "limited",
+          "coverageSummary": {
+            "evidenceFamilies": 5,
+            "families": [
+              {
+                "assessmentState": "partial",
+                "followUp": "interpretation",
+                "id": "privacy_notice",
+                "status": "review"
+              },
+              {
+                "assessmentState": "partial",
+                "followUp": "interpretation",
+                "id": "california_rights",
+                "status": "review"
+              },
+              {
+                "assessmentState": "partial",
+                "followUp": "interpretation",
+                "id": "request_methods",
+                "status": "review"
+              },
+              {
+                "assessmentState": "limited",
+                "followUp": "capture",
+                "id": "collection_notice",
+                "status": "review"
+              },
+              {
+                "assessmentState": "partial",
+                "followUp": "interpretation",
+                "id": "sale_sharing",
+                "status": "review"
+              },
+              {
+                "assessmentState": "limited",
+                "followUp": "capture",
+                "id": "privacy_choices",
+                "status": "unknown"
+              }
+            ],
+            "postureBasis": "assuming_ccpa_applies",
+            "scoreReady": false,
+            "totalFamilies": 6
+          },
+          "policyVersion": "california-regulatory-posture.v21-combined-opt-out",
+          "posture": "ccpa_cpra",
+          "scope": "starting_page",
+          "score": 96
+        },
+        "contractVersion": "certscore.posture-scores.v1",
+        "gdprEprivacy": {
+          "coverage": "scored",
+          "policyVersion": "gdpr-eprivacy-posture.v26-consent-only",
+          "posture": "gdpr_eprivacy",
+          "scope": "starting_page",
+          "score": 88
+        }
+      }
+    },
+    {
+      "path": "/score",
+      "value": {
+        "label": "Strong",
+        "value": 88
+      }
+    }
+  ],
+  "offlineSubstanceProbe": {
+    "scope": "Current local substance guard only, using concatenated retained article excerpts; not a full historical scanner replay or governing-body verdict.",
+    "results": [
+      {
+        "surfaceType": "privacy_policy",
+        "retainedExcerptChars": 4571,
+        "assessment": {
+          "matchesExpectedSurface": true,
+          "reasonCode": "substantive_topic_match"
+        }
+      },
+      {
+        "surfaceType": "cookie_policy",
+        "retainedExcerptChars": 4571,
+        "assessment": {
+          "matchesExpectedSurface": true,
+          "reasonCode": "surface_specific_signal"
+        }
+      }
+    ]
+  },
+  "packetTrace": {
+    "sourceBundleSha256": "f91468b44f888e1001f29fe7e59e890975eafc53a6d9b1de92e80af954cec66a",
+    "sourceManifestSha256": "5204af90cd5b64df8b54ce51af5a58aad271fdc84b1de0fc2b6354a8e71f187b",
+    "diagnosticsSha256": "1d5ebc7658d1f6c5d6df4cc1e5914cafe6ed3d01e194953fa1a749e801cb6a15",
+    "fixtureManifest": "packages/certscore-scan-core/src/fixtures/policy-document-purpose/manifest.json",
+    "observedSequence": [
+      "Footer Privacy statement at /privacy-policy/ was found and fetched, but only 435 characters of shell text were retained. Rendered recovery returned navigation_no_response.",
+      "Header Privacy Policy Generator matched the privacy policy phrase. Data Protection Audit matched equivalent data protection wording. These are discovery candidates, not proof of governing document role.",
+      "The tracking article was persisted as policy_document and primary governing selection (rank 1); two product pages were supporting documents. Article13 topic matches and privacy vocabulary were accepted as substance.",
+      "One-hop selection chose generator/compliance-check pages as supposed GDPR supplements. The actual notice remained an ineligible policy_index."
+    ],
+    "historicalRoleSelections": [
+      {
+        "url": "https://decareto.com/privacy-policy/",
+        "title": "privacy statement - decareto",
+        "documentRole": "policy_index",
+        "selectionState": "ineligible"
+      },
+      {
+        "url": "https://decareto.com/website-privacy/generator/",
+        "title": "Privacy Policy Generator with Website Scan | decareto",
+        "documentRole": "policy_document",
+        "selectionState": "supporting"
+      },
+      {
+        "url": "https://decareto.com/website-privacy/tracking/",
+        "title": "Privacy-compliant tracking on websites - Decareto",
+        "documentRole": "policy_document",
+        "selectionState": "primary"
+      },
+      {
+        "url": "https://decareto.com/gdpr/compliance-check/",
+        "title": "GDPR Check for Websites | decareto",
+        "documentRole": "policy_document",
+        "selectionState": "supporting"
+      }
+    ]
+  },
+  "localCorrection": {
+    "version": "policy_document_purpose.v1",
+    "files": [
+      "packages/certscore-scan-core/src/policy-document-purpose.ts",
+      "packages/certscore-scan-core/src/scanners/policy-surface-scanner.ts"
+    ],
+    "behavior": [
+      "Capture-time bounded title (512 chars) and lead (6000 chars) checks require corroborating instructional or commercial purpose.",
+      "Negative candidates retain their observed link, final URL, fetched HTTP status, bounded excerpt and a versioned role reason. They are insufficient policy evidence, not transport failures or missing-policy findings.",
+      "Identified articles/products skip disclosure extraction, vendor/cookie policy facts and policy-supplement child fetches.",
+      "No shared contract, read-time report projection, canonical scoring rule, model prompt, deployment flag or historical artifact is changed."
+    ],
+    "historicalPreservation": "The unchanged governing-selection projector still returns the historical primary/supporting decisions for the retained old fields. This is deliberate; no backfill or report rewrite was performed."
+  },
+  "validation": {
+    "newRegressionTests": {
+      "passed": 6,
+      "failed": 0,
+      "coverage": [
+        "three exact hashed retained negative bodies",
+        "actual retained thin notice shell",
+        "genuine/product-owned/multilingual/combined notice safeguards",
+        "bounded ambiguous context",
+        "historical governing selection stability",
+        "two loopback-only scanner integrations: genuine notice and thin shell"
+      ]
+    },
+    "broaderPolicyTests": {
+      "total": 64,
+      "passed": 64,
+      "failed": 0,
+      "baselineFailuresVerifiedWithOriginalScannerSource": [
+        "render setup, navigation and readiness share one deadline without a real browser",
+        "observed link lookup consumes navigation allowance without a new one-second minimum",
+        "short complete standalone notices use distinct retained disclosure proof instead of a fixed 2500-character cutoff"
+      ]
+    },
+    "typecheck": {
+      "contractsStandard": "passed",
+      "scanCoreStandard": "passed",
+      "declarationGenerationEnabled": true
+    },
+    "diffCheck": "passed",
+    "baselineFailureRepairs": [
+      "Readiness deadline test now asserts that no network-idle wait consumes its shared budget.",
+      "Observed-link mock advances the readiness clock to the deadline, and asserts no subsequent retry, capture or network-idle wait.",
+      "Short-notice test separates the older topic-count path from the later independent-declaration path, and retains a negative case for duplicated single-declaration text."
+    ],
+    "contractsTypeRepair": "Explicit Zod input/output annotation bounds runtime CMS metadata declaration expansion. It aliases the existing schema object; runtime validators, field names and persisted data remain unchanged.",
+    "reportAndCmsProjectionTests": {
+      "passed": 46,
+      "failed": 0
+    },
+    "canonicalArtifactAndSavedBundleTests": {
+      "passed": 9,
+      "failed": 0
+    },
+    "finalFocusedTestTotal": {
+      "passed": 125,
+      "failed": 0
+    }
+  }
+}

@@ -2,6 +2,7 @@
 
 import { createGmailTransport, getGmailConfig } from "../email/gmail";
 import { buildReportEmailText } from "./report-email-content";
+import { requireReportUser } from "./report-access";
 
 export type SendReportEmailActionState = {
   error: string | null;
@@ -28,6 +29,7 @@ export async function sendReportEmailAction(
   const recipientEmail = String(formData.get("recipientEmail") ?? "").trim().toLowerCase();
   const domainLabel = String(formData.get("domainLabel") ?? "").trim() || "this website";
   const scanId = normalizeScanId(String(formData.get("scanId") ?? ""));
+  await requireReportUser(scanId ? `/scan/${scanId}` : "/app");
 
   if (!isValidEmail(recipientEmail)) {
     return {

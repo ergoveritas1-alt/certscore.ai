@@ -24,11 +24,11 @@ function normalizeProviderList(rows: BetterAuthAccountRow[]) {
   return providers.length > 0 ? Array.from(new Set(providers)).sort().join(",") : "better-auth";
 }
 
-export async function getBetterAuthSessionUser(): Promise<AuthenticatedAppUser | null> {
+export async function getBetterAuthSessionUser(options: { disableCookieCache?: boolean } = {}): Promise<AuthenticatedAppUser | null> {
   const session = await getAuth().api.getSession({
     headers: await headers(),
     // Server rendering can read cookies but cannot forward refreshed cookies.
-    query: { disableRefresh: true }
+    query: { disableRefresh: true, ...(options.disableCookieCache ? { disableCookieCache: true } : {}) }
   });
 
   if (!session?.user) {

@@ -168,7 +168,7 @@ test("render setup, navigation and readiness share one deadline without a real b
   let captures=0,closed=0;
   const page={
     goto:async (_url:string,options:{timeout:number})=>{waits.push(["navigation",options.timeout]);now+=900;return {};},
-    waitForLoadState:async (_state:string,options:{timeout:number})=>{waits.push(["network",options.timeout]);now+=options.timeout;},
+    waitForLoadState:async (_state:string,options:{timeout:number})=>{waits.push(["network",options.timeout]);throw new Error("unrelated network activity must not consume readiness time");},
     waitForFunction:async (_fn:unknown,_arg:unknown,options:{timeout:number})=>{waits.push(["readiness",options.timeout]);now+=options.timeout;},
     waitForTimeout:async()=>{throw new Error("must stop before another wait");},
     content:async()=>{captures++;return "";},
@@ -181,7 +181,7 @@ test("render setup, navigation and readiness share one deadline without a real b
   assert.equal(result.ok,false);
   assert.equal(result.attempts?.[0]?.failureStage,"document_readiness");
   assert.equal(result.attempts?.[0]?.outcome,"timeout");
-  assert.deepEqual(waits,[["navigation",2200],["network",1000],["readiness",300]]);
+  assert.deepEqual(waits,[["navigation",2200],["readiness",1300]]);
   assert.equal(now,4000);assert.equal(captures,0);assert.ok(closed>=1);
 });
 
@@ -228,12 +228,19 @@ test("observed link lookup consumes navigation allowance without a new one-secon
   let now=1000;
   t.mock.method(Date,"now",()=>now);
   const clickTimeouts:number[]=[];
+  let retries=0,captures=0,networkWaits=0;
   const locator={count:async()=>1,getAttribute:async()=>{now+=200;return "/privacy";},
     evaluate:async()=>{now+=50;return true;},click:async(options:{timeout:number})=>{clickTimeouts.push(options.timeout);}};
   const page={isClosed:()=>false,url:()=>"https://example.test/",getByRole:()=>locator,locator:()=>locator,
     waitForNavigation:async(options:{timeout:number})=>{clickTimeouts.push(options.timeout);return null;},
-    waitForLoadState:async(_state:string,options:{timeout:number})=>{now+=options.timeout;},
-    waitForFunction:async()=>{throw new Error("expired");},close:async()=>{}};
+    waitForLoadState:async()=>{networkWaits++;throw new Error("must not wait for network idle");},
+    waitForFunction:async(_fn:unknown,_arg:unknown,options:{timeout:number})=>{
+      assert.equal(options.timeout,50);now+=options.timeout;throw new Error("readiness timeout");
+    },
+    waitForTimeout:async()=>{throw new Error("must not settle after the deadline");},
+    content:async()=>{captures++;return "";},
+    context:()=>({newPage:async()=>{retries++;throw new Error("must not retry after the deadline");}}),
+    close:async()=>{}};
   const result=await fetchRenderedPolicyDocumentText({
     input:{renderedRecoveryPage:page} as unknown as PolicySurfaceScannerInput,
     linkContext:{href:"/privacy",linkText:"Privacy Policy",pageUrl:"https://example.test/"},
@@ -241,4 +248,7 @@ test("observed link lookup consumes navigation allowance without a new one-secon
     browserRuntime:{getBrowser:async()=>({}) as never,close:async()=>{}},
   });
   assert.equal(result.ok,false);assert.deepEqual(clickTimeouts,[50,50]);assert.equal(now,1300);
+  assert.equal(result.attempts?.[0]?.failureStage,"document_readiness");
+  assert.equal(result.attempts?.[0]?.outcome,"timeout");
+  assert.equal(retries,0);assert.equal(captures,0);assert.equal(networkWaits,0);
 });

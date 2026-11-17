@@ -1,3 +1,4 @@
+import { reportApiAccessError } from "../../../../../server/scans/report-access";
 import { getCurrentUser } from "../../../../../server/auth";
 import { isPlatformAdminEmail } from "../../../../../server/admin/platform-admin";
 import { findOrganizationMembershipByUserId } from "../../../../../server/users/repository";
@@ -12,6 +13,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, context: { params: Promise<{ scanId: string }> }) {
+  const accessError = await reportApiAccessError();
+  if (accessError) return accessError;
   const { scanId } = await context.params;
   return handleRuntimeGraphRead(request, scanId, {
     // Evidence-detail weight comes from the existing canonical policy, never a new numeric limit.

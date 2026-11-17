@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, type ComponentProps } from "react";
+import { followAuthorizedReportShareLink } from "./report-share-access";
 
 export function reportDocumentDownloadHref(href: string, timeZone: string | null) {
   if (!timeZone) return href;
@@ -15,5 +16,8 @@ export function ReportDocumentDownloadLink({ href, ...props }: Omit<ComponentPro
     try { setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || null); }
     catch { setTimeZone(null); }
   }, []);
-  return <a {...props} href={reportDocumentDownloadHref(href, timeZone)} />;
+  return <a {...props} href={reportDocumentDownloadHref(href, timeZone)} onClick={async event => {
+    props.onClick?.(event);
+    if (!event.defaultPrevented) await followAuthorizedReportShareLink(event);
+  }} />;
 }

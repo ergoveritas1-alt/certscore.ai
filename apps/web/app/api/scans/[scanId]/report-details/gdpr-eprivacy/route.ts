@@ -1,3 +1,4 @@
+import { reportApiAccessError } from "../../../../../../server/scans/report-access";
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { hydrateChecklistPolicyEvidence } from "../../../../../../lib/scans/checklist-evidence-index";
@@ -28,6 +29,8 @@ function jsonError(status: number, message: string) {
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
+  const accessError = await reportApiAccessError();
+  if (accessError) return accessError;
   const { scanId } = await context.params;
   const generation = request.nextUrl.searchParams.get("generation")?.trim() ?? "";
   const rowIds = [
@@ -90,7 +93,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     },
     {
       headers: {
-        "Cache-Control": "public, max-age=31536000, immutable",
+        "Cache-Control": "private, no-store",
         ETag: `"${etag}"`,
         "X-Content-Type-Options": "nosniff",
       },

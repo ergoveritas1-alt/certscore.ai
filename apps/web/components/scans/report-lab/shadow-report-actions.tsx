@@ -1,5 +1,7 @@
 "use client";
 
+import { authorizeCurrentReportShare, openAuthorizedReportShareMenu, followAuthorizedReportShareLink } from "../report-share-access";
+
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { ReportPdfDownloadLink } from "../report-pdf-download-link";
 
@@ -31,6 +33,7 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
   const emailBody = `Review the CertScore.ai scan report for ${siteLabel}:\n\n${new URL(reportUrl, "https://certscore.ai").toString()}${canExportPdf ? `\n\nDownload the PDF with your workspace header (sign-in and workspace access required):\n${new URL(pdfHref, "https://certscore.ai").toString()}` : ""}`;
 
   async function copyReportLink() {
+    await authorizeCurrentReportShare();
     try {
       await navigator.clipboard.writeText(new URL(reportUrl, window.location.origin).toString());
       setCopyState("copied");
@@ -43,6 +46,7 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
   return (
     <details className="group/share relative">
       <summary
+        onClick={openAuthorizedReportShareMenu}
         aria-label="Share report"
         className="inline-flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-950 hover:border-zinc-500 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden"
       >
@@ -58,6 +62,7 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
         </button>
         <a
           className={menuItemClass}
+          onClick={followAuthorizedReportShareLink}
           href={`mailto:?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`}
         >
           <span>Email report</span>

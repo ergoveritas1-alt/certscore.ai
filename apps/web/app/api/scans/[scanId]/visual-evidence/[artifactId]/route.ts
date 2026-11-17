@@ -1,3 +1,4 @@
+import { reportApiAccessError } from "../../../../../../server/scans/report-access";
 import {matchesReportVisualReference} from '../../../../../../server/scans/report-visual-references';
 import { NextResponse } from "next/server";
 import { getVisualEvidenceArtifacts } from "../../../../../../lib/scans/visual-evidence";
@@ -19,6 +20,8 @@ type RouteContext = {
 };
 
 export async function GET(_request: Request, context: RouteContext) {
+  const accessError = await reportApiAccessError();
+  if (accessError) return accessError;
   const { artifactId, scanId } = await context.params;
   const scanRecord = await getPublicScanById(scanId);
 

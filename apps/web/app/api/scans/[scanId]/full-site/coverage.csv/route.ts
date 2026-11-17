@@ -1,3 +1,4 @@
+import { reportApiAccessError } from "../../../../../../server/scans/report-access";
 import { gzip } from "node:zlib";
 import { promisify } from "node:util";
 import { loadFullSiteCrawl } from "@website-signal-risk-scanner/db";
@@ -11,6 +12,8 @@ export const dynamic = "force-dynamic";
 const compress = promisify(gzip);
 
 export async function GET(request: Request, context: { params: Promise<{ scanId: string }> }) {
+  const accessError = await reportApiAccessError();
+  if (accessError) return accessError;
   // Match the full-site report's browser-session, rollout, report-availability and read-quota gates.
   if (!(await readFullSiteOptions()).allowed) return new Response(null, { status: 404 });
   const { scanId } = await context.params;

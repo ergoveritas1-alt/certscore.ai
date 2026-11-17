@@ -1,0 +1,852 @@
+{
+  "scanId": "9b0b7a54-a12e-4522-9887-c47757e9f38f",
+  "sourceBundleSha256": "f91468b44f888e1001f29fe7e59e890975eafc53a6d9b1de92e80af954cec66a",
+  "sourceManifestSha256": "5204af90cd5b64df8b54ce51af5a58aad271fdc84b1de0fc2b6354a8e71f187b",
+  "diagnosticsSha256": "1d5ebc7658d1f6c5d6df4cc1e5914cafe6ed3d01e194953fa1a749e801cb6a15",
+  "documents": [
+    {
+      "file": "policy_surface_text_2597f758_1c03e222.txt",
+      "sha256": "78aa8193a0b2c31589caea0f21dfdcf0fe0e56b5474903d6c9adf0042dc6cdf7",
+      "sizeBytes": 438,
+      "url": "https://decareto.com/privacy-policy/",
+      "title": "privacy statement - decareto",
+      "linkText": "Privacy statement",
+      "surfaceType": "privacy_policy",
+      "expectedReason": null,
+      "original": {
+        "documentRole": "policy_index",
+        "documentRoleReasonCodes": [
+          "multiple_distinct_privacy_document_children_retained"
+        ],
+        "governingPolicySelection": {
+          "contractVersion": "governing_policy_selection.v1",
+          "state": "ineligible",
+          "score": 0,
+          "reasonCodes": [
+            "policy_document_role_policy_index"
+          ]
+        },
+        "governingPolicyBodyAssessment": {
+          "contractVersion": "governing_policy_body_assessment.v1",
+          "state": "insufficient",
+          "canonicalContextTermCount": 1,
+          "documentTextChars": 435,
+          "evidenceBoundObservedTopicCount": 0,
+          "substantiveDisclosureSignalCount": 0,
+          "reasonCodes": [
+            "policy_body_target_owned",
+            "exact_privacy_policy_candidate",
+            "complete_policy_text_retention",
+            "policy_text_below_substantive_minimum"
+          ]
+        },
+        "classifierReasonCodes": [
+          "matched_privacy_policy",
+          "match_strength_direct",
+          "context_satisfied"
+        ],
+        "matchedLocale": "en",
+        "matchStrength": null,
+        "discoveryMethod": "footer_link"
+      }
+    },
+    {
+      "file": "policy_surface_text_13352fb5_fa6a90ef.txt",
+      "sha256": "d7b2f4425f8a15e646dffeaa95c1874a20cba788c3fe63b1ac5867898d414897",
+      "sizeBytes": 9158,
+      "url": "https://decareto.com/website-privacy/generator/",
+      "title": "Privacy Policy Generator with Website Scan | decareto",
+      "linkText": "Privacy Policy Generator",
+      "surfaceType": "privacy_policy",
+      "expectedReason": "policy_document_purpose.v1-product",
+      "original": {
+        "documentRole": "policy_document",
+        "documentRoleReasonCodes": [
+          "governing_policy_body_evidence_retained",
+          "substantive_policy_retains_supplemental_privacy_links"
+        ],
+        "governingPolicySelection": {
+          "contractVersion": "governing_policy_selection.v1",
+          "state": "supporting",
+          "rank": 3,
+          "score": 75,
+          "reasonCodes": [
+            "eligible_supporting_policy_document",
+            "target_controller_document",
+            "policy_content_coverage_truncated",
+            "complete_policy_text_retention",
+            "governing_policy_body_evidence_retained",
+            "substantive_policy_retains_supplemental_privacy_links"
+          ]
+        },
+        "governingPolicyBodyAssessment": {
+          "contractVersion": "governing_policy_body_assessment.v1",
+          "state": "substantive",
+          "canonicalContextTermCount": 2,
+          "documentTextChars": 9133,
+          "evidenceBoundObservedTopicCount": 0,
+          "substantiveDisclosureSignalCount": 0,
+          "reasonCodes": [
+            "policy_body_target_owned",
+            "exact_privacy_policy_candidate",
+            "complete_policy_text_retention",
+            "minimum_substantive_policy_text_retained",
+            "canonical_classifier_confirmed_standalone_policy_body",
+            "canonical_multilingual_policy_context_retained"
+          ]
+        },
+        "classifierReasonCodes": [
+          "matched_privacy_policy",
+          "match_strength_direct",
+          "context_satisfied"
+        ],
+        "matchedLocale": "en",
+        "matchStrength": null,
+        "discoveryMethod": "header_link"
+      }
+    },
+    {
+      "file": "policy_surface_text_afb2e53f_9f9d13a8.txt",
+      "sha256": "0bec6d9af9c8ab6b0f825b181d448facbbba59cdff4dc05deb74704318161856",
+      "sizeBytes": 4965,
+      "url": "https://decareto.com/website-privacy/tracking/",
+      "title": "Privacy-compliant tracking on websites - Decareto",
+      "linkText": "Data Privacy Statement (opens new tab)",
+      "surfaceType": "privacy_policy",
+      "expectedReason": "policy_document_purpose.v1-article",
+      "original": {
+        "documentRole": "policy_document",
+        "documentRoleReasonCodes": [
+          "multiple_substantive_disclosure_signals_retained"
+        ],
+        "governingPolicySelection": {
+          "contractVersion": "governing_policy_selection.v1",
+          "state": "primary",
+          "rank": 1,
+          "score": 79,
+          "reasonCodes": [
+            "highest_ranked_eligible_governing_policy",
+            "target_controller_document",
+            "policy_content_coverage_truncated",
+            "complete_policy_text_retention",
+            "multiple_substantive_disclosure_signals_retained"
+          ]
+        },
+        "governingPolicyBodyAssessment": {
+          "contractVersion": "governing_policy_body_assessment.v1",
+          "state": "substantive",
+          "canonicalContextTermCount": 0,
+          "documentTextChars": 4941,
+          "evidenceBoundObservedTopicCount": 2,
+          "substantiveDisclosureSignalCount": 2,
+          "reasonCodes": [
+            "policy_body_target_owned",
+            "exact_privacy_policy_candidate",
+            "complete_policy_text_retention",
+            "minimum_substantive_policy_text_retained",
+            "substantive_topic_match",
+            "canonical_classifier_confirmed_standalone_policy_body",
+            "substantive_disclosure_signal_retained",
+            "evidence_bound_policy_topic_retained"
+          ]
+        },
+        "classifierReasonCodes": [
+          "matched_privacy_policy",
+          "match_strength_direct",
+          "context_satisfied"
+        ],
+        "matchedLocale": "en",
+        "matchStrength": null,
+        "discoveryMethod": "page_text_link"
+      }
+    },
+    {
+      "file": "policy_surface_text_bceb0049_2b055178.txt",
+      "sha256": "04ae7e031d0f6ff054a744c1a95a372862a77815e384c99287020400966e0814",
+      "sizeBytes": 10500,
+      "url": "https://decareto.com/gdpr/compliance-check/",
+      "title": "GDPR Check for Websites | decareto",
+      "linkText": "Data Protection Audit",
+      "surfaceType": "privacy_policy",
+      "expectedReason": "policy_document_purpose.v1-product",
+      "original": {
+        "documentRole": "policy_document",
+        "documentRoleReasonCodes": [
+          "multiple_substantive_disclosure_signals_retained"
+        ],
+        "governingPolicySelection": {
+          "contractVersion": "governing_policy_selection.v1",
+          "state": "supporting",
+          "rank": 2,
+          "score": 77,
+          "reasonCodes": [
+            "eligible_supporting_policy_document",
+            "target_controller_document",
+            "policy_content_coverage_truncated",
+            "complete_policy_text_retention",
+            "multiple_substantive_disclosure_signals_retained"
+          ]
+        },
+        "governingPolicyBodyAssessment": {
+          "contractVersion": "governing_policy_body_assessment.v1",
+          "state": "insufficient",
+          "canonicalContextTermCount": 3,
+          "documentTextChars": 10469,
+          "evidenceBoundObservedTopicCount": 1,
+          "substantiveDisclosureSignalCount": 2,
+          "reasonCodes": [
+            "policy_body_target_owned",
+            "privacy_candidate_not_exact",
+            "complete_policy_text_retention",
+            "minimum_substantive_policy_text_retained",
+            "substantive_privacy_signals",
+            "canonical_multilingual_policy_context_retained",
+            "substantive_disclosure_signal_retained",
+            "evidence_bound_policy_topic_retained"
+          ]
+        },
+        "classifierReasonCodes": [
+          "matched_privacy_policy",
+          "match_strength_equivalent",
+          "context_not_satisfied",
+          "policy_context_satisfied"
+        ],
+        "matchedLocale": "en",
+        "matchStrength": null,
+        "discoveryMethod": "page_text_link"
+      }
+    }
+  ],
+  "oneHopSelections": [
+    {
+      "policyVersion": "one_hop_selection.v2",
+      "parentUrl": "https://decareto.com/website-privacy/generator/",
+      "selectedUrls": [
+        "https://decareto.com/gdpr/compliance-check/"
+      ],
+      "candidates": [
+        {
+          "url": "https://decareto.com/gdpr/compliance-check/",
+          "surfaceType": "privacy_policy",
+          "score": 0.82,
+          "fetchable": true,
+          "traversalDepth": 1,
+          "parentOriginMatches": true,
+          "selected": true,
+          "reasonCodes": [
+            "linked_from_retained_privacy_surface",
+            "material_gdpr_notice_supplement",
+            "one_hop_policy_document_candidate",
+            "bounded_same_origin_policy_supplement",
+            "single_supplement_fetch_limit",
+            "supplement_fetch_cap_2500ms",
+            "supplement_rendered_fallback_disabled",
+            "deterministic_material_gdpr_supplement_selection"
+          ]
+        },
+        {
+          "url": "https://decareto.com/de/website-datenschutz/generator/",
+          "surfaceType": "privacy_policy",
+          "score": 0.78,
+          "fetchable": true,
+          "traversalDepth": 1,
+          "parentOriginMatches": true,
+          "selected": false,
+          "reasonCodes": [
+            "linked_from_retained_privacy_surface",
+            "material_gdpr_notice_supplement",
+            "one_hop_policy_document_candidate",
+            "bounded_same_origin_policy_supplement",
+            "single_supplement_fetch_limit",
+            "supplement_fetch_cap_2500ms",
+            "supplement_rendered_fallback_disabled",
+            "not_selected_for_bounded_fetch"
+          ]
+        },
+        {
+          "url": "https://decareto.com/privacy-policy/",
+          "surfaceType": "privacy_policy",
+          "score": 0.9,
+          "fetchable": true,
+          "traversalDepth": 1,
+          "parentOriginMatches": true,
+          "selected": false,
+          "reasonCodes": [
+            "linked_from_retained_privacy_surface",
+            "linked_from_retained_privacy_policy_index",
+            "one_hop_policy_document_candidate",
+            "bounded_same_origin_policy_supplement",
+            "single_supplement_fetch_limit",
+            "supplement_fetch_cap_2500ms",
+            "supplement_rendered_fallback_disabled",
+            "not_selected_for_bounded_fetch"
+          ]
+        }
+      ]
+    },
+    {
+      "policyVersion": "one_hop_selection.v2",
+      "parentUrl": "https://decareto.com/gdpr/compliance-check/",
+      "selectedUrls": [
+        "https://decareto.com/website-privacy/generator/"
+      ],
+      "candidates": [
+        {
+          "url": "https://decareto.com/website-privacy/generator/",
+          "surfaceType": "privacy_policy",
+          "score": 0.9,
+          "fetchable": true,
+          "traversalDepth": 1,
+          "parentOriginMatches": true,
+          "selected": true,
+          "reasonCodes": [
+            "linked_from_retained_privacy_surface",
+            "material_gdpr_notice_supplement",
+            "one_hop_policy_document_candidate",
+            "bounded_same_origin_policy_supplement",
+            "single_supplement_fetch_limit",
+            "supplement_fetch_cap_2500ms",
+            "supplement_rendered_fallback_disabled",
+            "deterministic_material_gdpr_supplement_selection"
+          ]
+        },
+        {
+          "url": "https://decareto.com/privacy-policy/",
+          "surfaceType": "privacy_policy",
+          "score": 0.9,
+          "fetchable": true,
+          "traversalDepth": 1,
+          "parentOriginMatches": true,
+          "selected": false,
+          "reasonCodes": [
+            "linked_from_retained_privacy_surface",
+            "linked_from_retained_privacy_policy_index",
+            "one_hop_policy_document_candidate",
+            "bounded_same_origin_policy_supplement",
+            "single_supplement_fetch_limit",
+            "supplement_fetch_cap_2500ms",
+            "supplement_rendered_fallback_disabled",
+            "not_selected_for_bounded_fetch"
+          ]
+        }
+      ]
+    },
+    {
+      "policyVersion": "one_hop_selection.v2",
+      "parentUrl": "https://decareto.com/website-privacy/tracking/",
+      "selectedUrls": [
+        "https://decareto.com/website-privacy/generator/"
+      ],
+      "candidates": [
+        {
+          "url": "https://decareto.com/website-privacy/generator/",
+          "surfaceType": "privacy_policy",
+          "score": 0.9,
+          "fetchable": true,
+          "traversalDepth": 1,
+          "parentOriginMatches": true,
+          "selected": true,
+          "reasonCodes": [
+            "linked_from_retained_privacy_surface",
+            "material_gdpr_notice_supplement",
+            "one_hop_policy_document_candidate",
+            "bounded_same_origin_policy_supplement",
+            "single_supplement_fetch_limit",
+            "supplement_fetch_cap_2500ms",
+            "supplement_rendered_fallback_disabled",
+            "deterministic_material_gdpr_supplement_selection"
+          ]
+        },
+        {
+          "url": "https://decareto.com/de/website-datenschutz/tracking/",
+          "surfaceType": "privacy_policy",
+          "score": 0.78,
+          "fetchable": true,
+          "traversalDepth": 1,
+          "parentOriginMatches": true,
+          "selected": false,
+          "reasonCodes": [
+            "linked_from_retained_privacy_surface",
+            "material_gdpr_notice_supplement",
+            "one_hop_policy_document_candidate",
+            "bounded_same_origin_policy_supplement",
+            "single_supplement_fetch_limit",
+            "supplement_fetch_cap_2500ms",
+            "supplement_rendered_fallback_disabled",
+            "not_selected_for_bounded_fetch"
+          ]
+        },
+        {
+          "url": "https://decareto.com/gdpr-website-check-what-data-protection-risks-are-hidden-on-your-website/",
+          "surfaceType": "privacy_policy",
+          "score": 0.78,
+          "fetchable": true,
+          "traversalDepth": 1,
+          "parentOriginMatches": true,
+          "selected": false,
+          "reasonCodes": [
+            "linked_from_retained_privacy_surface",
+            "material_gdpr_notice_supplement",
+            "one_hop_policy_document_candidate",
+            "bounded_same_origin_policy_supplement",
+            "single_supplement_fetch_limit",
+            "supplement_fetch_cap_2500ms",
+            "supplement_rendered_fallback_disabled",
+            "not_selected_for_bounded_fetch"
+          ]
+        },
+        {
+          "url": "https://decareto.com/privacy-policy/",
+          "surfaceType": "privacy_policy",
+          "score": 0.9,
+          "fetchable": true,
+          "traversalDepth": 1,
+          "parentOriginMatches": true,
+          "selected": false,
+          "reasonCodes": [
+            "linked_from_retained_privacy_surface",
+            "linked_from_retained_privacy_policy_index",
+            "one_hop_policy_document_candidate",
+            "bounded_same_origin_policy_supplement",
+            "single_supplement_fetch_limit",
+            "supplement_fetch_cap_2500ms",
+            "supplement_rendered_fallback_disabled",
+            "not_selected_for_bounded_fetch"
+          ]
+        }
+      ]
+    },
+    {
+      "policyVersion": "one_hop_selection.v2",
+      "parentUrl": "https://decareto.com/privacy-policy/",
+      "selectedUrls": [
+        "https://decareto.com/website-privacy/generator/"
+      ],
+      "candidates": [
+        {
+          "url": "https://decareto.com/website-privacy/generator/",
+          "surfaceType": "privacy_policy",
+          "score": 0.9,
+          "fetchable": true,
+          "traversalDepth": 1,
+          "parentOriginMatches": true,
+          "selected": true,
+          "reasonCodes": [
+            "linked_from_retained_privacy_surface",
+            "material_gdpr_notice_supplement",
+            "one_hop_policy_document_candidate",
+            "bounded_same_origin_policy_supplement",
+            "single_supplement_fetch_limit",
+            "supplement_fetch_cap_2500ms",
+            "supplement_rendered_fallback_disabled",
+            "deterministic_material_gdpr_supplement_selection"
+          ]
+        },
+        {
+          "url": "https://decareto.com/de/datenschutzerklaerung/",
+          "surfaceType": "privacy_policy",
+          "score": 0.78,
+          "fetchable": true,
+          "traversalDepth": 1,
+          "parentOriginMatches": true,
+          "selected": false,
+          "reasonCodes": [
+            "linked_from_retained_privacy_surface",
+            "material_gdpr_notice_supplement",
+            "one_hop_policy_document_candidate",
+            "bounded_same_origin_policy_supplement",
+            "single_supplement_fetch_limit",
+            "supplement_fetch_cap_2500ms",
+            "supplement_rendered_fallback_disabled",
+            "not_selected_for_bounded_fetch"
+          ]
+        }
+      ]
+    }
+  ],
+  "candidateSummary": [
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_privacy_policy",
+        "match_strength_direct",
+        "context_satisfied"
+      ],
+      "clickable": true,
+      "discoveryMethod": "footer_link",
+      "domLocation": "footer",
+      "fetchable": true,
+      "linkText": "Privacy statement",
+      "matchedConcept": "privacy statement",
+      "matchedLocale": "en",
+      "matchStrength": "direct",
+      "mayLeadToConsentControls": false,
+      "normalizedUrl": "https://decareto.com/privacy-policy/",
+      "observationOnly": false,
+      "surfaceType": "privacy_policy"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_privacy_policy",
+        "match_strength_direct",
+        "context_satisfied",
+        "bounded_policy_surface_seed",
+        "canonical_legal_surface_hint"
+      ],
+      "clickable": false,
+      "discoveryMethod": "guessed_common_path",
+      "domLocation": "body",
+      "fetchable": true,
+      "linkText": "Privacy policy",
+      "matchedConcept": "privacy policy",
+      "matchedLocale": "en",
+      "matchStrength": "direct",
+      "mayLeadToConsentControls": false,
+      "normalizedUrl": "https://decareto.com/privacy-notice",
+      "observationOnly": false,
+      "surfaceType": "privacy_policy",
+      "seedSource": "canonical_legal_surface_hint"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_privacy_policy",
+        "match_strength_direct",
+        "context_satisfied",
+        "bounded_policy_surface_seed",
+        "canonical_legal_surface_hint"
+      ],
+      "clickable": false,
+      "discoveryMethod": "guessed_common_path",
+      "domLocation": "body",
+      "fetchable": true,
+      "linkText": "Privacy policy",
+      "matchedConcept": "privacy policy",
+      "matchedLocale": "en",
+      "matchStrength": "direct",
+      "mayLeadToConsentControls": false,
+      "normalizedUrl": "https://decareto.com/privacy-policy",
+      "observationOnly": false,
+      "surfaceType": "privacy_policy",
+      "seedSource": "canonical_legal_surface_hint"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_privacy_policy",
+        "match_strength_direct",
+        "context_satisfied",
+        "bounded_policy_surface_seed",
+        "canonical_legal_surface_hint"
+      ],
+      "clickable": false,
+      "discoveryMethod": "guessed_common_path",
+      "domLocation": "body",
+      "fetchable": true,
+      "linkText": "Privacy policy",
+      "matchedConcept": "privacy policy",
+      "matchedLocale": "en",
+      "matchStrength": "direct",
+      "mayLeadToConsentControls": false,
+      "normalizedUrl": "https://decareto.com/legal/privacy",
+      "observationOnly": false,
+      "surfaceType": "privacy_policy",
+      "seedSource": "canonical_legal_surface_hint"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_privacy_policy",
+        "match_strength_direct",
+        "context_satisfied"
+      ],
+      "clickable": true,
+      "discoveryMethod": "header_link",
+      "domLocation": "header",
+      "fetchable": true,
+      "linkText": "Privacy Policy Generator",
+      "matchedConcept": "privacy policy",
+      "matchedLocale": "en",
+      "matchStrength": "direct",
+      "mayLeadToConsentControls": false,
+      "normalizedUrl": "https://decareto.com/website-privacy/generator/",
+      "observationOnly": false,
+      "surfaceType": "privacy_policy"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_privacy_policy",
+        "match_strength_direct",
+        "context_satisfied",
+        "bounded_policy_surface_seed",
+        "canonical_legal_surface_hint"
+      ],
+      "clickable": false,
+      "discoveryMethod": "guessed_common_path",
+      "domLocation": "body",
+      "fetchable": true,
+      "linkText": "Privacy policy",
+      "matchedConcept": "privacy policy",
+      "matchedLocale": "en",
+      "matchStrength": "direct",
+      "mayLeadToConsentControls": false,
+      "normalizedUrl": "https://decareto.com/privacy",
+      "observationOnly": false,
+      "surfaceType": "privacy_policy",
+      "seedSource": "canonical_legal_surface_hint"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_privacy_policy",
+        "match_strength_direct",
+        "context_satisfied"
+      ],
+      "clickable": true,
+      "discoveryMethod": "page_text_link",
+      "domLocation": "body",
+      "fetchable": true,
+      "linkText": "Data Privacy Statement (opens new tab)",
+      "matchedConcept": "privacy statement",
+      "matchedLocale": "en",
+      "matchStrength": "direct",
+      "mayLeadToConsentControls": false,
+      "normalizedUrl": "https://decareto.com/privacy/",
+      "observationOnly": false,
+      "surfaceType": "privacy_policy"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_privacy_policy",
+        "match_strength_equivalent",
+        "context_not_satisfied",
+        "policy_context_satisfied"
+      ],
+      "clickable": true,
+      "discoveryMethod": "page_text_link",
+      "domLocation": "body",
+      "fetchable": true,
+      "linkText": "Data Protection Audit",
+      "matchedConcept": "data protection",
+      "matchedLocale": "en",
+      "matchStrength": "equivalent",
+      "mayLeadToConsentControls": false,
+      "normalizedUrl": "https://decareto.com/gdpr/compliance-check/",
+      "observationOnly": false,
+      "surfaceType": "privacy_policy"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_cookie_policy",
+        "match_strength_direct",
+        "context_satisfied",
+        "bounded_policy_surface_seed",
+        "canonical_legal_surface_hint"
+      ],
+      "clickable": false,
+      "discoveryMethod": "guessed_common_path",
+      "domLocation": "body",
+      "fetchable": true,
+      "linkText": "Cookie policy",
+      "matchedConcept": "cookie policy",
+      "matchedLocale": "en",
+      "matchStrength": "direct",
+      "mayLeadToConsentControls": false,
+      "normalizedUrl": "https://decareto.com/cookie-policy",
+      "observationOnly": false,
+      "surfaceType": "cookie_policy",
+      "seedSource": "canonical_legal_surface_hint"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_cookie_policy",
+        "match_strength_direct",
+        "context_satisfied",
+        "bounded_policy_surface_seed",
+        "canonical_legal_surface_hint"
+      ],
+      "clickable": false,
+      "discoveryMethod": "guessed_common_path",
+      "domLocation": "body",
+      "fetchable": true,
+      "linkText": "Cookie policy",
+      "matchedConcept": "cookie policy",
+      "matchedLocale": "en",
+      "matchStrength": "direct",
+      "mayLeadToConsentControls": false,
+      "normalizedUrl": "https://decareto.com/cookies",
+      "observationOnly": false,
+      "surfaceType": "cookie_policy",
+      "seedSource": "canonical_legal_surface_hint"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_your_privacy_choices",
+        "match_strength_direct",
+        "context_satisfied",
+        "bounded_policy_surface_seed",
+        "canonical_legal_surface_hint"
+      ],
+      "clickable": false,
+      "discoveryMethod": "guessed_common_path",
+      "domLocation": "body",
+      "fetchable": true,
+      "linkText": "Your privacy choices",
+      "matchedConcept": "your privacy choices",
+      "matchedLocale": "en",
+      "matchStrength": "direct",
+      "mayLeadToConsentControls": true,
+      "normalizedUrl": "https://decareto.com/privacy/choices",
+      "observationOnly": false,
+      "surfaceType": "your_privacy_choices",
+      "seedSource": "canonical_legal_surface_hint"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_your_privacy_choices",
+        "match_strength_direct",
+        "context_satisfied",
+        "bounded_policy_surface_seed",
+        "canonical_legal_surface_hint"
+      ],
+      "clickable": false,
+      "discoveryMethod": "guessed_common_path",
+      "domLocation": "body",
+      "fetchable": true,
+      "linkText": "Your privacy choices",
+      "matchedConcept": "your privacy choices",
+      "matchedLocale": "en",
+      "matchStrength": "direct",
+      "mayLeadToConsentControls": true,
+      "normalizedUrl": "https://decareto.com/privacy-rights",
+      "observationOnly": false,
+      "surfaceType": "your_privacy_choices",
+      "seedSource": "canonical_legal_surface_hint"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_cookie_settings",
+        "match_strength_direct",
+        "context_satisfied"
+      ],
+      "clickable": false,
+      "discoveryMethod": "page_text_link",
+      "domLocation": "body",
+      "fetchable": false,
+      "linkText": "Open cookie settings",
+      "matchedConcept": "cookie settings",
+      "matchedLocale": "en",
+      "matchStrength": "direct",
+      "mayLeadToConsentControls": true,
+      "normalizedUrl": "https://decareto.com/",
+      "observationOnly": true,
+      "surfaceType": "cookie_settings"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_accessibility_statement",
+        "matched_url_pattern",
+        "context_satisfied"
+      ],
+      "clickable": true,
+      "discoveryMethod": "header_link",
+      "domLocation": "header",
+      "fetchable": true,
+      "linkText": "WCAG",
+      "matchedConcept": "accessibility_statement",
+      "matchStrength": "contextual",
+      "mayLeadToConsentControls": false,
+      "normalizedUrl": "https://decareto.com/accessibility/checker/",
+      "observationOnly": false,
+      "surfaceType": "accessibility_statement"
+    },
+    {
+      "classifierProvenance": "privacy_surface_classifier.v1",
+      "classifierReasonCodes": [
+        "matched_accessibility_statement",
+        "matched_url_pattern",
+        "context_not_satisfied"
+      ],
+      "clickable": true,
+      "discoveryMethod": "page_text_link",
+      "domLocation": "body",
+      "fetchable": true,
+      "linkText": "Die besten Barrierefreiheit Test-Tools 2026",
+      "matchedConcept": "accessibility_statement",
+      "matchStrength": "contextual",
+      "mayLeadToConsentControls": false,
+      "normalizedUrl": "https://decareto.com/the-best-accessibility-testing-tools-of-2026/",
+      "observationOnly": false,
+      "surfaceType": "accessibility_statement"
+    }
+  ],
+  "failedFetches": [
+    {
+      "stage": "candidate_rendered",
+      "candidateUrl": "https://decareto.com/privacy-policy",
+      "discoveryMethod": "footer_link",
+      "surfaceType": "privacy_policy",
+      "ok": false,
+      "failureReason": "navigation_no_response",
+      "attempts": [
+        {
+          "mode": "rendered",
+          "navigationMethod": "observed_link_click",
+          "requestedUrl": "https://decareto.com/privacy-policy",
+          "finalUrl": "https://decareto.com/privacy-policy",
+          "failureStage": "response_verification",
+          "outcome": "navigation_no_response"
+        }
+      ]
+    },
+    {
+      "stage": "candidate_direct",
+      "candidateUrl": "https://decareto.com/cookie-policy",
+      "discoveryMethod": "guessed_common_path",
+      "surfaceType": "cookie_policy",
+      "ok": false,
+      "failureReason": "timeout",
+      "attempts": [
+        {
+          "mode": "direct",
+          "requestedUrl": "https://decareto.com/cookie-policy",
+          "outcome": "timeout"
+        },
+        {
+          "mode": "direct",
+          "requestedUrl": "https://www.decareto.com/cookie-policy",
+          "outcome": "timeout"
+        }
+      ]
+    },
+    {
+      "stage": "candidate_direct",
+      "candidateUrl": "https://decareto.com/privacy/choices",
+      "discoveryMethod": "guessed_common_path",
+      "surfaceType": "your_privacy_choices",
+      "ok": false,
+      "failureReason": "timeout",
+      "attempts": [
+        {
+          "mode": "direct",
+          "requestedUrl": "https://decareto.com/privacy/choices",
+          "outcome": "timeout"
+        },
+        {
+          "mode": "direct",
+          "requestedUrl": "https://www.decareto.com/privacy/choices",
+          "outcome": "timeout"
+        }
+      ]
+    }
+  ]
+}

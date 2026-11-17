@@ -1,3 +1,4 @@
+import { requireReportUser, reportReturnPath } from "../../../../server/scans/report-access";
 import { FullSiteReportContinuity } from "../../../../components/scans/full-site-report-continuity";
 import { loadFullSiteNotice } from "../../../../server/scans/full-site-notice";
 import { readFullSiteOptions } from "../../../../server/scans/full-site-options";
@@ -31,6 +32,9 @@ function legacyScanHref(scanId: string) {
 }
 
 export default async function ScanDetailPage({ params, searchParams }: ScanDetailPageProps) {
+  const reportParams = await params;
+  const reportSearch = await searchParams;
+  await requireReportUser(reportReturnPath(`/app/scans/${encodeURIComponent(reportParams.scanId)}`, reportSearch));
   const requestedFocus = (await searchParams)?.reviewFocus;
   const [{ scanId }, { membership, organization, user }] = await Promise.all([
     params,

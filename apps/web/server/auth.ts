@@ -8,6 +8,11 @@ export const getCurrentUser = cache(async (): Promise<AuthenticatedAppUser | nul
   return getBetterAuthSessionUser();
 });
 
+// Report access must reject revoked sessions even while the signed cookie cache lives.
+export const getFreshCurrentUser = cache(async (): Promise<AuthenticatedAppUser | null> => {
+  return getBetterAuthSessionUser({ disableCookieCache: true });
+});
+
 export async function requireAuthenticatedUser(): Promise<AuthenticatedAppUser> {
   const user = await getCurrentUser();
 

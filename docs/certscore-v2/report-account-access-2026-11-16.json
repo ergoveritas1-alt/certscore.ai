@@ -1,0 +1,36 @@
+{
+  "product": "CertScore.ai",
+  "date": "2026-11-16",
+  "status": "release_candidate_deployment_authorized",
+  "ownerScope": "Require an active signed-in account for Share/export and viewing shared browser reports.",
+  "behavior": [
+    "Current and legacy shared report pages authenticate before report data, metadata or development fixtures are loaded.",
+    "Login preserves the report route and query parameters; the existing login form supports account creation and returns to the requested destination.",
+    "Browser report endpoints require a validated session before exports, report details, screenshots, form snapshots, relationship graphs or full-site reads.",
+    "Share menu opening, copying, email and download actions recheck the session. The email server action independently authenticates before transport or report work.",
+    "Report access and login bypass the signed session-cookie cache to reject revoked sessions without a login redirect loop.",
+    "Report details use private, no-store responses. Existing workspace ownership and PDF eligibility checks remain in place."
+  ],
+  "preserved": [
+    "Canonical findings and scores",
+    "Historical report artifacts",
+    "Existing API and MCP authorization contracts",
+    "Account creation eligibility and access allowlists",
+    "Existing production operational settings"
+  ],
+  "cost": {
+    "estimatedIncrementalUsdPerMonth": "less than 1 within existing infrastructure",
+    "basis": "Bounded session lookups only; no new capture, model calls, retention or provisioned infrastructure. Anonymous requests stop before report work."
+  },
+  "validation": {
+    "accessSharingAndNavigationTestsPassed": 51,
+    "reportSummaryRegressionTestsPassed": 31,
+    "actualRouteIsolationTestsPassed": 1,
+    "routeIsolationCases": 10,
+    "routeIsolationProof": "Actual route handlers and actual access guard return 401/private-no-store for missing validated sessions, including forged cookie and bearer input. Data/export dependencies throw if reached.",
+    "webTypecheck": "Blocked only by existing optional-string errors in cms-security-projection.test.ts, lines 384-392; no errors reported in changed access files.",
+    "localHttp": "Anonymous shared report redirected to login with its requested report and review focus preserved. Broader live endpoint checks were interrupted when the development server disconnected; route isolation checks passed.",
+    "diffCheck": "passed"
+  },
+  "releaseBase": "60f6bd3d870a44c6e4c2fd91ee68912c3eabe7d6"
+}

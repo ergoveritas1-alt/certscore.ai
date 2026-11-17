@@ -1,3 +1,4 @@
+import { requireReportUser, reportReturnPath } from "../../../../server/scans/report-access";
 import { readFullSiteOptions } from "../../../../server/scans/full-site-options";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
@@ -68,8 +69,9 @@ async function pendingReport(
   );
 }
 
-export async function generateMetadata({ params }: PublicScanDetailPageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: PublicScanDetailPageProps): Promise<Metadata> {
   const { scanId } = await params;
+  await requireReportUser(reportReturnPath(`/scan/${encodeURIComponent(scanId)}`, await searchParams));
   const localFixture = process.env.NODE_ENV !== "production" && scanId === SHADOW_REPORT_SCAN_ID;
   const persistedReport = localFixture ? null : await loadReadyReport(scanId);
   const statusProjection = localFixture || persistedReport ? null : await loadScanStatus(scanId);
@@ -97,6 +99,8 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     params,
     searchParams ?? Promise.resolve({} as Record<string, string | string[] | undefined>),
   ]);
+
+  await requireReportUser(reportReturnPath(`/scan/${encodeURIComponent(scanId)}`, resolvedSearchParams));
 
   // The retained fixture keeps the approved report reviewable on localhost,
   // where this production scan is not present in the local database.

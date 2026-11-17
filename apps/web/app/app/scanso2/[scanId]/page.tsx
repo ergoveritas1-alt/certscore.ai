@@ -1,3 +1,4 @@
+import { requireReportUser, reportReturnPath } from "../../../../server/scans/report-access";
 import { canManageCompanyLogo } from "../../../../server/company/policy";
 import { FullSiteReportContinuity } from "../../../../components/scanso2/full-site-report-continuity";
 import { loadFullSiteNotice } from "../../../../server/scans/full-site-notice";
@@ -30,6 +31,8 @@ function legacyScanHref(scanId: string) {
 }
 
 export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
+  const reportParams = await params;
+  await requireReportUser(reportReturnPath(`/app/scanso2/${encodeURIComponent(reportParams.scanId)}`));
   const [{ scanId }, { membership, organization, user }] = await Promise.all([
     params,
     withServerTiming("app.scan_detail.context", () => getDashboardContext()),
