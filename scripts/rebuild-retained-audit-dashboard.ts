@@ -22,6 +22,7 @@ import { rebuildChoiceEvidence } from './lib/audit-progress-choice-verification'
 import { CHOICE_METRICS, OPT_OUT_OUTCOME_METRIC_IDS } from './lib/audit-progress-choice';
 import {applyRetainedReports,RETAINED_CLICK_ACTIVITY_KEYS} from './lib/audit-progress-retained-report';
 import {applyRetainedOptOutExtracts} from './lib/audit-progress-opt-out';
+import {NO_GO_METRICS,readAuditNoGoReasons} from './lib/audit-progress-no-go';
 
 const [previous, manifest, output, upgrade] = process.argv.slice(2);
 if (!previous || !manifest || !output || (upgrade && !['--wire-current-cmp','--replay-opt-out-outcomes','--gpc-core-questions','--usable-choice-funnel','--choice-click-activity'].includes(upgrade))) {
@@ -139,7 +140,12 @@ for (const [index, row] of (data.rows as ProgressRow[]).entries()) {
     }
   }
 }
-if(upgrade){
+const existingMetrics = new Set(data.metrics.map((metric: { id: string }) => metric.id));
+const newNoGoMetrics = NO_GO_METRICS.filter(metric => !existingMetrics.has(metric.id));
+data.metrics.splice(1, 0, ...newNoGoMetrics);
+data.noGoReasons = readAuditNoGoReasons(data.rows);
+const metricsChanged = Boolean(upgrade || newNoGoMetrics.length);
+if(metricsChanged){
   data.days=progressEngine().aggregate(data,data.rows);
   data.contracts=makeContracts(data.metrics,data.quantities);
 }
@@ -159,7 +165,7 @@ for (const name of dataFiles) {
     writeFileSync(file, progressEngine().stateCsv(data.days, auditStateCsvMetrics(data)), {flag: 'wx'});
   } else if (name === 'daily-volumes.csv') {
     writeFileSync(file, progressEngine().quantityCsv(data.days, auditQuantityCsvMetrics(data)), {flag: 'wx'});
-  } else if(name==='metric-contracts.json'&&upgrade){
+  } else if(name==='metric-contracts.json'&&metricsChanged){
     writeFileSync(file,JSON.stringify(data.contracts,null,2)+'\n',{flag:'wx'});
   } else {
     copyFileSync(path.join(prior, name), file);

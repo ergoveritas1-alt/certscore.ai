@@ -72,6 +72,8 @@ const checklistConcepts:Record<string,string>={
 };
 const topicChecks:Record<string,string>={controller_contact_disclosure:'controller_contact',processing_purposes_disclosure:'processing_purposes',legal_basis_disclosure_observed:'legal_basis',recipients_vendor_categories_disclosure:'recipients_or_vendor_categories',retention_disclosure_observed:'data_retention',data_subject_rights_disclosure:'data_subject_rights',international_transfers_disclosure:'international_transfers',dpo_contact_point_disclosure:'dpo_contact',supervisory_authority_complaint_disclosure:'supervisory_authority',automated_decision_making_profiling_disclosure:'automated_decision_making_or_profiling'};
 export function auditMeasureLinks(id:string,kind:string):Link[]{
+ if(id==='outcome.no_go_total')return [field('operations.cohort.outcome','Count and share of retained no-go outcomes across all retained attempts.','assessment_context')];
+ if(id.startsWith('outcome.no_go_reason.'))return [field('operations.cohort.outcome','Breakdown by the primary reason returned for a retained no-go outcome.','assessment_context')];
  if(id==='sealed.operations.transfer_framework_check')return [field('policies.stale_framework.evidence_state','Related audit coverage of the versioned retained-text matcher, separate from the returned checklist finding.','assessment_context')];
  if(id==='sealed.operations.transfer_framework_reasons')return [field('policies.stale_framework.evidence_state','Producer-recorded prerequisites for completing the retained-text matcher.','assessment_context')];
  if(id==='sealed.operations.transfer_supplement_disposition')return [field('policies.stale_framework.evidence_state','Producer-recorded disposition of unresolved material supplements.','assessment_context')];
@@ -148,6 +150,7 @@ export function auditStateCsvMetrics(data:ChecklistAliasInput,aliases=reviewedCh
 /** Forward report questions. Supporting fields explain these questions and never
  * become interchangeable rates or implicit fallbacks for the primary source. */
 const FORWARD_MEASURES:Record<string,string[]>={
+ 'outcome.no_go_total':[],
  outcome:['evidence','selection.status','sealed.publication'],
  'control.accept':[],
  'control.reject':[],
@@ -270,7 +273,7 @@ export function forwardAuditMeasures<T extends {id:string;kind:string}>(all:T[])
   parent.set(child,root);
  }
  const entries=all.filter(entry=>entry.id!=='regulatory_gap__gdpr_eprivacy__consent_browsing_as_consent'&&
-  (Object.hasOwn(FORWARD_MEASURES,entry.id)||parent.has(entry.id)||entry.kind==='finding'));
+  (Object.hasOwn(FORWARD_MEASURES,entry.id)||parent.has(entry.id)||entry.kind==='finding'||entry.id.startsWith('outcome.no_go_reason.')));
  const tableEntries=entries.filter(entry=>!OMITTED_MAIN_TABLE_MEASURES.has(entry.id))
   .filter(entry=>!parent.has(entry.id)||!byId.has(parent.get(entry.id)!))
   .map(entry=>({...entry,details:entries.filter(detail=>parent.get(detail.id)===entry.id)}));
@@ -362,7 +365,14 @@ export function buildAuditMeasureView(data:any){
  const groupOrder=[...new Set(grouped.map(entry=>entry.group))];
  grouped.sort((a,b)=>groupOrder.indexOf(a.group)-groupOrder.indexOf(b.group));
  const {entries,tableEntries:forwardTableEntries,retired}=forwardAuditMeasures(grouped);
- const tableEntries=forwardTableEntries.map(entry=>entry.id==='sealed.opt_out.action_completion'
+ const noGoTotals=new Map<string,number>();
+ for(const reason of Object.values(data.noGoReasons??{})){
+  const id='outcome.no_go_reason.'+reason;
+  noGoTotals.set(id,(noGoTotals.get(id)??0)+1);
+ }
+ const unavailableReasons=(data.rows??[]).filter((row:any)=>row.states?.outcome==='no_go'&&row.originProof!=='production_id_selection_only'&&!data.noGoReasons?.[row.scanId]).length;
+ noGoTotals.set('outcome.no_go_reason.unavailable',unavailableReasons);
+ const tableEntries=forwardTableEntries.filter(entry=>!entry.id.startsWith('outcome.no_go_reason.')||(noGoTotals.get(entry.id)??0)>0).map(entry=>entry.id==='sealed.opt_out.action_completion'
   ? {...entry,label:'Opt-out execution and verification'}:entry);
  const coreOrder=MASTER_CATALOG.questionGroups.map(q=>q.primaryMetric);
  const choiceOrder=Object.keys(choiceLabels);
@@ -370,6 +380,8 @@ export function buildAuditMeasureView(data:any){
   if(a.group!==b.group)return groupOrder.indexOf(a.group)-groupOrder.indexOf(b.group);
   if(a.group==='GPC')return coreOrder.indexOf(a.id)-coreOrder.indexOf(b.id);
   if(a.group==='Accept & Reject')return choiceOrder.indexOf(a.id)-choiceOrder.indexOf(b.id);
+  if(a.group==='No-go reasons')return Number(b.id==='outcome.no_go_total')-Number(a.id==='outcome.no_go_total')||
+   (noGoTotals.get(b.id)??0)-(noGoTotals.get(a.id)??0);
   return 0;
  });
  return {version:'certscore.audit-measure-catalog.v2',catalogVersion:MASTER_CATALOG.version,entries,tableEntries,retired,removals,checklistAliases,

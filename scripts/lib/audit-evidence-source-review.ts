@@ -156,8 +156,8 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "scripts/lib/audit-progress-contracts.ts",
-      "sha256": "155acf3a0e1af798c6b2cf1a4dd32bfe3c0c333aa0de3248651b31e6933dfb73",
-      "bytes": 25647,
+      "sha256": "0be40f0507444f311c7e3bcfd276d03d150c688ba901321c522be406caede063",
+      "bytes": 26332,
       "review": "Reviewed transfer-framework coverage from the existing bound producer receipt, separate from the historical conditional finding and scoring. Transfer-framework completion reason metadata is bound to the compact policy receipt. Unresolved supplement dispositions are bound to the same compact policy receipt."
     },
     {

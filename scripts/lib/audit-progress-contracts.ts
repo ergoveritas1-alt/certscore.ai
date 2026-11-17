@@ -54,6 +54,15 @@ export function metricContract(m:any,kind='state') {
   let meaning=m.label,eligible=m.denominator??'Readable reportable cohort rows, including rows with unavailable measurements';
   let mapping='Preserve the named returned state; missing field = unavailable, explicit null = unknown. No evidence/verdict substitution.';
   let field=key;
+  if(key==='outcome.no_go_total'){
+    source='Retained audit cohort and hash-verified no-go outcomes';
+    field='Retained scan outcome';
+    mapping='Count retained no-go outcomes among all retained attempts for the day. A missing reason still contributes to the total. ID-only attempts contribute to the denominator.';
+  }
+  if(key.startsWith('outcome.no_go_reason.')){
+    field='resultDisposition=no_go + noGo.reasonCode in the hash-verified public export';
+    mapping='Compare the exact returned primary reason. The chart and headline use retained no-go outcomes. The secondary percentage uses all retained attempts for the day. Missing reason evidence stays unavailable.';
+  }
   if(key.startsWith('opt_out.')||key.startsWith('choice_finding.')){source='Generation-matched persisted summary or checksum-verified full retained report; no public fallback';field=key.startsWith('choice_finding.')?'canonicalReportProjection.globalUnifiedFindings exact ID + surfacing/presentation decisions':'choice_audit fixed typed projection from scan configuration and consentControlAssessment.californiaPrivacyReview';mapping='Preserve canonical broad presence, inspection scope, configured enablement, returned packet, action completion, initial/terminal choice confirmation, confirmation basis, post-confirmation observation coverage, semantic sale/sharing registration and outcome separately. Terminal CMP choice confirmation does not establish sale/sharing state or a post-confirmation observation window. No packet is not action failure; enabled is not dispatched. Unknown/missing remains unavailable. Canonical records include neutral evidence and are not failure counts.';}
   if(key==='opt_out.dispatch'){source='Original verified manifest/bundle, or generation-matched persisted result verification receipt';field='privacyCaptureProfile + saleSharingOptOutLaneOutcome, or result artifactVerification.optOutDispatch';mapping='A verified presence-only profile proves exclusion; a retained lane outcome proves dispatch was recorded. Conflicting proof is explicit. Missing proof is unavailable. Configuration and packet absence cannot establish dispatch.';}
   if(['opt_out.action_completion','opt_out.choice_confirmation','opt_out.post_confirmation_observation'].includes(key)){

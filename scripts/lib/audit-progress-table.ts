@@ -1,5 +1,16 @@
 /** Presentation order only: preserves every returned measure and finding ID. */
 type Entry={kind:"metric"|"quantity"|"finding";id:string;label:string;group:string;[key:string]:any};
+type DailyHeadline={value:number;unit:string;basis:string};
+
+/** Average day-level values in the latest compatible series within the selected range. */
+export function averageDailyHeadlines(samples: readonly DailyHeadline[]) {
+  const latest=samples.at(-1);
+  if(!latest)return null;
+  const comparable=samples.filter(sample=>sample.unit===latest.unit&&sample.basis===latest.basis);
+  return {unit:latest.unit,basis:latest.basis,days:comparable.length,
+    value:comparable.reduce((sum,sample)=>sum+sample.value,0)/comparable.length};
+}
+
 export function measuredRateSeries(value:{source:string;series?:Record<string,any>}):[string,any][] {
   if(value.source!=='mixed_sources')return [];
   return Object.entries(value.series??{}).filter(([,part])=>Number.isFinite(part.rate));

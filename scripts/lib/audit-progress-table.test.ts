@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {groupedProgressEntries,controlPresenceUnavailableLabel,measuredRateSeries,latestVersionSample} from "./audit-progress-table";
+import {groupedProgressEntries,controlPresenceUnavailableLabel,measuredRateSeries,latestVersionSample,averageDailyHeadlines} from "./audit-progress-table";
+test('daily averages preserve measured zero and use the latest compatible unit and series',()=>{
+ assert.equal(averageDailyHeadlines([]),null);
+ assert.deepEqual(averageDailyHeadlines([
+  {value:40,unit:'%',basis:'older-source'},
+  {value:90,unit:'ms',basis:'current-source'},
+  {value:0,unit:'%',basis:'current-source'},
+  {value:36,unit:'%',basis:'current-source'},
+ ]),{value:18,unit:'%',basis:'current-source',days:2});
+});
 test('headline selects numeric latest version with its actual sample and no invented full-day estimate',()=>{
  const older={rate:24.5,numerator:34,denominator:139},latest={rate:24.4,numerator:11,denominator:45};
  const v={source:'mixed_sources',series:{'public_export/pulse-public-v5/scan-report-projection-v27':older,'public_export/pulse-public-v10/scan-report-projection-v27':latest}};

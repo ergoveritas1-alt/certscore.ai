@@ -2,7 +2,7 @@ import {POLICY_SUPPLEMENT_DISPOSITION,TRANSFER_FRAMEWORK_REASON} from '../../pac
 import {MASTER_CATALOG} from './audit-evidence-master-catalog';
 import {retainedInputCoverage} from './audit-progress-input-coverage';
 import {auditStateCsvMetrics,auditQuantityCsvMetrics,buildAuditMeasureView} from './audit-measure-catalog';
-import {groupedProgressEntries,controlPresenceUnavailableLabel,measuredRateSeries,unavailableMetricDetail,latestVersionSample} from './audit-progress-table';
+import {groupedProgressEntries,controlPresenceUnavailableLabel,measuredRateSeries,unavailableMetricDetail,latestVersionSample,averageDailyHeadlines} from './audit-progress-table';
 import {progressEngine} from './audit-progress-engine';
 import {optOutFunnel} from './audit-opt-out-funnel';
 import {auditDataHealth} from './audit-data-health';
@@ -98,13 +98,20 @@ export function renderProgressDashboard(data:any):string {
 .gap-review[data-resolution="implemented_locally"]>summary{color:#245c43}.gap-review[data-resolution="blocked_missing_evidence"]>summary{color:#865b14}.gap-review[data-resolution="intentional_subset"]>summary{color:#606873}
 .state-line{display:flex;align-items:baseline;gap:.3em;width:fit-content;max-width:164px;white-space:nowrap}.state-line-label{min-width:0;overflow:hidden;text-overflow:ellipsis}.state-line-value{flex:none}@media(max-width:650px){.state-line{max-width:157px}}
 .checklist-verdicts .state-line{max-width:none}
+.table-average-range{display:flex;flex-wrap:wrap;align-items:end;gap:8px 12px;margin:0 0 12px}.table-average-range label{display:grid;gap:4px;font-weight:600;font-size:12px}.table-average-range input{font:inherit;color:inherit;background:var(--panel);padding:6px 9px;border:1px solid var(--line);border-radius:8px}.table-average-range p{margin:0 0 6px;flex:1 1 220px}.table-average,.table-delta{display:inline-block;border-radius:5px;padding:1px 5px;white-space:nowrap;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;color:#46546c;background:#eef1f7}.table-average{flex:none;margin-right:auto}.table-delta{margin-left:5px;vertical-align:2px}.table-delta[data-direction="up"]{color:#175396;background:#e6f0fc}.table-delta[data-direction="down"]{color:#914509;background:#fff0df}#daily td:has(> .table-delta)> .value{display:inline}
 </style></head><body><main><div class="eyebrow">CertScore.ai · retained Mac mini evidence</div><h1>Daily progress by measure group</h1>
-<section class="panel" id="dataHealth" aria-labelledby="dataHealthTitle"><h2 id="dataHealthTitle">Data health</h2><p id="healthFreshness" class="minor"></p><div id="healthCounts" class="stats"></div><p id="healthAlerts"></p><details><summary>Measurement coverage and comparison context</summary><div class="table-scroll"><table id="healthCoverage"><caption>Latest Los Angeles day · selected filters</caption></table></div><p id="healthComparison" class="minor"></p><p id="healthControls" class="minor"></p><p id="healthQueue" class="minor"></p><p id="healthIntegrity" class="minor"></p><p class="minor">Unknown and unavailable values are not passes or failures. Coverage counts overlap across measures. Same-site/source matches are descriptive comparison candidates; site mix, timing and partial-day coverage still limit comparisons.</p></details></section>
+<section class="panel" id="dataHealth" aria-labelledby="dataHealthTitle"><h2 id="dataHealthTitle">Data health</h2><p id="healthFreshness" class="minor"></p><div id="healthCounts" class="stats"></div><p id="healthAlerts"></p><details><summary>Measurement coverage and comparison context</summary><div class="table-scroll"><table id="healthCoverage"><caption>Latest Los Angeles day · selected filters</caption></table></div><p id="healthComparison" class="minor"></p><details id="accessDenialReview"><summary>Access denials by build and target</summary><div id="accessDenialComparisons"></div></details><p id="healthControls" class="minor"></p><p id="healthQueue" class="minor"></p><p id="healthIntegrity" class="minor"></p><p class="minor">Unknown and unavailable values are not passes or failures. Coverage counts overlap across measures. Same-site/source matches are descriptive comparison candidates; site mix, timing and partial-day coverage still limit comparisons.</p></details></section>
 <details class="panel" id="coverageComparison"><summary>Evidence coverage comparison</summary><p>One canonical catalog, with four output views. Group by domain to explore the taxonomy, or switch to scan-report boxes to retain the existing layout mapping.</p><section class="taxonomy-overview" aria-label="Canonical item normalization review"><strong id="normalizationSummary"></strong><details id="gpcCanonicalQuestions"><summary>GPC · four canonical questions</summary>${MASTER_CATALOG.questionGroups.map(q=>`<p><strong>${q.title}</strong><br>${q.definition}</p>`).join('')}</details><p>Logical master v2: record types with distinct fields and scoped dimensions. Historical producer and export payloads keep their original contracts. Every item below has a recommendation badge. Blue = normalize as a field; green = keep distinct; gray = metadata; amber = conditional alias; rose = retire the standalone catalog entry, not the evidence.</p><div id="normalizationCounts" class="taxonomy-counts"></div><button id="showProposedConcepts">View master record types</button> <button id="normalizationDownload">Download master catalog v2</button><details id="normalizationPlan"><summary>Source review and migration gates</summary><p id="normalizationBasis"></p><ol id="normalizationWorkflow"></ol><p id="normalizationDecisions"></p></details></section><section class="taxonomy-overview" aria-label="Retained value parity"><strong id="masterParitySummary"></strong><p id="masterParityScope"></p><button id="masterParityDownload">Download value mapping and parity</button><p>Counts below cover the entire retained cohort, independent of chart filters. Values use original source versions; missing views and incompatible groups are not matches.</p></section><p id="reportFormatPolicy" class="minor"></p><p id="fullEvidencePolicy" class="minor"></p><p id="mappingCoverageSummary" class="minor"></p><p id="p2ResolutionSummary" class="minor"></p><details id="catalogGuidance"><summary>Catalog decisions and holds</summary><div id="catalogGuidanceItems"></div></details><details class="minor"><summary>Output definitions and availability</summary><p id="coverageFileScope"></p><p>Representation: Detailed = item-level fields; Summarized = a subset or summary; Derived = a calculated measure or assessment; Referenced = links or receipt references; Omitted = no item representation in that view.</p><p>Per-scan availability is evaluated separately in the retained-value counts below. A represented item may still be unknown, not assessed, not retained, unsupported by its source version, invalid/unbound or explicitly not applicable. A negative observation or measured zero is a value, not missing evidence.</p><p id="catalogScope"></p></details><div id="coverageGapCards" class="gap-cards" aria-label="Missing items by output view"></div><p class="minor" id="coverageReviewBasis"></p><details id="coveragePriorities"><summary>Recommended order for closing gaps</summary><ol class="gap-priorities" id="coveragePriorityList"></ol></details><p class="value-legend"><span class="value-tag" data-value="potential_overlap">Amber · possible overlap</span> <span class="value-tag" data-value="low_standalone_value">Lavender · low standalone value</span> Review suggestions only. No items are proven worthless; preserve evidence and differing scopes.</p><div class="filters coverage-controls"><label>View to review<select id="coverageView"><option value="all">All four views</option><option value="report">1 · Scan report</option><option value="standard">2 · Standard JSON evidence</option><option value="full">3 · Full evidence file</option><option value="audit">4 · Daily audit coverage</option></select></label><label>Review filter<select id="coverageReview"><option value="omitted">Missing items (omitted)</option><option value="close_locally">Close locally</option><option value="implemented_locally">Implemented locally</option><option value="blocked_missing_evidence">Blocked by missing evidence</option><option value="intentional_subset">Intentional subset</option><option value="P1">P1 · close first</option><option value="P2">P2 · close next</option><option value="retain_omission">Intentional omissions</option><option value="review_later">P3 · review later</option><option value="related_only">Related measure only</option><option value="flagged">All value-review flags</option><option value="potential_overlap">Possible overlap</option><option value="low_standalone_value">Low standalone value</option><option value="all" selected>All catalog items</option></select></label><label>Group by<select id="coverageGrouping"><option value="domains">Canonical domains</option><option value="areas">Scan-report boxes</option><option value="concepts" selected>Master record types</option></select></label><label>Normalization<select id="normalizationFilter"><option value="all">Every recommendation</option><option value="retirement">Alias / retirement candidates</option></select></label><label>Area<select id="coverageArea"></select></label><label>Evidence type<select id="coverageKind"><option value="all">All types</option></select></label><label>Find an item<input id="coverageSearch" type="search" placeholder="e.g. terminal, CMP, forms" /></label></div><p id="coverageMatrixSummary"></p><button id="catalogDownload">Download evidence catalog JSON</button><p class="minor">On narrow screens, scroll the table horizontally; the item column stays visible. Audit supplements retain their original report-area mapping. Expand an item’s definition to inspect its stable ID and scope.</p><div class="coverage-matrix-scroll" tabindex="0" role="region" aria-label="Evidence item coverage comparison"><table id="coverageMatrix" class="coverage-matrix"><caption class="minor">Four-way coverage by evidence area and item</caption><thead><tr><th scope="col" id="coverageHierarchyHeader">Domain / subject / item</th><th scope="col">1 · Scan report<br><span class="minor">Web · PDF · DOCX</span></th><th scope="col">2 · Standard JSON evidence<br><span class="minor">SDK / Mac mini scan bot</span></th><th scope="col">3 · Full evidence file<br><span class="minor">Report-evidence JSON</span></th><th scope="col">4 · Daily audit coverage</th></tr></thead></table></div></details>
 <div id="stats" class="stats"></div>
 <div class="filters"><label>Region<select id="region"><option value="all">All regions</option></select></label><label>CMP provider<select id="cmp"><option value="all">All returned providers</option></select></label><label>Origin proof<select id="origin"><option value="all">All retained Mac mini rows</option><option value="verified">Independently verified original credential</option><option value="selection">Production ID selection only</option></select></label><label>Measure group<select id="group"><option value="all">All measure groups</option></select></label></div>
 <details class="panel chart-panel" id="chartPanel"><summary><span id="trendTitle">Reject control presence</span></summary><div class="filters"><label>Metric<select id="metric"></select></label><label>State<select id="chartState"></select></label><label>Comparison source<select id="chartSource"><option value="all">Separate source/version series</option></select></label></div><svg class="plot" id="trend" role="img"></svg><div id="legend" class="legend"></div><p id="chartNote" class="minor"></p></details>
-<section class="panel"><div class="report-table-heading"><h2>Report signals and capture quality</h2><p class="minor" id="tableSummary"></p></div><div class="table-scroll"><table id="daily"></table></div></section>
+<section class="panel"><div class="report-table-heading"><h2>Report signals and capture quality</h2><p class="minor" id="tableSummary"></p></div>
+<div class="table-average-range" aria-describedby="tableRangeStatus">
+<label>Start date<input type="date" id="tableStartDate"></label>
+<label>End date<input type="date" id="tableEndDate"></label>
+<p class="minor" id="tableRangeStatus" role="status">Averages use comparable daily values in this range.</p>
+</div>
+<div class="table-scroll"><table id="daily"></table></div></section>
 
 <details class="panel"><summary>Evidence-box coverage map · additions and remaining gaps</summary><p>One entry per current CertScore.ai scan-report Detailed evidence box type, including conditional boxes. This maps section identity, not complete field coverage or visibility on every scan. Historical versions can differ. “Additions” describes accumulated audit coverage, not newly collected evidence in this refresh. Audit-only diagnostics are grouped separately.</p><div id="coverageMap"></div></details>
 <details class="panel"><summary>Metric contracts and retained sources</summary><p>Open a metric graph to inspect its contract. Unavailable exports remain explicit. Production ID selection is separate from verification of detailed evidence.</p><button id="sources">Inspect sources and limitations</button><p><a href="metric-contracts.json">Download all metric contracts</a></p></details>
@@ -114,7 +121,7 @@ export function renderProgressDashboard(data:any):string {
 <div id="chartPopover" class="popover" role="dialog" aria-modal="false" aria-labelledby="chartPopoverTitle" hidden><header><h2 id="chartPopoverTitle"></h2><button id="closeChartPopover" aria-label="Close graph">×</button></header><label>State<select id="popoverState"></select></label><label>Comparison source<select id="popoverSource"></select></label><div id="popoverGraph"></div><div id="popoverLegend" class="legend"></div><details><summary>Metric meaning and denominator</summary><dl id="contract" class="contract"></dl></details></div>
 <dialog id="proof"><button id="closeProof">Close</button><h2>Retained sources and limitations</h2><div id="proofBody"></div></dialog></main>
 <script id="dashboard-data" type="application/json">${safe}</script><script>
-(()=>{const __name=(v)=>v;const engine=(${progressEngine.toString()})();const inputCoverage=(${retainedInputCoverage.toString()});const buildOptOutFunnel=(${optOutFunnel.toString()});const buildDataHealth=(${auditDataHealth.toString()});const unavailableControlLabel=(${controlPresenceUnavailableLabel.toString()});const measuredSeries=(${measuredRateSeries.toString()});const unavailableDetail=(${unavailableMetricDetail.toString()});const latestSample=(${latestVersionSample.toString()});const data=JSON.parse(document.getElementById('dashboard-data').textContent),$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),label=s=>String(s).startsWith('reason_mask_')?(transferReasonLabels(s).join(' · ')||'No completion blockers recorded'):String(s).startsWith('supplement_mask_')?maskLabels(s,'supplement_mask_',data.policySupplementBits).join(' · '):String(s).replaceAll('_',' '),pct=n=>n===null||n===undefined?'—':(Number.isInteger(n)?String(n):n.toFixed(1))+'%',delta=n=>n===null||n===undefined?'—':(n>0?'+':'')+n.toFixed(1)+' pp',colors=['#6745ce','#167d76','#b56522','#ad4770','#3976b2','#68783a'];
+(()=>{const __name=(v)=>v;const engine=(${progressEngine.toString()})();const inputCoverage=(${retainedInputCoverage.toString()});const buildOptOutFunnel=(${optOutFunnel.toString()});const buildDataHealth=(${auditDataHealth.toString()});const unavailableControlLabel=(${controlPresenceUnavailableLabel.toString()});const measuredSeries=(${measuredRateSeries.toString()});const unavailableDetail=(${unavailableMetricDetail.toString()});const latestSample=(${latestVersionSample.toString()});const averageHeadlines=(${averageDailyHeadlines.toString()});const data=JSON.parse(document.getElementById('dashboard-data').textContent),$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),label=s=>String(s).startsWith('reason_mask_')?(transferReasonLabels(s).join(' · ')||'No completion blockers recorded'):String(s).startsWith('supplement_mask_')?maskLabels(s,'supplement_mask_',data.policySupplementBits).join(' · '):String(s).replaceAll('_',' '),pct=n=>n===null||n===undefined?'—':(Number.isInteger(n)?String(n):n.toFixed(1))+'%',delta=n=>n===null||n===undefined?'—':(n>0?'+':'')+n.toFixed(1)+' pp',colors=['#6745ce','#167d76','#b56522','#ad4770','#3976b2','#68783a'];
 for(const r of data.rows){r.states=Object.fromEntries(Object.entries(r.stateCodes).map(([k,i])=>[data.fieldKeys[k],data.stateValues[i]]));r.metricSources=Object.fromEntries(Object.entries(r.sourceCodes).map(([k,i])=>[data.fieldKeys[k],data.sourceValues[i]]));r.defaultSource=data.sourceValues[r.defaultSourceCode];delete r.stateCodes;delete r.sourceCodes;}
 let selectedKind='metric',selectedMetric='control.reject',selectedState='__primary__',selectedSource='all',days=[],anchor=null,tableInitialized=false;const key=e=>e.kind+':'+e.id,entry=()=>data.measureCatalog.entries.find(e=>e.kind===selectedKind&&e.id===selectedMetric)||data.tableEntries[0];
 for(const c of [...new Set(data.rows.map(r=>r.states.cmp_provider).filter(Boolean))].sort())$('cmp').add(new Option(label(c),c));for(const r of [...new Set(data.rows.map(r=>r.region))].sort())$('region').add(new Option(r,r));for(const g of [...new Set(data.tableEntries.map(e=>e.group))])$('group').add(new Option(g,g));for(const e of data.measureCatalog.entries)$('metric').add(new Option(e.group+' · '+e.label,key(e)));$('metric').value='metric:control.reject';
@@ -123,10 +130,10 @@ const stat=(d,id,kind)=>kind==='quantity'?d.quantities[id]:kind==='finding'?d.fi
 const countQuantity=e=>e.kind==='quantity'&&e.unit!=='ms'&&e.unit!=='milliseconds';
 const quantitySubject=e=>data.quantitySubjects[e.id]??e.unit;
 const quantityPercent=p=>p.measured&&p.nonzero!==null?100*p.nonzero/p.measured:null;
-function options(){const e=entry(),all=days.map(d=>stat(d,e.id,e.kind));$('chartState').replaceChildren();if(e.kind==='metric'){if(e.success.length&&e.id!==cookieComparisonId)$('chartState').add(new Option(e.id.startsWith('control.')?'Observed control presence':'Named numerator share','__primary__'));const states=[...new Set([...all.flatMap(v=>Object.keys(v.counts)),...(e.id==='sealed.opt_out.action_completion'?['completed']:[])])].sort();for(const s of states)$('chartState').add(new Option(label(s),s));}else if(e.kind==='quantity'){if(countQuantity(e))$('chartState').add(new Option('Measured reports with '+quantitySubject(e),'__primary__'));$('chartState').add(new Option('Median per measured report',countQuantity(e)?'__median__':'__primary__'));}else $('chartState').add(new Option('Canonical finding prevalence','__primary__'));if(![...$('chartState').options].some(o=>o.value===selectedState))selectedState=$('chartState').options[0]?.value??'';$('chartState').value=selectedState;
+function options(){const e=entry(),all=days.map(d=>stat(d,e.id,e.kind));$('chartState').replaceChildren();if(e.kind==='metric'){if(e.success.length&&e.id!==cookieComparisonId)$('chartState').add(new Option(e.id.startsWith('control.')?'Observed control presence':e.id==='outcome.no_go_total'?'Share of all retained attempts':e.id.startsWith('outcome.no_go_reason.')?'Share of retained no-gos':'Named numerator share','__primary__'));const states=[...new Set([...all.flatMap(v=>Object.keys(v.counts)),...(e.id==='sealed.opt_out.action_completion'?['completed']:[])])].sort();for(const s of states)$('chartState').add(new Option(label(s),s));}else if(e.kind==='quantity'){if(countQuantity(e))$('chartState').add(new Option('Measured reports with '+quantitySubject(e),'__primary__'));$('chartState').add(new Option('Median per measured report',countQuantity(e)?'__median__':'__primary__'));}else $('chartState').add(new Option('Canonical finding prevalence','__primary__'));if(![...$('chartState').options].some(o=>o.value===selectedState))selectedState=$('chartState').options[0]?.value??'';$('chartState').value=selectedState;
 const sources=[...new Set(all.flatMap(v=>Object.keys(v.series)))].sort();$('chartSource').replaceChildren(new Option('Separate source/version series','all'));for(const s of sources)$('chartSource').add(new Option(s,s));if(!sources.includes(selectedSource))selectedSource='all';$('chartSource').value=selectedSource;}
 const svgNS='http://www.w3.org/2000/svg';function node(tag,attrs={},text){const n=document.createElementNS(svgNS,tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);if(text!==undefined)n.textContent=text;return n;}
-function draw(){const e=entry(),svg=$('trend'),quantityRate=countQuantity(e)&&selectedState==='__primary__',medianQuantity=e.kind==='quantity'&&!quantityRate;svg.replaceChildren();svg.setAttribute('viewBox','0 0 680 280');$('trendTitle').textContent=e.label+' · '+(quantityRate?'measured reports with '+quantitySubject(e):medianQuantity?'median '+e.unit:e.kind==='finding'?'canonical finding prevalence':selectedState==='__primary__'?e.id.startsWith('control.')?'observed presence':'named numerator share':label(selectedState)+' share');svg.setAttribute('aria-label',$('trendTitle').textContent);
+function draw(){const e=entry(),svg=$('trend'),quantityRate=countQuantity(e)&&selectedState==='__primary__',medianQuantity=e.kind==='quantity'&&!quantityRate;svg.replaceChildren();svg.setAttribute('viewBox','0 0 680 280');$('trendTitle').textContent=e.label+' · '+(quantityRate?'measured reports with '+quantitySubject(e):medianQuantity?'median '+e.unit:e.kind==='finding'?'canonical finding prevalence':selectedState==='__primary__'?e.id.startsWith('control.')?'observed presence':e.id==='outcome.no_go_total'?'share of all retained attempts':e.id.startsWith('outcome.no_go_reason.')?'share of retained no-gos':'named numerator share':label(selectedState)+' share');svg.setAttribute('aria-label',$('trendTitle').textContent);
 const sources=[...new Set(days.flatMap(d=>Object.keys(stat(d,e.id,e.kind).series)))].filter(s=>selectedSource==='all'||s===selectedSource).sort(),series=sources.map(s=>({source:s,points:days.map(d=>{const p=stat(d,e.id,e.kind).series[s];if(!p)return null;const value=quantityRate?quantityPercent(p):medianQuantity?p.median:e.kind==='finding'?p.rate:selectedState==='__primary__'?p.rate:p.denominator&&(selectedState==='unavailable'||p.counts.unavailable!==p.denominator)?100*(p.counts[selectedState]??0)/p.denominator:null;return {...p,value};})})),maximum=medianQuantity?Math.max(1,...series.flatMap(s=>s.points.map(p=>p?.value??0))):100;
 const l=50,t=18,w=600,h=205;for(const f of [0,.25,.5,.75,1]){const y=t+h*(1-f);svg.append(node('line',{x1:l,y1:y,x2:l+w,y2:y,stroke:'#dce3ed'}),node('text',{x:2,y:y+4,'font-size':12,fill:'#56647a'},medianQuantity?(maximum*f).toFixed(1):100*f+'%'));}
 days.forEach((d,i)=>{if(i%Math.max(1,Math.ceil(days.length/6))===0||i===days.length-1)svg.append(node('text',{x:l+w*i/Math.max(1,days.length-1),y:255,'text-anchor':'middle','font-size':12,fill:'#56647a'},d.date.slice(5)+(d.completeDay?'':' *')));});
@@ -148,8 +155,19 @@ function rateLines(v,selected,denominatorLabel,recordSource,compact){
  const [source,p]=selected;
  recordSource?.(source);
  const subset=v.source==='mixed_sources'?' in one source':'';
- const value='<div class="value">'+pct(p.rate)+'</div>';
+ const value=tableHero(pct(p.rate),p.rate,'%',source);
  return value+(compact?'':'<div class="minor">'+p.numerator+'/'+p.denominator+' '+denominatorLabel+subset+' · '+delta(p.deltaPp)+'</div>');
+}
+function tableHero(title,number=null,unit='%',basis='',attribute=''){
+ const sample=Number.isFinite(number)&&basis?
+  ' data-average-value="'+number+'" data-average-unit="'+esc(unit)+'" data-average-basis="'+esc(basis)+'"':'';
+ return '<div class="value"'+(attribute?' '+attribute:'')+sample+'>'+esc(title)+'</div>';
+}
+function tableSeries(value){
+ if(!value)return '';
+ if(value.source!=='mixed_sources')return value.source??'';
+ const sources=Object.entries(value.series??{}).filter(([,part])=>part.denominator>(part.counts?.unavailable??0)).map(([source])=>source).sort();
+ return sources.length?sources.join(' | '):'';
 }
 // These headlines describe the eligible retained rows. Source-specific rates
 // and state definitions still come from the audit engine.
@@ -236,6 +254,8 @@ function tableStateHeadline(e,v){
  return [null,/^(?:sealed\\.)?cmp_provider$/.test(e.id)?'Identified':'Status returned'];
 }
 function metricMeaning(e){
+ if(e.id==='outcome.no_go_total')return 'Daily no-go count and share of all retained attempts.';
+ if(e.id.startsWith('outcome.no_go_reason.'))return 'Share and count of retained no-gos with this primary reason, plus its share of all retained attempts.';
  const exact={
   outcome:'Retained attempts that produced a usable complete or limited report.',
   gpc_delivery:'Usable scans with verified GPC header and navigator delivery.',
@@ -397,7 +417,7 @@ function drawTechnologyEstimates(svg,entry,left,top,width,height){
  return rate;
 }
 function cell(v,e,recordSource,compact=false,hero=null,notDispatched=false){
- const headline=(title,detail='')=>'<div class="value">'+esc(title)+'</div>'+(!compact&&detail?'<div class="states">'+esc(detail)+'</div>':'');
+ const headline=(title,detail='',number=null,unit='%',basis=v.source)=>tableHero(title,number,unit,basis)+(!compact&&detail?'<div class="states">'+esc(detail)+'</div>':'');
  const latest=latestSample(v);
  if(e.kind==='quantity'){
   if(v.eligible===0)return headline('No eligible data');
@@ -415,9 +435,9 @@ function cell(v,e,recordSource,compact=false,hero=null,notDispatched=false){
    const title=rate===null?'Separate measurement groups':compact?pct(rate):pct(rate)+' with '+quantitySubject(e);
    const basis=rate===null?'':measured.nonzero+'/'+measured.measured+' measured reports'+(singleSource?' in one source':'');
    const breakdown=compact&&rate!==null?'<div class="states minor state-percentages">'+percentageLine('headline',subject,pct(rate),subject+' among measured reports'+(singleSource?' in one source':''),true)+'</div>':'';
-   return headline(title)+breakdown+(singleSource?'<div class="minor">One measured source</div>':'')+coverage+(compact?'':'<div class="minor">'+basis+'</div>'+volumes);
+   return headline(title,'',rate,'%',singleSource?.[0]??v.source)+breakdown+(singleSource?'<div class="minor">One measured source</div>':'')+coverage+(compact?'':'<div class="minor">'+basis+'</div>'+volumes);
   }
-  return headline(v.median===null?'Separate measurement groups':v.median.toFixed(1)+' '+e.unit)+coverage+(compact?'':volumes);
+  return headline(v.median===null?'Separate measurement groups':v.median.toFixed(1)+' '+e.unit,'',v.median,e.unit)+coverage+(compact?'':volumes);
  }
  if(e.kind==='finding'){
   if(v.eligible===0)return headline('No eligible data');
@@ -426,7 +446,7 @@ function cell(v,e,recordSource,compact=false,hero=null,notDispatched=false){
   const selected=headlineRateSource(v,latest,false);
   const rate=rateLines(v,selected,'complete inventories',recordSource,compact);
   const percentage=selected?.[1].rate??v.rate;
-  return (rate||headline(pct(v.rate),v.numerator+'/'+v.denominator+' complete inventories · '+delta(v.deltaPp)))+
+  return (rate||headline(pct(v.rate),v.numerator+'/'+v.denominator+' complete inventories · '+delta(v.deltaPp),v.rate))+
    (compact?(percentage===null?'':'<div class="states minor state-percentages">'+percentageLine('headline','Prevalence',pct(percentage),'Prevalence among complete inventories',true)+'</div>'):'<div class="states">'+esc(limits)+'<br>Top '+(v.top===null?'unknown':v.top)+'</div>');
  }
  if(v.denominator===0)return headline('No eligible data');
@@ -444,7 +464,8 @@ function cell(v,e,recordSource,compact=false,hero=null,notDispatched=false){
   const count=tableStateCount(v,state);
   const percentage=pct(100*count/v.denominator);
   const useFraction=/^(control|click|registration)\\.(accept|reject)$|^detail\\.(accept|reject)\\.(activity_all|verdict)$/.test(e.id)||data.gpcQuestions.some(q=>q.primaryMetric===e.id);
-  return headline(percentage)+stateRows(v,e,true,{state,title,percentage,...(useFraction?{fraction:count+'/'+v.denominator}:{})});
+  const source=tableSeries(v);
+  return headline(percentage,'',100*count/v.denominator,'%',source?state+' / '+source:'')+stateRows(v,e,true,{state,title,percentage,...(useFraction?{fraction:count+'/'+v.denominator}:{})});
  }
  if(e.id.startsWith('customer_cmp_check.')&&v.counts.not_applicable===v.denominator)return headline('Not applicable');
  const unassessed=(e.id.startsWith('sealed.cmp_check.')||e.id.startsWith('customer_cmp_check.'))&&Object.keys(v.counts).every(k=>['not_assessed','incomplete','partially_assessed','unavailable'].includes(k));
@@ -453,7 +474,7 @@ function cell(v,e,recordSource,compact=false,hero=null,notDispatched=false){
  const body=unassessed?headline(v.counts.incomplete||v.counts.partially_assessed?'Partial assessment':'Not assessed'):
   rate||(!e.success.length?(compact?'':v.denominator+' eligible'):v.rate===null?headline('Rate unavailable'):
    compact&&e.id==='outcome'&&v.source.startsWith('retained_production_id_selection/')?headline('No detailed exports'):
-   headline(pct(v.rate),v.numerator+'/'+v.denominator+' · '+delta(v.deltaPp)));
+   headline(pct(v.rate),v.numerator+'/'+v.denominator+' · '+delta(v.deltaPp),v.rate));
  const percentage=selected?.[1].rate??v.rate;
  const state=e.success.length===1?e.success[0]:null;
  const title=e.id==='outcome'?'Observed':e.id==='sealed.outcome'?'Usable':e.id==='accessibility.coverage'?'Results available':state?label(state):'Share of eligible rows';
@@ -545,7 +566,8 @@ function prominenceCoverageCell(day,comparison){
  const unavailable=unresolved===day.reportable||comparison&&pairs>0&&pairs===missing;
  const count=comparison?assessed:pairs;
  const title=comparison?'Valid comparison':'Both observed';
- return '<div class="value">'+(unavailable?'Unavailable':pct(100*count/day.reportable))+'</div>'+
+ const share=unavailable?null:100*count/day.reportable;
+ return tableHero(unavailable?'Unavailable':pct(share),share,'%','retained_first_layer_control_pair/v1')+
   (unavailable?'':'<div class="states minor state-percentages prominence-coverage">'+
    percentageLine('headline',title,count+'/'+day.reportable,title+' among reportable scans',true)+'</div>')+
   (!comparison&&unresolved?'<div class="minor">'+unresolved+' with unresolved control presence</div>':'')+
@@ -635,7 +657,7 @@ function transferFrameworkReportSignals(counts){
 function transferFrameworkCell(day){
  const counts=transferFrameworkCounts([day]);
  if(!counts.reports)return '<div class="value">No eligible data</div>';
- return '<div class="value">'+esc(transferFrameworkHeadline(counts))+'</div>'+
+ return tableHero(transferFrameworkHeadline(counts),counts.unavailable===counts.reports?null:counts.noSignal+counts.signal,'',tableSeries(day.metrics['sealed.operations.transfer_framework_check']))+
   compactCoverageNote('data-transfer-assessment-coverage','Assessment breakdown',
    transferFrameworkBreakdown(counts)+transferReasonCoverage(day))+
   '<div class="minor" data-transfer-signal-coverage>'+esc(transferFrameworkReportSignals(counts))+'</div>';
@@ -680,7 +702,9 @@ function checklistVerdictCell(verdict,layout,showGapCount=false){
   }
  }
  const heroValue=heroState==='review_signal'?heroCount+' ('+share(heroCount)+')':share(heroCount);
- return '<div class="value" data-checklist-verdict>'+(showGapCount?heroCount+(heroCount===1?' gap':' gaps')+' in '+verdict.denominator+' reports':heroTitle+' · '+heroValue)+'</div><div class="states minor state-percentages checklist-verdicts">'+
+ const isCount=showGapCount||heroState==='review_signal';
+ const headline=showGapCount?heroCount+(heroCount===1?' gap':' gaps')+' in '+verdict.denominator+' reports':heroTitle+' · '+heroValue;
+ return tableHero(headline,isCount?heroCount:100*heroCount/verdict.denominator,isCount?'':'%',tableSeries(verdict),'data-checklist-verdict')+'<div class="states minor state-percentages checklist-verdicts">'+
   breakdown.map(([state,title])=>{
    const count=verdict.counts[state]??0;
    return percentageLine(state,title,count+' ('+share(count)+')');
@@ -731,7 +755,8 @@ function optOutFunnelCell(day){
   '<div>Control recorded, no supported route: '+f.controlWithoutSupportedRoute+'</div>'+
   '<div>Prerequisite detail unresolved: '+f.unresolvedPrerequisites+'</div>'+
   '<p>Broad signals can include policy instructions or page text. They do not authorize an action. These are recorded dispatch facts; a missing control is not proof of site-wide absence. The generic skip reason does not identify the rejected prerequisite. Delivered details below distinguish the recorded checks.</p>':'';
- return '<div class="value" data-opt-out-funnel>'+esc(heading)+'</div><div class="states minor state-percentages">'+lines+'</div>'+
+ const count=f.orphanedOutcomes||(!f.dispatched&&f.unknown)?null:f.dispatched;
+ return tableHero(heading,count,'','retained_opt_out_dispatch_count/v1','data-opt-out-funnel')+'<div class="states minor state-percentages">'+lines+'</div>'+
   '<details class="series-list opt-out-stages"><summary>Execution and verification stages</summary>'+stages+
   (f.orphanedOutcomes?'<p>Outcomes without matched recorded dispatch: '+f.orphanedOutcomes+'. Review required.</p>':'')+
   '<p>Each stage uses the same report and source-qualified evidence. Unknown outcomes stay in the eligible denominator. Observation-window completion does not establish whether tracking continued or an opt-out was honored. The chart retains the original completed-action share of all reportable scans.</p></details>'+
@@ -771,7 +796,7 @@ function assessmentOutcomeCell(value,definition,headlinePrefix=''){
  for(const state of Object.keys(counts)){
   if(!titles.has(state))titles.set(state,definition.labels?.[state]??label(state).replace(/^./,c=>c.toUpperCase()));
  }
- return '<div class="value" data-checklist-verdict>'+esc(headlinePrefix+title)+'</div>'+
+ return tableHero(headlinePrefix+title,entirelyUnavailable?null:covered,'',tableSeries(value),'data-checklist-verdict')+
   '<div class="states minor state-percentages checklist-verdicts">'+
   [...titles].map(([state,name])=>percentageLine(state,name,String(counts[state]??0))).join('')+'</div>';
 }
@@ -808,6 +833,206 @@ function controlAccessibilityReasons(day){
    Object.entries(g.reasons).map(([reason,n])=>'<div class="minor">'+esc(names[reason]??reason)+': '+n+' reports ('+pct(100*n/g.reports)+')</div>').join('')).join('')+
   '<div class="minor">Automated visible-control checks only. Keyboard operation, assistive technology, closed shadow roots and unopened panels are not assessed. Reasons may overlap. Missing historical receipts remain unknown.</div></details>';
 }
+const noGoPercent=new Intl.NumberFormat('en-US',{style:'percent',maximumFractionDigits:2});
+function broadOptOutCoverage(day){
+ const value=day.metrics['sealed.opt_out.presence'];
+ if(!value?.denominator)return '';
+ const {counts}=value;
+ const observed=counts.observed??0,notObserved=counts.not_observed??0;
+ const scopes=Object.entries(value.series).filter(([source])=>!source.startsWith('unavailable'))
+  .map(([source,part])=>{
+   const yes=part.counts.observed??0,resolved=yes+(part.counts.not_observed??0);
+   return '<div>'+esc(source)+' · '+(resolved?yes+'/'+resolved+' observed among resolved ('+pct(100*yes/resolved)+')':'No resolved assessment')+'</div>';
+  }).join('');
+ const reasons=day.metrics['sealed.opt_out.dispatch_reason']?.counts??{};
+ return '<details data-broad-opt-out-coverage class="series-list"><summary>Broader assessment coverage</summary>'+
+  '<div>'+observed+' observed · '+notObserved+' not observed · '+(counts.unknown??0)+' unknown · '+(counts.unavailable??0)+' unavailable</div>'+
+  scopes+Object.entries(reasons).filter(([key])=>key!=='unavailable').map(([key,count])=>
+   '<div>Conditional dispatch reason · '+esc(label(key))+' · '+count+'</div>').join('')+'</details>';
+}
+function noGoCell(day,value,total){
+ if(!day.attempts)return '<td><div class="value">No retained attempts</div></td>';
+ const rate=value.rate===null?'—':noGoPercent.format(value.rate/100);
+ const attemptShare=value.denominator>0&&value.rate===null?'—':noGoPercent.format(value.numerator/day.attempts);
+ const unavailable=value.counts.unavailable??0;
+ return '<td>'+tableHero(rate,value.rate,'%',value.source,'data-no-go-rate')+
+  '<div class="states minor state-percentages" data-no-go-count>'+
+  percentageLine('recorded',total?'No-gos':'Retained no-gos',value.numerator+'/'+value.denominator,total?'No-gos out of all retained attempts':'No-gos with this primary reason',true)+'</div>'+
+  (total?'':'<div class="minor" data-no-go-attempt-share>'+attemptShare+' of '+day.attempts+' retained attempts</div>')+
+  (unavailable?'<div class="minor">'+unavailable+' reason unavailable</div>':'')+'</td>';
+}
+const tableDateFormatter=new Intl.DateTimeFormat('en-CA',{timeZone:data.timezone,year:'numeric',month:'2-digit',day:'2-digit'});
+const tableToday=tableDateFormatter.format(new Date());
+const tableYesterday=new Date(Date.parse(tableToday+'T00:00:00Z')-86400000).toISOString().slice(0,10);
+const tableStartDate=$('tableStartDate'),tableEndDate=$('tableEndDate');
+for(const input of [tableStartDate,tableEndDate]){
+ input.min=data.days[0]?.date??tableToday;
+ input.max=tableToday;
+}
+tableStartDate.value=tableStartDate.min;
+tableEndDate.value=tableToday;
+const tableAverageNumber=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
+const averageUnit=unit=>unit==='%'?'%':unit?' '+unit:'';
+const tableClock=new Intl.DateTimeFormat('en-GB',{timeZone:data.timezone,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3,hourCycle:'h23'});
+function cutoffComparisons(rows){
+ const windows=(data.windows??[]).filter(w=>w.completeInventory!==false)
+  .map(w=>[Date.parse(w.start),Date.parse(w.end)]).sort((a,b)=>a[0]-b[0]);
+ const cutoff=Math.max(...(data.windows??[]).map(w=>Date.parse(w.end)));
+ if(!Number.isFinite(cutoff))return null;
+ const date=tableDateFormatter.format(cutoff),clock=tableClock.format(cutoff);
+ const latest=data.days.find(d=>d.date===date);
+ if(latest?.completeDay)return null;
+ function instant(target,time){
+  let lo=Date.parse(target+'T00:00:00Z')-86400000,hi=lo+3*86400000;
+  while(lo<hi){
+   const mid=Math.floor((lo+hi)/2),local=tableDateFormatter.format(mid)+' '+tableClock.format(mid);
+   if(local<target+' '+time)lo=mid+1;else hi=mid;
+  }
+  return lo;
+ }
+ function covered(start,end){
+  if(end<=start)return false;
+  let cursor=start;
+  for(const [lo,hi] of windows){
+   if(hi<=cursor)continue;
+   if(lo>cursor)return false;
+   cursor=hi;
+   if(cursor>=end)return true;
+  }
+  return false;
+ }
+ const windowsByDay=new Map();
+ for(const day of data.days){
+  if(day.date>date)continue;
+  const end=day.date===date?cutoff:instant(day.date,clock),start=instant(day.date,'00:00:00.000');
+  if(end>start&&tableClock.format(end)===clock)windowsByDay.set(day.date,{start,end,complete:covered(start,end)});
+ }
+ const sampledDays=new Set();
+ const matchedRows=rows.filter(r=>{
+  const time=Date.parse(r.createdAt);
+  if(!Number.isFinite(time))return false;
+  const day=tableDateFormatter.format(time),window=windowsByDay.get(day);
+  if(!window||time<window.start||time>=window.end)return false;
+  sampledDays.add(day);
+  return true;
+ });
+ if(!sampledDays.has(date))return null;
+ const matchedDays=engine.aggregate({...data,days:data.days.filter(d=>sampledDays.has(d.date))},matchedRows,true);
+ return {date,clock,rows:matchedRows,days:matchedDays,
+  incompleteDays:new Set(matchedDays.filter(d=>!windowsByDay.get(d.date).complete).map(d=>d.date))};
+}
+let comparableCutoff=null;
+const matchTemplate=document.createElement('template');
+const samplesFrom=hero=>hero?{value:Number(hero.dataset.averageValue),unit:hero.dataset.averageUnit,basis:hero.dataset.averageBasis}:null;
+function tableReviewValue(day,entry,sample){
+ const {attempts,reportable}=day;
+ if(entry.id===transferChecklistId){
+  const counts=transferFrameworkCounts([day]);
+  const coverage=[
+   counts.inconclusive?counts.inconclusive+' inconclusive':'',
+   counts.noText?counts.noText+' not assessed':'',
+   counts.partialSignal?counts.partialSignal+' flagged with partial coverage':'',
+   counts.unavailable?counts.unavailable+' assessment unavailable':'',
+  ].filter(Boolean);
+  return {attempts,reportable,population:counts.reports,coverage};
+ }
+ const layout=data.verdictLayouts[entry.id],definition=coverageHeadlines[entry.id];
+ const value=definition?day.metrics[definition.metric]:layout?day.metrics[layout.id]:stat(day,entry.id,entry.kind);
+ // The Accept state headline uses all eligible reportable rows, including unavailable execution.
+ if(entry.id==='click.accept'){
+  const unavailable=value.counts.unavailable??0;
+  return {attempts,reportable,population:value.denominator,coverage:unavailable?[unavailable+' execution unavailable']:[]};
+ }
+ const source=sample?.basis;
+ const part=value?.series?.[source]??value?.series?.[source?.slice(source.indexOf(' / ')+3)]??value;
+ const population=part?.measured??part?.denominator;
+ const unavailable=part?.missing??part?.unavailable??((part?.counts?.unavailable??0)+(part?.counts?.unknown??0));
+ return {attempts,reportable,population,coverage:unavailable?[unavailable+' unknown/unavailable']:[]};
+}
+function comparableHeadline(day,entry){
+ const id=entry.id;
+ if(entry.kind==='coverage'||[prominenceId,optOutFunnelId].includes(id))return null;
+ const value=stat(day,id,entry.kind),definition=coverageHeadlines[id],layout=data.verdictLayouts[id];
+ if(!value)return null;
+ const matchBody=id==='outcome.no_go_total'||id.startsWith('outcome.no_go_reason.')
+  ? noGoCell(day,value,id==='outcome.no_go_total').slice(4,-5)
+  : definition&&day.metrics[definition.metric]?assessmentOutcomeCell(day.metrics[definition.metric],definition)
+  : id===transferChecklistId?transferFrameworkCell(day)
+  : layout?(Object.keys(day.metrics[layout.id].series).length===1?checklistVerdictCell(day.metrics[layout.id],layout,id==='checklist.pre_consent_third_party_tracking'):'')
+  : cell(value,entry,undefined,true,entry.kind==='metric'?tableStateHeadline(entry,value):null,noDispatch(day));
+ matchTemplate.innerHTML=matchBody;
+ const hero=matchTemplate.content.firstElementChild;
+ return hero?.matches('.value[data-average-value]')?samplesFrom(hero):null;
+}
+function updateTableAverages(){
+ const start=tableStartDate.value,end=tableEndDate.value;
+ const valid=tableStartDate.validity.valid&&tableEndDate.validity.valid&&start&&end&&start<=end;
+ $('tableRangeStatus').textContent=valid
+  ?'Averages use the latest comparable series in this range. Changes show the day’s value minus its average.'
+  :'Choose dates in order within the retained date range.';
+ for(const row of $('daily').querySelectorAll('tr[data-table-id]')){
+  row.querySelector('.table-average')?.remove();
+  const entry=data.tableEntries.find(e=>e.id===row.dataset.tableId&&e.kind===row.dataset.tableKind);
+  const cells=Array.from(row.cells).slice(1);
+  const samples=cells.map(cell=>samplesFrom(cell.querySelector(':scope > .value[data-average-value]')));
+  const average=valid?averageHeadlines(samples.filter((sample,i)=>sample&&days[i].date>=start&&days[i].date<=end)):null;
+  const badge=document.createElement('span');
+  badge.className='table-average';
+  if(average)badge.dataset.averageValue=String(average.value);
+  badge.textContent=average?'Avg '+tableAverageNumber.format(average.value)+averageUnit(average.unit):'Avg —';
+  badge.title=average?average.days+' comparable daily values · '+start+' to '+end+' · '+average.basis:'No comparable measured daily values in the selected range.';
+  row.querySelector('.metric-name strong').after(badge);
+  cells.forEach((cell,i)=>{
+   cell.querySelector(':scope > .table-delta')?.remove();
+   cell.querySelector(':scope > [data-delta-review]')?.remove();
+   if(i<cells.length-2||![tableYesterday,tableToday].includes(days[i].date))return;
+   const sample=samples[i],change=document.createElement('span');
+   change.className='table-delta';
+   change.textContent='Δ —';
+   change.title='No comparable daily value and selected-range average.';
+   if(average&&sample&&sample.unit===average.unit&&sample.basis===average.basis){
+    const diff=Math.round((sample.value-average.value)*100)/100;
+    change.dataset.direction=diff>0?'up':diff<0?'down':'flat';
+    change.textContent='Δ '+(diff>0?'+':diff<0?'−':'')+tableAverageNumber.format(Math.abs(diff))+(sample.unit==='%'?' pp':averageUnit(sample.unit));
+    change.title='Daily value minus the selected-range average.';
+    if(entry&&Math.abs(sample.value-average.value)>10){
+     const day=days[i],context=tableReviewValue(day,entry,sample);
+     const review=document.createElement('div');
+     review.className='minor';review.dataset.deltaReview='';
+     const coverage=context.coverage.length>0;
+     const kind=coverage?'Coverage gap':sample.unit===''?'Count change':sample.unit==='%'?'Rate change':'Measure change';
+     review.textContent=kind+' · '+context.reportable+'/'+context.attempts+' reportable attempts'+
+      (context.population===undefined?'':' · '+context.population+' in headline sample')+
+      (coverage?' · '+context.coverage.join(' · '):'')+
+      (day.completeDay?'':' · partial day');
+     if(!day.completeDay&&comparableCutoff&&day.date<=comparableCutoff.date){
+      const sameBasis=other=>other&&other.basis===sample.basis&&other.unit===sample.unit;
+      const windowDay=comparableCutoff.days.find(d=>d.date===day.date);
+      const current=windowDay&&comparableHeadline(windowDay,entry);
+      const earlier=comparableCutoff.days.filter(d=>d.date>=start&&d.date<=end&&d.date<day.date)
+       .map(d=>({date:d.date,sample:comparableHeadline(d,entry)})).filter(d=>sameBasis(d.sample));
+      const matchedAverage=averageHeadlines(earlier.map(d=>d.sample));
+      const comparison=document.createElement('div');
+      comparison.dataset.cutoffComparison='';
+      if(sameBasis(current)&&matchedAverage){
+       const incomplete=comparableCutoff.incompleteDays.has(day.date)||
+        earlier.some(d=>comparableCutoff.incompleteDays.has(d.date));
+       comparison.dataset.inventory=incomplete?'incomplete':'complete';
+       comparison.textContent=(incomplete?'Retained samples, incomplete inventory · ':'')+
+        'Through '+comparableCutoff.clock.slice(0,5)+' LA: '+tableAverageNumber.format(current.value)+averageUnit(current.unit)+
+        ' vs '+tableAverageNumber.format(matchedAverage.value)+averageUnit(current.unit)+' average over '+earlier.length+' prior mornings';
+      }else comparison.textContent='Same-time comparison unavailable for this measurement';
+      review.append(comparison);
+     }
+     cell.querySelector(':scope > .value')?.after(change,review);
+    }
+   }
+   if(!change.isConnected)cell.querySelector(':scope > .value')?.after(change);
+  });
+ }
+}
+tableStartDate.addEventListener('input',updateTableAverages);
+tableEndDate.addEventListener('input',updateTableAverages);
 function renderTable(){const entries=data.tableEntries.filter(e=>$('group').value==='all'||e.group===$('group').value);$('tableSummary').textContent=entries.length+' measures';let html='<thead><tr><th>Measure group / metric</th>'+days.map(d=>{const coverage=(d.completeDay?'Complete day':'Partial day')+' · '+(d.inventoryHours>0?Number(d.inventoryHours).toFixed(1)+'h complete inventory':'Attempt inventory incomplete');
  return '<th class="day-header" scope="col" title="'+esc(coverage)+'"><time datetime="'+esc(d.date)+'">'+esc(d.date)+'</time><span class="minor day-header-count" aria-label="'+d.reportable+' reportable of '+d.attempts+' retained rows">'+d.reportable+' of '+d.attempts+'</span></th>';}).join('')+'</tr></thead><tbody>',group='';for(const e of entries){if(group!==e.group){group=e.group;html+='<tr class="group"><th colspan="'+(days.length+1)+'">'+esc(group)+'</th></tr>';}
  if(e.kind==='coverage'){
@@ -817,6 +1042,7 @@ function renderTable(){const entries=data.tableEntries.filter(e=>$('group').valu
   continue;
  }
  html+='<tr data-table-kind="'+e.kind+'" data-table-id="'+esc(e.id)+'"><td><div class="metric-name"><strong>'+esc(e.label)+'</strong><button class="chart-button" data-chart-kind="'+e.kind+'" data-chart-id="'+esc(e.id)+'" aria-label="Chart '+esc(e.label)+'" aria-haspopup="dialog" aria-controls="chartPopover" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 3v18h18M6 15l5-6 5 3 5-7"/></svg></button></div><div class="minor metric-meaning" aria-label="What the percentage measures" title="'+esc(metricMeaning(e))+'">'+esc(metricMeaning(e))+'</div><details class="canonical-mapping"><summary>'+esc([...new Set(e.canonicalLinks.map(l=>l.recordLabel))].join(' · '))+'</summary>'+e.canonicalLinks.map(l=>'<p>'+esc(l.recordType)+'<br>'+esc(l.masterFieldIds.join(', '))+'<br>'+esc(l.relationship.replaceAll('_',' '))+': '+esc(l.basis)+'</p>').join('')+'<p>'+esc(e.denominator??'See the metric contract for eligible measurements.')+'</p></details>'+(e.scopeNote?'<details class="scope-note minor"><summary>Scope and overlap</summary><p>'+esc(e.scopeNote)+'</p></details>':'')+(e.id===transferChecklistId?transferFrameworkPeriod():'')+'</td>'+days.map(d=>{const v=stat(d,e.id,e.kind),mixed=Object.keys(v.series).length>1;
+if(e.id==='outcome.no_go_total'||e.id.startsWith('outcome.no_go_reason.'))return noGoCell(d,v,e.id==='outcome.no_go_total');
 let headlineSource;
 const hero=e.kind==='metric'?tableStateHeadline(e,v):null;
 const layout=data.verdictLayouts[e.id],verdict=layout?d.metrics[layout.id]:null;
@@ -826,14 +1052,14 @@ const coverageValue=coverageHeadline?d.metrics[coverageHeadline.metric]:null;
 const body=coverageValue?assessmentOutcomeCell(coverageValue,coverageHeadline):e.id===transferChecklistId?transferFrameworkCell(d):e.id===optOutFunnelId?optOutFunnelCell(d):e.id===prominenceId?prominenceCoverageCell(d,false):verdict?
  (verdictSources.length>1?'<div class="value">Separate measurement groups</div>':checklistVerdictCell(verdict,layout,e.id==='checklist.pre_consent_third_party_tracking')):
  technologyEstimateCell(d,e,v)||cell(v,e,mixed?source=>{headlineSource=source;}:undefined,true,hero,noDispatch(d));
-if(verdict)return '<td>'+body+(e.id===controlAccessibilityId?controlAccessibilityReasons(d):'')+policyEvidenceCoverage(d,e,v)+rejectTrackingReduction(d,e)+'<details class="series-list"><summary>'+
+if(verdict)return '<td>'+body+(e.id===optOutFunnelId?broadOptOutCoverage(d):'')+(e.id===controlAccessibilityId?controlAccessibilityReasons(d):'')+policyEvidenceCoverage(d,e,v)+rejectTrackingReduction(d,e)+'<details class="series-list"><summary>'+
  (verdictSources.length>1?'Separate sources':'Source / version')+' ('+verdictSources.length+')</summary>'+
  verdictSources.map(([source,part])=>'<div class="series-entry"><strong>'+esc(source)+'</strong>'+checklistVerdictCell(part,layout)+'</div>').join('')+
  '</details>'+supportingDetails(d,e)+'</td>';
 const heroCount=hero&&Object.keys(v.counts).some(state=>state!=='unavailable'&&state!=='unknown')?
  '<div class="minor">'+esc(hero[1])+': '+tableStateCount(v,hero[0])+'/'+v.denominator+' eligible retained rows</div>':'';
 const allStates=v.denominator>0&&e.kind==='metric'?'<div class="series-entry"><strong>All eligible rows</strong>'+heroCount+stateRows(v,e,false)+'</div>':'';
-return '<td>'+body+(e.id===controlAccessibilityId?controlAccessibilityReasons(d):'')+policyEvidenceCoverage(d,e,v)+rejectTrackingReduction(d,e)+choiceConfirmationGap(d,e)+gpcQuestionCounts(d,e)+'<details class="series-list"><summary>'+(mixed?'Separate sources':'Source / version')+' ('+Object.keys(v.series).length+')</summary>'+allStates+Object.entries(v.series).map(([s,p])=>'<div class="series-entry"><strong>'+esc(s)+'</strong>'+(s===headlineSource?' <span class="minor">· Shown above</span>':'')+(cell(p,e))+'</div>').join('')+'</details>'+supportingDetails(d,e)+'</td>';}).join('')+'</tr>';}$('daily').innerHTML=html+'</tbody>';if(!tableInitialized){const scroller=$('daily').closest('.table-scroll');scroller.scrollLeft=scroller.scrollWidth;tableInitialized=true;}for(const b of $('daily').querySelectorAll('[data-chart-id]'))b.onclick=()=>selectChart(b.dataset.chartKind,b.dataset.chartId,b.getBoundingClientRect());}
+return '<td>'+body+(e.id===optOutFunnelId?broadOptOutCoverage(d):'')+(e.id===controlAccessibilityId?controlAccessibilityReasons(d):'')+policyEvidenceCoverage(d,e,v)+rejectTrackingReduction(d,e)+choiceConfirmationGap(d,e)+gpcQuestionCounts(d,e)+'<details class="series-list"><summary>'+(mixed?'Separate sources':'Source / version')+' ('+Object.keys(v.series).length+')</summary>'+allStates+Object.entries(v.series).map(([s,p])=>'<div class="series-entry"><strong>'+esc(s)+'</strong>'+(s===headlineSource?' <span class="minor">· Shown above</span>':'')+(cell(p,e))+'</div>').join('')+'</details>'+supportingDetails(d,e)+'</td>';}).join('')+'</tr>';}$('daily').innerHTML=html+'</tbody>';if(!tableInitialized){const scroller=$('daily').closest('.table-scroll');scroller.scrollLeft=scroller.scrollWidth;tableInitialized=true;}for(const b of $('daily').querySelectorAll('[data-chart-id]'))b.onclick=()=>selectChart(b.dataset.chartKind,b.dataset.chartId,b.getBoundingClientRect());updateTableAverages();}
 function position(){if(!anchor||$('chartPopover').hidden)return;const pop=$('chartPopover'),w=document.documentElement.clientWidth,h=innerHeight,space=w-anchor.right-22;pop.style.width=Math.min(580,space>=340?space:w-24)+'px';const rect=pop.getBoundingClientRect();pop.style.left=Math.max(12,Math.min(anchor.right+10,w-rect.width-12))+'px';pop.style.top=Math.max(12,Math.min(anchor.bottom-rect.height,h-rect.height-12))+'px';}
 function refreshPopover(){if($('chartPopover').hidden)return;$('chartPopoverTitle').textContent=$('trendTitle').textContent;const svg=$('trend').cloneNode(true);svg.removeAttribute('id');$('popoverGraph').replaceChildren(svg);$('popoverLegend').innerHTML=$('legend').innerHTML;for(const [a,b]of [['popoverState','chartState'],['popoverSource','chartSource']]){$(a).replaceChildren(...[...$(b).options].map(o=>o.cloneNode(true)));$(a).value=$(b).value;}const contract=selectedKind==='finding'?data.contracts?.findings:(selectedKind==='quantity'?data.contracts?.quantities:data.contracts?.metrics)?.find(c=>c.id===selectedMetric);$('contract').innerHTML=Object.entries(contract??{}).map(([k,v])=>'<dt>'+esc(k)+'</dt><dd>'+esc(typeof v==='string'?v:JSON.stringify(v))+'</dd>').join('');position();}
 function close(){ $('chartPopover').hidden=true;anchor=null;for(const b of document.querySelectorAll('[data-chart-id][aria-expanded="true"]'))b.setAttribute('aria-expanded','false');}
@@ -841,6 +1067,42 @@ function selectChart(kind,id,rect=null){selectedKind=kind;selectedMetric=id;sele
 function renderInputCoverage(rows){const c=inputCoverage(rows),matched=c.states.verified_report+c.states.verified_originals;
 $('inputCoverageSummary').textContent=matched+' / '+c.eligible+' readable reports have matching supplemental input; '+c.states.verified_originals+' also have verified original-bundle linkage. This describes audit inputs, not scanner accuracy.';
 $('inputCoverage').innerHTML='<thead><tr><th scope="col">Day (Los Angeles)</th><th scope="col">Readable reports</th><th scope="col">Matched reports</th><th scope="col">Original bundle linked</th><th scope="col">No supplemental file</th><th scope="col">Other input gaps</th><th scope="col">Not evaluated</th></tr></thead><tbody>'+c.days.map(d=>{const s=d.states,gaps=[['Wrong generation',s.generation_mismatch],['Unverifiable generation',s.generation_unverifiable],['Rejected provenance',s.rejected_provenance],['Conflicting generation',s.conflicting_generation]].filter(x=>x[1]).map(x=>esc(x[0])+': '+x[1]).join('<br>')||'0';return '<tr><th scope="row">'+esc(d.date)+'</th><td>'+d.eligible+'</td><td>'+(s.verified_report+s.verified_originals)+'</td><td>'+s.verified_originals+'</td><td>'+s.missing_input+'</td><td>'+gaps+'</td><td>'+s.not_evaluated+'</td></tr>';}).join('')+'</tbody>';}
+function renderAccessDenialReview(){
+ const host=$('accessDenialComparisons'),match=comparableCutoff;
+ if(!match){host.textContent='No retained morning sample through the cutoff under these filters.';return;}
+ const first=new Date(Date.parse(match.date+'T12:00:00Z')-7*86400000).toISOString().slice(0,10);
+ const eligible=match.rows.filter(r=>r.originProof!=='production_id_selection_only'&&
+  (r.reportable||r.states.outcome==='no_go'&&data.noGoReasons?.[r.scanId]&&data.noGoReasons[r.scanId]!=='unavailable')&&tableDateFormatter.format(new Date(r.createdAt))>=first);
+ const current=eligible.filter(r=>tableDateFormatter.format(new Date(r.createdAt))===match.date);
+ const earlier=eligible.filter(r=>tableDateFormatter.format(new Date(r.createdAt))<match.date);
+ const target=r=>JSON.stringify([r.site,r.region]);
+ const currentTargets=new Set(current.map(target)),earlierTargets=new Set(earlier.map(target));
+ const denied=r=>r.states.outcome==='no_go'&&data.noGoReasons?.[r.scanId]==='access_denied_or_forbidden_page';
+ const groups=(rows,matches)=>{
+  const builds=new Map();
+  for(const r of rows){
+   const build=r.comparisonMetadata?.producer??r.producer;
+   const key=typeof build==='string'&&/^[a-f0-9]{40,64}$/.test(build)?build:'Producer unavailable';
+   const counts=builds.get(key)??{attempts:0,denied:0,matched:0,matchedDenied:0,sites:new Set()};
+   counts.attempts++;if(denied(r)){counts.denied++;counts.sites.add(r.site);}
+   if(matches.has(target(r))){counts.matched++;if(denied(r))counts.matchedDenied++;}
+   builds.set(key,counts);
+  }
+  return [...builds].map(([build,c])=>'<li><code>'+esc(build)+'</code> · '+c.denied+'/'+c.attempts+' retained outcomes ('+pct(100*c.denied/c.attempts)+')'+
+   (c.matched?' · '+c.matchedDenied+'/'+c.matched+' on shared targets':' · no shared targets')+
+   (c.sites.size?' · denied targets '+esc([...c.sites].sort().join(', ')):'')+'</li>').join('');
+ };
+ const incomplete=[...match.incompleteDays].some(date=>date>=first);
+ const denialCount=rows=>rows.filter(denied).length+'/'+rows.length+' readable outcomes labeled access denied';
+ host.innerHTML='<p class="minor" data-cutoff-inventory="'+(incomplete?'incomplete':'complete')+'">'+
+  (incomplete?'Retained samples, incomplete inventory. ':'')+'Through '+esc(match.clock.slice(0,5))+
+  ' Los Angeles. Days without retained attempts are omitted. Shared targets match on hostname and scan region. Build groups use retained producer IDs.</p>'+
+  '<strong>'+esc(match.date)+'</strong><div class="minor">'+denialCount(current)+'</div><ul>'+
+  (groups(current,earlierTargets)||'<li>No readable outcomes</li>')+'</ul>'+
+  '<strong>Prior week · '+match.days.filter(d=>d.date>=first&&d.date<match.date).length+' mornings with retained attempts</strong>'+
+  '<div class="minor">'+denialCount(earlier)+'</div><ul>'+
+  (groups(earlier,currentTargets)||'<li>No readable outcomes</li>')+'</ul>';
+}
 function renderDataHealth(rows){
  const h=buildDataHealth(data,rows,data.healthContext);window.__auditDashboard.health=h;
  const pretty=v=>String(v).replaceAll('_',' ');
@@ -854,7 +1116,7 @@ function renderDataHealth(rows){
  $('healthQueue').textContent=h.pending.available?'All-site cache queue: '+h.pending.count+' pending exports ('+Object.entries(h.pending.statuses).map(([status,n])=>n+' '+pretty(status)+' attempts').join('; ')+'); '+h.pending.over7Days+' at least 7 days since scan creation; oldest '+(h.pending.oldestAttemptAgeDays===null?'unavailable':h.pending.oldestAttemptAgeDays.toFixed(1)+' days')+' at cutoff. Queue counts are independent of chart filters.':'Cache queue receipt unavailable.';
  $('healthIntegrity').textContent='Sealed snapshot master-value parity: '+h.integrity.masterStatus+'; mismatches: '+(h.integrity.masterMismatches??'unavailable')+'; recorded input errors: '+h.integrity.recordedErrors+'. Missing exports are tracked separately. This is snapshot verification, not live production monitoring.';
 }
-function render(){const rows=currentRows();renderDataHealth(rows);optOutDays=buildOptOutFunnel(rows,data.timezone);gpcAcknowledgedDays=acknowledgedActivity(rows);prominenceDays=collectProminenceCoverage(rows);rejectDays=engine.rejectCoverage(rows);renderInputCoverage(rows);days=engine.aggregate(data,rows,true);options();draw();renderTable();$('stats').innerHTML=[['Retained scans / attempts',rows.length],['Readable reportable rows',rows.filter(r=>r.reportable).length],['ID-only, no detailed export',rows.filter(r=>r.originProof==='production_id_selection_only').length],['Excluded canary/test',data.exclusionCounts?.excluded_canary_or_test??0]].map(([k,v])=>'<div><strong>'+v+'</strong><span>'+k+'</span></div>').join('');refreshPopover();}
+function render(){const rows=currentRows();comparableCutoff=cutoffComparisons(rows);renderDataHealth(rows);renderAccessDenialReview();optOutDays=buildOptOutFunnel(rows,data.timezone);gpcAcknowledgedDays=acknowledgedActivity(rows);prominenceDays=collectProminenceCoverage(rows);rejectDays=engine.rejectCoverage(rows);renderInputCoverage(rows);days=engine.aggregate(data,rows,true);options();draw();renderTable();$('stats').innerHTML=[['Retained scans / attempts',rows.length],['Readable reportable rows',rows.filter(r=>r.reportable).length],['ID-only, no detailed export',rows.filter(r=>r.originProof==='production_id_selection_only').length],['Excluded canary/test',data.exclusionCounts?.excluded_canary_or_test??0]].map(([k,v])=>'<div><strong>'+v+'</strong><span>'+k+'</span></div>').join('');refreshPopover();}
 function download(filename,content,type='text/csv'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 $('csv').onclick=()=>download('daily-metrics.csv',engine.stateCsv(days,data.csvMetrics));$('quantityCsv').onclick=()=>download('daily-volumes.csv',engine.quantityCsv(days,data.csvQuantities));$('findingCsv').onclick=()=>download('daily-findings.csv',engine.findingCsv(days,data.findingIds));$('region').onchange=$('origin').onchange=$('cmp').onchange=()=>{close();render();};$('group').onchange=renderTable;$('metric').onchange=()=>{const e=data.measureCatalog.entries.find(e=>key(e)===$('metric').value);selectChart(e.kind,e.id);};$('chartState').onchange=()=>{selectedState=$('chartState').value;draw();refreshPopover();};$('chartSource').onchange=()=>{selectedSource=$('chartSource').value;draw();refreshPopover();};$('popoverState').onchange=()=>{$('chartState').value=$('popoverState').value;$('chartState').onchange();};$('popoverSource').onchange=()=>{$('chartSource').value=$('popoverSource').value;$('chartSource').onchange();};$('closeChartPopover').onclick=close;document.addEventListener('keydown',e=>{if(e.key==='Escape')close();});window.addEventListener('resize',position);$('closeProof').onclick=()=>$('proof').close();$('sources').onclick=()=>{$('proofBody').innerHTML='<ul>'+data.limitations.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul><pre>'+esc(JSON.stringify({version:data.version,metricContractVersion:data.metricContractVersion,exclusions:data.exclusionCounts,sources:data.sources},null,2))+'</pre>';$('proof').showModal();};
 const parityItems=new Map((data.masterValueParity?.items??[]).map(i=>[i.legacyId,i]));

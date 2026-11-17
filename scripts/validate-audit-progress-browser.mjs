@@ -4,6 +4,208 @@ const root=path.resolve(process.argv[2]),file=path.join(root,'dashboard.html');c
 try{
  const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});await context.route('**/*',route=>{if(!route.request().url().startsWith('file:')){externalRequests++;return route.abort();}return route.continue();});const page=await context.newPage();page.on('pageerror',e=>errors.push(String(e)));
  await page.goto(pathToFileURL(file).href,{waitUntil:'load',timeout:60000});await page.waitForFunction(()=>window.__auditDashboard?.days?.length>0,{timeout:60000});
+ const totalNoGoRow=page.locator('#daily tr[data-table-id="outcome.no_go_total"]');
+ assert.equal(await totalNoGoRow.count(),1);
+ assert.equal(await totalNoGoRow.evaluate(row=>row.previousElementSibling.textContent),'No-go reasons');
+ const verifyDailyNoGoTotal=async()=>{
+  const expected=await page.evaluate(()=>{
+   const audit=window.__auditDashboard;
+   const dayOf=new Intl.DateTimeFormat('en-CA',{timeZone:audit.data.timezone,year:'numeric',month:'2-digit',day:'2-digit'});
+   const percent=new Intl.NumberFormat('en-US',{style:'percent',maximumFractionDigits:2});
+   const counts=new Map(audit.days.map(day=>[day.date,{n:0,N:0}]));
+   for(const row of audit.currentRows()){
+    const count=counts.get(dayOf.format(new Date(row.createdAt)));
+    count.N++;
+    if(row.states.outcome==='no_go'&&row.originProof!=='production_id_selection_only')count.n++;
+   }
+   return [...counts.values()].map(({n,N})=>N?[n+'/'+N,percent.format(n/N)]:null);
+  });
+  const visible=await totalNoGoRow.locator(':scope > td').evaluateAll(items=>items.slice(1).map(cell=>{
+   const count=cell.querySelector('[data-no-go-count] .state-line-value');
+   return count?[count.textContent,cell.querySelector('[data-no-go-rate]').textContent]:null;
+  }));
+  assert.deepEqual(visible,expected);
+ };
+ await verifyDailyNoGoTotal();
+ await totalNoGoRow.getByRole('button',{name:'Chart Total no-gos'}).click();
+ assert.match(await page.locator('#chartPopoverTitle').textContent(),/Total no-gos · share of all retained attempts/);
+ assert.ok(await page.locator('#popoverGraph circle').count()>0);
+ await page.locator('#closeChartPopover').click();
+ await page.selectOption('#origin','selection');
+ await verifyDailyNoGoTotal();
+ await page.selectOption('#origin','all');
+ await page.locator('#metric').evaluate(select=>{
+  select.value='metric:control.reject';
+  select.dispatchEvent(new Event('change'));
+ });
+ checks.dailyNoGoTotal=true;
+ const startDate=page.locator('#tableStartDate'),endDate=page.locator('#tableEndDate');
+ const averageDateBasis=await page.evaluate(()=>{
+  const audit=window.__auditDashboard;
+  const date=new Intl.DateTimeFormat('en-CA',{timeZone:audit.data.timezone,year:'numeric',month:'2-digit',day:'2-digit'});
+  const rates=audit.days.map(day=>({date:day.date,rate:day.metrics['outcome.no_go_total'].rate}));
+  return {rates,today:date.format(new Date())};
+ });
+ const {rates,today}=averageDateBasis;
+ const firstDate=rates[0].date;
+ assert.equal(await startDate.inputValue(),firstDate);
+ assert.equal(await endDate.inputValue(),today);
+ const number=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
+ const checkNoGoAverage=async(start,end)=>{
+  const values=rates.filter(day=>day.rate!==null&&day.date>=start&&day.date<=end).map(day=>day.rate);
+  const average=values.length?values.reduce((sum,value)=>sum+value,0)/values.length:null;
+  assert.equal(await totalNoGoRow.locator('.table-average').textContent(),average===null?'Avg —':'Avg '+number.format(average)+'%');
+  const yesterday=new Date(Date.parse(today+'T00:00:00Z')-86400000).toISOString().slice(0,10);
+  const cells=await totalNoGoRow.locator(':scope > td').evaluateAll(items=>items.slice(1).map(cell=>{
+   const badge=cell.querySelector(':scope > .table-delta');
+   return badge?{text:badge.textContent,direction:badge.dataset.direction??null}:null;
+  }));
+  assert.deepEqual(cells,rates.map((day,index)=>{
+   if(index<rates.length-2||![yesterday,today].includes(day.date))return null;
+   if(average===null||day.rate===null)return {text:'Δ —',direction:null};
+   const diff=Math.round((day.rate-average)*100)/100;
+   return {text:'Δ '+(diff>0?'+':diff<0?'−':'')+number.format(Math.abs(diff))+' pp',
+    direction:diff>0?'up':diff<0?'down':'flat'};
+  }));
+ };
+ await checkNoGoAverage(firstDate,today);
+ const lastMeasured=rates.findLast(day=>day.rate!==null&&day.date<=today);
+ if(lastMeasured){
+  await endDate.fill(lastMeasured.date);
+  await startDate.fill(lastMeasured.date);
+  await checkNoGoAverage(lastMeasured.date,lastMeasured.date);
+ }
+ await startDate.fill(firstDate);
+ await endDate.fill('');
+ assert.equal(await totalNoGoRow.locator('.table-average').textContent(),'Avg —');
+ assert.match(await page.locator('#tableRangeStatus').textContent(),/Choose dates in order/);
+ await endDate.fill(today);
+ await checkNoGoAverage(firstDate,today);
+ const flags=await page.locator('#daily [data-delta-review]').count();
+ const renderedFlags=await page.locator('#daily .table-delta').evaluateAll(badges=>badges.filter(badge=>{
+  const dayValue=Number(badge.previousElementSibling?.dataset.averageValue);
+  const row=badge.closest('tr'),value=row?.querySelector('.table-average')?.dataset.averageValue;
+  return badge.dataset.direction!==undefined&&value!==undefined&&Number.isFinite(dayValue)&&Math.abs(dayValue-Number(value))>10;
+ }).length);
+ assert.equal(flags,renderedFlags);
+ if(flags)assert.match(await page.locator('#daily [data-delta-review]').first().textContent(),/reportable attempts/);
+
+ const reviewChecks=await page.evaluate(()=>{
+  const {data,days,currentRows}=window.__auditDashboard;
+  const review=(id,date)=>document.querySelector('#daily [data-table-id="'+id+'"]')?.cells[days.findIndex(day=>day.date===date)+1]?.querySelector('[data-delta-review]');
+  const problems=[];
+  for(const day of days){
+   const accept=review('click.accept',day.date),click=day.metrics['click.accept'];
+   if(accept){
+    if(!accept.textContent.includes(click.denominator+' in headline sample'))problems.push('Accept denominator '+day.date);
+    if(click.counts.unavailable&&!accept.textContent.includes(click.counts.unavailable+' execution unavailable'))problems.push('Accept execution coverage '+day.date);
+   }
+   const transfer=review('checklist.outdated_transfer_framework_reference',day.date);
+   const check=day.metrics['sealed.operations.transfer_framework_check']?.counts??{};
+   if(transfer){
+    const expected=[[(check.inconclusive_policy_coverage??0)+(check.inconclusive_matcher_limit??0),' inconclusive'],
+     [check.not_assessed_no_eligible_text,' not assessed'],[check.unavailable,' assessment unavailable']];
+    for(const [n,label] of expected)if(n&&!transfer.textContent.includes(n+label))problems.push('Transfer coverage '+day.date+label);
+    if(!check.unavailable&&/unknown\/unavailable|\d assessment unavailable/.test(transfer.textContent))problems.push('Unexpected transfer assessment gap '+day.date);
+   }
+  }
+  const dateOf=new Intl.DateTimeFormat('en-CA',{timeZone:data.timezone,year:'numeric',month:'2-digit',day:'2-digit'});
+  const clockOf=new Intl.DateTimeFormat('en-GB',{timeZone:data.timezone,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3,hourCycle:'h23'});
+  const cutoff=Math.max(...data.windows.map(w=>Date.parse(w.end))),date=dateOf.format(cutoff);
+  const latest=days.find(d=>d.date===date);
+  if(latest&&!latest.completeDay&&latest.inventoryHours===0){
+   const clock=clockOf.format(cutoff);
+   const first=new Date(Date.parse(date+'T12:00:00Z')-7*86400000).toISOString().slice(0,10);
+   const mornings=new Map();
+   for(const row of currentRows()){
+    const time=Date.parse(row.createdAt),day=dateOf.format(time);
+    if(day>date||clockOf.format(time)>=clock||time>=cutoff)continue;
+    const counts=mornings.get(day)??{noGo:0,accessDenied:0,reasonKnown:false};
+    if(row.states.outcome==='no_go'&&row.originProof!=='production_id_selection_only'){
+     counts.noGo++;
+     if(data.noGoReasons[row.scanId]&&data.noGoReasons[row.scanId]!=='unavailable')counts.reasonKnown=true;
+     if(data.noGoReasons[row.scanId]==='access_denied_or_forbidden_page')counts.accessDenied++;
+    }
+    mornings.set(day,counts);
+   }
+   if(mornings.has(date)){
+    const panel=document.getElementById('accessDenialComparisons');
+    const priorWeek=[...mornings.keys()].filter(d=>d>=first&&d<date).length;
+    if(panel.querySelector('[data-cutoff-inventory]')?.dataset.cutoffInventory!=='incomplete'||
+       !panel.textContent.includes(priorWeek+' mornings with retained attempts'))problems.push('Retained-only access-denial comparison');
+    const reason=review('outcome.no_go_reason.access_denied_or_forbidden_page',date);
+    const prior=[...mornings].filter(([day,q])=>day<date&&q.reasonKnown)
+     .map(([,q])=>100*q.accessDenied/q.noGo);
+    if(reason&&prior.length){
+     const badge=reason.querySelector('[data-cutoff-comparison]');
+     const num=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
+     const mean=num.format(prior.reduce((a,b)=>a+b,0)/prior.length);
+     if(badge?.dataset.inventory!=='incomplete'||!badge.textContent.includes('vs '+mean+'% average over '+prior.length+' prior mornings'))problems.push('Same-time baseline '+badge?.textContent);
+    }
+   }
+  }
+  return problems;
+ });
+ assert.deepEqual(reviewChecks,[]);
+ checks.badgeDenominatorsAndRetainedCutoff=true;
+ checks.deltaReviewContext=true;
+ checks.tableRangeAverages=true;
+ const noGoRows=page.locator('#daily tr[data-table-id^="outcome.no_go_reason."]');
+ assert.equal(await page.locator('#noGoDate').count(),0);
+ if(await noGoRows.count()){
+  const noGoReason=await noGoRows.first().getAttribute('data-table-id');
+  assert.ok(noGoReason);
+  await page.selectOption('#group','No-go reasons');
+  const verifyDailyNoGoCells=async()=>{
+   const expected=await page.evaluate(id=>{
+    const audit=window.__auditDashboard;
+    const date=new Intl.DateTimeFormat('en-CA',{timeZone:audit.data.timezone,year:'numeric',month:'2-digit',day:'2-digit'});
+    const percent=new Intl.NumberFormat('en-US',{style:'percent',maximumFractionDigits:2});
+    const reason=id.split('.').at(-1);
+    const byDate=new Map();
+    for(const row of audit.currentRows()){
+     const key=date.format(new Date(row.createdAt));
+     if(!byDate.has(key))byDate.set(key,[]);
+     byDate.get(key).push(row);
+    }
+    return audit.days.map(day=>{
+     const rows=byDate.get(day.date)??[];
+     const noGos=rows.filter(row=>row.states.outcome==='no_go'&&row.originProof!=='production_id_selection_only');
+     const reasons=noGos.map(row=>audit.data.noGoReasons[row.scanId]??'unavailable');
+     const count=reasons.filter(value=>value===reason).length;
+     const allUnavailable=reasons.length>0&&reason!=='unavailable'&&reasons.every(value=>value==='unavailable');
+     return rows.length?{
+      count:count+'/'+noGos.length,
+      rate:noGos.length&&!allUnavailable?percent.format(count/noGos.length):'—',
+      attempts:(allUnavailable?'—':percent.format(count/rows.length))+' of '+rows.length+' retained attempts',
+     }:null;
+    });
+   },noGoReason);
+   const cells=await page.locator('#daily tr[data-table-id="'+noGoReason+'"] > td').evaluateAll(items=>items.slice(1).map(cell=>{
+    const count=cell.querySelector('[data-no-go-count] .state-line-value');
+    return count?{count:count.textContent,rate:cell.querySelector('[data-no-go-rate]').textContent,
+     attempts:cell.querySelector('[data-no-go-attempt-share]').textContent}:null;
+   }));
+   assert.deepEqual(cells,expected);
+  };
+  await verifyDailyNoGoCells();
+  await noGoRows.first().getByRole('button',{name:/^Chart /}).click();
+  assert.match(await page.locator('#chartPopoverTitle').textContent(),/share of retained no-gos/);
+  assert.ok(await page.locator('#popoverGraph circle').count()>0);
+  await page.locator('#closeChartPopover').click();
+  await page.selectOption('#origin','selection');
+  await verifyDailyNoGoCells();
+  await page.selectOption('#origin','all');
+  await page.selectOption('#group','all');
+  await page.locator('#metric').evaluate(select=>{
+   select.value='metric:control.reject';
+   select.dispatchEvent(new Event('change'));
+  });
+ }else{
+  assert.equal(await page.evaluate(()=>window.__auditDashboard.data.rows.some(row=>
+   row.states.outcome==='no_go'&&row.originProof!=='production_id_selection_only')),false);
+ }
+ checks.dailyNoGoReasons=true;
  const assertDataHealth=async()=>{
   const actual=await page.evaluate(()=>{
    const a=window.__auditDashboard,h=a.health;
@@ -83,7 +285,7 @@ try{
  const prominenceRow='[data-table-id="customer_cmp_check.prominence"]';
  const validComparisonRow=page.locator(prominenceRow+' + [data-table-id="customer_cmp_check.prominence_valid_comparison"]');
  if(tableEntries.some(entry=>entry.id==='customer_cmp_check.prominence')){
-  assert.equal(await validComparisonRow.locator('.metric-name').textContent(),'Accept and Reject prominence valid comparison');
+  assert.equal(await validComparisonRow.locator('.metric-name strong').textContent(),'Accept and Reject prominence valid comparison');
   assert.equal(displayedEntries.length,tableEntries.length+1);
  }
  const prominenceSample=await page.evaluate(()=>window.__auditDashboard.days.findIndex(day=>
@@ -552,7 +754,7 @@ try{
  const tableLayout=await page.locator('.report-table-heading').evaluate(heading=>{
   const title=heading.querySelector('h2').getBoundingClientRect();
   const count=heading.querySelector('#tableSummary').getBoundingClientRect();
-  const table=heading.nextElementSibling;
+  const table=heading.parentElement.querySelector('#daily').parentElement;
   const note=table.querySelector('details.coverage-note > summary');
   const meaning=table.querySelector('.metric-meaning');
   return {countAtRight:count.left>=title.right&&count.top<title.bottom,
@@ -689,6 +891,11 @@ try{
  if(positive>0)assert.match(await retainedOptOut.textContent(),/observed:/);
  checks.optOutCoverage=true;
  await page.selectOption('#group','Opt-out');
+ const broad=page.locator('[data-broad-opt-out-coverage]');
+ assert.ok(await broad.count()>0);
+ assert.match(await broad.last().textContent(),/observed · \d+ not observed · \d+ unknown/);
+ checks.broadOptOutAssessment=true;
+
  assert.equal(await page.locator('[data-table-id="sealed.opt_out.dispatch"]').count(),0);
  const dispatch=page.locator('[data-table-id="sealed.opt_out.action_completion"] [data-supporting-id="sealed.opt_out.dispatch"]');
  assert.equal(await dispatch.count(),await page.evaluate(()=>window.__auditDashboard.days.length));

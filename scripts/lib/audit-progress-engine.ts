@@ -4,6 +4,7 @@ export function progressEngine() {
   const num=(x:any)=>Number.isSafeInteger(x)&&x>=0;
   const source=(r:any,id:string)=>r.metricSources?.[id]??(id.startsWith('sealed.')?'unavailable_sealed_assessment':/^(site|technology|graph|form)\./.test(id)?'unavailable_sealed_projection':r.defaultSource??'unavailable_source');
   const eligible=(r:any,id:string)=>r.states[id]!==undefined||(id.startsWith('sealed.')&&!/^sealed\.(registration\.|terminal\.|gpc_path$|gpc_delivery$)/.test(id)&&r.reportable);
+  const isRetainedNoGo=(r:any)=>r.states.outcome==='no_go'&&r.originProof!=='production_id_selection_only';
   const compare=(v:any,p:any,partial:boolean)=>{
     const same=p&&v.source===p.source&&v.source!=='mixed_sources'&&!v.source.includes('unversioned')&&!v.source.includes('unknown')&&!v.source.includes('unavailable');
     v.deltaPp=same&&v.rate!==null&&p.rate!==null?v.rate-p.rate:null;
@@ -15,7 +16,10 @@ export function progressEngine() {
     const result:any[]=[];
     for(const base of data.days){
       const chosen=byDay.get(base.date)??[],previous=result.at(-1),metrics:any={},quantities:any={},findings:any={};
+      const noGos=chosen.filter(isRetainedNoGo);
       for(const m of data.metrics){
+        const noGoTotal=m.id==='outcome.no_go_total';
+        const noGoReason=m.id.startsWith('outcome.no_go_reason.')?m.id.slice('outcome.no_go_reason.'.length):null;
         const funnel=/^(control|click|registration)\.(accept|reject)$|^detail\.(accept|reject)\.(verdict|activity_all)$/.test(m.id);
         const registration=/^registration\.(accept|reject)$/.exec(m.id);
         const activity=/^detail\.(accept|reject)\.activity_all$/.exec(m.id);
@@ -32,12 +36,18 @@ export function progressEngine() {
           const click=r.states['click.'+action];
           return {state:['not_attempted','incomplete','unsupported'].includes(click)?'no_completed_click':'unavailable',key:'click.'+action};
         };
-        const selected=chosen.filter(r=>funnel?r.reportable:eligible(r,m.id)),groups:any={};
-        for(const r of selected){const s=source(r,activity?activityState(r).key:m.id);(groups[s]??=[]).push(r);}
+        const selected=noGoTotal?chosen:noGoReason?noGos:chosen.filter(r=>funnel?r.reportable:eligible(r,m.id)),groups:any={};
+        // The audit mapping uses the same exact public reason field across retained export versions.
+        for(const r of selected){const s=noGoTotal?'retained_attempt_outcome/v1':noGoReason?'retained_public_no_go_reason/v1':source(r,activity?activityState(r).key:m.id);(groups[s]??=[]).push(r);}
         const tally=(rs:any[],s:string)=>{
           const counts:any={};
           for(const r of rs){
             let state=activity?activityState(r).state:r.states[m.id]??'unavailable';
+            if(noGoTotal)state=isRetainedNoGo(r)?'recorded':'other_outcome';
+            else if(noGoReason){
+              const reason=data.noGoReasons?.[r.scanId]??'unavailable';
+              state=reason===noGoReason?'recorded':reason==='unavailable'?'unavailable':'other_reason';
+            }
             if(registration){
               const click=r.states['click.'+registration[1]];
               if(click!=='completed')state=['not_attempted','incomplete','unsupported'].includes(click)?'no_completed_click':'unavailable';
