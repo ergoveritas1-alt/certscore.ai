@@ -6,15 +6,15 @@ export const MASTER_SOURCE_REVIEW={
   "sources": [
     {
       "file": "apps/web/app/(marketing)/scan/[scanId]/page.tsx",
-      "sha256": "5d5fb7e4a6e4eca88febbf3b5b5f891619a9e5dd10eadf7b6cf5c7a911aaaf04",
-      "bytes": 7878,
-      "review": "Existing report/export capability review; bytes reverified unchanged."
+      "sha256": "f3e470a56917392039e2ae179fcb68845ff15b73b71a2383454f14d389ac74a2",
+      "bytes": 8197,
+      "review": "Owner-requested active-account guard runs before report reads. Findings, scores and historical projections are unchanged; access and branding regressions pass."
     },
     {
       "file": "apps/web/app/app/scans/[scanId]/page.tsx",
-      "sha256": "61957af3a95945f75cd8a73bf6034197c36c8abd666e058893358493c4c37f9d",
-      "bytes": 6779,
-      "review": "Existing report/export capability review; bytes reverified unchanged."
+      "sha256": "cb55f8b182c0b441ceaa702282ed1c2fc92cda24c46abffcb7ca51cd6a5e4f96",
+      "bytes": 7069,
+      "review": "Owner-requested active-account guard runs before report reads. Findings, scores and historical projections are unchanged; access and branding regressions pass."
     },
     {
       "file": "apps/web/components/scans/accessibility-evidence.tsx",
