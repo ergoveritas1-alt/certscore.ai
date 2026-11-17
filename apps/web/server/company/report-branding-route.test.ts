@@ -3,12 +3,12 @@ import test from "node:test";
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 
-test("document exports share workspace branding gates while public Word downloads remain unbranded", async () => {
+test("document exports require accounts and retain workspace branding gates", async () => {
   const route = fileURLToPath(new URL("../../app/api/scans/[scanId]/report-export/route.ts", import.meta.url));
   const mocks: Record<string, string> = {
     state: `export const state={signedIn:true,role:'advanced',accessible:true,logo:true,failLogo:false,loaded:[],rendered:[],theme:"white",settings:[],ready:true,projection:true,canonical:true,fullSite:false,builds:[],word:[]};`,
     next: `export class NextResponse extends Response { static json(body,options){return new NextResponse(JSON.stringify(body),options);} }`,
-    auth: `import {state} from 'test-state'; export async function getCurrentUser(){return state.signedIn ? {id:'viewer'} : null;} export async function getDashboardContext(){return {membership:{role:state.role},organization:{id:'viewer-workspace'},user:{email:'viewer@example.test'}};}`,
+    auth: `import {state} from 'test-state'; export async function getCurrentUser(){return state.signedIn ? {id:'viewer'} : null;} export const getFreshCurrentUser=getCurrentUser; export async function getDashboardContext(){return {membership:{role:state.role},organization:{id:'viewer-workspace'},user:{email:'viewer@example.test'}};}`,
     admin: `export function isPlatformAdminEmail(){return false;}`,
     status: `import {state} from 'test-state'; export async function getPublicScanStatusProjection(){return {reportReady:state.ready,reportGeneration:'v1',organizationId:'different-owner-workspace'};} export async function getOrganizationScanStatusProjection(){return state.accessible ? {id:'scan'} : null;}`,
     projection: `import {state} from 'test-state'; export async function loadPersistedScanReportProjection(){return state.projection ? {scan:{scanConfigJson:{fullSite:state.fullSite}},runtimeArtifacts:[]} : null;}`,
@@ -25,7 +25,7 @@ test("document exports share workspace branding gates while public Word download
   };
   const output = await build({ stdin: { contents: `export {GET} from ${JSON.stringify(route)}; export {state} from 'test-state';`, resolveDir: process.cwd() },
     bundle: true, write: false, format: "esm", platform: "node", plugins: [{ name: "branding-isolation", setup(api) {
-      const entries: Record<string, string> = { "next/server": "next", "test-state": "state" };
+      const entries: Record<string, string> = { "next/server": "next", "test-state": "state", "../auth": "auth" };
       const suffixes: Record<string, string> = { "/gpc-resource-inventory": "gpcInventory", "/server/auth": "auth", "/platform-admin": "admin", "/scan-status-projection": "status", "/scan-report-projection": "projection", "/report-export": "export", "/report-export-pdf": "pdf", "/report-export-docx": "docx", "/report-branding": "branding", "/visual-evidence": "visual", "/visual-evidence-object": "object", "/full-site-options": "options", "/full-site-report": "fullSite", "/tracking-workpaper": "workpaper" };
       api.onResolve({ filter: /.*/ }, args => {
         const key = entries[args.path] ?? Object.entries(suffixes).find(([suffix]) => args.path.endsWith(suffix))?.[1];
@@ -39,7 +39,11 @@ test("document exports share workspace branding gates while public Word download
   state.signedIn = false;
   assert.equal((await request()).status, 401);
   assert.equal(state.loaded.length, 0);
-  assert.equal((await request("format=pdf")).status, 401);
+  for (const format of ["pdf", "docx", "json", "csv"]) {
+    const anonymous = await request(`format=${format}`);
+    assert.equal(anonymous.status, 401);
+    assert.equal(anonymous.headers.get("cache-control"), "private, no-store");
+  }
   state.signedIn = true; state.role = "user";
   assert.equal((await request()).status, 403);
   assert.equal(state.loaded.length, 0);
@@ -92,6 +96,8 @@ test("document exports share workspace branding gates while public Word download
 
   state.signedIn = false; state.role = "user"; state.accessible = false;
   const brandingReads = state.loaded.length, settingReads = state.settings.length;
+  assert.equal((await request("format=docx&branding=workspace")).status, 401);
+  state.signedIn = true;
   const word = await request("format=docx&reviewFocus=ccpa_cpra&timeZone=Pacific%2FHonolulu");
   assert.equal(word.status, 200);
   assert.equal(word.headers.get("content-type"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
@@ -104,8 +110,6 @@ test("document exports share workspace branding gates while public Word download
   assert.equal(state.loaded.length, brandingReads); assert.equal(state.settings.length, settingReads);
   assert.equal((await request("format=docx")).status, 200);
   assert.equal(state.word.at(-1).report.reviewFocus, "gdpr_eprivacy");
-  assert.equal((await request("format=docx&branding=workspace")).status, 401);
-  state.signedIn = true;
   assert.equal((await request("format=docx&branding=workspace")).status, 403);
   state.role = "advanced";
   const inaccessibleReads = state.loaded.length;
@@ -127,7 +131,7 @@ test("document exports share workspace branding gates while public Word download
   assert.equal(state.word.at(-1).options.brandLogo.body.toString(), "logo");
   assert.equal(state.word.at(-1).options.headerTheme, "black");
   assert.ok(state.loaded.every((id: string) => id === "viewer-workspace"));
-  state.signedIn = false; state.role = "user"; state.accessible = false;
+  state.signedIn = true; state.role = "user"; state.accessible = false;
   assert.equal((await request("format=docx&timeZone=invalid%2Fzone")).status, 400);
   assert.equal((await request("format=docx&reviewFocus=invalid")).status, 400);
   assert.equal((await request("format=docx&scope=full-site")).status, 409);
