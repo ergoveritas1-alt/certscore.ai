@@ -65,11 +65,11 @@ import { gpcOptOutObservationSchema } from "./gpc-opt-out-prototype";
 export { terminalLaneEvidenceSchema, runtimeVisitEligibilityDiagnosticSchema, retainedRuntimeNoGoReasonSchema, type TerminalLaneEvidence, type RuntimeVisitEligibilityDiagnostic } from "./terminal-lane-evidence";
 export { classifyRuntimeErrorPage } from "./runtime-error-page";
 export * from "./gpc-impact";
-import { runtimeCmsMetadataSnapshotSchema } from "./runtime-cms-metadata";
-export { retainRuntimeCmsMetadataSnapshot, runtimeCmsMetadataMatchesTerminal, runtimeCmsMetadataSnapshotSchema } from "./runtime-cms-metadata";
 export * from "./collection-field-review";
 export * from "./collection-field-labels";
 import { siteMetadataSchema } from "./site-metadata";
+import { runtimeCmsMetadataSnapshotSchema } from "./runtime-cms-metadata";
+export { retainRuntimeCmsMetadataSnapshot, runtimeCmsMetadataMatchesTerminal, runtimeCmsMetadataSnapshotSchema } from "./runtime-cms-metadata";
 export * from "./site-metadata";
 export * from "./technology-inventory";
 export * from "./google-tag-context";
@@ -79,7 +79,7 @@ export * from "./accessibility-audit";
 const canonicalAccessibilityAuditSchema: z.ZodType<AccessibilityAuditObservation> = accessibilityAuditObservationSchema;
 export * from "./cms-version-evidence";
 import { z } from "zod";
-export { boundRuntimeDocumentStatus, hasBoundRuntimeVisualContent, hasRepresentativeRuntimeText, getUsableRuntimeVisitSnapshot, assessRuntimeVisitSnapshot, RUNTIME_VISIT_REJECTION_REASONS, type RuntimeVisitRejectionReason } from "./usable-runtime-visit";
+export { isBoundRuntimeAuthenticationPage, boundRuntimeDocumentStatus, hasBoundRuntimeVisualContent, hasRepresentativeRuntimeText, getUsableRuntimeVisitSnapshot, assessRuntimeVisitSnapshot, RUNTIME_VISIT_REJECTION_REASONS, type RuntimeVisitRejectionReason } from "./usable-runtime-visit";
 import { consentControlLinkDestinationSchema } from "./consent-control-link";
 import { vendorServicePurposeSchema } from "./vendor-service-purpose";
 import { vendorRegistryAttributionSchema } from "./vendor-registry-attribution";
@@ -3544,6 +3544,7 @@ export const displaySafeEvidenceExcerptSchema = z.object({
 // Type annotation bounds declaration size; runtime validation is unchanged.
 const canonicalPolicyObservationSchema: z.ZodType<z.output<typeof policySurfaceObservationSchema>, z.ZodTypeDef, unknown> = policySurfaceObservationSchema;
 const canonicalDomSnapshotSchema: z.ZodType<z.output<typeof domSnapshotArtifactSchema>, z.ZodTypeDef, unknown> = domSnapshotArtifactSchema;
+const canonicalRuntimeCmsMetadataSnapshotSchema: z.ZodType<z.output<typeof runtimeCmsMetadataSnapshotSchema>, z.ZodTypeDef, z.input<typeof runtimeCmsMetadataSnapshotSchema>> = runtimeCmsMetadataSnapshotSchema;
 const canonicalConsentUiObservationSchema: z.ZodType<z.output<typeof consentUiObservationSchema>, z.ZodTypeDef, z.input<typeof consentUiObservationSchema>> = consentUiObservationSchema;
 const canonicalPolicyInspectionSchema: z.ZodType<z.output<typeof policySurfaceInspectionOutcomeSchema>, z.ZodTypeDef, z.input<typeof policySurfaceInspectionOutcomeSchema>> = policySurfaceInspectionOutcomeSchema;
 const canonicalNetworkEventSchema: z.ZodType<NetworkEvent, z.ZodTypeDef, z.input<typeof networkEventSchema>> = networkEventSchema;
@@ -3555,7 +3556,6 @@ const bundleField3: z.ZodType<z.output<typeof consentActionAttemptSchema>, z.Zod
 const bundleField4: z.ZodType<z.output<typeof observedJourneySchema>, z.ZodTypeDef, z.input<typeof observedJourneySchema>> = observedJourneySchema;
 const bundleField5: z.ZodType<z.output<typeof cookieSnapshotSchema>, z.ZodTypeDef, z.input<typeof cookieSnapshotSchema>> = cookieSnapshotSchema;
 const bundleField6: z.ZodType<z.output<typeof normalizedVendorObservationSchema>, z.ZodTypeDef, z.input<typeof normalizedVendorObservationSchema>> = normalizedVendorObservationSchema;
-const canonicalRuntimeCmsMetadataSnapshotSchema: z.ZodType<z.output<typeof runtimeCmsMetadataSnapshotSchema>, z.ZodTypeDef, z.input<typeof runtimeCmsMetadataSnapshotSchema>> = runtimeCmsMetadataSnapshotSchema;
 const canonicalEvidenceBundleObjectSchema = z.object({
   accessibilityAudit: canonicalAccessibilityAuditSchema.optional(),
   runtimeMetadataSnapshots: z.array(canonicalDomSnapshotSchema).max(1).optional(),

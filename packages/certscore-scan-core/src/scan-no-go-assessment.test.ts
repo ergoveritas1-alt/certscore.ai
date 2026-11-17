@@ -1030,3 +1030,62 @@ test("CAPTCHA help, quoted access shells and ordinary capacity/refresh content r
     assert.equal(buildScanNoGoAssessment(scanEvidence({ text, screenshots: [], firstPartySuccesses: 8 })), null, text);
   }
 });
+
+test("a bound terminal sign-in screen stays unreportable despite unrelated consent and screenshot evidence", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-google-sign-in-"));
+  try {
+    const evidence = scanEvidence({
+      text: "Google Sign in Use your Google Account Email or phone Forgot email? Next",
+      screenshots: [await retainedScreenshot(directory, { substantive: true })],
+      consentUiObservations: [consentObservation({ controlLabel: "Accept all" })],
+    });
+    Object.assign(evidence.domSnapshots[0]!, {
+      url: "https://accounts.google.com/v3/signin/identifier",
+      documentIdentity: { source: "cdp_loader_id", token: "committed-loader" },
+      runtimeDocumentCapture: { version: "runtime_document_capture.v1", response: {
+        status: 200, documentToken: "committed-loader", origin: "https://accounts.google.com",
+        requestUrlSha256: "a".repeat(64), route: "committed",
+      } },
+    });
+    const result = buildScanNoGoAssessment(evidence);
+    assert.equal(result?.scanNoGoAssessment.decision, "no_go");
+    assert.equal(result?.primaryReasonCode, "authentication_required");
+    assert.equal(result?.scanNoGoAssessment.supportingSignals.runtimePageClassificationVersion, "runtime_page_classification.v2");
+    for (const mutate of [
+      (snapshot: typeof evidence.domSnapshots[number]) => { snapshot.runtimeDocumentCapture!.response!.documentToken = "other-loader"; },
+      (snapshot: typeof evidence.domSnapshots[number]) => { snapshot.runtimeDocumentCapture!.response!.route = "same_document"; },
+      (snapshot: typeof evidence.domSnapshots[number]) => { snapshot.runtimeDocumentCapture!.response!.requestUrlSha256 = "invalid"; },
+      (snapshot: typeof evidence.domSnapshots[number]) => { snapshot.url = "https://accounts.google.com/help"; },
+      (snapshot: typeof evidence.domSnapshots[number]) => {
+        snapshot.url = "https://other.example/v3/signin/identifier";
+        snapshot.runtimeDocumentCapture!.response!.origin = "https://other.example";
+      },
+    ]) {
+      const invalid = structuredClone(evidence);
+      mutate(invalid.domSnapshots[0]!);
+      assert.notEqual(buildScanNoGoAssessment(invalid)?.primaryReasonCode, "authentication_required");
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a retained browser-check shell needs the correct loader when a runtime capture is present", () => {
+  const evidence = scanEvidence({
+    text: "One moment... Checking your browser... Go back Main Page If you wish to report an error, please e-mail to: webmaster@astro.com",
+    screenshots: [],
+  });
+  const snapshot = evidence.domSnapshots[0]!;
+  assert.equal(buildScanNoGoAssessment(evidence)?.primaryReasonCode, "captcha_or_challenge");
+  snapshot.url = "https://astro.com/";
+  snapshot.documentIdentity = { source: "cdp_loader_id", token: "committed-loader" };
+  snapshot.runtimeDocumentCapture = { version: "runtime_document_capture.v1", response: {
+    status: 200, documentToken: "other-loader", origin: "https://astro.com",
+    requestUrlSha256: "a".repeat(64), route: "committed",
+  } };
+  assert.notEqual(buildScanNoGoAssessment(evidence)?.scanNoGoAssessment.decision, "no_go");
+  snapshot.runtimeDocumentCapture.response!.documentToken = "committed-loader";
+  assert.equal(buildScanNoGoAssessment(evidence)?.primaryReasonCode, "captcha_or_challenge");
+  snapshot.runtimeDocumentCapture.response!.status = 403;
+  assert.equal(buildScanNoGoAssessment(evidence)?.primaryReasonCode, "access_denied_or_forbidden_page");
+});

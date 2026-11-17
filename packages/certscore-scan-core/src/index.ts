@@ -1,7 +1,7 @@
 import {retainGpcRecoveryLedger} from "./gpc-navigation-recovery";
 export { buildGpcCmpStateComparison } from "./gpc-cmp-state-comparison.js";
 import { serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
-import { boundRuntimeDocumentStatus, CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage } from "@certscore/contracts";
+import { isBoundRuntimeAuthenticationPage, boundRuntimeDocumentStatus, CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage } from "@certscore/contracts";
 import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
 import { collectionRecipientPriorities } from "./collection-recipient-retention.js";
 import {gpcProofEventPriorities} from "./gpc-proof-retention.js";
@@ -2487,7 +2487,7 @@ function postConsentFlowRuntimeDisabled(input: {
 }
 
 const SCAN_NO_GO_TEXT_PATTERN =
-  /access to this site has been denied|access denied|access is temporarily restricted|forbidden|http\s*403|403(?:\s*-\s*|\s+)forbidden|403\s+error|the request could not be satisfied|block access from your country|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|dein browser wird geprüft|performing security verification|verification failed(?:\.|\s)+(?:please\s+)?try again|security check|protected by kasada|x-kpsdk|detected unusual (?:behaviour|activity)[^.]{0,180}(?:bot|browser|network)|resembles that of a bot|real (?:shopper|person|user)s?[^.]{0,80}not robots?|(?:please )?verif(?:y|ies|ying)[^.]{0,80}(?:you are|that you(?:'|’)re) human|are you (?:a )?(?:person|human) or (?:a )?robot|press and hold[^.]{0,100}verif|\bzaraz wracamy\b|(?:click|klicke)\s+(?:the|auf die)\s+(?:button|schaltfläche)\s+(?:below|unten)[^.]{0,140}(?:continue\s+(?:shopping|to proceed)|(?:mit dem )?einkauf\s+fortzufahren)/i;
+  /access to this site has been denied|access denied|access is temporarily restricted|forbidden|http\s*403|403(?:\s*-\s*|\s+)forbidden|403\s+error|the request could not be satisfied|block access from your country|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|wir überprüfen ihren browser|dein browser wird geprüft|performing security verification|verification failed(?:\.|\s)+(?:please\s+)?try again|security check|protected by kasada|x-kpsdk|detected unusual (?:behaviour|activity)[^.]{0,180}(?:bot|browser|network)|resembles that of a bot|real (?:shopper|person|user)s?[^.]{0,80}not robots?|(?:please )?verif(?:y|ies|ying)[^.]{0,80}(?:you are|that you(?:'|’)re) human|are you (?:a )?(?:person|human) or (?:a )?robot|press and hold[^.]{0,100}verif|\bzaraz wracamy\b|(?:click|klicke)\s+(?:the|auf die)\s+(?:button|schaltfläche)\s+(?:below|unten)[^.]{0,140}(?:continue\s+(?:shopping|to proceed)|(?:mit dem )?einkauf\s+fortzufahren)/i;
 
 const SCAN_NO_GO_NOT_FOUND_PATTERN =
   /^(?:not found(?:\s+not found)?|404(?: not found)?)[.!\s]*$|\b404\b[^\n]{0,80}(?:not found|file not found)|(?:requested (?:page|file|url)|the (?:page|file))[^\n]{0,80}not found|the page you (?:requested|are looking for) (?:could not be found|does not exist)/i;
@@ -2625,7 +2625,8 @@ export function buildScanNoGoAssessment(input: {
 
   const domTextCandidates = uniqueStrings(
     input.domSnapshots
-      .filter(snapshot => snapshot.artifactId !== "dom_blocking_frame_challenge" && !snapshot.blockingFrameChallenge)
+      .filter(snapshot => snapshot.artifactId !== "dom_blocking_frame_challenge" && !snapshot.blockingFrameChallenge &&
+        (!snapshot.runtimeDocumentCapture || boundRuntimeDocumentStatus(snapshot) !== undefined))
       .map((snapshot) => boundedScanNoGoText(snapshot.textExcerpt))
       .filter((text): text is string => Boolean(text)),
   );
@@ -2675,8 +2676,17 @@ export function buildScanNoGoAssessment(input: {
   // visitor saw. Consent probes can contain large inline scripts whose source
   // mentions blocking or challenge behavior without representing page state.
   // Only fall back to consent-surface text when no settled DOM text survived.
-  const terminalDomText = terminalRuntimeSnapshot?.textExcerpt;
-  const brandedErrorPageState = classifyBrandedRuntimeError(terminalDomText);
+  const terminalDomText = usesBoundRuntimeCapture && mainDocumentStatus === null ? undefined : terminalRuntimeSnapshot?.textExcerpt;
+  const boundAuthenticationPage = Boolean(terminalRuntimeSnapshot &&
+    isBoundRuntimeAuthenticationPage(terminalRuntimeSnapshot) &&
+    !input.domSnapshots.some(snapshot => snapshot.capturedAtMs === terminalRuntimeSnapshot.capturedAtMs &&
+      (snapshot.url !== terminalRuntimeSnapshot.url ||
+        snapshot.documentIdentity?.token !== terminalRuntimeSnapshot.documentIdentity?.token)));
+  const brandedErrorPageState: ClassifiedNoGoPageState | null =
+    boundAuthenticationPage
+      ? { confidence: 0.97, evidenceText: "The verified runtime document was a Google sign-in screen.",
+          hardTerminal: true, reasonCode: "authentication_required", visualPageState: "access_blocked" }
+      : classifyBrandedRuntimeError(terminalDomText);
   const textPageCandidate = brandedErrorPageState ?? (longestDomText
     ? classifyScanNoGoText(longestDomText)
     : classifyScanNoGoText(longestText));
@@ -2756,7 +2766,10 @@ export function buildScanNoGoAssessment(input: {
     ? { confidence: 0.95, evidenceText: blockingFrameSnapshot.textExcerpt!.slice(0, 360), hardTerminal: true,
         reasonCode: "captcha_or_challenge", visualPageState: "captcha_or_challenge" }
     : null;
-  const pageState = blockingFramePageState ?? challengePageState ?? explicitTextChallenge ?? httpPageState ?? textPageState;
+  const browserCheckDenial = usesBoundRuntimeCapture && classifyRuntimeErrorPage(terminalDomText, "runtime_page_classification.v2") === "captcha_or_challenge" && mainDocumentStatus !== null &&
+    [401, 403, 407, 451].includes(mainDocumentStatus) ? httpPageState : null;
+  const pageState = boundAuthenticationPage ? brandedErrorPageState :
+    browserCheckDenial ?? blockingFramePageState ?? challengePageState ?? explicitTextChallenge ?? httpPageState ?? textPageState;
   // Sparse new runtime captures are unresolved. Preserve positively classified
   // terminal responses and page templates through the existing assessment.
   const visualBlankPageState: ClassifiedNoGoPageState | null = !usesBoundRuntimeCapture && visuallyBlankSuccessfulPage
@@ -2877,7 +2890,7 @@ export function buildScanNoGoAssessment(input: {
       )
     );
   const contradictedByNormalSite =
-    strongPositiveSiteEvidence &&
+    !boundAuthenticationPage && strongPositiveSiteEvidence &&
     (
       (!blockedMainDocument && !settledPageState?.hardTerminal) ||
       representativeAccessBlockContradiction ||
@@ -2942,6 +2955,7 @@ export function buildScanNoGoAssessment(input: {
     ].filter((value): value is string => Boolean(value)),
     contradictorCodes: decision === "continue_with_diagnostics" ? positiveSiteSignals : [],
     supportingSignals: {
+      runtimePageClassificationVersion: "runtime_page_classification.v2",
       blockingFrameChallengeObserved: Boolean(blockingFrameSnapshot),
       challengeSignalsDetected: securityChallengeRequestObserved,
       documentStatusBlocked: blockedMainDocument,
@@ -3117,7 +3131,7 @@ const SCAN_NO_GO_REQUEST_REJECTION_SHELL_PATTERN =
   /^(?:request rejected[.!]?\s+)?the requested url was rejected[.!]?\s+please consult with your administrator[.!]?(?:\s+your support id is\s+[a-z0-9-]{1,160})?(?:\s+\[?go back\]?)?[.!\s]*$/i;
 
 function classifyBrandedRuntimeError(text: string | null | undefined): ClassifiedNoGoPageState | null {
-  const reasonCode = classifyRuntimeErrorPage(text);
+  const reasonCode = classifyRuntimeErrorPage(text, "runtime_page_classification.v2");
   if (!reasonCode) return null;
   const errorOffset = reasonCode === "not_found_404" ? text!.search(/\b404\s*\|?\s*OOPS!/i) : 0;
   return { confidence: 0.97, evidenceText: boundedScanNoGoText(text!.slice(Math.max(0, errorOffset))) ?? "Retained branded error page.",
@@ -3176,7 +3190,7 @@ function classifyScanNoGoText(text: string): ClassifiedNoGoPageState | null {
     return { confidence: 0.95, evidenceText, hardTerminal: true, reasonCode: "maintenance_or_unavailable", visualPageState: "maintenance_or_unavailable" };
   }
   if (SCAN_NO_GO_TEXT_PATTERN.test(normalized)) {
-    const challenge = /not a bot|not robots?|person or (?:a )?robot|verif(?:y|ies|ying)[^.]{0,80}(?:you are|that you(?:'|’)re) human|verification failed(?:\.|\s)+(?:please\s+)?try again|press and hold[^.]{0,100}verif|security (?:check|verification)|checking your browser|dein browser wird geprüft|performing security verification|protected by kasada|x-kpsdk|resembles that of a bot|(?:click|klicke)\s+(?:the|auf die)\s+(?:button|schaltfläche)\s+(?:below|unten)[^.]{0,140}(?:continue\s+(?:shopping|to proceed)|(?:mit dem )?einkauf\s+fortzufahren)/i.test(normalized);
+    const challenge = /not a bot|not robots?|person or (?:a )?robot|verif(?:y|ies|ying)[^.]{0,80}(?:you are|that you(?:'|’)re) human|verification failed(?:\.|\s)+(?:please\s+)?try again|press and hold[^.]{0,100}verif|security (?:check|verification)|dein browser wird geprüft|performing security verification|protected by kasada|x-kpsdk|resembles that of a bot|(?:click|klicke)\s+(?:the|auf die)\s+(?:button|schaltfläche)\s+(?:below|unten)[^.]{0,140}(?:continue\s+(?:shopping|to proceed)|(?:mit dem )?einkauf\s+fortzufahren)/i.test(normalized);
     return {
       confidence: challenge ? 0.95 : 0.93,
       evidenceText,

@@ -1,8 +1,22 @@
+/** A complete browser-check heading, with only the reviewed navigation/footer. */
+function isBrowserCheckPage(text: string | null | undefined): boolean {
+  return Boolean(text && text.length <= 256 &&
+    /^One moment\.\.\. Checking your browser\.\.\.(?: Go back Main Page If you wish to report an error, please e-mail to: webmaster@astro\.com)?$/i
+      .test(text.replace(/\s+/g, " ").trim()));
+}
+
 /** Closed, retained page templates. A phrase in an article or a successful
  * transport alone is not a page-state observation. No browser work is added. */
-export function classifyRuntimeErrorPage(text: string | null | undefined):
+export function classifyRuntimeErrorPage(
+  text: string | null | undefined,
+  // Report reconstruction and score eligibility keep the original template set.
+  // Only a new scanner assessment opts into the revised capture rules.
+  policy: "runtime_page_classification.v1" | "runtime_page_classification.v2" = "runtime_page_classification.v1",
+):
   "not_found_404" | "maintenance_or_unavailable" | "unsupported_region" | "redirect_only_page" | "captcha_or_challenge" | undefined {
   if (!text) return undefined;
+  if (policy === "runtime_page_classification.v2" &&
+      (isBrowserCheckPage(text) || /^Luarmor Checking Your Browser\.\. Show Details$/i.test(text.trim()))) return "captcha_or_challenge";
   const bounded = text.slice(0, 4096).replace(/\s+/g, " ").trim();
   if (text.length <= 256 && /^Verifying your browser before proceeding\.\.\.\s+Incident ID: [a-z0-9-]{1,160}$/i.test(bounded)) {
     return "captcha_or_challenge";

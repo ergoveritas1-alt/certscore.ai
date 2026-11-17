@@ -5401,6 +5401,8 @@ export function buildLocalV2ScanNoGoAssessment(input: {
   if (providedScanNoGo) {
     return providedScanNoGo;
   }
+  // Retained decisions are authoritative, including continue_with_diagnostics.
+  // New capture rules must not reinterpret historical reports or their scores.
   if (providedAssessment) {
     return null;
   }

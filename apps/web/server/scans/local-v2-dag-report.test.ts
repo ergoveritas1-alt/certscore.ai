@@ -1863,7 +1863,7 @@ test("local v2 no-go classifies parked cross-domain placeholders before scoring"
   });
 
   assert.equal(result?.primaryReasonCode, "parked_or_placeholder");
-  assert.equal(result?.visualAccessReview.page_state, "parked_or_placeholder");
+  assert.equal(result?.visualAccessReview?.page_state, "parked_or_placeholder");
 });
 
 test("local v2 no-go classifies application error pages as wrong-site or soft-404", async () => {
@@ -1880,7 +1880,7 @@ test("local v2 no-go classifies application error pages as wrong-site or soft-40
   });
 
   assert.equal(result?.primaryReasonCode, "wrong_site_or_soft_404");
-  assert.equal(result?.visualAccessReview.page_state, "wrong_site_or_soft_404");
+  assert.equal(result?.visualAccessReview?.page_state, "wrong_site_or_soft_404");
 });
 
 test("buildLocalV2DagTimingArtifacts retains bounded module and policy timings", async () => {
@@ -9959,6 +9959,92 @@ test("Leiden first-party script cookie carriage does not establish a Google Anal
   assert.equal(hasRequestLocalGoogleAnalyticsAnchor("https://gtm.universiteitleiden.nl/g/collect", true), true);
   assert.equal(hasRequestLocalGoogleAnalyticsAnchor("https://gtm.universiteitleiden.nl/g/collect", false), false);
   assert.equal(hasRequestLocalGoogleAnalyticsAnchor("https://www.google-analytics.com/g/collect", true), true);
+});
+
+test("historical runtime classification preserves retained decisions, score eligibility and findings", async () => {
+  const { buildLocalV2ScanNoGoAssessment, buildMaterializedLocalV2Detail } = await loadLocalV2DagReport();
+  const { assessRuntimeVisitSnapshot, classifyRuntimeErrorPage } = await import("@certscore/contracts");
+  const { projectCaliforniaObservedScoreBasis } = await import("./california-observed-score-basis");
+  const { gpcRuntimeFixture } = require("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
+  const url = "https://accounts.google.com/v3/signin/identifier";
+  const texts = [
+    "Google Sign in Use your Google Account Email or phone Forgot email? Next",
+    "One moment... Checking your browser... Go back Main Page If you wish to report an error, please e-mail to: webmaster@astro.com",
+    "Luarmor Checking Your Browser.. Show Details",
+  ];
+  for (const field of ["scanNoGoAssessment", "scan_no_go_assessment"] as const) {
+    for (const text of texts) {
+      const bundle = gpcRuntimeFixture({enabled:false, url}) as CanonicalEvidenceBundle;
+      const snapshot: CanonicalEvidenceBundle["domSnapshots"][number] = {
+        artifactId:"runtime-dom",path:"/retained/runtime.txt",url,capturedAtMs:100,
+        pagePhase:"network_idle",consentStateAtTime:"pre_consent",
+        documentIdentity:{source:"cdp_loader_id",token:"runtime-loader"},textExcerpt:text,
+        siteMetadata:{title:"Retained page title"} as CanonicalEvidenceBundle["domSnapshots"][number]["siteMetadata"],
+        runtimeDocumentCapture:{version:"runtime_document_capture.v1",response:{
+          origin:"https://accounts.google.com",requestUrlSha256:"a".repeat(64),
+          documentToken:"runtime-loader",status:200,route:"committed",
+        }},
+      };
+      bundle.runtimeMetadataSnapshots = [snapshot];
+      bundle.domSnapshots = [snapshot];
+      bundle[field] = {status:"available",version:"scan-no-go-assessment-v1",decision:"continue_with_diagnostics",
+        scanNoGoConfidence:0.7,reasonCodes:[],corroboratorCodes:[],contradictorCodes:[],supportingSignals:{},evidenceRefs:[]};
+      const before = JSON.stringify(bundle);
+      const sourceBundle = {verificationStatus:"verified" as const,sha256:"a".repeat(64),schemaVersion:bundle.schemaVersion};
+      const input = {bundle,consentSurfaceLikelyPresent:false,runtimeActivityObserved:true,lowRuntimeActivity:false,
+        requestedUrl:url,finalUrl:url,sourceBundle};
+      assert.equal(buildLocalV2ScanNoGoAssessment(input),null);
+      assert.equal(assessRuntimeVisitSnapshot(bundle,[snapshot],url).status,"usable");
+      assert.equal(classifyRuntimeErrorPage(text),undefined,"Historical template set must stay fixed");
+      assert.equal(classifyRuntimeErrorPage(text,"runtime_page_classification.v2"),
+        text.startsWith("Google") ? undefined : "captcha_or_challenge");
+      assert.equal(classifyRuntimeErrorPage("Help article: " + text,"runtime_page_classification.v2"),undefined);
+      assert.ok(projectCaliforniaObservedScoreBasis(bundle,sourceBundle,url),"Historical score eligibility survives");
+      const record = makeScanRecord();
+      record.scan = {...record.scan,id:bundle.scanId,domainHostname:"accounts.google.com",createdAt:bundle.startedAt};
+      const options = {policyTextEvidenceContext:{sourceBundle,scanId:bundle.scanId,generatedAt:bundle.completedAt,localOutDir:null,artifactsById:new Map()}};
+      const ordinary = structuredClone(bundle);
+      ordinary.runtimeMetadataSnapshots![0]!.textExcerpt = "Retained representative page content";
+      ordinary.domSnapshots[0]!.textExcerpt = "Retained representative page content";
+      const reference = buildMaterializedLocalV2Detail(record,ordinary,options);
+      const actual = buildMaterializedLocalV2Detail(record,bundle,options);
+      assert.equal(actual.scan.status,reference.scan.status);
+      assert.equal(actual.snapshot?.certscore_overall,reference.snapshot?.certscore_overall);
+      assert.equal(actual.snapshot?.privacy_score,reference.snapshot?.privacy_score);
+      assert.deepEqual(buildScanReportUnifiedFindingsForScan(actual),buildScanReportUnifiedFindingsForScan(reference));
+      assert.deepEqual(buildCanonicalGdprEprivacyShadowProjection(actual).legacyScoreAssessment,
+        buildCanonicalGdprEprivacyShadowProjection(reference).legacyScoreAssessment);
+      assert.equal(JSON.stringify(bundle),before,"Projection must not mutate retained evidence");
+    }
+  }
+});
+
+test("new scanner no-go decisions survive report reads without applying new rules to unassessed history", async () => {
+  const { buildLocalV2ScanNoGoAssessment } = await loadLocalV2DagReport();
+  const { buildScanNoGoAssessment } = await import("../../../../packages/certscore-scan-core/src/index");
+  const { gpcRuntimeFixture } = require("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
+  const url = "https://accounts.google.com/v3/signin/identifier";
+  const bundle = gpcRuntimeFixture({enabled:false,url}) as CanonicalEvidenceBundle;
+  bundle.domSnapshots = [{artifactId:"runtime-dom",path:"/retained/runtime.txt",url,capturedAtMs:100,
+    pagePhase:"network_idle",consentStateAtTime:"pre_consent",documentIdentity:{source:"cdp_loader_id",token:"runtime-loader"},
+    textExcerpt:"Google Sign in Use your Google Account Email or phone Forgot email? Next",
+    runtimeDocumentCapture:{version:"runtime_document_capture.v1",response:{origin:"https://accounts.google.com",
+      requestUrlSha256:"a".repeat(64),documentToken:"runtime-loader",status:200,route:"committed"}}}];
+  bundle.runtimeMetadataSnapshots = bundle.domSnapshots;
+  const sourceBundle = {verificationStatus:"verified",sha256:"a".repeat(64)};
+  const input = {bundle,consentSurfaceLikelyPresent:false,runtimeActivityObserved:true,lowRuntimeActivity:false,
+    requestedUrl:url,finalUrl:url,sourceBundle};
+  assert.equal(buildLocalV2ScanNoGoAssessment(input),null,"An unassessed historical sign-in page is not newly reclassified");
+  const fresh = buildScanNoGoAssessment({...bundle,screenshots:[]});
+  assert.equal(fresh?.primaryReasonCode,"authentication_required");
+  assert.equal(fresh?.scanNoGoAssessment.supportingSignals.runtimePageClassificationVersion,"runtime_page_classification.v2");
+  bundle.scanNoGoAssessment = fresh!.scanNoGoAssessment;
+  bundle.visualAccessReview = fresh!.visualAccessReview;
+  const retained = JSON.stringify(bundle);
+  const projected = buildLocalV2ScanNoGoAssessment(input);
+  assert.equal(projected?.primaryReasonCode,"authentication_required");
+  assert.deepEqual(projected?.scanNoGoAssessment,fresh!.scanNoGoAssessment);
+  assert.equal(JSON.stringify(bundle),retained);
 });
 
 test("the Accept stop diagnostic requires the joined packet to belong to the verified parent", async () => {

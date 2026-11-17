@@ -27,6 +27,22 @@ export function boundRuntimeDocumentStatus(snapshot: DomSnapshotArtifact): numbe
   } catch { return; }
 }
 
+/** The reviewed Google identifier screen on the committed runtime loader. */
+export function isBoundRuntimeAuthenticationPage(snapshot: DomSnapshotArtifact): boolean {
+  const response = snapshot.runtimeDocumentCapture?.response;
+  const status = boundRuntimeDocumentStatus(snapshot);
+  if (!response?.documentToken || response.route !== "committed" ||
+      !/^[a-f0-9]{64}$/.test(response.requestUrlSha256) ||
+      status === undefined || !Number.isInteger(status) || status < 200 || status >= 300) return false;
+  const url = new URL(snapshot.url);
+  if (url.origin !== "https://accounts.google.com" || url.pathname !== "/v3/signin/identifier") return false;
+  const text = snapshot.textExcerpt?.replace(/\s+/g, " ").trim() ?? "";
+  return text.length <= 1024 &&
+    /^(?:Google\s+)?Sign in\s+(?:Use your Google Account|to continue to [^.]{1,100})\b/i.test(text) &&
+    /\bEmail or phone\b/i.test(text) &&
+    /\b(?:Forgot email\?|Next\b)/i.test(text);
+}
+
 /** Visual proof remains restricted to the existing positive assessment and
  * screenshot from the exact original runtime document. */
 export function hasBoundRuntimeVisualContent(bundle: CanonicalEvidenceBundle, snapshot: DomSnapshotArtifact): boolean {
