@@ -89,10 +89,10 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
   if ((adaptiveBaseline || adaptiveGpc) && (!adaptiveBaseline || !adaptiveGpc ||
       adaptiveBaseline.durationMs !== adaptiveGpc.durationMs || adaptiveBaseline.outcome !== adaptiveGpc.outcome ||
       adaptiveBaseline.peerDocumentToken !== gc?.document?.token || adaptiveGpc.peerDocumentToken !== bc?.document?.token)) limits.push("paired_adaptive_protocol_mismatch");
+  const allowPrefix = bc?.comparisonPolicy === "page_http_signal.v2" && gc?.comparisonPolicy === "page_http_signal.v2";
   const verifiedWindow = (b: CanonicalEvidenceBundle, ms: number) => {
     const c = b.gpcImpactCapture;
     if (!c) return false;
-    const allowPrefix = bc?.comparisonPolicy === "page_http_signal.v2" && gc?.comparisonPolicy === "page_http_signal.v2";
     const w = c.windows.find(w => allowPrefix ? w.durationMs >= ms : w.durationMs === ms);
     if (!c.document || !w) return false;
     // Verify the complete enclosing request set before comparing its timed prefix.
@@ -108,6 +108,8 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
   const durations = [...new Set([...(bc?.windows ?? []), ...(gc?.windows ?? [])].map(w => w.durationMs))];
   const horizon = durations.sort((a, b) => b - a).find(ms => {
     if (pageHttpOnly && baseline && gpc) return verifiedWindow(baseline, ms) && verifiedWindow(gpc, ms);
+    // Strict assessment re-verifies every enclosing raw window below.
+    if (allowPrefix) return bc.windows.some(w => w.durationMs >= ms) && gc.windows.some(w => w.durationMs >= ms);
     return bc?.windows.some(w => w.durationMs === ms) && gc?.windows.some(w => w.durationMs === ms);
   });
   if (!horizon) limits.push("common_window_unavailable");

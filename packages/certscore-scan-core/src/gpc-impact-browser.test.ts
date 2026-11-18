@@ -90,7 +90,8 @@ test(slowInventory ? "the sole later read includes activity during already-requi
       }
       assert.equal(bundle.gpcImpactCapture.expectedEnabled,lane==='gpc_observation');
       const horizon = bundle.gpcImpactCapture.windows.at(-1)?.durationMs;
-      assert.ok(horizon === 3000 || horizon === 5000, JSON.stringify(bundle.gpcImpactCapture));
+      assert.ok(horizon !== undefined && horizon >= 3000 && horizon <= 5000, JSON.stringify(bundle.gpcImpactCapture));
+      assert.equal(horizon, Math.min(5000, bundle.gpcSignalObservation!.capturedAtMs - bundle.gpcImpactCapture.document!.committedAtMs));
       if (slowInventory) assert.equal(horizon, 5000, "existing five-second cap reached during owed inventory work");
       capturedHorizons.push(horizon);
       const timings = bundle.modulesRun.find(m => m.moduleName === "preConsentRuntimeScanner")!.timingBreakdown!;
