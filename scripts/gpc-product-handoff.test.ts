@@ -179,9 +179,14 @@ test("GPC product paired successful collection survives canonical handoff and al
   const { buildGpcCookieReadBinding } = await import("../packages/certscore-scan-core/src/gpc-cookie-read-binding");
   const { compactCanonicalEvidenceBundleForRetention } = await import("../packages/certscore-scan-core/src/index");
   const scan = scanRecord(), pair = collectionPairFixture(undefined, scan.scan.id), privateRead = gpcCookieReadWideDictionaryFixture(scan.scan.id);
-  privateRead.bundle.cookieSnapshots[0]!.gpcReadBinding = buildGpcCookieReadBinding(privateRead.input)!;
-  assert.ok(privateRead.bundle.cookieSnapshots[0]!.gpcReadBinding);
+  privateRead.bundle.cookieSnapshots[0]!.gpcReadBinding = buildGpcCookieReadBinding({ ...privateRead.input, cookieRead: {
+    scanStartedAtEpochMs: Date.parse(privateRead.bundle.startedAt), cookies: [{ name: "OptanonConsent",
+      domain: new URL(privateRead.bundle.url).hostname, path: "/", secure: true, expires: -1,
+      value: "version=202303.1.0&browserGpcFlag=1&isGpcEnabled=1" }],
+  } });
+  assert.ok(privateRead.bundle.cookieSnapshots[0]!.gpcReadBinding?.oneTrustGpcReceipt);
   pair.gpc = compactCanonicalEvidenceBundleForRetention(privateRead.bundle);
+  assert.ok(pair.gpc.cookieSnapshots[0]!.gpcReadBinding?.oneTrustGpcReceipt);
   const bytes=Buffer.from(serializeCanonicalEvidenceArtifact(pair.gpc));
   assert.equal(JSON.parse(bytes.toString()).artifactFormat,"certscore.canonical-evidence-artifact.v2");
   const baseline = collectionFixtureSource(pair.baseline), gpc = {bytes,pointer:{uri:"encoded-fixture-original",sha256:createHash("sha256").update(bytes).digest("hex"),sizeBytes:bytes.length}};
@@ -205,7 +210,7 @@ test("GPC product paired successful collection survives canonical handoff and al
   const ca = buildCanonicalReportExport(restored, undefined, "ccpa_cpra")!, eu = buildCanonicalReportExport(restored, undefined, "gdpr_eprivacy")!;
   const response = apiV2GpcResponseSchema.parse(ca.gpcResponse);
   assert.deepEqual(response.activityComparison?.collectionComparison, activity.collectionComparison);
-  assert.doesNotMatch(JSON.stringify(ca), /gpcReadBinding|gpc-cookie-read-binding|fixture-loader|canonical-evidence-artifact|gzip_base64|brotli_base64/);
+  assert.doesNotMatch(JSON.stringify(ca), /gpcReadBinding|gpc-cookie-read-binding|oneTrustGpcReceipt|browserGpcFlag|gpcCategoryFlag|fixture-loader|canonical-evidence-artifact|gzip_base64|brotli_base64/);
   const { CertScoreClient } = await import("../packages/certscore-sdk/src/client");
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ type: "certscore_pulse_evidence", scanId: scan.scan.id, gpcResponse: response }), { status: 200, headers: { "content-type": "application/json" } });

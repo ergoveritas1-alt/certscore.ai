@@ -121,6 +121,41 @@ export const gpcBoundedObservationOpenApi = {
         "incomplete"
       ]
     },
+    "cmpEventReadback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "sectionId",
+        "received",
+        "observedAtMs"
+      ],
+      "properties": {
+        "source": {
+          "const": "gpp_listener_ping_data.v1",
+          "type": "string"
+        },
+        "sectionId": {
+          "anyOf": [
+            {
+              "const": 7,
+              "type": "number"
+            },
+            {
+              "const": 8,
+              "type": "number"
+            }
+          ]
+        },
+        "received": {
+          "type": "boolean"
+        },
+        "observedAtMs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
     "semanticReadiness": {
       "type": "object",
       "additionalProperties": false,
@@ -213,6 +248,28 @@ export const gpcBoundedObservationOpenApi = {
         "causedByGpc": {
           "const": "not_established",
           "type": "string"
+        }
+      }
+    },
+    "cmpStatusReadback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "observedAtMs"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "visible_cmp_live_status",
+            "visible_hubspot_gpc_notification",
+            "hubspot_applied_gpc"
+          ]
+        },
+        "observedAtMs": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },

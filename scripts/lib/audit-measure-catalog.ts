@@ -165,7 +165,7 @@ const FORWARD_MEASURES:Record<string,string[]>={
  'detail.reject.activity_all':['customer_cmp_check.implementation'],
  'detail.reject.verdict':['sealed.choice_finding.california_post_reject_collection','detail.reject.projectable','detail.reject.reason','detail.reject.stop','reject.requests','reject.storage_writes'],
  gpc_delivery:['gpc_path'],
- 'detail.gpc.cmp_receipt':['detail.gpc.acknowledgment','detail.gpc.semantic_probe','detail.gpc.semantic_readiness','gpc.session.semantic_read_ms','detail.gpc.assessment_coverage'],
+ 'detail.gpc.cmp_receipt':['detail.gpc.cmp_receipt_source','detail.gpc.acknowledgment','detail.gpc.semantic_probe','detail.gpc.semantic_readiness','gpc.session.semantic_read_ms','detail.gpc.assessment_coverage'],
  'detail.gpc.assessment_coverage':['detail.gpc.response','detail.gpc.paired_pair','sealed.choice_evidence.paired_cmp','detail.gpc.paired_cmp','detail.gpc.paired_cmp_scope','detail.gpc.paired_window'],
  'detail.gpc.california_collection':['sealed.choice_finding.gpc_response','sealed.choice_finding.gpp_propagation_inconsistency','sealed.choice_finding.california_frictionless_gpc_exception'],
  'sealed.choice_evidence.paired_cmp':['sealed.choice_evidence.paired_baseline_sale','sealed.choice_evidence.paired_baseline_sharing','sealed.choice_evidence.paired_gpc_sale','sealed.choice_evidence.paired_gpc_sharing','sealed.choice_evidence.paired_sale_transition','sealed.choice_evidence.paired_sharing_transition','sealed.choice_evidence.paired_cmp_scope','sealed.priority_evidence.cmp'],

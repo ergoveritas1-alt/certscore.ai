@@ -3558,6 +3558,7 @@ const bundleField3: z.ZodType<z.output<typeof consentActionAttemptSchema>, z.Zod
 const bundleField4: z.ZodType<z.output<typeof observedJourneySchema>, z.ZodTypeDef, z.input<typeof observedJourneySchema>> = observedJourneySchema;
 const bundleField5: z.ZodType<z.output<typeof cookieSnapshotSchema>, z.ZodTypeDef, z.input<typeof cookieSnapshotSchema>> = cookieSnapshotSchema;
 const bundleField6: z.ZodType<z.output<typeof normalizedVendorObservationSchema>, z.ZodTypeDef, z.input<typeof normalizedVendorObservationSchema>> = normalizedVendorObservationSchema;
+const canonicalGpcNavigationRecoverySchema: z.ZodType<z.output<typeof gpcNavigationRecoverySchema>, z.ZodTypeDef, z.input<typeof gpcNavigationRecoverySchema>> = gpcNavigationRecoverySchema;
 const canonicalEvidenceBundleObjectSchema = z.object({
   accessibilityAudit: canonicalAccessibilityAuditSchema.optional(),
   runtimeMetadataSnapshots: z.array(canonicalDomSnapshotSchema).max(1).optional(),
@@ -3588,7 +3589,7 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   gpcPrototypeSessionBinding: gpcPrototypeSessionBindingSchema.optional(),
   gpcObservationSession: canonicalGpcSessionSchema.optional(),
   gpcImpactCapture: canonicalImpactCaptureSchema.optional(),
-  gpcNavigationRecovery: gpcNavigationRecoverySchema.optional(),
+  gpcNavigationRecovery: canonicalGpcNavigationRecoverySchema.optional(),
   gpcImpactSemanticObservation: canonicalImpactSemanticSchema.optional(),
   runtimeTimeline: z.array(bundleField0),
   networkEvents: z.array(canonicalNetworkEventSchema),

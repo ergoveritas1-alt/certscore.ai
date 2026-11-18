@@ -89,3 +89,49 @@ test("terminal GPP availability uses the current top document without waits or s
     }
   } finally { await browser.close(); }
 });
+
+test("a replaced queue and a display callback can yield an in-window GPP bit before an inconclusive terminal ping", async () => {
+  const browser = await chromium.launch(chromiumLaunchOptions({headless:true}));
+  try {
+    for (const terminal of ["loading", "ready_without_bit"] as const) {
+      const context = await browser.newContext({serviceWorkers:"block"});
+      try {
+        await installGpcSemanticMonitor(context, "fixtureMonitor");
+        await context.route("**/*", route => route.fulfill({contentType:"text/html",body:"<main>Local fixture</main>"}));
+        const page = await context.newPage(), started = Date.now();
+        await page.goto("https://gpp-readback.test/");
+        await page.evaluate(() => {
+          const w = window as any;
+          w.commands = [];
+          w.__gpp = (cmd: string, cb: any) => { w.commands.push(cmd); w.oldCallback = cb; };
+          document.body.append(document.createElement("div"));
+        });
+        await page.evaluate(terminal => {
+          const w = window as any;
+          const core = { Version:1, SaleOptOutNotice:1, SharingOptOutNotice:1, SaleOptOut:2, SharingOptOut:2 };
+          const ping = { gppVersion:"1.1", cmpStatus:"loaded", signalStatus:"ready", cmpDisplayStatus:"visible",
+            sectionList:[8], applicableSections:[8], parsedSections:{usca:[core]} };
+          const explicit = {...ping, parsedSections:{usca:[core,{GpcSegmentType:1, Gpc:terminal === "loading"}]}};
+          w.__gpp = (cmd: string, cb: any) => {
+            w.commands.push(cmd);
+            if (cmd === "addEventListener") {
+              cb({eventName:"listenerRegistered", data:true, listenerId:2, pingData:ping}, true);
+              w.displayChanged = () => cb({eventName:"cmpDisplayStatus", data:"visible", pingData:explicit}, true);
+            }
+            if (cmd === "ping") cb(terminal === "loading" ? {...ping,cmpStatus:"loading"} : ping, true);
+          };
+          // The superseded queue fires before the mutation observer reattaches.
+          w.oldCallback({eventName:"signalStatus",pingData:{...explicit, parsedSections:{usca:[core,{GpcSegmentType:1,Gpc:terminal !== "loading"}]}}},true);
+          document.body.append(document.createElement("div"));
+        }, terminal);
+        await page.evaluate(() => (window as any).displayChanged());
+        const sample = await captureGpcOptOutObservation(page,{scanId:"fixture",scanStartedAtMs:started,monitorKey:"fixtureMonitor"});
+        assert.equal(sample.gppDiagnostics?.listenerPolicy,"gpp_listener_ping_data.v1");
+        assert.deepEqual(sample.stateTransitions?.flatMap(row => typeof row.state?.gpc === "boolean" ? [row.state.gpc] : []),[terminal === "loading"]);
+        assert.equal(sample.gppStatus,terminal === "loading" ? "not_ready" : "observed");
+        assert.equal(sample.usca?.gpc ?? null,null);
+        assert.deepEqual(await page.evaluate(() => (window as any).commands),["addEventListener","addEventListener","removeEventListener","ping"]);
+      } finally { await context.close(); }
+    }
+  } finally { await browser.close(); }
+});

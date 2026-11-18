@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { HUBSPOT_GPC_MESSAGES } from "@certscore/contracts";
 import { chromium, type Page } from "playwright";
 import { chromiumLaunchOptions } from "./playwright-runtime.js";
 import { installGpcNavigatorSignal } from "./gpc-signal-capture.js";
@@ -146,4 +147,54 @@ test('a reviewed CMP container can itself supply live-status acknowledgment with
    } finally {await context.close();}
   });
  } finally {await browser.close();}
+});
+
+test("HubSpot dedicated GPC notification requires visible SDK-scoped current-visitor wording", async t => {
+  const browser = await chromium.launch(chromiumLaunchOptions({headless:true}));
+  try {
+    for (const scenario of ["docunlock","hubspot","hidden","offscreen","duplicate","ordinary_banner","policy","no_sdk","override","baseline"]) await t.test(scenario, async () => {
+      const context = await browser.newContext({serviceWorkers:"block"});
+      try {
+        const wording = scenario === "policy" ? "We respect Global Privacy Control signals." : HUBSPOT_GPC_MESSAGES[Number(scenario === "hubspot")];
+        const node = '<div id="hs-banner-gpc-wording">' + wording + '</div>';
+        const dialog = '<div id="hs-banner-gpc" role="dialog" aria-describedby="hs-banner-gpc-wording">' + node + '</div>';
+        const html = (scenario === "no_sdk" ? "" : '<script src="https://js.hs-banner.com/v2/3828814/banner.js"></script>') +
+          '<div id="hs-banner-parent" ' + (scenario === "hidden" ? 'hidden' : scenario === "offscreen" ? 'style="position:absolute;top:500vh"' : '') + '>' +
+          (scenario === "ordinary_banner" ? node : scenario === "duplicate" ? dialog + dialog : dialog) + '</div>';
+        await context.route("**/*",route => route.fulfill(route.request().resourceType() === "script"
+          ? {contentType:"application/javascript",body:"/* offline SDK request fixture */"} : {contentType:"text/html; charset=utf-8",body:html}));
+        const page = await context.newPage(), started = Date.now();
+        await page.goto("https://hubspot-fixture.test/" + (scenario === "override" ? "?_hsGpcSignal=TRUE" : ""));
+        const sample = await captureGpcOptOutObservation(page,{scanId:"hubspot-fixture",scanStartedAtMs:started,semanticOnly:scenario === "baseline"});
+        assert.deepEqual(sample.acknowledgment.map(row => row.source),["docunlock","hubspot"].includes(scenario) ? ["visible_hubspot_gpc_notification"] : []);
+        assert.equal(sample.gppStatus,"unavailable");
+      } finally { await context.close(); }
+    });
+  } finally { await browser.close(); }
+});
+
+
+test("HubSpot applied GPC requires a ready own-data receipt from its loaded SDK", async t => {
+  const browser = await chromium.launch(chromiumLaunchOptions({headless:true}));
+  try {
+    for (const scenario of ["applied","false","missing","pending","future","getter","override","no_sdk","baseline"]) await t.test(scenario, async () => {
+      const context = await browser.newContext({serviceWorkers:"block"});
+      try {
+        const code = "window.hsCookieBanner={rawPerfMetrics:{bannerStartAt:0,bannerReadyAt:" +
+          (scenario === "pending" ? "undefined" : scenario === "future" ? "1e9" : "1") + ",matchedBannerType:4," +
+          (scenario === "getter" ? "get usesGpc(){window.getterInvoked=true;return true}" :
+            scenario === "missing" ? "" : "usesGpc:" + (scenario !== "false")) + "}};";
+        const html = scenario === "no_sdk" ? "<script>"+code+"</script>" :
+          '<script src="https://js.hs-banner.com/v2/3828814/banner.js"></script>';
+        await context.route("**/*", route => route.fulfill(route.request().resourceType() === "script"
+          ? {contentType:"application/javascript",body:code} : {contentType:"text/html",body:html}));
+        const page = await context.newPage(), started = Date.now();
+        await page.goto("https://hubspot-fixture.test/" + (scenario === "override" ? "?_hsGpcSignal=TRUE" : ""));
+        const sample = await captureGpcOptOutObservation(page,{scanId:"applied",scanStartedAtMs:started,semanticOnly:scenario === "baseline"});
+        assert.equal(sample.hubspotGpcApplied,scenario === "applied" ? true : undefined);
+        assert.equal(await page.evaluate("window.getterInvoked"),undefined);
+        assert.deepEqual(sample.acknowledgment,[]);
+      } finally { await context.close(); }
+    });
+  } finally { await browser.close(); }
 });

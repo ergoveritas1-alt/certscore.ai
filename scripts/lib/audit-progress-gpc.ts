@@ -41,6 +41,7 @@ export const GPC_SESSION_QUANTITIES = [
 export const GPC_DETAIL_METRICS = [
   ...["baseline","gpc"].flatMap(side=>["sale","sharing"].map(axis=>["paired_"+side+"_"+axis,(side==="baseline"?"Without GPC":"With GPC")+" paired CMP "+axis+" setting"])),
   ["cmp_receipt", "GPC receipt reported by CMP"],
+  ["cmp_receipt_source", "Source of the definite CMP readback"],
   ["semantic_readiness", "GPC semantic readiness reason"],
   ["paired_sale_transition", "Paired sale setting · without → with GPC"],
   ["paired_sharing_transition", "Paired sharing setting · without → with GPC"],
@@ -88,8 +89,18 @@ export function pairedGpcAudit(report: Record<string, any>) {
     const o = parsedObservation.data;
     if (o.scanId === report.scanId && o.sourceSha256 === g.comparison?.gpcArtifact?.sha256 && o.sessionSha256 && o.documentUrlSha256 &&
       o.positiveEvidence?.representativeDocument && o.delivery.httpHeaderRetained && o.delivery.mainNavigatorReadbackRetained) {
-      states["detail.gpc.cmp_receipt"] = o.registration.cmpGpcSignal;
-      states["detail.gpc.semantic_readiness"] = o.semanticReadiness?.reason ?? "reason_not_retained";
+      const terminal = o.registration.cmpGpcSignal;
+      states["detail.gpc.cmp_receipt"] = terminal;
+      if (terminal !== "unknown") states["detail.gpc.cmp_receipt_source"] = "terminal_gpp";
+      else if (o.cmpEventReadback) {
+        states["detail.gpc.cmp_receipt"] = o.cmpEventReadback.received ? "received" : "not_received";
+        states["detail.gpc.cmp_receipt_source"] = "gpp_listener_event";
+      } else if (o.cmpStatusReadback) {
+        states["detail.gpc.cmp_receipt"] = "received";
+        states["detail.gpc.cmp_receipt_source"] = o.cmpStatusReadback.source;
+      }
+      states["detail.gpc.semantic_readiness"] = o.semanticReadiness?.reason ??
+        (o.semanticProbe === "observed" && o.registration.cmpGpcSignal === "unknown" ? "explicit_gpc_bit_absent" : "reason_not_retained");
       states["detail.gpc.request_sample_cap"] = o.requests.samplesTruncated ? "capped" : "not_capped";
       if (o.semanticReadiness) measurements["gpc.session.semantic_read_ms"] = o.semanticReadiness.observedAfterDocumentCommitMs;
       const qualified = o.requests.advertisingCollectionQualification?.rows;

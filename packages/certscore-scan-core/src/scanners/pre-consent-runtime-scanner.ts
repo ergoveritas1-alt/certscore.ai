@@ -4813,6 +4813,7 @@ export async function preConsentRuntimeScanner(
       captureId: prototypeBinding?.captureId, session: retainedGpcObservationSession, impact: frozenImpactCapture, signal: retainedGpcSignalObservation,
       enabled: input.globalPrivacyControlEnabled === true, succeeded: cookieCaptureSucceeded, aborted: effectiveSignal?.aborted === true,
       before: cookieCaptureBefore, after: cookieCaptureAfter, startedAtMs: cookieCaptureStartedAtMs, completedAtMs: cookieCaptureCompletedAtMs,
+      cookieRead: { cookies, scanStartedAtEpochMs: input.scanStartedAtMs },
       snapshot: cookieSnapshot,
     }) : undefined;
     return {

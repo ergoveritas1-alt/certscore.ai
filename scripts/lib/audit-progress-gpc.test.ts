@@ -134,3 +134,75 @@ test('recorded California collection is independent of comparison direction and 
  assert.equal(pairedGpcAudit(report).states['detail.gpc.california_collection'],'unavailable');
  assert.equal(pairedGpcAudit({...report,scanId:'other'}).states['detail.gpc.assessment_coverage'],'unavailable');
 });
+
+test("daily readback counts a verified in-window GPP event once and prefers an explicit terminal answer", async () => {
+  const {createHash} = await import("node:crypto");
+  const {gpcObservationSessionSchema} = await import("@certscore/contracts");
+  const hash = (value:unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  for (const received of [true,false]) {
+    const {gpc} = collectionPairFixture();
+    const session = gpc.gpcObservationSession!, terminal = session.semanticObservation!;
+    session.listener = {callbacks:2, registered:true, dropped:0};
+    terminal.gppDiagnostics = {reason:"api_unavailable",listenerPolicy:"gpp_listener_ping_data.v1",callbackCount:0,
+      sectionList:[],applicableSections:[],diagnosticCodes:["api_unavailable"]};
+    const state = {apiVersion:"1.1",sectionId:8,sectionVersion:1,cmpStatus:"loaded",signalStatus:"ready",
+      saleNotice:1,sharingNotice:1,saleOptOut:2,sharingOptOut:2,gpc:received} as const;
+    terminal.stateTransitions = [{observedAtMs:200,status:"observed",state,stateSha256:hash(state)}];
+    const replay = () => {
+      gpc.gpcPrototypeSessionBinding!.sessionSha256 = hash(gpcObservationSessionSchema.parse(session));
+      const source = collectionFixtureSource(gpc);
+      const observation = buildGpcProductionObservation({scanId:gpc.scanId,source});
+      return {observation, audit:pairedGpcAudit({scanId:gpc.scanId,gpcResponse:{contractVersion:"certscore.gpc-response-assessment.v3",
+        observation,comparison:{gpcArtifact:source.pointer}}})};
+    };
+    const first = replay();
+    assert.deepEqual(first.observation.cmpEventReadback,{source:"gpp_listener_ping_data.v1",sectionId:8,received,observedAtMs:200});
+    assert.equal(first.observation.registration.cmpGpcSignal,"unknown");
+    assert.equal(first.audit.states["detail.gpc.cmp_receipt"],received ? "received" : "not_received");
+    assert.equal(first.audit.states["detail.gpc.cmp_receipt_source"],"gpp_listener_event");
+    terminal.usca = {...state,gpc:!received}; terminal.gppStatus = "observed"; terminal.stateSha256 = hash(terminal.usca);
+    const both = replay();
+    assert.equal(both.audit.states["detail.gpc.cmp_receipt"],received ? "not_received" : "received");
+    assert.equal(both.audit.states["detail.gpc.cmp_receipt_source"],"terminal_gpp");
+    terminal.stateTransitions[0]!.observedAtMs = 0;
+    assert.equal(replay().observation.cmpEventReadback,undefined);
+    terminal.stateTransitions[0]!.observedAtMs = 200;
+    delete terminal.gppDiagnostics.listenerPolicy;
+    assert.equal(replay().observation.cmpEventReadback,undefined);
+  }
+});
+
+test("displayed explicit GPC messages count once only for a bound GPC visit", async () => {
+  const {createHash} = await import("node:crypto");
+  const {gpcObservationSessionSchema, HUBSPOT_GPC_SELECTOR, HUBSPOT_GPC_MESSAGES} = await import("@certscore/contracts");
+  const {gpc} = collectionPairFixture();
+  const session = gpc.gpcObservationSession!, terminal = session.semanticObservation!;
+  const replay = () => {
+    gpc.gpcPrototypeSessionBinding!.sessionSha256 = createHash("sha256").update(JSON.stringify(gpcObservationSessionSchema.parse(session))).digest("hex");
+    const source = collectionFixtureSource(gpc);
+    const observation = buildGpcProductionObservation({scanId:gpc.scanId,source});
+    return pairedGpcAudit({scanId:gpc.scanId,gpcResponse:{contractVersion:"certscore.gpc-response-assessment.v3",
+      observation,comparison:{gpcArtifact:source.pointer}}}).states;
+  };
+  terminal.acknowledgment = [{cmp:"HubSpot Consent Banner",scopeSelector:HUBSPOT_GPC_SELECTOR,
+    message:HUBSPOT_GPC_MESSAGES[0],source:"visible_hubspot_gpc_notification"}];
+  assert.equal(replay()["detail.gpc.cmp_receipt_source"],"visible_hubspot_gpc_notification");
+  terminal.acknowledgment = [];
+  terminal.hubspotGpcApplied = true;
+  assert.equal(replay()["detail.gpc.cmp_receipt_source"],"hubspot_applied_gpc");
+  delete terminal.hubspotGpcApplied;
+  for (const [cmp,scopeSelector] of [["TrustArc","#truste-consent-track"],["Cookiebot","#CybotCookiebotDialog"],["Ketch","#ketch-banner"]]) {
+    terminal.acknowledgment = [{cmp,scopeSelector,message:"The GPC signal is honored",source:"visible_cmp_live_status"}];
+    assert.equal(replay()["detail.gpc.cmp_receipt"],"received");
+  }
+  terminal.acknowledgment[0]!.cmp = "TrustArc";
+  assert.equal(replay()["detail.gpc.cmp_receipt"],"unknown");
+  terminal.acknowledgment = [{cmp:"TrustArc",scopeSelector:"#truste-consent-track",message:"Opt-Out Signal Honored",source:"visible_cmp_live_status"}];
+  assert.equal(replay()["detail.gpc.cmp_receipt"],"unknown");
+  terminal.acknowledgment[0]!.message = "The GPC signal is honored";
+  terminal.navigatorGpc = false;
+  assert.notEqual(replay()["detail.gpc.cmp_receipt"],"received");
+  terminal.navigatorGpc = true;
+  terminal.limitationKeys.push("document_changed_during_semantic_readback");
+  assert.notEqual(replay()["detail.gpc.cmp_receipt"],"received");
+});

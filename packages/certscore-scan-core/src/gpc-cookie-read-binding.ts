@@ -3,6 +3,7 @@ import { gpcCookieReadBindingSchema, type GpcCookieReadBinding, type GpcObservat
   type GpcSignalObservation, type CookieSnapshot, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { sameDocumentCaptureBinding, type DocumentCaptureBinding } from "./document-bound-capture.js";
 import { gpcDocumentHash } from "./gpc-signal-capture.js";
+import { parseOneTrustGpcCookieReceipt } from "./local-onetrust-gpc-receipt.js";
 
 type Context = { scanId: string; targetUrl: string; captureId?: string; session?: GpcObservationSession;
   impact?: GpcImpactCapture; signal?: GpcSignalObservation };
@@ -26,10 +27,10 @@ function matches(b: GpcCookieReadBinding, snapshot: Pick<CookieSnapshot, "artifa
   try { return b.targetUrlSha256 === gpcDocumentHash(ctx.targetUrl); } catch { return false; }
 }
 
-/** Stamp the single cookie read already performed. No browser/SDK call, wait,
- * new clock read, cookie value or additional inventory enters this proof. */
+/** Stamp the single cookie read already performed and retain only reviewed flags. */
 export function buildGpcCookieReadBinding(input: Context & { enabled: boolean; succeeded: boolean; aborted: boolean;
   before: DocumentCaptureBinding; after: DocumentCaptureBinding; startedAtMs: number; completedAtMs: number;
+  cookieRead?: { cookies: Parameters<typeof parseOneTrustGpcCookieReceipt>[0]; scanStartedAtEpochMs: number };
   snapshot: Pick<CookieSnapshot, "artifactId" | "capturedAtMs" | "consentStateAtTime"> }): GpcCookieReadBinding | undefined {
   if (!input.enabled || !input.succeeded || input.aborted || !input.captureId || !input.session?.mainDocument ||
     input.before.documentIdentity?.source !== "cdp_loader_id" || !sameDocumentCaptureBinding(input.before, input.after)) return;
@@ -39,7 +40,10 @@ export function buildGpcCookieReadBinding(input: Context & { enabled: boolean; s
       documentToken: input.before.documentIdentity.token, targetUrlSha256: gpcDocumentHash(input.targetUrl), documentUrlSha256: gpcDocumentHash(input.before.url),
       documentCommittedAtMs: input.session.mainDocument.committedAtMs, startedAtMs: input.startedAtMs, completedAtMs: input.completedAtMs,
       inventoryCompleteness: "not_assessed", matchedRequestHorizon: "not_established" });
-    return parsed.success && matches(parsed.data, input.snapshot, input) ? parsed.data : undefined;
+    if (!parsed.success || !matches(parsed.data, input.snapshot, input)) return;
+    const receipt = input.cookieRead && parseOneTrustGpcCookieReceipt(input.cookieRead.cookies, new URL(input.after.url),
+      (input.cookieRead.scanStartedAtEpochMs + input.completedAtMs) / 1000);
+    return receipt ? gpcCookieReadBindingSchema.parse({ ...parsed.data, oneTrustGpcReceipt: receipt }) : parsed.data;
   } catch { return; }
 }
 

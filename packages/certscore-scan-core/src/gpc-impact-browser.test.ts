@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { execFileSync } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,6 +10,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { runScan } from "./index";
 import { buildGpcImpactAssessment } from "./gpc-impact-assessment";
+import { assessGpcCohortRow } from "./gpc-impact-cohort";
 import { buildGpcProductionObservation } from "./gpc-production-observation";
 import { buildLocalV2DagLambdaLaneRun } from "../../../apps/v2-dag-lambda/src/handler";
 import { readOriginalGpcCookieReadBinding } from "./gpc-cookie-read-binding";
@@ -140,3 +143,50 @@ test(slowInventory ? "the sole later read includes activity during already-requi
 });
 
 }
+
+test("the GPC worker retains a OneTrust cookie receipt on a page without GPP", async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), "gpc-receipt-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const key = path.join(dir, "key.pem"), cert = path.join(dir, "cert.pem");
+  execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-out", cert,
+    "-days", "1", "-subj", "/CN=localhost"], { stdio: "ignore" });
+  const server = createHttpsServer({ key: await readFile(key), cert: await readFile(cert) }, (req, res) => {
+    res.setHeader("Content-Type", "text/html");
+    if (req.headers["sec-gpc"] === "1") {
+      res.setHeader("Set-Cookie", "OptanonConsent=version=202303.1.0&browserGpcFlag=1&isGpcEnabled=1&consentId=PRIVATE_ID; Secure; Path=/");
+    }
+    res.end(`<html lang="en"><head><title>Local product documentation</title></head><body><main><h1>Product documentation</h1><p>${"Public product and service details. ".repeat(40)}</p></main></body></html>`);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  const url = `https://127.0.0.1:${(server.address() as { port: number }).port}/`;
+  let cookieReads = 0;
+  const launch = chromium.launch.bind(chromium);
+  t.mock.method(chromium, "launch", async (...args: Parameters<typeof chromium.launch>) => {
+    const browser = await launch(...args), newContext = browser.newContext.bind(browser);
+    browser.newContext = async options => {
+      const context = await newContext({ ...options, serviceWorkers: "block" });
+      await context.route("**/*", route => new URL(route.request().url()).origin === new URL(url).origin ? route.fallback() : route.abort());
+      const cookies = context.cookies.bind(context);
+      context.cookies = async (...cookieArgs) => { cookieReads++; return cookies(...cookieArgs); };
+      return context;
+    };
+    return browser;
+  });
+
+  const scanId = "onetrust-no-gpp", outDir = path.join(dir, "scan"), workerLane = "gpc_observation";
+  const bundle = await runScan({ scanId, url, outDir, evidenceLane: workerLane, profile: "standard", scenarioResourceMode: "lean",
+    retainGpcObservation: true, preConsentScreenshotMode: "never" });
+  assert.ok(bundle.region);
+  const retained = JSON.parse(await readFile(path.join(outDir, "CanonicalEvidenceBundle.json"), "utf8"));
+  retained.scanLaneRuns = [buildLocalV2DagLambdaLaneRun({ bundle, workerLane, region: bundle.region, physicalInvocationId: "fixture-onetrust" })];
+  const bytes = Buffer.from(JSON.stringify(retained));
+  const gpc = { bytes, pointer: { sha256: createHash("sha256").update(bytes).digest("hex"), sizeBytes: bytes.length } };
+  const audit = assessGpcCohortRow({ scanId, required: true, gpc });
+  assert.equal(cookieReads, 1, JSON.stringify(bundle.modulesRun.map(module => module.errors)));
+  assert.equal(audit.observation.semanticProbe, "unavailable");
+  assert.equal(audit.observation.registration.cmpGpcSignal, "unknown");
+  assert.deepEqual(audit.pairedStorageMetadata.gpc.oneTrustGpcReceipt, { sdkVersion: "202303.1.0", browserGpcFlag: true, gpcCategoryFlag: true });
+  assert.doesNotMatch(bytes.toString(), /PRIVATE_ID|consentId=|isGpcEnabled=/);
+});

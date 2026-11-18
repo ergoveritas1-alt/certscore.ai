@@ -16,7 +16,11 @@ export async function installGpcSemanticMonitor(context: BrowserContext, key: st
       if (++callbacks > 64) { dropped++; return; }
       if (success !== true || !event || typeof event !== "object") return;
       if (event.eventName === "listenerRegistered" && event.data === true && Number.isInteger(event.listenerId) && event.listenerId > 0) listenerId = event.listenerId;
-      if (!["listenerRegistered", "signalStatus", "sectionChange", "cmpStatus"].includes(event.eventName)) return;
+      // The IAB display event also carries PingData. Only its validated GPP
+      // section supplies a readback; showing or hiding a banner supplies none.
+      if (event.eventName === "cmpDisplayStatus") {
+        if (!["visible", "hidden", "disabled"].includes(event.data) || event.pingData?.cmpDisplayStatus !== event.data) return;
+      } else if (!["listenerRegistered", "signalStatus", "sectionChange", "cmpStatus"].includes(event.eventName)) return;
       const value = parse(event.pingData);
       const previous = history.at(-1);
       if (previous && previous.status === value.status && JSON.stringify(previous.state) === JSON.stringify(value.state) &&
@@ -25,8 +29,9 @@ export async function installGpcSemanticMonitor(context: BrowserContext, key: st
       history.push({ at: Date.now(), ...value });
     };
     const attach = (lifecycle = false) => {
-      if (closed || (api && api === w.__gpp)) return;
-      if ((!lifecycle && ++checks > 128) || attempts >= 2) { observer?.disconnect(); return; }
+      if (closed) return;
+      if (!lifecycle && ++checks >= 128) observer?.disconnect();
+      if ((api && api === w.__gpp) || attempts >= 2) return;
       if (typeof w.__gpp !== "function") return;
       // A queued stub can be replaced by the loaded CMP. Keep the bounded
       // lifecycle hooks and attach to the new API, without wrapping its global.
@@ -34,8 +39,10 @@ export async function installGpcSemanticMonitor(context: BrowserContext, key: st
       listenerId = null;
       api = w.__gpp; attempts++;
       const attachedApi = api;
-      try { api("addEventListener", (event: any, success: boolean) => { if (api === attachedApi) onEvent(event, success); }); } catch { api = undefined; }
-      if (api) observer?.disconnect();
+      try { api("addEventListener", (event: any, success: boolean) => { if (api === attachedApi && w.__gpp === attachedApi) onEvent(event, success); }); } catch { api = undefined; }
+      // A callable queue stub can be replaced between lifecycle events. Keep
+      // the remaining mutation checks until the second attachment is spent.
+      if (attempts >= 2) observer?.disconnect();
       // Mutation observation is bounded; load/DOMContentLoaded/terminal hooks
       // still detect API replacement after the mutation budget is exhausted.
     };
@@ -52,7 +59,7 @@ export async function installGpcSemanticMonitor(context: BrowserContext, key: st
         document.removeEventListener("DOMContentLoaded", onLifecycle);
         document.removeEventListener("load", onLifecycle, true);
         if (api && listenerId !== null) { try { api("removeEventListener", () => {}, listenerId); } catch {} }
-        return { startedAt, endedAt: Date.now(), callbacks, dropped, listenerRegistered: listenerId !== null, history };
+        return { policy: "gpp_listener_ping_data.v1", startedAt, endedAt: Date.now(), callbacks, dropped, listenerRegistered: listenerId !== null, history };
       },
     } });
   }

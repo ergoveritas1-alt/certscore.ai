@@ -12,6 +12,12 @@ export const GPC_STATUS_MESSAGES = [
   "The GPC signal is honored",
   "Opt-Out Signal Honored",
 ] as const;
+// The retained HubSpot SDK renders this separate dialog for a detected GPC signal.
+export const HUBSPOT_GPC_SELECTOR = '#hs-banner-parent #hs-banner-gpc[role="dialog"][aria-describedby="hs-banner-gpc-wording"] #hs-banner-gpc-wording';
+export const HUBSPOT_GPC_MESSAGES = [
+  "We’ve detected your Global Privacy Control (GPC) signal. Non-essential cookies have been disabled. Learn more in our Privacy Policy.",
+  "Your GPC signal has been detected. While some cookies are necessary to make our website and services function properly, consent for all non-essential cookies has been automatically declined. You can change your preferences at any time. To learn more about the different cookies we use, check out our Cookie Policy.",
+] as const;
 export const GPC_DIAGNOSTIC_CODES = [
   "ping_not_object", "gpp_version_unsupported", "cmp_status_not_loaded", "signal_status_not_ready",
   "duplicate_ping_callback", "synchronous_ping_unavailable", "api_unavailable",
@@ -45,9 +51,11 @@ export const gpcOptOutObservationSchema = z.object({
   documentStartedAtMs: time, capturedAtMs: time, navigatorGpc: z.boolean().nullable(),
   gppStatus: z.enum(["observed", "unavailable", "not_ready", "unsupported", "invalid"]),
   gppDiagnostics: z.object({ reason: z.string().min(1).max(80), callbackCount: time,
+    listenerPolicy: z.literal("gpp_listener_ping_data.v1").optional(),
     applicableSections: z.array(z.number().int()).max(4), sectionList: z.array(z.number().int()).max(33),
     diagnosticCodes: z.array(z.enum(GPC_DIAGNOSTIC_CODES)).max(8).optional(),
   }).strict().optional(),
+  hubspotGpcApplied: z.literal(true).optional(),
   acknowledgmentCaptureComplete: z.boolean().optional(),
   usca: gpcUscaStateSchema.nullable(), usnat: gpcUsNationalStateSchema.nullable().optional(), stateSha256: hash.nullable(),
   stateTransitions: z.array(z.object({ observedAtMs: time,
@@ -55,10 +63,13 @@ export const gpcOptOutObservationSchema = z.object({
     state: z.union([gpcUscaStateSchema, gpcUsNationalStateSchema]).nullable(), stateSha256: hash.nullable(),
     diagnosticCodes: z.array(z.enum(GPC_DIAGNOSTIC_CODES)).max(8).optional(),
   }).strict()).max(16).optional(),
-  acknowledgment: z.array(z.object({
+  acknowledgment: z.array(z.discriminatedUnion("source", [z.object({
     cmp: z.string().min(1).max(100), scopeSelector: z.string().min(1).max(200),
     message: z.enum(GPC_STATUS_MESSAGES), source: z.literal("visible_cmp_live_status"),
-  }).strict()).max(8),
+  }).strict(), z.object({
+    cmp: z.literal("HubSpot Consent Banner"), scopeSelector: z.literal(HUBSPOT_GPC_SELECTOR),
+    message: z.enum(HUBSPOT_GPC_MESSAGES), source: z.literal("visible_hubspot_gpc_notification"),
+  }).strict()])).max(8),
   limitationKeys: codes,
 }).strict().superRefine((p, ctx) => {
   if (p.stateTransitions?.some((row, i, all) => row.observedAtMs > p.capturedAtMs ||

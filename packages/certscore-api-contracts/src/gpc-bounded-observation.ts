@@ -87,6 +87,13 @@ export const gpcBoundedObservationSchema = z.object({
   positiveEvidence: z.object({ policyVersion: z.literal("gpc_positive_evidence.v1"), representativeDocument: z.boolean() }).strict().optional(),
   delivery: z.object({ httpHeaderRetained: z.boolean(), mainNavigatorReadbackRetained: z.boolean(), fullContextVerified: z.boolean() }).strict(),
   semanticProbe: z.enum(["observed", "unsupported", "unavailable", "not_ready", "invalid", "incomplete"]),
+  // Latest explicit bit in the bounded listener history, at the event's own time.
+  cmpEventReadback: z.object({
+    source: z.literal("gpp_listener_ping_data.v1"),
+    sectionId: z.union([z.literal(7), z.literal(8)]),
+    received: z.boolean(),
+    observedAtMs: count,
+  }).strict().optional(),
   // Optional future producer fact. A missing legacy field has no inferred reason.
   // No callback timing, payload, document token or arbitrary diagnostic text.
   semanticReadiness: z.object({
@@ -98,6 +105,10 @@ export const gpcBoundedObservationSchema = z.object({
   }).strict().optional(),
   registration: z.object({ basis: z.literal("current_recorded_state"), sale: axis, sharing: axis,
     cmpGpcSignal: z.enum(["received", "not_received", "unknown"]), causedByGpc: z.literal("not_established") }).strict(),
+  cmpStatusReadback: z.object({
+    source: z.enum(["visible_cmp_live_status", "visible_hubspot_gpc_notification", "hubspot_applied_gpc"]),
+    observedAtMs: count,
+  }).strict().optional(),
   acknowledgment: z.object({ observed: z.boolean(), captureComplete: z.boolean() }).strict(),
   requests: z.object({ count, blockedBeforeTransmissionCount: count, complete: z.boolean(), fromMs: count.nullable(), documentCommittedAtMs: count.nullable(), throughMs: count.nullable(),
     classifiedCount: count, collectionCount: count,
@@ -136,6 +147,16 @@ export const gpcBoundedObservationSchema = z.object({
   scoreEffect: z.literal("none"), legalInterpretation: z.literal("not_assessed"),
 }).strict().superRefine((o, ctx) => {
   const readiness = o.semanticReadiness;
+  const statusReadback = o.cmpStatusReadback;
+  if (statusReadback && statusReadback.source !== "hubspot_applied_gpc" && !o.acknowledgment.observed)
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"Displayed GPC readback requires a retained acknowledgment."});
+  for (const readback of [o.cmpEventReadback, statusReadback]) if (readback && (!o.scanId || !o.sourceSha256 || !o.sessionSha256 || !o.documentUrlSha256 ||
+    !o.positiveEvidence?.representativeDocument || !o.delivery.httpHeaderRetained || !o.delivery.mainNavigatorReadbackRetained ||
+    o.status === "unavailable" || o.semanticProbe === "incomplete" || o.requests.documentCommittedAtMs === null ||
+    o.requests.throughMs === null || o.requests.fromMs === null ||
+    readback.observedAtMs < Math.max(o.requests.documentCommittedAtMs, o.requests.fromMs) ||
+    readback.observedAtMs > o.requests.throughMs))
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"A CMP readback requires verified delivery and an observation inside its original document window."});
   if (readiness && ((readiness.reason === "api_unavailable"
       ? o.semanticProbe !== "unavailable" || o.status === "unavailable"
       : o.semanticProbe !== "not_ready" || o.status !== "limited") || !o.scanId ||

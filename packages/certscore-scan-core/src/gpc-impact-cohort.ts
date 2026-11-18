@@ -39,6 +39,7 @@ function retainedStorageMetadata(bundle: CanonicalEvidenceBundle | null) {
     const proof = readOriginalGpcCookieReadBinding(bundle, snapshot);
     return proof ? [proof] : [];
   });
+  const oneTrustReceipts = gpcReads.flatMap(read => read.oneTrustGpcReceipt ? [read.oneTrustGpcReceipt] : []);
   return { source: "original_bytes_verified" as const, cookieSnapshots: bundle.cookieSnapshots.length,
     cookieSnapshotsWithCoverage: bundle.cookieSnapshots.filter(s => s.captureCoverage).length,
     cookieSnapshotsWithOwnDocumentBinding: bound.length,
@@ -46,6 +47,7 @@ function retainedStorageMetadata(bundle: CanonicalEvidenceBundle | null) {
       completedAfterCommitMs: s.captureCoverage!.completedAtMs - doc!.committedAtMs })),
     cookieReadIntervalsOmitted: Math.max(0, bound.length - 8), storageSnapshots: bundle.storageSnapshots.length,
     gpcCookieReadBindings: gpcReads.length,
+    oneTrustGpcReceipt: oneTrustReceipts.length === 1 ? oneTrustReceipts[0] : undefined,
     gpcCookieReadIntervals: gpcReads.slice(0, 8).map(proof => ({ startedAfterCommitMs: proof.startedAtMs - proof.documentCommittedAtMs,
       completedAfterCommitMs: proof.completedAtMs - proof.documentCommittedAtMs })),
     gpcCookieReadIntervalsOmitted: Math.max(0, gpcReads.length - 8),
@@ -112,6 +114,7 @@ export function summarizeGpcImpactCohort(rows: ReturnType<typeof assessGpcCohort
         measuredRequestComparisons: rate(behavioral.length, required.length),
         measuredWithoutReadableCmp: behavioral.filter(r => r.observation.semanticProbe !== "observed").length,
         unavailableRequestComparisons: required.length - behavioral.length,
+        oneTrustGpcCookieReadback: rate(required.filter(r => r.pairedStorageMetadata.gpc.oneTrustGpcReceipt).length, required.length),
         collectionSamples: {
           packets: rate(samples.length, required.length),
           measuredRequestPairsWithoutPacket: behavioral.length - samples.length,

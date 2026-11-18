@@ -198,12 +198,29 @@ test("future GPC cookie bindings enter only the separate private metadata audit"
   const { buildGpcCookieReadBinding } = await import("./gpc-cookie-read-binding");
   const { collectionFixtureSource } = await import("./test-fixtures/gpc-collection-pair.cases");
   const baseline = await storageMetadataFixture(), f = gpcCookieReadFixture();
-  f.bundle.cookieSnapshots[0]!.gpcReadBinding = buildGpcCookieReadBinding(f.input)!;
-  const r = buildGpcImpactCohort([{ scanId: f.bundle.scanId, required: true, baseline: baseline.input().baseline, gpc: collectionFixtureSource(f.bundle) }]);
+  const cookie = { name: "OptanonConsent", secure: true, domain: new URL(f.bundle.url).hostname, path: "/", expires: -1,
+    value: "version=202303.1.0&browserGpcFlag=1&isGpcEnabled=0&consentId=PRIVATE_ID" };
+  const read = { scanStartedAtEpochMs: Date.parse(f.bundle.startedAt), cookies: [cookie] };
+  const stamp = (cookies: typeof read.cookies) => buildGpcCookieReadBinding({ ...f.input, cookieRead: { ...read, cookies } });
+  f.bundle.cookieSnapshots[0]!.gpcReadBinding = stamp([cookie]);
+  const gpc = collectionFixtureSource(f.bundle);
+  const input = { scanId: f.bundle.scanId, required: true, baseline: baseline.input().baseline, gpc };
+  const r = buildGpcImpactCohort([input]);
   const metadata = r.rows[0]!.pairedStorageMetadata.gpc;
   assert.equal(metadata.gpcCookieReadBindings, 1); assert.equal(metadata.cookieSnapshotsWithCoverage, 0);
   assert.equal(r.summary.behavioralEvidence.retainedStorageMetadata.baselineAndGpcHaveOwnReadMetadata.numerator, 1);
   assert.equal(r.summary.behavioralEvidence.retainedStorageMetadata.bothHaveOwnDocumentCookieMetadata.numerator, 0);
   assert.equal(r.rows[0]!.pairedStorageMetadata.comparison, "not_assessed");
-  assert.doesNotMatch(JSON.stringify(metadata), /PRIVATE_COOKIE|fixture-loader|documentToken|captureId|https?:/);
+  assert.deepEqual(metadata.oneTrustGpcReceipt, { sdkVersion: "202303.1.0", browserGpcFlag: true, gpcCategoryFlag: false });
+  assert.equal(r.summary.behavioralEvidence.oneTrustGpcCookieReadback.numerator, 1);
+  assert.equal(r.rows[0]!.observation.registration.cmpGpcSignal, "unknown");
+  assert.equal(r.rows[0]!.observation.semanticProbe, "unavailable");
+  assert.equal(buildGpcImpactCohort([{ ...input, gpc: { ...gpc, pointer: { ...gpc.pointer, sha256: "0".repeat(64) } } }])
+    .summary.behavioralEvidence.oneTrustGpcCookieReadback.numerator, 0);
+  assert.equal(stamp([cookie, { ...cookie, value: "x".repeat(2049) }])?.oneTrustGpcReceipt, undefined);
+  assert.equal(stamp([{ ...cookie, value: cookie.value.replace("202303.1.0", "202611.1.0") }])?.oneTrustGpcReceipt, undefined);
+  assert.equal(buildGpcCookieReadBinding({ ...f.input, cookieRead: read,
+    after: { ...f.input.after, documentIdentity: { source: "cdp_loader_id", token: "new-loader" } } }), undefined);
+  assert.doesNotMatch(JSON.stringify(metadata), /PRIVATE_COOKIE|PRIVATE_ID|fixture-loader|documentToken|captureId|https?:/);
+  assert.doesNotMatch(gpc.bytes.toString(), /PRIVATE_ID|consentId|isGpcEnabled/);
 });

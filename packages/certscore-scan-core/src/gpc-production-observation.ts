@@ -8,6 +8,7 @@ import {
   GPC_OPT_OUT_ADAPTER_VERSION, choiceRequestRole, isQualifyingSaleSharingRequest, canonicalEvidenceBundleSchema, gpcBoundedObservationSchema, gpcResponseAssessmentV3Schema,
   type CanonicalEvidenceBundle, type GpcBoundedObservation, type GpcResponseAssessmentV2, type NetworkEvent,
 } from "@certscore/contracts";
+import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { gpcDocumentHash } from "./gpc-signal-capture.js";
 import { evaluateGpcObservationSession } from "./gpc-observation-completion.js";
 import type { GpcPrototypeArtifact } from "./gpc-opt-out-assessment.js";
@@ -82,6 +83,21 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
       signalStatusReady: apiUnavailable || synchronousUnavailable ? null : !codes.includes("signal_status_not_ready"), observedAfterDocumentCommitMs:afterCommit}
     : undefined;
   const state = semantic?.gppStatus === "observed" ? result.currentSaleSharingState : null;
+  const statusBound = representative && result.delivery.httpHeaderRetained && result.delivery.mainNavigatorReadbackRetained &&
+    session?.terminal === "completed" && semantic?.scanId === input.scanId && semantic.capturedAtMs >= session.captureStartedAtMs &&
+    semantic.limitationKeys.every(key => key === "acknowledgment_capture_truncated");
+  const displayed = statusBound ? semantic.acknowledgment.find(row => row.source === "visible_hubspot_gpc_notification" ||
+      (row.message === "The GPC signal is honored" || row.message === "Your Global Privacy Control signal is honored.") &&
+      // Fuzzy discovery selectors can identify a CMP candidate but cannot bind a displayed receipt to its banner.
+      /^[#.][\w-]+$/.test(row.scopeSelector) && KNOWN_CMP_REGISTRY.some(cmp =>
+        cmp.canonicalName === row.cmp && cmp.domSelectors?.includes(row.scopeSelector))) : undefined;
+  const statusSource = displayed?.source ?? (statusBound && semantic.hubspotGpcApplied ? "hubspot_applied_gpc" : undefined);
+  const event = representative && result.delivery.httpHeaderRetained && result.delivery.mainNavigatorReadbackRetained &&
+    semantic?.scanId === input.scanId && diagnostics?.listenerPolicy === "gpp_listener_ping_data.v1" &&
+    semantic.limitationKeys.every(key => key === "acknowledgment_capture_truncated") &&
+    session?.terminal === "completed" && session.mainDocument && !session.listener.dropped && session.listener.callbacks > 0
+    ? semantic.stateTransitions?.filter(row => row.status === "observed" && typeof row.state?.gpc === "boolean" &&
+      row.observedAtMs >= Math.max(session.captureStartedAtMs, session.mainDocument!.committedAtMs)).at(-1) : undefined;
   const axis = (notice?: number, value?: number) => notice === 1 && value === 1 ? "opted_out" : notice === 1 && value === 2 ? "not_opted_out" : "unknown";
   const vendors = new Map<string, CanonicalEvidenceBundle["normalizedVendorObservations"]>();
   for (const vendor of bundle?.normalizedVendorObservations ?? []) {
@@ -212,8 +228,12 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
     positiveEvidence: { policyVersion: "gpc_positive_evidence.v1", representativeDocument: Boolean(result.sourceVerified && result.documentBound && representative) },
     delivery: result.delivery, semanticProbe: semantic?.gppStatus ?? "incomplete",
     ...(semanticReadiness ? {semanticReadiness} : {}),
+    ...(event?.state && typeof event.state.gpc === "boolean" ? { cmpEventReadback: {
+      source: "gpp_listener_ping_data.v1", sectionId: event.state.sectionId, received: event.state.gpc, observedAtMs: event.observedAtMs,
+    } } : {}),
     registration: { basis: "current_recorded_state", sale: axis(state?.saleNotice, state?.saleOptOut), sharing: axis(state?.sharingNotice, state?.sharingOptOut),
       cmpGpcSignal: state?.gpc === true ? "received" : state?.gpc === false ? "not_received" : "unknown", causedByGpc: "not_established" },
+    ...(statusSource ? { cmpStatusReadback: { source: statusSource, observedAtMs: semantic!.capturedAtMs } } : {}),
     acknowledgment: { observed: result.acknowledgmentObserved, captureComplete: result.acknowledgmentCaptureComplete },
     requests: { count: result.requestCapture.count, blockedBeforeTransmissionCount: result.requestCapture.blockedBeforeTransmissionCount, complete: result.requestCapture.complete,
       fromMs: result.requestCapture.fromMs, documentCommittedAtMs: result.requestCapture.documentCommittedAtMs, throughMs: result.requestCapture.throughMs,

@@ -1,6 +1,12 @@
 import { z } from "zod";
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const time = z.number().int().min(0).max(120_000);
+const oneTrustGpcCookieReceiptSchema = z.object({
+  sdkVersion: z.literal("202303.1.0"),
+  browserGpcFlag: z.boolean(),
+  gpcCategoryFlag: z.boolean(),
+}).strict().refine(receipt => !receipt.gpcCategoryFlag || receipt.browserGpcFlag);
+export type OneTrustGpcCookieReceipt = z.infer<typeof oneTrustGpcCookieReceiptSchema>;
 const binding = z.object({
   contractVersion: z.literal("certscore.gpc-cookie-read-binding.v1"),
   scope: z.literal("gpc_browser_context_point_in_time"),
@@ -10,6 +16,7 @@ const binding = z.object({
   documentCommittedAtMs: time, startedAtMs: time, completedAtMs: time,
   inventoryCompleteness: z.literal("not_assessed"),
   matchedRequestHorizon: z.literal("not_established"),
+  oneTrustGpcReceipt: oneTrustGpcCookieReceiptSchema.optional(),
 }).strict();
 /** Private original-worker metadata. Never a public cookie comparison or an
  * extension of the baseline bound_cookie_snapshot eligibility policy. */
