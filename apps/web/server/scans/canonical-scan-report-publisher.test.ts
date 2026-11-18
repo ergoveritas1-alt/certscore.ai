@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { consentControlAssessmentSchema, CALIFORNIA_CHOICE_ABSENCE_ID, CALIFORNIA_PRIVACY_REVIEW_IDS } from "@certscore/contracts";
 import { redirectPublicationHarness } from "./redirect-publication.fixture";
+import { deriveBrowserStartingPageScoreAssessment } from "../browser-scans/starting-page-score";
 import { projectCanonicalSurfaceSummary } from "../../lib/scans/canonical-surface-summary";
 import { classifyScoreMaterializationFailure } from "./score-materialization-failure";
 import { build } from "esbuild";
@@ -12,6 +13,79 @@ import path from "node:path";
 import test from "node:test";
 
 const webRequire = createRequire(path.resolve("apps/web/package.json"));
+
+test("only browser extension scans with document-bound proof publish both posture scores", async () => {
+  const harness = await redirectPublicationHarness();
+  try {
+    const scanId = "20000000-0000-4000-8000-000000000002";
+    const completedAt = "2026-11-17T20:00:00.000Z";
+    harness.state.record = {
+      scan: {
+        id: scanId,
+        domainHostname: "extension-fixture.test",
+        status: "completed",
+        scanType: "browser_extension",
+        scanFromValue: "local_extension",
+        createdAt: completedAt,
+        completedAt,
+        pagesRequested: 1,
+        pagesScanned: 1,
+        scanConfigJson: { processor: "browser-extension-bx01", startingPageVerified: true },
+      },
+      signalEnrichmentWorkflow: { findingsReady: true, mergedSignalsReady: true },
+      accessPostureSummary: { homepageFetchStatus: "ok" },
+      events: [{ id: "observed", eventType: "browser_extension.observed_signals_ingested", createdAt: completedAt }],
+      pageEvidence: [], policyEnrichment: [], policyReviewQueue: [], preconsentViolations: [],
+      primaryPolicyEnrichment: null, runtimeArtifacts: {}, signals: [], trackerVendors: [], validationFindings: [],
+      snapshot: { certscore_overall: 100, scan_outcome: "completed_successfully" },
+    };
+    await assert.rejects(
+      () => harness.pipeline.publishCanonicalScanReportProjection({
+        organizationId: null,
+        scanId,
+        publicationTrigger: "authorized_worker",
+      }),
+      { invariant: "posture_scores_unavailable", phase: "score_availability" },
+    );
+    assert.deepEqual(harness.state.writes, []);
+    const url = "https://extension-fixture.test/";
+    const assessment = deriveBrowserStartingPageScoreAssessment({
+      scanId, browserScanId: "browser-session", requestedUrl: url, completedAt,
+      document: {
+        version: "browser_extension_starting_document.v1",
+        documentId: "20000000-0000-4000-8000-000000000003",
+        frameId: 0, tabId: 2, navigationUrl: url, finalUrl: url, responseStatus: 200,
+        navigationStartedAtMs: 0, mainRequestAtMs: 1, responseStartedAtMs: 52, mainResponseAtMs: 50,
+        capturedAtMs: 1000,
+      },
+    });
+    harness.state.record.runtimeArtifacts = { hybrid_runtime_evidence: { consentControlAssessment: assessment } };
+    harness.state.record.scan.scanConfigJson.browserStartingDocumentVerified = true;
+    const published = await harness.pipeline.publishCanonicalScanReportProjection({
+      organizationId: null, scanId, publicationTrigger: "authorized_worker",
+    });
+    assert.equal(published.status, "ready");
+    const [snapshotWrite] = harness.state.writes.filter((row: { sql: string }) => row.sql.includes("insert into public.scan_snapshots"));
+    const params = snapshotWrite.params;
+    const record = harness.pipeline.readPersistedScanReportProjection({
+      scan: harness.state.record.scan,
+      snapshot: {
+        report_projection_status: "ready", report_projection_version: params[28],
+        report_projection_computed_at: completedAt, report_projection_payload: JSON.parse(params[37]),
+        report_projection_payload_sha256: params[38], report_projection_payload_size_bytes: params[39],
+      },
+    });
+    assert.ok(record);
+    const api = harness.pipeline.buildApiV2ScanResource(record);
+    assert.equal(api.scoreStatus, "final");
+    assert.equal(api.postureScores.gdprEprivacy.score, 100);
+    assert.equal(api.postureScores.ccpaCpra.score, 100);
+    assert.equal(api.postureScores.ccpaCpra.coverage, "limited");
+    assert.ok(api.postureScores.ccpaCpra.coverageSummary.families.every((row: { status:string }) => row.status === "unknown"));
+  } finally {
+    await harness.close();
+  }
+});
 
 test("a verified redirect-only runtime publishes one unscored limitation across report and API", async () => {
   const h = await redirectPublicationHarness();

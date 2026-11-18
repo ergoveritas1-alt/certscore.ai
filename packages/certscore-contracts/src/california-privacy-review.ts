@@ -326,6 +326,11 @@ export const californiaObservedScoreBasisSchema = z.discriminatedUnion("policyVe
     responseRequestId:z.string().min(1).max(160),
     routeEvidence:z.literal("runtime_document_response.v1"),
   }).strict(),
+  californiaObservedScoreBasisV1Schema.omit({domArtifactId: true}).extend({
+    policyVersion: z.literal("usable_starting_page_score.v5-browser-extension"),
+    sourceLane: z.literal("browser_extension"),
+    evidenceRef: z.literal("browser_scan_artifacts.page_evidence#documentProof"),
+  }).strict(),
 ]);
 export type CaliforniaObservedScoreBasis = z.infer<typeof californiaObservedScoreBasisSchema>;
 const californiaPrivacyReviewV10=californiaPrivacyReviewV9.extend({
@@ -439,6 +444,11 @@ const californiaPrivacyReviewValidatedSchema: z.ZodType<CaliforniaPrivacyReviewS
       (row.observedScoreBasis.scanId !== row.scanId || row.observedScoreBasis.documentUrl !== row.documentUrl ||
        row.observedScoreBasis.sourceHash !== row.sourceHash)) {
     ctx.addIssue({code:"custom",message:"Observed score availability must bind the same verified scan, document and source."});
+  }
+  if (row.contractVersion === "certscore.california-privacy-review.v10" &&
+      row.observedScoreBasis?.policyVersion === "usable_starting_page_score.v5-browser-extension" &&
+      (row.reviewCoverage.runtimeCoverage !== "limited" || row.reviewCoverage.scoreReady)) {
+    ctx.addIssue({ code: "custom", message: "Browser document proof alone supplies limited capture coverage." });
   }
   if ((row.contractVersion === "certscore.california-privacy-review.v4" || row.contractVersion === "certscore.california-privacy-review.v5" || row.contractVersion === "certscore.california-privacy-review.v6" || (row.contractVersion === "certscore.california-privacy-review.v7" || (row.contractVersion === "certscore.california-privacy-review.v8" || (row.contractVersion === "certscore.california-privacy-review.v9" || row.contractVersion === "certscore.california-privacy-review.v10")))) && row.disclosureInspection) {
     const inspection = row.disclosureInspection;

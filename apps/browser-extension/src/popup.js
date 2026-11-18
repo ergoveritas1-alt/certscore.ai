@@ -118,10 +118,11 @@ function renderStatus(status) {
   syncElapsedTimer(status);
   updateRunButton();
   const summary = status?.summary;
-  runButton.hidden = status?.label === "Complete";
-  newScanButton.hidden = status?.label !== "Complete";
+  const finished = !status?.busy && Boolean(status?.reportUrl);
+  runButton.hidden = finished;
+  newScanButton.hidden = !finished;
 
-  if (summary) {
+  if (summary && status?.phase !== "no_go") {
     resultRequestsEl.textContent = String(summary.networkRequestCount ?? 0);
     resultCookiesEl.textContent = String(summary.cookieEventCount ?? 0);
     resultBannerEl.textContent = summary.bannerObserved === true ? "Seen" : summary.bannerObserved === false ? "Not seen" : "Unknown";

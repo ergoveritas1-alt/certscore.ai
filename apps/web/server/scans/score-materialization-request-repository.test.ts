@@ -5,9 +5,121 @@ import path from "node:path";
 import test from "node:test";
 import {Pool} from "pg";
 import {redirectPublicationHarness} from "./redirect-publication.fixture";
+import {deriveBrowserStartingPageScoreAssessment} from "../browser-scans/starting-page-score";
 import {consentCanaryAccuracyFixture,withOriginalRuntimeForPublication} from "./consent-canary-accuracy.fixture";
 
 const adminUrl=process.env.CERTSCORE_PUBLICATION_TEST_ADMIN_URL;
+
+test("the durable worker sweep publishes only eligible browser extension reports", { skip: !adminUrl }, async () => {
+  const url = new URL(adminUrl!);
+  assert.equal(url.hostname, "127.0.0.1");
+  assert.equal(url.pathname, "/postgres");
+  const name = `certscore_browser_publication_${Date.now()}`;
+  const admin = new Pool({ connectionString: url.toString() });
+  const originalFetch = globalThis.fetch;
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+  let pool: Pool | undefined;
+  let harness: Awaited<ReturnType<typeof redirectPublicationHarness>> | undefined;
+  try {
+    await admin.query(`create database ${name}`);
+    url.pathname = `/${name}`;
+    const db = pool = new Pool({ connectionString: url.toString() });
+    await db.query(`create table scans(id uuid primary key, organization_id uuid, status text, scan_type text, scan_config_json jsonb);
+      create table scan_events(scan_id uuid, event_type text, metadata_json jsonb, created_at timestamptz);`);
+    for (const migration of ["0152_scan_score_materialization_requests.sql", "0164_scan_score_materialization_terminal_failure.sql", "0176_score_materialization_retry_schedule.sql"]) {
+      await db.query(await readFile(path.resolve("packages/db/migrations", migration), "utf8"));
+    }
+    const completedAt = "2026-11-17T20:00:00.000Z";
+    const finalUrl = "https://extension-fixture.test/";
+    const modes = ["verified", "blocked", "legacy", "stale_findings", "stale_merge", "missing_normalization"] as const;
+    const { pipeline, state } = harness = await redirectPublicationHarness({ materializationRoute: true });
+    state.databaseQuery = (sql: string, params: unknown[]) => db.query(sql, params);
+    state.databaseReportInputs = true;
+    const ids = new Map(modes.map(mode => [mode, randomUUID()]));
+    const scanId = ids.get("verified")!;
+    for (const [mode, id] of ids) {
+      const scanConfig = { processor: "browser-extension-bx01", browserStartingDocumentVerified: mode !== "legacy" };
+      await db.query("insert into scans values ($1, null, $2, 'browser_extension', $3)", [id, mode === "blocked" ? "failed" : "completed", scanConfig]);
+      await db.query("insert into scan_score_materialization_requests (scan_id, token_sha256) values ($1, repeat('0', 64))", [id]);
+      await db.query(`insert into scan_events (scan_id, event_type, created_at) values
+        ($1, 'signals.merge_completed', now() - ($2::int * interval '1 minute')),
+        ($1, 'findings.unified_derivation_completed', now() - ($3::int * interval '1 minute'))`,
+      [id, mode === "stale_merge" ? 3 : 1, mode === "stale_findings" ? 3 : 1]);
+      if (mode !== "missing_normalization") {
+        await db.query("insert into scan_events (scan_id, event_type, created_at) values ($1, 'browser_extension.observed_signals_ingested', now() - interval '2 minutes')", [id]);
+      }
+    }
+    const assessment = deriveBrowserStartingPageScoreAssessment({
+      scanId, browserScanId: "browser-session", requestedUrl: finalUrl, completedAt,
+      document: {
+        version: "browser_extension_starting_document.v1", documentId: "A29D8BC54C7548CF56048133D66325AF",
+        frameId: 0, tabId: 2, navigationUrl: finalUrl, finalUrl, responseStatus: 200,
+        navigationStartedAtMs: 0, mainRequestAtMs: 1, responseStartedAtMs: 52, mainResponseAtMs: 50, capturedAtMs: 1000,
+      },
+    });
+    state.record = {
+      scan: { id: scanId, domainHostname: "extension-fixture.test", status: "completed", scanType: "browser_extension", scanFromValue: "local_extension",
+        createdAt: completedAt, completedAt, pagesRequested: 1, pagesScanned: 1,
+        scanConfigJson: { processor: "browser-extension-bx01", browserStartingDocumentVerified: true } },
+      signalEnrichmentWorkflow: { findingsReady: true, mergedSignalsReady: true },
+      accessPostureSummary: { homepageFetchStatus: "ok" },
+      snapshot: { certscore_overall: 100, scan_outcome: "completed_successfully" },
+      events: [{ id: "observed", eventType: "browser_extension.observed_signals_ingested", createdAt: completedAt }],
+      runtimeArtifacts: { hybrid_runtime_evidence: { consentControlAssessment: assessment } },
+      pageEvidence: [], policyEnrichment: [], policyReviewQueue: [], preconsentViolations: [],
+      primaryPolicyEnrichment: null, signals: [], trackerVendors: [], validationFindings: [],
+    };
+    const calls: Array<{ mode: string; scanId: string }> = [];
+    let resolveSettlement: () => void;
+    let rejectSettlement: (error: unknown) => void;
+    const settlement = new Promise<void>((resolve, reject) => {
+      resolveSettlement = resolve;
+      rejectSettlement = reject;
+    });
+    globalThis.fetch = async (input, init) => {
+      try {
+        const request = new Request(input, init);
+        assert.equal(new URL(request.url).origin, "http://localhost:3000");
+        const body = await request.clone().json() as { mode: string; scanId: string };
+        calls.push({ mode: body.mode, scanId: body.scanId });
+        assert.equal(body.scanId, scanId);
+        if (body.mode === "publish_report") {
+          const response = await pipeline.POST(request);
+          assert.equal(response.status, 200);
+          return response;
+        }
+        // The real publisher above exercises report readiness; this fixture
+        // acknowledges the separate Admin and legacy-score writes.
+        await pipeline.completeScoreMaterializationRequest(scanId);
+        resolveSettlement();
+        return Response.json({ complete: true });
+      } catch (error) {
+        rejectSettlement(error);
+        throw error;
+      }
+    };
+    assert.equal(await pipeline.reconcilePersistedCompletedResultFinalizations({ targetEnvironment: "local" }), 0);
+    assert.equal(await pipeline.reconcilePersistedCompletedResultFinalizations({
+      targetEnvironment: "production", webBaseUrl: "http://localhost:3000",
+    }), 1);
+    await Promise.race([settlement, new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Browser publication did not finish")), 5000).unref();
+    })]);
+    assert.deepEqual(calls, [{ scanId, mode: "publish_report" }, { scanId, mode: "finalize" }]);
+    const rows = await db.query("select scan_id, status from scan_score_materialization_requests where status = 'completed'");
+    assert.deepEqual(rows.rows, [{ scan_id: scanId, status: "completed" }]);
+    assert.equal(await pipeline.reconcilePersistedCompletedResultFinalizations({ targetEnvironment: "production" }), 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+    else process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    if (harness) await harness.close();
+    if (pool) await pool.end();
+    await admin.query(`drop database if exists ${name} with (force)`);
+    await admin.end();
+  }
+});
 
 test("canonical invariant failures quarantine once; transient errors retain bounded PostgreSQL recovery",{skip:!adminUrl},async()=>{
   const url=new URL(adminUrl!);

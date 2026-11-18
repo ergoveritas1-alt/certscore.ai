@@ -100,13 +100,15 @@ Certifications:
 5. Select **Run Browser-Assisted Scan**.
 6. Approve scan-time website access when Chrome prompts.
 7. Keep the target tab open while the 15-second pre-consent observation and bounded legal-surface review complete.
-8. Reopen the extension after the icon shows **OK**, then select **Open CertScore.ai report**.
+8. For a verified public page, the popup shows **Complete**. Select **Open CertScore.ai report** to review the evidence.
+
+With the updated CertScore.ai server, a blocked main document produces **Browser scan blocked** and an unscored report. A visit with insufficient evidence produces **Page unverified**. Both outcomes retain a report link. With an older server, the popup shows **Evidence sent** when the server acknowledges the upload without verifying the page.
 
 No consent-banner buttons are clicked by the extension.
 
 ## Submission files
 
-- Upload package: `artifacts/chrome-web-store/certscore-chrome-extension-0.2.0.zip`
+- Local 0.2.2 candidate [ZIP](../../artifacts/chrome-web-store/certscore-chrome-extension-0.2.2.zip) and [SHA-256 checksum](../../artifacts/chrome-web-store/certscore-chrome-extension-0.2.2.zip.sha256)
 - Store icon: `apps/browser-extension/assets/icons/icon-128.png`
 - Small promotional tile: `apps/browser-extension/store-assets/small-promo-440x280.png`
 - Listing screenshot: `apps/browser-extension/store-assets/screenshot-run-scan-640x400.png`

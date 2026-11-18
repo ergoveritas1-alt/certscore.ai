@@ -249,15 +249,30 @@ async function captureBrowserPageEvidence(scan) {
     phase: "surface_review"
   });
 
-  const homepage = await chrome.tabs.sendMessage(scan.tabId, {
-    includeText: false,
-    type: "BX01_COLLECT_PAGE_EVIDENCE"
-  }).catch(() => null);
+  const [capture] = await chrome.scripting.executeScript({
+    target: { tabId: scan.tabId, frameIds: [0] },
+    injectImmediately: true,
+    func: () => globalThis.__certscoreCaptureStartingDocument?.(),
+  }).catch(() => []);
+  const homepage = capture?.result?.page;
   if (!homepage) return { policySurfaceCount: 0 };
 
+  const capturedAtMs = nowMs(scan);
+  const scanTimeOrigin = performance.timeOrigin + scan.startedAt;
+  const navigation = capture.result.navigation;
+  const documentProof = {
+    version: "browser_extension_starting_document.v1",
+    documentId: capture.documentId ?? null,
+    frameId: capture.frameId,
+    tabId: scan.tabId,
+    navigationUrl: navigation?.url ?? null,
+    responseStatus: navigation?.status ?? null,
+    navigationStartedAtMs: navigation ? Math.round(navigation.startedAt - scanTimeOrigin) : null,
+    responseStartedAtMs: navigation?.responseStartedAt == null ? null : Math.round(navigation.responseStartedAt - scanTimeOrigin),
+  };
   const transportProbeEvidence = await collectTransportProbeEvidence(scan.targetUrl);
   await uploadArtifact(scan, {
-    artifactJson: { ...homepage, ...transportProbeEvidence, capturedAtMs: nowMs(scan), pageType: "homepage", sourceId: "BX01", sourceType: "browser_extension" },
+    artifactJson: { ...homepage, ...transportProbeEvidence, capturedAtMs, documentProof, pageType: "homepage", sourceId: "BX01", sourceType: "browser_extension" },
     artifactType: "page_evidence",
     contentType: "application/json"
   });
@@ -584,11 +599,14 @@ async function completeScan(scan) {
     method: "POST"
   });
 
-  if (!response.ok) {
+  const body = await response.json().catch(() => null);
+  const noGo = response.status === 422 && body?.status === "no_go" && typeof body.reportUrl === "string";
+  if ((!response.ok && !noGo) || typeof body?.reportUrl !== "string") {
     throw new Error(`Completion failed with ${response.status}.`);
   }
-
-  const body = await response.json();
+  const verified = response.ok && body.startingPageVerified === true;
+  const siteBlocked = ["access_denied_or_forbidden_page", "authentication_required", "captcha_or_challenge", "rate_limited_429"].includes(body.noGoReason);
+  const label = noGo ? (siteBlocked ? "Browser scan blocked" : "Page unverified") : verified ? "Complete" : "Evidence sent";
   const reportUrl = new URL(body.reportUrl, scan.apiBaseUrl).toString();
   const summary = {
     bannerObserved,
@@ -601,22 +619,24 @@ async function completeScan(scan) {
     anonymous: scan.anonymous,
     browserScanId: scan.browserScanId,
     busy: false,
-    label: "Complete",
-    message: `Captured ${networkRequestCount} requests, ${cookieEventCount} cookie events, ${pageEvidenceSummary.policySurfaceCount} linked legal surfaces, and ${bannerObserved ? "a visible consent banner" : "no visible consent banner"}.`,
-    phase: "complete",
+    label,
+    message: noGo ? (siteBlocked ? "The site blocked the browser scan. Open the unscored report for details." : "The intended public page could not be verified. Open the unscored report for details.")
+      : !verified ? "Open the report to check the result of this browser visit."
+      : `Captured ${networkRequestCount} requests, ${cookieEventCount} cookie events, ${pageEvidenceSummary.policySurfaceCount} linked legal surfaces, and ${bannerObserved ? "a visible consent banner" : "no visible consent banner"}.`,
+    phase: noGo ? "no_go" : verified ? "complete" : "submitted",
     reportUrl,
     summary,
     targetUrl: scan.targetUrl
   };
   setStatus(completeStatus);
   sendStatusToLauncher(scan, completeStatus);
-  setBadge("complete");
+  setBadge(noGo ? "error" : verified ? "complete" : "");
   await chrome.notifications.create(`certscore-scan-complete:${scan.browserScanId}`, {
     buttons: [{ title: "Open report" }],
     iconUrl: chrome.runtime.getURL("assets/certscore-mark-cropped.png"),
-    message: "Your browser-assisted scan is complete. Open the CertScore.ai report to review the retained evidence.",
+    message: completeStatus.message,
     priority: 2,
-    title: "CertScore.ai scan complete",
+    title: `CertScore.ai · ${label}`,
     type: "basic"
   }).catch(() => {});
 }
@@ -633,7 +653,7 @@ chrome.webRequest.onBeforeRequest.addListener(
     }
 
     const hostname = hostnameFromUrl(details.url);
-    scan.events.push({
+    const networkEvent = {
       consentInteractionObserved: scan.consentInteractionObserved,
       eventType: "network_request",
       hostname,
@@ -643,7 +663,9 @@ chrome.webRequest.onBeforeRequest.addListener(
       resourceType: details.type,
       tabId: details.tabId,
       url: details.url
-    });
+    };
+    scan.events.push(networkEvent);
+    scan.requests.set(details.requestId, networkEvent);
   },
   { urls: ["http://*/*", "https://*/*"] }
 );
@@ -655,7 +677,7 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       return;
     }
 
-    const last = scan.events[scan.events.length - 1];
+    const last = scan.requests.get(details.requestId);
     if (last?.eventType === "network_request" && last.url === details.url) {
       last.referrer = trimOptionalString(eventHeaders(details.requestHeaders, "referer"), 8192);
     }
@@ -672,10 +694,12 @@ chrome.webRequest.onHeadersReceived.addListener(
     }
 
     const setCookieHeaders = eventHeaderValues(details.responseHeaders, "set-cookie");
-    const matchingNetworkEvents = scan.events.filter((event) => event.eventType === "network_request" && event.url === details.url);
-    const networkEvent = matchingNetworkEvents[matchingNetworkEvents.length - 1];
-    if (networkEvent) {
+    const networkEvent = scan.requests.get(details.requestId);
+    if (networkEvent?.url === details.url) {
       networkEvent.statusCode = details.statusCode;
+      if (details.type === "main_frame") {
+        networkEvent.responseObservedAtMs = Math.max(0, Math.round(details.timeStamp - (performance.timeOrigin + scan.startedAt)));
+      }
       networkEvent.responseHeadersObserved = summarizeResponseHeaders(details.responseHeaders);
     }
 
@@ -692,6 +716,13 @@ chrome.webRequest.onHeadersReceived.addListener(
   { urls: ["http://*/*", "https://*/*"] },
   ["responseHeaders", "extraHeaders"]
 );
+
+chrome.webRequest.onBeforeRedirect.addListener(details => {
+  const event = activeScans.get(details.tabId)?.requests.get(details.requestId);
+  if (event?.url === details.url && event.resourceType === "main_frame" && details.redirectUrl.length <= 16384) {
+    event.redirectUrl = details.redirectUrl;
+  }
+}, { urls: ["http://*/*", "https://*/*"] });
 
 chrome.cookies.onChanged.addListener((changeInfo) => {
   for (const scan of activeScans.values()) {
@@ -817,7 +848,7 @@ async function startScan(message) {
 
   let tabId = message.tabId;
   if (message.launchFromCertScore) {
-    const createdTab = await chrome.tabs.create({ active: true, url: session.targetUrl || targetUrl });
+    const createdTab = await chrome.tabs.create({ active: true, url: "about:blank" });
     if (!createdTab.id) {
       throw new Error("Could not open the target website tab for this scan.");
     }
@@ -833,6 +864,7 @@ async function startScan(message) {
     browserScanId: session.browserScanId,
     consentInteractionObserved: false,
     events: [],
+    requests: new Map(),
     launcherTabId,
     startedAt: performance.now(),
     startedAtEpochMs,
@@ -848,7 +880,11 @@ async function startScan(message) {
     message: "Scanning is in progress. Reloading the page without clicking the consent banner so pre-consent activity is visible.",
     phase: "reloading"
   });
-  await chrome.tabs.reload(tabId, { bypassCache: true });
+  if (message.launchFromCertScore) {
+    await chrome.tabs.update(tabId, {url: scan.targetUrl});
+  } else {
+    await chrome.tabs.reload(tabId, { bypassCache: true });
+  }
 
   setScanStatus(scan, {
     label: "Scanning",

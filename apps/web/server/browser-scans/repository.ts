@@ -12,6 +12,7 @@ import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan
 import { CURRENT_GDPR_EPRIVACY_SCORE_VERSION } from "../scans/score-assessment-projection";
 import { deriveBrowserScanCanonicalMaterializationFromObservedSignals } from "./canonical-materialization";
 import { assessBrowserStartingPage } from "./starting-page";
+import { deriveBrowserStartingPageScoreAssessment } from "./starting-page-score";
 import { summarizeBrowserEvidence, type BrowserScanArtifactRow, type BrowserScanEventRow } from "./evidence-summary";
 import { buildBrowserObservedSignalPackageFromEvidence } from "./observed-signal-package";
 import {
@@ -762,7 +763,7 @@ async function materializeBrowserScanAsCanonicalScan(input: {
       "select artifact_type, content_type, artifact_json from browser_scan_artifacts where browser_scan_id = $1 order by created_at, id",
       [session.id]
     );
-    const limitation = assessBrowserStartingPage(session.target_url, events, artifacts);
+    const { limitation, document } = assessBrowserStartingPage(session.target_url, events, artifacts);
     const completedAt = new Date().toISOString();
     const { rows: [scan] } = await client.query<{id: string}>(
       `insert into scans (organization_id, domain_id, submitted_by_user_id, scan_type, status,
@@ -773,7 +774,8 @@ async function materializeBrowserScanAsCanonicalScan(input: {
         limitation ? 0 : 1, session.scan_started_at ?? null, completedAt, input.durationMs,
         JSON.stringify({browserScanId: session.id, captureMode: BROWSER_SCAN_CAPTURE_MODE, hostname: session.target_hostname,
           normalizedUrl: session.target_url, processor: "browser-extension-bx01", sourceId: BROWSER_SCAN_SOURCE_ID,
-          sourceType: BROWSER_SCAN_SOURCE_TYPE, scanFrom: "local_extension", startingPageVerified: !limitation})]
+          sourceType: BROWSER_SCAN_SOURCE_TYPE, scanFrom: "local_extension", startingPageVerified: !limitation,
+          ...(document ? { browserStartingDocumentVerified: true } : {})})]
     );
     if (!scan) throw new Error("Could not create canonical browser-extension scan.");
     let observedSignalPackage = null;
@@ -790,7 +792,12 @@ async function materializeBrowserScanAsCanonicalScan(input: {
           presentation.snapshotStopReasonLabel, presentation.snapshotStopReasonDetail, JSON.stringify(assessment)]
       );
     } else {
-      observedSignalPackage = await writeUsableBrowserEvidence(client, {scan, session, resolved, completedAt, events, artifacts, summary: input.summary});
+      const consentControlAssessment = document ? deriveBrowserStartingPageScoreAssessment({
+        scanId: scan.id, browserScanId: session.id, requestedUrl: session.target_url, completedAt, document,
+      }) : undefined;
+      observedSignalPackage = await writeUsableBrowserEvidence(client, {
+        scan, session, resolved, completedAt, events, artifacts, summary: input.summary, consentControlAssessment,
+      });
     }
     await client.query(
       "update domains set latest_scan_id = $2, last_scanned_at = $3::timestamptz where id = $1",
@@ -829,6 +836,7 @@ async function writeUsableBrowserEvidence(client: PoolClient, input: {
   completedAt: string;
   events: BrowserScanEventRow[];
   artifacts: BrowserScanArtifactRow[];
+  consentControlAssessment?: ReturnType<typeof deriveBrowserStartingPageScoreAssessment>;
   summary: Record<string, unknown>;
 }) {
   const { scan, session, resolved, completedAt, events, artifacts } = input;
@@ -991,6 +999,7 @@ async function writeUsableBrowserEvidence(client: PoolClient, input: {
         valueCaptured: false
       }),
       JSON.stringify({
+        ...(input.consentControlAssessment ? { consentControlAssessment: input.consentControlAssessment } : {}),
         browserExtension: {
           artifactCounts: {
             screenshots: evidence.screenshotArtifactCount

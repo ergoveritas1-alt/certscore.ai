@@ -138,6 +138,10 @@ function collectPageEvidence(includeText = false) {
     .map((form) => form.action || window.location.href)
     .filter(Boolean)
     .slice(0, 50);
+  const readableText = (document.body?.innerText || "").trim();
+  const heading = document.querySelector("h1")?.innerText?.trim() || document.title.trim();
+  const challengeScreen = readableText.length <= 2500 &&
+    /^(?:verify (?:you are|you're) human|checking your browser|verify you are a human|performing security verification)[.!…\s]*$/i.test(heading);
   const bodyText = includeText
     ? (document.querySelector("main")?.innerText || document.body?.innerText || "").replace(/\s+/g, " ").trim().slice(0, 12000)
     : "";
@@ -157,6 +161,9 @@ function collectPageEvidence(includeText = false) {
 
   return {
     accessibilitySummary,
+    hasReadableContent: readableText.length >= 40,
+    challengeScreen,
+    accessDeniedScreen: readableText.length <= 2500 && /^(?:access denied|403 forbidden)[.!…\s]*$/i.test(heading),
     bodyText,
     finalUrl: window.location.href.slice(0, 4096),
     formActions,
@@ -173,6 +180,20 @@ function collectPageEvidence(includeText = false) {
 }
 
 let consentInteractionObserved = false;
+
+// Called only by the service worker in the extension's isolated world.
+globalThis.__certscoreCaptureStartingDocument = () => {
+  const navigation = performance.getEntriesByType("navigation")[0];
+  return {
+    page: collectPageEvidence(false),
+    navigation: navigation ? {
+      url: navigation.name,
+      status: navigation.responseStatus ?? null,
+      startedAt: performance.timeOrigin,
+      responseStartedAt: navigation.responseStart > 0 ? performance.timeOrigin + navigation.responseStart : null,
+    } : null,
+  };
+};
 
 function getRuntime() {
   try {

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { isTerminalPageCaptureAssessment } from "../../lib/scans/scan-report-disposition";
-import { assessBrowserStartingPage } from "./starting-page";
+import { assessBrowserStartingPage as assess } from "./starting-page";
 import type { BrowserScanArtifactRow, BrowserScanEventRow } from "./evidence-summary";
 
 const target = "https://example.com/";
+const assessBrowserStartingPage = (...args: Parameters<typeof assess>) => assess(...args).limitation;
 function document(statusCode?: number, url = target, extra = {}): BrowserScanEventRow {
   return { event_type: "network_request", observed_at_ms: 1, event_json: {
     eventType: "network_request", resourceType: "main_frame", hostname: new URL(url).hostname, tabId: 2,
@@ -44,4 +45,24 @@ test("missing, stale, empty, cross-tab or unrelated documents cannot establish a
   ] as [BrowserScanEventRow[],BrowserScanArtifactRow[]][]) {
     assert.equal(assessBrowserStartingPage(target,events,artifacts)?.presentation.code,"runtime_capture_unverified");
   }
+});
+
+test("score proof requires a matching browser document and corroborated response", () => {
+  const proof = {
+    version: "browser_extension_starting_document.v1",
+    documentId: "A29D8BC54C7548CF56048133D66325AF",
+    frameId: 0, tabId: 2, navigationUrl: target, responseStatus: 200,
+    navigationStartedAtMs: 0, responseStartedAtMs: 52,
+  };
+  const network = document(200, target, { responseObservedAtMs: 50 });
+  assert.equal(assess(target, [network], [page({ documentProof: proof })]).document?.documentId, proof.documentId);
+  assert.equal(assess(target, [network], [page()]).document, null);
+  for (const patch of [{ frameId: 1 }, { tabId: 3 }, { responseStatus: 403 }, { documentId: null },
+    { navigationStartedAtMs: -100 }, { responseStartedAtMs: 501 }, { navigationUrl: target + "different" }]) {
+    assert.equal(assess(target, [network], [page({ documentProof: { ...proof, ...patch } })]).limitation?.presentation.code,
+      "runtime_capture_unverified");
+  }
+  const denial = assess(target, [document(403)], [page({ documentProof: proof })]);
+  assert.equal(denial.limitation?.presentation.code, "access_denied_or_forbidden_page");
+  assert.equal(denial.document, null);
 });

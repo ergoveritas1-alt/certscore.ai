@@ -28,6 +28,7 @@ export const browserScanEventSchema = z.discriminatedUnion("eventType", [
     referrer: optionalBoundedString(8192),
     redirectUrl: observedUrlSchema.optional(),
     resourceType: optionalBoundedString(80),
+    responseObservedAtMs: observedAtMsSchema.optional(),
     responseHeadersObserved: z.array(boundedString(80)).max(40).optional(),
     statusCode: z.number().int().min(100).max(599).optional(),
     tabId: z.number().int().optional(),

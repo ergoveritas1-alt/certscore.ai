@@ -11,7 +11,7 @@ export async function redirectPublicationHarness(options: {materializationRoute?
   const output = path.join(directory, "pipeline.cjs");
   const webRequire = createRequire(path.resolve("apps/web/package.json"));
   await writeFile(infrastructure, `
-    const state = {record:null,writes:[],objects:new Map(),databaseQuery:null,sourceReadError:null,localPrivacyFormOrigin:null,localPrivacyFormLookups:0};
+    const state = {record:null,writes:[],objects:new Map(),databaseQuery:null,databaseReportInputs:false,sourceReadError:null,localPrivacyFormOrigin:null,localPrivacyFormLookups:0};
     module.exports = {state,
       getAnonymousScanById:async()=>state.record,getScanById:async()=>state.record,
       withNonBlockingDatabaseLock:async(key,run)=>({acquired:true,value:await run()}),
@@ -28,7 +28,8 @@ export async function redirectPublicationHarness(options: {materializationRoute?
           return {scan_id:p[0],scan_status:state.record.scan.status,report_projection_status:'ready',report_projection_version:p[28],report_projection_source_hash:p[29],
             report_projection_computed_at:state.record.scan.completedAt,report_projection_payload:JSON.parse(p[37]),report_projection_payload_sha256:p[38],report_projection_payload_size_bytes:p[39]};
         }
-        if(state.databaseQuery&&sql.includes('scan_score_materialization_requests'))return (await state.databaseQuery(sql,params)).rows[0]??null;
+        if(state.databaseQuery&&(sql.includes('scan_score_materialization_requests')||
+          state.databaseReportInputs&&sql.includes('as report_inputs_ready')))return (await state.databaseQuery(sql,params)).rows[0]??null;
         if(sql.includes('as report_inputs_ready'))return {report_inputs_ready:true};
         if(sql.includes('as event_count')){if(state.sourceReadError)throw state.sourceReadError;return {event_count:state.record.events.length,latest_event_id:state.record.events.at(-1)?.id??null};}
         if(sql.includes('tranco_rank_settings'))return null;
@@ -61,7 +62,7 @@ export async function redirectPublicationHarness(options: {materializationRoute?
       export {POST} from './apps/web/app/api/internal/scan-score-materialization/route';
       export {completeScoreMaterializationRequest,failScoreMaterializationRequest,recordScoreMaterializationRequestError} from './apps/web/server/scans/score-materialization-request-repository';
       export {getReadTriggeredPublicationDeferral} from './apps/web/server/scans/report-publication-ownership';
-      export {ensureCompletedScanScoresPersisted} from './apps/validation-worker/src/validation/local-v2-dag-lambda-results';
+      export {ensureCompletedScanScoresPersisted,reconcilePersistedCompletedResultFinalizations} from './apps/validation-worker/src/validation/local-v2-dag-lambda-results';
       ` : ""}
     `, resolveDir: process.cwd(), loader: "ts" },
     outfile: output, bundle: true, platform: "node", format: "cjs", packages: "external",
@@ -69,7 +70,13 @@ export async function redirectPublicationHarness(options: {materializationRoute?
       builder.onResolve({ filter: /^server-only$/ }, () => ({ path: "server-only", namespace: "empty" }));
       builder.onLoad({ filter: /.*/, namespace: "empty" }, () => ({ contents: "", loader: "js" }));
       builder.onResolve({ filter: /^(?:@website-signal-risk-scanner\/db|\.\/get-scan-by-id)$/ }, () => ({ path: infrastructure, external: true }));
-      builder.onResolve({ filter: /^@(?:certscore|website-signal-risk-scanner)\// }, args => ({ path: webRequire.resolve(args.path), external: true }));
+      builder.onResolve({ filter: /^@website-signal-risk-scanner\/shared\/scan-location$/ }, () => ({
+        path: path.resolve("packages/shared/src/scan-location.ts"),
+      }));
+      builder.onResolve({ filter: /^@(?:certscore|website-signal-risk-scanner)\// }, args => {
+        const require = path.isAbsolute(args.importer) ? createRequire(args.importer) : webRequire;
+        return { path: require.resolve(args.path), external: true };
+      });
     } }],
   });
   const require = createRequire(import.meta.url);

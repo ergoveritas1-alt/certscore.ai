@@ -7101,10 +7101,11 @@ export async function processNanoSignalEnrichmentJob(input: {
       });
     }
 
-    if (
-      !shouldReprojectAfterBrowserExtensionSignals &&
-      (scanStatus === "completed" || scanType === "preview")
-    ) {
+    const readyBrowserReprojection = shouldReprojectAfterBrowserExtensionSignals &&
+      artifacts.scan?.scan_config_json?.browserStartingDocumentVerified === true;
+    if ((scanType !== "browser_extension" && !shouldReprojectAfterBrowserExtensionSignals &&
+         (scanStatus === "completed" || scanType === "preview")) ||
+        (scanType === "browser_extension" && scanStatus === "completed" && readyBrowserReprojection)) {
       const workerEnv = getWorkerEnv();
       // Verify the durable recovery owner, then release the validation slot
       // without awaiting HTTP. Local/preview paths retain awaited completion.

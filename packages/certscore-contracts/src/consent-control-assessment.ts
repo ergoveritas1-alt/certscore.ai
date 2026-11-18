@@ -173,6 +173,12 @@ export const consentControlAssessmentSchema = z.object({
       california.scanId !== assessment.scan.scanId || california.documentUrl !== assessment.scan.finalUrl)) {
     context.addIssue({code: z.ZodIssueCode.custom, path: ["californiaPrivacyReview"], message: "California choice assessment must bind the same usable scan and final document."});
   }
+  if (california?.contractVersion === "certscore.california-privacy-review.v10" &&
+      california.observedScoreBasis?.policyVersion === "usable_starting_page_score.v5-browser-extension" &&
+      (assessment.scan.scanStatus !== "completed" || assessment.document.identityStatus !== "matched" ||
+       california.observedScoreBasis.documentToken !== assessment.document.canonicalDocumentToken)) {
+    context.addIssue({code: "custom", path: ["californiaPrivacyReview"], message: "Browser score proof must match the retained starting document."});
+  }
   if (assessment.cmpAudit && assessment.cmpAudit.scanId !== assessment.scan.scanId) context.addIssue({ code: z.ZodIssueCode.custom, message: "CMP audit must bind the assessment scan." });
   const visual = assessment.visualComparison;
   if (visual && (assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||

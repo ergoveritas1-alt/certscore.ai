@@ -1,6 +1,25 @@
 import type { ScanNoGoAssessment } from "@certscore/contracts";
 import { resolveScanNoGoPresentation, type ScanNoGoReasonCode } from "@website-signal-risk-scanner/shared";
+import { z } from "zod";
 import type { BrowserScanArtifactRow, BrowserScanEventRow } from "./evidence-summary";
+
+const documentProofSchema = z.object({
+  version: z.literal("browser_extension_starting_document.v1"),
+  documentId: z.string().regex(/^(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i),
+  frameId: z.literal(0),
+  tabId: z.number().int().nonnegative(),
+  navigationUrl: z.string().max(500),
+  responseStatus: z.number().int().min(200).max(299),
+  navigationStartedAtMs: z.number().int().nonnegative().max(600000),
+  responseStartedAtMs: z.number().int().nonnegative().max(600000),
+}).strict();
+
+export type BrowserStartingDocument = z.infer<typeof documentProofSchema> & {
+  finalUrl: string;
+  capturedAtMs: number;
+  mainRequestAtMs: number;
+  mainResponseAtMs: number;
+};
 
 function documentUrl(value: unknown) {
   if (typeof value !== "string") return null;
@@ -26,7 +45,7 @@ function limit(reason: ScanNoGoReasonCode, detail: string, status?: number) {
     supportingSignals: { assessmentPolicy: "browser_extension_starting_page.v1", detail, mainDocumentStatus: status ?? null },
     evidenceRefs: ["browser_scan_events.main_frame", "browser_scan_artifacts.page_evidence"],
   };
-  return { assessment, presentation: resolveScanNoGoPresentation(reason) };
+  return { limitation: { assessment, presentation: resolveScanNoGoPresentation(reason) }, document: null };
 }
 
 /** Input rows belong to one intake session. Only the selected tab's final main document can qualify. */
@@ -84,5 +103,27 @@ export function assessBrowserStartingPage(target: string, events: BrowserScanEve
       !(page.hasReadableContent === true || (page.hasReadableContent === undefined && legacyContent))) {
     return limit("runtime_capture_unverified", "representative_content_unverified", status);
   }
-  return null;
+  // Previously released extension builds retain only URL and timing. They can
+  // still classify access outcomes but cannot establish an observed score basis.
+  if (page.documentProof === undefined) return { limitation: null, document: null };
+  const proof = documentProofSchema.safeParse(page.documentProof);
+  if (!proof.success || proof.data.tabId !== last.tabId ||
+      documentUrl(proof.data.navigationUrl)?.href !== final.href ||
+      final.href.length > 500 || proof.data.responseStatus !== status ||
+      !Number.isInteger(page.capturedAtMs) || page.capturedAtMs > 600000 ||
+      Math.abs(proof.data.navigationStartedAtMs - first.observedAtMs) > 500 ||
+      proof.data.navigationStartedAtMs > proof.data.responseStartedAtMs ||
+      proof.data.responseStartedAtMs > page.capturedAtMs ||
+      last.responseObservedAtMs === undefined ||
+      last.responseObservedAtMs < last.observedAtMs || last.responseObservedAtMs > page.capturedAtMs ||
+      Math.abs(last.responseObservedAtMs - proof.data.responseStartedAtMs) > 500) {
+    return limit("runtime_capture_unverified", "main_document_binding_unverified", status);
+  }
+  return { limitation: null, document: {
+    ...proof.data,
+    finalUrl: final.href,
+    capturedAtMs: page.capturedAtMs,
+    mainRequestAtMs: last.observedAtMs,
+    mainResponseAtMs: last.responseObservedAtMs,
+  } };
 }

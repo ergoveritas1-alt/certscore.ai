@@ -254,7 +254,11 @@ async function canonicalReportInputsReady(scanId: string) {
                 from public.scan_events findings
                where findings.scan_id = $1::uuid
                  and findings.event_type = 'findings.unified_derivation_completed'
-            ) as report_inputs_ready`,
+            ) and (
+              scan.scan_type is distinct from 'browser_extension'
+              or (scan.status = 'completed' and ${browserExtensionReportPublicationReady})
+            ) as report_inputs_ready
+       from public.scans scan where scan.id = $1::uuid`,
     [scanId]
   );
   return row?.report_inputs_ready === true;
@@ -428,6 +432,25 @@ const completedReportPublicationHandoff = createReportPublicationHandoff({
   },
 });
 
+// This source has no Lambda result. Admit only verified browser intake with
+// merged signals and findings produced after the latest normalization event.
+const browserExtensionReportPublicationReady = `(
+  scan.scan_type = 'browser_extension'
+  and scan.scan_config_json->>'browserStartingDocumentVerified' = 'true'
+  and (
+    select count(distinct proof.event_type) = 2
+      from public.scan_events proof
+     where proof.scan_id = scan.id
+       and proof.event_type in ('signals.merge_completed', 'findings.unified_derivation_completed')
+       and proof.created_at >= (
+         select max(observed.created_at)
+           from public.scan_events observed
+          where observed.scan_id = scan.id
+            and observed.event_type = 'browser_extension.observed_signals_ingested'
+       )
+  )
+)`;
+
 /** Call only after canonical findings are persisted; verify the recovery owner. */
 export async function handoffCompletedScanReportPublication(input: {
   scanId: string;
@@ -441,9 +464,10 @@ export async function handoffCompletedScanReportPublication(input: {
         `select exists (
            select 1 from public.scan_score_materialization_requests request
            join public.scans scan on scan.id = request.scan_id
-           join lateral (
+           left join lateral (
              select event.metadata_json from public.scan_events event
               where event.scan_id = request.scan_id
+                and scan.scan_type is distinct from 'browser_extension'
                 and event.event_type = $2
                 and event.metadata_json->>'resultStatus' = 'completed'
                 and event.created_at >= now() - interval '7 days'
@@ -453,8 +477,11 @@ export async function handoffCompletedScanReportPublication(input: {
           where request.scan_id = $1::uuid
             and request.status = 'pending'
             and scan.status = 'completed'
-            and result.metadata_json->>'targetEnvironment' = 'production'
-            and result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null
+            and (
+              (result.metadata_json->>'targetEnvironment' = 'production'
+               and result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null)
+              or ${browserExtensionReportPublicationReady}
+            )
             and exists (
               select 1 from public.scan_events merged
                where merged.scan_id = request.scan_id
@@ -2689,22 +2716,23 @@ async function mapWithConcurrency<T, R>(
 }
 
 type PersistedCompletedResultFinalizationCandidate = {
-  completed_at: string;
-  metadata_json: Record<string, unknown>;
+  completed_at: string | null;
+  metadata_json: Record<string, unknown> | null;
   scan_id: string;
 };
 
-async function loadDuePersistedCompletedResultFinalizations() {
+async function loadDuePersistedCompletedResultFinalizations(includeBrowserScans: boolean) {
   return query<PersistedCompletedResultFinalizationCandidate>(
     `select request.scan_id::text,
             result.metadata_json->>'completedAt' as completed_at,
             result.metadata_json
        from public.scan_score_materialization_requests request
        join public.scans scan on scan.id = request.scan_id
-       join lateral (
+       left join lateral (
          select event.metadata_json
            from public.scan_events event
           where event.scan_id = request.scan_id
+            and scan.scan_type is distinct from 'browser_extension'
             and event.event_type = $1
             and event.metadata_json->>'resultStatus' = 'completed'
             and event.created_at >= now() - interval '7 days'
@@ -2714,8 +2742,11 @@ async function loadDuePersistedCompletedResultFinalizations() {
       where request.status = 'pending'
         and request.next_attempt_at <= now()
         and scan.status = 'completed'
-        and result.metadata_json->>'targetEnvironment' = 'production'
-        and result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null
+        and (
+          (result.metadata_json->>'targetEnvironment' = 'production'
+           and result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null)
+          or ($2::boolean and ${browserExtensionReportPublicationReady})
+        )
         and exists (
           select 1 from public.scan_events merged
            where merged.scan_id = request.scan_id
@@ -2730,7 +2761,7 @@ async function loadDuePersistedCompletedResultFinalizations() {
                request.requested_at asc,
                request.scan_id asc
       limit 25`,
-    [RESULT_RECEIVED_EVENT_TYPE],
+    [RESULT_RECEIVED_EVENT_TYPE, includeBrowserScans],
   );
 }
 
@@ -2778,9 +2809,10 @@ async function discoverMissingCompletedResultFinalizations() {
 
 export async function reconcilePersistedCompletedResultFinalizations(input: {
   includeMissingRequests?: boolean;
+  targetEnvironment?: LambdaTargetEnvironment;
   webBaseUrl?: string;
 } = {}) {
-  const due = await loadDuePersistedCompletedResultFinalizations();
+  const due = await loadDuePersistedCompletedResultFinalizations(input.targetEnvironment === "production");
   const missing = input.includeMissingRequests
     ? await discoverMissingCompletedResultFinalizations()
     : { rows: [] as PersistedCompletedResultFinalizationCandidate[] };
@@ -2794,6 +2826,16 @@ export async function reconcilePersistedCompletedResultFinalizations(input: {
     .slice(0, 25);
   let started = 0;
   for (const candidate of candidates) {
+    if (candidate.metadata_json === null) {
+      const status = completedReportPublicationHandoff.handoff({
+        scanId: candidate.scan_id,
+        targetEnvironment: "production",
+        webBaseUrl: input.webBaseUrl,
+      });
+      if (status === "started") started += 1;
+      continue;
+    }
+    if (candidate.completed_at === null) continue;
     // Admit at most the combined publication and trailing-stage capacity.
     // Slow trailing persistence must not prevent recovery of the next report.
     if (resultFinalizationBackgroundTasks.size >= RESULT_FINALIZATION_BACKGROUND_CONCURRENCY * 2) break;
@@ -2825,6 +2867,7 @@ export async function reconcilePersistedCompletedResultFinalizations(input: {
 }
 
 export function startPersistedCompletedResultFinalizationRecovery(input: {
+  targetEnvironment?: LambdaTargetEnvironment;
   webBaseUrl?: string;
 } = {}) {
   let stopped = false;
@@ -2836,13 +2879,14 @@ export function startPersistedCompletedResultFinalizationRecovery(input: {
         const includeMissingRequests = Date.now() >= nextMissingRequestDiscoveryAt;
         const finalizationsStarted = await reconcilePersistedCompletedResultFinalizations({
           includeMissingRequests,
+          targetEnvironment: input.targetEnvironment,
           webBaseUrl: input.webBaseUrl,
         });
         if (includeMissingRequests) {
           nextMissingRequestDiscoveryAt = Date.now() + MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS;
         }
         if (finalizationsStarted > 0) {
-          console.info("[validation-worker] resumed persisted Lambda result finalizations", {
+          console.info("[validation-worker] resumed persisted report finalizations", {
             finalizationsStarted,
           });
         }

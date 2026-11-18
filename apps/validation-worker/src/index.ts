@@ -80,6 +80,7 @@ function bootstrapValidationWorker() {
   // Recovery must still run when a regional result queue is disabled or unavailable.
   startLocalV2DagLambdaOrphanReconciler();
   startPersistedCompletedResultFinalizationRecovery({
+    targetEnvironment: env.CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV,
     webBaseUrl: env.CERTSCORE_WEB_BASE_URL,
   });
   const ecsReadinessEnabled = process.platform === "linux" && process.env.BUILD_RUNTIME_TARGET === "ecs-fargate";
