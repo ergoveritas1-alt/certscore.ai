@@ -5455,7 +5455,7 @@ test("GPC coordinator publishes bounded comparison from the original verified wo
     capture.recordRequest(bundle.networkEvents[0]!);
     now = 1; capture.documentCommitted({ loaderId: "loader", url: bundle.url });
     for (const event of bundle.networkEvents.slice(1)) capture.recordRequest(event);
-    now = 1500;
+    now = enabled ? 1500 : 1800;
     bundle.gpcSignalObservation!.capturedAtMs = now;
     capture.bindReadback("loader");
     bundle.gpcImpactCapture = capture.finish(bundle.gpcSignalObservation);
@@ -5474,7 +5474,7 @@ test("GPC coordinator publishes bounded comparison from the original verified wo
     artifactRoot = outcome.artifactRoot;
     const comparison = outcome.bundle.gpcActivityComparison;
     assert.equal(comparison?.status, "measured");
-    assert.equal(comparison.durationMs, 1000);
+    assert.equal(comparison.durationMs, 1499, "shorter verified visit ends 1499 ms after document commit");
     assert.equal(comparison.scanId, scanId);
     assert.equal(comparison.scoreEffect, "none");
     assert.equal(comparison.sourceHashes.baseline, createHash("sha256").update(JSON.stringify(pair[0])).digest("hex"));
