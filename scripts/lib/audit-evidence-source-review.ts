@@ -156,9 +156,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "scripts/lib/audit-progress-contracts.ts",
-      "sha256": "0be40f0507444f311c7e3bcfd276d03d150c688ba901321c522be406caede063",
-      "bytes": 26332,
-      "review": "Reviewed transfer-framework coverage from the existing bound producer receipt, separate from the historical conditional finding and scoring. Transfer-framework completion reason metadata is bound to the compact policy receipt. Unresolved supplement dispositions are bound to the same compact policy receipt."
+      "sha256": "a8dc71c7f675437fadbf11531d5f370aac641db6b4b6c2b135b3898d1991e06e",
+      "bytes": 26513,
+      "review": "Reviewed transfer-framework coverage from the existing bound producer receipt, separate from the historical conditional finding and scoring. Transfer-framework completion reason metadata is bound to the compact policy receipt. Unresolved supplement dispositions are bound to the same compact policy receipt. Reviewed explicit displayed CMP and HubSpot SDK GPC receipt sources alongside GPP."
     },
     {
       "file": "packages/certscore-contracts/src/site-metadata.ts",
