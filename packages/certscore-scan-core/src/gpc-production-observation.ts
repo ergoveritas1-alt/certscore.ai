@@ -86,7 +86,7 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
   const statusBound = representative && result.delivery.httpHeaderRetained && result.delivery.mainNavigatorReadbackRetained &&
     session?.terminal === "completed" && semantic?.scanId === input.scanId && semantic.capturedAtMs >= session.captureStartedAtMs &&
     semantic.limitationKeys.every(key => key === "acknowledgment_capture_truncated");
-  const displayed = statusBound ? semantic.acknowledgment.find(row => row.source === "visible_hubspot_gpc_notification" ||
+  const displayed = statusBound ? semantic.acknowledgment.find(row => row.source !== "visible_cmp_live_status" ||
       (row.message === "The GPC signal is honored" || row.message === "Your Global Privacy Control signal is honored.") &&
       // Fuzzy discovery selectors can identify a CMP candidate but cannot bind a displayed receipt to its banner.
       /^[#.][\w-]+$/.test(row.scopeSelector) && KNOWN_CMP_REGISTRY.some(cmp =>

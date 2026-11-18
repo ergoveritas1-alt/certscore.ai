@@ -18,6 +18,14 @@ export const HUBSPOT_GPC_MESSAGES = [
   "We’ve detected your Global Privacy Control (GPC) signal. Non-essential cookies have been disabled. Learn more in our Privacy Policy.",
   "Your GPC signal has been detected. While some cookies are necessary to make our website and services function properly, consent for all non-essential cookies has been automatically declined. You can change your preferences at any time. To learn more about the different cookies we use, check out our Cookie Policy.",
 ] as const;
+export const TRUSTARC_GPC_SELECTOR = "#truste-consent-track #truste-gpc-signal";
+export const TRUSTARC_GPC_BRANCH_SELECTOR = "#truste-consent-track #truste-consent-text .gpc-detected";
+export const TRUSTARC_GPC_BRANCH_MESSAGE = "We have detected a Global Privacy Control signal from your browser and disabled Cookies used for targeted advertising, which may have also been considered a sale or sharing of your personal information.";
+export const ONETRUST_GPC_NOTIFICATION_SELECTOR = "#onetrust-consent-sdk .ot-optout-signal #ot-pc-gpc-txt";
+export const COOKIEBOT_GPC_SELECTOR = "#CybotCookiebotDialog .CybotCookiebotDialogGpcContainer .CybotCookiebotDialogGpcText";
+export const EXPLICIT_VISITOR_GPC_MESSAGES = [
+  "The GPC signal is honored", "Your Global Privacy Control signal is honored.", "GPC signal detected.",
+] as const;
 export const GPC_DIAGNOSTIC_CODES = [
   "ping_not_object", "gpp_version_unsupported", "cmp_status_not_loaded", "signal_status_not_ready",
   "duplicate_ping_callback", "synchronous_ping_unavailable", "api_unavailable",
@@ -69,6 +77,18 @@ export const gpcOptOutObservationSchema = z.object({
   }).strict(), z.object({
     cmp: z.literal("HubSpot Consent Banner"), scopeSelector: z.literal(HUBSPOT_GPC_SELECTOR),
     message: z.enum(HUBSPOT_GPC_MESSAGES), source: z.literal("visible_hubspot_gpc_notification"),
+  }).strict(), z.object({
+    cmp: z.literal("TrustArc"), scopeSelector: z.literal(TRUSTARC_GPC_SELECTOR),
+    message: z.enum(EXPLICIT_VISITOR_GPC_MESSAGES), source: z.literal("visible_trustarc_gpc_notification"),
+  }).strict(), z.object({
+    cmp: z.literal("TrustArc"), scopeSelector: z.literal(TRUSTARC_GPC_BRANCH_SELECTOR),
+    message: z.literal(TRUSTARC_GPC_BRANCH_MESSAGE), source: z.literal("visible_trustarc_gpc_branch"),
+  }).strict(), z.object({
+    cmp: z.literal("OneTrust"), scopeSelector: z.literal(ONETRUST_GPC_NOTIFICATION_SELECTOR),
+    message: z.literal("Opt-Out Request Honored"), source: z.literal("visible_onetrust_gpc_notification"),
+  }).strict(), z.object({
+    cmp: z.literal("Cookiebot"), scopeSelector: z.literal(COOKIEBOT_GPC_SELECTOR),
+    message: z.literal("The GPC signal is honored"), source: z.literal("visible_cookiebot_gpc_notification"),
   }).strict()])).max(8),
   limitationKeys: codes,
 }).strict().superRefine((p, ctx) => {

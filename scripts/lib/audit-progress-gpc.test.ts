@@ -174,7 +174,7 @@ test("daily readback counts a verified in-window GPP event once and prefers an e
 
 test("displayed explicit GPC messages count once only for a bound GPC visit", async () => {
   const {createHash} = await import("node:crypto");
-  const {gpcObservationSessionSchema, HUBSPOT_GPC_SELECTOR, HUBSPOT_GPC_MESSAGES} = await import("@certscore/contracts");
+  const {gpcObservationSessionSchema, HUBSPOT_GPC_SELECTOR, HUBSPOT_GPC_MESSAGES, TRUSTARC_GPC_SELECTOR, COOKIEBOT_GPC_SELECTOR} = await import("@certscore/contracts");
   const {gpc} = collectionPairFixture();
   const session = gpc.gpcObservationSession!, terminal = session.semanticObservation!;
   const replay = () => {
@@ -187,6 +187,10 @@ test("displayed explicit GPC messages count once only for a bound GPC visit", as
   terminal.acknowledgment = [{cmp:"HubSpot Consent Banner",scopeSelector:HUBSPOT_GPC_SELECTOR,
     message:HUBSPOT_GPC_MESSAGES[0],source:"visible_hubspot_gpc_notification"}];
   assert.equal(replay()["detail.gpc.cmp_receipt_source"],"visible_hubspot_gpc_notification");
+  terminal.acknowledgment = [{cmp:"TrustArc",scopeSelector:TRUSTARC_GPC_SELECTOR,message:"GPC signal detected.",source:"visible_trustarc_gpc_notification"}];
+  assert.equal(replay()["detail.gpc.cmp_receipt_source"],"visible_trustarc_gpc_notification");
+  terminal.acknowledgment = [{cmp:"Cookiebot",scopeSelector:COOKIEBOT_GPC_SELECTOR,message:"The GPC signal is honored",source:"visible_cookiebot_gpc_notification"}];
+  assert.equal(replay()["detail.gpc.cmp_receipt_source"],"visible_cookiebot_gpc_notification");
   terminal.acknowledgment = [];
   terminal.hubspotGpcApplied = true;
   assert.equal(replay()["detail.gpc.cmp_receipt_source"],"hubspot_applied_gpc");

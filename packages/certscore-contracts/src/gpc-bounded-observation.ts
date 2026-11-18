@@ -105,7 +105,7 @@ export const gpcBoundedObservationSchema = z.object({
   registration: z.object({ basis: z.literal("current_recorded_state"), sale: axis, sharing: axis,
     cmpGpcSignal: z.enum(["received", "not_received", "unknown"]), causedByGpc: z.literal("not_established") }).strict(),
   cmpStatusReadback: z.object({
-    source: z.enum(["visible_cmp_live_status", "visible_hubspot_gpc_notification", "hubspot_applied_gpc"]),
+    source: z.enum(["visible_cmp_live_status", "visible_hubspot_gpc_notification", "visible_cookiebot_gpc_notification", "visible_trustarc_gpc_notification", "visible_trustarc_gpc_branch", "visible_onetrust_gpc_notification", "hubspot_applied_gpc"]),
     observedAtMs: count,
   }).strict().optional(),
   acknowledgment: z.object({ observed: z.boolean(), captureComplete: z.boolean() }).strict(),

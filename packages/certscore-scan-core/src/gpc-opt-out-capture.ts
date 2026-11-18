@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import type { Page } from "playwright";
-import { GPC_OPT_OUT_ADAPTER_VERSION, GPC_STATUS_MESSAGES, HUBSPOT_GPC_MESSAGES, HUBSPOT_GPC_SELECTOR, gpcOptOutObservationSchema, gpcUscaStateSchema, gpcUsNationalStateSchema, type BrowserDocumentIdentity } from "@certscore/contracts";
+import {
+  COOKIEBOT_GPC_SELECTOR, EXPLICIT_VISITOR_GPC_MESSAGES, GPC_OPT_OUT_ADAPTER_VERSION, GPC_STATUS_MESSAGES,
+  HUBSPOT_GPC_MESSAGES, HUBSPOT_GPC_SELECTOR, ONETRUST_GPC_NOTIFICATION_SELECTOR,
+  TRUSTARC_GPC_BRANCH_MESSAGE, TRUSTARC_GPC_BRANCH_SELECTOR, TRUSTARC_GPC_SELECTOR,
+  gpcOptOutObservationSchema, gpcUscaStateSchema, gpcUsNationalStateSchema, type BrowserDocumentIdentity, type GpcOptOutObservation,
+} from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { parseGpcGppPing } from "./gpc-gpp-parser.js";
 import { gpcDocumentHash } from "./gpc-signal-capture.js";
@@ -14,7 +19,13 @@ export async function captureGpcOptOutObservation(page: Page, input: {
   binding?: { captureId: string; documentIdentity: () => BrowserDocumentIdentity | undefined };
 }) {
   const before = input.binding?.documentIdentity();
-  const readback = ({ scopes, messages, hubspotMessages, hubspotSelector, monitorKey }: { scopes: Array<{ name: string; selectors: readonly string[] }>; messages: readonly string[]; hubspotMessages: readonly string[]; hubspotSelector: string; monitorKey?: string }) => {
+  const readback = ({ scopes, messages, hubspotMessages, hubspotSelector, trustarcSelector, trustarcBranch,
+    trustarcSentence, onetrustSelector, cookiebotSelector, explicitMessages, monitorKey }: {
+    scopes: Array<{ name: string; selectors: readonly string[] }>;
+    messages: readonly string[]; hubspotMessages: readonly string[]; explicitMessages: readonly string[];
+    hubspotSelector: string; trustarcSelector: string; trustarcBranch: string; trustarcSentence: string;
+    onetrustSelector: string; cookiebotSelector: string; monitorKey?: string;
+  }) => {
     const monitor = monitorKey ? (window as unknown as Record<string, any>)[monitorKey]?.finish() : undefined;
     const startedUrl = location.href, timeOrigin = performance.timeOrigin;
     let ping: Record<string, unknown> | null = null;
@@ -49,22 +60,61 @@ export async function captureGpcOptOutObservation(page: Page, input: {
       sectionList: Array.isArray(p.sectionList) ? p.sectionList.slice(0, 33).map(number) : null,
       parsedSections: Object.fromEntries(["usca", "usnat"].map(key => [key,
         Array.isArray(p.parsedSections?.[key]) ? p.parsedSections[key].slice(0, 3).map(safeSection) : safeSection(p.parsedSections?.[key])])) } : null;
-    const acknowledgment: Array<{ cmp: string; scopeSelector: string; message: string; source: "visible_cmp_live_status" | "visible_hubspot_gpc_notification" }> = [];
+    const acknowledgment: Array<{ cmp: string; scopeSelector: string; message: string;
+      source: GpcOptOutObservation["acknowledgment"][number]["source"] }> = [];
     const seen = new Set<Element>();
     let truncated = false;
+    function rendered(node: HTMLElement) {
+      return node.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) &&
+        !node.closest('[hidden], [aria-hidden="true"], template');
+    }
     function visible(node: HTMLElement) {
       const rect = node.getBoundingClientRect();
       return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 &&
-        rect.top < innerHeight && rect.left < innerWidth && node.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) &&
-        !node.closest('[hidden], [aria-hidden="true"], template');
+        rect.top < innerHeight && rect.left < innerWidth && rendered(node);
+    }
+    const loadedScript = (selector: string, url: RegExp) => {
+      const script = document.querySelector<HTMLScriptElement>(selector);
+      return Boolean(script && url.test(script.src) && performance.getEntriesByName(script.src, "resource")
+        .some(entry => (entry as PerformanceResourceTiming).initiatorType === "script"));
+    };
+    if (scopes.length) {
+      // Dedicated vendor status nodes also exist as empty or hidden templates.
+      const trustarcScript = { script:'script[src*="//consent.trustarc.com/notice"],script[src*="//consent.trustarc.com/asset/notice.js/v/"]',
+        url:/^https:\/\/consent\.trustarc\.com\/(?:notice|asset\/notice\.js\/v\/[a-f0-9]+)(?:[?#]|$)/ };
+      const statuses = [
+        {cmp:"TrustArc", selector:trustarcSelector, source:"visible_trustarc_gpc_notification",
+          ...trustarcScript, wording:explicitMessages},
+        {cmp:"TrustArc", selector:trustarcBranch, source:"visible_trustarc_gpc_branch", ...trustarcScript, wording:[trustarcSentence]},
+        {cmp:"OneTrust", selector:onetrustSelector, source:"visible_onetrust_gpc_notification",
+          script:'script[src*="//cdn.cookielaw.org/scripttemplates/otSDKStub.js"]',
+          url:/^https:\/\/cdn\.cookielaw\.org\/scripttemplates\/otSDKStub\.js(?:[?#]|$)/, wording:["Opt-Out Request Honored"]},
+        {cmp:"Cookiebot", selector:cookiebotSelector, source:"visible_cookiebot_gpc_notification",
+          script:'script[src*="//consent.cookiebot.com/uc.js"]', url:/^https:\/\/consent\.cookiebot\.com\/uc\.js(?:[?#]|$)/, wording:["The GPC signal is honored"]},
+      ] as const;
+      for (const status of statuses) {
+        const nodes = document.querySelectorAll<HTMLElement>(status.selector);
+        const node = nodes.length === 1 ? nodes[0] : undefined;
+        if (!node || !visible(node) || !loadedScript(status.script, status.url)) continue;
+        if (status.source === "visible_onetrust_gpc_notification" && node.closest(".ot-hide")) continue;
+        let message = node.innerText.trim().replace(/\s+/g, " ");
+        if (status.source === "visible_trustarc_gpc_branch") {
+          const alternatives = node.parentElement?.querySelectorAll<HTMLElement>(":scope > .no-gpc-detected");
+          if (alternatives?.length !== 1 || !alternatives[0] || rendered(alternatives[0]) ||
+              !message.split(/(?<=[.!?])\s+/).includes(trustarcSentence)) continue;
+          message = trustarcSentence;
+        }
+        if (!(status.wording as readonly string[]).includes(message)) continue;
+        acknowledgment.push({cmp:status.cmp, scopeSelector:status.selector, source:status.source, message});
+        seen.add(node);
+      }
     }
     let hubspotGpcApplied = false;
     if (scopes.length && !location.search.includes("_hsGpcSignal")) {
       const nodes = document.querySelectorAll<HTMLElement>(hubspotSelector);
       const node = nodes.length === 1 ? nodes[0] : undefined;
-      const script = document.querySelector<HTMLScriptElement>('script[src^="https://js.hs-banner.com/v2/"][src*="/banner.js"]');
-      const sdkLoaded = script && /^https:\/\/js\.hs-banner\.com\/v2\/\d+\/banner\.js(?:[?#]|$)/.test(script.src) &&
-          performance.getEntriesByName(script.src, "resource").some(entry => (entry as PerformanceResourceTiming).initiatorType === "script");
+      const sdkLoaded = loadedScript('script[src*="//js.hs-banner.com/v2/"][src*="/banner.js"]',
+        /^https:\/\/js\.hs-banner\.com\/v2\/\d+\/banner\.js(?:[?#]|$)/);
       if (sdkLoaded) {
         // Only own data descriptors, with no vendor callback, getter or mutation.
         const field = (object: unknown, name: string) => object && typeof object === "object"
@@ -116,10 +166,20 @@ export async function captureGpcOptOutObservation(page: Page, input: {
       monitor: monitor ? { policy: monitor.policy, callbacks: monitor.callbacks, dropped: monitor.dropped, registered: monitor.listenerRegistered } : null,
       history: monitor?.history ?? [] };
   };
-  const argumentsJson = JSON.stringify({ scopes: input.semanticOnly ? [] : KNOWN_CMP_REGISTRY.map(cmp => ({ name: cmp.canonicalName, selectors: cmp.domSelectors ?? [] })), messages: GPC_STATUS_MESSAGES, hubspotMessages: HUBSPOT_GPC_MESSAGES, hubspotSelector: HUBSPOT_GPC_SELECTOR, monitorKey: input.monitorKey });
+  const argumentsJson = JSON.stringify({
+    scopes: input.semanticOnly ? [] : KNOWN_CMP_REGISTRY.map(cmp => ({ name: cmp.canonicalName, selectors: cmp.domSelectors ?? [] })),
+    messages: GPC_STATUS_MESSAGES, monitorKey: input.monitorKey,
+    hubspotSelector: HUBSPOT_GPC_SELECTOR, hubspotMessages: HUBSPOT_GPC_MESSAGES,
+    trustarcSelector: TRUSTARC_GPC_SELECTOR, trustarcBranch: TRUSTARC_GPC_BRANCH_SELECTOR, trustarcSentence: TRUSTARC_GPC_BRANCH_MESSAGE,
+    onetrustSelector: ONETRUST_GPC_NOTIFICATION_SELECTOR, cookiebotSelector: COOKIEBOT_GPC_SELECTOR,
+    explicitMessages: EXPLICIT_VISITOR_GPC_MESSAGES,
+  });
   // Keep tsx name helpers lexical; never patch the website global to run a probe.
   const sample = await page.evaluate<ReturnType<typeof readback>>(`(() => { const __name = (fn) => fn; return (${readback.toString()})(${argumentsJson}); })()`);
-  if (sample.monitor) input.onMonitorFinished?.(sample.monitor);
+  if (sample.monitor) {
+    const { callbacks, dropped, registered } = sample.monitor;
+    input.onMonitorFinished?.({ callbacks, dropped, registered });
+  }
   const decoded = !sample.present ? { status: "unavailable", state: null, reason: "api_unavailable", diagnosticCodes: ["api_unavailable"] as string[] } :
     sample.callbackCount > 1 ? { status: "invalid", state: null, reason: "duplicate_ping_callback", diagnosticCodes: ["duplicate_ping_callback"] as string[] } :
     sample.callbackCount !== 1 || !sample.callbackSucceeded ? { status: "not_ready", state: null, reason: "synchronous_ping_unavailable", diagnosticCodes: ["cmp_status_not_loaded"] as string[] } : parseGpcGppPing(sample.safePing);

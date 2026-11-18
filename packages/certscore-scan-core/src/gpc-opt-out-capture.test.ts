@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { HUBSPOT_GPC_MESSAGES } from "@certscore/contracts";
+import { HUBSPOT_GPC_MESSAGES, TRUSTARC_GPC_BRANCH_MESSAGE } from "@certscore/contracts";
 import { chromium, type Page } from "playwright";
 import { chromiumLaunchOptions } from "./playwright-runtime.js";
 import { installGpcNavigatorSignal } from "./gpc-signal-capture.js";
@@ -194,6 +194,57 @@ test("HubSpot applied GPC requires a ready own-data receipt from its loaded SDK"
         assert.equal(sample.hubspotGpcApplied,scenario === "applied" ? true : undefined);
         assert.equal(await page.evaluate("window.getterInvoked"),undefined);
         assert.deepEqual(sample.acknowledgment,[]);
+      } finally { await context.close(); }
+    });
+  } finally { await browser.close(); }
+});
+
+test("TrustArc and Cookiebot dedicated slots exclude empty and hidden retained templates", async t => {
+  const browser = await chromium.launch(chromiumLaunchOptions({headless:true}));
+  try {
+    for (const cmp of ["TrustArc", "Cookiebot"]) {
+      for (const scenario of ["visible","template","hidden","policy","ambiguous","duplicate","no_sdk","outside","baseline"]) await t.test(cmp + " " + scenario, async () => {
+        const context = await browser.newContext({serviceWorkers:"block"});
+        try {
+          const trustarc = cmp === "TrustArc";
+          const wording = scenario === "template" ? (trustarc ? "" : "[#GPC_TOAST_TEXT#]") : scenario === "ambiguous" ? "Opt-Out Signal Honored" :
+            scenario === "policy" ? "We honor Global Privacy Control signals." : "The GPC signal is honored";
+          const slot = trustarc ? '<span id="truste-gpc-signal">'+wording+'</span>' :
+            '<div class="CybotCookiebotDialogGpcContainer"><div class="CybotCookiebotDialogGpcText">'+wording+'</div></div>';
+          const sdk = trustarc ? "//consent.trustarc.com/notice?domain=fixture.test" : "https://consent.cookiebot.com/uc.js";
+          const content = (scenario === "no_sdk" ? "" : '<script src="'+sdk+'"></script>') +
+            '<div id="'+(scenario === "outside" ? "policy-body" : trustarc ? "truste-consent-track" : "CybotCookiebotDialog")+'" '+
+            (scenario === "hidden" ? 'style="display:none"' : "")+'>'+slot+(scenario === "duplicate" ? slot : "")+'</div>';
+          await context.route("**/*",route => route.fulfill(route.request().resourceType() === "script" ?
+            {contentType:"application/javascript",body:"/* fixture */"} : {contentType:"text/html",body:content}));
+          const page = await context.newPage(), started = Date.now(); await page.goto("https://cmp-slot.test/");
+          const sample = await captureGpcOptOutObservation(page,{scanId:"cmp-slot",scanStartedAtMs:started,semanticOnly:scenario === "baseline"});
+          assert.deepEqual(sample.acknowledgment.map(r=>r.source),scenario === "visible" ?
+            [trustarc ? "visible_trustarc_gpc_notification" : "visible_cookiebot_gpc_notification"] : []);
+          assert.equal(sample.gppStatus,"unavailable");
+        } finally { await context.close(); }
+      });
+    }
+  } finally { await browser.close(); }
+});
+
+test("only the displayed TrustArc GPC branch or explicit OneTrust GPC slot supplies a readback", async t => {
+  const browser = await chromium.launch(chromiumLaunchOptions({headless:true}));
+  try {
+    for (const cmp of ["TrustArc","OneTrust"]) for (const scenario of ["visible","hidden","ambiguous","template_state","policy","no_sdk"]) await t.test(cmp+" "+scenario, async () => {
+      const context = await browser.newContext({serviceWorkers:"block"});
+      try {
+        const ta = cmp === "TrustArc", hidden = scenario === "hidden" ? " hidden" : "";
+        const message = scenario === "policy" ? "Our policy honors GPC." : ta ? TRUSTARC_GPC_BRANCH_MESSAGE : "Opt-Out Request Honored";
+        const html = (scenario === "no_sdk" ? "" : '<script src="'+(ta ? "https://consent.trustarc.com/notice?domain=fixture.test" : "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js")+'"></script>') +
+          (ta ? '<div id="truste-consent-track"><div id="truste-consent-text"><p><span class="no-gpc-detected" '+
+            (scenario === "ambiguous" ? "" : scenario === "template_state" ? 'style="position:absolute;top:500vh"' : "hidden")+'>Default settings</span><span class="gpc-detected"'+hidden+
+            '>This site uses cookies. '+message+' Required cookies remain enabled.</span></p></div></div>' :
+            '<div id="onetrust-consent-sdk"><div class="'+(scenario === "ambiguous" ? "ordinary" : scenario === "template_state" ? "ot-optout-signal ot-hide" : "ot-optout-signal")+'"'+hidden+'><span id="ot-pc-gpc-txt">'+message+'</span></div></div>');
+        await context.route("**/*",route=>route.fulfill(route.request().resourceType()==="script" ? {contentType:"application/javascript",body:"/* fixture */"} : {contentType:"text/html",body:html}));
+        const page=await context.newPage(), started=Date.now();await page.goto("https://cmp-branch.test/");
+        const result=await captureGpcOptOutObservation(page,{scanId:"cmp-branch",scanStartedAtMs:started});
+        assert.deepEqual(result.acknowledgment.map(r=>r.source),scenario==="visible" ? [ta ? "visible_trustarc_gpc_branch" : "visible_onetrust_gpc_notification"] : []);
       } finally { await context.close(); }
     });
   } finally { await browser.close(); }

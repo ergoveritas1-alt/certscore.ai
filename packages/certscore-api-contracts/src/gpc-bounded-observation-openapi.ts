@@ -264,6 +264,10 @@ export const gpcBoundedObservationOpenApi = {
           "enum": [
             "visible_cmp_live_status",
             "visible_hubspot_gpc_notification",
+            "visible_cookiebot_gpc_notification",
+            "visible_trustarc_gpc_notification",
+            "visible_trustarc_gpc_branch",
+            "visible_onetrust_gpc_notification",
             "hubspot_applied_gpc"
           ]
         },
