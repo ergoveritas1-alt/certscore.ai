@@ -5,13 +5,22 @@ import {isCanonicalAdvertisingCollectionCandidate, resolveCanonicalVendor, CANON
 import { extractPropertySaleSharingSource, matchPropertySaleSharingRequest } from "@certscore/vendor-resolver/property-sale-sharing";
 import { createHash } from "node:crypto";
 import {
-  GPC_OPT_OUT_ADAPTER_VERSION, isQualifyingSaleSharingRequest, canonicalEvidenceBundleSchema, gpcBoundedObservationSchema, gpcResponseAssessmentV3Schema,
-  type CanonicalEvidenceBundle, type GpcBoundedObservation, type GpcResponseAssessmentV2,
+  GPC_OPT_OUT_ADAPTER_VERSION, choiceRequestRole, isQualifyingSaleSharingRequest, canonicalEvidenceBundleSchema, gpcBoundedObservationSchema, gpcResponseAssessmentV3Schema,
+  type CanonicalEvidenceBundle, type GpcBoundedObservation, type GpcResponseAssessmentV2, type NetworkEvent,
 } from "@certscore/contracts";
 import { gpcDocumentHash } from "./gpc-signal-capture.js";
 import { evaluateGpcObservationSession } from "./gpc-observation-completion.js";
 import type { GpcPrototypeArtifact } from "./gpc-opt-out-assessment.js";
 import { gpcEndpointEvidence } from "./gpc-vendor-evidence.js";
+
+/** A consent ping can use the same endpoint. Require an explicit page view of the observed document. */
+function isGoogleGpcPageView(event: NetworkEvent, documentHash: string) {
+  if (choiceRequestRole(event.requestUrl, event.method, event.resourceType) !== "advertising") return false;
+  const params = new URL(event.requestUrl).searchParams;
+  const [page, ...duplicates] = params.getAll("dl");
+  return params.getAll("en").length === 1 && params.get("en") === "page_view" &&
+    !!page && duplicates.length === 0 && URL.canParse(page) && gpcDocumentHash(page) === documentHash;
+}
 
 /** Verifies the original worker bytes, including its inline producer-bound session.
  * The resulting independent observation never upgrades the paired v2 comparison. */
@@ -147,19 +156,26 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
   // recipient family. Reuse its qualification work and only unused inspection
   // slots; successful, source-bound collection is still required.
   const reviewRows: NonNullable<GpcBoundedObservation["requests"]["collectionReview"]>["rows"] = [];
-  if (representative && result.delivery.httpHeaderRetained && result.delivery.mainNavigatorReadbackRetained) {
+  if (representative && session?.mainDocument && result.delivery.httpHeaderRetained && result.delivery.mainNavigatorReadbackRetained) {
     const extra = prioritizeGpcRecipients(classified.filter(e => !allQualifications.has(e.eventId) && e.collectionEndpointObserved &&
       e.method !== "OPTIONS" && /^https:/.test(e.requestUrl) && !["script", "document", "stylesheet", "font"].includes(e.resourceType ?? "")),
       e => vendors.get(e.eventId)?.[0]?.registryAttribution?.entityId ?? e.eventId, () => false, Math.max(0, 100 - candidates.length));
     const reviewCandidates = [...candidates, ...extra];
     for (const event of reviewCandidates) {
-      const status = bundle?.networkResponseEvents.find(r => r.requestId === event.requestId)?.status;
+      const response = bundle?.networkResponseEvents.find(r => r.requestId === event.requestId);
+      const status = response?.status;
       if (!event.collectionEndpointObserved || status === undefined || status < 200 || status >= 400) continue;
       const resolved = resolveCanonicalVendor({type:"request",url:event.requestUrl,sourceScanner:"gpc_observation",matchSource:"network_request"}).observation;
-      if (!resolved || resolved.confidence < .9 || resolved.registryAttribution?.matchKind !== "endpoint" ||
+      if (!resolved?.registryAttribution || resolved.confidence < .9 ||
         !["analytics", "advertising", "marketing", "session_replay"].includes(resolved.purpose) ||
         !(vendors.get(event.eventId) ?? []).every(v => v.registryAttribution?.entityId === resolved.registryAttribution!.entityId && v.purpose === resolved.purpose)) continue;
-      reviewRows.push({evidenceId:event.eventId,entityId:resolved.registryAttribution.entityId,label:resolved.entity,
+      const googlePageView = resolved.vendor === "Google" && resolved.purpose === "advertising" &&
+        event.requestHeaders?.secGpc === "1" &&
+        response?.responseUrl === event.requestUrl && response.timestampMs >= event.timestampMs &&
+        response.timestampMs <= session.captureEndedAtMs && status < 300 && isGoogleGpcPageView(event, session.mainDocument.documentUrlSha256);
+      if (resolved.registryAttribution.matchKind !== "endpoint" &&
+          !(resolved.registryAttribution.matchKind === "hostname" && googlePageView)) continue;
+      reviewRows.push({...(googlePageView ? {measurement:"google_ccm_document_page_view" as const} : {}),evidenceId:event.eventId,entityId:resolved.registryAttribution.entityId,label:resolved.entity,
         purpose:resolved.purpose as "analytics"|"advertising"|"marketing"|"session_replay",observedAtMs:event.timestampMs,httpStatus:status,
         qualification:allQualifications.get(event.eventId) ?? qualifyGpcRequest(event,session!,{gpcDelivered:true,requestAtMs:event.timestampMs})});
     }
@@ -209,7 +225,7 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
       ...(qualification.some(row=>row.propertyEvidence) ? {propertySaleSharingSource:propertySource} : {}),
       gppPropagation: propagation,
       classifiedCount: classified.length, collectionCount: classified.filter(r => r.collectionEndpointObserved).length,
-      collectionReview: {policyVersion:"gpc_collection_review.v1",rows:prioritizeGpcRecipients(reviewRows,r=>r.entityId,()=>false,32)},
+      collectionReview: {policyVersion:"gpc_collection_review.v2-google-page-view",rows:prioritizeGpcRecipients(reviewRows,r=>r.entityId,()=>false,32)},
       evidenceIds: classified.slice(0, 100).map(r => r.eventId), samplesTruncated: classified.length > 100 },
     limitationKeys, scoreEffect: "none", legalInterpretation: "not_assessed",
   });

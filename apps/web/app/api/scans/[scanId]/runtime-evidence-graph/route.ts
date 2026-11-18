@@ -16,6 +16,7 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
   const accessError = await reportApiAccessError();
   if (accessError) return accessError;
   const { scanId } = await context.params;
+  const view = new URL(request.url).searchParams.get("view");
   return handleRuntimeGraphRead(request, scanId, {
     // Evidence-detail weight comes from the existing canonical policy, never a new numeric limit.
     throttle: (request, scanId) => enforceApiV2ScanReadThrottle({ request: runtimeGraphQuotaRequest(request), scanId, requestId: crypto.randomUUID(), route: "runtime-evidence-graph", profile: "terminal", detail: "evidence" }),
@@ -27,6 +28,6 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
       status: (organizationId, scanId) => getOrganizationScanStatusProjection({ organizationId, scanId }),
       report: loadPersistedScanReportProjection,
     }),
-    hydrate: record => hydrateRuntimeGraphForRead(record, {includeGpcForInventory: new URL(request.url).searchParams.get("view") === "gpc-inventory"}),
+    hydrate: record => hydrateRuntimeGraphForRead(record, {includeGpcForInventory: view === "gpc-inventory" || view === "gpc-flagged-items"}),
   });
 }

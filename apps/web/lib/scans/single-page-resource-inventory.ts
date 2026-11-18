@@ -12,12 +12,17 @@ import { inventoryPurposeGroups } from "./inventory-purpose-presentation";
 type Resource = FullSiteReportResponse["services"][number]["resources"][number];
 export type SinglePageResourceInventory = { requestMetric?: { label: string; value: number; counts: { nonEssential: number; review: number; contextual: number; essential: number; unclassified?: number }; overview?: NetworkInventoryOverview }; resources: Resource[]; services: FullSiteReportResponse["services"]; mix: FullSiteReportResponse["inventoryMix"] };
 /** Adapt the canonical retained inventory to the same resource/service presentation as site scans. */
-export function buildSinglePageResourceInventory(pageId: string, rows: InventoryGroupRow[], requests: CrawlOccurrence[] | null, reviewedPolicies: ReviewedPolicy[] = [], retainedResources: Array<{ occurrence: CrawlOccurrence; evidence: string }> = []): SinglePageResourceInventory {
+export function buildSinglePageResourceInventory(pageId: string, rows: InventoryGroupRow[], requests: CrawlOccurrence[] | null, reviewedPolicies: ReviewedPolicy[] = [], retainedResources: Array<{ occurrence: CrawlOccurrence; evidence: string }> = [], scope: "baseline" | "choice" = "baseline"): SinglePageResourceInventory {
   const resources = new Map<string, Resource>();
   const add = (occurrence: CrawlOccurrence, evidence: string) => {
     const key = `${occurrence.kind}:${occurrence.identity}`;
     const existing = resources.get(key);
     if (existing) {
+      // A repeated choice-phase resource can acquire stronger evidence in the same visit.
+      if (scope === "choice" &&
+          (evidence === "Non-essential" || (evidence === "Review" && existing.inventoryEvidence !== "Non-essential"))) {
+        existing.inventoryEvidence = evidence;
+      }
       existing.eventCount += occurrence.eventCount; existing.occurrence.eventCount = existing.eventCount;
       if (occurrence.firstSeenMs !== null) existing.occurrence.firstSeenMs = Math.min(existing.occurrence.firstSeenMs ?? occurrence.firstSeenMs, occurrence.firstSeenMs);
       existing.destinationMissingCount += occurrence.networkDestinationMissingCount ?? 0;
@@ -46,7 +51,11 @@ export function buildSinglePageResourceInventory(pageId: string, rows: Inventory
   const all = [...resources.values()];
   const services = new Map<string, FullSiteReportResponse["services"][number]>();
   for (const resource of all) {
-    const { key, name } = serviceIntegrationGroup(resource.context.identity);
+    const domain = resource.occurrence.domain;
+    const role = resource.occurrence.details.choiceRequestRole;
+    const { key, name } = !resource.context.identity && domain && (role === "analytics" || role === "advertising" || role === "sanity_batch_beacon")
+      ? {key: JSON.stringify(["endpoint", domain]), name: domain}
+      : serviceIntegrationGroup(resource.context.identity);
     const group = services.get(key) ?? { key, name, context: resource.context, pageIds: [pageId], purposes: [], resources: [], origins: [] };
     group.resources.push(resource); services.set(key, group);
   }

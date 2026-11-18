@@ -69,7 +69,7 @@ export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDi
   for(const finding of eligible) {
     if(finding.details?.family!=="california_collection_review")continue;
     result.push({id:finding.unifiedFindingId,title:finding.title,summary:finding.summary,status:"Partial concern",
-      evidence:finding.details.assessments.flatMap(a=>a.rows.filter(r=>r.treatment==="potential_risk").map(r=>`${r.entity}: +${r.msFromAnchor} ms ${a.path==="gpc"?"from GPC visit start":"after Reject click"}; ${r.purpose} collection; sale/sharing purpose unresolved`)),
+      evidence:finding.details.assessments.flatMap(a=>[...(a.identifierTransmission ? [`After Reject, ${a.identifierTransmission.cookieName} was sent to ${a.identifierTransmission.endpoint} (HTTP ${a.identifierTransmission.httpStatus}).`] : []), ...a.rows.filter(r=>r.treatment==="potential_risk").map(r=>`${r.entity}: +${r.msFromAnchor} ms ${a.path==="gpc"?"from GPC visit start":"after Reject click"}; ${r.purpose} collection; sale/sharing purpose unresolved`)]),
       evidenceJson:{findingId:finding.unifiedFindingId,assessments:finding.details.assessments,
         ...(gpcObservation?.scanId && gpcObservation.sourceSha256 && gpcObservation.sessionSha256 && gpcObservation.documentUrlSha256 ? {gpcPriorityBinding: {
           version:"california_gpc_priority_binding.v1",scanId:gpcObservation.scanId,sourceSha256:gpcObservation.sourceSha256,

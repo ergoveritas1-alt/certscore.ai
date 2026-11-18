@@ -281,7 +281,7 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.match(source, /data-testid="gpc-evidence-index-card"/);
   assert.match(gpcEvidenceCardSource, /gpcEvidenceHeaderLabel\(projection\)/);
   assert.doesNotMatch(gpcEvidenceCardSource, /gpcSummaryLabel\(projection\)/);
-  assert.match(gpcEvidenceCardSource, /projection\.coverageSummary/);
+  assert.doesNotMatch(evidenceDirectorySource, /PrivacyChoiceOverview/);
   assert.doesNotMatch(gpcEvidenceCardSource, /<details open=/);
   assert.doesNotMatch(evidenceDirectorySource, /expanded=\{report\.reviewFocus === "ccpa_cpra"\}/);
   assert.doesNotMatch(gpcEvidenceCardSource, /CMP GPC signal:|Visible acknowledgment:/);
@@ -291,11 +291,11 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.ok(runtimeIndex < gpcCardIndex);
   assert.ok(transportIndex < gpcCardIndex);
   assert.match(gpcEvidenceCardSource, /title=\{EVIDENCE_SECTION_TITLES\.gpc\}/);
-  assert.match(gpcEvidenceCardSource, /<DetailedEvidenceFinding/);
+  assert.doesNotMatch(gpcEvidenceCardSource, /Comparison with GPC disabled/);
   assert.equal((gpcEvidenceCardSource.match(/<GpcActivityComparison/g) ?? []).length, 1);
-  assert.ok(gpcEvidenceCardSource.indexOf("<GpcActivityComparison") < gpcEvidenceCardSource.indexOf("<DetailedEvidenceFinding"));
+  assert.ok(gpcEvidenceCardSource.indexOf("<GpcActivityComparison") < gpcEvidenceCardSource.indexOf("<GpcVisitInventory"));
   assert.match(gpcEvidenceCardSource, /evidenceJson=\{evidenceJson\}/);
-  assert.match(modelSource, /buildGpcResponseReportProjection\(canonical\.ownerUnifiedFindings\)/);
+  assert.match(modelSource, /buildGpcResponseReportProjection\(canonical\.ownerUnifiedFindings,\s*\{\s*scanId: scanRecord\.scan\.id, activityComparison: runtimeArtifacts\?\.gpcActivityComparison,/);
   assert.doesNotMatch(source, /GPC violation|GPC not honored/i);
   assert.match(source, /report\.policySurfaceCoverage === "limited"/);
   assert.match(source, /Policy discovery or document retrieval was incomplete/);

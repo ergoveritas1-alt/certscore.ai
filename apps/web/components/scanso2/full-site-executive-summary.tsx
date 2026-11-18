@@ -72,7 +72,7 @@ export function FullSiteExecutiveSummary({ score, pending, scannedPages, statusL
           <div className="min-w-0 border-l border-zinc-200 pl-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Site score</p>
             <p className="mt-2 text-lg font-semibold text-zinc-950">{priorities ? `${priorities.length} priority ${priorities.length === 1 ? "issue" : "issues"}` : pending ? "Assessment in progress" : "Assessment unavailable"}</p>
-            <p className="mt-1 text-xs leading-5 text-zinc-500">{scannedPages === null ? "Waiting for page outcomes" : `${scannedPages} ${scannedPages === 1 ? "page" : "pages"} scanned`}</p>
+            {!singlePage ? <p className="mt-1 text-xs leading-5 text-zinc-500">{scannedPages === null ? "Waiting for page outcomes" : `${scannedPages} pages scanned`}</p> : null}
           </div>
         </div>
         {!score ? <p className="mt-2 text-xs text-zinc-500">{pending ? "The site-wide score will appear when the assessment is ready." : "Site-wide scoring is unavailable for this scan."}</p> : null}

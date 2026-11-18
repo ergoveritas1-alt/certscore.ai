@@ -9,6 +9,7 @@ import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
 import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
+import { NoGoBrowserExtensionRecovery } from "../../../../components/scans/no-go-browser-extension-recovery";
 import { ShadowScanReport } from "../../../../components/scans/report-lab/shadow-scan-report";
 import { ReportGuestShareProvider } from "../../../../components/scans/report-lab/shadow-report-actions";
 import { isPublicAccountCreationEnabled } from "../../../../server/access-control";
@@ -191,6 +192,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     return scanPage(viewer.signedIn, <>
       <ScanProgressReportVisible scanId={scanId} trackTiming={false} />
       <h1 className="text-2xl font-semibold text-slate-950">Scan ended without a report</h1>
+      <NoGoBrowserExtensionRecovery guidance={statusProjection.browserGuidance} />
       <Link href="/#homepage-scan" className="mt-4 inline-block text-sky-800 underline">Start another scan</Link>
     </>);
   }

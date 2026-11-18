@@ -9,8 +9,21 @@ import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-epriva
 import { buildSitePriorityReview } from "../../lib/scans/full-site-priority-review";
 import { buildExecutiveOverview } from "./report-lab/executive-overview-copy";
 import { ConsentTrackingSummary } from "./consent-tracking-summary";
+import { buildConsentTrackingOverview } from "../../lib/scans/consent-tracking-overview";
+import { SHADOW_REPORT } from "./report-lab/shadow-report-data";
 
 const score = {version: "test", value: 29, assessedNonEssentialStorage: 9, scoredPages: 10, limitedPages: 0, scope: "Retained evidence", priorityReview: [], sources: []};
+
+test("retained baseline counts appear in the normal report when the distinct summary is missing", () => {
+  const tiles = buildConsentTrackingOverview({ scan: SHADOW_REPORT.scan, inventorySummary: [
+    { label: "Requests", value: 25, counts: { nonEssential: 12, review: 12, contextual: 1, essential: 0 } },
+    { label: "Cookies & storage", value: 10, counts: { nonEssential: 9, review: 1, contextual: 0, essential: 0 } },
+  ] }, "ccpa_cpra");
+  const before = tiles[0]!;
+  assert.equal(before.count, null);
+  assert.equal(before.state, "partial");
+  assert.match(renderToStaticMarkup(<ConsentTrackingSummary tiles={[before]} />), /Partial inventory.*Non-essential · 12 requests · 9 cookies &amp; storage/);
+});
 
 test("the consent overview displays missing counts as NA, plain form counts, and visible classification markers", () => {
   const tiles = renderToStaticMarkup(<ConsentTrackingSummary tiles={[
@@ -23,12 +36,10 @@ test("the consent overview displays missing counts as NA, plain form counts, and
   assert.match(tiles, /title="0">0</);
   assert.match(tiles, /title="1">1</);
   assert.match(tiles, /title="44">44</);
-  assert.equal((tiles.match(/<span class="text-\[10px\] font-normal leading-4 text-slate-500">flagged items<\/span>/g) ?? []).length, 2);
-  assert.match(tiles, /title="0">0<\/span><span class="text-\[10px\] font-normal leading-4 text-slate-500">flagged items<\/span><\/span>/);
   assert.match(tiles, /title="44 non-essential">44 non-essential</);
-  assert.match(tiles, />observed forms<\/span>/);
+  assert.doesNotMatch(tiles, />(?:flagged items|observed forms)<\/span>/);
   assert.doesNotMatch(tiles, /title="0 non-essential"|title="0 review"/);
-  assert.doesNotMatch(tiles, /Unavailable|≥/);
+  assert.doesNotMatch(tiles, /Unavailable|≥|>Partial</);
 });
 
 test("positive flagged totals show only positive classification subcounts", () => {
@@ -57,15 +68,13 @@ test("consent tiles offer a disclosure only when there are details to show", () 
   }
 });
 
-test("storage classification review count is visible without changing the inventory total", () => {
-  for (const review of [undefined, 0, 1, 2]) {
-    const html = renderToStaticMarkup(<ConsentTrackingSummary tiles={[
-      { id: "storage", label: "Cookies & storage", count: 3, unit: "distinct items", state: "recorded", storageReviewCount: review },
-    ]} />);
-    assert.match(html, /title="3">3</);
-    if (review) assert.match(html, new RegExp(`>${review} ${review === 1 ? "needs" : "need"} classification review</span>`));
-    else assert.doesNotMatch(html, /classification review<\/span>/);
-  }
+test("the storage tile shows the distinct total without a classification caption", () => {
+  const tile = { id: "storage", label: "Cookies & storage", count: 14, unit: "distinct items",
+    state: "recorded", storageReviewCount: 3 } as const; // A previously saved tile.
+  const html = renderToStaticMarkup(<ConsentTrackingSummary tiles={[tile]} />);
+  assert.match(html, /title="14">14</);
+  assert.doesNotMatch(html, />distinct items</);
+  assert.doesNotMatch(html, /3 need classification review/);
 });
 
 test("page and site scores preserve findings without displaying deduction amounts", () => {
@@ -169,7 +178,7 @@ test("one scanned page shows only the single page assessment", () => {
   assert.match(html,/Score 29 out of 100/);
   assert.doesNotMatch(html,/>Page score</);
   assert.match(html,/Assessment highlights/);
-  assert.match(html,/1 page scanned/);
+  assert.doesNotMatch(html,/1 page scanned/);
   assert.doesNotMatch(html,/1 page assessed/);
   assert.match(html,/Retained single-page verdict/);
   assert.doesNotMatch(html,/>Site score</);
@@ -213,8 +222,9 @@ test("completed 86-point report with partial California checks keeps its result 
   const before=structuredClone(californiaScore);
   const html=renderToStaticMarkup(<FullSiteExecutiveSummary pending={false} scannedPages={1} reviewFocus="ccpa_cpra" score={{...score,priorityReview:[]}} californiaScore={californiaScore}/>);
   assert.match(html,/California score 86 out of 100/);
+  assert.doesNotMatch(html,/Limited evidence ·|California evidence areas assessed/);
   assert.match(html,/California privacy review/);
-  assert.match(html,/1 page scanned/);
+  assert.doesNotMatch(html,/1 page scanned/);
   assert.match(html,/View the California privacy checks in/);
   assert.match(html,/href="#evidence"/);
   assert.doesNotMatch(html,/Assessment incomplete|assessment is incomplete|unresolved checks|0 CCPA\/CPRA issues|No CCPA\/CPRA priority issues/);

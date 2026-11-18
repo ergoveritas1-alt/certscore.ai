@@ -109,7 +109,8 @@ for (const scenario of cases) test(`completed report headings: ${scenario.name}`
       assert.match(executive, /California score unavailable for this scan/);
       assert.doesNotMatch(executive, /out of 100/);
     } else assert.match(executive, reviewFocus === "ccpa_cpra" ? /California score 86 out of 100/ : /(?:Site score|Score) 82 out of 100/);
-    assert.match(executive, new RegExp(`${scannedPages} ${scannedPages === 1 ? "page" : "pages"} scanned`));
+    if (scannedPages === 1) assert.doesNotMatch(executive, /1 page scanned/);
+    else assert.match(executive, new RegExp(`${scannedPages} pages scanned`));
     assert.deepEqual(californiaScore, scoreBefore);
   }
   if (scenario.coverage && scenario.detailLabel) {

@@ -1,3 +1,4 @@
+import { choiceRequestRole } from "@certscore/contracts";
 import {captureOsanoReceiptBaseline,readVerifiedOsanoReceipt,type OsanoReceiptBaseline} from "./osano-consent-receipt.js";
 import {requireWithinActionBoundary, ActionOperationStopped} from "./action-operation-boundary.js";
 import {readWithinActionBoundary} from "./action-operation-boundary.js";
@@ -2095,6 +2096,7 @@ function classifyRequests(
   return requests.map((captured) => {
     const requestUrl = captured.request.url();
     const purpose = classifyPostRefusalRequestPurpose(requestUrl);
+    const role = choiceRequestRole(requestUrl, captured.request.method(), captured.request.resourceType());
     const startedAtMs = elapsed(scanStartedAtMs, captured.startedAtEpochMs);
     const googleConsentMode = captureGoogleConsentModeRequest({ url: requestUrl, requestId: captured.requestId, timestampMs: startedAtMs });
     const rootStartedAtMs = !captured.request.redirectedFrom() ? startedAtMs
@@ -2110,6 +2112,7 @@ function classifyRequests(
       ...(rootStartedAtMs === undefined || rootStartedAtMs > startedAtMs ? {} : { rootStartedAtMs }),
       ...(captured.measurementEvidence ? { measurementEvidence: { ...captured.measurementEvidence, timestampMs: startedAtMs } } : {}),
       ...(captured.responseCookieWrites ? {responseCookieWrites:captured.responseCookieWrites} : {}),
+      ...(role ? {choiceRequestRole: role} : {}),
       sanitizedUrl: sanitizeUrl(requestUrl),
       ...(googleConsentMode ? { googleConsentMode } : {}),
       ...(hostnameFromUrl(requestUrl) ? { hostname: hostnameFromUrl(requestUrl) } : {}),

@@ -1,5 +1,5 @@
 import type { PostRefusalReportProjection } from "@certscore/contracts";
-import { CANONICAL_VENDOR_RESOLVER_VERSION, C3_COOKIE_PROVIDER_RESOLVER_VERSION, getCanonicalVendorRegistryManifest,
+import { documentedChoiceCookie, CANONICAL_VENDOR_RESOLVER_VERSION, C3_COOKIE_PROVIDER_RESOLVER_VERSION, getCanonicalVendorRegistryManifest,
   resolveCanonicalVendor, resolveCanonicalVendorLabel, resolveCanonicalCookieClassification } from "@certscore/vendor-resolver";
 import { retainedRejectPresence } from "./reject-presence-evidence";
 
@@ -30,7 +30,7 @@ export function retainedRejectEntityEvidence(p: PostRefusalReportProjection, pre
     const identity = classification?.provider?{entityId:classification.provider.registryAttribution.entityId,entity:classification.provider.entity,vendor:classification.provider.vendor}:owner({ type: "cookie", cookieName: source.name, hostname: source.hostname,
       cookiePurposePolicyVersion: presence.cookiePurposePolicy??"certscore.cookie-purpose.v5" }, source.vendor);
     observations.push({ kind: "cookie_snapshot", evidenceRef: `cookie:${cookie.identityHash ?? `${cookie.name}@${cookie.hostname ?? ""}`}:${cookie.valueHash}`,
-      name: cookie.name, ...(cookie.hostname ? { hostname: cookie.hostname } : {}), purpose: classification?.category??source.purpose!,
+      name: cookie.name, ...(cookie.hostname ? { hostname: cookie.hostname } : {}), purpose: (presence.includeChoiceCookies ? documentedChoiceCookie(source.name)?.category : undefined) ?? classification?.category ?? source.purpose!,
       msAfterClick: presence.postSnapshot! - presence.start, ...(identity ?? {}) });
   }
   for (const id of presence.requestIds) {

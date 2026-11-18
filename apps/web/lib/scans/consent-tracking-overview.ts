@@ -6,6 +6,9 @@ import { GPC_CUSTOMER_RESULTS_ENABLED } from "./gpc-customer-policy";
 import { INVENTORY_METRIC_LABELS, inventoryMetricLabel } from "./inventory-resource-semantics";
 import { buildNetworkInventoryOverview } from "./network-inventory-overview";
 
+import { choiceInventoryCounts } from "./choice-inventory-counts";
+import type { GpcRequestWindow } from "./gpc-request-window";
+
 type TileId = "before" | "accept" | "reject" | "services" | "storage" | "forms" | "opt-out" | "gpc";
 type Totals = Pick<ReportInventoryMetric, "label" | "value"> & { counts?: Partial<InventoryAssessmentCounts> };
 export type ConsentTrackingTile = {
@@ -13,9 +16,11 @@ export type ConsentTrackingTile = {
   label: string;
   count: number | null;
   unit: string;
+  contributors?: ReturnType<typeof choiceInventoryCounts>["contributors"];
+  deferredGpc?: { scanId: string; graphHash: string };
+  gpcWindow?: GpcRequestWindow;
   state: "recorded" | "partial" | "not_tested" | "unavailable";
   choiceUnconfirmed?: boolean;
-  storageReviewCount?: number;
   breakdown?: { nonEssential: number; review?: number };
   metrics?: Totals[];
   notes?: string[];
@@ -32,7 +37,7 @@ const { requests, storage, frames } = INVENTORY_METRIC_LABELS;
 
 type OverviewInput = Pick<ShadowReportData, "inventorySummary" | "resourceInventory" | "actionInventories" | "actionTimelines" |
   "acceptPath" | "rejectPath" | "formsSummary" | "collectionTableRows" | "afterAcceptFormsLimited" |
-  "gpcResponse" | "gpcLaneStatus" | "gpcTimeline" | "californiaPrivacyReview" | "scan">;
+  "runtimeEvidenceGraph" | "gpcResourceInventory" | "gpcResponse" | "gpcLaneStatus" | "californiaPrivacyReview" | "scan">;
 
 function observationCount(count: number | undefined, state: ConsentTrackingTile["state"]) {
   return count !== undefined && (state === "recorded" || count > 0) ? count : null;
@@ -68,14 +73,14 @@ export function buildConsentTrackingOverview(report: OverviewInput, focus: Repor
   const hasBaselineInventory = Boolean(overview || baselineTotals.some(metric => metric.value != null || metric.counts));
   const baselineCounts = overview?.distinctClassifications?.requests;
   const baselineFlags = overview?.distinctClassifications ? flaggedItems(Object.values(overview.distinctClassifications)) : undefined;
-  const baselineState = baselineCounts ? "recorded" : "unavailable";
+  const baselineState = baselineCounts ? "recorded" : hasBaselineInventory ? "partial" : "unavailable";
   const before: ConsentTrackingTile = {
     id: "before", label: california ? "Before choice" : "Before consent",
     count: baselineFlags?.count ?? null,
     unit: "flagged items", state: baselineState, breakdown: baselineFlags?.breakdown,
     metrics: baselineTotals, services: inventoryNames, evidence: hasBaselineInventory ? "pre-consent" : undefined,
     notes: hasBaselineInventory ? [overview ? "Counts represent distinct retained resources. Services group requests, cookies and storage, and frames."
-      : "The full request classification was not captured. Other retained inventory counts are shown below.",
+      : "The counts below cover the retained inventory. A distinct flagged-item total is unavailable.",
       "Timing and capture scope can differ across consent states."] : undefined,
   };
   const baselineServices = new Set(report.resourceInventory?.services.filter(service => service.context.identity).map(service => service.key));
@@ -87,7 +92,8 @@ export function buildConsentTrackingOverview(report: OverviewInput, focus: Repor
       notes: path?.note ? [path.note] : undefined, evidence: report.actionTimelines?.[id] ? id : undefined };
     const action = buildNetworkInventoryOverview(capture.inventory.services);
     const proof = capture.measurement;
-    const states: ConsentTrackingTile["state"] = proof?.requestCoverage === "complete" ? "recorded" : "partial";
+    const flags = choiceInventoryCounts(capture);
+    const states = flags.state;
     const req = action.distinctClassifications?.requests;
     const facts: NonNullable<ConsentTrackingTile["facts"]> = [];
     if (proof) facts.push({ label: "Choice", value: proof.execution.consentConfirmed ? "Confirmed" : "Click recorded, choice unconfirmed" });
@@ -101,24 +107,22 @@ export function buildConsentTrackingOverview(report: OverviewInput, focus: Repor
     })[proof.stopReason];
     const samplesStorage = action.distinctStorage > 0 || proof?.storageSnapshotRetained;
     const metrics: Totals[] = [
-      { label: "Distinct requests", value: action.distinctResources, counts: req ? { nonEssential: req.nonEssential, unclassified: req.unclassified } : undefined },
+      { label: "Distinct requests", value: action.distinctResources, counts: req ? { nonEssential: req.nonEssential, review: req.review, unclassified: req.unclassified } : undefined },
       { label: storage, value: samplesStorage ? action.distinctStorage : null,
         counts: samplesStorage && action.distinctClassifications ? {
-          nonEssential: action.distinctClassifications.storage.nonEssential,
+          nonEssential: action.distinctClassifications.storage.nonEssential, review: action.distinctClassifications.storage.review,
           unclassified: action.distinctClassifications.storage.unclassified,
         } : undefined },
       { label: frames, value: null },
     ];
-    const flags = flaggedItems(metrics.map(metric => metric.counts));
     return {
-      id, label, count: observationCount(flags?.count, states), unit: "flagged items", state: states,
+      id, label, count: flags.count, unit: "flagged items", state: states,
       choiceUnconfirmed: proof?.execution.clickCompleted && !proof.execution.consentConfirmed,
       breakdown: flags?.breakdown,
       metrics,
       notes: [`${capture.note} ${capture.clockLabel}.`, ...(stop ? [stop] : []),
         ...(proof?.documentChanged ? ["The page or control frame changed during the capture. Treat the counts as a partial view of this choice."] : []),
-        ...(path?.note && states === "partial" ? [path.note] : []),
-        "Classification-review counts were not retained for this path."],
+        ...(path?.note && states === "partial" ? [path.note] : [])],
       facts, services: action.identifiedServiceNames,
       sharedServices: capture.inventory.services.filter(service => baselineServices.has(service.key)).map(service => service.name),
       evidence: report.actionTimelines?.[id] ? id : undefined,
@@ -139,11 +143,10 @@ export function buildConsentTrackingOverview(report: OverviewInput, focus: Repor
       ...forms.map(row => `${row.form.title || row.form.surfaceType.replaceAll("_", " ")} · ${row.form.retainedFieldCount} fields${isAfterAcceptForm(row) ? " · After Accept" : ""}`)],
   };
   if (!california) return [before, ...actions,
-    { id: "services", label: "Services before consent", count: overview?.identifiedServices ?? null, unit: "identified services",
+    { id: "services", label: "Services pre-consent", count: overview?.identifiedServices ?? null, unit: "identified services",
       state: overview ? "recorded" : "unavailable", services: inventoryNames, evidence: overview?.identifiedServices ? "pre-consent" : undefined },
     { id: "storage", label: storage, count: storageCount || null,
       unit: overview ? "distinct items" : "retained items", state: storageCount ? overview ? "recorded" : "partial" : "unavailable",
-      storageReviewCount: baselineTotals[1]?.counts?.review,
       metrics: baselineTotals.slice(1), evidence: storageCount ? "pre-consent" : undefined }, formTile];
 
   const privacy = report.californiaPrivacyReview;
@@ -163,25 +166,24 @@ export function buildConsentTrackingOverview(report: OverviewInput, focus: Repor
     ] : undefined,
     services: optOut ? [...new Set(optOut.requests.map(request => request.vendor))] : undefined,
   };
+  return [before, ...actions, optOutTile, buildGpcTile(report), formTile];
+}
+
+export function buildGpcTile(report: Pick<OverviewInput, "scan" | "gpcResponse" | "gpcLaneStatus" | "runtimeEvidenceGraph" | "gpcResourceInventory">): ConsentTrackingTile {
   const response = GPC_CUSTOMER_RESULTS_ENABLED ? report.gpcResponse : null;
-  const gpc = response?.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? response.assessment.observation : null;
-  const delivered = gpc && gpc.status !== "unavailable" && gpc.delivery.httpHeaderRetained && gpc.delivery.mainNavigatorReadbackRetained;
-  const paired = delivered ? response?.activityComparison : undefined;
-  const gpcState = delivered ? gpc.status === "complete" && gpc.requests.complete ? "recorded" : "partial"
-    : report.gpcLaneStatus === "not_requested" ? "not_tested" : "unavailable";
-  const gpcTile: ConsentTrackingTile = {
-    id: "gpc", label: "GPC enabled", count: observationCount(delivered ? gpc.requests.classifiedCount : undefined, gpcState),
-    unit: "classified tracking requests", state: gpcState, evidence: report.gpcTimeline ? "gpc" : undefined,
-    notes: [...(delivered ? ["GPC used a separate visit. The classified count covers tracking categories in that visit’s retained request sample."] : []),
-      ...(response?.coverageSummary ? [response.coverageSummary] : [])],
-    facts: delivered ? [
-      { label: "Signal delivery", value: "Verified in the request and browser" },
-      { label: "Requests in retained GPC sample", value: format(gpc.requests.count) },
-      ...(gpc.requests.throughMs != null ? [{ label: "Visit measured through", value: duration(gpc.requests.throughMs) }] : []),
-      ...(gpc.requests.advertisingCollectionCount != null ? [{ label: "Advertising collection requests", value: format(gpc.requests.advertisingCollectionCount) }] : []),
-      ...(paired ? [{ label: `Advertising/marketing in matched ${duration(paired.durationMs)} windows`, value: `${format(paired.activity.advertisingMarketing.baselineRequests)} before choice · ${format(paired.activity.advertisingMarketing.gpcRequests)} with GPC` }] : []),
-    ] : undefined,
-    services: delivered ? [...new Set(gpc.requests.advertisingCollectionRecipients?.rows.map(row => row.label) ?? [])] : undefined,
+  const comparison = response?.activityComparison;
+  const graph = report.runtimeEvidenceGraph;
+  const capture = response && report.gpcResourceInventory;
+  const flags = capture ? choiceInventoryCounts(capture) : null;
+  return {
+    id: "gpc", label: "GPC enabled", count: flags?.count ?? null,
+    unit: "flagged items", breakdown: flags?.breakdown,
+    contributors: flags?.contributors,
+    deferredGpc: response && !capture && graph?.scanId === report.scan.id && graph.details
+      ? { scanId: graph.scanId, graphHash: graph.details.sha256 } : undefined,
+    state: flags?.state ?? (report.gpcLaneStatus === "not_requested" ? "not_tested" : "unavailable"),
+    gpcWindow: comparison && { durationMs: comparison.durationMs, activity: comparison.activity },
+    evidence: response ? "gpc" : undefined,
+    notes: response && !comparison ? ["Matched request comparison unavailable."] : undefined,
   };
-  return [before, ...actions, optOutTile, gpcTile, formTile];
 }

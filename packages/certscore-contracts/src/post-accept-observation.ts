@@ -683,6 +683,8 @@ export const POST_ACCEPT_REPORT_PROJECTION_VERSION =
   "certscore.post_accept_report_projection.v1" as const;
 
 const postAcceptReportActivityRowSchema = z.object({
+  choiceRequestRole: postRefusalNetworkRequestSchema.shape.choiceRequestRole,
+  method: postRefusalNetworkRequestSchema.shape.method,
   activityType: z.enum(["network_request", "storage_write"]),
   category: postRefusalNetworkRequestSchema.shape.purpose,
   consentState: z.literal("post_accept"),
@@ -871,6 +873,8 @@ export function projectPostAcceptEvidenceForReport(input: {
             nonEssential: true as const,
             requestId: request.requestId,
             url: request.sanitizedUrl,
+            ...(request.choiceRequestRole === "tag_library" || (request.choiceRequestRole && request.httpStatus !== undefined && request.httpStatus >= 200 && request.httpStatus < 300)
+              ? {choiceRequestRole: request.choiceRequestRole, method: request.method} : {}),
             ...(request.vendor ? { vendor: request.vendor } : {}),
           })),
         ...packet.storage.writesAfterAccept

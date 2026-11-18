@@ -1,3 +1,4 @@
+import { choiceRequestRole } from "@certscore/contracts";
 import {captureOsanoReceiptBaseline,readVerifiedOsanoReceipt,type OsanoReceiptBaseline} from "./osano-consent-receipt.js";
 import {requireWithinActionBoundary, ActionOperationStopped} from "./action-operation-boundary.js";
 import {readWithinActionBoundary as readWithinAcceptDeadline} from "./action-operation-boundary.js";
@@ -239,6 +240,8 @@ export interface PostAcceptObserverInput {
 }
 
 type CapturedRequest = {
+  choiceRole?: ReturnType<typeof choiceRequestRole>;
+  measurementStatus?: number;
   request: Request;
   requestId: string;
   startedAtEpochMs: number;
@@ -446,6 +449,7 @@ export async function runPostAcceptObserver(
 
   const activeRequestIds = new Set<string>();
   const requestIds = new WeakMap<Request, string>();
+  const measurementRequests = new WeakMap<Request, CapturedRequest>();
   let nextRequestNumber = 0;
   let acceptanceRegisteredAtEpochMs: number | undefined;
   let activeRequestIdsAtAcceptanceRegistration: string[] = [];
@@ -726,9 +730,16 @@ export async function runPostAcceptObserver(
         if (selection.evicted) activeRequestIds.delete(selection.evicted.requestId);
         if (!selection.retained) return;
       } else bucket.push(captured);
+      captured.choiceRole = choiceRequestRole(request.url(), request.method(), request.resourceType());
+      if (captured.choiceRole && captured.choiceRole !== "tag_library") measurementRequests.set(request, captured);
       requestIds.set(request, requestId);
       activeRequestIds.add(requestId);
       if (actionDispatched) extendFormLifecycle();
+    });
+    page.on("response", response => {
+      if (networkObservationClosed || timing.observationEndedAtMs !== undefined) return;
+      const captured = measurementRequests.get(response.request());
+      if (captured) captured.measurementStatus = response.status();
     });
     const markCompleted = (request: Request) => {
       const requestId = requestIds.get(request);
@@ -2976,6 +2987,7 @@ function classifyRequests(
 ): PostAcceptNetworkRequest[] {
   return captured.map((entry) => {
     const url = entry.request.url();
+    const role = entry.choiceRole;
     const vendor = vendorFor({ type: "request", url });
     const googleConsentMode = captureGoogleConsentModeRequest({ url, requestId: entry.requestId, timestampMs: elapsed(scanStartedAtMs, entry.startedAtEpochMs) });
     const offset = acceptanceRegisteredAtEpochMs === undefined
@@ -2983,6 +2995,7 @@ function classifyRequests(
       : elapsed(scanStartedAtMs, entry.startedAtEpochMs) - elapsed(scanStartedAtMs, acceptanceRegisteredAtEpochMs);
     return {
       requestId: entry.requestId,
+      ...(role ? {choiceRequestRole:role, method:entry.request.method(), httpStatus:entry.measurementStatus} : {}),
       sanitizedUrl: sanitizeUrl(url),
       ...(googleConsentMode ? { googleConsentMode } : {}),
       ...(hostnameFromUrl(url) ? { hostname: hostnameFromUrl(url) } : {}),

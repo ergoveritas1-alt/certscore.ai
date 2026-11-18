@@ -17,8 +17,9 @@ export function reviewFocusMismatchNote(focus: ReportReviewFocus, scanFrom: unkn
   if ((focus === "ccpa_cpra" && scanFrom === "california") ||
       (focus === "gdpr_eprivacy" && (scanFrom === "eu_de" || scanFrom === "eu_ie"))) return null;
   const origin = scanFrom === "california" ? "California" : scanFrom === "eu_de" ? "Germany" : scanFrom === "eu_ie" ? "Ireland" : "an unverified location";
-  const visitorRegion = focus === "ccpa_cpra" ? "California" : "EU";
-  return `Coverage · Scanned from ${origin}; ${visitorRegion} visitor behavior was not tested. Switching review focus uses this visit’s evidence.`;
+  return focus === "ccpa_cpra"
+    ? `Scanned from ${origin}; California site behavior should be scanned from California.`
+    : `Scanned from ${origin}; EU site behavior should be scanned from the EU.`;
 }
 export function reviewFocusScopeNote(focus: ReportReviewFocus, scanFrom: unknown) {
   scanFrom = normalizedOrigin(scanFrom);

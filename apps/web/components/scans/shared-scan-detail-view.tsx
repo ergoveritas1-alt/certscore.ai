@@ -61,6 +61,7 @@ import { ScanPageHeader } from "./scan-page-header";
 import { InventorySortButton, InventorySortRuntime } from "./inventory-table-sort";
 import { InventoryNameDisclosure } from "./inventory-name-disclosure";
 import { VendorBrandChip } from "./vendor-brand-chip";
+import { noGoBrowserGuidance } from "../../lib/scans/no-go-browser-guidance";
 import { NoGoBrowserExtensionRecovery } from "./no-go-browser-extension-recovery";
 import {
   EMPHASIS_METRIC_CARD_CLASS,
@@ -7883,6 +7884,7 @@ export async function SharedScanDetailView({
   });
   const isScanInFlight = scanRecord.scan.status === "queued" || scanRecord.scan.status === "running";
   const isScanFailed = scanRecord.scan.status === "failed";
+  const browserGuidance = showBrowserExtensionRecovery ? noGoBrowserGuidance(scanRecord) : undefined;
   const scanFailure = scanFailureExplanation(scanRecord.scan.errorMessage, projectScanReportNoGo(scanRecord));
   const accessibilityAudit = projectAccessibilityAuditSummary(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id);
   const isIncompleteScanCoverage = hasIncompleteScanCoverage(scanRecord) || isAccessibilityAuditLimited(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id);
@@ -8209,13 +8211,16 @@ export async function SharedScanDetailView({
                   <p className="text-sm leading-6 text-rose-800">
                     {scanFailure.detail}
                   </p>
-                  <p className="text-sm leading-6 text-slate-600">{scanFailure.nextStep}</p>
+                  {browserGuidance
+                    ? <NoGoBrowserExtensionRecovery guidance={browserGuidance} />
+                    : <p className="text-sm leading-6 text-slate-600">{scanFailure.nextStep}</p>}
                   <a href="/app" className="inline-block pt-2 text-sm font-medium text-sky-700 underline">Back to Overview</a>
                 </div>
               </div>
             </section>
           ) : (
             <>
+              <NoGoBrowserExtensionRecovery guidance={browserGuidance} />
               <ExecutiveSummaryCard
                 accessLimitationNotice={executiveAccessNoticeCardProps}
                 allFindings={allExecutiveFindingsWithRegulatoryGaps}
@@ -8279,11 +8284,7 @@ export async function SharedScanDetailView({
             showProtectedRouteInterruptions={showAdvancedDiagnostics}
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
           />
-          {showBrowserExtensionRecovery && executiveAccessLimitationNotice?.finding.id === "scan_quality_visual_no_go" ? (
-            <NoGoBrowserExtensionRecovery
-              isTargetSiteState={executiveAccessLimitationNotice.review.coverageLabel === "Observed target-site state"}
-            />
-          ) : null}
+
           {isNoGoReport ? null : (
             <div className="space-y-5">
               <RuntimeInventoryTable

@@ -51,3 +51,27 @@ test("a full after-click clock with verified navigation remains a partial choice
   assert.equal(counted?.measurement?.elapsedMs, 510);
   assert.equal(counted?.inventory.resources[0]?.inventoryEvidence, "Non-essential");
 });
+
+test("a legacy cookie-write attempt cannot add a flagged item without stored or sent evidence", () => {
+  const p = afterRejectProjection();
+  const row = { ...p.postRefusalActivity[0], activityType: "storage_write", storageType: "cookie", storageName: "_fbp" };
+  const capture = projectActionResourceInventory({ ...input, projection: {
+    ...p, scoringEvidence: undefined, postRefusalActivity: [row],
+  } });
+  assert.ok(capture);
+  assert.equal(capture.inventory.resources[0]?.inventoryEvidence, "Unclassified");
+});
+
+test("choice request identities ignore query variants and keep positive evidence across repetitions", () => {
+  const p = afterRejectClickProjection();
+  const source = p.afterActionRequests![0]!;
+  const repeat = { ...source, requestId: "another", sanitizedUrl: source.sanitizedUrl + "?test=1" };
+  const capture = projectActionResourceInventory({ ...input, projection: {
+    ...p, afterActionCapture: { ...p.afterActionCapture, requestIds: [source.requestId, repeat.requestId],
+      requestAncestry: [source, repeat].map(r => ({ requestId: r.requestId, rootStartedAtMs: r.rootStartedAtMs })) },
+    afterActionRequests: [{ ...source, nonEssential: false, vendor: undefined, purpose: "unknown" }, repeat],
+  } });
+  assert.ok(capture);
+  assert.equal(capture.inventory.resources.length, 1);
+  assert.equal(capture.inventory.resources[0]?.inventoryEvidence, "Non-essential");
+});

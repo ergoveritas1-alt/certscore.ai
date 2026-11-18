@@ -19,6 +19,7 @@ import { consentControlReportLabels } from "../../../lib/scans/consent-control-r
 import type { ReviewedPolicy } from "../../../lib/scans/full-site-resource-context";
 import { projectReportRuntimeInventory } from "../../../lib/scans/report-runtime-inventory";
 import { afterClickCoverage } from "../after-action-summary";
+import { noGoBrowserGuidance } from "../../../lib/scans/no-go-browser-guidance";
 import { projectScanReportNoGo } from "../../../lib/scans/scan-report-disposition";
 import { siteMetadataProjectionSchema } from "@certscore/contracts";
 import { acceptPathIncompleteReason } from "./accept-path-reason";
@@ -508,7 +509,7 @@ function buildReportIdentity(scanRecord: ScanDetailResponse): ShadowReportData["
 export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewedPolicies: ReviewedPolicy[] = []): TimelineReportData {
   const noGo = projectScanReportNoGo(scanRecord);
   if (noGo) {
-    return { ...noGo, scan: buildReportIdentity(scanRecord), score: { label: "Not scored" as const, value: null } };
+    return { ...noGo, browserGuidance: noGoBrowserGuidance(scanRecord, noGo), scan: buildReportIdentity(scanRecord), score: { label: "Not scored" as const, value: null } };
   }
   const canonical = getPersistedCanonicalReportProjection(scanRecord);
   if (!canonical) {
@@ -595,7 +596,9 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     rejectPath,
     canonical.ownerUnifiedFindings,
   );
-  const gpcResponse = buildGpcResponseReportProjection(canonical.ownerUnifiedFindings);
+  const gpcResponse = buildGpcResponseReportProjection(canonical.ownerUnifiedFindings, {
+    scanId: scanRecord.scan.id, activityComparison: runtimeArtifacts?.gpcActivityComparison,
+  });
   const executionConfig = record(scanRecord.scan.scanConfigJson)?.execution;
   const gpcLambdaConfig = record(record(executionConfig)?.v2DagLambda);
   const gpcObservationEnabled = gpcLambdaConfig?.gpcObservationEnabled === true ||

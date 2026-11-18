@@ -1,6 +1,7 @@
+import { NoGoBrowserExtensionRecovery } from "../no-go-browser-extension-recovery";
 import { signalSnapshotValueClass } from "../signal-snapshot-styles";
 import { GpcProductEvidence } from "../gpc-product-evidence";
-import { PrivacyChoiceOverview } from "../privacy-choice-overview";
+import { GpcVisitInventory } from "./gpc-visit-inventory";
 import { GdprEprivacyCoverageSummary, GdprEprivacyReview } from "../gdpr-eprivacy-review";
 import { GPC_CUSTOMER_RESULTS_ENABLED } from "../../../lib/scans/gpc-customer-policy";
 import { EVIDENCE_SECTION_TITLES } from "../../../lib/scans/detailed-evidence-presentation";
@@ -35,8 +36,8 @@ import { SitewideEvidenceCard } from "../sitewide-evidence-card";
 import { FullSiteIdentity } from "../full-site-identity";
 import { FullSiteExecutiveSummary } from "../full-site-executive-summary";
 import { ReportInventoryNavigation } from "../report-inventory-navigation";
-import { ConsentTrackingSummary } from "../consent-tracking-summary";
-import { buildConsentTrackingOverview } from "../../../lib/scans/consent-tracking-overview";
+import { ConsentTrackingSummary, GpcInventoryContributors, GpcInventoryProvider, GpcInventoryRecap } from "../consent-tracking-summary";
+import { buildConsentTrackingOverview, buildGpcTile } from "../../../lib/scans/consent-tracking-overview";
 import { ReportPageEventTimeline } from "../report-page-event-timeline";
 import { isAfterAcceptForm } from "../../../lib/scans/collection-surface-table-row";
 import { SitePriorityReview } from "../site-priority-review";
@@ -79,7 +80,7 @@ import {
 } from "./industry-benchmark-data";
 import { ShadowPolicyEvidenceViewer } from "./shadow-policy-evidence-viewer";
 import { evidenceRowAnchor } from "../../../lib/scans/report-evidence-navigation";
-import { gpcCollectionRecipients, gpcCardActivity, gpcCardResponse, gpcSummaryLabel, gpcEvidenceHeaderLabel } from "./gpc-report-projection";
+import { gpcCollectionRecipients, gpcCardActivity, gpcEvidenceHeaderLabel } from "./gpc-report-projection";
 import { getConsentControlSummaryLabel } from "./timeline-report-model";
 import {
   SHADOW_PRIVACY_NOTICE_EVIDENCE,
@@ -1249,7 +1250,7 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
           reviewFocusControl={<RegulatoryReviewFocus focus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} />}
           timing={<ReportCoverageTiming scanId={report.scan.id} duration={report.scan.duration} showDurationInSummary={false}
             groups={[
-              { title: "Coverage", rows: [["Scan scope", "Single page"], ["Pages scanned", 1], ["Scan region", report.scan.origin]] },
+              { title: "Coverage", rows: [["Scan scope", "Single page"], ["Scan region", report.scan.origin]] },
               { title: "Timing", rows: [["Observation window", report.scan.duration]] },
             ]}
             started={report.scan.startedAt ?? "Not available"} completed={report.scan.completedAt ?? "Not available"} />} /></div>
@@ -1455,51 +1456,45 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
 
 export function GpcEvidenceIndexCard({ projection, california = false }: { projection: GpcResponseReportProjection; california?: boolean }) {
   if(!reportSectionInFocus("gpc",california?"ccpa_cpra":"gdpr_eprivacy"))return null;
-  const proof = projection.assessment.comparison.enabledProof;
   const activity = gpcCardActivity(projection);
   const recipients = gpcCollectionRecipients(projection);
   const scoredRisk = california && projection.californiaDeductionPoints > 0;
-  const hasComparison = projection.assessment.comparison.comparable && projection.assessment.status !== "indeterminate";
-  const evidenceJson: Record<string, unknown> = {
-    assessment: projection.assessment,
-    evidenceRefs: projection.evidenceRefs,
-  };
-
+  const siteFacts = projection.observedFacts.filter(row =>
+    row.label.startsWith("Site-recorded") || row.label === "Visible GPC acknowledgment" || row.label === "GPC signal");
+  const hasVisitInventory = projection.assessment.contractVersion !== "certscore.gpc-response-assessment.v1" &&
+    (projection.assessment.comparison.deltas.cookies.gpcCount > 0 || projection.assessment.comparison.deltas.trackers.gpcCount > 0);
+  const adverse = projection.guidance?.items.filter(item => item.kind === "adverse") ?? [];
+  const evidenceJson = projection.assessment.comparison.comparable
+    ? { assessment: projection.assessment, evidenceRefs: projection.evidenceRefs }
+    : { observedFacts: projection.observedFacts, evidenceRefs: projection.evidenceRefs };
   return (
     <details className="group/gpc border-b border-r border-zinc-200 p-5" id="gpc-evidence" data-testid="gpc-evidence-index-card">
       <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.gpc}
-        recap={scoredRisk ? "Risk observed" : gpcEvidenceHeaderLabel(projection)}
+        recap={<GpcInventoryRecap fallback={scoredRisk ? "Risk observed" : gpcEvidenceHeaderLabel(projection)} />}
         badge={<EvidenceHeaderStatus rows={scoredRisk ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" && !projection.activityComparison ? [{status: "Limited"}] : []} />} />
       <div className="mt-4 space-y-3 text-xs leading-5 text-zinc-600">
-        {activity ? <p>{activity}</p> : null}
-        {recipients.length ? <div>
-          <p className="font-semibold text-zinc-800">Advertising recipients observed with GPC</p>
-          <ul className="mt-1 space-y-1">
-            {recipients.map(recipient => <li key={recipient.entityId}>
-              <span className="font-semibold">{recipient.label}</span> · {recipient.count} collection request{recipient.count === 1 ? "" : "s"}
-              {recipient.identifiedCount > 0 ? <span className="block">{recipient.identifiedCount} identified advertising, audience or synchronization request{recipient.identifiedCount === 1 ? "" : "s"} with GPC enabled</span> : <span className="block">Retained advertising requests for review</span>}
-              {recipient.firstMs !== undefined ? <> · {recipient.firstMs === recipient.lastMs ? "observed" : "first observed"} at {(recipient.firstMs / 1000).toFixed(2)} s{recipient.lastMs !== recipient.firstMs ? `; last at ${(recipient.lastMs! / 1000).toFixed(2)} s` : ""} after GPC visit start</> : null}
-            </li>)}
-          </ul>
-        </div> : null}
-        {projection.observedFacts.length ? <dl className="space-y-2">{projection.observedFacts.filter(row => row.label !== "Activity with GPC").map(row => <div key={row.label}><dt className="font-semibold text-zinc-800">{row.label}</dt><dd>{row.value}</dd></div>)}</dl> : null}
-        <GpcActivityComparison comparison={projection.activityComparison} />
-        <GpcProductEvidence comparison={projection.cmpStateComparison} guidance={projection.guidance} />
-        {hasComparison ? <DetailedEvidenceFinding title="Comparison with GPC disabled" summary={gpcCardResponse(projection)}
-          evidenceJson={evidenceJson} evidenceRefs={projection.evidenceRefs} correctionSteps={[]}>
-          <div className="space-y-3 text-xs leading-5 text-zinc-600">
-            <details className="group/gpc-comparison border-t border-zinc-200 pt-3">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold [&::-webkit-details-marker]:hidden">
-                How we measured this<DisclosureChevron className="text-zinc-400 group-open/gpc-comparison:rotate-180" />
-              </summary>
-              <div className="mt-3 space-y-3">
-                <p>Page request: Sec-GPC {proof.secGpcHeaderValue ?? "unverified"}; browser setting: {proof.navigatorGlobalPrivacyControl === null ? "unverified" : String(proof.navigatorGlobalPrivacyControl)}.</p>
-                {projection.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? <p>{projection.assessment.observation.requests.count} retained request attempts; {proof.requestsWithSecGpc} retained requests with Sec-GPC.</p> : null}
-                <p>{projection.coverageSummary}</p>
-              </div>
-            </details>
+        <GpcInventoryContributors />
+        {projection.activityComparison ? <GpcActivityComparison comparison={projection.activityComparison} /> :
+          <p>Matched request comparison unavailable.</p>}
+        {hasVisitInventory || activity || recipients.length ? <section className="space-y-2" aria-label="GPC visit evidence">
+          <h4 className="text-sm font-semibold text-zinc-900">Across the GPC visit</h4>
+          {hasVisitInventory ? <GpcVisitInventory assessment={projection.assessment} /> : null}
+          {recipients.length ? <ul className="space-y-1">{recipients.map(recipient => <li key={recipient.entityId}>
+            <strong>{recipient.label}</strong> · {recipient.count} advertising collection request{recipient.count === 1 ? "" : "s"}
+            {recipient.firstMs !== undefined ? ` · ${(recipient.firstMs / 1000).toFixed(2)}${recipient.lastMs !== undefined && recipient.lastMs !== recipient.firstMs ? `–${(recipient.lastMs / 1000).toFixed(2)}` : ""} s after GPC visit start` : ""}
+            {recipient.identifiedCount > 0 ? <span className="block">{recipient.identifiedCount} identified advertising, audience or synchronization request{recipient.identifiedCount === 1 ? "" : "s"} with GPC enabled</span> : null}
+          </li>)}</ul> : null}
+          {activity ? <details><summary className="cursor-pointer">Visit-wide request sample</summary><p className="mt-1">{activity}</p></details> : null}
+        </section> : null}
+        {adverse.map(item => <p key={item.code} className="font-medium text-zinc-900">{item.observation}</p>)}
+        <details className="border-t border-zinc-200 pt-2">
+          <summary className="cursor-pointer font-medium">Signal and site-recorded settings</summary>
+          <div className="mt-2 space-y-3">
+            {siteFacts.map(row => <p key={row.label}><strong>{row.label}</strong> · {row.value}</p>)}
+            <GpcProductEvidence comparison={projection.cmpStateComparison} guidance={projection.guidance} />
+            <EvidenceTools evidenceJson={evidenceJson} evidenceRefs={projection.evidenceRefs} correctionSteps={[]} />
           </div>
-        </DetailedEvidenceFinding> : <EvidenceTools evidenceJson={{ observedFacts: projection.observedFacts, evidenceRefs: projection.evidenceRefs }} evidenceRefs={projection.evidenceRefs} correctionSteps={[]} />}
+        </details>
       </div>
     </details>
   );
@@ -1540,7 +1535,6 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
           </div>
           <RatingMix report={report} homepage={compact} />
         </div>
-        {GPC_CUSTOMER_RESULTS_ENABLED && reportSectionInFocus("gpc", report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) ? <PrivacyChoiceOverview report={report} /> : null}
         <div className={`${compact ? "mt-3 gap-3" : "mt-6 gap-6"} evidence-directory-grid grid items-start sm:grid-cols-2`}>
           <EvidenceColumns siteIntegrity={<SiteIntegrityEvidence finding={report.siteIntegrity} />} hasSiteIntegrity={Boolean(report.siteIntegrity)}>
             {additionalEvidence}
@@ -1708,7 +1702,9 @@ export function ShadowScanReport({
         <p className="mt-4 text-zinc-700">{report.noGo.explanation}</p>
         <p className="mt-3 text-zinc-700">{report.noGo.summary}</p>
         {report.noGo.evidenceExcerpt ? <blockquote className="mt-4 border-l-2 border-amber-400 pl-4 text-sm text-zinc-600">{report.noGo.evidenceExcerpt}</blockquote> : null}
-        <p className="mt-5 font-medium">{report.noGo.recommendedNextAction}</p>
+        {report.browserGuidance
+          ? <NoGoBrowserExtensionRecovery guidance={report.browserGuidance} />
+          : <p className="mt-5 font-medium">{report.noGo.recommendedNextAction}</p>}
       </section>
     </main>
   ) : (
@@ -1724,7 +1720,10 @@ export function ShadowScanReport({
     </>
   );
 
-  const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace californiaAssessment={report.californiaPrivacyReview} californiaScore={report.californiaScore} reviewFocus={focus} afterAcceptForms={report.collectionTableRows?.filter(isAfterAcceptForm)} afterAcceptFormsLimited={report.afterAcceptFormsLimited} formDestinationEvidence={<FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />} homepageRuntimeCards={report.executiveRuntimeCards} executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<ReportPageEventTimeline events={report.timeline} accept={report.actionTimelines?.accept} reject={report.actionTimelines?.reject} gpc={report.gpcTimeline} />} executiveSnapshot={<SignalSnapshot siteOverview={Boolean(report.fullSite)} report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} homepageHighlightExpansion={report.assessmentHighlightExpansion} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
+  const body = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace californiaAssessment={report.californiaPrivacyReview} californiaScore={report.californiaScore} reviewFocus={focus} afterAcceptForms={report.collectionTableRows?.filter(isAfterAcceptForm)} afterAcceptFormsLimited={report.afterAcceptFormsLimited} formDestinationEvidence={<FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />} homepageRuntimeCards={report.executiveRuntimeCards} executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<ReportPageEventTimeline events={report.timeline} accept={report.actionTimelines?.accept} reject={report.actionTimelines?.reject} gpc={report.gpcTimeline} />} executiveSnapshot={<SignalSnapshot siteOverview={Boolean(report.fullSite)} report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} homepageHighlightExpansion={report.assessmentHighlightExpansion} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
+
+  const reportContent = focus === "ccpa_cpra" && report.resultDisposition !== "no_go" && report.gpcResponse
+    ? <GpcInventoryProvider tile={buildGpcTile(report)}>{body}</GpcInventoryProvider> : body;
 
   const completionEvent = report.resultDisposition !== "no_go" && !report.fullSite
     ? <ScanCompletedEvent scanId={report.scan.id} scanSource={mode === "authenticated" ? "dashboard" : "homepage"} domain={report.scan.host} /> : null;

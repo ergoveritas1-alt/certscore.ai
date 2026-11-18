@@ -1,3 +1,4 @@
+export { buildGpcMeasurementInventory } from "./gpc-measurement-inventory.js";
 import { buildGpcCollectionComparison } from "./gpc-collection-comparison.js";
 import { gpcActivityComparisonSchema, type GpcActivityComparison, type GpcBoundedObservation } from "@certscore/contracts";
 import { buildGpcImpactAssessment, readVerifiedGpcImpactSource, type GpcImpactSource } from "./gpc-impact-assessment.js";

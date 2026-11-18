@@ -31,3 +31,18 @@ test("first-party static assets are contextual while scripts and known tracking 
   }
   assert.equal(classifyCrawlInventoryResource({ ...base, resourceType: "script" }), "Unclassified");
 });
+
+test("successful CDN image delivery needs an attributed asset endpoint; a CDN hostname alone cannot clear a review", () => {
+  const image = { ...base, label: "https://cdn.sanity.io/images/abc/production/_redacted_",
+    domain: "cdn.sanity.io", resourceType: "Image", purpose: "infrastructure", details: { method: "GET", httpStatus: 200 } };
+  assert.equal(classifyCrawlInventoryResource(image), "Contextual");
+  const ambiguous: CrawlOccurrence[] = [
+    { ...image, label: "https://cdn.sanity.io/collect" },
+    { ...image, details: { method: "GET", httpStatus: 204 } },
+    { ...image, details: { method: "GET", httpStatus: 200, hasCookieOrTrackingEvidence: true } },
+    { ...image, details: { method: "POST", httpStatus: 200 } },
+    { ...image, details: { method: "GET" } },
+  ];
+  for (const row of ambiguous) assert.equal(classifyCrawlInventoryResource(row), "Review");
+  assert.equal(classifyCrawlInventoryResource({ ...image, purpose: "advertising" }), "Non-essential");
+});

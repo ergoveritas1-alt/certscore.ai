@@ -70,6 +70,7 @@ test("retained 401 stays unscored through persistence, checksum-verified read, t
         </AppRouterContext.Provider>,
       );
       assert.match(html, /Sign-in required/);
+      assert.doesNotMatch(html, /View Chrome extension instructions/);
       assert.match(html, /Not scored/);
       assert.match(html, /HTTP 401/);
       assert.equal([...html.matchAll(/placeholder="Scan next website"/g)].length, 1);
@@ -189,6 +190,30 @@ test("the production projection writer withholds score and top findings before d
   assert.equal(value.findingCount, 0);
   assert.equal(canonicalReportProjection.legacyScoreAssessmentInput.scoreValue, null);
   assert.deepEqual(canonicalReportProjection.topFindingIds, []);
+});
+
+test("current public and signed-in reports show the appropriate next step after a hosted challenge", async () => {
+  const { buildTimelineReportModel } = await import("../../components/scans/report-lab/timeline-report-model");
+  const { ShadowScanReport } = await import("../../components/scans/report-lab/shadow-scan-report");
+  const router = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {} };
+  for (const restricted of [false, true]) {
+    const record = scan();
+    record.runtimeArtifacts = { scan_no_go_assessment: { decision: "no_go", reasonCodes: ["captcha_or_challenge"] } };
+    record.snapshot = { ...record.snapshot, robots_allowed: !restricted };
+    const saved = readPersistedScanReportProjection(readable(buildPersistedScanReportProjection(record)));
+    assert.ok(saved);
+    const report = buildTimelineReportModel(saved);
+    assert.equal(report.resultDisposition, "no_go");
+    for (const mode of ["authenticated", "public"] as const) {
+      const html = renderToStaticMarkup(
+        <AppRouterContext.Provider value={router}><PathnameContext.Provider value="/scan/challenge">
+          <ShadowScanReport mode={mode} variant="timeline" report={report} />
+        </PathnameContext.Provider></AppRouterContext.Provider>);
+      assert.match(html, /Not scored/);
+      assert.equal(html.includes("View Chrome extension instructions"), !restricted);
+      assert.equal(html.includes("Choose a URL that permits scanning"), restricted);
+    }
+  }
 });
 
 test("a blocked extension reload renders the terminal report with its HTTP status and no recovery loop", async () => {

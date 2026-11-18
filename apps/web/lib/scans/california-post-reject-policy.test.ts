@@ -43,12 +43,13 @@ function gpc() {
  const comparison=buildGpcResponseAssessment({baseline:gpcRuntimeFixture({enabled:false}),gpc:g,gpcArtifact:pointer,baselineArtifact:{...pointer,uri:"s3://fixture/base.json"}});
  return buildGpcProductionAssessment({scanId:g.scanId,comparison,source:{bytes,pointer}});
 }
-function canonical(p:ReturnType<typeof projection>,withGpc=false,gpcOverride?:ReturnType<typeof gpc>) {
+function canonical(p:ReturnType<typeof projection>,withGpc=false,gpcOverride?:ReturnType<typeof gpc>, priorPolicy?:NonNullable<ReturnType<typeof assessCaliforniaPostReject>>["policyVersion"]) {
  const f=californiaCoverageFixture();f.bundle.scanId="gpc-fixture";f.policyEvidence.projection.scanId=f.bundle.scanId;
  f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v10";f.bundle.policySurfaceObservations.forEach(row=>{row.documentLanguage="en";});
  const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
  const parent=deriveConsentControlAssessment({scan:{scanId:f.bundle.scanId,finalUrl:CA_FIXTURE_URL}});parent.californiaPrivacyReview=child;
  const runtime=JSON.parse(JSON.stringify({...buildPostRefusalRuntimeProjection(p),consentControlAssessment:parent,...(withGpc?{gpcResponseAssessment:gpcOverride??gpc()}:{})}));
+ if (priorPolicy) runtime.californiaPostRejectAssessment = assessCaliforniaPostReject(p,priorPolicy);
  const findings=buildUnifiedFindingDisplayPackets({runtimeArtifacts:runtime,reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
  return {runtime,findings,score:deriveCaliforniaRegulatoryScore({assessment:child,unifiedFindings:findings,checklistRows:[]})};
 }
@@ -91,15 +92,15 @@ function auctionGpc(regs?:unknown,mode?:"failed_response"|"missing_signal"|"wron
  const comparison=buildGpcResponseAssessment({baseline:gpcRuntimeFixture({enabled:false}),gpc:b,gpcArtifact:pointer,baselineArtifact:{...pointer,uri:"s3://fixture/base.json"}});
  return buildGpcProductionAssessment({scanId:b.scanId,comparison,source:{bytes,pointer:mode==="wrong_hash"?{...pointer,sha256:"f".repeat(64)}:pointer}});
 }
-test("versioned Index auction evidence reaches canonical GPC and Reject findings with shared recipient deduplication",()=>{
+test("versioned Index auction evidence reaches canonical GPC and Reject findings with independent visit deductions",()=>{
  const p=auctionProjection(),a=assessCaliforniaPostReject(p)!,g=auctionGpc();
- assert.equal(a.policyVersion,"california-post-reject.v5-index-auction");assert.equal(a.status,"qualified_collection");
+ assert.equal(a.policyVersion,"california-post-reject.v7-per-visit");assert.equal(a.status,"qualified_collection");
  assert.equal(assessCaliforniaPostReject(p,"california-post-reject.v4-retained-scope")?.status,"no_eligible_collection","old policy cannot acquire the new basis");
  const policy=deriveCaliforniaGpcResponsePolicy(g);
  assert.equal(policy.policyVersion,"california-gpc-response.v11-index-auction");assert.equal(policy.scoreEffect,"deduction");
  assert.deepEqual(policy.recipientIds,a.recipientIds);
  const result=canonical(p,true,g);
- assert.equal(result.score.score,85);assert.equal(result.score.policyVersion,"california-regulatory-posture.v17-reject-scope");
+ assert.equal(result.score.score,70);assert.equal(result.score.policyVersion,"california-regulatory-posture.v24-per-visit");
  assert.deepEqual(retainedCaliforniaPostReject(result.runtime),a);
  assert.ok(result.findings.some(f=>f.unifiedFindingId==="california_post_reject_collection"&&f.presentationDecision.status==="surface"));
  assert.equal(result.score.deductions.filter(d=>d.policyKey==="california.choice_enforcement.recipients").length,1);
@@ -129,23 +130,23 @@ test("Index role cannot replace successful response, delivered signal or origina
 
 test("Magnite auction evidence reaches canonical findings and preserves historical policy meanings",()=>{
  const p=auctionProjection(undefined,magniteRequests()),a=assessCaliforniaPostReject(p)!,g=auctionGpc(undefined,undefined,magniteRequests());
- assert.equal(a.policyVersion,"california-post-reject.v6-auctions");assert.equal(a.status,"qualified_collection");
+ assert.equal(a.policyVersion,"california-post-reject.v7-per-visit");assert.equal(a.status,"qualified_collection");
  assert.equal(assessCaliforniaPostReject(p,"california-post-reject.v5-index-auction")?.status,"no_eligible_collection");
  const policy=deriveCaliforniaGpcResponsePolicy(g);
  assert.equal(policy.policyVersion,"california-gpc-response.v12-auctions");assert.equal(policy.scoreEffect,"deduction");assert.deepEqual(policy.recipientIds,a.recipientIds);
- const result=canonical(p,true,g);assert.equal(result.score.score,85);assert.equal(result.score.policyVersion,"california-regulatory-posture.v17-reject-scope");
+ const result=canonical(p,true,g);assert.equal(result.score.score,70);assert.equal(result.score.policyVersion,"california-regulatory-posture.v24-per-visit");
  assert.deepEqual(retainedCaliforniaPostReject(result.runtime),a);
  assert.ok(result.findings.some(f=>f.unifiedFindingId==="california_post_reject_collection"&&f.presentationDecision.status==="surface"));
  assert.ok(!result.findings.some(f=>/deduct|points/i.test(f.summary)));
 });
-test("mixed Index and Magnite auctions keep distinct versioned roles and deduplicate recipients across requests and paths",()=>{
+test("mixed Index and Magnite auctions keep distinct versioned roles and deduplicate recipients within each path",()=>{
  const inputs=[...indexRequests(),...magniteRequests(),...magniteRequests()],p=auctionProjection(undefined,inputs),g=auctionGpc(undefined,undefined,inputs);
  assert.equal(g.contractVersion,"certscore.gpc-response-assessment.v3");if(g.contractVersion!=="certscore.gpc-response-assessment.v3")return;
  const q=g.observation.requests.advertisingCollectionQualification!;
  assert.equal(q.policyVersion,"gpc_sale_sharing_evidence.v7-auctions");assert.equal(q.rows.length,3);
  assert.deepEqual(new Set(q.rows.map(r=>r.policyVersion)),new Set(["ca_sale_sharing_qualification.v4-index-auction","ca_sale_sharing_qualification.v5-magnite-auction"]));
  const a=assessCaliforniaPostReject(p)!;assert.equal(a.recipientIds.length,2);assert.equal(a.requests.length,3);
- const result=canonical(p,true,g);assert.equal(result.score.score,75);
+ const result=canonical(p,true,g);assert.equal(result.score.score,53);
  assert.equal(result.score.deductions.filter(d=>d.policyKey==="california.choice_enforcement.recipients").length,1);
 });
 test("Magnite GPP limitations remain factual and separate from full recipient eligibility",()=>{
@@ -165,16 +166,16 @@ test("Magnite purpose classification cannot replace response, GPC or original so
  for(const row of [p.scoringEvidence!.requests[0]!,p.afterActionRequests![0]!])row.californiaCollection!.httpStatus=500;
  assert.equal(assessCaliforniaPostReject(p)?.requests[0]?.reason,"response_unverified");assert.equal(assessCaliforniaPostReject(p)?.recipientIds.length,0);
 });
-test("California post-Reject request evidence persists canonically and unions recipients with GPC without a registration gate",()=>{
+test("California post-Reject request evidence persists canonically and scores recipients separately from GPC without a registration gate",()=>{
  const p=projection(),a=assessCaliforniaPostReject(p)!;assert.equal(p.registrationStatus,"unconfirmed");
  assert.equal(a.status,"qualified_collection");assert.equal(a.recipientIds.length,1);
- const first=canonical(p);assert.equal(first.score.score,85);assert.equal(first.score.policyVersion,"california-regulatory-posture.v17-reject-scope");
+ const first=canonical(p);assert.equal(first.score.score,85);assert.equal(first.score.policyVersion,"california-regulatory-posture.v24-per-visit");
  assert.deepEqual(retainedCaliforniaPostReject(first.runtime),a);
  const finding=first.findings.find(f=>f.unifiedFindingId==="california_post_reject_collection")!;
  assert.equal(finding.presentationDecision.status,"surface");assert.equal(finding.scoreEffects?.[0]?.deductionPoints,15);
  assert.ok(!finding.scoreEffects?.some(e=>e.appliesTo==="certscore_overall"));assert.ok(!/deduct|points/i.test(finding.summary));
- assert.equal(canonical(p,true).score.score,85,"same LinkedIn recipient across GPC and Reject is counted once");
- const two=canonical(projection([linkedin,google]),true);assert.equal(two.score.score,75,"union is two recipients, not summed standalone deductions");
+ assert.equal(canonical(p,true).score.score,70,"same LinkedIn recipient across GPC and Reject is counted on each visit");
+ const two=canonical(projection([linkedin,google]),true);assert.equal(two.score.score,60,"two Reject recipients and one GPC recipient");
  assert.equal(two.score.deductions.filter(d=>d.policyKey==="california.choice_enforcement.recipients").length,1);
  const drift=structuredClone(first.runtime);drift.californiaPostRejectAssessment.requests[0].msAfterClick++;
  assert.equal(retainedCaliforniaPostReject(drift),null);
@@ -188,8 +189,8 @@ test('retained CMP/action context qualifies exact Reject variants without regist
   assert.equal(a.scopeEvidence?.basis,'bound_canonical_reject_context');
   assert.equal(assessCaliforniaPostReject(p,'california-post-reject.v3-property-bound')?.scope,'unknown');
   assert.equal(assessCaliforniaPostReject(p,'california-post-reject.v2-qualified-disclosure')?.scope,'unknown');
-  const result=canonical(p,true);assert.equal(result.score.score,85,'same recipient across GPC and Reject is charged once');
-  assert.equal(result.score.policyVersion,'california-regulatory-posture.v17-reject-scope');
+  const result=canonical(p,true);assert.equal(result.score.score,70,'same recipient is scored once on each visit');
+  assert.equal(result.score.policyVersion,'california-regulatory-posture.v24-per-visit');
   assert.equal(retainedCaliforniaPostReject(result.runtime)?.scope,'cookie_tracking_rejection');
   result.runtime.californiaPostRejectAssessment.scopeEvidence.selectorSha256='0'.repeat(64);
   assert.equal(retainedCaliforniaPostReject(result.runtime),null,'persisted scope cannot drift from retained proof');
@@ -249,7 +250,7 @@ test("v2 POST/body/header proof reaches California scoring and restricted or sec
   Object.assign(row,{method:"POST",sanitizedUrl:"https://px.ads.linkedin.com/wa/",californiaCollection:fact});p.afterActionRequests=structuredClone(p.scoringEvidence!.requests);
   const assessment=assessCaliforniaPostReject(p)!;
   assert.equal(assessment.status==="qualified_collection",mode==="body"||mode==="header",mode);
-  if(mode==="body"||mode==="header")assert.equal(canonical(p,true).score.score,85,"same recipient across POST Reject and GPC counts once");
+  if(mode==="body"||mode==="header")assert.equal(canonical(p,true).score.score,70,"same recipient counts once per POST Reject and GPC visit");
  }
 });
 
@@ -260,18 +261,18 @@ test("decoded LinkedIn POST proof passes canonical assessment and score while ne
   const fact=captureCaliforniaRejectRequest({url:"https://px.ads.linkedin.com/wa/?fmt=g",method:"POST",requestId:row.requestId,startedAtMs:row.startedAtMs,httpStatus:204,hasBody:true,body,headers:{"content-type":"text/plain"}})!;
   Object.assign(row,{method:"POST",sanitizedUrl:"https://px.ads.linkedin.com/wa/",californiaCollection:fact});p.afterActionRequests=structuredClone(p.scoringEvidence!.requests);
   assert.equal(fact.payload,"inspected_body");assert.equal(assessCaliforniaPostReject(p)!.status==="qualified_collection",mode==="identified");
-  if(mode==="identified"){assert.equal(canonical(p).score.score,85);assert.equal(canonical(p,true).score.score,85,"shared GPC recipient is deduplicated");}
+  if(mode==="identified"){assert.equal(canonical(p).score.score,85);assert.equal(canonical(p,true).score.score,70,"recipient qualifies on both visits");}
  }
 });
 
-test("vendor findings retain both paths while matching hashes share one California recipient effect",()=>{
+test("vendor findings retain both paths while matching hashes count once on each visit",()=>{
  const p=projection(),row=p.scoringEvidence!.requests[0]!;
  const body=gzipSync(JSON.stringify({signalType:"CLICK",hem:"a1".repeat(32)})).toString("base64");
  const fact=captureCaliforniaRejectRequest({url:"https://px.ads.linkedin.com/wa/?fmt=g",method:"POST",requestId:row.requestId,startedAtMs:row.startedAtMs,httpStatus:204,hasBody:true,body,headers:{"content-type":"text/plain"}})!;
  Object.assign(row,{method:"POST",sanitizedUrl:"https://px.ads.linkedin.com/wa/",californiaCollection:fact,vendor:"LinkedIn",purpose:"advertising",nonEssential:true});
  p.afterActionRequests=structuredClone(p.scoringEvidence!.requests);
  const result=canonical(p,true);
- assert.equal(result.score.score,85);
+ assert.equal(result.score.score,70);
  assert.equal(result.runtime.californiaPostRejectAssessment.recipientIds.length,1);
  const gpcFinding=result.findings.find(f=>f.unifiedFindingId==="gpc_response")!;
  const rejectFinding=result.findings.find(f=>f.unifiedFindingId==="post_reject_click_tracking")!;
@@ -292,12 +293,12 @@ test('NPA alone no longer vetoes supported advertising collection; cookie match 
  const legacy=assessCaliforniaPostReject(p,'california-post-reject.v1')!;
  assert.equal(legacy.status,'no_eligible_collection');
  const revised=assessCaliforniaPostReject(p)!;assert.equal(revised.status,'qualified_collection');
- assert.equal(revised.policyVersion,'california-post-reject.v4-retained-scope');
+ assert.equal(revised.policyVersion,'california-post-reject.v7-per-visit');
  const historicalRuntime={postRefusalEvidenceProjection:p,californiaPostRejectAssessment:legacy};
  assert.deepEqual(retainedCaliforniaPostReject(historicalRuntime),legacy);
- const result=canonical(p,true);assert.equal(result.score.score,75,'LinkedIn GPC plus Google Reject: two unique recipients');
+ const result=canonical(p,true);assert.equal(result.score.score,70,'LinkedIn GPC plus Google Reject: two unique recipients');
  assert.equal(result.runtime.californiaPostRejectAssessment?.recipientIds.length,1);
- const combined=canonical(projection([linkedin,google+'&npa=1']),true);assert.equal(combined.score.score,75,'same LinkedIn on both paths does not add another recipient');
+ const combined=canonical(projection([linkedin,google+'&npa=1']),true);assert.equal(combined.score.score,60,'LinkedIn qualifies independently on both visits');
  for(const suffix of ['&npa=1&rdp=1','&npa=1&ltd=1','&npa=1&us_privacy=1NYN'])assert.notEqual(assessCaliforniaPostReject(projection([google+suffix]))?.status,'qualified_collection');
 });
 
@@ -312,7 +313,7 @@ test("Google audience and identity-sync Reject requests independently qualify an
   assert.deepEqual(result.runtime.californiaPostRejectAssessment.recipientIds, ["ent_7509263a9ab6"]);
  }
  const combined = canonical(projection([...urls, google + "&npa=1"]), true);
- assert.equal(combined.score.score, 75, "one Google recipient plus LinkedIn GPC, regardless of Google's three roles");
+ assert.equal(combined.score.score, 70, "one Google recipient plus LinkedIn GPC, regardless of Google's three roles");
  assert.equal(combined.score.deductions.filter(d => d.policyKey === "california.choice_enforcement.recipients").length, 1);
 });
 
@@ -355,7 +356,7 @@ test("Magnite v14 larger body reaches the canonical pipeline while GPP and succe
  assert.equal(proof.policyVersion,"bounded_ca_request_proof.v14");assert.equal(proof.bodyStatus,"complete");
  assert.equal(assessCaliforniaPostReject(p)?.status,"qualified_collection");
  assert.equal(assessCaliforniaPostReject(p,"california-post-reject.v5-index-auction")?.status,"no_eligible_collection");
- const full=canonical(p,true,g);assert.equal(full.score.score,85);
+ const full=canonical(p,true,g);assert.equal(full.score.score,70);
  assert.equal(full.score.deductions.filter(d=>d.policyKey==="california.choice_enforcement.recipients").length,1);
  assert.ok(full.findings.some(f=>f.unifiedFindingId==="california_post_reject_collection"&&f.presentationDecision.status==="surface"));
  const regs={gpp:"DBAA",gpp_sid:[7]},limited=auctionProjection(regs,inputs),lg=auctionGpc(regs,undefined,inputs);
@@ -363,4 +364,10 @@ test("Magnite v14 larger body reaches the canonical pipeline while GPP and succe
  assert.ok(!canonical(limited,true,lg).score.deductions.some(d=>d.policyKey==="california.choice_enforcement.recipients"));
  assert.equal(deriveCaliforniaGpcResponsePolicy(auctionGpc(undefined,"failed_response",inputs)).scoreEffect,"none");
  assert.equal(deriveCaliforniaGpcResponsePolicy(auctionGpc(undefined,"missing_signal",inputs)).scoreEffect,"none");
+});
+
+test("historical qualified collection retains its cross-visit recipient union", () => {
+  const result = canonical(projection([linkedin,linkedin]), true, undefined, "california-post-reject.v4-retained-scope");
+  assert.equal(result.score.score, 85);
+  assert.equal(result.score.policyVersion, "california-regulatory-posture.v17-reject-scope");
 });

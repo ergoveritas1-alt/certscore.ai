@@ -3,6 +3,7 @@ import { isAfterActionReportEligible, retainedConsentAssessment } from "../../..
 import { readChoicePathExecution } from "../../../lib/scans/choice-path-execution";
 import { consentControlReportLabels } from "../../../lib/scans/consent-control-report";
 import { afterClickCoverage } from "../after-action-summary";
+import { noGoBrowserGuidance } from "../../../lib/scans/no-go-browser-guidance";
 import { projectScanReportNoGo } from "../../../lib/scans/scan-report-disposition";
 import { siteMetadataProjectionSchema } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
@@ -621,7 +622,7 @@ function buildReportIdentity(scanRecord: ScanDetailResponse): ShadowReportData["
 export function buildTimelineReportModel(scanRecord: ScanDetailResponse): TimelineReportData {
   const noGo = projectScanReportNoGo(scanRecord);
   if (noGo) {
-    return { ...noGo, scan: buildReportIdentity(scanRecord), score: { label: "Not scored" as const, value: null } };
+    return { ...noGo, browserGuidance: noGoBrowserGuidance(scanRecord, noGo), scan: buildReportIdentity(scanRecord), score: { label: "Not scored" as const, value: null } };
   }
   const canonical = getPersistedCanonicalReportProjection(scanRecord);
   if (!canonical) {

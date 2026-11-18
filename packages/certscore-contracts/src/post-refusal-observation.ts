@@ -1,3 +1,4 @@
+import { choiceRequestRoleSchema } from "./choice-request-role";
 import {validateOsanoReceiptEnvelope,validateOsanoReceiptProjection} from "./osano-consent-receipt";
 import { validateCookieYesLegacyReceiptEnvelope, validateCookieYesLegacyProjectionProof } from "./cookieyes-legacy-consent-state";
 import { consentScopeExclusionSchema } from "./consent-scope-exclusion";
@@ -143,6 +144,7 @@ export const postRefusalNetworkRequestSchema = z.object({
   californiaCollection: californiaRejectRequestEvidenceSchema.optional(),
   responseCookieWrites: z.array(exactCookieWriteEvidenceSchema).max(24).optional(),
   responseCookieNamesSet: z.array(z.string().max(180)).max(96).optional(),
+  choiceRequestRole: choiceRequestRoleSchema.optional(),
   measurementEvidence: measurementRequestEvidenceSchema.optional(),
   method: z.string().min(1).max(16).optional(),
   rootStartedAtMs: z.number().int().nonnegative().optional(),
@@ -1305,6 +1307,8 @@ export const POST_REFUSAL_REPORT_PROJECTION_VERSION =
   "certscore.post_refusal_report_projection.v1" as const;
 
 const postRefusalReportActivityRowSchema = z.object({
+  choiceRequestRole: postRefusalNetworkRequestSchema.shape.choiceRequestRole,
+  method: postRefusalNetworkRequestSchema.shape.method,
   activityType: z.enum(["network_request", "storage_write"]),
   category: postRefusalNetworkRequestSchema.shape.purpose,
   consentState: z.literal("post_reject"),
@@ -1342,7 +1346,20 @@ const postRejectScoringEvidenceSchema = z.object({
   postActionStorage: z.array(postRefusalStorageItemSchema).max(96),
 }).strict();
 
+/** A compact join between the verified browser graph and the Reject request ledger. */
+export const rejectIdentifierWitnessSchema = z.object({
+  packetSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  cookieDomain: z.string().min(1).max(255),
+  graphSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  requestNodeId: z.string().min(1).max(160),
+  requestId: z.string().min(1).max(160),
+  endpoint: z.string().url().max(2048),
+  startedAtMs: z.number().int().nonnegative(),
+  httpStatus: z.number().int().min(200).max(299),
+  cookieName: z.string().min(1).max(180),
+}).strict();
 export const postRefusalReportProjectionSchema = z.object({
+  sentIdentifierWitness: rejectIdentifierWitnessSchema.optional(),
   receiptAvailability: consentReceiptAvailabilitySchema.optional(),
   resolver: postRefusalResolverSchema.optional(),
   confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
@@ -1475,6 +1492,8 @@ export function projectPostRefusalEvidenceForReport(input: {
             nonEssential: true as const,
             requestId: request.requestId,
             url: request.sanitizedUrl,
+            ...(request.choiceRequestRole === "tag_library" || (request.choiceRequestRole && request.httpStatus !== undefined && request.httpStatus >= 200 && request.httpStatus < 300)
+              ? {choiceRequestRole: request.choiceRequestRole, method: request.method} : {}),
             ...(request.vendor ? { vendor: request.vendor } : {}),
           })),
         ...packet.storage.writesAfterRefusal

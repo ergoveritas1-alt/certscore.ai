@@ -299,6 +299,7 @@ export type ShadowReportData = {
 
 export type NoGoReportData = Pick<ShadowReportData, "scan" | "fullSite"> &
   ExternalScanNoGoProjection & {
+    browserGuidance?: import("../../../lib/scans/no-go-browser-guidance").NoGoBrowserGuidance;
     score: { label: "Not scored"; value: null };
   };
 

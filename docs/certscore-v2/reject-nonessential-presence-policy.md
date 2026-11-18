@@ -64,3 +64,5 @@ model/API call, lane, wait, timeout or retention change is introduced. Estimated
 incremental bounded CPU/assessment metadata is below $0.50/month at 100,000 scans
 under existing retention. Local implementation and evidence replay do not deploy
 code or change historical production scores.
+
+Under the owner-approved November 17, 2026 update, `after_reject_nonessential_presence.v4-choice-cookies` recognizes the exact RudderStack cookies `rl_anonymous_id`, `rl_session`, and `rl_page_init_referrer` as analytics in the verified post-Reject snapshot. Their shared canonical owner counts once. The exact Osano choice cookies `osano_consentmanager` and `osano_consentmanager_uuid` remain essential. The report inventory and scoring assessment use the same documented cookie identities. Historical assessments use their retained policy version.

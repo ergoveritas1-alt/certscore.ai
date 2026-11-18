@@ -1,34 +1,26 @@
 import React from "react";
 import Link from "next/link";
+import type { NoGoBrowserGuidance } from "../../lib/scans/no-go-browser-guidance";
 
-export function NoGoBrowserExtensionRecovery({
-  isTargetSiteState
-}: {
-  isTargetSiteState: boolean;
-}) {
+export function NoGoBrowserExtensionRecovery({ guidance }: { guidance?: NoGoBrowserGuidance }) {
+  if (!guidance) return null;
+  if (guidance === "robots") return (
+    <p className="mt-4 text-sm leading-6 text-slate-700">
+      The site’s robots.txt restricts scanning this page. Choose a URL that permits scanning, or ask the site owner to update the rule before retrying.
+    </p>
+  );
   return (
-    <section className="overflow-hidden rounded-[1.4rem] border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 px-4 py-5 sm:px-6 sm:py-6 shadow-sm">
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="max-w-3xl space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-700">Alternate scan path</p>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-950">Try scanning from Chrome</h2>
-          <p className="text-sm leading-6 text-slate-700">
-            CertScore.ai&apos;s hosted scanner could not verify a representative public page. The site may respond differently in
-            a normal Chrome session, so you can try a reviewer-started scan with the CertScore.ai Chrome extension.
-          </p>
-          <p className="text-sm leading-6 text-slate-600">
-            {isTargetSiteState
-              ? "The extension may encounter the same page until the underlying site issue is resolved."
-              : "Running from a normal Chrome session may help when the hosted scanner encounters access controls, regional behavior, or browser-specific rendering."}
-          </p>
-        </div>
-        <Link
-          className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2"
-          href="/browser-extension"
-        >
-          Show instructions
-        </Link>
-      </div>
+    <section aria-label="Chrome extension scan instructions" className="mt-4 space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-5">
+      <h3 className="font-semibold text-slate-950">Review the public page in Chrome</h3>
+      <p className="text-sm leading-6 text-slate-700">
+        {guidance === "challenge"
+          ? "If you’re authorized to scan this site and its public page opens directly in Chrome while you’re signed out of the site, you can start a separate browser scan. If Chrome also shows a challenge, ask the site owner about approved scanner access."
+          : "If the intended public page loads normally in Chrome while you’re signed out of the site and you’re authorized to scan it, you can start a separate browser scan to collect evidence from that page."}
+      </p>
+      <p className="text-sm leading-6 text-slate-700">The CertScore.ai extension clears site data for the selected site and reloads the page for a fresh observation.</p>
+      <Link className="inline-flex font-semibold text-sky-800 underline underline-offset-4" href="/browser-extension">
+        View Chrome extension instructions
+      </Link>
     </section>
   );
 }

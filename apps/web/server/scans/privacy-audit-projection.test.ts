@@ -190,7 +190,8 @@ test("review focus defaults to origin, allows either view and preserves geograph
   assert.match(reviewFocusScopeNote("gdpr_eprivacy", "california"), /EU visitor behavior was not tested/);
   assert.equal(reviewFocusMismatchNote("gdpr_eprivacy", "eu_de"), null);
   assert.equal(reviewFocusMismatchNote("ccpa_cpra", "california"), null);
-  assert.match(reviewFocusMismatchNote("ccpa_cpra", "eu_ie") ?? "", /Scanned from Ireland; California visitor behavior was not tested/);
-  assert.match(reviewFocusMismatchNote("gdpr_eprivacy", "california") ?? "", /Scanned from California; EU visitor behavior was not tested/);
+  assert.equal(reviewFocusMismatchNote("ccpa_cpra", "eu_de"), "Scanned from Germany; California site behavior should be scanned from California.");
+  assert.equal(reviewFocusMismatchNote("ccpa_cpra", "eu_ie"), "Scanned from Ireland; California site behavior should be scanned from California.");
+  assert.equal(reviewFocusMismatchNote("gdpr_eprivacy", "california"), "Scanned from California; EU site behavior should be scanned from the EU.");
   assert.equal(reportUrlWithFocus("/scan/123?foo=bar#evidence", "ccpa_cpra"), "/scan/123?foo=bar&reviewFocus=ccpa_cpra#evidence");
 });

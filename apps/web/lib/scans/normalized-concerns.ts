@@ -13,7 +13,7 @@ import { gpcVendorFindingSummary } from "./choice-vendor-findings";
 import {retainedCaliforniaPostReject} from "./california-post-reject-policy";
 import {deriveGppPropagationPolicy} from "./gpp-propagation-policy";
 import { AFTER_REJECT_SCORING_POLICY, afterRejectScoringNarrative, retainedAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
-import { VENDOR_COVERAGE_REJECT_PRESENCE_POLICY } from "./after-reject-scoring-contract";
+import { C3_REJECT_PRESENCE_POLICY, VENDOR_COVERAGE_REJECT_PRESENCE_POLICY } from "./after-reject-scoring-contract";
 import { assessConsentProminenceMateriality } from "./consent-prominence-materiality";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { readAccessibilityAudit, readPreferenceAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-evidence";
@@ -3803,9 +3803,11 @@ function buildConsentControlInventoryConcerns(
 function buildCaliforniaCollectionReviewConcerns(runtimeArtifacts:Record<string,unknown>|null|undefined,domainContext?:ScanDomainContext) {
  const assessments=retainedPotentialRisk(runtimeArtifacts);
  const rows=assessments.flatMap(a=>a.rows.filter(r=>r.treatment==="potential_risk").map(r=>({...r,path:a.path,sourceSha256:a.sourceSha256})));
- if(!rows.length)return [];
+ const sent=assessments.find(a=>a.identifierTransmission)?.identifierTransmission;
+ if(!rows.length&&!sent)return [];
  const refs=[...new Set(rows.flatMap(r=>[`choice-source:sha256:${r.sourceSha256}`,`request:${r.evidenceId}`]))];
- const title="Collection under privacy-choice conditions — review recommended";
+ if (sent) refs.push(`choice-source:sha256:${sent.packetSha256}`,`request:${sent.requestId}`);
+ const title=sent&&!rows.length?"Tracking identifiers sent after Reject":"Collection under privacy-choice conditions — review recommended";
  const signalCopy:Record<string,string>={google_npa:"non-personalized ads declared",processing_declarations_not_retained:"processing declarations unavailable",
   gpp_unresolved:"GPP interpretation unresolved",privacy_signal_invalid:"invalid privacy signal",privacy_signal_conflict:"conflicting privacy signals"};
  const groups=rows.filter((r,i)=>rows.findIndex(x=>x.entityId===r.entityId&&x.path===r.path)===i);
@@ -3815,7 +3817,7 @@ function buildCaliforniaCollectionReviewConcerns(runtimeArtifacts:Record<string,
    return `${r.entity} (${r.purpose}): ${matched.length} retained request${matched.length===1?"":"s"}, first at +${first} ms ${r.path==="gpc"?"from GPC visit start":"after the Reject click"}${signals.length?`; ${signals.join(", ")}`:""}`;
  });
  return [buildConcernFromSharedInput({categoryId:"privacy",domainContext,title,
-  description:`${observations.join("; ")}. Collection was observed; the sale/sharing purpose of these specific requests remains unresolved. Review recipient purposes, effective settings, processing arrangements and privacy-choice enforcement. A cookie Reject click does not establish a California sale/sharing opt-out. These observations do not establish a legal violation.`,
+  description:`${sent ? `After Reject, the browser sent the identifier from ${sent.cookieName} to ${sent.endpoint}. ` : ""}${observations.length ? observations.join("; ")+". " : ""}Collection was observed; the sale/sharing purpose of these specific requests remains unresolved. Review recipient purposes, effective settings, processing arrangements and privacy-choice enforcement. A cookie Reject click does not establish a California sale/sharing opt-out. These observations do not establish a legal violation.`,
   evidence:refs,observedValue:"observed",originKey:`privacy.${CA_POTENTIAL_RISK_FINDING}`,originType:"runtime_artifact",
   rawEvidence:{californiaGpcPotentialRiskAssessment:runtimeArtifacts?.californiaGpcPotentialRiskAssessment,
     californiaRejectPotentialRiskAssessment:runtimeArtifacts?.californiaRejectPotentialRiskAssessment,gpcResponseAssessment:runtimeArtifacts?.gpcResponseAssessment,
@@ -4137,7 +4139,7 @@ function buildRejectClickTrackingConcerns(
   domainContext?: ScanDomainContext
 ) {
   const scoring=retainedAfterRejectScoringAssessment(runtimeArtifacts);
-  if (scoring && [AFTER_REJECT_SCORING_POLICY,VENDOR_COVERAGE_REJECT_PRESENCE_POLICY].some(version=>version===scoring.policyVersion) && scoring.deductionPoints>0 &&
+  if (scoring && [AFTER_REJECT_SCORING_POLICY,C3_REJECT_PRESENCE_POLICY,VENDOR_COVERAGE_REJECT_PRESENCE_POLICY].some(version=>version===scoring.policyVersion) && scoring.deductionPoints>0 &&
     (scoring.cookieRefs?.length || scoring.requestIds.length)) {
     const narrative=afterRejectScoringNarrative(scoring)!;
     const refs=[`post-refusal-packet:sha256:${scoring.sourcePacketSha256}`,
@@ -4207,7 +4209,7 @@ function buildPostRefusalObservationConcerns(
     ...persistedStorageRows.map((row) => getStringValue(row.vendor))
   ]);
   const scoringAssessment = retainedAfterRejectScoringAssessment(runtimeArtifacts);
-  const presenceProjected=scoringAssessment && [AFTER_REJECT_SCORING_POLICY,VENDOR_COVERAGE_REJECT_PRESENCE_POLICY].some(version=>version===scoringAssessment.policyVersion) && scoringAssessment.deductionPoints>0 &&
+  const presenceProjected=scoringAssessment && [AFTER_REJECT_SCORING_POLICY,C3_REJECT_PRESENCE_POLICY,VENDOR_COVERAGE_REJECT_PRESENCE_POLICY].some(version=>version===scoringAssessment.policyVersion) && scoringAssessment.deductionPoints>0 &&
     (!!scoringAssessment.cookieRefs?.length || scoringAssessment.requestIds.length>0);
   const narrative = afterRejectScoringNarrative(scoringAssessment);
   const commonEvidence = {

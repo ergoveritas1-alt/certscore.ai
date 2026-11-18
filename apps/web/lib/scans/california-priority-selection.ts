@@ -90,7 +90,7 @@ export function californiaPriorityDemotion(finding: Finding, findings: readonly 
     return "uncorroborated_choice_absence";
   }
   const assessments = collectionEvidence(finding);
-  if (!assessments) return null;
+  if (!assessments || assessments.some(a=>a.identifierTransmission)) return null;
   const potential = assessments.flatMap(row => row.rows.filter(item => item.treatment === "potential_risk"));
   if (!potential.length) return null;
   // A qualified collection-review finding is eligible regardless of recipient

@@ -79,7 +79,7 @@ import { chromiumContextOptions, chromiumLaunchArgs, chromiumLaunchOptions, isAw
 import { assertPublicNetworkUrl, publicNetworkGuardEnabled, PublicNetworkGuardError, type PublicNetworkGuardDiagnostic } from "@certscore/scan-core/public-network-guard";
 import { buildGpcResponseAssessment } from "@certscore/scan-core/gpc-response-assessment";
 import { buildGpcProductionAssessment } from "@certscore/scan-core/gpc-production-observation";
-import { buildGpcActivityComparison } from "@certscore/scan-core/gpc-activity-comparison";
+import { buildGpcActivityComparison, buildGpcMeasurementInventory } from "@certscore/scan-core/gpc-activity-comparison";
 import { canonicalSha256 } from "@certscore/scan-core/post-refusal-reconciliation";
 import { decidePostRefusalCooperativeAbort, POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS } from "@certscore/scan-core/post-refusal-orchestration";
 import { buildCanonicalPostAcceptActionRecipes, buildPostAcceptCmpActionRecipe } from "@certscore/scan-core/post-accept-cmp-recipes";
@@ -3074,6 +3074,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         ...gpcGraphs.graphs,
       ],
       runtimeEvidenceGraphDiagnostics: [...(bundle.runtimeEvidenceGraphDiagnostics ?? []), ...gpcGraphs.diagnostics],
+      gpcMeasurementInventory: verifiedGpc && gpcResult && verifiedGpcWorkerBytes.has(verifiedGpc)
+        ? buildGpcMeasurementInventory(verifiedGpc, verifiedWorkerArtifact(gpcResult, "gpc_observation").sha256, gpcResponseAssessment.observation) : undefined,
       gpcActivityComparison: buildGpcActivityComparison({
         scanId: payload.scanId,
         observation: gpcResponseAssessment.observation,

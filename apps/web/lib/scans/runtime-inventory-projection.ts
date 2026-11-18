@@ -1040,6 +1040,12 @@ export function deriveInventoryMacroCategory(input: {
   return "Review";
 }
 
+export function cookieInventoryClassification(essentiality: ReadonlySet<string>): InventoryEvidenceClassification {
+  if (essentiality.size === 1 && essentiality.has("non_essential")) return "Non-essential";
+  if (essentiality.size === 1 && essentiality.has("essential")) return "Essential";
+  return "Review";
+}
+
 export function classifyInventoryEvidence(
   row: Pick<InventoryGroupRow, "macroCategory" | "priority" | "purpose" | "purposes"> &
     Partial<Pick<InventoryGroupRow, "cookieDetails" | "requestCount" | "requestDetails" | "type" | "party">>
@@ -1050,15 +1056,7 @@ export function classifyInventoryEvidence(
   const cookieEssentiality = new Set(
     (row.cookieDetails ?? []).map((cookie) => cookie.essentiality ?? "unknown")
   );
-  if (cookieEssentiality.size > 0) {
-    if (cookieEssentiality.size === 1 && cookieEssentiality.has("non_essential")) {
-      return "Non-essential";
-    }
-    if (cookieEssentiality.size === 1 && cookieEssentiality.has("essential")) {
-      return "Essential";
-    }
-    return "Review";
-  }
+  if (cookieEssentiality.size > 0) return cookieInventoryClassification(cookieEssentiality);
   if (
     row.type === "tracker" &&
     (row.requestCount ?? 0) <= 0 &&

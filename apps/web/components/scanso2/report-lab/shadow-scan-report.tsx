@@ -1,3 +1,4 @@
+import { NoGoBrowserExtensionRecovery } from "../no-go-browser-extension-recovery";
 import { GpcProductEvidence } from "../../scans/gpc-product-evidence";
 import { GpcActivityComparison } from "../../scans/gpc-activity-comparison";
 import { ReportPdfAccessProvider } from "../../scans/report-lab/shadow-report-actions";
@@ -1770,7 +1771,9 @@ export function ShadowScanReport({
         <p className="mt-4 text-zinc-700">{report.noGo.explanation}</p>
         <p className="mt-3 text-zinc-700">{report.noGo.summary}</p>
         {report.noGo.evidenceExcerpt ? <blockquote className="mt-4 border-l-2 border-amber-400 pl-4 text-sm text-zinc-600">{report.noGo.evidenceExcerpt}</blockquote> : null}
-        <p className="mt-5 font-medium">{report.noGo.recommendedNextAction}</p>
+        {report.browserGuidance
+          ? <NoGoBrowserExtensionRecovery guidance={report.browserGuidance} />
+          : <p className="mt-5 font-medium">{report.noGo.recommendedNextAction}</p>}
       </section>
     </main>
   ) : (

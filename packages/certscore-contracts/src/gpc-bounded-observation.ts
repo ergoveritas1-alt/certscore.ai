@@ -101,11 +101,12 @@ export const gpcBoundedObservationSchema = z.object({
   requests: z.object({ count, blockedBeforeTransmissionCount: count, complete: z.boolean(), fromMs: count.nullable(), documentCommittedAtMs: count.nullable(), throughMs: count.nullable(),
     classifiedCount: count, collectionCount: count,
     collectionReview: z.object({
-      policyVersion: z.literal("gpc_collection_review.v1"),
+      policyVersion: z.enum(["gpc_collection_review.v1", "gpc_collection_review.v2-google-page-view"]),
       rows: z.array(z.object({
         evidenceId: z.string().min(1).max(160), entityId: z.string().regex(/^ent_[a-f0-9]{12}$/),
         label: z.string().min(1).max(200), observedAtMs: count,
         purpose: z.enum(["analytics", "advertising", "marketing", "session_replay"]),
+        measurement: z.literal("google_ccm_document_page_view").optional(),
         httpStatus: z.number().int().min(200).max(399),
         qualification: saleSharingRequestQualificationSchema,
       }).strict()).max(32),
@@ -148,6 +149,8 @@ export const gpcBoundedObservationSchema = z.object({
   const review = o.requests.collectionReview;
   if (review && (new Set(review.rows.map(r => r.evidenceId)).size !== review.rows.length ||
     review.rows.length > o.requests.collectionCount || review.rows.some(r =>
+      (r.measurement && (review.policyVersion !== "gpc_collection_review.v2-google-page-view" ||
+        r.entityId !== "ent_7509263a9ab6" || r.purpose !== "advertising" || r.httpStatus >= 300)) ||
       !o.sourceSha256 || !o.sessionSha256 || !o.documentUrlSha256 || (!o.delivery.httpHeaderRetained || !o.delivery.mainNavigatorReadbackRetained) ||
       !o.positiveEvidence?.representativeDocument || o.requests.fromMs === null || o.requests.throughMs === null ||
       r.observedAtMs < Math.max(o.requests.fromMs, o.requests.documentCommittedAtMs ?? 0) || r.observedAtMs > o.requests.throughMs)))

@@ -1,9 +1,10 @@
+import { projectScoredPostRefusalEvidence } from "./reject-identifier-projection";
 import { resolveRuntimeEvidenceClock } from "@certscore/contracts";
 import { hasBoundCmpPreferenceDocument } from "@certscore/contracts";
 import { ZodError } from "zod";
 import { projectVisibleCmpInventory, projectLoadedCmpInventory, completeConfiguredCmpNames, verifiedMainFrameVisualCapture } from "@certscore/contracts";
 import { createHash } from "node:crypto";
-import { possibleCmpCookieTemplate, cmpBasicEvidenceSchema, type CmpPreferencesEvidence, verifyConsentControlInspection, projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, cmpAuditAssessmentSchema, cmpCookieExpiryEvidenceSchema, cmpAuditCriterionSchema, cmpPreferencesEvidenceSchema, type CanonicalEvidenceBundle, type CmpAuditAssessment, type ExtendedCmpCriterion } from "@certscore/contracts";
+import { possibleCmpCookieTemplate, cmpBasicEvidenceSchema, type CmpPreferencesEvidence, verifyConsentControlInspection, projectPostAcceptEvidenceForReport, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, cmpAuditAssessmentSchema, cmpCookieExpiryEvidenceSchema, cmpAuditCriterionSchema, cmpPreferencesEvidenceSchema, type CanonicalEvidenceBundle, type CmpAuditAssessment, type ExtendedCmpCriterion } from "@certscore/contracts";
 import { resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
 import { KNOWN_CMP_REGISTRY, isKnownCmpCookieName } from "@website-signal-risk-scanner/shared";
 
@@ -212,7 +213,7 @@ function retainedChoiceCaptures(bundle: CanonicalEvidenceBundle) {
     try {
       const packetSha256 = createHash("sha256").update(JSON.stringify(packet)).digest("hex");
       const projection = action === "accept" ? projectPostAcceptEvidenceForReport({ packet: bundle.postAcceptEvidence!, packetSha256 })
-        : projectPostRefusalEvidenceForReport({ packet: bundle.postRefusalEvidence!, packetSha256 });
+        : projectScoredPostRefusalEvidence({ packet: bundle.postRefusalEvidence!, packetSha256 });
       if (!projection.execution?.clickCompleted) return [];
       const after = projection.afterActionCapture, registered = projection.registeredObservationCompletion;
       const clickAt = after?.actionDispatchedAtMs ?? ("scoringEvidence" in projection ? projection.scoringEvidence?.actionDispatchedAtMs : undefined) ?? projection.retainedActionTiming?.actionDispatchedAtMs;

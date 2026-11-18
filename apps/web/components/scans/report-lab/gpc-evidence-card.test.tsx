@@ -7,7 +7,7 @@ import type {GpcResponseReportProjection} from "./shadow-report-data";
 const projection = {
   assessment:{contractVersion:"certscore.gpc-response-assessment.v3",status:"indeterminate",
     observation:{status:"limited",registration:{sale:"unknown",sharing:"unknown"},requests:{count:20,complete:false,classifiedCount:13,collectionCount:5,advertisingCollectionCount:1}},
-    comparison:{enabledProof:{secGpcHeaderValue:"1",navigatorGlobalPrivacyControl:true,requestsWithSecGpc:20}}},
+    comparison:{deltas:{cookies:{shared:[],gpcOnly:[],gpcCount:0},trackers:{shared:[],gpcOnly:[],gpcCount:0}},enabledProof:{secGpcHeaderValue:"1",navigatorGlobalPrivacyControl:true,requestsWithSecGpc:20}}},
   californiaDeductionPoints:15,
   observedFacts:[{label:"GPC signal",value:"Observed on the page request and in the browser"}],
   headline:"Observation limited",comparisonHeadline:"Comparison incomplete",coverageSummary:"The paired comparison did not meet the required evidence coverage.",evidenceRefs:[],summary:"Retained positive observation",
@@ -38,7 +38,7 @@ test("GPC detail groups qualifying recipients and shows retained request timing 
     {entityId:'ent_5262e317b747',label:'Adobe Inc.',evidenceId:'request-b',observedAtMs:3200},
   ]};
   const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={timed} california />);
-  assert.match(html,/Adobe Inc\./);assert.match(html,/2 collection requests/);
+  assert.match(html,/Adobe Inc\./);assert.match(html,/2 advertising collection requests/);
   assert.match(html,/1\.66/);assert.match(html,/3\.20/);assert.match(html,/after GPC visit start/);
   assert.equal((html.match(/Adobe Inc\./g)??[]).length,1);
   assert.doesNotMatch(html,/deduct|penalt|15.point/i);
@@ -68,7 +68,7 @@ test("verified five-second activity remains visible when the independent quiet-p
    sourceHashes:{baseline:'a'.repeat(64),gpc:'b'.repeat(64)},activity:{advertisingMarketing:{baselineRequests:24,gpcRequests:18,baselineServices:13,gpcServices:10},analyticsReplay:{baselineRequests:1,gpcRequests:1,baselineServices:1,gpcServices:1}},scoreEffect:'none',causedByGpc:'not_established'};
  measured.observedFacts.push({label:'5-second matched comparison',value:'Over the same 5-second interval after page commit, advertising/marketing requests: 24 without GPC and 18 with GPC; analytics/replay requests: 1 without GPC and 1 with GPC.'});
  const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={measured} california />);
- assert.match(html,/5-second/);assert.match(html,/24 without GPC and 18 with GPC/);
+ assert.match(html,/first 5 seconds/);assert.match(html,/>24<\/td><td[^>]*>18<\/td>/);
  assert.doesNotMatch(html,/Comparison incomplete|GPC is honored|deduct|penalt/i);
  assert.equal(measured.assessment.status,'indeterminate');
 });
@@ -82,7 +82,7 @@ test("GPC request comparison sits directly in the GPC details before nested comp
  const before=structuredClone(measured);
  const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={measured} california />);
  assert.equal((html.match(/aria-label="Baseline versus GPC"/g)??[]).length,1);
- assert.ok(html.indexOf('aria-label="Baseline versus GPC"')<html.indexOf('Comparison with GPC disabled'));
+ assert.ok(html.indexOf('aria-label="Baseline versus GPC"')<html.indexOf('Across the GPC visit'));
  assert.match(html,/Requests observed during the first second after each page loaded\./);
  assert.match(html,/Advertising \/ marketing/);
  assert.match(html,/Analytics \/ session replay/);
@@ -98,7 +98,7 @@ test("GPC vendor evidence distinguishes identified activity and other retained r
  ]};
  timed.vendorFindings=[{entityId:"ent_3ee0b5177739",entity:"LinkedIn Corporation",requestCount:1,firstMs:49,evidenceIds:["identified"]}];
  const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={timed} california />);
- assert.match(html,/LinkedIn Corporation/);assert.match(html,/2 collection requests/);
+ assert.match(html,/LinkedIn Corporation/);assert.match(html,/2 advertising collection requests/);
  assert.match(html,/1 identified advertising, audience or synchronization request with GPC enabled/);
  assert.doesNotMatch(html,/deduction|penalt|points/i);
 });
@@ -134,4 +134,37 @@ test("GPC product customer projection and JSON evidence never expose producer do
   assert.doesNotMatch(legacyJson,/fixture-loader|independent-baseline-loader|prototypeCaptureBinding|documentToken/);
   for(const exposed of [JSON.stringify(projected),html])assert.doesNotMatch(exposed,/fixture-loader|independent-baseline-loader|prototypeCaptureBinding|documentToken/);
   assert.equal(JSON.stringify(findings),before,'customer redaction cannot mutate original canonical findings');
+});
+
+test("a measured zero in both GPC categories stays separate from later activity and baseline-only identities", async () => {
+  const { gpcActivityComparisonFixture } = await import("../../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison");
+  const { buildConsentTrackingOverview } = await import("../../../lib/scans/consent-tracking-overview");
+  const { GpcRequestTable } = await import("../gpc-request-table");
+  const { SHADOW_REPORT } = await import("./shadow-report-data");
+  const result = structuredClone(projection);
+  result.activityComparison = gpcActivityComparisonFixture({
+    durationMs: 1000,
+    activity: {
+      advertisingMarketing: { baselineRequests: 1, gpcRequests: 0, baselineServices: 1, gpcServices: 0 },
+      analyticsReplay: { baselineRequests: 0, gpcRequests: 0, baselineServices: 0, gpcServices: 0 },
+    },
+  });
+  const { deltas } = result.assessment.comparison;
+  Object.assign(deltas.cookies, {
+    gpcCount: 4, shared: ['["_fbp",".example.org","/"]'], gpcOnly: ['["unlisted_cookie","example.org","/"]', "opaque-legacy-key"],
+    baselineOnly: ['["baseline_cookie","example.org","/"]'],
+  });
+  Object.assign(deltas.trackers, { gpcCount: 1, shared: [], gpcOnly: ["Example|Example Ads|advertising"], baselineOnly: ["Unseen|Baseline vendor|analytics"] });
+  const tile = buildConsentTrackingOverview({ scan: SHADOW_REPORT.scan, gpcResponse: result }, "ccpa_cpra").find(item => item.id === "gpc")!;
+  assert.equal(tile.count, null, "cookie comparison identities alone cannot verify storage");
+  assert.equal(tile.state, "unavailable");
+  assert.equal(tile.breakdown, undefined);
+  assert.deepEqual(tile.gpcWindow?.activity, result.activityComparison.activity);
+  const html = renderToStaticMarkup(<GpcEvidenceIndexCard projection={result} california />);
+  assert.ok(html.includes(renderToStaticMarkup(<GpcRequestTable comparison={tile.gpcWindow!} />)));
+  assert.match(html, /4 cookie identities in snapshots or write observations · at least 1 classified non-essential/);
+  assert.match(html, /2 of 4 identities available for classification/);
+  assert.match(html, /unlisted_cookie/);
+  assert.match(html, /Example Ads/);
+  assert.doesNotMatch(html, /baseline_cookie|Baseline vendor|opaque-legacy-key/);
 });

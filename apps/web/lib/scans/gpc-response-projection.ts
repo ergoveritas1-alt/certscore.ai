@@ -115,6 +115,7 @@ export function describeMeasuredGpcActivity(comparison?: GpcActivityComparison) 
  */
 export function buildCanonicalGpcResponseProjection(
   findings: UnifiedFindingDisplayPacket[],
+  refreshed?: {scanId: string; activityComparison: unknown},
 ): CanonicalGpcResponseProjection | null {
   if (!GPC_CUSTOMER_RESULTS_ENABLED) return null;
   const finding = findings.find((candidate) =>
@@ -133,7 +134,8 @@ export function buildCanonicalGpcResponseProjection(
   const policy=deriveCaliforniaGpcResponsePolicy(parsedAssessment.data);
   const deduction=finding.scoreEffects?.some(e=>e.appliesTo === "california_posture" && e.policyVersion === policy.policyVersion &&
     e.policyKey === policy.policyKey && e.deductionPoints === policy.deductionPoints) ? policy.deductionPoints : 0;
-  const activityComparison = readGpcActivityComparison(finding.details.activityComparison, parsedAssessment.data);
+  const activityComparison = (refreshed && readGpcActivityComparison(refreshed.activityComparison, parsedAssessment.data, refreshed.scanId))
+    ?? readGpcActivityComparison(finding.details.activityComparison, parsedAssessment.data);
   const cmpStateComparison = readBoundGpcCmpStateComparison(finding.details.cmpStateComparison, parsedAssessment.data);
   const measured = describeMeasuredGpcActivity(activityComparison);
   const presentation = describeCanonicalGpcResponse(parsedAssessment.data);

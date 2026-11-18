@@ -1,4 +1,5 @@
 import "server-only";
+import { noGoBrowserGuidance, type NoGoBrowserGuidance } from "../../lib/scans/no-go-browser-guidance";
 
 import { apiV2PreConsentRuntimePreviewSchema, type ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
 import { queryOne } from "@website-signal-risk-scanner/db";
@@ -12,6 +13,7 @@ import {
 } from "./scan-report-projection-contract";
 
 export type ScanStatusProjection = {
+  browserGuidance?: NoGoBrowserGuidance;
   accessibilityAuditStatus?: "completed" | "limited" | null;
   fullSite?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   completedAt: string | null;
@@ -62,6 +64,17 @@ export function deriveCanonicalScanProgressStage(
 }
 
 type ScanStatusProjectionRow = {
+  scan_type: string | null;
+  robots_allowed: boolean | null;
+  robots_fetch_status: string | null;
+  captcha_flag: boolean | null;
+  auth_wall_detected: boolean | null;
+  auth_wall_suspected: boolean | null;
+  homepage_fetch_http_status: number | null;
+  block_page_classification: string | null;
+  challenge_suspected: boolean | null;
+  stop_reason_code: string | null;
+  scan_outcome: string | null;
   accessibility_audit_status?: "completed" | "limited" | null;
   full_site?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   completed_at: string | Date | null;
@@ -102,7 +115,13 @@ function iso(value: string | Date | null) {
 function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | null {
   if (!row) return null;
   const preConsentPreview = apiV2PreConsentRuntimePreviewSchema.safeParse(row.pre_consent_preview);
+  const browserGuidance = row.status === "failed" && row.publication_request_status !== "terminal_failure"
+    ? noGoBrowserGuidance({ snapshot: row, runtimeArtifacts: null, scan: { status: row.status,
+        pageUrl: row.page_url, domainHostname: row.domain_hostname, scanType: row.scan_type,
+        scanFromValue: row.scan_from, pagesScanned: row.pages_scanned } })
+    : undefined;
   return {
+    ...(browserGuidance ? { browserGuidance } : {}),
     ...(row.full_site ? {fullSite:row.full_site} : {}),
     completedAt: iso(row.completed_at),
     createdAt: iso(row.created_at) as string,
@@ -138,7 +157,10 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
 
 const REQUIRES_PUBLICATION_SQL = requiresPersistedReportPublicationSql("s", "publication_request");
 
-const PROJECTION_SQL = `select s.id,
+const PROJECTION_SQL = `select s.id, s.scan_type,
+       snapshot.robots_allowed, snapshot.robots_fetch_status, snapshot.captcha_flag, snapshot.auth_wall_detected, snapshot.auth_wall_suspected,
+       snapshot.homepage_fetch_http_status, snapshot.block_page_classification, snapshot.challenge_suspected,
+       snapshot.stop_reason_code, snapshot.scan_outcome,
        s.organization_id,
        s.status,
        s.created_at,

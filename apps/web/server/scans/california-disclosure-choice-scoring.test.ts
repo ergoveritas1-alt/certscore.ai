@@ -168,13 +168,16 @@ test("an older contract rejects new scoring metadata rather than silently changi
 
 
 test("new disclosure policy preserves the analytics and full GPC recipient schedules",()=>{
-  for(const [url,points] of [[ANALYTICS_URL,7],[QUALIFIED_URL,15]] as const) {
+  for(const [url,points,policyVersion] of [
+    [ANALYTICS_URL,7,"california-regulatory-posture.v24-per-visit"],
+    [QUALIFIED_URL,15,CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION],
+  ] as const) {
     const f=fixture(noNonDiscrimination);f.bundle.scanId="gpc-fixture";f.policyEvidence.projection.scanId="gpc-fixture";
     const review=materialize(f),gpc=californiaPriorityGpcFixture([url]),risk=assessGpcPotentialRisk(gpc);
     const runtime={gpcResponseAssessment:gpc,californiaGpcPotentialRiskAssessment:risk};
     const result=pipeline(review,runtime);
     assert.equal(result.points(RIGHTS),3);assert.equal(result.score.score,100-3-points);
-    assert.equal(result.score.policyVersion,CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION);
+    assert.equal(result.score.policyVersion,policyVersion);
     assert.equal(result.score.deductions.filter(d=>d.findingId!==RIGHTS).reduce((sum,d)=>sum+d.points,0),points);
   }
 });

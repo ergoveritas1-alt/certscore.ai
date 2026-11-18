@@ -4,6 +4,7 @@ export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v26-consent-only";
 export const HISTORICAL_NARROW_POLICY_VERSION = "gdpr-eprivacy-posture.v25-narrow" as const;
 export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v13-shared-integrity";
 export type GdprEprivacyScoringPolicyVersion = typeof SCORING_POLICY_VERSION | typeof HISTORICAL_NARROW_POLICY_VERSION | "gdpr-eprivacy-posture.v24" | "gdpr-eprivacy-posture.v23" | "gdpr-eprivacy-posture.v22" | "gdpr-eprivacy-posture.v21" | "gdpr-eprivacy-posture.v20" | "gdpr-eprivacy-posture.v19" | "gdpr-eprivacy-posture.v18";
+export const CA_REJECT_IDENTIFIER_TRANSMISSION_POINTS = 3;
 export const POST_REJECT_ENTITY_TOTALS = [0, 15, 20, 23, 25, 27, 28, 29, 30] as const;
 /** Initial effect includes the first entity; unknown ownership cannot add increments. */
 export function postRejectEntityPoints(entityIds: readonly string[], supported: boolean) {

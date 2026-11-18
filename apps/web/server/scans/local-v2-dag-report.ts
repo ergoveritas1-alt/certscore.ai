@@ -1,3 +1,4 @@
+import { projectScoredPostRefusalEvidence } from "./reject-identifier-projection";
 import {buildAuditComparisonDelivery,readAuditComparisonDelivery,type AuditComparisonDelivery} from '../../../../packages/certscore-contracts/src/audit-comparison';
 import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { readBoundGpcCmpStateComparison } from "@certscore/contracts";
@@ -69,7 +70,6 @@ import {
   policyTextEvidenceProjectionSchema,
   projectPostAcceptEvidenceForReport,
   postRefusalReportProjectionSchema,
-  projectPostRefusalEvidenceForReport,
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type CanonicalEvidenceBundle,
   type NormalizedVendorObservation,
@@ -6396,7 +6396,7 @@ export function buildMaterializedLocalV2Detail(
     "postRefusalPacketUri",
   );
   const postRefusalReportProjection = withPropertySaleSharingSource(bundle.postRefusalEvidence
-    ? projectPostRefusalEvidenceForReport({
+    ? projectScoredPostRefusalEvidence({
         packet: bundle.postRefusalEvidence,
         ...(postRefusalPacketPointer?.sha256
           ? { packetSha256: postRefusalPacketPointer.sha256 }
@@ -6910,9 +6910,10 @@ export function buildMaterializedLocalV2Detail(
 }
 
 export function buildGpcResponseRuntimeProjection(
-  bundle: Pick<CanonicalEvidenceBundle, "gpcResponseAssessment" | "gpcActivityComparison" | "gpcCmpStateComparison" | "gpcCmpPairBlocker"> & Partial<Pick<CanonicalEvidenceBundle, "scanId">>,
+  bundle: Pick<CanonicalEvidenceBundle, "gpcResponseAssessment" | "gpcMeasurementInventory" | "gpcActivityComparison" | "gpcCmpStateComparison" | "gpcCmpPairBlocker"> & Partial<Pick<CanonicalEvidenceBundle, "scanId">>,
 ): {
   gpcResponseAssessment?: CanonicalEvidenceBundle["gpcResponseAssessment"];
+  gpcMeasurementInventory?: CanonicalEvidenceBundle["gpcMeasurementInventory"];
   gpc_response_assessment?: CanonicalEvidenceBundle["gpcResponseAssessment"];
   californiaGpcPotentialRiskAssessment?: CaliforniaPotentialRiskAssessment | null;
   gpcActivityComparison?: CanonicalEvidenceBundle["gpcActivityComparison"];
@@ -6930,6 +6931,10 @@ export function buildGpcResponseRuntimeProjection(
     ? {
         gpcResponseAssessment: bundle.gpcResponseAssessment,
         gpc_response_assessment: bundle.gpcResponseAssessment,
+        ...(bundle.gpcResponseAssessment.contractVersion === "certscore.gpc-response-assessment.v3" &&
+          bundle.gpcMeasurementInventory && bundle.gpcMeasurementInventory.scanId === bundle.scanId &&
+          bundle.gpcMeasurementInventory.sourceSha256 === bundle.gpcResponseAssessment.observation?.sourceSha256
+          ? {gpcMeasurementInventory: bundle.gpcMeasurementInventory} : {}),
         ...(potentialRisk ? {californiaGpcPotentialRiskAssessment:potentialRisk} : {}),
         ...(cmpStateComparison ? {gpcCmpStateComparison: cmpStateComparison} : {}),
         ...(cmpBlocker ? {gpcCmpPairBlocker: cmpBlocker} : {}),
@@ -6942,7 +6947,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v49";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v51";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

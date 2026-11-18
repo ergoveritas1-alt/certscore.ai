@@ -1,3 +1,4 @@
+import { analyticsMeasurementIdentity } from "./gpc-measurement-inventory.js";
 import {createHash} from "node:crypto";
 import type {CanonicalEvidenceBundle, GpcImpactCapture} from "@certscore/contracts";
 import {gpcEndpointEvidence} from "./gpc-vendor-evidence.js";
@@ -24,6 +25,8 @@ export function retainGpcComparisonLedger(bundle:CanonicalEvidenceBundle):GpcImp
         const id=createHash("sha256").update(JSON.stringify([v.vendor,v.product??"unspecified",v.purpose])).digest("hex");
         (["advertising","marketing"].includes(v.purpose)?advertising:analytics).add(id);
       }
+      const measured = analytics.size ? undefined : analyticsMeasurementIdentity(e);
+      if (measured) analytics.add(measured);
       return {eventId:e.eventId,timestampMs:e.timestampMs,urlSha256:gpcDocumentHash(e.requestUrl),headersVerified:e.requestHeaders!==undefined,
         secGpc:e.requestHeaders?.secGpc===undefined?null:e.requestHeaders.secGpc==="1"?"1" as const:"other" as const,
         advertising:[...advertising],analytics:[...analytics],collection:e.collectionEndpointObserved===true,attributionUnknown};

@@ -11,7 +11,7 @@ import type { ScanStatusProjection } from "./scan-status-projection";
 /** A terminal capture decision has a status snapshot but no scored report. */
 export function buildTerminalRuntimeVisitReport(projection: Pick<ScanStatusProjection,
   "id" | "status" | "publicationRequestStatus" | "scanNoGoAssessment" | "domainHostname" | "pageUrl" |
-  "createdAt" | "startedAt" | "completedAt" | "scanFrom"
+  "createdAt" | "startedAt" | "completedAt" | "scanFrom" | "browserGuidance"
 >): NoGoReportData | null {
   if (projection.status !== "failed" || projection.publicationRequestStatus === "terminal_failure" ||
       !isTerminalPageCaptureAssessment(projection.scanNoGoAssessment)) return null;
@@ -30,6 +30,7 @@ export function buildTerminalRuntimeVisitReport(projection: Pick<ScanStatusProje
   }
   return {
     ...noGo,
+    browserGuidance: projection.browserGuidance,
     score: { label: "Not scored", value: null },
     scan: {
       id: projection.id,

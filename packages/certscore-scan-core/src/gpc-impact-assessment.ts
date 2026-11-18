@@ -1,3 +1,5 @@
+import { analyticsMeasurementIdentity } from "./gpc-measurement-inventory.js";
+import { gpcDocumentHash } from "./gpc-signal-capture.js";
 import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import {selectGpcRecoveryCapture} from "./gpc-navigation-recovery";
 import { createHash } from "node:crypto";
@@ -44,8 +46,14 @@ function inventory(bundle: CanonicalEvidenceBundle, events: NetworkEvent[], purp
   const evidence = new Set(events.map(e => e.eventId));
   const vendors = bundle.normalizedVendorObservations.filter(v => purposes.has(v.purpose) && v.matchedEvidenceIds.some(id => evidence.has(id) && gpcEndpointEvidence(v, id) === "verified"));
   const classified = new Set(vendors.flatMap(v => v.matchedEvidenceIds.filter(id => evidence.has(id) && gpcEndpointEvidence(v, id) === "verified")));
+  const identities = new Set(vendors.map(v => JSON.stringify([v.vendor, v.product ?? "unspecified", v.purpose])));
+  if (purposes.has("analytics")) for (const event of events) {
+    if (classified.has(event.eventId)) continue;
+    const identity = analyticsMeasurementIdentity(event);
+    if (identity) { identities.add(identity); classified.add(event.eventId); }
+  }
   return {
-    identities: new Set(vendors.map(v => JSON.stringify([v.vendor, v.product ?? "unspecified", v.purpose]))),
+    identities,
     requests: events.filter(e => classified.has(e.eventId)).length,
     collectionRequests: events.filter(e => classified.has(e.eventId) && e.collectionEndpointObserved === true).length,
   };
@@ -159,8 +167,26 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
   const measuredInventory=(bundle:CanonicalEvidenceBundle,events:NetworkEvent[],purposes:string[])=>{
     const ledger=pageHttpOnly?ledgerFor(bundle,horizon):undefined;
     if(!ledger)return inventory(bundle,events,new Set(purposes));
-    const ids=(r:typeof ledger[number])=>[...(purposes.includes("advertising")?r.advertising:[]),...(purposes.includes("analytics")?r.analytics:[])];
-    return {identities:new Set(ledger.flatMap(ids)),requests:ledger.filter(r=>ids(r).length>0).length,collectionRequests:ledger.filter(r=>ids(r).length>0&&r.collection).length};
+    const byId = new Map(events.map(event => [event.eventId, event]));
+    const identities = new Set<string>();
+    let requests = 0, collectionRequests = 0;
+    for (const row of ledger) {
+      const ids = [...(purposes.includes("advertising") ? row.advertising : []), ...(purposes.includes("analytics") ? row.analytics : [])];
+      // Older ledgers may have skipped a first-party collector. Join the original
+      // request on the ledger's full identity before filling that missing role.
+      if (purposes.includes("analytics") && !row.analytics.length) {
+        const event = byId.get(row.eventId);
+        if (event && event.timestampMs === row.timestampMs && URL.canParse(event.requestUrl) && gpcDocumentHash(event.requestUrl) === row.urlSha256) {
+          const measured = analyticsMeasurementIdentity(event);
+          if (measured) ids.push(measured);
+        }
+      }
+      if (!ids.length) continue;
+      ids.forEach(id => identities.add(id));
+      requests++;
+      if (row.collection) collectionRequests++;
+    }
+    return {identities, requests, collectionRequests};
   };
   const compare = (purposes: string[]) => {
     const b = measuredInventory(baseline,be,purposes), g = measuredInventory(gpc,ge,purposes);

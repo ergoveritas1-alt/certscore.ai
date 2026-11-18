@@ -13,6 +13,6 @@ test("unbound legacy and GPC packets cannot be elevated by canonical priority pr
 
 test("catalog ranks an already-projected GPC finding only in California review", () => {
   const row = {id: "gpc_response", status: "Potential gap", rank: 1};
-  assert.deepEqual(selectRegulatoryReview([row], "ccpa_cpra"), {regulatory: [row], other: [], topIssues: [row]});
-  assert.deepEqual(selectRegulatoryReview([row], "gdpr_eprivacy"), {regulatory: [], other: [], topIssues: []});
+  assert.deepEqual(selectRegulatoryReview([row], "ccpa_cpra"), {regulatory: [row], other: [], topIssues: [row], reviewItemCount: 0});
+  assert.deepEqual(selectRegulatoryReview([row], "gdpr_eprivacy"), {regulatory: [], other: [], topIssues: [], reviewItemCount: 0});
 });

@@ -1,3 +1,5 @@
+import { gpcMeasurementInventorySchema, type GpcMeasurementInventory } from "./choice-request-role";
+export * from "./choice-request-role";
 import { gpcCmpPairBlockerSchema } from "./gpc-cmp-pair-coverage";
 import { gpcNavigationRecoverySchema } from "./gpc-navigation-recovery";
 import {consentCaptureDiagnosticSchema} from "./consent-capture-diagnostic";
@@ -3656,10 +3658,11 @@ const canonicalEvidenceBundleBaseSchema: z.ZodType<z.output<typeof canonicalEvid
 // Keep the large legacy contract named, preserving defaults and input types while adding a bounded extension.
 type CmpBundleExtension = { saleSharingOptOut?: VerifiedSaleSharingOptOut; saleSharingOptOutLaneOutcome?: SaleSharingOptOutLaneOutcome; cmpBasicEvidence?: CmpBasicEvidence; cmpPreferencesEvidence?: CmpPreferencesEvidence; cmpPreferenceLaneOutcome?: { diagnostic?: CaptureFailureDiagnostic; status: "joined" | "limited"; startedAt: string; completedAt: string; limitationCode?: "preference_budget_exhausted" | "preference_worker_failed" | "preference_inspection_cancelled" } };
 export const canonicalEvidenceBundleSchema: z.ZodType<
-  z.output<typeof canonicalEvidenceBundleBaseSchema> & CmpBundleExtension & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] },
+  z.output<typeof canonicalEvidenceBundleBaseSchema> & CmpBundleExtension & { gpcMeasurementInventory?: GpcMeasurementInventory; runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] },
   z.ZodTypeDef,
-  z.input<typeof canonicalEvidenceBundleBaseSchema> & CmpBundleExtension & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] }
+  z.input<typeof canonicalEvidenceBundleBaseSchema> & CmpBundleExtension & { gpcMeasurementInventory?: GpcMeasurementInventory; runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] }
 > = withRuntimeGraphCompatibility(canonicalEvidenceBundleBaseSchema.and(z.object({
+  gpcMeasurementInventory: gpcMeasurementInventorySchema.optional(),
   saleSharingOptOut: verifiedSaleSharingOptOutSchema.optional(),
   saleSharingOptOutLaneOutcome: saleSharingOptOutLaneOutcomeSchema.optional(),
   cmpBasicEvidence: cmpBasicEvidenceSchema.optional(),

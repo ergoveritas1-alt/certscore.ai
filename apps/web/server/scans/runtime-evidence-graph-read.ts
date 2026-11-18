@@ -1,4 +1,5 @@
 import { apiRuntimeEvidenceGraphProjectionSchema } from "@certscore/api-contracts";
+import { choiceInventoryCounts } from "../../lib/scans/choice-inventory-counts";
 import { projectGpcResourceInventory } from "../../lib/scans/gpc-resource-inventory";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 
@@ -18,9 +19,20 @@ export async function handleRuntimeGraphRead(request: Request, scanId: string, d
     const hydrated = await dependencies.hydrate(record);
     const graph = apiRuntimeEvidenceGraphProjectionSchema.safeParse(hydrated.runtimeArtifacts?.runtimeEvidenceGraphProjection);
     if (!graph.success || graph.data.scanId !== scanId) return error(404, "Relationship evidence is unavailable.");
-    const body = new URL(request.url).searchParams.get("view") === "gpc-inventory"
-      ? projectGpcResourceInventory({scanId,projection:graph.data,pageUrl:record.scan.domainHostname ? `https://${record.scan.domainHostname}/` : ""})
-      : graph.data;
-    return Response.json(body, { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+    const view = new URL(request.url).searchParams.get("view");
+    const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
+    const inventory = () => projectGpcResourceInventory({
+      scanId, projection: graph.data, measurementInventory: record.runtimeArtifacts?.gpcMeasurementInventory,
+      pageUrl: record.scan.domainHostname ? `https://${record.scan.domainHostname}/` : "",
+    });
+    if (view === "gpc-flagged-items") {
+      const reference = apiRuntimeEvidenceGraphProjectionSchema.safeParse(record.runtimeArtifacts?.runtimeEvidenceGraphProjection);
+      const capture = inventory();
+      return Response.json(capture && reference.success && reference.data.details ? {
+        scanId, graphHash: reference.data.details.sha256, ...choiceInventoryCounts(capture),
+      } : null, { headers });
+    }
+    const body = view === "gpc-inventory" ? inventory() : graph.data;
+    return Response.json(body, { headers });
   } catch { return error(503, "Relationship evidence is temporarily unavailable. Try again later."); }
 }

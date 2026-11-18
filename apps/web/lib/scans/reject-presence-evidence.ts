@@ -1,9 +1,9 @@
-import {resolveCanonicalCookieClassification} from "@certscore/vendor-resolver";
+import {documentedChoiceCookie, resolveCanonicalCookieClassification} from "@certscore/vendor-resolver";
 import type { PostRefusalReportProjection } from "@certscore/contracts";
 
 /** Positive observations only. Cookie presence does not establish a write or
  * active use; service presence does not establish identifier transmission. */
-export function retainedRejectPresence(p: PostRefusalReportProjection,cookiePurposePolicy?: "certscore.cookie-purpose.v6" | "certscore.cookie-purpose.v7") {
+export function retainedRejectPresence(p: PostRefusalReportProjection,cookiePurposePolicy?: "certscore.cookie-purpose.v6" | "certscore.cookie-purpose.v7", includeChoiceCookies = false) {
   const reclassify=!!cookiePurposePolicy;
   const proof=p.actionControlProof, s=p.scoringEvidence, c=p.afterActionCapture;
   const confirmed=p.productionProjectable && p.refusalExercised && p.registrationStatus==="confirmed" &&
@@ -23,7 +23,7 @@ export function retainedRejectPresence(p: PostRefusalReportProjection,cookiePurp
   const postSnapshot=s.postActionCapturedAtMs;
   const snapshotUsable=postSnapshot!==undefined && postSnapshot>=(confirmed?completion!.startedAtMs:start+window) && postSnapshot<=end &&
     (confirmed || c!.storageSnapshotRetained && JSON.stringify(p.afterActionStorage)===JSON.stringify(s.postActionStorage));
-  const cookies=snapshotUsable?s.postActionStorage.filter(row=>row.storageType==="cookie" && (reclassify?(()=>{const c=resolveCanonicalCookieClassification(row.name,{cookieDomain:row.hostname},cookiePurposePolicy);
+  const cookies=snapshotUsable?s.postActionStorage.filter(row=>row.storageType==="cookie" && (reclassify?(()=>{const c=(includeChoiceCookies && documentedChoiceCookie(row.name)) || resolveCanonicalCookieClassification(row.name,{cookieDomain:row.hostname},cookiePurposePolicy);
       if(c.essentiality==="essential" || cookiePurposePolicy==="certscore.cookie-purpose.v7" && row.purposeAssessment?.essentiality==="essential")return false;
       return row.nonEssential&&row.purpose!==undefined&&row.purpose!=="unknown" ||
         (!row.purpose||row.purpose==="unknown")&&c.essentiality==="non_essential";
@@ -41,5 +41,5 @@ export function retainedRejectPresence(p: PostRefusalReportProjection,cookiePurp
     return root!==undefined && root>start && root<=row.startedAtMs &&
       (row.rootStartedAtMs===undefined || row.rootStartedAtMs===root)?[row.requestId]:[];
   });
-  return {reclassify,cookiePurposePolicy,confirmed,start,end,postSnapshot:snapshotUsable?postSnapshot:undefined,cookies,requestIds:[...new Set(requestIds)]};
+  return {includeChoiceCookies,reclassify,cookiePurposePolicy,confirmed,start,end,postSnapshot:snapshotUsable?postSnapshot:undefined,cookies,requestIds:[...new Set(requestIds)]};
 }

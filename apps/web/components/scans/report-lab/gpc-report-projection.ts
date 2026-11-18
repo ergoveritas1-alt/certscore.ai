@@ -96,8 +96,9 @@ export function gpcCardResponse(projection: GpcResponseReportProjection): string
 
 export function buildGpcResponseReportProjection(
   findings: UnifiedFindingDisplayPacket[],
+  refreshed?: {scanId: string; activityComparison: unknown},
 ): GpcResponseReportProjection | null {
-  const projection = buildCanonicalGpcResponseProjection(findings);
+  const projection = buildCanonicalGpcResponseProjection(findings, refreshed);
   if (!projection) {
     return null;
   }

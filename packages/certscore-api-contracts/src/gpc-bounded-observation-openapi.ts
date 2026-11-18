@@ -309,8 +309,11 @@ export const gpcBoundedObservationOpenApi = {
           ],
           "properties": {
             "policyVersion": {
-              "const": "gpc_collection_review.v1",
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "gpc_collection_review.v1",
+                "gpc_collection_review.v2-google-page-view"
+              ]
             },
             "rows": {
               "type": "array",
@@ -353,6 +356,10 @@ export const gpcBoundedObservationOpenApi = {
                       "marketing",
                       "session_replay"
                     ]
+                  },
+                  "measurement": {
+                    "const": "google_ccm_document_page_view",
+                    "type": "string"
                   },
                   "httpStatus": {
                     "type": "integer",

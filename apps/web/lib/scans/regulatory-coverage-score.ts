@@ -401,7 +401,7 @@ export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow, policyVe
   if (row.id === "post_reject_tracking_reduction") {
     if (isNarrowPolicy(policyVersion) || policyVersion === "gdpr-eprivacy-posture.v24" || policyVersion === "gdpr-eprivacy-posture.v23" || policyVersion === "gdpr-eprivacy-posture.v22" || policyVersion === "gdpr-eprivacy-posture.v21" || policyVersion === "gdpr-eprivacy-posture.v20") {
       const assessment = readAfterRejectScoringAssessment(retained.afterRejectScoringAssessment);
-      if(!isNarrowPolicy(policyVersion)&&policyVersion!=="gdpr-eprivacy-posture.v24"&&assessment?.policyVersion==="after_reject_nonessential_presence.v3-cookie-coverage")return 0;
+      if(!isNarrowPolicy(policyVersion)&&policyVersion!=="gdpr-eprivacy-posture.v24"&&(assessment?.policyVersion==="after_reject_nonessential_presence.v3-cookie-coverage" || assessment?.policyVersion==="after_reject_nonessential_presence.v4-choice-cookies"))return 0;
       if(!isNarrowPolicy(policyVersion)&&!["gdpr-eprivacy-posture.v23","gdpr-eprivacy-posture.v24"].includes(policyVersion)&&assessment?.policyVersion==="after_reject_nonessential_presence.v2-vendor-coverage")return 0;
       if(!isNarrowPolicy(policyVersion)&&!["gdpr-eprivacy-posture.v22","gdpr-eprivacy-posture.v23","gdpr-eprivacy-posture.v24"].includes(policyVersion)&&assessment?.policyVersion==="after_reject_nonessential_presence.v1")return 0;
       if (policyVersion === "gdpr-eprivacy-posture.v20" && assessment?.registration !== "confirmed") return 0;

@@ -6444,4 +6444,5 @@ export function resolveCanonicalCookieClassification(name: string, context: Pick
     ...([COOKIE_PURPOSE_POLICY, FUNDING_CHOICES_COOKIE_PURPOSE_POLICY, GOOGLE_SECURITY_COOKIE_PURPOSE_POLICY, X_COOKIE_PURPOSE_POLICY,REVIEWED_COOKIE_PURPOSE_POLICY].some(v=>v===policyVersion)?{unknownReason:cookieUnknownReason(knowledge)}:{}) });
 }
 
+export { documentedChoiceCookie } from "./documented-choice-cookie";
 export { isAdvertisingIdentityValue } from "./advertising-identifiers";

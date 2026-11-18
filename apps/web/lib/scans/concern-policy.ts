@@ -11,7 +11,7 @@ import {FRICTIONLESS_GPC_FINDING_ID} from "@certscore/contracts";
 import {POLICY_CHOICE_METHOD_FINDING_ID} from "@certscore/contracts";
 import { readSaleSharingLinkPresence, PRIVACY_CHOICE_PRESENCE_SIGNAL } from "@certscore/contracts";
 import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
-import {retainedPotentialRisk,potentialRiskRecipients,CA_POTENTIAL_RISK_FINDING,CA_POTENTIAL_RISK_POLICY,potentialRiskPoints} from "./california-potential-risk-policy";
+import {scoreCaliforniaCollectionReview,collectionReviewScorePolicy,retainedPotentialRisk,CA_POTENTIAL_RISK_FINDING} from "./california-potential-risk-policy";
 import {retainedCaliforniaPostReject,californiaPostRejectPoints,CALIFORNIA_POST_REJECT_POLICY} from "./california-post-reject-policy";
 import {deriveGppPropagationPolicy} from "./gpp-propagation-policy";
 import {hasVerifiedCustomerGpcEvidence} from "./gpc-customer-policy";
@@ -2771,12 +2771,12 @@ export function deriveConcernPolicy(input: {
       negativeEvidenceFlags: ["missing_specific_runtime_anchor"], promotionEligibility: "internal_only" };
   }
   if(suggestedUnifiedFindingId===CA_POTENTIAL_RISK_FINDING) {
-    const assessments=retainedPotentialRisk(input.rawEvidence),eligible=assessments.some(a=>a.rows.some(r=>r.treatment==="potential_risk"));
-    const ids=potentialRiskRecipients(assessments);
-    const version=assessments[0]?.policyVersion??CA_POTENTIAL_RISK_POLICY;
+    const assessments=retainedPotentialRisk(input.rawEvidence),eligible=assessments.some(a=>a.identifierTransmission || a.rows.some(r=>r.treatment==="potential_risk"));
+    const version=collectionReviewScorePolicy(assessments);
+    const {reviewPoints: points, reviewIds: ids} = scoreCaliforniaCollectionReview(assessments);
     return {allowedNarrativeTier:eligible?"moderate":"weak",externalSurfacingEligibility:eligible?"eligible":"suppress",
       negativeEvidenceFlags:[],promotionEligibility:eligible?"eligible":"blocked",regulatoryChecklistEligibility:"none",
-      scoreEffects:eligible&&ids.length?[{appliesTo:"california_posture",framework:"california",deductionPoints:potentialRiskPoints(ids,version),
+      scoreEffects:eligible&&version&&points>0?[{appliesTo:"california_posture",framework:"california",deductionPoints:points,
         evidenceRefs:assessments.map(a=>`choice-source:sha256:${a.sourceSha256}`),observedActivity:ids,
         policyKey:version,policyVersion:version,reasonCode:"observed_collection_purpose_unresolved"}]:[]};
   }

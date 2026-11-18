@@ -1874,7 +1874,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     return;
   }
   if(packet.unifiedFindingId==="california_collection_review") {
-    const eligible=packet.details?.family==="california_collection_review"&&packet.details.assessments.some(a=>a.rows.some(r=>r.treatment==="potential_risk"))&&
+    const eligible=packet.details?.family==="california_collection_review"&&packet.details.assessments.some(a=>a.identifierTransmission || a.rows.some(r=>r.treatment==="potential_risk"))&&
       packet.concernContext?.promotionEligibilities.includes("eligible")&&packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
     overrideDecision(decision,{state:eligible?"review":"suppressed",lane:eligible?"main":"suppressed",tier:"support",
       reason:eligible?"Verified collection; sale/sharing purpose requires review.":"Collection review evidence is insufficient.",ruleId:"evidence.context.keep_review"});return;

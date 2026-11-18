@@ -10,7 +10,7 @@ import { SHADOW_REPORT } from "./report-lab/shadow-report-data";
 test("single-page overview uses the shared report card and keeps every retained classification in technical details", () => {
   const html = renderToStaticMarkup(<FullSiteExecutiveSummary scannedPages={1} pending={false} score={{ value: 56, priorityReview: [], scoredPages: 1, limitedPages: 0 }} homepageVerdict="Retained page assessment" inventorySummary={<ReportInventorySummary metrics={[{ label: "Embedded content", value: 3, counts: { nonEssential: 0, review: 1, contextual: 2, essential: 0 } }]} />} />);
   assert.match(html, /Score 56 out of 100/);
-  assert.match(html, /1 page scanned/);
+  assert.doesNotMatch(html, /1 page scanned/);
   assert.match(html, /Retained page assessment/);
   for (const label of ["Non-essential", "Classification review", "Contextual", "Essential"]) assert.ok(html.includes(label));
   assert.doesNotMatch(html, /<details[^>]*open/);

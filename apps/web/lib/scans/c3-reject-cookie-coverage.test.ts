@@ -35,7 +35,7 @@ function pipeline(p:ReturnType<typeof fixture>, policy?:Parameters<typeof assess
 
 test("C3 retained snapshots flow through persistence, concern, finding, details and v24 score without mutating evidence",()=>{
  const p=fixture(),before=structuredClone(p),result=pipeline(p),assessment=retainedAfterRejectScoringAssessment(result.runtime)!;
- assert.equal(assessment.policyVersion,"after_reject_nonessential_presence.v3-cookie-coverage");
+ assert.equal(assessment.policyVersion,"after_reject_nonessential_presence.v4-choice-cookies");
  assert.equal(assessment.deductionPoints,23);assert.equal(assessment.entityEvidence?.entities.length,3);
  assert.equal(assessment.registration,"unconfirmed");assert.equal(assessment.sourcePacketSha256,p.packetSha256);
  assert.ok(result.concerns.some(c=>c.promotionEligibility==="eligible"));
@@ -88,4 +88,18 @@ test("same canonical cookie owner and its service are deduplicated",()=>{
  const r={...source.scoringEvidence!.requests[0]!,sanitizedUrl:"https://siteimproveanalytics.com/js/siteanalyze_123.js",hostname:"siteimproveanalytics.com",vendor:"Siteimprove",googleConsentMode:undefined,measurementEvidence:undefined};
  p.scoringEvidence!.requests=[r];p.afterActionRequests=[structuredClone(r)];p.afterActionCapture!.requestIds=[r.requestId];p.afterActionCapture!.requestAncestry=[{requestId:r.requestId,rootStartedAtMs:r.rootStartedAtMs!}];
  const a=assessAfterRejectScoring(p)!;assert.equal(a.entityEvidence?.entities.length,2);assert.equal(a.deductionPoints,20);
+});
+
+test("three documented RudderStack cookies produce one Reject entity from the verified snapshot", () => {
+ const names=["rl_anonymous_id","rl_session","rl_page_init_referrer"];
+ const p=fixture([...names,"osano_consentmanager","osano_consentmanager_uuid","rl_unrecognized"]);
+ const result=pipeline(p);
+ const assessment=retainedAfterRejectScoringAssessment(result.runtime)!;
+ assert.deepEqual(assessment.cookieRefs?.map(c=>c.name).sort(),[...names].sort());
+ assert.deepEqual(assessment.entityEvidence?.entities.map(e=>e.vendor),["RudderStack"]);
+ assert.equal(assessment.deductionPoints,15);
+ assert.equal(deriveCanonicalOverallScoreExplanationForReport({scanRecord:{runtimeArtifacts:null},checklistRows:result.rows,unifiedFindings:result.findings})?.score,85);
+ assert.equal(assessAfterRejectScoring(p,"after_reject_nonessential_presence.v3-cookie-coverage")?.deductionPoints,0);
+ p.scoringEvidence!.postActionStorage=[];p.afterActionStorage=[];
+ assert.equal(assessAfterRejectScoring(p)?.deductionPoints,0);
 });
