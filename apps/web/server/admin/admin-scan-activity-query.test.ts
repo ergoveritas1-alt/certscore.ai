@@ -123,8 +123,8 @@ test("bounded traffic proof preserves old original owners and ignores later inte
   } finally { await client.query("rollback"); await client.end(); }
 });
 
-test("manual and active-scan refresh share one live page request", () => {
-  const refresh=readFileSync("apps/web/app/app/admin/scans/admin-scans-auto-refresh.tsx","utf8");
+test("manual refresh reloads the chart and table together", () => {
+  const refresh=readFileSync("apps/web/app/app/admin/scans/admin-scans-refresh-button.tsx","utf8");
   assert.equal(refresh.match(/window\.location\.reload\(\)/g)?.length,1);
   assert.doesNotMatch(refresh,/useRouter|useTransition|router\.refresh/);
   assert.doesNotMatch(refresh,/refreshAdminScanActivity/);

@@ -13,7 +13,7 @@ import { projectAdminRequestAdmission } from "../../../../lib/admin/admin-reques
 import { getAdminScanFilterOptions, getAdminScanActivityPage, type AdminScanListAccess, type AdminScanListFreshness, type AdminScanListItem, type AdminScanListStatus } from "../../../../server/admin/list-admin-scans";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminNavigationProvider, AdminScanActions } from "./admin-scan-actions";
-import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
+import { AdminScansRefreshButton } from "./admin-scans-refresh-button";
 import { AdminScansFilterForm } from "./admin-scans-filter-form";
 import basicTableStyles from "./admin-basic-scan-table.module.css";
 import { AdminTrafficFilters } from "../../../../components/admin/admin-traffic-filters";
@@ -466,22 +466,12 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
     const normalizedPage = Math.min(currentPage, totalPages);
     const scans = scanPage.items;
-    const liveTargets = scans.flatMap((scan) => {
-      if (!["queued", "running", "finalizing"].includes(scan.status)) return [];
-      const id = scan.rowKind === "scan" ? scan.scanId : scan.requestPublicId;
-      return id ? [{
-        id,
-        kind: scan.rowKind,
-        status: scan.status
-      } as const] : [];
-    });
-
     return <Card className="min-w-0 overflow-hidden border-slate-200 bg-white">
       <CardHeader className="pb-2"><div className="flex flex-wrap items-end justify-between gap-2"><div><CardTitle>Scan activity</CardTitle></div><p className="text-sm text-slate-500">{snapshotNumber(totalCount)} matching items</p></div></CardHeader>
       <AdminTableRefreshBoundary basePath="/app/admin/scans" label="Refreshing scans">
       <CardContent className="min-w-0 space-y-3 pt-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <AdminScansAutoRefresh targets={liveTargets} />
+          <AdminScansRefreshButton />
           <Link className="app-raised-button rounded-full px-3 py-1.5 text-sm font-semibold text-sky-800" href={adminScanActivityHref(sharedParams, { details: showReportDetails ? null : "1", page: String(currentPage) })} prefetch={false}>{showReportDetails ? "Show basic rows" : "Show report details"}</Link>
         </div>
         {!showReportDetails ? <p className="text-xs text-slate-500">Basic scan rows include scores and top finding counts. Consent evidence, vendor counts and other report columns are available through Show report details or the individual report.</p> : null}

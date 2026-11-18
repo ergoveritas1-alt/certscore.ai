@@ -574,16 +574,13 @@ test("admin users paginate in SQL instead of loading the complete account histor
   assert.match(pageSource, /lastMcpToolInvocationAt/);
 });
 
-test("admin scans poll lightweight status data and refresh only after a status change", async () => {
+test("admin scans use a manual refresh button instead of polling active scans", async () => {
   const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
-  const refreshSource = await readFile("apps/web/app/app/admin/scans/admin-scans-auto-refresh.tsx", "utf8");
-  const routeSource = await readFile("apps/web/app/api/admin/scans/live-status/route.ts", "utf8");
+  const refreshSource = await readFile("apps/web/app/app/admin/scans/admin-scans-refresh-button.tsx", "utf8");
 
-  assert.match(pageSource, /<AdminScansAutoRefresh targets=\{liveTargets\}/);
-  assert.match(refreshSource, /fetch\("\/api\/admin\/scans\/live-status"/);
-  assert.match(refreshSource, /result\.fingerprint !== initialFingerprint/);
-  assert.doesNotMatch(refreshSource, /setInterval/);
-  assert.match(routeSource, /getAdminScanLiveStatus\(targets\)/);
+  assert.match(pageSource, /<AdminScansRefreshButton \/>/);
+  assert.doesNotMatch(pageSource, /liveTargets|AdminScansAutoRefresh/);
+  assert.doesNotMatch(refreshSource, /fetch\(|useEffect|setTimeout|setInterval/);
 });
 
 test("API activity obtains rows and the filtered total in one paginated query", async () => {
