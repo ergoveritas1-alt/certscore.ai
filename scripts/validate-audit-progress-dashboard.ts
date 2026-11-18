@@ -7,7 +7,8 @@ import {verifyChoiceEvidence} from './lib/audit-progress-choice-verification';
 import assert from 'node:assert/strict';import {readFileSync,writeFileSync,realpathSync} from 'node:fs';import path from 'node:path';import {createHash} from 'node:crypto';
 import {progressEngine} from './lib/audit-progress-engine';import {makeContracts} from './lib/audit-progress-contracts';import {verifyProgressPins} from './lib/audit-progress-pins';
 import {applyRetainedReports,RETAINED_CLICK_ACTIVITY_KEYS} from './lib/audit-progress-retained-report';
-import {applyRetainedOptOutExtracts,TECHNICAL_COUNT_KEYS,TECHNICAL_COUNT_SOURCE,TECHNICAL_COUNT_REF} from './lib/audit-progress-opt-out';
+import {applyRetainedOptOutExtracts,TECHNICAL_COUNT_KEYS,TECHNICAL_COUNT_SOURCE,TECHNICAL_COUNT_REF,REJECT_ACTIVITY_REF} from './lib/audit-progress-opt-out';
+import {REJECT_ACTIVITY_KEY} from './lib/audit-progress-priority-evidence';
 import {localDay} from './lib/audit-progress';
 import {TRACKING_REVIEW_KEYS,TRACKING_REVIEW_REF,TRACKING_REVIEW_SOURCE} from './lib/audit-progress-control-accessibility';
 import {NO_GO_METRICS,readAuditNoGoReasons} from './lib/audit-progress-no-go';
@@ -36,12 +37,14 @@ const masterValueParity=verifyMasterValueParity(data);assert.deepEqual(data.mast
 const actual=progressEngine().aggregate(data,data.rows);
 assert.ok(Array.isArray(data.optOutExtracts)&&data.optOutExtracts.length>0,'Missing retained opt-out inputs');
 const proofRows=structuredClone(data.rows);
-const replayedRefs=new Set([TECHNICAL_COUNT_REF,TRACKING_REVIEW_REF,'generation_matched_comparison']);
+const replayedRefs=new Set([TECHNICAL_COUNT_REF,TRACKING_REVIEW_REF,'generation_matched_comparison',REJECT_ACTIVITY_REF]);
 for(let i=0;i<proofRows.length;i++){
  delete proofRows[i].comparisonMetadata;
  delete proofRows[i].comparisonUnavailableReason;
  delete proofRows[i].technicalCountUnavailable;
  delete proofRows[i].californiaRejectCoverage;
+ delete proofRows[i].states[REJECT_ACTIVITY_KEY];
+ delete proofRows[i].metricSources?.[REJECT_ACTIVITY_KEY];
  if(retainedProof[i].californiaRejectCoverage)proofRows[i].californiaRejectCoverage=retainedProof[i].californiaRejectCoverage;
  proofRows[i].refs=proofRows[i].refs.filter((ref:any)=>!replayedRefs.has(ref.role));
  for(const key of TECHNICAL_COUNT_KEYS)if(proofRows[i].metricSources?.[key]?.startsWith(TECHNICAL_COUNT_SOURCE)){

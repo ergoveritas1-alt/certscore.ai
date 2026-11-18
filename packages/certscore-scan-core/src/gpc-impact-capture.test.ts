@@ -42,7 +42,7 @@ test("same-URL history update preserves fixed windows and frozen evidence", () =
   const { capture, finish, url } = setup();
   capture.navigatedWithinDocument({ url, navigationType: "historyApi" }, "loader");
   const result = finish();
-  assert.equal(result.windows.length, 3);
+  assert.deepEqual(result.windows.map(w => w.durationMs), [250, 500, 1000, 1400]);
   assert.deepEqual(result.invalidationReasons, []);
   capture.invalidate("renderer_crash");
   capture.navigatedWithinDocument({ url: `${url}changed`, navigationType: "historyApi" }, "loader");

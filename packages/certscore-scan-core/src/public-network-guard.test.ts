@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { once } from "node:events";
+import { entryNavigationGuardObserver, navigationFailureCode } from "./transport-fallback.js";
 import { assertPublicNetworkUrl, guardedPublicFetch, installPublicNetworkGuardRoute, PublicNetworkGuardError } from "./public-network-guard.js";
 
 test("runtime guard accepts only all-public DNS answers", async () => {
@@ -119,16 +121,33 @@ test("route phase diagnostics distinguish pending validation without weakening o
       let release!: () => void, lookups = 0, opened = 0;
       const pending = new Promise<void>(resolve => { release = resolve; });
       await context.route("https://guard-fixture.test/**", async route => { opened++; await route.fulfill({ body: "fixture" }); });
+      const page = await context.newPage();
+      const cdp = await context.newCDPSession(page);
+      await cdp.send("Network.enable");
+      const blocked = denied ? once(cdp, "Network.loadingFailed", { signal: AbortSignal.timeout(4000) }) : undefined;
+      const observer = entryNavigationGuardObserver(page);
+      observer.begin("https://guard-fixture.test/");
       await installPublicNetworkGuardRoute(context, { env: { CERTSCORE_PUBLIC_NETWORK_GUARD_FORCE: "true" },
         resolver: async () => { lookups++; await pending; return [{ address: denied ? "127.0.0.1" : "93.184.216.34", family: 4 }]; },
-        onRequestPhase: (_request, phase) => { phases.push(phase); if (phase !== "validation_pending") throw new Error("Observer failure"); },
+        onRequestPhase: (request, phase, diagnostic) => {
+          phases.push(phase);
+          if (phase === "validation_pending") observer.bind(request);
+          if (diagnostic) observer.deny(request, { reason: diagnostic.reason });
+          if (phase !== "validation_pending") throw new Error("Observer failure");
+        },
       });
-      const page = await context.newPage();
-      const navigation = page.goto("https://guard-fixture.test/", { timeout: 3000 }).catch(() => null);
+      const navigation = page.goto("https://guard-fixture.test/", { timeout: 3000 }).catch(error => navigationFailureCode(error));
       for (let count = 0; !phases.length && count < 100; count++) await new Promise(resolve => setTimeout(resolve, 5));
       assert.deepEqual(phases, ["validation_pending"]);
       assert.equal(opened, 0, "No network before public validation");
-      release(); await navigation;
+      release(); const result = await navigation;
+      assert.deepEqual(observer.decision(), denied ? { reason: "non_public_dns_answer" } : undefined);
+      if (blocked) {
+        assert.equal(result, "ERR_BLOCKED_BY_CLIENT");
+        const [event] = await blocked;
+        assert.equal(event.type, "Document");
+        assert.equal(event.blockedReason, "inspector");
+      }
       assert.deepEqual(phases, ["validation_pending", denied ? "denied" : "validated"]);
       assert.equal(lookups, 1); assert.equal(opened, denied ? 0 : 1);
       await context.close();

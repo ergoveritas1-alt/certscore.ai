@@ -5,12 +5,13 @@ import { FullSiteRegion, FullSiteTiming } from "./full-site-workspace";
 import { ShareReportActions } from "./share-report-actions";
 import { VendorBrandLogo } from "./vendor-brand-chip";
 
-export function FullSiteIdentity({ scanId, host, url, createdAt, duration, region, visualEvidenceHref, visualEvidenceAction, actions, timing, reviewFocusControl }: {
+export function FullSiteIdentity({ scanId, host, url, createdAt, duration, coverageNote, region, visualEvidenceHref, visualEvidenceAction, actions, timing, reviewFocusControl }: {
   scanId: string;
   host: string;
   url?: string | null;
   createdAt: ReactNode;
   duration?: ReactNode;
+  coverageNote?: ReactNode;
   region: ReactNode;
   visualEvidenceHref?: string | null;
   visualEvidenceAction?: ReactNode;
@@ -27,7 +28,8 @@ export function FullSiteIdentity({ scanId, host, url, createdAt, duration, regio
       {reviewFocusControl}
     </div>
     <div className="min-w-0">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {coverageNote}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <p className="text-xs font-medium text-zinc-500">{createdAt}{duration}</p>
         {timing ?? <FullSiteTiming />}
       </div>

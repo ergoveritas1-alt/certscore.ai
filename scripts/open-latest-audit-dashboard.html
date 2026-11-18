@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open the latest CertScore.ai daily audit</title>
+<h1>Latest CertScore.ai daily audit</h1>
+<p><a id="latest-dashboard" href="../artifacts/daily-scan-audit/latest/dashboard.html">Open the latest verified dashboard</a></p>
+<script>
+  const link = document.getElementById("latest-dashboard");
+  const dashboard = new URL(link.href);
+  // Each open resolves the publisher's latest symlink through a fresh document URL.
+  dashboard.searchParams.set("view", `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  link.href = dashboard.href;
+  window.location.replace(dashboard.href);
+</script>
+</html>

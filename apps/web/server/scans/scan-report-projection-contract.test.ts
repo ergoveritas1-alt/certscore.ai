@@ -29,10 +29,143 @@ import {
 } from "./persisted-canonical-report-projection";
 import { buildGdprEprivacyChecklistPresentation } from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
+import terminalFixtures from "../../lib/scans/test-fixtures/retained-terminal-confirmations.json";
+import { afterRejectClickProjection, afterRejectProjection } from "../../lib/scans/test-fixtures/after-reject-scoring";
+import { assessAfterRejectScoring } from "../../lib/scans/after-reject-scoring-policy";
+import { assessChoicePathExecution, postRefusalReportProjectionSchema, type PostRefusalReportProjection } from "@certscore/contracts";
+import { MAX_AUDIT_REJECT_ACTIVITY_BYTES } from "../../../../packages/certscore-contracts/src/audit-reject-activity";
+import { buildAuditRejectActivity } from "./audit-reject-activity";
 
 const projectionPath = "apps/web/server/scans/scan-report-projection.ts";
 const projectionContractPath = "apps/web/server/scans/scan-report-projection-contract.ts";
 const statusProjectionPath = "apps/web/server/scans/scan-status-projection.ts";
+
+test("an unconfirmed Reject retains private activity for the existing completed click", () => {
+  const projection = terminalFixtures.find(entry => entry.action === "reject")!.projection;
+  const id = projection.sourceIdentity!.scanId;
+  assert.equal(projection.status, "unconfirmed");
+  const record = {
+    scan: { id, status: "completed", createdAt: "2026-11-18T12:00:00.000Z" },
+    runtimeArtifacts: { postRefusalEvidenceProjection: projection },
+  } as unknown as ScanDetailResponse;
+  const persisted = buildPersistedScanReportProjection(record);
+  assert.deepEqual(persisted.payload.auditRejectActivity, [2, id, projection.packetSha256, "request"]);
+  assert.ok(Buffer.byteLength(JSON.stringify(persisted.payload.auditRejectActivity)) <= MAX_AUDIT_REJECT_ACTIVITY_BYTES);
+  assert.equal(Object.hasOwn(persisted.report, "auditRejectActivity"), false);
+  const hydrated = readPersistedScanReportProjection({
+    scan: record.scan,
+    snapshot: {
+      report_projection_computed_at: "2026-11-18T12:01:00.000Z",
+      report_projection_payload: persisted.payload,
+      report_projection_payload_sha256: persisted.sha256,
+      report_projection_payload_size_bytes: persisted.sizeBytes,
+      report_projection_status: "ready",
+      report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+    } as ScanDetailResponse["snapshot"],
+  });
+  assert.ok(hydrated);
+  assert.equal(Object.hasOwn(hydrated, "auditRejectActivity"), false);
+  const capture = projection.afterActionCapture!;
+  const oldRoots = {
+    ...projection,
+    afterActionCapture: {
+      ...capture,
+      requestAncestry: capture.requestAncestry!.map(request => ({ ...request, rootStartedAtMs: capture.actionDispatchedAtMs })),
+    },
+  };
+  assert.equal(buildAuditRejectActivity(id, oldRoots)?.[3], "classification_unavailable");
+  assert.equal(buildAuditRejectActivity(id, { ...projection, sourceIdentity: { ...projection.sourceIdentity, targetSha256: "f".repeat(64) } })?.[3], "source_unbound");
+  assert.equal(buildAuditRejectActivity(id, { ...projection, packetSha256: undefined }), undefined);
+  const firstWrite = capture.storageWrites[0]!;
+  const byWrite = {
+    ...oldRoots, afterActionCapture: { ...oldRoots.afterActionCapture, writeDiagnostics: undefined,
+      storageWrites: [{ ...firstWrite, nonEssential: true }] },
+  };
+  assert.equal(buildAuditRejectActivity(id, byWrite)?.[3], "storage_write");
+});
+
+test("the persisted Reject receipt distinguishes all three evidence types and uses canonical snapshot classification", () => {
+  const id = "00000000-0000-4000-8000-000000000042";
+  const cookie = {
+    storageType: "cookie", name: "_pk_id.4.ac51", hostname: "example.test", identityBasis: "cookie_name_domain_path_partition",
+    identityHash: "d".repeat(64), valueHash: "e".repeat(64), purpose: "unknown", nonEssential: false,
+  } satisfies NonNullable<PostRefusalReportProjection["afterActionStorage"]>[number];
+  const cases = [
+    [false, false, false, "classification_unavailable"],
+    [true, false, false, "request"],
+    [false, true, false, "storage_write"],
+    [true, true, false, "request_and_storage_write"],
+    [false, false, true, "cookie_snapshot"],
+    [true, false, true, "request_and_cookie_snapshot"],
+    [false, true, true, "storage_write_and_cookie_snapshot"],
+    [true, true, true, "request_and_storage_write_and_cookie_snapshot"],
+  ] as const;
+  function projection(request: boolean, write: boolean, snapshot: boolean) {
+    const p = afterRejectClickProjection();
+    const capture = p.afterActionCapture!;
+    p.sourceIdentity = { policyVersion: "post_reject_source_identity.v1", scanId: id, targetSha256: p.actionControlProof!.authorizedTargetSha256! };
+    if (!request) {
+      p.afterActionRequests = [];
+      p.scoringEvidence!.requests = [];
+      capture.requestIds = [];
+      capture.requestAncestry = [];
+    }
+    p.scoringEvidence!.preActionStorage = [cookie];
+    p.scoringEvidence!.postActionStorage = snapshot ? [cookie] : [];
+    p.afterActionStorage = structuredClone(p.scoringEvidence!.postActionStorage);
+    if (write) capture.storageWrites = [{ storageType: "local_storage", name: "analytics", observedAtMs: capture.actionDispatchedAtMs + 1, nonEssential: true }];
+    p.execution = assessChoicePathExecution(p, "reject");
+    return postRefusalReportProjectionSchema.parse(p);
+  }
+  const stored = (p: PostRefusalReportProjection) => buildPersistedScanReportProjection({
+    scan: { id, status: "completed", createdAt: "2026-11-18T12:00:00.000Z" },
+    runtimeArtifacts: { postRefusalEvidenceProjection: p },
+  } as unknown as ScanDetailResponse).payload.auditRejectActivity;
+
+  for (const [request, write, snapshot, result] of cases) {
+    const p = projection(request, write, snapshot);
+    const evidence = assessAfterRejectScoring(p);
+    assert.equal(Boolean(evidence?.cookieRefs?.length), snapshot);
+    assert.equal(Boolean(evidence?.requestIds.length), request);
+    const receipt = stored(p);
+    assert.deepEqual(receipt, [2, id, p.packetSha256, result]);
+    assert.ok(Buffer.byteLength(JSON.stringify(receipt)) <= MAX_AUDIT_REJECT_ACTIVITY_BYTES);
+  }
+
+  const snapshot = projection(false, false, true);
+  const patched = (mutate: (p: PostRefusalReportProjection) => void) => {
+    const copy = structuredClone(snapshot);
+    mutate(copy);
+    copy.execution = assessChoicePathExecution(copy, "reject");
+    return stored(copy)?.[3];
+  };
+  assert.equal(patched(p => { p.scoringEvidence!.postActionCapturedAtMs = p.afterActionCapture!.actionDispatchedAtMs; }), "classification_unavailable");
+  assert.equal(patched(p => { p.afterActionStorage![0]!.valueHash = "f".repeat(64); }), "classification_unavailable");
+  assert.equal(patched(p => { p.afterActionStorage = []; p.afterActionCapture!.storageSnapshotRetained = false; }), "classification_unavailable");
+  for (const name of ["osano_consentmanager", "unrecognized_cookie"]) {
+    assert.equal(patched(p => {
+      p.afterActionStorage![0]!.name = name;
+      p.scoringEvidence!.postActionStorage[0]!.name = name;
+    }), "classification_unavailable");
+  }
+  assert.equal(patched(p => { p.afterActionCapture!.stopReason = "target_changed"; }), "capture_unavailable");
+  assert.equal(patched(p => { p.captureCoverage!.requestsDroppedAfterAction = 1; p.afterActionCapture!.requestsDropped = 1; }), "capture_unavailable");
+
+  const confirmed = afterRejectProjection();
+  confirmed.sourceIdentity = snapshot.sourceIdentity;
+  confirmed.interactionDiagnostics = snapshot.interactionDiagnostics;
+  confirmed.execution = assessChoicePathExecution(confirmed, "reject");
+  confirmed.scoringEvidence!.requests = [];
+  confirmed.scoringEvidence!.postActionStorage = [cookie];
+  confirmed.registeredObservationCompletion = { ...confirmed.registeredObservationCompletion!, completedAtMs: 230, termination: "evidence_satisfied" };
+  confirmed.scoringEvidence!.postActionCapturedAtMs = 225;
+  assert.equal(stored(confirmed)?.[3], "cookie_snapshot");
+  confirmed.scoringEvidence!.storageWrites = [{ storageType: "local_storage", name: "analytics", observedAtMs: 200, msOffsetFromRefusal: 80,
+    purpose: "analytics", nonEssential: true, evidenceSource: "post_action_snapshot_delta" }];
+  assert.equal(stored(confirmed)?.[3], "cookie_snapshot");
+  confirmed.scoringEvidence!.storageWrites[0]!.evidenceSource = "instrumented_write";
+  assert.equal(stored(confirmed)?.[3], "storage_write_and_cookie_snapshot");
+});
 
 test("scan report projection requires the canonical v2 consent assessment", async () => {
   const source = await readFile(projectionPath, "utf8");

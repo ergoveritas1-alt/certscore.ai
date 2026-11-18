@@ -22,10 +22,10 @@ import { rebuildChoiceEvidence } from './lib/audit-progress-choice-verification'
 import { CHOICE_METRICS, OPT_OUT_OUTCOME_METRIC_IDS } from './lib/audit-progress-choice';
 import {applyRetainedReports,RETAINED_CLICK_ACTIVITY_KEYS} from './lib/audit-progress-retained-report';
 import {applyRetainedOptOutExtracts} from './lib/audit-progress-opt-out';
-import {NO_GO_METRICS,readAuditNoGoReasons} from './lib/audit-progress-no-go';
+import {NO_GO_METRICS,readAuditNoGoEvidence} from './lib/audit-progress-no-go';
 
 const [previous, manifest, output, upgrade] = process.argv.slice(2);
-if (!previous || !manifest || !output || (upgrade && !['--wire-current-cmp','--replay-opt-out-outcomes','--gpc-core-questions','--usable-choice-funnel','--choice-click-activity'].includes(upgrade))) {
+if (!previous || !manifest || !output || (upgrade && !['--wire-current-cmp','--replay-opt-out-outcomes','--gpc-core-questions','--replay-gpc-evidence','--usable-choice-funnel','--choice-click-activity'].includes(upgrade))) {
   throw Error('Supply a sealed dashboard.json, a retained-only input manifest, and a fresh output directory');
 }
 const priorFile = realpathSync(previous);
@@ -96,9 +96,10 @@ if(upgrade==='--replay-opt-out-outcomes'){
   const presence=CHOICE_METRICS.find(metric=>metric.id==='sealed.opt_out.presence')!;
   data.metrics=data.metrics.map((metric:{id:string})=>metric.id===presence.id?presence:metric);
 }
-if(upgrade==='--gpc-core-questions'){
+if(upgrade==='--gpc-core-questions'||upgrade==='--replay-gpc-evidence'){
   const known=new Set(data.metrics.map((m:{id:string})=>m.id));
   data.metrics.push(...GPC_CORE_METRICS.filter(m=>!known.has(m.id)));
+  const replay=upgrade==='--replay-gpc-evidence';
   for(const row of data.rows as ProgressRow[]){
     if(!row.reportable)continue;
     for(const m of GPC_CORE_METRICS)row.states[m.id]='unavailable';
@@ -108,7 +109,23 @@ if(upgrade==='--gpc-core-questions'){
     assert.equal(sha(bytes),ref.sha256,'GPC question source hash');
     const extracted=extractExportRow(JSON.parse(bytes.toString('utf8')),ref);
     assert.equal(extracted.scanId,row.scanId);
-    for(const m of GPC_CORE_METRICS){row.states[m.id]=extracted.states[m.id]??'unavailable';(row.metricSources??={})[m.id]=extracted.metricSources![m.id]!;}
+    const keys=replay?Object.keys(extracted.states).filter(key=>key.startsWith('detail.gpc.')||key.startsWith('gpc_')):GPC_CORE_METRICS.map(m=>m.id);
+    for(const key of keys){
+      row.states[key]=extracted.states[key]??'unavailable';
+      const source=extracted.metricSources?.[key];
+      if(source!==undefined)(row.metricSources??={})[key]=source;
+      else delete row.metricSources?.[key];
+    }
+    if(!replay)continue;
+    const quantities=new Set([...Object.keys(extracted.measurements??{}),...Object.keys(row.measurements??{}),...Object.keys(extracted.metricSources??{}),...Object.keys(row.metricSources??{})]);
+    for(const key of quantities)if(key.startsWith('gpc.')){
+      const measured=extracted.measurements?.[key];
+      if(measured!==undefined)(row.measurements??={})[key]=measured;
+      else delete row.measurements?.[key];
+      const source=extracted.metricSources?.[key];
+      if(source!==undefined)(row.metricSources??={})[key]=source;
+      else delete row.metricSources?.[key];
+    }
   }
 }
 if(upgrade==='--usable-choice-funnel'){
@@ -125,9 +142,12 @@ if(upgrade==='--choice-click-activity'){
   data.metrics.push(...definitions.values());
 }
 const replay = structuredClone(data.rows) as ProgressRow[];
+for (const row of replay) delete row.navigationBlock;
 applyRetainedReports(replay, data.retainedReports);
 applyRetainedOptOutExtracts(replay, inputs.sources);
 for (const [index, row] of (data.rows as ProgressRow[]).entries()) {
+  if (replay[index]!.navigationBlock) row.navigationBlock = replay[index]!.navigationBlock;
+  else delete row.navigationBlock;
   const coverage = replay[index]!.californiaRejectCoverage;
   if (coverage) row.californiaRejectCoverage = coverage;
   else delete row.californiaRejectCoverage;
@@ -143,7 +163,7 @@ for (const [index, row] of (data.rows as ProgressRow[]).entries()) {
 const existingMetrics = new Set(data.metrics.map((metric: { id: string }) => metric.id));
 const newNoGoMetrics = NO_GO_METRICS.filter(metric => !existingMetrics.has(metric.id));
 data.metrics.splice(1, 0, ...newNoGoMetrics);
-data.noGoReasons = readAuditNoGoReasons(data.rows);
+Object.assign(data, readAuditNoGoEvidence(data.rows));
 const metricsChanged = Boolean(upgrade || newNoGoMetrics.length);
 if(metricsChanged){
   data.days=progressEngine().aggregate(data,data.rows);

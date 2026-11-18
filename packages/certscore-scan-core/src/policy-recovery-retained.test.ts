@@ -8,6 +8,8 @@ import {
   policyRenderedRecoveryDeadline, fetchRenderedPolicyDocumentText, policyInputAfterHomepageRedirect,
   type PolicySurfaceCandidate, type PolicySurfaceScannerInput,
 } from "./scanners/policy-surface-scanner.js";
+import { mergePolicySurfaceObservations } from "./policy-surface-projection.js";
+import { PolicyGuessStop } from "./policy-guess-stop.js";
 import retained from "./test-fixtures/policy-recovery-retained.json";
 
 // Only the fixture's explicitly retained fields are historical evidence.
@@ -167,7 +169,7 @@ test("render setup, navigation and readiness share one deadline without a real b
   const waits: Array<[string,number]> = [];
   let captures=0,closed=0;
   const page={
-    goto:async (_url:string,options:{timeout:number})=>{waits.push(["navigation",options.timeout]);now+=900;return {};},
+    goto:async (_url:string,options:{timeout:number})=>{waits.push(["navigation",options.timeout]);now+=900;return {headers:()=>({})};},
     waitForLoadState:async (_state:string,options:{timeout:number})=>{waits.push(["network",options.timeout]);throw new Error("unrelated network activity must not consume readiness time");},
     waitForFunction:async (_fn:unknown,_arg:unknown,options:{timeout:number})=>{waits.push(["readiness",options.timeout]);now+=options.timeout;},
     waitForTimeout:async()=>{throw new Error("must stop before another wait");},
@@ -251,4 +253,113 @@ test("observed link lookup consumes navigation allowance without a new one-secon
   assert.equal(result.attempts?.[0]?.failureStage,"document_readiness");
   assert.equal(result.attempts?.[0]?.outcome,"timeout");
   assert.equal(retries,0);assert.equal(captures,0);assert.equal(networkWaits,0);
+});
+
+test("repeated same-origin denials suppress new guesses but preserve cached requests and independently linked URLs", async t => {
+  const base = "https://www.example.test";
+  const calls: string[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    calls.push(String(url));
+    return new Response("", { status: 403, headers: { "cf-mitigated": "challenge" } });
+  });
+  const work = processInput();
+  work.input.absoluteDeadlineAtMs = Date.now() + 10_000;
+  work.input.url = work.input.normalizedUrl = base;
+  work.directOnly = true;
+  const guard = new PolicyGuessStop();
+  guard.recordHomepage(403, base);
+  const run = <T>(fn: () => Promise<T>) => fn();
+  work.fetchCaches = {
+    guessStop: guard, analysis: new Map(), direct: new Map(), rendered: new Map(),
+    browserRuntime: { getBrowser: async () => { throw Error("unexpected browser"); }, close: async () => {} },
+    diagnostics: { failedFetches: [], successfulFetches: [], seenFailureKeys: new Set(),
+      protectedObservedFetchAttempts: 0, renderedRecoveryAttempts: 0, renderedRecoverySuccesses: 0 },
+    runCandidate: run, runRenderedFetch: run,
+  };
+  const attempt = (path: string, guessed: boolean) => processPolicyCandidateBeforeDeadline({
+    ...work,
+    candidate: { ...work.candidate, normalizedUrl: base + path, url: base + path, sameOrigin: true,
+      clickable: !guessed, discoveryMethod: guessed ? "guessed_common_path" : "footer_link" },
+  });
+  assert.equal((await attempt("/privacy", true)).observation.httpStatus, 403);
+  const skipped = (await attempt("/notice", true)).observation;
+  assert.equal(skipped.documentFetchState, "not_attempted");
+  assert.ok(skipped.selectionReasonCodes?.includes("guess_skipped_after_same_origin_403s"));
+  assert.equal((await attempt("/privacy", true)).observation.httpStatus, 403);
+  assert.equal((await attempt("/notice", false)).observation.httpStatus, 403);
+  assert.deepEqual(calls, [base + "/privacy", base + "/notice"]);
+  assert.equal(work.fetchCaches.diagnostics.failedFetches.length, 2);
+});
+
+test("rendered challenge telemetry belongs to the committed policy response, including an HTTP 200", async () => {
+  const requestUrl = "https://example.test/privacy";
+  const responseUrl = "https://example.test/verify";
+  const page = {
+    goto: async () => ({
+      status: () => 200, url: () => responseUrl, headers: () => ({ "cf-mitigated": "challenge" }),
+    }),
+    close: async () => {},
+  };
+  const context = { newPage: async () => page, route: async () => {}, close: async () => {} };
+  const result = await fetchRenderedPolicyDocumentText({
+    input: {} as PolicySurfaceScannerInput, url: requestUrl, timeoutMs: 1500,
+    browserRuntime: { getBrowser: async () => ({ newContext: async () => context }) as never, close: async () => {} },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.text, "");
+  assert.deepEqual(result.attempts?.map(row => [row.requestedUrl, row.finalUrl, row.httpStatus, row.cfMitigated]),
+    [[requestUrl, responseUrl, 200, "challenge"]]);
+});
+
+test("a directly linked cookie excerpt survives interruption after its artifact write", async t => {
+  const url = "https://example.test/cookie-policy";
+  const text = "Cookie Policy. We use first-party and third-party cookies for several reasons. " +
+    "Some cookies keep the site working. Others measure which pages our visitors use.";
+  const writes = new Map<string, string>();
+  const controller = new AbortController();
+  const work = processInput(controller.signal);
+  work.input.url = work.input.normalizedUrl = "https://example.test/";
+  work.input.absoluteDeadlineAtMs = Date.now() + 10_000;
+  work.input.artifactWriter = {
+    baseDir: ".", artifactPath: f => f, writeJsonArtifact: async f => f,
+    writeTextArtifact: async (f, body) => { writes.set(f, body); return f; },
+  };
+  work.input.onRetainedPolicyDocument = checkpoint => {
+    const observation = checkpoint.policySurfaceObservations[0]!;
+    assert.equal(writes.get(checkpoint.artifactRefs[0]!.path), observation.textExcerpt);
+    controller.abort();
+  };
+  work.candidate = { ...work.candidate, url, normalizedUrl: url, linkSourcePageUrl: work.input.url,
+    sameOrigin: true, deterministicSurfaceType: "cookie_policy", deterministicMatchStrength: "direct", linkText: "Cookie Policy" };
+  work.prefetchedOnly = true;
+  work.directOnly = true;
+  const run = <T>(fn: () => Promise<T>) => fn();
+  const network = t.mock.method(globalThis, "fetch", async () => { throw Error("unexpected network"); });
+  work.fetchCaches = {
+    analysis: new Map(), direct: new Map([[url, Promise.resolve({ ok: true, status: 200, text })]]),
+    rendered: new Map(), runCandidate: run, runRenderedFetch: run,
+    browserRuntime: { getBrowser: async () => { throw Error("unexpected browser"); }, close: async () => {} },
+    diagnostics: { failedFetches: [], successfulFetches: [], seenFailureKeys: new Set(),
+      protectedObservedFetchAttempts: 0, renderedRecoveryAttempts: 0, renderedRecoverySuccesses: 0 },
+  };
+  const { observation } = await processPolicyCandidateBeforeDeadline(work);
+  assert.equal(network.mock.callCount(), 0);
+  assert.equal(observation.status, "fetched");
+  assert.ok(observation.selectionReasonCodes?.includes("policy_excerpt_only_checkpoint"));
+  assert.equal(observation.documentTextCoverage?.status, "unavailable");
+  assert.equal(observation.documentRole, "unknown");
+  assert.deepEqual(observation.retainedArticle13SectionEvidence, []);
+  policySurfaceObservationSchema.parse(observation);
+  const completed = { ...observation, selectionReasonCodes: [], confidence: 0.5 };
+  for (const [first, second] of [[observation, completed], [completed, observation]] as const) {
+    assert.deepEqual(mergePolicySurfaceObservations([first], [second])[0]?.selectionReasonCodes, []);
+  }
+});
+
+test("Chinese privacy protection statement in the opening identifies a notice despite a later policy link", () => {
+  const opening = "腾讯云隐私保护声明。";
+  const statement = "在您使用我们提供的服务时，我们会收集您的个人信息，例如手机号码和邮箱地址。";
+  const body = opening + statement.repeat(35) + "其他服务适用其隐私政策。";
+  assert.equal(assessPolicyTextQuality(body).usable, true);
+  assert.equal(assessPolicyTextQuality("产品目录，".repeat(230) + "隐私保护声明。").usable, false);
 });

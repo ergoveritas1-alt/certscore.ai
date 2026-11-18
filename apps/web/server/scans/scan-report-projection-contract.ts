@@ -1,8 +1,10 @@
 import { MAX_AUDIT_POLICY_PROVENANCE_BYTES, auditPolicyProvenanceSchema } from '../../../../packages/certscore-contracts/src/audit-policy-provenance';
+import type { AuditRejectActivity } from "../../../../packages/certscore-contracts/src/audit-reject-activity";
+import { buildAuditRejectActivity } from "./audit-reject-activity";
 import { hasTerminalReportPublicationFailure } from "./report-publication-read-state";
 import { createHash } from "node:crypto";
 import { SCAN_FROM_DEFINITIONS } from "@website-signal-risk-scanner/shared/scan-location";
-import { withScanReportDisposition } from "../../lib/scans/scan-report-disposition";
+import { projectScanReportNoGo, withScanReportDisposition } from "../../lib/scans/scan-report-disposition";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import type { PersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
 
@@ -193,6 +195,12 @@ function omitOptionalCollectionSamples(value: unknown): boolean {
   return omitted;
 }
 
+type PrivateAuditFields = {
+  auditPrivacyForm?: string;
+  auditPolicyProvenance?: unknown;
+  auditRejectActivity?: AuditRejectActivity;
+};
+
 export function buildPersistedScanReportProjection(
   scanRecord: ScanDetailResponse,
   options: { canonicalReportProjection?: PersistedCanonicalReportProjection; auditPrivacyForm?: string; auditPolicyProvenance?: unknown } = {},
@@ -211,10 +219,18 @@ export function buildPersistedScanReportProjection(
   const auditPolicyProvenance = policy.success && policy.data.binding.scanId === scanRecord.scan.id &&
     Date.parse(policy.data.binding.createdAt) === Date.parse(scanRecord.scan.createdAt) &&
     Buffer.byteLength(JSON.stringify(policy.data)) <= MAX_AUDIT_POLICY_PROVENANCE_BYTES ? policy.data : undefined;
+  const canonicalReject = runtimeArtifacts?.postRefusalEvidenceProjection;
+  const rejectAlias = runtimeArtifacts?.post_refusal_evidence_projection;
+  const reject = canonicalReject != null && rejectAlias != null && !equivalentForPersistence(canonicalReject, rejectAlias)
+    ? undefined : canonicalReject ?? rejectAlias;
+  const auditRejectActivity = reject && scanRecord.scan.status === "completed" && !projectScanReportNoGo(scanRecord)
+    ? buildAuditRejectActivity(scanRecord.scan.id, reject)
+    : undefined;
   const payload = {
     ...scanRecord,
     auditPrivacyForm: options.auditPrivacyForm,
     auditPolicyProvenance,
+    auditRejectActivity,
     // Request state belongs to the live read, never the immutable report bytes.
     reportPublication: undefined,
     ...(options.canonicalReportProjection
@@ -223,10 +239,15 @@ export function buildPersistedScanReportProjection(
     previousSnapshot,
     runtimeArtifacts,
     snapshot
-  } satisfies ScanDetailResponse & { auditPrivacyForm?: string; auditPolicyProvenance?: unknown };
-  const normalizedPayload = normalizeProjectionJson(payload) as ScanDetailResponse & { auditPrivacyForm?: string; auditPolicyProvenance?: unknown };
+  } satisfies ScanDetailResponse & PrivateAuditFields;
+  const normalizedPayload = normalizeProjectionJson(payload) as ScanDetailResponse & PrivateAuditFields;
   let serialized = JSON.stringify(normalizedPayload);
   let sizeBytes = Buffer.byteLength(serialized);
+  if (sizeBytes > MAX_SCAN_REPORT_PROJECTION_BYTES && normalizedPayload.auditRejectActivity !== undefined) {
+    delete normalizedPayload.auditRejectActivity;
+    serialized = JSON.stringify(normalizedPayload);
+    sizeBytes = Buffer.byteLength(serialized);
+  }
   if (sizeBytes > MAX_SCAN_REPORT_PROJECTION_BYTES && normalizedPayload.auditPolicyProvenance !== undefined) {
     delete normalizedPayload.auditPolicyProvenance;
     serialized = JSON.stringify(normalizedPayload);
@@ -248,7 +269,8 @@ export function buildPersistedScanReportProjection(
       sizeBytes,
     });
   }
-  const { auditPrivacyForm: _privateAudit, auditPolicyProvenance: _privatePolicy, ...report } = normalizedPayload;
+  const { auditPrivacyForm: _privateAudit, auditPolicyProvenance: _privatePolicy,
+    auditRejectActivity: _privateReject, ...report } = normalizedPayload;
   return {
     payload: normalizedPayload,
     report,
@@ -293,7 +315,8 @@ export function readPersistedScanReportProjection(
   ) {
     return null;
   }
-  const { auditPrivacyForm: _privateAudit, auditPolicyProvenance: _privatePolicy, ...report } = payload as ScanDetailResponse & { auditPrivacyForm?: string; auditPolicyProvenance?: unknown };
+  const { auditPrivacyForm: _privateAudit, auditPolicyProvenance: _privatePolicy,
+    auditRejectActivity: _privateReject, ...report } = payload as ScanDetailResponse & PrivateAuditFields;
   return withScanReportDisposition({
     ...report,
     // Update the old Ireland display label after verifying the retained payload.

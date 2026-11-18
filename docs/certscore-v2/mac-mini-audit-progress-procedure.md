@@ -254,12 +254,14 @@ view and save the partial/blocked component with its actual available cutoff.
 Never call missing data zero, fetch missing detail endpoints or launch another
 cloud query for this supplement.
 
-The existing local HTTP preview should serve the `latest` path so that reloading
-the same dashboard URL opens the newest published table. A page already open is
-its loaded snapshot until reloaded. No daemon, extra cron, new automation, paid
-service, deployment or production mutation is introduced. Link the stable view
-and immutable run from each daily summary. Preserve the 5:00 a.m. Los Angeles
-schedule, actual model/reasoning, checkpoint, backlog and model-transition ledger.
+Use `scripts/open-latest-audit-dashboard.html` as the stable dashboard link in
+daily summaries. It navigates through the verified publisher's `latest` symlink
+with a fresh document URL each time it opens. Reopen the launcher to see a new
+publication. An already loaded snapshot stays visible in its tab until a new
+navigation. Link the immutable run separately when a summary references an exact
+snapshot. The launcher runs without a background service or a schedule change.
+Preserve the 5:00 a.m. Los Angeles schedule, actual model/reasoning, checkpoint,
+backlog and model-transition ledger.
 
 
 ## Focused incremental policy — owner direction

@@ -208,11 +208,37 @@ test('all-click activity counts verified unconfirmed evidence and leaves generic
   {...base,states:{'click.reject':'completed','detail.reject.verdict':confirmed,'sealed.detail.reject.post_click_activity':'activity_observed'}},
   {...base,states:{'click.reject':'completed','detail.reject.verdict':noVerdict,'sealed.detail.reject.post_click_activity':'activity_observed'}},
   {...base,states:{'click.reject':'completed','detail.reject.verdict':noVerdict},measurements:{'reject.requests':8,'reject.storage_writes':4}},
+  {...base,states:{'click.reject':'completed','detail.reject.verdict':'no_eligible_nonessential_activity_observed_during_completed_window'}},
   {...base,states:{'click.reject':'not_attempted'}},
  ];
  const measures=evidenceMetricRegistry([]).filter(m=>['detail.reject.activity_all','detail.reject.verdict'].includes(m.id));
  const {metrics}=aggregate(samples,measures)[0];
  assert.equal(metrics['detail.reject.verdict'].numerator,1);
- assert.equal(metrics['detail.reject.activity_all'].denominator,4);
- assert.deepEqual(metrics['detail.reject.activity_all'].counts,{activity_observed:2,unavailable:1,no_completed_click:1});
+ const activity=metrics['detail.reject.activity_all'];
+ assert.equal(activity.denominator,5);
+ assert.deepEqual(activity.counts,{activity_observed:2,unavailable:1,no_eligible_nonessential_activity_observed_during_completed_window:1,no_completed_click:1});
+ assert.deepEqual(activity.activityCoverage,{completedClicks:4,classifiedCompletedClicks:3,observedCompletedClicks:2});
+ assert.equal(metrics['detail.reject.verdict'].activityCoverage,undefined);
+});
+
+
+test('all-click Reject counts the exact returned finding and deduplicates event evidence',()=>{
+ const returned={file:ref.file,sha256:ref.sha256,role:'hash_verified_bot_archive_export'};
+ const exact={id:'post_reject_click_tracking',label:'Non-essential cookies or services after Reject',family:'other',top:null};
+ const completed=extractExportRow(base,returned);
+ const unconfirmed={...completed,states:{'click.reject':'completed','detail.reject.verdict':'no_confirmed_post_refusal_verdict'}};
+ const withFinding={...unconfirmed,findings:[exact],findingInventory:false};
+ const withBoth={...withFinding,states:{...unconfirmed.states,'sealed.detail.reject.post_click_activity':'activity_observed'}};
+ const withoutClick={...withFinding,states:{'click.reject':'not_attempted'}};
+ const unknown={...withFinding,refs:[]};
+ const related={...unconfirmed,findings:[{...exact,id:'reject_did_not_reduce_tracking'}]};
+ const measures=evidenceMetricRegistry([]).filter(m=>m.id==='detail.reject.activity_all');
+ const value=aggregate([withFinding,withBoth,withoutClick,unknown,related],measures)[0].metrics[measures[0]!.id];
+ assert.equal(value.numerator,2);
+ assert.equal(value.denominator,5);
+ assert.equal(value.rate,null);
+ assert.deepEqual(value.activityCoverage,{completedClicks:4,classifiedCompletedClicks:1,observedCompletedClicks:1});
+ const exactSeries=Object.values(value.series).filter((entry:any)=>entry.source.endsWith('/returned_reject_presence.v1'));
+ assert.equal(exactSeries.length,1);
+ assert.equal((exactSeries[0] as {numerator:number}).numerator,1);
 });

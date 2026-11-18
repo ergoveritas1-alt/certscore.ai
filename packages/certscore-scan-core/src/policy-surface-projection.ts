@@ -163,7 +163,9 @@ function policyObservationRank(observation: PolicySurfaceObservation): number {
     skipped_budget: 2,
     not_observed: 1,
   };
-  return statusRank[observation.status] * 10 + observation.confidence;
+  // A finished evaluation supersedes a durable excerpt from the same fetch.
+  const excerptOnly = observation.selectionReasonCodes?.includes("policy_excerpt_only_checkpoint");
+  return statusRank[observation.status] * 10 + observation.confidence - (excerptOnly ? 2 : 0);
 }
 
 const POLICY_TRACKING_QUERY_PARAM = /^(?:utm_.+|ref|ref_|referrer|source|campaign|campaignid|tag|linkcode|creative|creativeasin|ascsubtag|pf_rd_.+)$/i;

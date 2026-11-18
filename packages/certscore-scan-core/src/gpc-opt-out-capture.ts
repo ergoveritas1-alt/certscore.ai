@@ -80,8 +80,8 @@ export async function captureGpcOptOutObservation(page: Page, input: {
     };
     if (scopes.length) {
       // Dedicated vendor status nodes also exist as empty or hidden templates.
-      const trustarcScript = { script:'script[src*="//consent.trustarc.com/notice"],script[src*="//consent.trustarc.com/asset/notice.js/v/"]',
-        url:/^https:\/\/consent\.trustarc\.com\/(?:notice|asset\/notice\.js\/v\/[a-f0-9]+)(?:[?#]|$)/ };
+      const trustarcScript = { script:'script[src*="//consent.trustarc.com/notice"],script[src*="//consent.truste.com/notice"],script[src*="//consent.trustarc.com/asset/notice.js/v/"]',
+        url:/^https:\/\/consent\.(?:trustarc\.com\/(?:notice|asset\/notice\.js\/v\/[a-f0-9]+)|truste\.com\/notice)(?:[?#]|$)/ };
       const statuses = [
         {cmp:"TrustArc", selector:trustarcSelector, source:"visible_trustarc_gpc_notification",
           ...trustarcScript, wording:explicitMessages},
@@ -113,8 +113,8 @@ export async function captureGpcOptOutObservation(page: Page, input: {
     if (scopes.length && !location.search.includes("_hsGpcSignal")) {
       const nodes = document.querySelectorAll<HTMLElement>(hubspotSelector);
       const node = nodes.length === 1 ? nodes[0] : undefined;
-      const sdkLoaded = loadedScript('script[src*="//js.hs-banner.com/v2/"][src*="/banner.js"]',
-        /^https:\/\/js\.hs-banner\.com\/v2\/\d+\/banner\.js(?:[?#]|$)/);
+      const sdkLoaded = loadedScript('script[src*="//js.hs-banner.com/v2/"][src*="/banner.js"],script[src*="//js-na2.hs-banner.com/v2/"][src*="/banner.js"]',
+        /^https:\/\/js(?:-na2)?\.hs-banner\.com\/v2\/\d+\/banner\.js(?:[?#]|$)/);
       if (sdkLoaded) {
         // Only own data descriptors, with no vendor callback, getter or mutation.
         const field = (object: unknown, name: string) => object && typeof object === "object"

@@ -24,7 +24,6 @@ import { CmsSecurityEvidence } from "../cms-security-evidence";
 import { CmpDetails } from "../cmp-details";
 import { cmpDetailsExperience } from "../../../lib/scans/cmp-audit-projection";
 import { EvidenceJumpLink, ReportEvidenceHashNavigation } from "../evidence-jump-link";
-import { GpcActivityComparison } from "../gpc-activity-comparison";
 import { SiteIntegrityEvidence } from "../site-integrity-evidence";
 import { choicePathExecutionLabel } from "@certscore/contracts";
 import React from "react";
@@ -36,8 +35,9 @@ import { SitewideEvidenceCard } from "../sitewide-evidence-card";
 import { FullSiteIdentity } from "../full-site-identity";
 import { FullSiteExecutiveSummary } from "../full-site-executive-summary";
 import { ReportInventoryNavigation } from "../report-inventory-navigation";
-import { ConsentTrackingSummary, GpcInventoryContributors, GpcInventoryProvider, GpcInventoryRecap } from "../consent-tracking-summary";
-import { buildConsentTrackingOverview, buildGpcTile } from "../../../lib/scans/consent-tracking-overview";
+import { GpcActivityComparison } from "../gpc-activity-comparison";
+import { ConsentTrackingSummary, GpcInventoryContributors, GpcInventoryProvider, GpcInventoryRecap, GpcInventoryRequestTable } from "../consent-tracking-summary";
+import { buildConsentTrackingOverview, buildGpcTile, getBaselineFlaggedBreakdown } from "../../../lib/scans/consent-tracking-overview";
 import { ReportPageEventTimeline } from "../report-page-event-timeline";
 import { isAfterAcceptForm } from "../../../lib/scans/collection-surface-table-row";
 import { SitePriorityReview } from "../site-priority-review";
@@ -176,14 +176,14 @@ function ReportIdentity({
   workspaceIdentity?: boolean;
   hideShare?: boolean;
   mode?: "authenticated" | "public";
-  report: Pick<ShadowReportData, "scan" | "fullSite"> & { reviewFocus?: ShadowReportData["reviewFocus"]; resultDisposition?: "no_go" };
+  report: TimelineReportData;
 }) {
   if (report.fullSite && !workspaceIdentity) return null;
   const visualEvidence = report.scan.visualEvidenceHref ?? null;
-  const reviewFocusControl = report.resultDisposition === "no_go" ? null : <RegulatoryReviewFocus focus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} />;
+  const reviewFocusControl = report.resultDisposition === "no_go" ? null : <ReportPostureSelector report={report} />;
   if (workspaceIdentity) return <FullSiteIdentity
     scanId={report.scan.id} host={report.scan.host} url={report.scan.url}
-    createdAt={<><ReviewFocusCoverageNote report={report} /><ReportCreatedAt scan={report.scan} /></>} duration={<FullSiteScanDuration />} visualEvidenceHref={visualEvidence}
+    coverageNote={<ReviewFocusCoverageNote report={report} />} createdAt={<ReportCreatedAt scan={report.scan} />} duration={<FullSiteScanDuration />} visualEvidenceHref={visualEvidence}
     region={<span className="inline-flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-2 py-1"><ScanFromMarker {...getScanFromMarkerInput(report.scan.originCode)} selected />Scanned from {report.scan.origin}</span>}
     reviewFocusControl={reviewFocusControl}
     actions={hideShare ? null : <ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
@@ -268,6 +268,11 @@ export function ReportScanNext({ allowRestrictedScanOptions = false, defaultScan
       />
     </div>
   );
+}
+
+function ReportPostureSelector({ report }: { report: Pick<ShadowReportData, "reviewFocus" | "scan" | "score" | "californiaScore"> }) {
+  return <RegulatoryReviewFocus focus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)}
+    scores={{ gdpr_eprivacy: report.score.value, ccpa_cpra: report.californiaScore?.score }} />;
 }
 
 function ScoreScale({ compact = false, report }: { compact?: boolean; report: ShadowReportData }) {
@@ -1245,9 +1250,11 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
   return <ReportInventoryNavigation><div className="mx-auto max-w-[1500px] px-4 py-4 text-zinc-900 sm:px-6" data-single-page-report>
     <header className="pb-1">
       <div className="mt-1 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-center sm:gap-x-4 lg:gap-x-6 sm:[&>div:first-child]:contents sm:[&>div:first-child>header]:contents sm:[&>div:first-child>header>div:last-child]:col-span-full">
-        <div><FullSiteIdentity scanId={report.scan.id} host={report.scan.host} url={report.scan.url} createdAt={<><ReviewFocusCoverageNote report={report} /><ReportCreatedAt scan={report.scan} /></>} duration={<span className="ml-2 tabular-nums">({report.scan.duration} scan)</span>} visualEvidenceHref={report.scan.visualEvidenceHref}
+        <div><FullSiteIdentity scanId={report.scan.id} host={report.scan.host} url={report.scan.url}
+          coverageNote={<ReviewFocusCoverageNote report={report} />} createdAt={<ReportCreatedAt scan={report.scan} />}
+          duration={<span className="ml-2 tabular-nums">({report.scan.duration} scan)</span>} visualEvidenceHref={report.scan.visualEvidenceHref}
           region={<span className="rounded-md border border-zinc-300 bg-white px-2 py-1">Scanned from {report.scan.origin}</span>}
-          reviewFocusControl={<RegulatoryReviewFocus focus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} />}
+          reviewFocusControl={<ReportPostureSelector report={report} />}
           timing={<ReportCoverageTiming scanId={report.scan.id} duration={report.scan.duration} showDurationInSummary={false}
             groups={[
               { title: "Coverage", rows: [["Scan scope", "Single page"], ["Scan region", report.scan.origin]] },
@@ -1473,9 +1480,13 @@ export function GpcEvidenceIndexCard({ projection, california = false }: { proje
         recap={<GpcInventoryRecap fallback={scoredRisk ? "Risk observed" : gpcEvidenceHeaderLabel(projection)} />}
         badge={<EvidenceHeaderStatus rows={scoredRisk ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" && !projection.activityComparison ? [{status: "Limited"}] : []} />} />
       <div className="mt-4 space-y-3 text-xs leading-5 text-zinc-600">
-        <GpcInventoryContributors />
-        {projection.activityComparison ? <GpcActivityComparison comparison={projection.activityComparison} /> :
-          <p>Matched request comparison unavailable.</p>}
+        {projection.activityComparison ? <GpcActivityComparison comparison={projection.activityComparison}
+          requestTable={<GpcInventoryRequestTable comparison={projection.activityComparison} />}>
+          <GpcInventoryContributors />
+        </GpcActivityComparison> : <>
+          <p>Matched request comparison unavailable.</p>
+          <GpcInventoryContributors />
+        </>}
         {hasVisitInventory || activity || recipients.length ? <section className="space-y-2" aria-label="GPC visit evidence">
           <h4 className="text-sm font-semibold text-zinc-900">Across the GPC visit</h4>
           {hasVisitInventory ? <GpcVisitInventory assessment={projection.assessment} /> : null}
@@ -1723,7 +1734,8 @@ export function ShadowScanReport({
   const body = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace californiaAssessment={report.californiaPrivacyReview} californiaScore={report.californiaScore} reviewFocus={focus} afterAcceptForms={report.collectionTableRows?.filter(isAfterAcceptForm)} afterAcceptFormsLimited={report.afterAcceptFormsLimited} formDestinationEvidence={<FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />} homepageRuntimeCards={report.executiveRuntimeCards} executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<ReportPageEventTimeline events={report.timeline} accept={report.actionTimelines?.accept} reject={report.actionTimelines?.reject} gpc={report.gpcTimeline} />} executiveSnapshot={<SignalSnapshot siteOverview={Boolean(report.fullSite)} report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} homepageHighlightExpansion={report.assessmentHighlightExpansion} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
   const reportContent = focus === "ccpa_cpra" && report.resultDisposition !== "no_go" && report.gpcResponse
-    ? <GpcInventoryProvider tile={buildGpcTile(report)}>{body}</GpcInventoryProvider> : body;
+    ? <GpcInventoryProvider tile={buildGpcTile(report)}
+        baselineBreakdown={getBaselineFlaggedBreakdown(report)}>{body}</GpcInventoryProvider> : body;
 
   const completionEvent = report.resultDisposition !== "no_go" && !report.fullSite
     ? <ScanCompletedEvent scanId={report.scan.id} scanSource={mode === "authenticated" ? "dashboard" : "homepage"} domain={report.scan.host} /> : null;

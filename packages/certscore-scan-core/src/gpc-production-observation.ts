@@ -13,6 +13,7 @@ import { gpcDocumentHash } from "./gpc-signal-capture.js";
 import { evaluateGpcObservationSession } from "./gpc-observation-completion.js";
 import type { GpcPrototypeArtifact } from "./gpc-opt-out-assessment.js";
 import { gpcEndpointEvidence } from "./gpc-vendor-evidence.js";
+import { readTrustArcGpcStatus } from "./gpc-trustarc-readback.js";
 
 /** A consent ping can use the same endpoint. Require an explicit page view of the observed document. */
 function isGoogleGpcPageView(event: NetworkEvent, documentHash: string) {
@@ -92,6 +93,8 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
       /^[#.][\w-]+$/.test(row.scopeSelector) && KNOWN_CMP_REGISTRY.some(cmp =>
         cmp.canonicalName === row.cmp && cmp.domSelectors?.includes(row.scopeSelector))) : undefined;
   const statusSource = displayed?.source ?? (statusBound && semantic.hubspotGpcApplied ? "hubspot_applied_gpc" : undefined);
+  const statusReadback = statusSource ? { source: statusSource, observedAtMs: semantic!.capturedAtMs } :
+    statusBound && bundle && session ? readTrustArcGpcStatus(bundle, session, semantic.capturedAtMs) : undefined;
   const event = representative && result.delivery.httpHeaderRetained && result.delivery.mainNavigatorReadbackRetained &&
     semantic?.scanId === input.scanId && diagnostics?.listenerPolicy === "gpp_listener_ping_data.v1" &&
     semantic.limitationKeys.every(key => key === "acknowledgment_capture_truncated") &&
@@ -233,7 +236,7 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
     } } : {}),
     registration: { basis: "current_recorded_state", sale: axis(state?.saleNotice, state?.saleOptOut), sharing: axis(state?.sharingNotice, state?.sharingOptOut),
       cmpGpcSignal: state?.gpc === true ? "received" : state?.gpc === false ? "not_received" : "unknown", causedByGpc: "not_established" },
-    ...(statusSource ? { cmpStatusReadback: { source: statusSource, observedAtMs: semantic!.capturedAtMs } } : {}),
+    ...(statusReadback ? { cmpStatusReadback: statusReadback } : {}),
     acknowledgment: { observed: result.acknowledgmentObserved, captureComplete: result.acknowledgmentCaptureComplete },
     requests: { count: result.requestCapture.count, blockedBeforeTransmissionCount: result.requestCapture.blockedBeforeTransmissionCount, complete: result.requestCapture.complete,
       fromMs: result.requestCapture.fromMs, documentCommittedAtMs: result.requestCapture.documentCommittedAtMs, throughMs: result.requestCapture.throughMs,

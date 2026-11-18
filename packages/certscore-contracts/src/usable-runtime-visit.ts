@@ -1,4 +1,6 @@
 import type { CanonicalEvidenceBundle, DomSnapshotArtifact } from "./index";
+import { getDomain } from "tldts";
+import { resolveRuntimeEvidenceClock } from "./runtime-evidence-clock";
 import { classifyRuntimeErrorPage } from "./runtime-error-page";
 
 export const RUNTIME_VISIT_REJECTION_REASONS = [
@@ -71,6 +73,39 @@ export function hasRepresentativeRuntimeText(snapshot: DomSnapshotArtifact): boo
   return text.length >= 180 && text.split(/\s+/).filter(word => /[\p{L}\p{N}]/u.test(word)).length >= 24;
 }
 
+export const RUNTIME_VIEWPORT_ID = "screenshot_pre_consent_runtime_viewport";
+export const RUNTIME_VIEWPORT_FILENAME = "screenshot-pre-consent-runtime-viewport.jpg";
+
+export function runtimeViewportCandidate(snapshot: DomSnapshotArtifact, targetUrl: string): boolean {
+  if (snapshot.artifactId !== "dom_text_pre_consent" || snapshot.consentStateAtTime !== "pre_consent" ||
+      snapshot.runtimeDocumentCapture?.response?.route !== "committed" || boundRuntimeDocumentStatus(snapshot) !== 200 ||
+      (snapshot.textExcerpt?.trim().length ?? 0) < 180 || !hasRepresentativeRuntimeText(snapshot) ||
+      classifyRuntimeErrorPage(snapshot.textExcerpt, "runtime_page_classification.v2")) return false;
+  try {
+    const target = new URL(targetUrl);
+    const current = new URL(snapshot.url);
+    const apex = getDomain(target.hostname, { allowPrivateDomains: true });
+    return [target, current].every(url => url.protocol === "https:" && !url.username && !url.password) &&
+      target.port === current.port && target.pathname === current.pathname && target.search === current.search &&
+      target.hash === current.hash && (target.hostname === current.hostname ||
+      (target.hostname === apex && current.hostname === `www.${apex}`) ||
+      (current.hostname === apex && target.hostname === `www.${apex}`));
+  } catch { return false; }
+}
+
+export function reviewedRuntimeViewport(bundle: CanonicalEvidenceBundle, snapshot: DomSnapshotArtifact) {
+  if (!snapshot.runtimeDocumentCapture?.viewport || !runtimeViewportCandidate(snapshot, bundle.normalizedUrl)) return;
+  const clock = resolveRuntimeEvidenceClock(bundle);
+  if (!clock) return;
+  const shots = bundle.screenshots.filter(shot => shot.artifactId === RUNTIME_VIEWPORT_ID);
+  const shot = shots[0];
+  if (shots.length === 1 && shot?.retentionStatus === "available" && shot.displayStatus === "available" &&
+      shot.captureMethod === "primary_viewport_fallback" && shot.consentStateAtTime === "pre_consent" &&
+      shot.url === snapshot.url && shot.documentIdentity?.source === "cdp_loader_id" &&
+      shot.documentIdentity.token === snapshot.documentIdentity?.token &&
+      shot.capturedAtMs >= snapshot.capturedAtMs && shot.capturedAtMs <= clock.durationMs) return shot;
+}
+
 /** The original runtime visit used by usable_starting_page_score.v1. Callers
  * must verify the source bundle first and explicitly select lane-owned DOM. */
 export function getUsableRuntimeVisitSnapshot(
@@ -110,7 +145,9 @@ export function assessRuntimeVisitSnapshot(
       lane.accessOutcome !== "representative_page" || lane.challengeDetected) return unavailable("runtime_lane_unavailable");
   if (lane.executionOutcome === "degraded" && !lane.navigationAttempts?.some(attempt =>
     attempt.outcome === "success" && typeof attempt.httpStatus === "number" &&
-    attempt.httpStatus >= 200 && attempt.httpStatus < 300)) return unavailable("runtime_navigation_unverified");
+    attempt.httpStatus >= 200 && attempt.httpStatus < 300) &&
+      !(lane.navigationAttempts?.some(attempt => attempt.outcome === "committed_timeout" && attempt.httpStatus === 200) &&
+        snapshot && reviewedRuntimeViewport(bundle, snapshot))) return unavailable("runtime_navigation_unverified");
   const documentUrl = (value: string) => {
     try {
       const url = new URL(value);

@@ -54,10 +54,19 @@ function flaggedItems(groups: Array<Partial<InventoryAssessmentCounts> | undefin
   return { count: nonEssential + (review ?? 0), breakdown: { nonEssential, ...(review !== undefined ? { review } : {}) } };
 }
 
+function baselineOverview(report: Pick<OverviewInput, "resourceInventory" | "inventorySummary">) {
+  const baselineMetric = report.inventorySummary?.find(metric => inventoryMetricLabel(metric.label) === requests);
+  return report.resourceInventory?.requestMetric?.overview ?? baselineMetric?.overview;
+}
+
+export function getBaselineFlaggedBreakdown(report: Pick<OverviewInput, "resourceInventory" | "inventorySummary">) {
+  const counts = baselineOverview(report)?.distinctClassifications;
+  return counts ? flaggedItems(Object.values(counts))?.breakdown : undefined;
+}
+
 export function buildConsentTrackingOverview(report: OverviewInput, focus: ReportReviewFocus): ConsentTrackingTile[] {
   const california = focus === "ccpa_cpra";
-  const baselineMetric = report.inventorySummary?.find(metric => inventoryMetricLabel(metric.label) === requests);
-  const overview = report.resourceInventory?.requestMetric?.overview ?? baselineMetric?.overview;
+  const overview = baselineOverview(report);
   const fallback = (label: string) => report.inventorySummary?.find(metric => inventoryMetricLabel(metric.label) === label);
   const storageCount = overview?.distinctStorage ?? fallback(storage)?.value ?? 0;
   const frameCount = overview?.distinctEmbeds ?? fallback(frames)?.value ?? 0;

@@ -1,5 +1,6 @@
 import {CMS_PROJECTION_UNAVAILABLE_REASONS} from "../../apps/web/server/scans/cms-security-projection";
 import {readAuditComparisonDelivery} from '../../packages/certscore-contracts/src/audit-comparison';
+import {auditNavigationBlockSchema} from '../../packages/certscore-contracts/src';
 import {applyChoiceSummary, CHOICE_AUDIT_VERSION, LEGACY_CHOICE_AUDIT_VERSION} from './audit-progress-choice';
 import {ACCEPT_PATH_DIAGNOSTIC_KEY,priorityCoverageStates} from './audit-progress-priority-evidence';
 import {applyControlAccessibility,applyTrackingReviews,TRACKING_REVIEW_REF} from './audit-progress-control-accessibility';
@@ -13,11 +14,14 @@ import {createHash} from 'node:crypto';
 import {consentControlAssessmentSchema} from '../../packages/certscore-contracts/src/consent-control-assessment';
 import {CMS_CATALOGUE_V1,CMS_CATALOGUE_V2,CMS_CATALOGUE_V3,CMS_CATALOGUE_VERSION} from '../../packages/certscore-contracts/src/cms-security-catalog';
 import {AUDIT_POLICY_PROVENANCE_VERSION} from '../../packages/certscore-contracts/src/audit-policy-provenance';
+import {AUDIT_REJECT_ACTIVITY_VERSION, auditRejectActivitySchema} from '../../packages/certscore-contracts/src/audit-reject-activity';
+import {REJECT_ACTIVITY_KEY} from './audit-progress-priority-evidence';
 import {botOriginSql} from './audit-bot-origin';
 import type {ProgressRow} from './audit-progress';
 
 export const OPT_OUT_INPUT_VERSION='certscore.audit-opt-out-inputs.v1';
 export const OPT_OUT_EXTRACT_VERSION='certscore.audit-opt-out-extract.v1';
+export const REJECT_ACTIVITY_REF='generation_matched_reject_activity';
 export type OptOutReceipt={file:string;sha256:string;bytes:number};
 const digest=(b:Buffer)=>createHash('sha256').update(b).digest('hex');
 const DIRECT_ID_INVENTORY_VERSION='certscore.mac-mini-direct-id-inventory.v1';
@@ -25,9 +29,9 @@ const DIRECT_ID_INVENTORY_VERSION='certscore.mac-mini-direct-id-inventory.v1';
 // The daily archive export has no creator ID or private payload digest. The
 // bounded inventory supplies both for the exact ready report generation.
 // Keep this join local to diagnostics and leave the archive row's provenance intact.
-function archiveMatchesDiagnosticGeneration(row:ProgressRow):boolean {
+function archiveDiagnosticGeneration(row:ProgressRow, noGo=false) {
   const ref=row.refs.find(ref=>ref.role==='hash_verified_bot_archive_export');
-  if(!ref||path.basename(ref.file)!==row.scanId+'.json')return false;
+  if(!ref||path.basename(ref.file)!==row.scanId+'.json')return null;
   if(statSync(ref.file).size>6*1024*1024)throw Error('Diagnostic archive source exceeds export byte bound');
   const bytes=readFileSync(ref.file);
   if(digest(bytes)!==ref.sha256)throw Error('Diagnostic archive source hash mismatch');
@@ -36,7 +40,10 @@ function archiveMatchesDiagnosticGeneration(row:ProgressRow):boolean {
     Date.parse(report.timestamps?.createdAt)===Date.parse(row.createdAt)&&
     report.meta?.reportProjectionVersion===row.projectionVersion&&
     report.meta?.reportProjectionSourceHash===row.publicProjectionSourceHash&&
-    ['completed','completed_limited'].includes(report.scanStatus)&&report.resultDisposition!=='no_go';
+    ['completed','completed_limited'].includes(report.scanStatus)&&(report.resultDisposition==='no_go')===noGo ? report : null;
+}
+function archiveMatchesDiagnosticGeneration(row:ProgressRow, noGo=false):boolean {
+  return archiveDiagnosticGeneration(row,noGo)!==null;
 }
 
 function retainedDailyQuery(file:string,input:{version?:string;choiceAuditVersion?:string;querySha256?:string}):string|null {
@@ -89,7 +96,11 @@ select row_to_json(r) from (
 }
 
 export function retainedGenerationMatches(extract:any,row:ProgressRow):boolean {
-  if(!row.reportable||extract.scanId!==row.scanId||extract.isMacMini!==true||extract.isCanary!==false||!extract.originalRequestId||extract.publicationRequestStatus==='terminal_failure')return false;
+  return row.reportable && samePersistedGeneration(extract,row);
+}
+
+function samePersistedGeneration(extract:any,row:ProgressRow):boolean {
+  if(extract.scanId!==row.scanId||extract.isMacMini!==true||extract.isCanary!==false||!extract.originalRequestId||extract.publicationRequestStatus==='terminal_failure')return false;
   if(!['completed','completed_limited'].includes(extract.status)||extract.projection_status!=='ready'||
     !['scan-report-projection-v26','scan-report-projection-v27'].includes(extract.projection_version)||extract.projection_version!==row.projectionVersion||
     !/^[a-f0-9]{64}$/.test(extract.projection_payload_sha256??'')||
@@ -188,6 +199,8 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
   const byId=new Map(rows.map(r=>[r.scanId,r])),matched=new Map<string,{state:string;source:string}>();
   const cmpGenerations=new Map<string,{creator:string;payloadSha256:string;omitted:boolean}>();
   const diagnosticGenerations=new Map<string,{creator:string;payloadSha256:string;diagnostic:boolean;conflict:boolean}>();
+  const rejectActivityReceipts=new Map<string,string>();
+  const blockGenerations=new Map<string,string>();
   const summary={sources:receipts.length,inspected:0,matched:0,added:0,alreadyRetained:0,unmatchedOrUnavailable:0};
   for(const receipt of receipts){
     const file=realpathSync(receipt.file);if(statSync(file).size>32_000_000)throw Error('Control extract exceeds byte bound');
@@ -198,11 +211,27 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
     const archiveDiagnostics=input.forwardCoverageDiagnosticsProjected===true;
     if(archiveDiagnostics&&(!query?.includes("'cmsProjectionDiagnostic'")||!query.includes("'acceptPath'")))
       throw Error('Missing frozen daily query for forward CMS and Accept diagnostics');
+    const rejectActivityProjected=input.rejectActivityReceiptProjected===true;
+    if(rejectActivityProjected&&(!query?.includes('end "auditRejectActivity"')||
+      input.rows.some((row:any)=>!Object.hasOwn(row,'auditRejectActivity'))))
+      throw Error('Missing frozen daily query or column for post-Reject activity');
     const cmpBlockerOmitted=Boolean(query&&/case when jsonb_typeof\(\(p\.report_projection_payload#>'\{runtimeArtifacts,gpcCmpStateComparison\}'\)\)='object' then 'source_present' else 'source_missing' end\),\s*'transport',\s*'included'(?:\)|,\s*'acceptPath',)/.test(query));
     const seen=new Set<string>();
     for(const extract of input.rows){
       summary.inspected++;if(seen.has(extract.scanId))throw Error('Duplicate control-extract scan');seen.add(extract.scanId);
       const row=byId.get(extract.scanId),result=row?retainedOptOutState(extract,row):null;
+      if(row?.states.outcome==='no_go' && extract.auditNavigationBlock!=null && input.version===DIRECT_ID_INVENTORY_VERSION &&
+          samePersistedGeneration(extract,row) && archiveMatchesDiagnosticGeneration(row,true) &&
+          (row.originProof==='mac_mini_archive' || row.originProof==='original_credential_verified' && row.originRequestId===extract.originalRequestId)){
+        const block=auditNavigationBlockSchema.parse(extract.auditNavigationBlock);
+        const generation=JSON.stringify([extract.originalRequestId,extract.projection_payload_sha256]);
+        if(blockGenerations.has(row.scanId)&&blockGenerations.get(row.scanId)!==generation ||
+            row.navigationBlock&&!isDeepStrictEqual(row.navigationBlock,block))throw Error('Conflicting navigation block evidence');
+        blockGenerations.set(row.scanId,generation);
+        row.navigationBlock=block;
+        if(!row.refs.some(ref=>ref.file===file && ref.role==='runtime_navigation_block'))
+          row.refs.push({file,sha256:receipt.sha256,role:'runtime_navigation_block'});
+      }
       if(row&&retainedGenerationMatches(extract,row)){
         const direct=input.version===DIRECT_ID_INVENTORY_VERSION;
         const priority=extract.choice_audit?.version===CHOICE_AUDIT_VERSION ? extract.choice_audit.priorityEvidence : undefined;
@@ -211,15 +240,41 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
         const cmsReason=Array.isArray(extract.technicalCounts)&&specificCmsReason(extract.technicalCounts[1]);
         const archive=row.originProof==='mac_mini_archive';
         const creatorVerified=row.originProof==='original_credential_verified'&&row.originRequestId===extract.originalRequestId;
+        const rejectActivityEligible=rejectActivityProjected&&(archive||creatorVerified)&&row.states['click.reject']==='completed';
         const diagnosticBound=direct&&(creatorVerified||archiveDiagnostics&&archive&&
           (acceptReason||cmsReason)&&archiveMatchesDiagnosticGeneration(row));
         if(direct&&(archive||creatorVerified)){
           const {originalRequestId:creator,projection_payload_sha256:payloadSha256}=extract;
           const prior=diagnosticGenerations.get(row.scanId);
-          const diagnostic=diagnosticBound&&(acceptReason||cmsReason);
+          const diagnostic=diagnosticBound&&(acceptReason||cmsReason)||rejectActivityEligible&&extract.auditRejectActivity!=null;
           const conflict=Boolean(prior&&(prior.conflict||prior.creator!==creator||prior.payloadSha256!==payloadSha256));
-          if(conflict&&(diagnostic||prior?.diagnostic))throw Error('Conflicting generation-bound Accept diagnostic payload or CMS diagnostic provenance');
+          if(conflict&&(diagnostic||prior?.diagnostic))throw Error('Conflicting generation-bound Accept diagnostic payload or CMS diagnostic provenance or Reject activity provenance');
           diagnosticGenerations.set(row.scanId,{creator,payloadSha256,diagnostic:diagnostic||prior?.diagnostic===true,conflict});
+        }
+        if(rejectActivityEligible){
+          const report=archiveDiagnosticGeneration(row);
+          const observation=report?.postRefusalObservation;
+          const parsed=auditRejectActivitySchema.safeParse(extract.auditRejectActivity);
+          const activityReceipt=parsed.data;
+          const bound=observation?.execution?.clickCompleted===true &&
+            observation?.confirmation?.policyVersion==='choice_confirmation_summary.v2' &&
+            activityReceipt?.[1]===row.scanId && activityReceipt[2]===observation.confirmation.sourcePacketSha256;
+          const prior=rejectActivityReceipts.get(row.scanId);
+          if(bound){
+            const identity=JSON.stringify(activityReceipt);
+            if(prior&&prior!==identity)throw Error('Conflicting generation-bound post-Reject activity receipt');
+            rejectActivityReceipts.set(row.scanId,identity);
+            if(!row.refs.some(ref=>ref.file===file&&ref.role===REJECT_ACTIVITY_REF))
+              row.refs.push({file,sha256:receipt.sha256,role:REJECT_ACTIVITY_REF});
+          }
+          if(bound||(!prior&&row.states[REJECT_ACTIVITY_KEY]!=='invalid_or_unbound')){
+            row.states[REJECT_ACTIVITY_KEY]=bound ? activityReceipt[3] :
+              extract.auditRejectActivity==null ? 'receipt_unavailable' : 'invalid_or_unbound';
+            const scope=bound&&activityReceipt[0]===2 ? `${AUDIT_REJECT_ACTIVITY_VERSION}/retained_reject_presence` :
+              'certscore.audit-reject-activity.v1/bounded_after_action_capture.v2';
+            (row.metricSources??={})[REJECT_ACTIVITY_KEY]=
+              `persisted_reject_activity_receipt/${row.projectionVersion}/${scope}`;
+          }
         }
         const technicalCounts=cmsReason&&!diagnosticBound
           ? [extract.technicalCounts[0],'source_missing'] : extract.technicalCounts;

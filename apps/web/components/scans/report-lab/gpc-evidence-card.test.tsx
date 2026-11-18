@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {renderToStaticMarkup} from "react-dom/server";
 import {GpcEvidenceIndexCard} from "./shadow-scan-report";
+import { GpcInventoryProvider } from "../consent-tracking-summary";
 import type {GpcResponseReportProjection} from "./shadow-report-data";
 
 const projection = {
@@ -68,7 +69,7 @@ test("verified five-second activity remains visible when the independent quiet-p
    sourceHashes:{baseline:'a'.repeat(64),gpc:'b'.repeat(64)},activity:{advertisingMarketing:{baselineRequests:24,gpcRequests:18,baselineServices:13,gpcServices:10},analyticsReplay:{baselineRequests:1,gpcRequests:1,baselineServices:1,gpcServices:1}},scoreEffect:'none',causedByGpc:'not_established'};
  measured.observedFacts.push({label:'5-second matched comparison',value:'Over the same 5-second interval after page commit, advertising/marketing requests: 24 without GPC and 18 with GPC; analytics/replay requests: 1 without GPC and 1 with GPC.'});
  const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={measured} california />);
- assert.match(html,/first 5 seconds/);assert.match(html,/>24<\/td><td[^>]*>18<\/td>/);
+ assert.match(html,/Advertising and analytics requests<\/th>/);assert.match(html,/>24<\/td><td[^>]*>18<\/td>/);
  assert.doesNotMatch(html,/Comparison incomplete|GPC is honored|deduct|penalt/i);
  assert.equal(measured.assessment.status,'indeterminate');
 });
@@ -83,7 +84,7 @@ test("GPC request comparison sits directly in the GPC details before nested comp
  const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={measured} california />);
  assert.equal((html.match(/aria-label="Baseline versus GPC"/g)??[]).length,1);
  assert.ok(html.indexOf('aria-label="Baseline versus GPC"')<html.indexOf('Across the GPC visit'));
- assert.match(html,/Requests observed during the first second after each page loaded\./);
+ assert.match(html,/Advertising and analytics requests<\/th>/);
  assert.match(html,/Advertising \/ marketing/);
  assert.match(html,/Analytics \/ session replay/);
  assert.deepEqual(measured,before);
@@ -161,10 +162,30 @@ test("a measured zero in both GPC categories stays separate from later activity 
   assert.equal(tile.breakdown, undefined);
   assert.deepEqual(tile.gpcWindow?.activity, result.activityComparison.activity);
   const html = renderToStaticMarkup(<GpcEvidenceIndexCard projection={result} california />);
-  assert.ok(html.includes(renderToStaticMarkup(<GpcRequestTable comparison={tile.gpcWindow!} />)));
+  assert.ok(html.includes(renderToStaticMarkup(<GpcRequestTable comparison={tile.gpcWindow!} visitItems={{}} />)));
   assert.match(html, /4 cookie identities in snapshots or write observations · at least 1 classified non-essential/);
   assert.match(html, /2 of 4 identities available for classification/);
   assert.match(html, /unlisted_cookie/);
   assert.match(html, /Example Ads/);
   assert.doesNotMatch(html, /baseline_cookie|Baseline vendor|opaque-legacy-key/);
+});
+
+test("GPC evidence places expanded, branded service counts after the comparison", async () => {
+  const { gpcActivityComparisonFixture } = await import("../../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison");
+  const { buildGpcTile } = await import("../../../lib/scans/consent-tracking-overview");
+  const { SHADOW_REPORT } = await import("./shadow-report-data");
+  const result = { ...projection, activityComparison: gpcActivityComparisonFixture() };
+  const tile = { ...buildGpcTile({ scan: SHADOW_REPORT.scan, gpcResponse: result }), state: "partial" as const,
+    count: 8, breakdown: { nonEssential: 0, review: 8 }, contributors: [
+      { service: "Google Fonts", nonEssential: 0, review: 6 },
+      { service: "cdnjs CDN", nonEssential: 0, review: 1 },
+      { service: "jsDelivr CDN", nonEssential: 0, review: 1 },
+    ] };
+  const html = renderToStaticMarkup(<GpcInventoryProvider tile={tile} baselineBreakdown={{ nonEssential: 0, review: 8 }}>
+    <GpcEvidenceIndexCard projection={result} california />
+  </GpcInventoryProvider>);
+  assert.match(html, /Distinct flagged items.*Review.*?>8<\/td><td[^>]*>8<\/td>/);
+  assert.match(html, /Baseline → GPC.*<details open=""[^>]*><summary[^>]*>Flagged items by service/);
+  assert.match(html, /\/vendor-logos\/google\.png[^>]*><\/span><span[^>]*>Google Fonts/);
+  assert.doesNotMatch(html, /google\.com\/s2\/favicons/);
 });

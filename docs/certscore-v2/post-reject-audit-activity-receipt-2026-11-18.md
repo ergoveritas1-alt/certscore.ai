@@ -1,0 +1,13 @@
+# Post-Reject activity in the daily audit
+
+The November 18 partial-day dashboard covered six completed Reject clicks. Ovid, Garmin and Our World in Data returned the canonical finding for non-essential cookies or services after Reject. The audit had no matched private activity classification for those three exports. Their public exports carried unconfirmed registration, a packet hash and after-click totals without event-level essentiality. Ovid and Our World in Data described service requests in their returned findings. Garmin described a cookie snapshot. The finding and the confirmed observation verdict answer different questions.
+
+## Local implementation
+
+The materializer derives `certscore.audit-reject-activity.v2` from the existing verified Reject projection when it creates a report. The private receipt carries the scan ID, Reject packet hash and which kinds of non-essential evidence were observed after the completed click. It can record service requests, storage writes, cookie snapshots and any combination of the three. Service requests and cookie snapshots use the same evidence checks as the canonical Reject finding. Snapshot presence qualifies even when the cookie value stayed the same. A snapshot supplies presence only. The receipt carries explicit unavailable reasons for missing capture or unresolved classification. Both public report read paths strip the private field. Existing v1 receipts retain their request and write semantics.
+
+The daily exporter can carry the receipt in the same bounded SELECT as the existing v2 summaries and required receipts. The receipt column is capped at 192 bytes per row and sits outside the choice-summary cap. Query planning preserves the existing timeout, row and override limits and carries any additional deferred IDs. Audit intake matches the original creator and ready projection generation, rehashes the archive export and checks the completed Reject packet hash. The all-click activity headline counts each report once across the receipt and the verified public finding. The narrower request and write measure keeps snapshot-only positives outside its observed count. Receipt versions, the public verdict and the canonical presence finding retain separate source series.
+
+## Subsequent release
+
+The production deployment hold is active. After an authorized release verifies the materializer, review the new source hashes and stage `includeRejectActivityReceipt: true` in the next eligible scheduled run before offline sizing. The option defaults off. Verify the frozen query and receipt delivery by Los Angeles date and report version. Existing receipts and dashboards keep their original evidence and coverage. The local implementation uses no new capture, scan or AWS query.

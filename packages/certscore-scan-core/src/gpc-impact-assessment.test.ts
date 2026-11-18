@@ -17,8 +17,8 @@ function source(bundle: CanonicalEvidenceBundle) {
   const bytes = Buffer.from(JSON.stringify(bundle));
   return { bytes, pointer: { uri: "fixture.json", sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") } };
 }
-function fixture(enabled: boolean, names: string[], end = 1500) {
-  const bundle = gpcRuntimeFixture({ enabled, vendors: names.map(name => ({ name })) });
+function fixture(enabled: boolean, names: string[], end = 1500, exact = false, requestTimes: number[] = []) {
+  const bundle = gpcRuntimeFixture({ enabled, vendors: names.map((name, i) => ({ name, atMs: requestTimes[i] })) });
   let now = 0;
   const capture = createGpcImpactCapture({ expectedEnabled: enabled, now: () => now });
   capture.documentRequested({ type: "Document", frameId: "main", loaderId: "loader", request: { url: bundle.url, headers: enabled ? { "Sec-GPC": "1" } : {} } }, "main");
@@ -31,7 +31,10 @@ function fixture(enabled: boolean, names: string[], end = 1500) {
   bundle.gpcSignalObservation!.prototypeCaptureBinding = { captureId: "11111111-1111-4111-8111-111111111111", documentIdentitySource: "cdp_loader_id", documentToken: "loader" };
   capture.bindReadback("loader");
   bundle.gpcImpactCapture = capture.finish(bundle.gpcSignalObservation);
-  delete bundle.gpcImpactCapture.comparisonPolicy; // Preserve historical fixture eligibility.
+  if (!exact) { // Reproduce historical fixed-checkpoint captures.
+    delete bundle.gpcImpactCapture.comparisonPolicy;
+    bundle.gpcImpactCapture.windows = bundle.gpcImpactCapture.windows.filter(w => [250, 500, 1000, 3000, 5000].includes(w.durationMs));
+  }
   bundle.completedAt = "2026-09-05T12:00:02.000Z";
   bundle.modulesRun[0]!.timingBreakdown![0]!.outcome = "timed_out";
   return canonicalEvidenceBundleSchema.parse(bundle);
@@ -264,4 +267,19 @@ test("page HTTP comparison rejects missing per-request signal, loader changes an
     if(defect==="no_marker"){delete gpc.gpcImpactCapture!.comparisonPolicy;gpc.gpcSignalObservation!.workerCount=1;}
     assert.equal(buildGpcActivityComparison({scanId:baseline.scanId,baseline:source(baseline),gpc:source(gpc)}),undefined,defect);
   }
+});
+
+test("unequal terminal receipts compare the common prefix after raw request pruning", () => {
+  const baseline = fixture(false, ["A", "B"], 1900, true, [1286, 1614]);
+  const gpc = fixture(true, ["A"], 1614, true, [1286]);
+  for (const bundle of [baseline, gpc]) {
+    bundle.gpcImpactCapture = retainGpcComparisonLedger(bundle);
+    bundle.networkEvents = bundle.networkEvents.filter(event => event.isMainFrame);
+  }
+  const run = () => buildGpcActivityComparison({ scanId: baseline.scanId, baseline: source(baseline), gpc: source(gpc) });
+  assert.equal(run()?.durationMs, 1613);
+  assert.equal(run()?.activity.advertisingMarketing.baselineRequests, 1, "exclude the request exactly at the shared cutoff");
+  assert.equal(run()?.activity.advertisingMarketing.gpcRequests, 1);
+  baseline.gpcImpactCapture!.windows.at(-1)!.requestSetSha256 = "f".repeat(64);
+  assert.equal(run()?.durationMs, 1000);
 });

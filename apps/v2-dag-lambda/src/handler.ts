@@ -3,7 +3,7 @@ import { CANONICAL_ARTIFACT_MAX_DECODED_BYTES, parseCanonicalEvidenceArtifact, s
 import { assessGpcCmpStateComparison } from "@certscore/scan-core/gpc-cmp-state-comparison";
 import { isLoopbackPostRefusalTarget } from "@certscore/scan-core/post-refusal-target-authorization";
 import { runtimeEvidenceClockSchema } from "@certscore/contracts";
-import { boundRuntimeDocumentStatus } from "@certscore/contracts";
+import { boundRuntimeDocumentStatus, getUsableRuntimeVisitSnapshot, reviewedRuntimeViewport, RUNTIME_VIEWPORT_FILENAME, RUNTIME_VIEWPORT_ID } from "@certscore/contracts";
 import { claimRedHatCanary, type RedHatCanaryOptions } from "./redhat-opt-out-canary";
 import {claimReviewedOptOutRollout, reviewedRouteDispatch} from "./reviewed-opt-out-rollout";
 import {redHatConditionalDispatch} from './redhat-opt-out-dispatch';
@@ -29,6 +29,7 @@ import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import type { Duplex } from "node:stream";
 import path from "node:path";
+import { statSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { connect as tlsConnect, type TLSSocket } from "node:tls";
 import { consentActionPassiveBarrierLimits } from "./consent-action-tail-policy.js";
@@ -68,6 +69,7 @@ import {
   type PostRefusalLambdaDispatchConfig,
   type PostRefusalLambdaEvidenceDescriptor,
   type PreConsentRuntimePreview,
+  type BrowserPolicyLink,
   type VerifiedPolicyEvidencePacket,
   type VerifiedPreConsentRuntimePreviewPacket,
   type V2DagLambdaResultPurpose,
@@ -157,6 +159,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   profile: "standard" | "tiny";
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   policySurfaceSeeds?: Array<{
+    verifiedDocument?: true;
     confidence?: number;
     hintType: string;
     source: "prior_scan_hint" | "canonical_legal_surface_hint";
@@ -566,7 +569,8 @@ type HandlerOptions = {
     artifactRoot: string;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
-    onRuntimePreviewComplete?: (preview: PreConsentRuntimePreview) => void;
+    onRuntimePreviewComplete?: RunScanInput["onPreConsentRuntimePreview"];
+    readBrowserPolicyLinks?: RunScanInput["readBrowserPolicyLinks"];
     physicalInvocationId?: string;
     policySurfaceDeadlineAtMs?: number;
     preConsentModuleDeadlineMs?: number;
@@ -943,6 +947,7 @@ function parsePolicySurfaceSeeds(value: unknown): NonNullable<LocalV2DagLambdaDi
       const url = parsed.toString();
       if (!selected.has(url)) {
         selected.set(url, {
+          ...(source === "prior_scan_hint" && record.verifiedDocument === true ? { verifiedDocument: true as const } : {}),
           ...(typeof record.confidence === "number" && Number.isFinite(record.confidence)
             ? { confidence: Math.max(0, Math.min(1, record.confidence)) }
             : {}),
@@ -1147,8 +1152,8 @@ export function buildLocalV2DagLambdaLaneRun(input: {
     .filter((event) => Boolean(event.requestId && mainDocumentRequestIds.has(event.requestId)))
     .sort((left, right) => left.timestampMs - right.timestampMs);
   const firstTopLevelResponse = topLevelResponses[0];
-  const firstSuccessfulNavigationAttempt = moduleRun.recoveryDiagnostics?.attempts?.find((attempt) =>
-    attempt.outcome === "success" && attempt.httpStatus !== undefined
+  const firstNavigationResponse = moduleRun.recoveryDiagnostics?.attempts?.find((attempt) =>
+    attempt.httpStatus !== undefined
   );
   const retainedDocumentUrl = [...input.bundle.domSnapshots]
     .reverse()
@@ -1163,7 +1168,7 @@ export function buildLocalV2DagLambdaLaneRun(input: {
     (firstTopLevelResponse ? Math.max(0, Math.round(firstTopLevelResponse.timestampMs)) : null);
   const firstHttpStatus = siteFacingNavigation?.firstHttpStatus ??
     firstTopLevelResponse?.status ??
-    firstSuccessfulNavigationAttempt?.httpStatus ??
+    firstNavigationResponse?.httpStatus ??
     null;
   const firstEffectiveUrl = sanitizedLaneUrl(
     siteFacingNavigation?.firstEffectiveUrl ??
@@ -1180,6 +1185,8 @@ export function buildLocalV2DagLambdaLaneRun(input: {
     httpStatus: attempt.httpStatus ?? null,
     durationMs: attempt.durationMs,
     effectiveUrl: sanitizedLaneUrl(attempt.url),
+    ...(attempt.failureCode ? { failureCode: attempt.failureCode } : {}),
+    ...(attempt.guardDecision ? { guardDecision: attempt.guardDecision } : {}),
   }));
   const noGoReason = input.bundle.scanNoGoAssessment?.reasonCodes[0] ?? null;
   // Background security traffic is not itself a blocked page. Only this visit's
@@ -1198,12 +1205,12 @@ export function buildLocalV2DagLambdaLaneRun(input: {
     signals.blockingFrameChallengeObserved === false && signals.documentStatusBlocked === false &&
     signals.expectedOriginReached === true && signals.successfulSettledMainDocument === true &&
     typeof signals.mainDocumentStatus === "number" &&
-    signals.mainDocumentStatus >= 200 && signals.mainDocumentStatus < 400 &&
+    signals.mainDocumentStatus >= 200 && signals.mainDocumentStatus < 300 &&
     signals.substantiveCapturedPageTextObserved === true && signals.substantiveRetainedDomVolumeObserved === true &&
     signals.visualHardNoGoPageState === false && signals.visualNoGo === false &&
     (!siteFacingNavigation || !siteFacingNavigation.challengeDetected &&
       (siteFacingNavigation.terminalAccess === undefined || siteFacingNavigation.terminalAccess === "representative_page") &&
-      (siteFacingNavigation.terminalHttpStatus == null || siteFacingNavigation.terminalHttpStatus >= 200 && siteFacingNavigation.terminalHttpStatus < 400));
+      (siteFacingNavigation.terminalHttpStatus == null || siteFacingNavigation.terminalHttpStatus >= 200 && siteFacingNavigation.terminalHttpStatus < 300));
   const challengeDetected = siteFacingNavigation?.terminalAccess === "bot_challenge" || !incidentalChallengeTraffic && (siteFacingNavigation?.challengeDetected ?? Boolean(
     input.bundle.scanNoGoAssessment?.supportingSignals.challengeSignalsDetected ||
     noGoReason === "captcha_or_challenge" ||
@@ -1245,7 +1252,7 @@ export function buildLocalV2DagLambdaLaneRun(input: {
           ? "navigation_failed"
           : laneId === "policy_evidence"
             ? input.bundle.scanNoGoAssessment?.decision === "no_go" ? "unknown" : siteFacingNavigation?.terminalAccess ?? "unknown"
-          : input.bundle.scanNoGoAssessment?.decision !== "no_go" && accessStatus != null && accessStatus >= 200 && accessStatus < 400 &&
+          : input.bundle.scanNoGoAssessment?.decision !== "no_go" && accessStatus != null && accessStatus >= 200 && accessStatus < 300 &&
               (!usesBoundRuntimeCapture || hasRepresentativeRuntimeEvidence(input.bundle))
             ? "representative_page"
             : "unknown";
@@ -1272,6 +1279,9 @@ export function buildLocalV2DagLambdaLaneRun(input: {
     firstEffectiveUrl,
     navigationCount,
     navigationAttempts,
+    ...(moduleRun.recoveryDiagnostics?.securityChallenge
+      ? { securityChallengeRecovery: moduleRun.recoveryDiagnostics.securityChallenge }
+      : {}),
     challengeDetected,
     challengeType,
     executionOutcome,
@@ -1294,7 +1304,8 @@ export async function runLocalV2DagLambdaArtifactChain(
     forceAllowedScenarioPlanning?: boolean;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
-    onRuntimePreviewComplete?: (preview: PreConsentRuntimePreview) => void;
+    onRuntimePreviewComplete?: RunScanInput["onPreConsentRuntimePreview"];
+    readBrowserPolicyLinks?: RunScanInput["readBrowserPolicyLinks"];
     physicalInvocationId?: string;
     phaseLabelPrefix?: string;
     preConsentScreenshotMode?: "always" | "selective" | "never";
@@ -1344,6 +1355,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     onScanCoreComplete: options.onScanCoreComplete,
     onPolicySurfaceComplete: options.onPolicySurfaceComplete,
     onRuntimePreviewComplete: options.onRuntimePreviewComplete,
+    readBrowserPolicyLinks: options.readBrowserPolicyLinks,
     physicalInvocationId: options.physicalInvocationId,
     scanTuning,
     screenshotSafetyReviewCoordinator,
@@ -1396,7 +1408,8 @@ async function runLocalV2DagLambdaScanBundle(
     artifactRoot: string;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
-    onRuntimePreviewComplete?: (preview: PreConsentRuntimePreview) => void;
+    onRuntimePreviewComplete?: RunScanInput["onPreConsentRuntimePreview"];
+    readBrowserPolicyLinks?: RunScanInput["readBrowserPolicyLinks"];
     physicalInvocationId?: string;
     phaseLabelPrefix?: string;
     phaseTimings: LocalV2DagLambdaPhaseTiming[];
@@ -1446,10 +1459,11 @@ async function runLocalV2DagLambdaScanBundle(
         policyPlanningDeadlineMs: 1_500,
         policySurfaceDeadlineAtMs: options.policySurfaceDeadlineAtMs,
         policySurfaceSeeds: payload.policySurfaceSeeds,
+        readBrowserPolicyLinks: options.readBrowserPolicyLinks,
         postConsentFlowsEnabled: false,
         preConsentModuleDeadlineMs: options.preConsentModuleDeadlineMs,
-        preConsentScreenshotMode: evidenceLane === "runtime_evidence" ||
-          evidenceLane === "gpc_observation" ||
+        localRuntimeViewportEnabled: payload.targetEnvironment === "local" && !isAwsLambdaRuntime() && evidenceLane === "runtime_evidence",
+        preConsentScreenshotMode: evidenceLane === "gpc_observation" ||
           evidenceLane === "policy_evidence"
           ? "never"
           : options.preConsentScreenshotMode,
@@ -1563,6 +1577,7 @@ export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   }));
   const auxiliaryArtifacts = await timeLambdaPhase(phaseTimings, "auxiliary_upload", () => uploadAuxiliaryArtifactFiles({
     artifactRoot,
+    bundle,
     payload,
     s3Client: input.s3Client,
     signal: input.signal
@@ -2984,6 +2999,10 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   if (!consentProofBundle || !runtimeEvidenceBundle || !policyEvidenceBundle) {
     throw new Error("Three-lane Lambda evidence merge requires consent, runtime, and policy worker bundles.");
   }
+  if (runtimeEvidenceBundle.screenshots.some(shot => shot.artifactId === RUNTIME_VIEWPORT_ID)) {
+    const mirror = await workerAuxiliaryMirrorOutcomePromise;
+    if (mirror.status === "rejected") throw mirror.error;
+  }
   let bundle = await timeLambdaPhase(phaseTimings, "evidence_lane_bundle_merge", async () =>
     mergeLocalV2DagLambdaEvidenceLaneBundles({
       artifactRoot,
@@ -3682,7 +3701,7 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   const { gpcObservation: parentGpcObservation, ...parentPayloadWithoutGpcObservation } = input.parentPayload;
   const workerPayload: LocalV2DagLambdaDispatchPayload = {
     ...parentPayloadWithoutGpcObservation,
-    ...(["cmp_preferences", "sale_sharing_opt_out"].includes(workerLane) ? { parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload) } : {}),
+    ...(["cmp_preferences", "sale_sharing_opt_out", "policy_evidence", "runtime_evidence"].includes(workerLane) ? { parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload) } : {}),
     callbackCorrelationId: input.parentScanId,
     ...(input.coordinatorPlanSummary ? { coordinatorPlanSummary: input.coordinatorPlanSummary } : {}),
     ...(workerLane === "reject_observation" && input.parentPayload.postRefusalObservation
@@ -4723,9 +4742,27 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     );
   const consentProofInspectionUsable = consentProof.consentSurfaceInspection?.inspectionCompleted === true &&
     consentProof.consentSurfaceInspection.coverageStatus === "complete";
+  const runtimeSnapshot = runtimeEvidence.screenshots.some(shot => shot.artifactId === RUNTIME_VIEWPORT_ID)
+    ? getUsableRuntimeVisitSnapshot(runtimeEvidence, runtimeEvidence.domSnapshots) : undefined;
+  const candidateShot = runtimeSnapshot && reviewedRuntimeViewport(runtimeEvidence, runtimeSnapshot);
+  const viewport = runtimeSnapshot?.runtimeDocumentCapture?.viewport;
+  let runtimeViewport: ScreenshotArtifact | undefined;
+  const runtimeReview = runtimeEvidence.visualAccessReview ?? runtimeEvidence.visual_access_review;
+  if (candidateShot && viewport && runtimeReview?.go_no_go !== "NO_GO" && runtimeEvidence.scanId === input.scanId && consentProof.scanId === input.scanId &&
+      runtimeEvidence.normalizedUrl === consentProof.normalizedUrl && runtimeEvidence.region === consentProof.region &&
+      runtimeEvidence.scanLaneRuns.length === 1 && hasRepresentativeRuntimeEvidence(runtimeEvidence) &&
+      candidateShot.path === path.join(input.artifactRoot, `worker-runtime_evidence-${RUNTIME_VIEWPORT_FILENAME}`)) {
+    try {
+      if (statSync(candidateShot.path).size === viewport.sizeBytes &&
+          createHash("sha256").update(readFileSync(candidateShot.path)).digest("hex") === viewport.sha256) {
+        runtimeViewport = candidateShot;
+      }
+    } catch { /* Missing mirrored pixels cannot resolve a blank-page assessment. */ }
+  }
   const noGoReconciliation = reconcileEvidenceLaneNoGoAssessment({
     consentProof,
     consentProofVisualUsable,
+    runtimeViewport,
     runtimeEvidence,
   });
   const scanNoGoAssessment = noGoReconciliation.scanNoGoAssessment;
@@ -4769,7 +4806,7 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     : baseScanEvidenceLaneAssessment;
   const artifactRefs = dedupeByField([
     ...consentProof.artifactRefs,
-    ...runtimeEvidence.artifactRefs,
+    ...runtimeEvidence.artifactRefs.filter(ref => ref.artifactId !== RUNTIME_VIEWPORT_ID || runtimeViewport),
     ...policyEvidence.artifactRefs,
   ], "artifactId");
   const modulesRun = dedupeByJson([
@@ -4828,7 +4865,8 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     policySurfaceObservations,
     siteIntegrityObservation: runtimeEvidence.siteIntegrityObservation,
     transportSecurityObservations,
-    screenshots: consentProof.screenshots,
+    screenshots: runtimeViewport ? [...consentProof.screenshots, runtimeViewport] : consentProof.screenshots,
+    ...(runtimeViewport ? { homepageScreenshot: { status: "available" as const } } : {}),
     domSnapshots: consentProof.domSnapshots,
     // Runtime descriptive metadata must not replace consent-owned DOM evidence.
     runtimeMetadataSnapshots,
@@ -4874,6 +4912,7 @@ export function verifyLaneRuntimeGraph(bundle: CanonicalEvidenceBundle, scanId: 
 function reconcileEvidenceLaneNoGoAssessment(input: {
   consentProof: CanonicalEvidenceBundle;
   consentProofVisualUsable: boolean;
+  runtimeViewport?: ScreenshotArtifact;
   runtimeEvidence: CanonicalEvidenceBundle;
 }): {
   disagreement: boolean;
@@ -4893,10 +4932,16 @@ function reconcileEvidenceLaneNoGoAssessment(input: {
   const consentRepresentative = input.consentProofVisualUsable &&
     consentRun?.executionOutcome === "success" &&
     consentRun.accessOutcome === "representative_page";
+  const sparseConsentNoGo = consentNoGo && ["blank_or_unusable_page", "loading_or_stalled"].includes(consentAssessment.reasonCodes[0] ?? "") &&
+    consentAssessment.reasonCodes.every(reason => ["blank_or_unusable_page", "loading_or_stalled", "scan_no_go_corroborated"].includes(reason));
+  const timedOutRuntime = runtimeRun?.executionOutcome === "degraded" &&
+    runtimeRun.navigationAttempts?.some(attempt => attempt.outcome === "committed_timeout");
   const runtimeRepresentative = input.runtimeEvidence.runtimeCoverage?.coverageStatus !== "limited_none" &&
-    runtimeRun?.executionOutcome === "success" &&
-    runtimeRun.accessOutcome === "representative_page" && hasRepresentativeRuntimeEvidence(input.runtimeEvidence);
-  const consentCaptureOnly = consentNoGo && !runtimeRepresentative &&
+    (runtimeRun?.executionOutcome === "success" || (timedOutRuntime && sparseConsentNoGo && input.runtimeViewport)) &&
+    runtimeRun?.accessOutcome === "representative_page" && hasRepresentativeRuntimeEvidence(input.runtimeEvidence);
+  const timedOutCandidate = timedOutRuntime && input.runtimeEvidence.domSnapshots.some(snapshot =>
+    snapshot.runtimeDocumentCapture?.viewportAttempted);
+  const consentCaptureOnly = consentNoGo && !runtimeRepresentative && !timedOutCandidate &&
     input.runtimeEvidence.domSnapshots.some(snapshot => Boolean(snapshot.runtimeDocumentCapture)) &&
     ["blank_or_unusable_page", "loading_or_stalled"].includes(consentAssessment.reasonCodes[0] ?? "");
   // An independent sparse consent visit cannot turn an unresolved runtime
@@ -4954,6 +4999,8 @@ function reconcileEvidenceLaneNoGoAssessment(input: {
       supportingSignals: {
         ...selectedAssessment.supportingSignals,
         evidenceLaneAccessDisagreement: true,
+        ...(input.runtimeViewport && representativeLane === "runtime_evidence"
+          ? { verifiedRuntimeViewport: input.runtimeViewport.artifactId } : {}),
         noGoLane,
         representativeLane,
       },
@@ -5528,6 +5575,7 @@ const CORE_ARTIFACT_FILE_NAMES = new Set([
 ]);
 
 export async function uploadAuxiliaryArtifactFiles(input: {
+  bundle?: CanonicalEvidenceBundle;
   attemptTimeoutMs?: number;
   artifactRoot: string;
   maxAttempts?: number;
@@ -5536,10 +5584,16 @@ export async function uploadAuxiliaryArtifactFiles(input: {
   signal?: AbortSignal;
 }): Promise<LocalV2DagLambdaAuxiliaryArtifact[]> {
   const entries = await readdir(input.artifactRoot, { withFileTypes: true });
+  const bundle = input.bundle;
+  const snapshot = (bundle?.runtimeMetadataSnapshots ?? bundle?.domSnapshots)?.find(row => row.runtimeDocumentCapture?.viewport);
+  const shot = bundle && snapshot && reviewedRuntimeViewport(bundle, snapshot);
+  const viewport = snapshot?.runtimeDocumentCapture?.viewport;
   const fileNames = entries
     .filter((entry) => entry.isFile())
     .map((entry) => entry.name)
     .filter((fileName) => isSupportedAuxiliaryFileName(fileName) && !CORE_ARTIFACT_FILE_NAMES.has(fileName))
+    .filter(fileName => !fileName.endsWith(RUNTIME_VIEWPORT_FILENAME) ||
+      (shot && path.resolve(input.artifactRoot, fileName) === path.resolve(shot.path)))
     .sort();
   if (fileNames.length === 0) {
     return [];
@@ -5553,6 +5607,10 @@ export async function uploadAuxiliaryArtifactFiles(input: {
   const attemptTimeoutMs = Math.max(10, input.attemptTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS);
   return Promise.all(fileNames.map(async (fileName) => {
     const object = await artifactObjectMetadata(path.join(input.artifactRoot, fileName));
+    if (fileName.endsWith(RUNTIME_VIEWPORT_FILENAME) &&
+        (object.sha256 !== viewport?.sha256 || object.sizeBytes !== viewport.sizeBytes)) {
+      throw new Error("Reviewed runtime viewport bytes changed before upload.");
+    }
     const key = `${prefix}/auxiliary/${fileName}`;
     const command = new PutObjectCommand({
       Body: object.body,
@@ -6070,12 +6128,18 @@ export async function publishVerifiedPolicyEvidence(input: {
 export function buildVerifiedPreConsentRuntimePreviewPacket(input: {
   payload: LocalV2DagLambdaDispatchPayload;
   preview: PreConsentRuntimePreview;
+  browserPolicyLinks?: BrowserPolicyLink[];
 }): VerifiedPreConsentRuntimePreviewPacket {
   const unsigned = {
     artifactOnly: true as const,
     contractVersion: VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION,
     normalizedUrl: input.payload.targetUrl,
     preview: input.preview,
+    ...(input.payload.workerLane === "runtime_evidence" && input.payload.parentDispatchSha256 && input.browserPolicyLinks?.length
+      ? {
+        browserPolicyLinks: input.browserPolicyLinks,
+        browserPolicyParentDispatchSha256: input.payload.parentDispatchSha256,
+      } : {}),
     productionFindingIntegration: false as const,
     scanId: input.payload.scanId,
   };
@@ -6090,6 +6154,35 @@ export function buildVerifiedPreConsentRuntimePreviewPacket(input: {
   });
 }
 
+function runtimePreviewObjectKey(payload: LocalV2DagLambdaDispatchPayload) {
+  return `${artifactKeyPrefix(payload)}/VerifiedPreConsentRuntimePreviewPacket.json`;
+}
+
+/** The preview is an acceleration input. Its links still require a live response
+ * and normal document evaluation before they can contribute policy evidence. */
+export async function readRuntimeBrowserPolicyLinks(
+  payload: LocalV2DagLambdaDispatchPayload, signal: AbortSignal, client?: S3GetClient,
+): Promise<BrowserPolicyLink[]> {
+  if (!payload.parentDispatchSha256 || signal.aborted) return [];
+  try {
+    const runtimePayload = { ...payload, orchestrationMode: "worker" as const, workerLane: "runtime_evidence" as const };
+    const object = await (client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new GetObjectCommand({
+      Bucket: requireArtifactBucket(), Key: runtimePreviewObjectKey(runtimePayload),
+    }), { abortSignal: signal });
+    if (!object.ContentLength || object.ContentLength > 64_000 || signal.aborted) return [];
+    const bytes = await streamToBuffer(object.Body);
+    if (signal.aborted || bytes.length !== object.ContentLength ||
+        createHash("sha256").update(bytes).digest("hex") !== object.Metadata?.["certscore-artifact-sha256"]) return [];
+    const parsed = verifiedPreConsentRuntimePreviewPacketSchema.parse(JSON.parse(bytes.toString("utf8")));
+    const { sourceHash, ...unsigned } = parsed;
+    return parsed.scanId === payload.scanId && parsed.normalizedUrl === payload.targetUrl &&
+      parsed.browserPolicyParentDispatchSha256 === payload.parentDispatchSha256 &&
+      sha256Json(unsigned) === sourceHash ? parsed.browserPolicyLinks ?? [] : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function publishVerifiedPreConsentRuntimePreview(input: {
   packet: VerifiedPreConsentRuntimePreviewPacket;
   payload: LocalV2DagLambdaDispatchPayload;
@@ -6099,7 +6192,7 @@ export async function publishVerifiedPreConsentRuntimePreview(input: {
   const body = Buffer.from(`${JSON.stringify(input.packet, null, 2)}\n`, "utf8");
   const sha256 = createHash("sha256").update(body).digest("hex");
   const bucket = requireArtifactBucket();
-  const key = `${artifactKeyPrefix(input.payload).replace(/^\/+|\/+$/g, "")}/VerifiedPreConsentRuntimePreviewPacket.json`;
+  const key = runtimePreviewObjectKey(input.payload);
   await sendWithBoundedRetries({
     attemptTimeoutMs: LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS,
     maxAttempts: input.s3Client ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS,
@@ -6435,6 +6528,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       scannerCancellationRequestedAt = now();
       scannerAbortController?.abort(new Error(`Scanner work exceeded its ${scannerWorkTimeoutMs}ms deadline.`));
     }, scannerWorkTimeoutMs);
+    const activePayload = payload;
     const artifactResult = await withHandlerSafetyTimeout(
       runArtifactChain(payload, {
         allowRuntimeEvidenceFinalizationAfterAbort:
@@ -6478,11 +6572,14 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
             });
           }
         },
-        onRuntimePreviewComplete: (preview) => {
+        readBrowserPolicyLinks: activePayload.workerLane === "policy_evidence"
+          ? signal => readRuntimeBrowserPolicyLinks(activePayload, signal, options.s3GetClient)
+          : undefined,
+        onRuntimePreviewComplete: (preview, browserPolicyLinks) => {
           if (payload?.orchestrationMode !== "worker" || payload.workerLane !== "runtime_evidence") return;
           if (runtimePreviewHandoff) return;
           try {
-            const packet = buildVerifiedPreConsentRuntimePreviewPacket({ payload, preview });
+            const packet = buildVerifiedPreConsentRuntimePreviewPacket({ payload, preview, browserPolicyLinks });
             runtimePreviewHandoff = publishVerifiedPreConsentRuntimePreview({
               packet,
               payload,

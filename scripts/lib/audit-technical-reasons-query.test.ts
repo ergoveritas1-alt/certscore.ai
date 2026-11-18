@@ -5,7 +5,7 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {technicalCountsSql,fitAuditDeltaQuery} from './audit-delta-query';
+import {technicalCountsSql,fitAuditDeltaQuery,REJECT_ACTIVITY_RECEIPT_SQL,assertCurrentPriorityExtraction} from './audit-delta-query';
 import {choiceAuditSqlForTransport} from './audit-progress-choice';
 test('actual bounded SQL preserves zero counts and distinguishes missing, verification, binding and schema blockers',()=>{
  const root=mkdtempSync(path.join(tmpdir(),'technical-reasons-pg-')),env={...process.env};
@@ -43,15 +43,41 @@ test('actual bounded SQL preserves zero counts and distinguishes missing, verifi
   assert.equal(acceptRows[0].acceptPath,'control_unresolved');
   assert.equal(acceptRows[0].accept,null);
   assert.deepEqual(acceptRows.slice(1).map(row=>row.acceptPath),Array(8).fill(null));
+  const activity=[1,id,hash,'request'];
+  const snapshot=[2,id,hash,'cookie_snapshot'];
+  const allActivity=[2,id,hash,'request_and_storage_write_and_cookie_snapshot'];
+  const project=(auditRejectActivity:unknown,scanId=id)=>({scan:{id:scanId},auditRejectActivity});
+  const activityCases=[
+   [project(activity),'ready',false],
+   [project(snapshot),'ready',false],
+   [project(allActivity),'ready',false],
+   [project(activity),'ready',true],
+   [project(activity),'pending',false],
+   [project(activity,'wrong'),'ready',false],
+   [project([...activity,'x'.repeat(192)]),'ready',false],
+   [project(null),'ready',false],
+  ] as const;
+  const activitySql=`select coalesce(${REJECT_ACTIVITY_RECEIPT_SQL},'null'::jsonb)
+   from (values ${activityCases.map(([value,status,canary])=>`('${JSON.stringify(value)}'::jsonb,'${status}',${canary})`).join(',')})
+   p(report_projection_payload,report_projection_status,canary), (select '${id}'::uuid id) s,
+   lateral (select p.canary "isCanary") o;`;
+  const activityRows=run('psql',['-X','-h',root,'-p','54396','-U','fixture','-d','postgres','-Atq','-v','ON_ERROR_STOP=1'],activitySql);
+  assert.deepEqual(activityRows.trim().split('\n').map(value=>JSON.parse(value)),[activity,snapshot,allActivity,null,null,null,null,null]);
  }finally{spawnSync('/opt/homebrew/bin/pg_ctl',['-D',root+'/data','-m','immediate','-w','stop'],{env,stdio:'ignore'});rmSync(root,{recursive:true,force:true});}
 });
 test('56 pending targets preserve required receipts within the existing launch cap',()=>{
  const pendingRefreshIds=Array.from({length:56},(_,i)=>{const h=createHash('sha256').update('pending-fixture-'+i).digest('hex').slice(0,32);return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);});
  const p=fitAuditDeltaQuery({overlapStartUtc:'2026-11-08T22:41:19.889464+00:00',windowEndUtc:'2026-11-11T13:00:00.000000+00:00',pendingRefreshIds,includePrivacyFormReceipts:true},'MACMINI_DELTA_IDS');
- const candidate=fitAuditDeltaQuery({overlapStartUtc:'2026-11-08T22:41:19.889464+00:00',windowEndUtc:'2026-11-11T13:00:00.000000+00:00',pendingRefreshIds,includePrivacyFormReceipts:true,includeForwardCoverageDiagnostics:true},'MACMINI_DELTA_IDS');
+ const candidate=fitAuditDeltaQuery({overlapStartUtc:'2026-11-08T22:41:19.889464+00:00',windowEndUtc:'2026-11-11T13:00:00.000000+00:00',pendingRefreshIds,includePrivacyFormReceipts:true,includeForwardCoverageDiagnostics:true,includeRejectActivityReceipt:true},'MACMINI_DELTA_IDS');
  assert.ok(candidate.pendingRefreshIds.length>0&&candidate.selected.override.fits);
  assert.deepEqual(candidate.pendingRefreshIds,pendingRefreshIds.slice(0,candidate.pendingRefreshIds.length));
  assert.ok(candidate.selected.sql.includes("'acceptPath'")&&candidate.selected.sql.includes('cmsProjectionDiagnostic'));
  assert.ok(!p.selected.sql.includes("'acceptPath'"));
+ assert.match(candidate.selected.sql,/"auditRejectActivity"/);
+ assert.doesNotMatch(p.selected.sql,/"auditRejectActivity"/);
+ assert.equal(candidate.selected.policyReceipt,true);
+ assert.equal(candidate.selected.privacyForm,true);
+ assert.deepEqual(candidate.deferredPendingIds,pendingRefreshIds.slice(candidate.pendingRefreshIds.length));
+ assert.throws(()=>assertCurrentPriorityExtraction([{}],false,true),/omitted the post-Reject/);
  assert.equal(p.selected.privacyForm,true);assert.equal(p.selected.policyReceipt,true);assert.equal(p.selected.controlAccessibility,true);assert.ok(p.selected.override.fits);assert.ok(p.selected.sql.includes('source_schema_incomplete'));
 });

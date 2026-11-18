@@ -1,12 +1,17 @@
-import React from "react";
+import React, { type ReactNode } from "react";
 import { GpcRequestTable } from "./gpc-request-table";
 import { describeGpcCollectionComparison } from "@certscore/contracts";
 import type { GpcActivityComparison as Comparison } from "@certscore/contracts";
 
-export function GpcActivityComparison({ comparison }: { comparison?: Comparison }) {
+export function GpcActivityComparison({ comparison, requestTable, children }: {
+  comparison?: Comparison;
+  requestTable?: ReactNode;
+  children?: ReactNode;
+}) {
   if (!comparison) return null;
   return <>
-    <GpcRequestTable comparison={comparison} />
+    {requestTable ?? <GpcRequestTable comparison={comparison} />}
+    {children}
     {comparison.collectionComparison ? <details className="border-t border-zinc-100 px-3 py-2 text-xs text-zinc-700">
       <summary className="cursor-pointer font-medium">Successful advertising collection · retained evidence</summary>
       <p className="mt-2">{describeGpcCollectionComparison(comparison.collectionComparison, false)}</p>

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { getUsableRuntimeVisitSnapshot, assessRuntimeVisitSnapshot, runtimeVisitEligibilityDiagnosticSchema,
-  classifyRuntimeErrorPage, hasBoundRuntimeVisualContent, hasRepresentativeRuntimeText, retainedRuntimeNoGoReasonSchema,
+  reviewedRuntimeViewport, classifyRuntimeErrorPage, hasBoundRuntimeVisualContent, hasRepresentativeRuntimeText, retainedRuntimeNoGoReasonSchema,
   type CanonicalEvidenceBundle } from "@certscore/contracts";
 
 /** Reuses the verified runtime worker already downloaded by the coordinator.
@@ -34,7 +34,14 @@ export function assertOriginalRuntimeVisitForReport(
   merged: CanonicalEvidenceBundle,
 ): void {
   if ((merged.scanNoGoAssessment ?? merged.scan_no_go_assessment)?.decision === "no_go") return;
-  if (!getUsableRuntimeVisitSnapshot(runtimeEvidence, runtimeEvidence.domSnapshots)) {
+  const snapshot = getUsableRuntimeVisitSnapshot(runtimeEvidence, runtimeEvidence.domSnapshots);
+  const lane = runtimeEvidence.scanLaneRuns.find(row => row.laneId === "runtime_evidence");
+  // A timeout rescued exclusively by the worker viewport also requires those reviewed
+  // bytes to have survived verification in the final bundle.
+  const needsViewport = lane?.executionOutcome === "degraded" &&
+    !lane.navigationAttempts?.some(attempt => attempt.outcome === "success" &&
+      typeof attempt.httpStatus === "number" && attempt.httpStatus >= 200 && attempt.httpStatus < 300);
+  if (!snapshot || (needsViewport && !reviewedRuntimeViewport(merged, snapshot))) {
     throw new Error("original_runtime_visit_unavailable");
   }
 }

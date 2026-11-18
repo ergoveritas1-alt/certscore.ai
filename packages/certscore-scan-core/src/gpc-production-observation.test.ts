@@ -4,7 +4,53 @@ import test from "node:test";
 import { createHash } from "node:crypto";
 import { gpcProductionRuntimeFixture } from "../../certscore-contracts/src/test-fixtures/gpc-production";
 import { buildGpcProductionObservation } from "./gpc-production-observation";
+import { gpcDocumentHash } from "./gpc-signal-capture";
 import { resolveVendorObservations, decodeGppRequest } from "@certscore/vendor-resolver";
+
+test("TrustArc GPC readback requires matching successful requests after the same-document notice loads", () => {
+  const paths = [
+    "/notice?domain=fixture.test",
+    "/asset/notice.js/v/3199e04",
+    "/cm/fixture.test/opt-out/domains?domain=fixture.test&type=fixture_v3&is_gpc=true",
+    "/consent/log?domain=fixture.test&type=fixture_v3&is_gpc=true",
+  ];
+  for (const scenario of ["confirmed", "duplicate", "conflict", "late", "no-script", "wrong-frame", "failed-response"]) {
+    const bundle = gpcProductionRuntimeFixture();
+    const session = bundle.gpcObservationSession!;
+    const frame = {frameId: "main", frameUrl: bundle.url, isMainFrame: true, isSubFrame: false};
+    for (const [index, endpoint] of paths.entries()) {
+      if (scenario === "no-script" && index === 1) continue;
+      let url = "https://consent.trustarc.com" + endpoint;
+      if (index === 3 && scenario === "duplicate") url += "&is_gpc=true";
+      if (index === 3 && scenario === "conflict") url = url.replace("is_gpc=true", "is_gpc=false");
+      const id = "trustarc-" + index;
+      const at = 100 + index * 100;
+      const request = { ...bundle.networkEvents[0]!, eventId: id, requestId: id, timestampMs: at,
+        requestUrl: url, url, requestHostname: "consent.trustarc.com", path: new URL(url).pathname,
+        scenario: "fresh_pre_consent" as const, documentUrl: bundle.url,
+        frameContext: index === 3 && scenario === "wrong-frame" ? {...frame, frameId:"other"} : frame,
+        resourceType: index < 2 ? "script" as const : "fetch" as const };
+      bundle.networkEvents.push(request);
+      bundle.networkResponseEvents.push({...request, eventType:"network_response", eventId:id+"-response",
+        timestampMs:index===3 && scenario==="late" ? 950 : at+10, responseUrl:url,
+        status:index===3 && scenario==="failed-response" ? 403 : 200});
+      session.requests.push({eventId:id, timestampMs:at, urlSha256:gpcDocumentHash(url), secGpc:"1"});
+      session.requestsObserved++;
+    }
+    bundle.gpcObservationSession = gpcObservationSessionSchema.parse(session);
+    bundle.gpcPrototypeSessionBinding!.sessionSha256 = createHash("sha256").update(JSON.stringify(bundle.gpcObservationSession)).digest("hex");
+    const bytes = Buffer.from(JSON.stringify(bundle));
+    const observation = buildGpcProductionObservation({scanId:bundle.scanId, source:{bytes, pointer:{
+      uri:"fixture://trustarc", sizeBytes:bytes.length, sha256:createHash("sha256").update(bytes).digest("hex"),
+    }}});
+    assert.equal(observation.status,"complete",scenario);
+    assert.deepEqual(observation.cmpStatusReadback,scenario==="confirmed" ?
+      {source:"trustarc_consent_request_gpc", observedAtMs:410} : undefined,scenario);
+    assert.equal(observation.acknowledgment.observed,false,scenario);
+    assert.equal(observation.registration.sale,"unknown",scenario);
+    assert.equal(observation.registration.sharing,"unknown",scenario);
+  }
+});
 
 test("API availability preserves the original absent-function reason without creating CMP state or weakening source proof", () => {
   const fixture=()=>{

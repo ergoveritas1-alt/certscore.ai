@@ -64,7 +64,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   policySurfaceSeeds?: Array<Pick<
     SharedCrawlSeedHint,
     "confidence" | "hintType" | "source" | "sourceCompletedAt" | "sourceScanId" | "url"
-  >>;
+  > & { verifiedDocument?: true }>;
   privacyCaptureProfile?: PrivacyCaptureProfile;
   saleSharingOptOut?: SaleSharingOptOutDispatch;
   postAcceptObservation?: PostAcceptLambdaDispatchConfig;
@@ -83,6 +83,7 @@ const POLICY_SURFACE_HINT_TYPES = new Set([
 
 function policySurfaceSeedsFromConfig(config: SharedScanConfig | Record<string, unknown>) {
   const execution = asRecord(asRecord(config).execution);
+  const documents = Array.isArray(execution.priorDocumentSources) ? execution.priorDocumentSources.map(asRecord) : [];
   const rawHints = Array.isArray(execution.crawlSeedHints) ? execution.crawlSeedHints : [];
   const selected = new Map<string, NonNullable<LocalV2DagLambdaDispatchPayload["policySurfaceSeeds"]>[number]>();
   for (const rawHint of rawHints) {
@@ -108,8 +109,16 @@ function policySurfaceSeedsFromConfig(config: SharedScanConfig | Record<string, 
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
       parsed.hash = "";
       const normalizedUrl = parsed.toString();
+      const verifiedDocument = source === "prior_scan_hint" &&
+        ["privacy_policy", "cookie_policy"].includes(hintType) &&
+        documents.some(document =>
+          document.canonicalUrl === url && document.sourceScanId === sourceScanId &&
+          document.sourceCompletedAt === sourceCompletedAt && document.documentType === hintType &&
+          typeof document.documentText === "string" && document.documentText.trim().length > 0,
+        );
       if (!selected.has(normalizedUrl)) {
         selected.set(normalizedUrl, {
+          ...(verifiedDocument ? { verifiedDocument: true } : {}),
           ...(typeof hint.confidence === "number" && Number.isFinite(hint.confidence)
             ? { confidence: Math.max(0, Math.min(1, hint.confidence)) }
             : {}),

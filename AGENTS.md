@@ -258,6 +258,17 @@ A request containing “deploy,” “production,” “hosting,” “CI/CD,”
 
 If platform discovery is needed, inspect the repository’s deployment topology first. If any system capability suggests Vercel, treat it as inapplicable and continue with the canonical AWS path. Stop and ask before introducing any non-AWS deployment platform.
 
+## California recipient scoring by visit — November 17, 2026
+
+For new canonical materializations, apply the approved collection-review and
+qualified-collection schedules separately to GPC and Reject. Use the strongest
+eligible tier per canonical recipient per visit. Sum the visit effects subject
+to the existing 15-point review cap and 47-point combined family cap. Preserve
+the once-per-scan 3-point independent Reject identifier effect, explicit opt-out
+policy and historical assessment versions. This supersedes earlier cross-visit
+recipient union instructions for these two visits. See
+`docs/certscore-v2/california-potential-risk-policy.md`. Local only.
+
 ## Supported potential privacy-risk findings — October 22, 2026
 
 The owner approved local `california.collection-review.v3-retained-scope`: verified collection

@@ -90,20 +90,26 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
       adaptiveBaseline.durationMs !== adaptiveGpc.durationMs || adaptiveBaseline.outcome !== adaptiveGpc.outcome ||
       adaptiveBaseline.peerDocumentToken !== gc?.document?.token || adaptiveGpc.peerDocumentToken !== bc?.document?.token)) limits.push("paired_adaptive_protocol_mismatch");
   const verifiedWindow = (b: CanonicalEvidenceBundle, ms: number) => {
-    const c = b.gpcImpactCapture!, w = c.windows.find(w => w.durationMs === ms);
+    const c = b.gpcImpactCapture;
+    if (!c) return false;
+    const allowPrefix = bc?.comparisonPolicy === "page_http_signal.v2" && gc?.comparisonPolicy === "page_http_signal.v2";
+    const w = c.windows.find(w => allowPrefix ? w.durationMs >= ms : w.durationMs === ms);
     if (!c.document || !w) return false;
-    const ledger=ledgerFor(b,ms);
+    // Verify the complete enclosing request set before comparing its timed prefix.
+    const ledger=ledgerFor(b,w.durationMs);
     if(ledger)return w.requestCount===ledger.length && new Set(ledger.map(r=>r.eventId)).size===ledger.length &&
-      gpcImpactIdentityHash(ledger)===w.requestSetSha256 && (b.gpcSignalObservation?.capturedAtMs??-1)>=c.document.committedAtMs+ms &&
-      ledger.every(r=>r.headersVerified && (c.expectedEnabled?r.secGpc==="1":r.secGpc===null));
-    const events = eventsFor(b, c, ms);
+      gpcImpactIdentityHash(ledger)===w.requestSetSha256 && (b.gpcSignalObservation?.capturedAtMs??-1)>=c.document.committedAtMs+w.durationMs &&
+      ledger.filter(r=>r.timestampMs<c.document!.committedAtMs+ms).every(r=>r.headersVerified && (c.expectedEnabled?r.secGpc==="1":r.secGpc===null));
+    const events = eventsFor(b, c, w.durationMs);
     return w.requestCount === events.length && new Set(events.map(e => e.eventId)).size === events.length &&
-      w.requestSetSha256 === gpcImpactRequestSetHash(events) && (b.gpcSignalObservation?.capturedAtMs ?? -1) >= c.document.committedAtMs + ms &&
-      events.every(e => e.requestHeaders !== undefined && (c.expectedEnabled ? e.requestHeaders?.secGpc === "1" : e.requestHeaders?.secGpc === undefined));
+      w.requestSetSha256 === gpcImpactRequestSetHash(events) && (b.gpcSignalObservation?.capturedAtMs ?? -1) >= c.document.committedAtMs + w.durationMs &&
+      events.filter(e => e.timestampMs < c.document!.committedAtMs + ms).every(e => e.requestHeaders !== undefined && (c.expectedEnabled ? e.requestHeaders?.secGpc === "1" : e.requestHeaders?.secGpc === undefined));
   };
-  const windows = bc?.windows.filter(w => gc?.windows.some(g => g.durationMs === w.durationMs) &&
-    (!pageHttpOnly || baseline && gpc && verifiedWindow(baseline, w.durationMs) && verifiedWindow(gpc, w.durationMs))) ?? [];
-  const horizon = windows.at(-1)?.durationMs;
+  const durations = [...new Set([...(bc?.windows ?? []), ...(gc?.windows ?? [])].map(w => w.durationMs))];
+  const horizon = durations.sort((a, b) => b - a).find(ms => {
+    if (pageHttpOnly && baseline && gpc) return verifiedWindow(baseline, ms) && verifiedWindow(gpc, ms);
+    return bc?.windows.some(w => w.durationMs === ms) && gc?.windows.some(w => w.durationMs === ms);
+  });
   if (!horizon) limits.push("common_window_unavailable");
   if (adaptiveBaseline && horizon !== adaptiveBaseline.durationMs) limits.push("adaptive_full_window_unavailable");
   for (const [label, bundle] of [["baseline", baseline], ["gpc", gpc]] as const) {

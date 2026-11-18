@@ -268,7 +268,8 @@ export const gpcBoundedObservationOpenApi = {
             "visible_trustarc_gpc_notification",
             "visible_trustarc_gpc_branch",
             "visible_onetrust_gpc_notification",
-            "hubspot_applied_gpc"
+            "hubspot_applied_gpc",
+            "trustarc_consent_request_gpc"
           ]
         },
         "observedAtMs": {

@@ -6,7 +6,7 @@ import { assessGoogleConsentModeRequest, postRefusalReportProjectionSchema, read
 import { assessRejectClickTracking } from "./reject-click-tracking-policy";
 import { POST_REJECT_SCORING_TIERS } from "./scoring-policy";
 import { rejectEntityPoints, retainedRejectEntityEvidence } from "./reject-presence-entities";
-import { retainedRejectPresence } from "./reject-presence-evidence";
+import { retainedCurrentRejectPresence, retainedRejectPresence } from "./reject-presence-evidence";
 
 export { AFTER_REJECT_SCORING_POLICY, REGISTRATION_INDEPENDENT_AFTER_REJECT_SCORING_POLICY, LEGACY_AFTER_REJECT_SCORING_POLICY,
   readAfterRejectScoringAssessment, type AfterRejectScoringAssessment } from "./after-reject-scoring-contract";
@@ -19,9 +19,9 @@ export function assessAfterRejectScoring(value: unknown, policyVersion: AfterRej
   if (!parsed.success) return null;
   const p = parsed.data;
   if (isRejectPresencePolicy(policyVersion)) {
-    const cookiePolicy = policyVersion === VENDOR_COVERAGE_REJECT_PRESENCE_POLICY ? "certscore.cookie-purpose.v6"
-      : policyVersion === AFTER_REJECT_SCORING_POLICY || policyVersion === C3_REJECT_PRESENCE_POLICY ? "certscore.cookie-purpose.v7" : undefined;
-    const presence = retainedRejectPresence(p, cookiePolicy, policyVersion === AFTER_REJECT_SCORING_POLICY);
+    const presence = policyVersion === AFTER_REJECT_SCORING_POLICY ? retainedCurrentRejectPresence(p)
+      : retainedRejectPresence(p, policyVersion === VENDOR_COVERAGE_REJECT_PRESENCE_POLICY ? "certscore.cookie-purpose.v6"
+        : policyVersion === C3_REJECT_PRESENCE_POLICY ? "certscore.cookie-purpose.v7" : undefined);
     const positive=!!presence && (presence.cookies.length>0 || presence.requestIds.length>0);
     const contradiction=!!presence?.confirmed && p.contradictionObserved;
     const entityEvidence=presence?retainedRejectEntityEvidence(p,presence):{resolverVersion:"unavailable",entities:[],observations:[]};

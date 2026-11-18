@@ -5,6 +5,20 @@ function isBrowserCheckPage(text: string | null | undefined): boolean {
       .test(text.replace(/\s+/g, " ").trim()));
 }
 
+// Match the whole interstitial, including its localized button and legal
+// footer. A mention of the button in storefront or help copy cannot match.
+const amazonShoppingInterstitials = [
+  /^Klicke auf die Schaltfläche unten, um mit dem Einkauf fortzufahren[.!]? Weiter shoppen Unsere AGB Datenschutzerklärung © \d{4}[-–]\d{4}, Amazon\.com, Inc\. oder Tochtergesellschaften\.?$/iu,
+  /^Cliquez sur le bouton ci-dessous pour continuer vos achats[.!]? Continuer les achats Conditions générales de vente Vos informations personnelles © \d{4}[-–]\d{4}, Amazon\.com, Inc\. ou ses filiales\.?$/iu,
+  /^Fai clic sul pulsante qui sotto per continuare a fare acquisti[.!]? Continua con gli acquisti(?: Continua con gli acquisti)? Condizioni generali di uso e vendita Informativa sulla privacy © \d{4}[-–]\d{4}, Amazon\.com, Inc\. o società affiliate\.?$/iu,
+];
+
+export function isAmazonShoppingInterstitial(text: string | null | undefined): boolean {
+  if (!text || text.length > 1024) return false;
+  const normalized = text.normalize("NFC").replace(/\s+/gu, " ").trim();
+  return amazonShoppingInterstitials.some(template => template.test(normalized));
+}
+
 /** Closed, retained page templates. A phrase in an article or a successful
  * transport alone is not a page-state observation. No browser work is added. */
 export function classifyRuntimeErrorPage(
@@ -16,7 +30,7 @@ export function classifyRuntimeErrorPage(
   "not_found_404" | "maintenance_or_unavailable" | "unsupported_region" | "redirect_only_page" | "captcha_or_challenge" | undefined {
   if (!text) return undefined;
   if (policy === "runtime_page_classification.v2" &&
-      (isBrowserCheckPage(text) || /^Luarmor Checking Your Browser\.\. Show Details$/i.test(text.trim()))) return "captcha_or_challenge";
+      (isAmazonShoppingInterstitial(text) || isBrowserCheckPage(text) || /^Luarmor Checking Your Browser\.\. Show Details$/i.test(text.trim()))) return "captcha_or_challenge";
   const bounded = text.slice(0, 4096).replace(/\s+/g, " ").trim();
   if (text.length <= 256 && /^Verifying your browser before proceeding\.\.\.\s+Incident ID: [a-z0-9-]{1,160}$/i.test(bounded)) {
     return "captcha_or_challenge";

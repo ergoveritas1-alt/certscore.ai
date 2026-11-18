@@ -1,3 +1,4 @@
+import { browserPolicyLinkSchema, type BrowserPolicyLink } from "@certscore/contracts";
 import { createGpcNavigationRecovery } from "../gpc-navigation-recovery";
 import { consentGeometryCheckpoint } from "../consent-geometry-checkpoint.js";
 import { reconcileConsentGeometryInventoryCoverage } from "../consent-geometry-inventory-coverage.js";
@@ -21,6 +22,10 @@ import { runAccessibilityAudit, unavailableAccessibilityAudit } from "../accessi
 import type { AccessibilityAuditObservation } from "@certscore/contracts";
 import { installBorlabsDeferredDialogReveal, revealBorlabsDeferredDialog } from "../borlabs-passive-dialog-reveal.js";
 import { installFormDestinationTracing } from "../form-destination-trace.js";
+import { waitForPassiveStorefrontSettle } from "../passive-storefront-settle.js";
+import { captureRuntimeViewport } from "../runtime-viewport.js";
+import { RUNTIME_VIEWPORT_FILENAME, runtimeViewportCandidate, isAmazonShoppingInterstitial, classifyRuntimeErrorPage } from "@certscore/contracts";
+import { canTestAmazonDeContinueLocally, tryAmazonDeLocalContinue } from "../amazon-de-local-continue.js";
 import { readRuntimeRequestPayload } from "../request-payload-signals.js";
 import { SITE_INTEGRITY_LIMITS, siteIntegrityCodeProofSchema, siteIntegrityObservationSchema, type SiteIntegrityObservation } from "@certscore/contracts";
 import { createHash, randomUUID } from "node:crypto";
@@ -53,6 +58,7 @@ import {
   type RuntimeEvidenceEvent,
   type RuntimeEvidenceGraph,
   type ScanModuleRun,
+  type SecurityChallengeRecovery,
   type ScreenshotArtifact,
   type SetCookieMetadata,
   type ScriptEvent,
@@ -142,6 +148,8 @@ import {
   isNavigationTransportFailure,
   isPendingMainDocumentStatus,
   isTransientMainDocumentStatus,
+  entryNavigationGuardObserver,
+  navigationFailureCode,
   navigationDiagnosticOrigin,
   navigationTransportRecoveryUrls,
 } from "../transport-fallback.js";
@@ -255,6 +263,7 @@ const ONE_PIXEL_TRANSPARENT_PNG = Buffer.from(
 );
 
 export interface PreConsentRuntimeScannerInput {
+  localRuntimeViewportEnabled?: boolean;
   localOverflowConsentGeometryRefresh?: boolean;
   /** Required entry-page audit; omitted in consent, GPC and inventory workers. */
   accessibilityScanId?: string;
@@ -346,6 +355,7 @@ async function createPassiveBrowserContext(
 }
 
 export interface PreConsentRuntimeCheckpoint {
+  browserPolicyLinks?: BrowserPolicyLink[];
   completedAt: string;
   cookieEvents: CookieEvent[];
   cookieSnapshots: CookieSnapshot[];
@@ -798,13 +808,19 @@ export async function preConsentRuntimeScanner(
   page.on("framenavigated", recordConsentFrameChange);
   page.on("frameattached", recordConsentFrameChange);
   page.on("framedetached", recordConsentFrameChange);
+  const entryGuard = entryNavigationGuardObserver(page);
   if (input.navigationHosts) {
     const hosts = new Set(input.navigationHosts);
     await browserContext.route("**/*", async route => {
       const request = route.request();
-      if (request.isNavigationRequest() && request.frame() === page.mainFrame() && (!hosts.has(new URL(request.url()).hostname) || input.navigationAllowed?.(request.url()) === false)) {
-        await route.abort("blockedbyclient");
-        return;
+      if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+        const hostAllowed = hosts.has(new URL(request.url()).hostname);
+        if (!hostAllowed || input.navigationAllowed?.(request.url()) === false) {
+          entryGuard.bind(request);
+          entryGuard.deny(request, { reason: hostAllowed ? "navigation_route_denied" : "navigation_host_denied" });
+          await route.abort("blockedbyclient");
+          return;
+        }
       }
       await route.fallback();
     });
@@ -921,10 +937,16 @@ export async function preConsentRuntimeScanner(
   const webBotAuthRoute = await installWebBotAuthRoute(browserContext);
   await installPublicNetworkGuardRoute(browserContext, {
     signal: input.signal,
-    onRequestPhase: captureConsentEvidence ? (request, phase) => {
+    onRequestPhase: (request, phase, diagnostic) => {
+      if (phase === "validation_pending") entryGuard.bind(request);
+      if (phase === "denied" && diagnostic) {
+        const { reason, resolverCode } = diagnostic;
+        entryGuard.deny(request, { reason, ...(resolverCode ? { resolverCode } : {}) });
+      }
+      if (!captureConsentEvidence) return;
       const id = requestIds.get(request);
       if (id && (guardPhases.has(id) || guardPhases.size < 2000)) guardPhases.set(id, phase);
-    } : undefined,
+    },
   });
 
   const formTracing = captureScope === "runtime_evidence" ? await installFormDestinationTracing(page, input.scanStartedAtMs, () => currentBrowserDocumentIdentity(page)).catch(() => null) : null;
@@ -935,6 +957,7 @@ export async function preConsentRuntimeScanner(
     if (!isHttpUrl(requestUrl)) {
       return;
     }
+    if (request.isNavigationRequest()) entryGuard.bind(request);
     passiveEvidenceActivity.markRequestStarted(request);
 
     const requestId = nextId("req");
@@ -1130,6 +1153,8 @@ export async function preConsentRuntimeScanner(
       outcome: diagnostic.status === "retained" ? "completed" : diagnostic.status === "timed_out" ? "timed_out" : "skipped",
       detail: JSON.stringify({ policy: "terminal_pair_first.v4", ...diagnostic }) }));
   const navigationAttempts: NonNullable<NonNullable<ScanModuleRun["recoveryDiagnostics"]>["attempts"]> = [];
+  let challengeReloadAttempt: { index: number; attempt: typeof navigationAttempts[number] } | undefined;
+  let securityChallengeRecovery: SecurityChallengeRecovery | undefined;
   let recoveryAttemptCount = 0;
   let recoveryDurationMs = 0;
   const recoveryModes = new Set<string>();
@@ -1146,13 +1171,22 @@ export async function preConsentRuntimeScanner(
       recoveryDurationMs += Date.now() - startedAtMs;
     }
   };
-  const recoveryDiagnostics = (): NonNullable<ScanModuleRun["recoveryDiagnostics"]> => ({
-    attempted: recoveryAttemptCount > 0,
-    attemptCount: recoveryAttemptCount,
-    modes: Array.from(recoveryModes).slice(0, 12),
-    durationMs: recoveryDurationMs,
-    attempts: navigationAttempts.slice(0, 8),
-  });
+  const recoveryDiagnostics = (): NonNullable<ScanModuleRun["recoveryDiagnostics"]> => {
+    // The reload belongs in the report. The entry-attempt list still drives
+    // the existing pending-document and committed-timeout capture checks.
+    const reportedAttempts = [...navigationAttempts];
+    if (challengeReloadAttempt) {
+      reportedAttempts.splice(challengeReloadAttempt.index, 0, challengeReloadAttempt.attempt);
+    }
+    return {
+      attempted: recoveryAttemptCount > 0,
+      attemptCount: recoveryAttemptCount,
+      modes: Array.from(recoveryModes).slice(0, 12),
+      durationMs: recoveryDurationMs,
+      attempts: reportedAttempts.slice(0, 8),
+      ...(securityChallengeRecovery ? { securityChallenge: structuredClone(securityChallengeRecovery) } : {}),
+    };
+  };
   let earlyScreenshotCaptured = false;
   let supplementalScreenshotAttempted = false;
   let consentGeometryDiagnosticWritten = false;
@@ -1299,6 +1333,7 @@ export async function preConsentRuntimeScanner(
   let retainedTransportSecurityArtifactRef: ArtifactRef | undefined;
   let retainedRenderedPolicyLinkEvidence: RetainedRenderedPolicyLink[] = [];
 
+  let browserPolicyLinksPromise: Promise<BrowserPolicyLink[]> | undefined;
   let passiveRuntimeCheckpointPromise: Promise<void> | undefined;
   const emitPassiveRuntimeCheckpoint = () => {
     if (
@@ -1315,7 +1350,10 @@ export async function preConsentRuntimeScanner(
         const checkpointNetworkEvents = networkEvents.map((event) => ({ ...event }));
         const checkpointIframeEvents = iframeEvents.map((event) => ({ ...event }));
         const checkpointVendorResolverInputs = vendorResolverInputs.map((resolverInput) => ({ ...resolverInput }));
-        const checkpointCookies = await browserContext.cookies().catch(() => []);
+        const [checkpointCookies, browserPolicyLinks] = await Promise.all([
+          browserContext.cookies().catch(() => []),
+          browserPolicyLinksPromise,
+        ]);
         applyFinalDocumentPartyClassification({
           finalDocumentUrl: safePageUrl(page, effectiveNavigationUrl),
           networkEvents: checkpointNetworkEvents,
@@ -1342,6 +1380,7 @@ export async function preConsentRuntimeScanner(
           evidenceRefs: [],
         };
         input.onPassiveRuntimeCheckpoint?.({
+          browserPolicyLinks,
           completedAt: new Date().toISOString(),
           cookieEvents: checkpointCookieEvents,
           cookieSnapshots: [checkpointCookieSnapshot],
@@ -1516,9 +1555,11 @@ export async function preConsentRuntimeScanner(
           });
           input.signal?.throwIfAborted();
         }
+        let waitingForCommittedDom = false;
         try {
           const navigationTimeoutMs = index === 0 ? Math.max(1, Math.min(15_000, remainingModuleBudgetMs())) : recoveryNavigationTimeout(remainingModuleBudgetMs(), 7_500);
           if (navigationTimeoutMs <= 0) throw lastError ?? new Error("Navigation budget exhausted before recovery.");
+          entryGuard.begin(candidateUrl);
           const navigationDispatchAtMs = Date.now();
           const documentRevisionAtDispatch = browserDocumentIdentityState.mainDocumentRevision;
           const response = index === 0
@@ -1563,9 +1604,11 @@ export async function preConsentRuntimeScanner(
                 }
                 return observation;
               });
+            waitingForCommittedDom = response !== null;
             await page.waitForLoadState("domcontentloaded", {
               timeout: Math.max(1, Math.min(navigationTimeoutMs - (Date.now() - navigationDispatchAtMs), remainingModuleBudgetMs())),
             });
+            waitingForCommittedDom = false;
           }
           const passiveDocumentReady = captureConsentEvidence || await waitForPassiveRuntimeDocumentReadiness(
             page,
@@ -1593,11 +1636,12 @@ export async function preConsentRuntimeScanner(
           });
           return response;
         } catch (error) {
-          const currentPageUrl = page.url();
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          if (/timeout/i.test(errorMessage) && currentPageUrl !== "about:blank") {
+          const failureCode = navigationFailureCode(error);
+          // A goto timeout can leave an earlier document (or a browser error
+          // page) visible. Only the subsequent DOM wait proves this goto committed.
+          if (waitingForCommittedDom && failureCode === "timeout" && page.url() !== "about:blank") {
             noteRecovery("committed_navigation_timeout");
-            effectiveNavigationUrl = currentPageUrl;
+            effectiveNavigationUrl = page.url();
             navigationNotes.push(
               "Entry navigation committed a document but did not reach DOMContentLoaded within the bounded wait; retained the current page for evidence capture.",
             );
@@ -1605,17 +1649,23 @@ export async function preConsentRuntimeScanner(
               url: candidateUrl,
               mode: attemptMode,
               outcome: "committed_timeout",
+              failureCode,
               durationMs: Date.now() - attemptStartedAtMs,
             });
             return null;
           }
+          const guardDecision = failureCode === "ERR_BLOCKED_BY_CLIENT" ? entryGuard.decision() : undefined;
           navigationAttempts.push({
             url: candidateUrl,
             mode: attemptMode,
             outcome: "transport_error",
+            failureCode,
+            ...(guardDecision ? { guardDecision } : {}),
             durationMs: Date.now() - attemptStartedAtMs,
           });
           lastError = error;
+        } finally {
+          entryGuard.end();
         }
         }
         throw lastError;
@@ -1642,6 +1692,7 @@ export async function preConsentRuntimeScanner(
     }
 
     if (
+      !bindStartingPageText &&
       input.executionProfile !== "inventory_only" &&
       navigationResponse &&
       isPendingMainDocumentStatus(navigationResponse.status()) &&
@@ -1682,26 +1733,59 @@ export async function preConsentRuntimeScanner(
       }
     }
 
-    if (
-      input.executionProfile !== "inventory_only" &&
-      navigationResponse &&
-      [403, 429, 503].includes(navigationResponse.status()) &&
-      remainingModuleBudgetMs() >= 4_750 &&
-      await hasStrongUnresolvedSecurityChallenge(page)
-    ) {
+    const challengeInitialStatus = navigationResponse?.status() ?? null;
+    let challengeDecision: SecurityChallengeRecovery["decision"];
+    if (input.executionProfile === "inventory_only") {
+      challengeDecision = "inventory_only";
+    } else if (challengeInitialStatus === null) {
+      challengeDecision = "no_navigation_response";
+    } else if (![403, 429, 503].includes(challengeInitialStatus)) {
+      challengeDecision = "ineligible_status";
+    } else if (remainingModuleBudgetMs() < 4_750) {
+      challengeDecision = "insufficient_budget";
+    } else {
+      challengeDecision = await readSecurityChallengeMarkers(page);
+    }
+    securityChallengeRecovery = { initialHttpStatus: challengeInitialStatus, decision: challengeDecision };
+    if (challengeDecision === "challenge_markers_detected") {
       navigationNotes.push(
-        `Strong security-challenge markers were observed on HTTP ${navigationResponse.status()}; allowed one bounded passive resolution window.`,
+        `Strong security-challenge markers were observed on HTTP ${challengeInitialStatus}; allowed one bounded passive resolution window.`,
       );
       await measureRecovery("security_challenge_passive_wait", () =>
         page.waitForTimeout(Math.min(3_000, Math.max(0, remainingModuleBudgetMs() - 1_500))),
       );
-      if (await hasStrongUnresolvedSecurityChallenge(page) && !transientStatusRetried && remainingModuleBudgetMs() >= 1_250) {
-        const challengeRetry = await measureRecovery("security_challenge_same_region_retry", () =>
+      const afterWait = await readSecurityChallengeMarkers(page);
+      if (afterWait !== "challenge_markers_detected") {
+        securityChallengeRecovery.sameSessionReload = { outcome: afterWait };
+      } else if (transientStatusRetried) {
+        securityChallengeRecovery.sameSessionReload = { outcome: "transient_status_already_retried" };
+      } else if (remainingModuleBudgetMs() < 1_250) {
+        securityChallengeRecovery.sameSessionReload = { outcome: "insufficient_budget" };
+      } else {
+        const mode = "security_challenge_same_region_retry";
+        const reloadUrl = page.url();
+        const reloadStartedAtMs = Date.now();
+        securityChallengeRecovery.sameSessionReload = { outcome: "in_progress" };
+        const challengeRetry = await measureRecovery(mode, () =>
           page.reload({
             waitUntil: "commit",
             timeout: Math.min(2_000, remainingModuleBudgetMs()),
           }).catch(() => null),
         );
+        const reloadStatus = challengeRetry?.status();
+        securityChallengeRecovery.sameSessionReload = reloadStatus === undefined
+          ? { outcome: "no_response" }
+          : { outcome: "response", httpStatus: reloadStatus };
+        challengeReloadAttempt = {
+          index: navigationAttempts.length,
+          attempt: {
+            url: sanitizeTransportUrl(challengeRetry?.url() ?? reloadUrl),
+            mode,
+            outcome: reloadStatus === undefined ? "transport_error" : reloadStatus >= 400 ? "http_error" : "success",
+            httpStatus: reloadStatus,
+            durationMs: Date.now() - reloadStartedAtMs,
+          },
+        };
         if (challengeRetry) {
           navigationResponse = challengeRetry;
           effectiveNavigationUrl = page.url() === "about:blank" ? effectiveNavigationUrl : page.url();
@@ -1710,11 +1794,14 @@ export async function preConsentRuntimeScanner(
           }).catch(() => undefined);
         }
       }
-      navigationNotes.push(
-        await hasStrongUnresolvedSecurityChallenge(page)
-          ? "The bounded security-challenge recovery window ended without normal public content."
-          : "The security challenge resolved passively and normal page evidence became available.",
-      );
+      const finalMarkers = await readSecurityChallengeMarkers(page);
+      if (finalMarkers === "challenge_markers_detected") {
+        navigationNotes.push("Security-challenge markers persisted after the bounded recovery window.");
+      } else if (finalMarkers === "body_read_failed") {
+        navigationNotes.push("The final challenge check could not read the current page body.");
+      } else {
+        navigationNotes.push("The final challenge check did not detect strong markers in the current page body.");
+      }
     }
 
     if (input.executionProfile !== "inventory_only" && navigationResponse && [404, 410].includes(navigationResponse.status()) && remainingModuleBudgetMs() >= 1_500) {
@@ -1735,8 +1822,112 @@ export async function preConsentRuntimeScanner(
         }
       }
     }
+    // The Amazon.de interstitial may appear during existing passive recovery
+    // from a pending 202 document.
+    if (bindStartingPageText && !input.signal?.aborted &&
+      (navigationResponse?.status() === 200 || isPendingMainDocumentStatus(navigationResponse?.status())) &&
+      remainingModuleBudgetMs() - requiredTailReserveMs >= 2_750 &&
+      canTestAmazonDeContinueLocally(process.env, input.normalizedUrl)) {
+      const start = Date.now();
+      const mode = "local_amazon_de_continue";
+      const result = await tryAmazonDeLocalContinue(page, 1_750);
+      if (result.attempted) {
+        const durationMs = Date.now() - start;
+        noteRecovery(mode);
+        recoveryDurationMs += durationMs;
+        navigationAttempts.push({
+          url: effectiveNavigationUrl,
+          mode,
+          outcome: result.response ? (result.response.ok() ? "success" : "http_error") : "committed_timeout",
+          httpStatus: result.response?.status(),
+          durationMs,
+        });
+        if (result.storefrontVerified) {
+          navigationResponse = result.response;
+          effectiveNavigationUrl = page.url();
+          navigationNotes.push("A single Amazon.de continuation reached a verified storefront in the local runtime visit.");
+        } else {
+          navigationNotes.push("A single Amazon.de continuation did not verify the storefront in the local runtime visit.");
+        }
+      }
+    }
+
+    // Observe ordinary loading shells before freezing the original document.
+    // The existing capture and no-go assessment still verify the terminal page.
+    let usedPassiveStorefrontAllowance = false;
+    let verifiedStorefrontBinding: DocumentCaptureBinding | undefined;
+    let passiveStorefrontNavigation: NonNullable<DomSnapshotArtifact["runtimeDocumentCapture"]>["passiveStorefrontNavigation"];
+    const storefrontBudgetMs = Math.min(input.waitMode === "fast" ? 750 : 1_250, remainingModuleBudgetMs() - requiredTailReserveMs - 1_000);
+    const storefrontDocument = currentBrowserDocumentIdentity(page)?.token;
+    const storefrontUrl = navigationResponse?.url();
+    const storefrontStatus = navigationResponse?.status();
+    const intendedStorefrontUrls = [input.normalizedUrl, alternateWwwNavigationUrl(input.normalizedUrl)]
+      .filter((url): url is string => url?.startsWith("https://") === true);
+    const matchesStorefrontEntry = storefrontUrl !== undefined && intendedStorefrontUrls.includes(storefrontUrl);
+    if (matchesStorefrontEntry && storefrontUrl?.startsWith("https://") && bindStartingPageText && !input.signal?.aborted && storefrontBudgetMs >= 250 && storefrontDocument &&
+        (storefrontStatus === 200 || storefrontStatus === 202) && storefrontUrl === page.url() &&
+        navigationResponse?.headers()["cf-mitigated"] !== "challenge") {
+      const result = await recordBoundedTiming(
+        timingBreakdown, "passive storefront settle", "Observe a standalone loading shell or empty HTTP 202 in the original document.",
+        storefrontBudgetMs, () => waitForPassiveStorefrontSettle(page, storefrontUrl, storefrontBudgetMs, storefrontStatus, intendedStorefrontUrls),
+        () => "unverified" as const,
+      );
+      usedPassiveStorefrontAllowance = result !== "ineligible";
+      const binding = readRuntimeTextBinding();
+      const token = binding.documentIdentity?.token;
+      const response = boundRuntimeDocumentResponse(browserDocumentIdentityState, binding);
+      if (result === "storefront_observed" && token === storefrontDocument && binding.url === storefrontUrl) {
+        verifiedStorefrontBinding = binding;
+      } else if (result === "storefront_navigation_observed" && token && token !== storefrontDocument &&
+        intendedStorefrontUrls.includes(binding.url) && response?.route === "committed" && response.status === 200) {
+        verifiedStorefrontBinding = binding;
+        passiveStorefrontNavigation = {
+          version: "passive_storefront_navigation.v1",
+          sourceUrl: storefrontUrl,
+          sourceDocumentToken: storefrontDocument,
+          destinationDocumentToken: token,
+        };
+        effectiveNavigationUrl = binding.url;
+      }
+      if (verifiedStorefrontBinding) {
+        navigationNotes.push("The original browser session verified a storefront during passive observation.");
+      }
+    }
+
     initialNavigationHttpStatus = navigationResponse?.status();
     const technologyNavigationBinding = { token: currentBrowserDocumentIdentity(page)?.token, url: page.url() };
+    if (captureScope === "runtime_evidence" && input.onPassiveRuntimeCheckpoint &&
+        navigationResponse?.status() === 200 && navigationResponse.url() === technologyNavigationBinding.url &&
+        technologyNavigationBinding.token &&
+        navigationResponse.headers()["cf-mitigated"] !== "challenge") {
+      browserPolicyLinksPromise = recordBoundedTiming(
+        timingBreakdown, "runtime preview policy links", "Capture visible policy destinations from the committed browser document.",
+        Math.min(120, remainingModuleBudgetMs()),
+        async () => {
+          const links = await captureRenderedPolicyLinks(page, true);
+          if (page.url() !== technologyNavigationBinding.url ||
+              currentBrowserDocumentIdentity(page)?.token !== technologyNavigationBinding.token) return [];
+          return links.flatMap(link => {
+            if (link.pageUrl !== technologyNavigationBinding.url || link.linkVisibility !== "visible" ||
+                link.accessibleNameSource === "none") return [];
+            const result = browserPolicyLinkSchema.safeParse({
+              href: link.href, pageUrl: link.pageUrl, linkText: link.linkText,
+              domLocation: link.domLocation, linkVisibility: link.linkVisibility,
+            });
+            if (!result.success) return [];
+            const destination = new URL(result.data.href);
+            const source = new URL(result.data.pageUrl);
+            const kind = classifyPrivacySurface({linkText: link.linkText, url: link.href}).surfaceType;
+            return ["privacy_policy", "cookie_policy"].includes(kind) &&
+              source.protocol === "https:" && destination.origin === source.origin &&
+              !source.username && !source.password && !source.search && !source.hash &&
+              !destination.username && !destination.password && !destination.search && !destination.hash
+              ? [result.data] : [];
+          }).slice(0, 4);
+        },
+        () => [],
+      ).catch(() => []);
+    }
     const finalDocumentParty = applyFinalDocumentPartyClassification({
       finalDocumentUrl: effectiveNavigationUrl,
       networkEvents,
@@ -2409,7 +2600,7 @@ export async function preConsentRuntimeScanner(
     // allowance before the inventory, so a later text-only confirmation cannot
     // leave forms/scripts/iframes frozen at the earlier empty DOM. GPC retains
     // its independent paired-impact freeze and terminal confirmation ordering.
-    const earlySparseConfirmation = captureScope === "runtime_evidence" &&
+    const earlySparseConfirmation = !usedPassiveStorefrontAllowance && captureScope === "runtime_evidence" &&
       !input.globalPrivacyControlEnabled &&
       navigationAttempts.some(attempt => attempt.outcome === "committed_timeout");
     if (earlySparseConfirmation) {
@@ -4399,7 +4590,7 @@ export async function preConsentRuntimeScanner(
     });
     if (confirmSparsePage) {
       const confirmationWaitMs = fastWait ? 750 : 1_250;
-      if (!earlySparseConfirmation) await measureRecovery("sparse_page_confirmation", () => recordTiming(
+      if (!earlySparseConfirmation && !usedPassiveStorefrontAllowance) await measureRecovery("sparse_page_confirmation", () => recordTiming(
         timingBreakdown,
         "no-go candidate confirmation wait",
         "Short, read-only second-look window for initially blank or loading pages.",
@@ -4619,7 +4810,13 @@ export async function preConsentRuntimeScanner(
       }
     }
     const liveBinding = readRuntimeTextBinding();
-    const boundStartingPage = bindStartingPageText && domTextCapture &&
+    // Only the document verified inside the passive window can supply the
+    // starting-page capture after an interstitial.
+    const storefrontBindingValid = !usedPassiveStorefrontAllowance ||
+      Boolean(verifiedStorefrontBinding && sameDocumentCaptureBinding(verifiedStorefrontBinding, liveBinding)) ||
+      isAmazonShoppingInterstitial(domTextCapture?.value) ||
+      classifyRuntimeErrorPage(domTextCapture?.value) === "redirect_only_page";
+    const boundStartingPage = storefrontBindingValid && bindStartingPageText && domTextCapture &&
       initialRuntimeText?.documentIdentity?.token === domTextCapture.documentIdentity?.token &&
       sameDocumentCaptureBinding(domTextCapture, liveBinding) ? domTextCapture : undefined;
     if (bindStartingPageText && !boundStartingPage) {
@@ -4645,8 +4842,27 @@ export async function preConsentRuntimeScanner(
     const runtimeDocumentCapture = bindStartingPageText ? {
       version: "runtime_document_capture.v1" as const,
       response: boundStartingPage ? boundRuntimeDocumentResponse(browserDocumentIdentityState, liveBinding) : undefined,
+      ...(boundStartingPage && passiveStorefrontNavigation ? { passiveStorefrontNavigation } : {}),
     } : undefined;
     const domSnapshot = earlyDomSnapshot ?? await finishDomSnapshot(runtimeDocumentCapture, liveBinding.url);
+
+    if (input.localRuntimeViewportEnabled && earlySparseConfirmation && boundStartingPage && networkMetadataSession &&
+        domSnapshot.runtimeDocumentCapture && runtimeViewportCandidate(domSnapshot, input.normalizedUrl)) {
+      domSnapshot.runtimeDocumentCapture.viewportAttempted = true;
+      const allowance = optionalEvidenceAllowance({ remainingMs: remainingModuleBudgetMs(),
+        maximumMs: 750, requiredReserveMs: requiredTailReserveMs });
+      const proof = await captureRuntimeViewport({
+        snapshot: domSnapshot, targetUrl: input.normalizedUrl, binding: boundStartingPage,
+        readBinding: readRuntimeTextBinding, remainingMs: allowance, signal: input.signal,
+        scanStartedAtMs: input.scanStartedAtMs, session: networkMetadataSession,
+        path: input.artifactWriter.artifactPath(RUNTIME_VIEWPORT_FILENAME),
+      });
+      if (proof) {
+        domSnapshot.runtimeDocumentCapture.viewport = proof.viewport;
+        screenshots.push(proof.shot);
+        notifyScreenshotCaptured(input, proof.shot);
+      }
+    }
 
     // Keep the original loader anchor; take each terminal read exactly once.
     // A page change after the single loader read invalidates proof; no refresh.
@@ -5068,6 +5284,7 @@ export async function preConsentRuntimeScanner(
       topLevelUrl: page.url() === "about:blank" ? input.normalizedUrl : page.url(),
       documentUrl: requestEvent?.documentUrl, evidenceRefs: [], confidence: 0.95, directVsInferred: "direct",
       status: response.status(), setCookieHeaders: [], setCookieMetadata: [], cookieNamesSet: [],
+      ...(response.headers()["cf-mitigated"] === "challenge" ? { responseHeaders: { cfMitigated: "challenge" as const } } : {}),
       cacheHeaders: {}, accessControlHeaders: {},
     };
     networkResponseEvents.push(responseEvent);
@@ -5098,7 +5315,7 @@ export async function preConsentRuntimeScanner(
       .map((header) => parseSetCookieMetadata(header, hostname, firstPartyHostname))
       .filter((metadata): metadata is SetCookieMetadata => Boolean(metadata))
       .filter((metadata) => isValidSetCookieDomainForResponse(metadata.domain, hostname));
-    const safeHeaders = safeResponseHeaders(headers);
+    const safeHeaders = { ...responseEvent.responseHeaders, ...safeResponseHeaders(headers) };
     const timing = responseTiming(response);
     Object.assign(responseEvent, {
       metadataCapture: headersComplete ? "complete" : "limited",
@@ -5228,11 +5445,14 @@ export async function preConsentRuntimeScanner(
   }
 }
 
-async function hasStrongUnresolvedSecurityChallenge(page: import("playwright").Page): Promise<boolean> {
-  const text = await page.locator("body").innerText({ timeout: 600 }).catch(() => "");
+async function readSecurityChallengeMarkers(page: Page) {
+  const text = await page.locator("body").innerText({ timeout: 600 }).catch(() => null);
+  if (text === null) return "body_read_failed";
   const normalized = text.replace(/\s+/g, " ").trim().slice(0, 4_000);
-  if (normalized.length > 1_200 && normalized.split(/\s+/).length > 170) return false;
-  return /checking (?:your )?browser|verify (?:you are|that you(?:'|’)re) human|performing security verification|cloudflare ray id|press and hold.{0,100}verif|security (?:check|challenge)|just a moment/i.test(normalized);
+  if (normalized.length > 1_200 && normalized.split(/\s+/).length > 170) return "substantive_body";
+  return /checking (?:your )?browser|verify (?:you are|that you(?:'|’)re) human|performing security verification|cloudflare ray id|press and hold.{0,100}verif|security (?:check|challenge)|just a moment/i.test(normalized)
+    ? "challenge_markers_detected"
+    : "challenge_markers_absent";
 }
 
 async function waitForPassiveRuntimeDocumentReadiness(
@@ -6890,8 +7110,8 @@ export function mergeRetainedRenderedPolicyLinks(
   return retained;
 }
 
-export async function captureRenderedPolicyLinks(page: Page): Promise<RetainedRenderedPolicyLink[]> {
-  const snapshot = await page.evaluate(() => {
+export async function captureRenderedPolicyLinks(page: Page, runtimePreview = false): Promise<RetainedRenderedPolicyLink[]> {
+  const snapshot = await page.evaluate((runtimePreview) => {
     const elements: HTMLAnchorElement[] = [];
     const pendingRoots: Array<Document | ShadowRoot> = [document];
     const seenRoots = new Set<Document | ShadowRoot>();
@@ -6899,11 +7119,17 @@ export async function captureRenderedPolicyLinks(page: Page): Promise<RetainedRe
       const root = pendingRoots.shift();
       if (!root || seenRoots.has(root)) continue;
       seenRoots.add(root);
-      for (const element of root.querySelectorAll("a[href]")) {
-        elements.push(element as HTMLAnchorElement);
+      const anchors = root.querySelectorAll<HTMLAnchorElement>("a[href]");
+      if (runtimePreview && anchors.length > 160) {
+        for (let i = 0; i < 80; i += 1) elements.push(anchors.item(i));
+        for (let i = anchors.length - 80; i < anchors.length; i += 1) elements.push(anchors.item(i));
+      } else {
+        for (const anchor of anchors) elements.push(anchor);
       }
-      for (const element of root.querySelectorAll("*")) {
-        if (element.shadowRoot) pendingRoots.push(element.shadowRoot);
+      if (!runtimePreview) {
+        for (const element of root.querySelectorAll("*")) {
+          if (element.shadowRoot) pendingRoots.push(element.shadowRoot);
+        }
       }
     }
     const selected = elements.length > 1_000
@@ -6911,9 +7137,10 @@ export async function captureRenderedPolicyLinks(page: Page): Promise<RetainedRe
       : elements;
     return {
       pageUrl: window.location.href,
+      title: runtimePreview ? document.title : "",
       links: selected.flatMap((element) => {
         const href = element.getAttribute("href")?.trim();
-        if (!href) return [];
+        if (!href || (runtimePreview && element.hash)) return [];
         const labelledBy = element.getAttribute("aria-labelledby")?.split(/\s+/).slice(0, 4)
           .map((id) => (element.getRootNode() as Document | ShadowRoot).getElementById(id)?.textContent ?? "")
           .join(" ");
@@ -6948,14 +7175,15 @@ export async function captureRenderedPolicyLinks(page: Page): Promise<RetainedRe
         return [{
           documentLanguage: document.documentElement.lang || undefined,
           domLocation,
-          href,
+          href: runtimePreview ? element.href : href,
           linkText,
           linkVisibility,
           accessibleNameSource,
         }];
       }),
     };
-  });
+  }, runtimePreview);
+  if (runtimePreview && /just a moment|access denied|attention required|verify (?:you are|that you are)|captcha|security check/i.test(snapshot.title)) return [];
   return retainedRenderedPolicyLinks(snapshot.links, snapshot.pageUrl);
 }
 
@@ -12546,6 +12774,7 @@ export function buildAutomatedAccessObservation(input: {
 
 export function safeResponseHeaders(headers: Record<string, string>): NonNullable<NetworkResponseEvent["responseHeaders"]> {
   return {
+    ...(headers["cf-mitigated"] === "challenge" ? { cfMitigated: "challenge" as const } : {}),
     contentType: headers["content-type"],
     cacheControl: headers["cache-control"],
     retryAfter: headers["retry-after"]?.slice(0,120),
@@ -13514,14 +13743,20 @@ export async function capturePreConsentScreenshot(
             captureMethod: captureMethods.placeholder,
           });
         }
-        // Playwright's bounded viewport capture remains the compatibility fallback.
+        // The surface path is still CDP; reserve time for Playwright as well.
       }
     }
-    const compatibleViewportTimeoutMs = nextCaptureTimeoutMs(viewportAttemptMaximumMs);
+    // A Promise.race timeout does not cancel Chromium's capture command. Do
+    // not let a second CDP request consume the entire transaction while the
+    // independent Playwright viewport fallback remains unreachable. Give it
+    // at least half of the remaining time, within the original deadline.
+    const compatibleViewportTimeoutMs = nextCaptureTimeoutMs(Math.min(
+      viewportAttemptMaximumMs,
+      Math.max(1, Math.floor(remainingCaptureMs() / 2)),
+    ));
     if (compatibleViewportTimeoutMs !== null) {
       try {
-        // A busy compositor can stall surface capture indefinitely. The view
-        // path uses the same live viewport and remaining transaction budget.
+        // Try the surface path inside its share of the same transaction.
         await captureViewportScreenshotWithCdp(page, screenshotPath, compatibleViewportTimeoutMs, true, options.borrowedCdpSession);
         return {
           status: "available",
@@ -13553,6 +13788,33 @@ export async function capturePreConsentScreenshot(
       }
     }
     if (compatibleViewportTimeoutMs === null && cdpViewportFailure) deferredViewportAttemptErrors.push(cdpViewportFailure);
+    const playwrightViewportTimeoutMs = nextCaptureTimeoutMs(viewportAttemptMaximumMs);
+    if (playwrightViewportTimeoutMs !== null) {
+      try {
+        // A viewport is the required artifact here. Try it before optional
+        // full-page work, which can otherwise exhaust the fallback reserve.
+        await captureScreenshotWithPlaywright(page, screenshotPath, playwrightViewportTimeoutMs, false);
+        return {
+          status: "available",
+          captureMethod: captureMethods.viewportFallback,
+          artifactRefs: [],
+          notes: ["Pre-consent viewport retained through the same-page Playwright fallback after CDP capture failed."],
+        };
+      } catch (error) {
+        const errorMessage = errorMessageFromUnknown(error);
+        deferredViewportAttemptErrors.push(`Playwright viewport screenshot failed: ${errorMessage}`);
+        if (isTerminalScreenshotTargetFailure(errorMessage)) {
+          options.screenshotErrors.push(...deferredViewportAttemptErrors);
+          return retainScreenshotPlaceholder({
+            failureReason: classifyVisualCaptureFailureReason(errorMessage),
+            notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during Playwright viewport capture."],
+            options,
+            screenshotPath,
+            captureMethod: captureMethods.placeholder,
+          });
+        }
+      }
+    }
     if (boundedViewportOnly) {
       options.screenshotErrors.push(...deferredViewportAttemptErrors);
       return retainScreenshotPlaceholder({
@@ -13560,7 +13822,7 @@ export async function capturePreConsentScreenshot(
           ? "screenshot_timeout"
           : "placeholder_used",
         notes: [
-          "A bounded control-synchronized screenshot was attempted through both CDP and compatible viewport capture paths.",
+          "A bounded control-synchronized screenshot was attempted through CDP and same-page Playwright viewport capture paths.",
         ],
         options,
         screenshotPath,
@@ -13568,10 +13830,13 @@ export async function capturePreConsentScreenshot(
       });
     }
   }
-  const fullPageTimeoutMs = nextCaptureTimeoutMs(options.timeoutMs);
+  // Reserve a quarter of a full-page-first transaction for the existing viewport fallback.
+  const fullPageTimeoutMs = nextCaptureTimeoutMs(options.captureMode === "full_page_first"
+    ? Math.max(1, options.timeoutMs - Math.min(viewportAttemptMaximumMs, Math.ceil(options.timeoutMs / 4)))
+    : options.timeoutMs);
   if (fullPageTimeoutMs !== null) {
     try {
-      await page.screenshot({ path: screenshotPath, fullPage: true, timeout: fullPageTimeoutMs });
+      await captureScreenshotWithPlaywright(page, screenshotPath, fullPageTimeoutMs, true);
       return {
         status: "available",
         captureMethod: captureMethods.fullPage,
@@ -13600,42 +13865,58 @@ export async function capturePreConsentScreenshot(
       }
     }
   }
-  const finalViewportTimeoutMs = nextCaptureTimeoutMs(viewportAttemptMaximumMs);
+  const finalViewportTimeoutMs = options.captureMode === "full_page_first"
+    ? nextCaptureTimeoutMs(viewportAttemptMaximumMs)
+    : null;
   if (finalViewportTimeoutMs !== null) {
     try {
-      await page.screenshot({ path: screenshotPath, fullPage: false, timeout: finalViewportTimeoutMs });
-      if (options.captureMode === "full_page_first") {
-        options.screenshotErrors.push("Viewport screenshot fallback used after full-page screenshot failure.");
-      }
+      await captureScreenshotWithPlaywright(page, screenshotPath, finalViewportTimeoutMs, false);
+      options.screenshotErrors.push("Viewport screenshot fallback used after full-page screenshot failure.");
       return {
         status: "available",
         captureMethod: captureMethods.viewportFallback,
         artifactRefs: [],
-        notes: [
-          "Viewport pre-consent screenshot retained after full-page screenshot failure.",
-          ...(options.captureMode === "viewport_first" && deferredViewportAttemptErrors.length > 0
-            ? ["The requested viewport artifact was retained after bounded capture-method retries."]
-            : []),
-        ],
+        notes: ["Viewport pre-consent screenshot retained after full-page screenshot failure."],
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      if (options.captureMode === "viewport_first") {
-        options.screenshotErrors.push(...deferredViewportAttemptErrors);
-      }
       options.screenshotErrors.push(`Viewport screenshot fallback failed: ${errorMessage}`);
     }
   } else {
     options.screenshotErrors.push(...deferredViewportAttemptErrors);
-    options.screenshotErrors.push(`Screenshot transaction deadline exhausted after ${Date.now() - captureStartedAtMs}ms.`);
+    if (remainingCaptureMs() === 0) {
+      options.screenshotErrors.push(`Screenshot transaction deadline exhausted after ${Date.now() - captureStartedAtMs}ms.`);
+    }
   }
   return retainScreenshotPlaceholder({
     failureReason: "placeholder_used",
-    notes: ["A 1x1 screenshot placeholder was retained after full-page and viewport screenshot capture failed."],
+    notes: ["A 1x1 screenshot placeholder was retained after the bounded screenshot capture paths failed."],
     options,
     screenshotPath,
     captureMethod: captureMethods.placeholder,
   });
+}
+
+async function captureScreenshotWithPlaywright(
+  page: Page,
+  screenshotPath: string,
+  timeoutMs: number,
+  fullPage: boolean,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const bytes = await Promise.race([
+      // Do not give Playwright the artifact path: a late result must never
+      // overwrite a placeholder or a newer document-bound capture.
+      page.screenshot({ type: "png", fullPage, timeout: timeoutMs }),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`Playwright ${fullPage ? "full-page" : "viewport"} screenshot timed out`)), timeoutMs);
+      }),
+    ]);
+    await writeFile(screenshotPath, bytes);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function retainScreenshotPlaceholder(input: {

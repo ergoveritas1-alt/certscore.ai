@@ -761,6 +761,34 @@ test("verified original runtime redirect notices produce an unscored capture lim
   ]) {const changed=structuredClone(bundle);change(changed);assert.equal(buildLocalV2ScanNoGoAssessment({...input,bundle:changed}),null);}
 });
 
+test("audit navigation guard evidence requires one matching original result", async () => {
+  const { buildMaterializedLocalV2Detail } = await loadLocalV2DagReport();
+  const { gpcRuntimeFixture } = require("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
+  const bundle = gpcRuntimeFixture({enabled:false}) as CanonicalEvidenceBundle;
+  const guardDecision = {reason:"dns_resolution_failed", resolverCode:"ENOTFOUND"} as const;
+  const attempt = {sequence:1, mode:"initial_https_navigation", outcome:"transport_error", failureCode:"timeout",
+    httpStatus:null, durationMs:15_000, effectiveUrl:bundle.normalizedUrl} as const;
+  bundle.scanLaneRuns = [{...bundle.scanLaneRuns[0]!, laneId:"runtime_evidence", accessOutcome:"navigation_failed",
+    navigationAttempts:[attempt,{...attempt, sequence:2, mode:"https_apex_www_recovery", failureCode:"ERR_BLOCKED_BY_CLIENT", guardDecision}]}];
+  const record = makeScanRecord();
+  record.scan.id = bundle.scanId;
+  const hash = "a".repeat(64);
+  const uri = "s3://fixture/CanonicalEvidenceBundle.json";
+  const sourceBundle = {verificationStatus:"verified" as const,sha256:hash,schemaVersion:bundle.schemaVersion,uri,sizeBytes:123};
+  const options = {policyTextEvidenceContext:{sourceBundle,scanId:bundle.scanId,generatedAt:bundle.completedAt,localOutDir:null,artifactsById:new Map()}};
+  const event:ScanDetailResponse["events"][number] = {id:"result",createdAt:bundle.completedAt,eventType:"v2_lambda_result.received",
+    message:"Fixture result",metadataJson:{processor:LOCAL_V2_DAG_SCAN_PROCESSOR,artifactOnly:true,productionFindingIntegration:false,
+      artifactPointers:{scanArtifactUri:uri},artifactMetadata:{scanArtifactUri:{sha256:hash,sizeBytes:123}}}};
+  const project = () => buildMaterializedLocalV2Detail(record,bundle,options).runtimeArtifacts?.auditNavigationBlock;
+  record.events = [event];
+  assert.deepEqual(project(), {initial:"timeout",terminal:"ERR_BLOCKED_BY_CLIENT",mode:"https_apex_www_recovery",guard:guardDecision});
+  sourceBundle.sha256 = "f".repeat(64);
+  assert.equal(project(),undefined);
+  sourceBundle.sha256 = hash;
+  record.events = [event,event];
+  assert.equal(project(),undefined);
+});
+
 test("a verified usable visit keeps its California score basis when a partial runtime inventory has no tracking signals", async () => {
   const { buildMaterializedLocalV2Detail } = await loadLocalV2DagReport();
   const { gpcRuntimeFixture } = require("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
@@ -1807,6 +1835,31 @@ test("explicit scanner continue assessment blocks downstream raw-text no-go reco
   });
 
   assert.equal(result, null);
+});
+
+test("policy-only blocking text cannot reconstruct a homepage no-go", async () => {
+  const { buildLocalV2ScanNoGoAssessment } = await loadLocalV2DagReport();
+  for (const textExcerpt of ["Access denied. HTTP 403 Forbidden", "One moment... Checking your browser...", "This domain is for sale."]) {
+    const bundle = {
+      domSnapshots: [{ textExcerpt: "Welcome to the observed starting page." }],
+      policySurfaceObservations: [{ textExcerpt, normalizedUrl: "https://example.test/privacy" }],
+    } as unknown as CanonicalEvidenceBundle;
+    const input = { bundle, consentSurfaceLikelyPresent: true, runtimeActivityObserved: true,
+      lowRuntimeActivity: false, requestedUrl: "https://example.test/", finalUrl: "https://example.test/" };
+    assert.equal(buildLocalV2ScanNoGoAssessment(input), null, textExcerpt);
+    assert.equal(bundle.policySurfaceObservations[0]?.textExcerpt, textExcerpt, "Policy evidence remains intact");
+    // The same retained text on the starting page still stops the scan.
+    const homepageBlock = buildLocalV2ScanNoGoAssessment({ ...input,
+      bundle: { ...bundle, domSnapshots: [{ textExcerpt }] } as unknown as CanonicalEvidenceBundle });
+    assert.equal(homepageBlock?.scanNoGoAssessment.decision, "no_go", textExcerpt);
+    assert.ok(homepageBlock?.scanNoGoAssessment.evidenceRefs.includes("CanonicalEvidenceBundle.json#domSnapshots[0].textExcerpt"));
+    const fromUrl = (url: string) => buildLocalV2ScanNoGoAssessment({ ...input,
+      bundle: { ...bundle, screenshots: [{ url, consentStateAtTime: "pre_consent" }] } as unknown as CanonicalEvidenceBundle });
+    assert.equal(fromUrl("https://example.test/help?topic=forbidden"), null);
+    const denied = fromUrl("https://example.test/403-forbidden.html?token=private");
+    assert.equal(denied?.matchedText, "https://example.test/403-forbidden.html");
+    assert.ok(denied?.scanNoGoAssessment.evidenceRefs.includes("CanonicalEvidenceBundle.json#screenshots[0].url"));
+  }
 });
 
 test("a later placeholder attempt does not override a valid representative screenshot", async () => {
@@ -7333,6 +7386,30 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
     assert.equal(partiallyRetainedArtifacts?.[0]?.key, null);
     assert.equal(partiallyRetainedArtifacts?.[1]?.status, "available");
     assert.equal(typeof partiallyRetainedArtifacts?.[1]?.key, "string");
+
+    const { RUNTIME_VIEWPORT_ID, RUNTIME_VIEWPORT_FILENAME } = await import("@certscore/contracts");
+    const documentIdentity = {source: "cdp_loader_id", token: "runtime-only"};
+    const url = "https://example.test/";
+    const hash = "a".repeat(64);
+    const snapshot = { artifactId: "dom_text_pre_consent", url, documentIdentity, capturedAtMs: 100,
+      consentStateAtTime: "pre_consent", textExcerpt: "Our catalog describes products and services for our customers. ".repeat(6),
+      runtimeDocumentCapture: {version: "runtime_document_capture.v1",
+        response: {origin: "https://example.test", status: 200, route: "committed", documentToken: documentIdentity.token,
+          requestUrlSha256: createHash("sha256").update(url).digest("hex")}, viewportAttempted: true,
+        viewport: {sha256: hash, sizeBytes: 90000}} };
+    partiallyRetainedBundle.runtimeMetadataSnapshots = [snapshot];
+    (partiallyRetainedBundle.screenshots as unknown[]).push({ artifactId: RUNTIME_VIEWPORT_ID, url, documentIdentity,
+      path: "/worker/worker-runtime_evidence-" + RUNTIME_VIEWPORT_FILENAME, capturedAtMs: 200,
+      captureMethod: "primary_viewport_fallback", consentStateAtTime: "pre_consent", retentionStatus: "available", displayStatus: "available" });
+    await writeFile(bundlePath, JSON.stringify(partiallyRetainedBundle));
+    const runtimeDetail = await materializeLocalV2DagScanDetail(scanRecord);
+    const runtimeImage = (runtimeDetail.runtimeArtifacts?.visual_evidence_artifacts as Array<Record<string, unknown>>)
+      .find(row => row.id === "local_v2:" + RUNTIME_VIEWPORT_ID);
+    assert.equal(runtimeImage?.capture_step, "runtime_viewport");
+    assert.equal(runtimeImage?.sha256, hash);
+    assert.equal(runtimeImage?.mime_type, "image/jpeg");
+    assert.equal(runtimeImage?.bannerCrop, undefined);
+    assert.match(String(runtimeImage?.key), /auxiliary\/worker-runtime_evidence-screenshot-pre-consent-runtime-viewport\.jpg$/);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

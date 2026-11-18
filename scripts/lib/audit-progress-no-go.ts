@@ -49,9 +49,10 @@ export const NO_GO_TOTAL_METRIC: Metric = {
 export const NO_GO_METRICS = [NO_GO_TOTAL_METRIC, ...NO_GO_REASON_METRICS];
 
 /** Read the returned primary reason from the exact archived export for each no-go. */
-export function readAuditNoGoReasons(
+export function readAuditNoGoEvidence(
   rows: readonly Pick<ProgressRow, 'scanId' | 'createdAt' | 'states' | 'refs' | 'originProof'>[],
-): Record<string, ScanNoGoReasonCode> {
+) {
+  const archivedClientBlocks: Record<string, true> = {};
   const reasons: Record<string, ScanNoGoReasonCode> = {};
   for (const row of rows) {
     if (row.states.outcome !== 'no_go' || row.originProof === 'production_id_selection_only') continue;
@@ -69,7 +70,13 @@ export function readAuditNoGoReasons(
       throw Error('No-go export identity, timestamp or disposition mismatch: ' + row.scanId);
     }
     const reason = scanNoGoReasonCodeSchema.safeParse(report.noGo?.reasonCode);
+    if (reason.data === 'navigation_transport_failure' && typeof report.noGo?.evidenceExcerpt === 'string' &&
+        /^page\.goto: net::ERR_BLOCKED_BY_CLIENT(?: at |$)/.test(report.noGo.evidenceExcerpt)) archivedClientBlocks[row.scanId] = true;
     if (reason.success) reasons[row.scanId] = reason.data;
   }
-  return reasons;
+  return { noGoReasons: reasons, archivedClientBlocks };
+}
+
+export function readAuditNoGoReasons(rows: Parameters<typeof readAuditNoGoEvidence>[0]) {
+  return readAuditNoGoEvidence(rows).noGoReasons;
 }

@@ -1,7 +1,7 @@
 import {retainGpcRecoveryLedger} from "./gpc-navigation-recovery";
 export { buildGpcCmpStateComparison } from "./gpc-cmp-state-comparison.js";
 import { serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
-import { isBoundRuntimeAuthenticationPage, boundRuntimeDocumentStatus, CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage, hasRepresentativeRuntimeText } from "@certscore/contracts";
+import { RUNTIME_VIEWPORT_ID, isBoundRuntimeAuthenticationPage, boundRuntimeDocumentStatus, CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage, hasRepresentativeRuntimeText, isAmazonShoppingInterstitial } from "@certscore/contracts";
 import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
 import { collectionRecipientPriorities } from "./collection-recipient-retention.js";
 import {gpcProofEventPriorities} from "./gpc-proof-retention.js";
@@ -35,6 +35,7 @@ import {
   type ObservedJourney,
   type PolicySurfaceObservation,
   type PreConsentRuntimePreview,
+  type BrowserPolicyLink,
   type RuntimeCoverageSummary,
   type RuntimeEvidenceEvent,
   type ScanProfile,
@@ -109,7 +110,7 @@ import { maybeFulfillHeavyResource } from "./resource-stubbing.js";
 import { installWebBotAuthRoute } from "./web-bot-auth-routing.js";
 import { assertPublicNetworkUrl, installPublicNetworkGuardRoute, publicNetworkGuardEnabled } from "./public-network-guard.js";
 import { throwIfAborted } from "./abort.js";
-import {
+import { alternateWwwNavigationUrl,
   classifyNavigationFailure,
   isLikelyInfrastructureHomepageTarget,
   isNavigationTransportFailure,
@@ -253,6 +254,7 @@ export interface RunScanInput {
   policySurfaceSeeds?: PolicySurfaceSeed[];
   /** Deterministic loopback-only diagnostic provider; never accepted for public targets. */
   localPolicyNanoAssistProvider?: PolicyNanoAssistProvider;
+  localRuntimeViewportEnabled?: boolean;
   preConsentScreenshotMode?: "always" | "selective" | "never";
   preConsentScreenshotTimeoutMs?: number;
   /**
@@ -314,10 +316,12 @@ export interface RunScanInput {
    * Non-blocking retrieval-only handoff for the passive runtime checkpoint.
    * It is preliminary and must never enter canonical finding or score paths.
    */
-  onPreConsentRuntimePreview?: (preview: PreConsentRuntimePreview) => void;
+  onPreConsentRuntimePreview?: (preview: PreConsentRuntimePreview, links?: BrowserPolicyLink[]) => void;
+  readBrowserPolicyLinks?: (signal: AbortSignal) => Promise<BrowserPolicyLink[]>;
 }
 
 export interface PolicySurfaceSeed {
+  verifiedDocument?: true;
   confidence?: number;
   hintType: string;
   source: "prior_scan_hint" | "canonical_legal_surface_hint";
@@ -570,7 +574,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
             "This bounded passive checkpoint is retrieval-only; the canonical scan continues to completion.",
           ],
         },
-      }));
+      }), checkpoint.browserPolicyLinks);
     } catch {
       // Preliminary retrieval observers must never affect canonical capture.
     }
@@ -614,6 +618,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         browser: sharedBrowser,
         stubHeavyResources: input.captureReplay,
         screenshotCaptureMode: "viewport_first",
+        localRuntimeViewportEnabled: input.localRuntimeViewportEnabled === true && input.preConsentScreenshotMode !== "never",
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         onScreenshotCaptured: input.onPreConsentScreenshotCaptured,
@@ -648,6 +653,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       browser: sharedBrowser,
       nanoAssistProvider: nanoPolicyAssistProvider,
       policySurfaceSeeds: input.policySurfaceSeeds,
+      readBrowserPolicyLinks: input.readBrowserPolicyLinks,
       stopAfterAccessBlock: input.policyStopAfterAccessBlock,
       onRetainedPolicyDocument: (retained) => {
         if (policyCheckpointsClosed || input.signal?.aborted ||
@@ -2549,7 +2555,8 @@ export function buildScanNoGoAssessment(input: {
   scanNoGoAssessment: ScanNoGoAssessment;
   visualAccessReview: VisualAccessReview;
 } | null {
-  const representativeScreenshots = input.screenshots.filter(isRepresentativeScreenshotArtifact);
+  // The independent runtime viewport is adjudicated after worker safety and byte verification.
+  const representativeScreenshots = input.screenshots.filter(shot => shot.artifactId !== RUNTIME_VIEWPORT_ID && isRepresentativeScreenshotArtifact(shot));
   const blockingFrameSnapshot = input.domSnapshots.find(snapshot => {
     const parsed = domSnapshotArtifactSchema.safeParse(snapshot);
     if (!parsed.success) return false;
@@ -2635,7 +2642,11 @@ export function buildScanNoGoAssessment(input: {
     ...input.consentUiObservations.map((observation) => boundedScanNoGoText(observation.textExcerpt)),
   ].filter((text): text is string => Boolean(text)));
   const longestText = [...textCandidates].sort((left, right) => right.length - left.length)[0] ?? "";
-  const longestRetainedDomText = [...domTextCandidates].sort((left, right) => right.length - left.length)[0] ?? "";
+  const amazonInterstitial = input.domSnapshots.find(snapshot =>
+    snapshot.consentStateAtTime === "pre_consent" && !snapshot.blockingFrameChallenge &&
+    (!snapshot.runtimeDocumentCapture || boundRuntimeDocumentStatus(snapshot) !== undefined) &&
+    isAmazonShoppingInterstitial(snapshot.textExcerpt));
+  const longestRetainedDomText = amazonInterstitial?.textExcerpt ?? [...domTextCandidates].sort((left, right) => right.length - left.length)[0] ?? "";
   const consentSurfaceTexts = input.consentUiObservations
     .map((observation) => boundedScanNoGoText(observation.textExcerpt))
     .filter((text): text is string => Boolean(text));
@@ -2663,8 +2674,9 @@ export function buildScanNoGoAssessment(input: {
     ? boundRuntimeDocumentStatus(terminalRuntimeSnapshot) ?? null
     : getMainDocumentStatus(input.networkEvents, input.networkResponseEvents);
   const mainDocumentStatuses = getMainDocumentStatuses(input.networkEvents, input.networkResponseEvents);
+  const successfulSettledMainDocument = mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 300;
   const successfulMainDocumentBeforeTerminal = mainDocumentStatuses.length > 1 &&
-    mainDocumentStatuses.slice(0, -1).some((status) => status >= 200 && status < 400) &&
+    mainDocumentStatuses.slice(0, -1).some((status) => status >= 200 && status < 300) &&
     mainDocumentStatus !== null && classifyMainDocumentStatus(mainDocumentStatus)?.hardTerminal === true;
   const successfulFirstPartyResponses = input.networkResponseEvents.filter((event) =>
     event.firstParty === true && (event.status ?? 0) >= 200 && (event.status ?? 0) < 400
@@ -2691,6 +2703,19 @@ export function buildScanNoGoAssessment(input: {
   // An earlier challenge can be longer than the storefront that replaces it.
   // Prefer the terminal capture only when it proves the active challenge or
   // positively verifies representative content for the requested site.
+  const passiveNavigation = terminalRuntimeSnapshot?.runtimeDocumentCapture?.passiveStorefrontNavigation;
+  const intendedEntryUrls = input.normalizedUrl
+    ? [input.normalizedUrl, alternateWwwNavigationUrl(input.normalizedUrl)]
+    : [];
+  const verifiedPassiveNavigation = amazonInterstitial && terminalRuntimeSnapshot && passiveNavigation &&
+    mainDocumentStatus === 200 && terminalRuntimeSnapshot.runtimeDocumentCapture?.response?.route === "committed" &&
+    intendedEntryUrls.includes(amazonInterstitial.url) && intendedEntryUrls.includes(terminalRuntimeSnapshot.url) &&
+    passiveNavigation.sourceUrl === amazonInterstitial.url &&
+    amazonInterstitial.documentIdentity?.source === "cdp_loader_id" &&
+    amazonInterstitial.documentIdentity.token === passiveNavigation.sourceDocumentToken &&
+    terminalRuntimeSnapshot.documentIdentity?.token === passiveNavigation.destinationDocumentToken &&
+    passiveNavigation.sourceDocumentToken !== passiveNavigation.destinationDocumentToken &&
+    amazonInterstitial.capturedAtMs < terminalRuntimeSnapshot.capturedAtMs;
   const useTerminalDomEvidence = terminalRuntimeSnapshot && !terminalDocumentConflict &&
     terminalRuntimeSnapshot.artifactId === "dom_text_pre_consent" &&
     terminalRuntimeSnapshot.consentStateAtTime === "pre_consent" &&
@@ -2700,6 +2725,16 @@ export function buildScanNoGoAssessment(input: {
         mainDocumentStatus >= 200 && mainDocumentStatus < 300 &&
         terminalText.length >= 180 && terminalWordCount >= 24 &&
         hasRepresentativeRuntimeText(terminalRuntimeSnapshot) &&
+        (!amazonInterstitial || verifiedPassiveNavigation || (
+          Boolean(amazonInterstitial.runtimeDocumentCapture && amazonInterstitial.documentIdentity?.token) &&
+          amazonInterstitial.url === terminalRuntimeSnapshot.url &&
+          amazonInterstitial.documentIdentity?.source === terminalRuntimeSnapshot.documentIdentity?.source &&
+          amazonInterstitial.documentIdentity?.token === terminalRuntimeSnapshot.documentIdentity?.token &&
+          amazonInterstitial.runtimeDocumentCapture?.response?.requestUrlSha256 ===
+            terminalRuntimeSnapshot.runtimeDocumentCapture?.response?.requestUrlSha256 &&
+          boundRuntimeDocumentStatus(amazonInterstitial) === mainDocumentStatus &&
+          amazonInterstitial.capturedAtMs < terminalRuntimeSnapshot.capturedAtMs
+        )) &&
         matchesScanTargetHost(terminalRuntimeSnapshot.url, input.normalizedUrl))) &&
     domSnapshotArtifactSchema.safeParse(terminalRuntimeSnapshot).success;
   const assessmentDomText = useTerminalDomEvidence ? terminalText : longestRetainedDomText;
@@ -2739,9 +2774,7 @@ export function buildScanNoGoAssessment(input: {
     !substantiveCapturedPageTextObserved &&
     !actionableConsentControlObserved;
   const positiveSiteSignals = uniqueStrings([
-    mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400
-      ? "main_document_success"
-      : null,
+    successfulSettledMainDocument ? "main_document_success" : null,
     substantiveDomTextObserved
       ? "substantive_dom_text_observed"
       : null,
@@ -2815,14 +2848,12 @@ export function buildScanNoGoAssessment(input: {
   const assessSparsePage = !usesBoundRuntimeCapture || visuallySubstantiveScreenshotObserved;
   const temporallyConfirmedSparsePage =
     assessSparsePage &&
-    ((mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400) || committedVisualPageRetained) &&
+    (successfulSettledMainDocument || committedVisualPageRetained) &&
     assessmentDomText.length <= 60 &&
     substantiveDomWordCount <= 10 &&
     sparseSecondLookRetained;
   const sparseSuccessfulPage =
-    assessSparsePage && mainDocumentStatus !== null &&
-    mainDocumentStatus >= 200 &&
-    mainDocumentStatus < 400 &&
+    assessSparsePage && successfulSettledMainDocument &&
     nearlyEmptyPage &&
     input.networkEvents.length <= 4 &&
     successfulFirstPartyResponses <= 2 &&
@@ -2875,10 +2906,6 @@ export function buildScanNoGoAssessment(input: {
     classifyMainDocumentStatus(mainDocumentStatus)?.reasonCode === "server_error_5xx"
   );
   const explicitTerminalPage = Boolean(settledPageState) || sparseSuccessfulPage || temporallyConfirmedSparsePage || partialRuntimeWithoutPageEvidence;
-  const successfulSettledMainDocument =
-    mainDocumentStatus !== null &&
-    mainDocumentStatus >= 200 &&
-    mainDocumentStatus < 400;
   const accessBlockMarkerCount = countAccessBlockTextMarkers(assessmentDomText || longestText);
   const likelyIncidentalAccessBlockText =
     textPageState?.reasonCode === "access_denied_or_forbidden_page" &&
@@ -2982,7 +3009,7 @@ export function buildScanNoGoAssessment(input: {
       blockingFrameChallengeObserved: Boolean(blockingFrameSnapshot),
       challengeSignalsDetected: securityChallengeRequestObserved,
       documentStatusBlocked: blockedMainDocument,
-      expectedOriginReached: mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400,
+      expectedOriginReached: successfulSettledMainDocument,
       mainDocumentStatus,
       substantiveDomTextObserved: substantiveRetainedDomVolumeObserved,
       substantiveRetainedDomVolumeObserved,

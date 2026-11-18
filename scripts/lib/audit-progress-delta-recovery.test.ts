@@ -30,6 +30,8 @@ for (const forwardCoverageDiagnostics of [false,true]) test(`daily export resume
         },
       } : { version: 'certscore.audit-choice-summary.v2', availability: 'size_bound' },
       auditComparison: null,
+      auditNavigationBlock: null,
+      ...(forwardCoverageDiagnostics?{auditRejectActivity:[2,'11111111-1111-4111-8111-111111111111','d'.repeat(64),'cookie_snapshot']}:{ }),
       caReject: null,
       technicalCounts: null,
       trackingReviews: null,
@@ -55,7 +57,7 @@ for (const forwardCoverageDiagnostics of [false,true]) test(`daily export resume
     const begin={
       overlapStartUtc: start, windowEndUtc: end, newScanStartUtc: start,
       includePrivacyFormReceipts: true, pendingRefreshIds: planned,containerName:'psql',
-      ...(forwardCoverageDiagnostics?{includeForwardCoverageDiagnostics:true}:{}),
+      ...(forwardCoverageDiagnostics?{includeForwardCoverageDiagnostics:true,includeRejectActivityReceipt:true}:{}),
     };
     writeFileSync(beginFile,JSON.stringify(begin));
     const compressed = gzipSync(JSON.stringify(row) + '\n');
@@ -113,6 +115,7 @@ switch (call) {
     const command = ['--import', 'tsx', 'scripts/export-mac-mini-delta.ts', run];
     const plan=JSON.parse((await exec(process.execPath,[...command,'--plan'],{env})).stdout);
     assert.equal(plan.forwardCoverageDiagnosticsProjected,forwardCoverageDiagnostics);
+    assert.equal(plan.rejectActivityReceiptProjected,forwardCoverageDiagnostics);
     assert.equal(plan.containerName,'psql');
     assert.equal(plan.override.fits,true);
     await assert.rejects(exec(process.execPath,[...command,'--plan'],
@@ -123,6 +126,7 @@ switch (call) {
     assert.deepEqual(JSON.parse(first).rows, [row]);
     const saved=JSON.parse(first);
     assert.equal(saved.forwardCoverageDiagnosticsProjected,forwardCoverageDiagnostics||undefined);
+    assert.equal(saved.rejectActivityReceiptProjected,forwardCoverageDiagnostics||undefined);
     assert.equal(saved.querySha256,plan.querySha256);
     assert.ok(saved.pendingRefreshIds.length<100&&saved.pendingRefreshIds.length>0);
     assert.deepEqual([...saved.pendingRefreshIds,...saved.deferredPendingIds],planned);
@@ -130,6 +134,8 @@ switch (call) {
     rmSync(inventory);
     if (forwardCoverageDiagnostics) {
       writeFileSync(beginFile,JSON.stringify({...begin,includeForwardCoverageDiagnostics:false}));
+      await assert.rejects(exec(process.execPath,[...command,'--recover'],{env}),/Recovery transport does not match/);
+      writeFileSync(beginFile,JSON.stringify({...begin,includeRejectActivityReceipt:false}));
       await assert.rejects(exec(process.execPath,[...command,'--recover'],{env}),/Recovery transport does not match/);
       writeFileSync(beginFile,JSON.stringify(begin));
     }

@@ -1,7 +1,7 @@
 import { projectScoredPostRefusalEvidence } from "./reject-identifier-projection";
 import {buildAuditComparisonDelivery,readAuditComparisonDelivery,type AuditComparisonDelivery} from '../../../../packages/certscore-contracts/src/audit-comparison';
 import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
-import { readBoundGpcCmpStateComparison } from "@certscore/contracts";
+import { projectAuditNavigationBlock, readBoundGpcCmpStateComparison } from "@certscore/contracts";
 import {reviewedOptOutPolicyOwner,reviewedOptOutPolicyRedirect} from "@certscore/contracts";
 import {assessGpcPotentialRisk, type CaliforniaPotentialRiskAssessment} from "../../lib/scans/california-potential-risk-policy";
 import {withPropertySaleSharingSource} from "../../lib/scans/property-sale-sharing-source";
@@ -48,7 +48,10 @@ import { bindNarrowGeometry } from "./gdpr-narrow-geometry";
 import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   assessRuntimeVisitSnapshot,
+  reviewedRuntimeViewport,
+  RUNTIME_VIEWPORT_ID,
   classifyRuntimeErrorPage,
+  isAmazonShoppingInterstitial,
   assessArticle13PolicyTextQuality,
   looksLikeArticle13CodeOrConfigText,
   classifyConsentControlLabel,
@@ -454,6 +457,8 @@ function preConsentScreenshotRank(screenshot: NonNullable<CanonicalEvidenceBundl
 
 function localV2VisualEvidenceArtifactId(screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number]) {
   switch (screenshot.artifactId) {
+    case RUNTIME_VIEWPORT_ID:
+      return "local_v2:screenshot_pre_consent_runtime_viewport";
     case "screenshot_pre_consent_geometry_proof":
       return "local_v2:screenshot_pre_consent_geometry_proof";
     case "screenshot_pre_consent_cmp_controls":
@@ -5326,13 +5331,32 @@ function boundedTextExcerpt(value: string | null | undefined) {
   return value ? value.replace(/\s+/g, " ").trim().slice(0, 240) : null;
 }
 
-function collectLocalV2NoGoTextCandidates(bundle: CanonicalEvidenceBundle) {
-  return uniqueStrings([
-    ...(bundle.domSnapshots ?? []).map((snapshot) => boundedTextExcerpt(snapshot.textExcerpt)),
-    ...(bundle.consentUiObservations ?? []).map((observation) => boundedTextExcerpt(observation.textExcerpt)),
-    ...(bundle.policySurfaceObservations ?? []).map((observation) => boundedTextExcerpt(observation.textExcerpt)),
-    ...(bundle.screenshots ?? []).map((screenshot) => boundedTextExcerpt(screenshot.url))
-  ]);
+// Only starting-page evidence can establish a fallback homepage denial. Keep
+// the exact source index so later audits can distinguish a route from page text.
+function findLocalV2NoGoEvidence(bundle: CanonicalEvidenceBundle) {
+  for (const [source, items] of [
+    ["domSnapshots", bundle.domSnapshots ?? []],
+    ["consentUiObservations", bundle.consentUiObservations ?? []],
+  ] as const) {
+    for (const [index, item] of items.entries()) {
+      if ("consentStateAtTime" in item && item.consentStateAtTime && item.consentStateAtTime !== "pre_consent") continue;
+      const text = boundedTextExcerpt(item.textExcerpt);
+      const shoppingInterstitial = source === "domSnapshots" && isAmazonShoppingInterstitial(item.textExcerpt);
+      if (text && (shoppingInterstitial || LOCAL_V2_HARD_NO_GO_TEXT_PATTERN.test(text))) {
+        return { text, shoppingInterstitial, ref: `CanonicalEvidenceBundle.json#${source}[${index}].textExcerpt` };
+      }
+    }
+  }
+  for (const [index, screenshot] of (bundle.screenshots ?? []).entries()) {
+    if (screenshot.consentStateAtTime && screenshot.consentStateAtTime !== "pre_consent") continue;
+    let url: URL;
+    try { url = new URL(screenshot.url); } catch { continue; }
+    if (!["https:", "http:"].includes(url.protocol)) continue;
+    if (LOCAL_V2_HARD_NO_GO_TEXT_PATTERN.test(url.pathname)) {
+      return { text: boundedTextExcerpt(url.origin + url.pathname)!, shoppingInterstitial: false, ref: `CanonicalEvidenceBundle.json#screenshots[${index}].url` };
+    }
+  }
+  return null;
 }
 
 function collectLocalV2ModuleErrors(bundle: CanonicalEvidenceBundle) {
@@ -5364,6 +5388,80 @@ function localV2VisualCapture(bundle: CanonicalEvidenceBundle) {
     notes,
     status
   };
+}
+
+const GEOMETRY_FALLBACK_PNG = "screenshot-pre-consent-geometry-proof.png";
+
+/** Reuse an existing visual artifact on a verified local mirror. Only its
+ * visual summary is repaired. The original evidence and other decisions stay intact. */
+function withSameSessionScreenshotFallback(input: {
+  bundle: CanonicalEvidenceBundle;
+  manifest: Record<string, unknown>;
+  localOutDir: string;
+}): CanonicalEvidenceBundle {
+  const { bundle, manifest, localOutDir } = input;
+  const visual = localV2VisualCapture(bundle);
+  if (manifest.scanId !== bundle.scanId ||
+      !(visual.status === "placeholder" || visual.failureReason === "placeholder_used") ||
+      (bundle.scan_no_go_assessment ?? bundle.scanNoGoAssessment)?.decision === "no_go") return bundle;
+
+  const screenshot = bundle.screenshots?.find(shot =>
+    shot.artifactId === "screenshot_pre_consent_geometry_proof" &&
+    path.basename(shot.path) === GEOMETRY_FALLBACK_PNG &&
+    shot.consentStateAtTime === "pre_consent" &&
+    shot.retentionStatus === "available" && shot.displayStatus !== "withheld" &&
+    (shot.captureMethod === "primary_viewport_fallback" || shot.captureMethod === "independent_visual_fallback_viewport") &&
+    shot.documentIdentity?.source === "cdp_loader_id" && Boolean(shot.documentIdentity.token));
+  if (!screenshot || isPreConsentErrorShellScreenshot(bundle, screenshot)) return bundle;
+
+  const sameDocument = (item: { url: string; documentIdentity?: typeof screenshot.documentIdentity; consentStateAtTime: string }) =>
+    item.consentStateAtTime === "pre_consent" && item.url === screenshot.url &&
+    item.documentIdentity?.source === screenshot.documentIdentity?.source &&
+    item.documentIdentity?.token === screenshot.documentIdentity?.token;
+  const placeholder = bundle.screenshots.find(shot => shot.captureMethod === "primary_placeholder" && sameDocument(shot));
+  if (!placeholder || placeholder.capturedAtMs >= screenshot.capturedAtMs ||
+      !bundle.domSnapshots.some(sameDocument) ||
+      getLocalV2FinalDocumentUrl(bundle) !== screenshot.url) return bundle;
+
+  try {
+    const target = new URL(bundle.normalizedUrl);
+    const captured = new URL(screenshot.url);
+    if (captured.protocol !== "https:" || captured.username || captured.password ||
+        captured.port !== target.port || captured.hostname.replace(/^www\./, "") !== target.hostname.replace(/^www\./, "")) return bundle;
+    const pointer = getLocalV2DagAuxiliaryArtifact(manifest, GEOMETRY_FALLBACK_PNG);
+    if (!pointer || !pointer.sha256 || !/^[a-f0-9]{64}$/i.test(pointer.sha256) ||
+        !pointer.uri.endsWith(`/${bundle.scanId}/auxiliary/${GEOMETRY_FALLBACK_PNG}`) ||
+        pointer.sizeBytes === null || pointer.sizeBytes < 80_000 || pointer.sizeBytes > 4_000_000) return bundle;
+
+    const file = path.join(localOutDir, GEOMETRY_FALLBACK_PNG);
+    const stat = statSync(file);
+    if (!stat.isFile() || stat.size !== pointer.sizeBytes) return bundle;
+    const bytes = verifyLocalV2DagLambdaArtifactBody({
+      body: readFileSync(file), expectedSha256: pointer.sha256, expectedSizeBytes: pointer.sizeBytes,
+    });
+    // The existing visual no-go review uses the same viewport size and encoded
+    // density thresholds to reject blank or placeholder-sized PNGs.
+    if (bytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a" ||
+        bytes.toString("ascii", 12, 16) !== "IHDR" ||
+        bytes.subarray(-12).toString("hex") !== "0000000049454e44ae426082") return bundle;
+    const width = bytes.readUInt32BE(16);
+    const height = bytes.readUInt32BE(20);
+    if (width < 640 || height < 400 || bytes.length / (width * height) < 0.06) return bundle;
+
+    return {
+      ...bundle,
+      screenshots: bundle.screenshots.map(shot => shot === screenshot ? { ...shot, path: file } : shot),
+      visualCapture: {
+        status: "available",
+        captureMethod: screenshot.captureMethod,
+        notes: ["Verified viewport image retained from the original pre-consent document."],
+        artifactRefs: [{ artifactId: screenshot.artifactId, artifactType: "screenshot",
+          path: file, sensitivity: "safe", redactionStatus: "not_needed", relatedEventIds: [] }],
+      },
+    };
+  } catch {
+    return bundle;
+  }
 }
 
 function getProvidedLocalV2ScanNoGoAssessment(bundle: CanonicalEvidenceBundle) {
@@ -5434,8 +5532,10 @@ export function buildLocalV2ScanNoGoAssessment(input: {
     };
   }
 
-  const textCandidates = collectLocalV2NoGoTextCandidates(input.bundle);
-  const matchedText = textCandidates.find((text) => LOCAL_V2_HARD_NO_GO_TEXT_PATTERN.test(text));
+  const matchedEvidence = findLocalV2NoGoEvidence(input.bundle);
+  const matchedText = matchedEvidence?.text;
+  const isSecurityChallenge = Boolean(matchedText &&
+    (matchedEvidence?.shoppingInterstitial || LOCAL_V2_CHALLENGE_NO_GO_TEXT_PATTERN.test(matchedText)));
   const matchedPlaceholderText = matchedText && /domain(?:s)? (?:is |are )?(?:for sale|may be for sale)|placeholder page/i.test(matchedText)
     ? matchedText
     : null;
@@ -5482,7 +5582,7 @@ export function buildLocalV2ScanNoGoAssessment(input: {
     : matchedWrongSiteText
       ? "wrong_site_or_soft_404"
       : matchedText
-        ? LOCAL_V2_CHALLENGE_NO_GO_TEXT_PATTERN.test(matchedText)
+        ? isSecurityChallenge
           ? "captcha_or_challenge"
           : "access_denied_or_forbidden_page"
     : retainedVisualErrorShell
@@ -5493,7 +5593,7 @@ export function buildLocalV2ScanNoGoAssessment(input: {
     : matchedWrongSiteText
       ? "wrong_site_or_soft_404"
       : matchedText
-        ? LOCAL_V2_CHALLENGE_NO_GO_TEXT_PATTERN.test(matchedText) ? "captcha_or_challenge" : "access_blocked"
+        ? isSecurityChallenge ? "captcha_or_challenge" : "access_blocked"
         : retainedVisualErrorShell ? "visual_error_shell" : "capture_failed";
   const evidenceText = matchedText ??
     crossDomainEvidenceText ??
@@ -5505,6 +5605,7 @@ export function buildLocalV2ScanNoGoAssessment(input: {
   const evidenceRefs = [
     "scan_runtime_artifacts.scan_no_go_assessment",
     "scan_runtime_artifacts.visual_access_review",
+    matchedEvidence?.ref,
     screenshot ? "scan_runtime_artifacts.visual_evidence_artifacts" : null
   ].filter((value): value is string => Boolean(value));
   const shortExplanation = matchedPlaceholderText
@@ -5512,7 +5613,7 @@ export function buildLocalV2ScanNoGoAssessment(input: {
     : matchedWrongSiteText
       ? `The retained initial-load evidence showed an application error or wrong-site page instead of the normal public site: "${matchedWrongSiteText}"`
       : matchedText
-    ? `The retained initial-load evidence showed a ${LOCAL_V2_CHALLENGE_NO_GO_TEXT_PATTERN.test(matchedText) ? "security challenge" : "access-denied or forbidden page"} instead of the normal public site: "${matchedText}"`
+    ? `The retained initial-load evidence showed a ${isSecurityChallenge ? "security challenge" : "access-denied or forbidden page"} instead of the normal public site: "${matchedText}"`
     : evidenceText;
   const visualAccessReview = {
     artifact_ref: screenshot ? "local_v2:screenshot_pre_consent" : null,
@@ -5668,6 +5769,8 @@ export function buildMaterializedLocalV2Detail(
     consentControlGeometryEvidence?: Record<string, unknown> | null;
     gdprTransparencyEvidenceProfile?: GdprTransparencyProductionEvidenceProfile | string | null;
     localOutDir?: string | null;
+    /** Already checksum-verified by the retained local artifact reader. */
+    retainedScreenshotManifest?: Record<string, unknown> | null;
     policyTextEvidenceContext?: PolicyTextEvidenceContext;
     scanArtifactUri?: string | null;
     gdprNoticeOmissionReview?: unknown;
@@ -5675,6 +5778,14 @@ export function buildMaterializedLocalV2Detail(
     onCaliforniaRestrictionShadow?: (result: import("@certscore/contracts").CaliforniaRestrictionShadow) => void;
   } = {}
 ): ScanDetailResponse {
+  if (options.localOutDir && options.retainedScreenshotManifest &&
+      options.policyTextEvidenceContext?.scanId === bundle.scanId &&
+      options.policyTextEvidenceContext.sourceBundle.verificationStatus === "verified" &&
+      bundle.scanId === scanRecord.scan.id) {
+    bundle = withSameSessionScreenshotFallback({
+      bundle, manifest: options.retainedScreenshotManifest, localOutDir: options.localOutDir,
+    });
+  }
   const requestedHost = scanRecord.scan.domainHostname ?? hostnameFromUrl(bundle.normalizedUrl ?? bundle.url);
   const finalDocumentUrl = getLocalV2FinalDocumentUrl(bundle);
   const requestedDocumentUrl = safeLocalV2DocumentUrl(
@@ -6434,8 +6545,13 @@ export function buildMaterializedLocalV2Detail(
   const inheritedRuntimeArtifacts = providedScanNoGoAssessment || localV2NoGo
     ? { ...(scanRecord.runtimeArtifacts ?? {}) }
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
+  const viewportSnapshot = bundle.runtimeMetadataSnapshots?.find(row => row.runtimeDocumentCapture?.viewport);
+  const runtimeShot = viewportSnapshot && reviewedRuntimeViewport(bundle, viewportSnapshot);
   const runtimeArtifacts = {
     ...inheritedRuntimeArtifacts,
+    auditNavigationBlock: diagnosticSourceHash && scanRecord.events.filter(e => e.eventType === "v2_lambda_result.received").length === 1 &&
+      getLocalV2DagLambdaArtifactPointer(scanRecord, "scanArtifactUri")?.sha256 === diagnosticSourceHash
+      ? projectAuditNavigationBlock(bundle.scanLaneRuns ?? []) ?? undefined : undefined,
     // Never inherit stale comparison metadata into a newly materialized report.
     auditComparison: options.auditComparison?.scanId===scanRecord.scan.id &&
       Date.parse(options.auditComparison.createdAt)===Date.parse(scanRecord.scan.createdAt) &&
@@ -6677,12 +6793,15 @@ export function buildMaterializedLocalV2Detail(
     third_party_request_count: thirdPartyRequestCount,
     third_party_request_domains: thirdPartyDomains,
     visual_evidence_artifacts: (bundle.screenshots ?? [])
-      .filter(isPreConsentScreenshotArtifact)
-      .sort((left, right) => preConsentScreenshotRank(left) - preConsentScreenshotRank(right))
+      .filter(shot => isPreConsentScreenshotArtifact(shot) || shot === runtimeShot)
+      .sort((left, right) => {
+        const recovered = providedScanNoGoAssessment?.supportingSignals.verifiedRuntimeViewport;
+        if (left.artifactId === recovered) return -1;
+        if (right.artifactId === recovered) return 1;
+        return preConsentScreenshotRank(left) - preConsentScreenshotRank(right);
+      })
       .flatMap((screenshot) => {
-      if (!isPreConsentScreenshotArtifact(screenshot)) {
-        return [];
-      }
+      const runtimeViewport = screenshot === runtimeShot;
       const capturedErrorShell = isPreConsentErrorShellScreenshot(bundle, screenshot);
       const screenshotWithheld = screenshot.displayStatus === "withheld" ||
         (screenshot.displayStatus === undefined && screenshot.retentionStatus === "withheld");
@@ -6694,14 +6813,16 @@ export function buildMaterializedLocalV2Detail(
       return [{
         bucket: storagePointer.bucket,
         capture_method: getString((screenshot as { captureMethod?: unknown }).captureMethod) ?? visualCapture.captureMethod ?? null,
-        capture_step: "initial_load",
+        ...(runtimeViewport ? { sha256: viewportSnapshot?.runtimeDocumentCapture?.viewport?.sha256,
+          byte_size: viewportSnapshot?.runtimeDocumentCapture?.viewport?.sizeBytes } : {}),
+        capture_step: runtimeViewport ? "runtime_viewport" : "initial_load",
         consent_state: screenshot.consentStateAtTime ?? "pre_consent",
         final_url: safeLocalV2DocumentUrl(screenshot.url, canonicalDocumentUrl),
         id: localV2VisualEvidenceArtifactId(screenshot),
         interaction_state: "none",
         key: capturedErrorShell || screenshotWithheld ? null : storagePointer.key,
-        mime_type: "image/png",
-        ...(capturedErrorShell || screenshotWithheld ? {} : deriveConsentScreenshotCrops({ assessment: consentControlAssessment,
+        mime_type: runtimeViewport ? "image/jpeg" : "image/png",
+        ...(runtimeViewport || capturedErrorShell || screenshotWithheld ? {} : deriveConsentScreenshotCrops({ assessment: consentControlAssessment,
           geometry: options.consentControlGeometryEvidence, screenshot })),
         page_url: safeLocalV2DocumentUrl(screenshot.url, canonicalDocumentUrl),
         status: screenshotWithheld ? "withheld" : capturedErrorShell ? "capture_failed" : "available",
@@ -7127,6 +7248,7 @@ async function materializeLocalV2DagScanDetailUncached(
           }),
           consentControlGeometryEvidence,
           gdprTransparencyEvidenceProfile: input.gdprTransparencyEvidenceProfile,
+          retainedScreenshotManifest: shouldReadLocalOutDir && verifiedArtifactChainAvailable ? remoteManifest : null,
           localOutDir: shouldReadLocalOutDir ? input.outDir : null,
           policyTextEvidenceContext: {
             artifactsById: policyTextArtifactsById,

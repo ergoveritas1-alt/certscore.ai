@@ -96,8 +96,11 @@ export function createGpcImpactCapture(input: { expectedEnabled: boolean; now: (
       if (input.adaptive && (!adaptiveOutcome || adaptiveFailed)) limits.push("adaptive_pair_unavailable");
       const horizons = input.diagnostic15Seconds ? GPC_DIAGNOSTIC_HORIZONS_MS : GPC_IMPACT_HORIZONS_MS;
       const adaptiveDuration = adaptiveOutcome?.durationMs;
-      const measuredHorizons = adaptiveDuration ? [...new Set([...horizons.filter(ms => ms <= adaptiveDuration), adaptiveDuration])].sort((first,second)=>first-second) : horizons;
-      const windows = !limits.length && document ? measuredHorizons.filter(ms => proof!.capturedAtMs >= document!.committedAtMs + ms).map(durationMs => {
+      const elapsed = proof && document ? proof.capturedAtMs - document.committedAtMs : 0;
+      const end = adaptiveDuration ?? Math.min(elapsed, horizons[horizons.length - 1]!);
+      const measuredHorizons: number[] = horizons.filter(ms => ms <= end);
+      if (end >= horizons[0] && measuredHorizons.at(-1) !== end) measuredHorizons.push(end);
+      const windows = !limits.length && document ? measuredHorizons.filter(ms => ms <= elapsed).map(durationMs => {
         const events = requests.filter(e => e.timestampMs >= document!.committedAtMs && e.timestampMs < document!.committedAtMs + durationMs);
         return { durationMs, requestCount: events.length, requestSetSha256: gpcImpactRequestSetHash(events) };
       }) : [];

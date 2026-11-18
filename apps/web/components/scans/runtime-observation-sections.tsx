@@ -84,7 +84,7 @@ export function RuntimeObservationTimeline({
                   className="absolute left-[0.31rem] top-[1.45rem] h-6 border-l-2 border-dashed border-emerald-500"
                 />
               ) : null}
-              <p className={`${monoClass} text-[11px] font-semibold ${event.tone === "concern" ? "text-rose-700" : "text-zinc-600"}`}>
+              <p className={`${monoClass} relative -top-1 text-[11px] font-semibold ${event.tone === "concern" ? "text-rose-700" : "text-zinc-600"}`}>
                 {event.at}
               </p>
               <div className={`${compact ? "mt-2" : "mt-4"} flex min-h-5 items-start gap-2`}>

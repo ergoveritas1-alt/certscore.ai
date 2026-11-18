@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { GpcRequestTable } from "./gpc-request-table";
+import type { GpcRequestWindow } from "../../lib/scans/gpc-request-window";
 import { ClassificationCounts } from "./report-inventory-summary";
 import { DisclosureChevron } from "./report-finding-row";
 import { EvidenceJumpLink } from "./evidence-jump-link";
@@ -38,9 +39,9 @@ function hasTileDetails(tile: ConsentTrackingTile, canNavigate: boolean) {
 
 type GpcTileCounts = Pick<ConsentTrackingTile, "count" | "breakdown" | "state" | "contributors"> & { scanId: string; graphHash: string };
 
-const GpcContext = createContext<ConsentTrackingTile | undefined>(undefined);
+const GpcContext = createContext<{ tile?: ConsentTrackingTile; baselineBreakdown?: ConsentTrackingTile["breakdown"] }>({});
 
-export function GpcInventoryProvider({ tile, children }: { tile?: ConsentTrackingTile; children: ReactNode }) {
+export function GpcInventoryProvider({ tile, baselineBreakdown, children }: { tile?: ConsentTrackingTile; baselineBreakdown?: ConsentTrackingTile["breakdown"]; children: ReactNode }) {
   const scanId = tile?.deferredGpc?.scanId;
   const graphHash = tile?.deferredGpc?.graphHash;
   const [resolved, setResolved] = useState<GpcTileCounts | null>(null);
@@ -61,31 +62,40 @@ export function GpcInventoryProvider({ tile, children }: { tile?: ConsentTrackin
   }, [scanId, graphHash]);
   const current = tile && resolved && scanId === resolved.scanId && graphHash === resolved.graphHash
     ? { ...tile, ...resolved } : tile;
-  return <GpcContext.Provider value={current}>{children}</GpcContext.Provider>;
+  return <GpcContext.Provider value={{ tile: current, baselineBreakdown }}>{children}</GpcContext.Provider>;
 }
 
 export function GpcInventoryRecap({ fallback }: { fallback: ReactNode }) {
-  const tile = useContext(GpcContext);
+  const { tile } = useContext(GpcContext);
   if (!tile) return <>{fallback}</>;
   if (tile.count === null) return <>Flagged-item count unavailable</>;
   return <>{format(tile.count)} flagged {tile.count === 1 ? "item" : "items"} · {format(tile.breakdown!.nonEssential)} non-essential · {format(tile.breakdown!.review ?? 0)} review</>;
 }
 
+export function GpcInventoryRequestTable({ comparison }: { comparison: GpcRequestWindow }) {
+  const { tile, baselineBreakdown } = useContext(GpcContext);
+  return <GpcRequestTable comparison={comparison}
+    visitItems={{ baseline: baselineBreakdown, gpc: tile?.count == null ? undefined : tile.breakdown }} />;
+}
+
 export function GpcInventoryContributors() {
-  const tile = useContext(GpcContext);
+  const { tile } = useContext(GpcContext);
   if (!tile?.contributors?.length) return null;
-  return <details className="rounded-md border border-zinc-200 px-3 py-2">
+  return <details open className="rounded-md border border-zinc-200 px-3 py-2">
     <summary className="cursor-pointer font-medium text-zinc-800">Flagged items by service</summary>
     <table className="mt-2 w-full text-left text-xs tabular-nums"><thead><tr>
       <th scope="col">Service or endpoint</th><th scope="col">Non-essential</th><th scope="col">Review</th>
     </tr></thead><tbody>{tile.contributors.map(group => <tr key={group.service} className="border-t border-zinc-100">
-      <th scope="row" className="py-1 font-normal">{group.service}</th><td>{group.nonEssential}</td><td>{group.review}</td>
+      <th scope="row" className="py-1 font-normal"><span className="flex items-center gap-1.5">
+        <VendorBrandLogo label={group.service} bundledOnly className="!h-4 !w-4" />
+        <span className="break-words">{group.service}</span>
+      </span></th><td>{group.nonEssential}</td><td>{group.review}</td>
     </tr>)}</tbody></table>
   </details>;
 }
 
 export function ConsentTrackingSummary({ tiles: initialTiles }: { tiles: ConsentTrackingTile[] }) {
-  const gpc = useContext(GpcContext);
+  const { tile: gpc } = useContext(GpcContext);
   const tiles = gpc ? initialTiles.map(tile => tile.id === "gpc" ? gpc : tile) : initialTiles;
   const id = useId();
   const [selected, setSelected] = useState<string | null>(null);
@@ -148,7 +158,10 @@ export function ConsentTrackingSummary({ tiles: initialTiles }: { tiles: Consent
     <div id={`${id}-detail`} role="region" aria-labelledby={active ? `${id}-${active.id}` : undefined} hidden={!active} data-overview-expanded-content
       className="space-y-3 rounded-b-xl border-t border-slate-200 px-3 py-3 text-xs leading-5 text-slate-600 sm:px-4">
       {active ? <>
-        {active.gpcWindow ? <GpcRequestTable comparison={active.gpcWindow} /> : <h4 className="text-sm font-semibold text-slate-900">{active.label} <span className="ml-2 text-[11px] font-medium text-slate-600">{statusLabel[active.state]}</span></h4>}
+        {active.gpcWindow ? <GpcRequestTable comparison={active.gpcWindow} visitItems={{
+          baseline: tiles.find(tile => tile.id === "before")?.breakdown,
+          gpc: active.count === null ? undefined : active.breakdown,
+        }} /> : <h4 className="text-sm font-semibold text-slate-900">{active.label} <span className="ml-2 text-[11px] font-medium text-slate-600">{statusLabel[active.state]}</span></h4>}
         {active.id === "gpc" && active.state === "partial" ? <p>The count covers the resources retained from the GPC visit. Capture coverage was limited.</p> : null}
         {active.id === "gpc" && active.count === null ? <p>The scan lacks enough verified resource evidence for a flagged-item count.</p> : null}
         {active.notes?.length ? <ul className="max-h-44 space-y-1 overflow-y-auto">{active.notes.map((note, index) => <li key={index} className="break-words">{note}</li>)}</ul> : null}

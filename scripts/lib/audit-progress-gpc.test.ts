@@ -80,6 +80,21 @@ test('audit exposes informative request pairs, qualified activity facts and inde
  assert.equal(a.measurements['gpc.session.semantic_read_ms'],undefined);
  const late=pairedGpcAudit(fixture(5500));assert.equal(late.states['detail.gpc.early_zero_later_collection'],'early_zero_full_visit_positive');
 });
+test('the retained Google page-view review version preserves the bound CMP readback',()=>{
+ const baseline=fixture();
+ for(const receipt of ['received','not_received','unknown'] as const){
+  const observation={...baseline.gpcResponse.observation!,semanticProbe:'observed',semanticReadiness:undefined,
+   registration:{...baseline.gpcResponse.observation!.registration,cmpGpcSignal:receipt}};
+  const report={...baseline,gpcResponse:{...baseline.gpcResponse,observation:{...observation,requests:{...observation.requests,
+   collectionReview:{policyVersion:'gpc_collection_review.v2-google-page-view',rows:[]}}}}};
+  const audit=pairedGpcAudit(report);
+  assert.equal(audit.states['detail.gpc.cmp_receipt'],receipt);
+  assert.equal(audit.states['detail.gpc.semantic_readiness'],receipt==='unknown'?'explicit_gpc_bit_absent':'reason_not_retained');
+  assert.equal(pairedGpcAudit({...report,scanId:'wrong'}).states['detail.gpc.cmp_receipt'],'unavailable');
+  report.gpcResponse.observation.requests.collectionReview.policyVersion='gpc_collection_review.unsupported';
+  assert.equal(pairedGpcAudit(report).states['detail.gpc.cmp_receipt'],'unavailable');
+ }
+});
 test('bound CMP snapshots expose per-axis transitions without inferring causation',async()=>{
  const {gpcProductFixture}=await import('../../apps/web/lib/scans/test-fixtures/gpc-product');const f=gpcProductFixture();
  const a=pairedGpcAudit({scanId:f.assessment.observation.scanId,gpcResponse:{...f.assessment,cmpStateComparison:f.cmpStateComparison}});
@@ -124,15 +139,21 @@ test('recorded California collection is independent of comparison direction and 
   summary:'Synthetic retained evidence',observation:assessment.observation,scoreEffect:'none',legalInterpretation:'not_assessed',
   comparison:{...c,baselineArtifact:{lane:'runtime_evidence',sha256:b.pointer.sha256,sizeBytes:b.pointer.sizeBytes},gpcArtifact:{lane:'gpc_observation',sha256:g.pointer.sha256,sizeBytes:g.pointer.sizeBytes},delivery:{status:delivery.status}},
   californiaPolicy:{applied:true,deductionPoints:15},evidenceUrl:'https://example.test/evidence'});
- const report={scanId:pair.gpc.scanId,gpcResponse:response};
- const values=pairedGpcAudit(report).states;
- assert.equal(values['detail.gpc.california_collection'],'recorded');
- assert.equal(values['detail.gpc.assessment_coverage'],comparison.comparison.comparable?'assessed':'inconclusive');
- response.californiaPolicy={applied:false,deductionPoints:0};
- assert.equal(pairedGpcAudit(report).states['detail.gpc.california_collection'],'not_recorded');
- response.observation!.sourceSha256='f'.repeat(64);
- assert.equal(pairedGpcAudit(report).states['detail.gpc.california_collection'],'unavailable');
- assert.equal(pairedGpcAudit({...report,scanId:'other'}).states['detail.gpc.assessment_coverage'],'unavailable');
+ for(const policyVersion of ['gpc_collection_review.v1','gpc_collection_review.v2-google-page-view'] as const){
+  const current=structuredClone(response),observation=current.observation!;
+  observation.requests.collectionReview={policyVersion,rows:observation.requests.collectionReview?.rows??[]};
+  const report={scanId:pair.gpc.scanId,gpcResponse:current};
+  const values=pairedGpcAudit(report).states;
+  assert.equal(values['detail.gpc.california_collection'],'recorded',policyVersion);
+  assert.equal(values['detail.gpc.assessment_coverage'],comparison.comparison.comparable?'assessed':'inconclusive');
+  current.californiaPolicy={applied:false,deductionPoints:0};
+  const withoutPolicyFinding=pairedGpcAudit(report).states;
+  assert.equal(withoutPolicyFinding['detail.gpc.california_collection'],'not_recorded',policyVersion);
+  assert.equal(withoutPolicyFinding['detail.gpc.session_collection'],'positive_retained',policyVersion);
+  observation.sourceSha256='f'.repeat(64);
+  assert.equal(pairedGpcAudit(report).states['detail.gpc.california_collection'],'unavailable',policyVersion);
+  assert.equal(pairedGpcAudit({...report,scanId:'other'}).states['detail.gpc.assessment_coverage'],'unavailable');
+ }
 });
 
 test("daily readback counts a verified in-window GPP event once and prefers an explicit terminal answer", async () => {

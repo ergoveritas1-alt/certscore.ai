@@ -225,6 +225,25 @@ test("carries bounded prior policy URLs into Lambda as acceleration hints", () =
   }]);
 });
 
+test("marks exact URLs backed by a matching retained policy document", () => {
+  const sourceCompletedAt = new Date().toISOString();
+  const config = buildLambdaScanConfig();
+  const source = { sourceCompletedAt, sourceScanId: "saved-policy-scan" };
+  const url = new URL("/privacy-policy", config.normalizedUrl).href;
+  config.execution = {
+    ...config.execution,
+    crawlSeedHints: [
+      { ...source, source: "prior_scan_hint", hintType: "privacy_policy", url },
+      { ...source, source: "prior_scan_hint", hintType: "cookie_policy", url: new URL("/cookies", url).href },
+    ],
+    priorDocumentSources: [
+      { ...source, canonicalUrl: url, documentType: "privacy_policy", documentText: "Retained policy text." },
+    ],
+  };
+  const payload = buildLocalV2DagLambdaDispatchPayload({ scanConfig: config, scanId: "scan-policy-priority" });
+  assert.deepEqual(payload.policySurfaceSeeds?.map(seed => seed.verifiedDocument), [true, undefined]);
+});
+
 test("drops stale prior policy URLs before Lambda dispatch", () => {
   const config = buildLambdaScanConfig();
   config.execution = {

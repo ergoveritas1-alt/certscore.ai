@@ -4,10 +4,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { chromium } from "playwright";
+import type { Page, Request } from "playwright";
 import { createArtifactWriter } from "./artifact-writer.js";
+import { chromiumLaunchOptions } from "./playwright-runtime.js";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 import {
   alternateWwwNavigationUrl,
+  entryNavigationGuardObserver,
+  navigationFailureCode,
   boundedRetryAfterMs,
   classifyNavigationFailure,
   httpsTransportUpgradeUrl,
@@ -19,6 +24,120 @@ import {
   navigationTransportRecoveryUrls,
   navigationDiagnosticOrigin,
 } from "./transport-fallback.js";
+
+test("entry navigation diagnostic codes exclude URLs and call logs", () => {
+  assert.equal(navigationFailureCode(new Error("page.goto: Timeout 250ms exceeded.\nCall log: net::ERR_CONNECTION_RESET")), "timeout");
+  assert.equal(navigationFailureCode("page.goto: net::ERR_SSL_PROTOCOL_ERROR at https://example.test/"), "ERR_SSL_PROTOCOL_ERROR");
+  assert.equal(navigationFailureCode("unrelated at https://example.test/ERR_BLOCKED_BY_CLIENT"), "other");
+  assert.equal(navigationFailureCode("page.goto: net::ERR_UNREVIEWED"), "other");
+});
+
+test("only the reported navigation failure can authorize transport recovery", () => {
+  assert.equal(isNavigationTransportFailure("page.goto: net::ERR_TIMED_OUT at https://fixture.test/"), true);
+  for (const reason of ["net::ERR_BLOCKED_BY_CLIENT", "net::ERR_NAME_NOT_RESOLVED", "Download is starting"]) {
+    assert.equal(isNavigationTransportFailure(`page.goto: ${reason} at https://fixture.test/timeout\nCall log: net::ERR_CONNECTION_RESET`), false);
+  }
+});
+
+for (const scenario of ["native_timeout", "timeout_before_commit", "client_block"] as const) {
+  test(`bounded entry navigation handles ${scenario} on a loopback fixture`, async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "certscore-entry-timeout-"));
+    const browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
+    const pathname = scenario === "client_block" ? "/timeout" : "/entry";
+    const secure = `https://127.0.0.1${pathname}`;
+    const alternate = `http://127.0.0.1${pathname}`;
+    const requests: string[] = [];
+    const unexpected: string[] = [];
+    const newContext = browser.newContext.bind(browser);
+    browser.newContext = async options => {
+      const context = await newContext({ ...options, serviceWorkers: "block" });
+      await context.route("**/*", route => {
+        const url = route.request().url();
+        requests.push(url);
+        if (url === secure) return route.abort(scenario === "client_block" ? "blockedbyclient" : "timedout");
+        if (url === alternate) return route.fulfill({ contentType: "text/html", body: "<main><h1>Fixture storefront</h1></main>" });
+        unexpected.push(url);
+        return route.abort();
+      });
+      if (scenario === "timeout_before_commit") {
+        const newPage = context.newPage.bind(context);
+        context.newPage = async () => {
+          const page = await newPage();
+          const goto = page.goto.bind(page);
+          await goto("data:text/html,<p>Earlier document</p>");
+          page.goto = (url, options) => url === secure
+            ? Promise.reject(new Error("page.goto: Timeout 15000ms exceeded."))
+            : goto(url, options);
+          return page;
+        };
+      }
+      return context;
+    };
+    try {
+      const result = await preConsentRuntimeScanner({ browser, url: secure, normalizedUrl: secure,
+        artifactWriter: await createArtifactWriter(root), captureScope: "consent_proof", internalBudgetMs: 8_000,
+        scanStartedAtMs: Date.now(), screenshotMode: "never", waitMode: "fast" });
+      const attempts = result.moduleRun.recoveryDiagnostics?.attempts ?? [];
+      assert.equal(attempts[0]?.outcome, "transport_error");
+      assert.equal(attempts[0]?.failureCode, scenario === "client_block" ? "ERR_BLOCKED_BY_CLIENT" :
+        scenario === "native_timeout" ? "ERR_TIMED_OUT" : "timeout");
+      if (scenario === "client_block") {
+        assert.equal(attempts.length, 1);
+        assert.ok(!requests.includes(alternate));
+      } else {
+        assert.equal(attempts.length, 2);
+        assert.equal(attempts[1]?.url, alternate);
+        assert.equal(attempts[1]?.httpStatus, 200);
+        assert.equal(attempts[1]?.outcome, "success");
+      }
+      assert.deepEqual(unexpected, []);
+    } finally {
+      await browser.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test("only the current main-frame entry request or its server redirects can attribute a denial", () => {
+  const frame = {};
+  const observer = entryNavigationGuardObserver({ mainFrame: () => frame } as unknown as Page);
+  const request = (url: string, previous?: Request, isNavigation = true, ownFrame = frame) => ({
+    url: () => url, redirectedFrom: () => previous ?? null, isNavigationRequest: () => isNavigation, frame: () => ownFrame,
+  }) as unknown as Request;
+  const url = "https://example.test/", root = request(url);
+  const denied = { reason: "dns_resolution_failed", resolverCode: "ENOTFOUND" } as const;
+  observer.begin(url + "#entry");
+  observer.bind(root);
+  for (const unrelated of [request(url), request(url, undefined, false), request(url, undefined, true, {}), request("https://other.test/")]) {
+    observer.bind(unrelated);
+    observer.deny(unrelated, denied);
+    assert.equal(observer.decision(), undefined);
+  }
+  const redirect = request("https://www.example.test/", root);
+  observer.bind(redirect);
+  observer.deny(redirect, denied);
+  assert.deepEqual(observer.decision(), denied);
+  observer.end();
+  observer.begin("https://www.example.test/");
+  observer.deny(redirect, denied);
+  assert.equal(observer.decision(), undefined);
+});
+
+test("the runtime scanner retains the initial navigation guard denial without a recovery visit", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "entry-navigation-denied-"));
+  const url = "https://127.0.0.1/";
+  try {
+    const result = await preConsentRuntimeScanner({
+      url, normalizedUrl: url, navigationHosts: [], screenshotMode: "never", waitMode: "fast",
+      artifactWriter: await createArtifactWriter(directory), scanStartedAtMs: Date.now(), internalBudgetMs: 10_000,
+    });
+    const attempts = result.moduleRun.recoveryDiagnostics?.attempts;
+    assert.equal(attempts?.length, 1);
+    assert.equal(attempts?.[0]?.outcome, "transport_error");
+    assert.equal(attempts?.[0]?.failureCode, "ERR_BLOCKED_BY_CLIENT");
+    assert.deepEqual(attempts?.[0]?.guardDecision, { reason: "navigation_host_denied" });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 test("HTTP transport fallback preserves the complete HTTPS target", () => {
   assert.equal(

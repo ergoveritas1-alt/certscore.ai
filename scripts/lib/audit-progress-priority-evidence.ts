@@ -88,6 +88,14 @@ const receipt = z.object({
 }).strict();
 
 export const ACCEPT_PATH_DIAGNOSTIC_KEY = "sealed.priority_evidence.accept_path_reason";
+export const REJECT_ACTIVITY_KEY = "sealed.priority_evidence.reject_activity";
+export const REJECT_ACTIVITY_METRIC = {
+  id: REJECT_ACTIVITY_KEY,
+  label: "Reject click activity evidence",
+  group: "A/R verdicts",
+  denominator: "Readable reportable scans; completed Reject clicks with a generation-matched receipt can supply a classified outcome.",
+  success: [],
+};
 
 export const PRIORITY_EVIDENCE_METRICS = [
   {id:ACCEPT_PATH_DIAGNOSTIC_KEY,label:"Accept non-completion reason",group:"A/R verdicts",

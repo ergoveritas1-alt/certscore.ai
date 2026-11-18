@@ -1,6 +1,11 @@
 import {documentedChoiceCookie, resolveCanonicalCookieClassification} from "@certscore/vendor-resolver";
 import type { PostRefusalReportProjection } from "@certscore/contracts";
 
+/** Current report and audit evidence use the same cookie classification. */
+export function retainedCurrentRejectPresence(projection: PostRefusalReportProjection) {
+  return retainedRejectPresence(projection, "certscore.cookie-purpose.v7", true);
+}
+
 /** Positive observations only. Cookie presence does not establish a write or
  * active use; service presence does not establish identifier transmission. */
 export function retainedRejectPresence(p: PostRefusalReportProjection,cookiePurposePolicy?: "certscore.cookie-purpose.v6" | "certscore.cookie-purpose.v7", includeChoiceCookies = false) {

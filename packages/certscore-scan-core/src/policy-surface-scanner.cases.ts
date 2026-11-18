@@ -2813,6 +2813,32 @@ test("policySurfaceScanner fast mode stops stalled rendered discovery at the sof
   });
 });
 
+test("policySurfaceScanner closes a late owned browser without starting a context after discovery expires", async (t) => {
+  let contexts = 0;
+  let closes = 0;
+  const browser = {
+    async newContext() {
+      contexts++;
+      return { async close() {} };
+    },
+    async close() { closes++; },
+  } as unknown as Browser;
+  let finishLaunch: ((browser: Browser) => void) | undefined;
+  t.mock.method(chromium, "launch", () => new Promise<Browser>(resolve => { finishLaunch = resolve; }));
+  try {
+    await withPolicyScan("policy-footer-privacy", async ({ result }) => {
+      assert.equal(observedSurface(result.policySurfaceObservations, "privacy_policy")?.status, "fetched");
+      assert.ok(finishLaunch, "The owned browser launch was in flight at the soft deadline");
+      finishLaunch(browser);
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(contexts, 0, "Expired discovery cannot create a context after a late launch");
+      assert.ok(closes >= 1, "The runtime still closes its late-owned browser");
+    }, { discoveryMode: "fast", internalBudgetMs: 1_800 });
+  } finally {
+    finishLaunch?.(browser);
+  }
+});
+
 test("policySurfaceScanner warms the primary page-locale policy path before weak generic guesses", async () => {
   const stalledBrowser = {
     async newContext() {
@@ -5791,6 +5817,73 @@ test("policySurfaceScanner keeps core common paths when Nano ranks only secondar
       true,
     );
   } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("policySurfaceScanner keeps its owned browser for policy recovery after discovery times out", async (t) => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-discovery-timeout-"));
+  const launch = chromium.launch.bind(chromium);
+  let launches = 0;
+  let contexts = 0;
+  let discoveryClosed = false;
+  let browserClosedBeforeRecovery = false;
+  let ownedBrowser: Browser | undefined;
+  t.mock.method(chromium, "launch", async (options) => {
+    launches++;
+    const browser = ownedBrowser = await launch(options);
+    const newContext = browser.newContext.bind(browser);
+    t.mock.method(browser, "newContext", async (contextOptions) => {
+      const index = contexts++;
+      if (index > 0) browserClosedBeforeRecovery ||= !browser.isConnected();
+      const context = await newContext(contextOptions);
+      await context.route("**/*", route => {
+        const url = new URL(route.request().url());
+        if (url.origin !== server.baseUrl) return route.abort("blockedbyclient");
+        if (url.pathname === "/browser-visible-policy-homepage") return route.fulfill({
+          status: 200, contentType: "text/html", body: `<html><body><main>${publisherPolicyText}</main>
+            <footer><a href="/browser-visible-policy-homepage/privacy">Privacy Policy</a></footer></body></html>`,
+        });
+        return route.fallback();
+      });
+      if (index === 0) {
+        context.once("close", () => { discoveryClosed = true; });
+        const newPage = context.newPage.bind(context);
+        t.mock.method(context, "newPage", async () => {
+          const page = await newPage();
+          // Stall readiness after the positive footer checkpoint, matching the
+          // retained CNN sequence without contacting CNN or any external site.
+          t.mock.method(page, "waitForFunction", () => new Promise((_resolve, reject) => {
+            context.once("close", () => reject(new Error("Discovery context closed")));
+          }));
+          return page;
+        });
+      }
+      return context;
+    });
+    return browser;
+  });
+  try {
+    const url = `${server.baseUrl}/browser-visible-policy-homepage`;
+    const result = await policySurfaceScanner({ url, normalizedUrl: url, scanStartedAtMs: Date.now(),
+      internalBudgetMs: 2_500, discoveryMode: "fast", artifactWriter: await createArtifactWriter(tempRoot),
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider() });
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    assert.ok(result.moduleRun.timingBreakdown?.some(timing => timing.label === "rendered discovery: policy link readiness" &&
+      timing.detail.includes("still pending")), "Exercise the soft timeout after retaining the observed link");
+    assert.equal(discoveryClosed, true, "Timed-out discovery context is closed");
+    assert.equal(browserClosedBeforeRecovery, false, "Recovery must not reuse a closed browser");
+    assert.equal(launches, 1, "Recovery reuses the original browser without relaunching");
+    assert.ok(contexts >= 2, "Recovery uses a fresh context after discovery cancellation");
+    assert.ok(result.policySurfaceObservations.some(observation => observation.status === "fetched" &&
+      observation.normalizedUrl === `${url}/privacy` && observation.httpStatus === 200));
+    assert.ok(diagnostics.failedFetches.some(failure => failure.stage === "candidate_direct" && failure.httpStatus === 403));
+    assert.ok(diagnostics.funnel.renderedRecoverySuccesses >= 1);
+    assert.equal(ownedBrowser?.isConnected(), false, "Final cleanup still closes the owned browser");
+  } finally {
+    await ownedBrowser?.close();
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
   }

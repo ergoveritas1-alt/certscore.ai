@@ -177,21 +177,23 @@ test("HubSpot dedicated GPC notification requires visible SDK-scoped current-vis
 test("HubSpot applied GPC requires a ready own-data receipt from its loaded SDK", async t => {
   const browser = await chromium.launch(chromiumLaunchOptions({headless:true}));
   try {
-    for (const scenario of ["applied","false","missing","pending","future","getter","override","no_sdk","baseline"]) await t.test(scenario, async () => {
+    for (const scenario of ["applied","na2","lookalike","false","missing","pending","future","getter","override","no_sdk","baseline"]) await t.test(scenario, async () => {
       const context = await browser.newContext({serviceWorkers:"block"});
       try {
         const code = "window.hsCookieBanner={rawPerfMetrics:{bannerStartAt:0,bannerReadyAt:" +
           (scenario === "pending" ? "undefined" : scenario === "future" ? "1e9" : "1") + ",matchedBannerType:4," +
           (scenario === "getter" ? "get usesGpc(){window.getterInvoked=true;return true}" :
             scenario === "missing" ? "" : "usesGpc:" + (scenario !== "false")) + "}};";
+        const host = scenario === "na2" ? "js-na2.hs-banner.com" :
+          scenario === "lookalike" ? "js-na2.hs-banner.com.example.test" : "js.hs-banner.com";
         const html = scenario === "no_sdk" ? "<script>"+code+"</script>" :
-          '<script src="https://js.hs-banner.com/v2/3828814/banner.js"></script>';
+          `<script src="https://${host}/v2/3828814/banner.js"></script>`;
         await context.route("**/*", route => route.fulfill(route.request().resourceType() === "script"
           ? {contentType:"application/javascript",body:code} : {contentType:"text/html",body:html}));
         const page = await context.newPage(), started = Date.now();
         await page.goto("https://hubspot-fixture.test/" + (scenario === "override" ? "?_hsGpcSignal=TRUE" : ""));
         const sample = await captureGpcOptOutObservation(page,{scanId:"applied",scanStartedAtMs:started,semanticOnly:scenario === "baseline"});
-        assert.equal(sample.hubspotGpcApplied,scenario === "applied" ? true : undefined);
+        assert.equal(sample.hubspotGpcApplied,["applied","na2"].includes(scenario) ? true : undefined);
         assert.equal(await page.evaluate("window.getterInvoked"),undefined);
         assert.deepEqual(sample.acknowledgment,[]);
       } finally { await context.close(); }
@@ -203,7 +205,9 @@ test("TrustArc and Cookiebot dedicated slots exclude empty and hidden retained t
   const browser = await chromium.launch(chromiumLaunchOptions({headless:true}));
   try {
     for (const cmp of ["TrustArc", "Cookiebot"]) {
-      for (const scenario of ["visible","template","hidden","policy","ambiguous","duplicate","no_sdk","outside","baseline"]) await t.test(cmp + " " + scenario, async () => {
+      const scenarios = ["visible","template","hidden","policy","ambiguous","duplicate","no_sdk","outside","baseline"];
+      if (cmp === "TrustArc") scenarios.push("legacy_host", "lookalike");
+      for (const scenario of scenarios) await t.test(cmp + " " + scenario, async () => {
         const context = await browser.newContext({serviceWorkers:"block"});
         try {
           const trustarc = cmp === "TrustArc";
@@ -211,7 +215,9 @@ test("TrustArc and Cookiebot dedicated slots exclude empty and hidden retained t
             scenario === "policy" ? "We honor Global Privacy Control signals." : "The GPC signal is honored";
           const slot = trustarc ? '<span id="truste-gpc-signal">'+wording+'</span>' :
             '<div class="CybotCookiebotDialogGpcContainer"><div class="CybotCookiebotDialogGpcText">'+wording+'</div></div>';
-          const sdk = trustarc ? "//consent.trustarc.com/notice?domain=fixture.test" : "https://consent.cookiebot.com/uc.js";
+          const trustarcHost = scenario === "legacy_host" ? "consent.truste.com" :
+            scenario === "lookalike" ? "consent.truste.com.example.test" : "consent.trustarc.com";
+          const sdk = trustarc ? `https://${trustarcHost}/notice?domain=fixture.test` : "https://consent.cookiebot.com/uc.js";
           const content = (scenario === "no_sdk" ? "" : '<script src="'+sdk+'"></script>') +
             '<div id="'+(scenario === "outside" ? "policy-body" : trustarc ? "truste-consent-track" : "CybotCookiebotDialog")+'" '+
             (scenario === "hidden" ? 'style="display:none"' : "")+'>'+slot+(scenario === "duplicate" ? slot : "")+'</div>';
@@ -219,7 +225,7 @@ test("TrustArc and Cookiebot dedicated slots exclude empty and hidden retained t
             {contentType:"application/javascript",body:"/* fixture */"} : {contentType:"text/html",body:content}));
           const page = await context.newPage(), started = Date.now(); await page.goto("https://cmp-slot.test/");
           const sample = await captureGpcOptOutObservation(page,{scanId:"cmp-slot",scanStartedAtMs:started,semanticOnly:scenario === "baseline"});
-          assert.deepEqual(sample.acknowledgment.map(r=>r.source),scenario === "visible" ?
+          assert.deepEqual(sample.acknowledgment.map(r=>r.source),["visible","legacy_host"].includes(scenario) ?
             [trustarc ? "visible_trustarc_gpc_notification" : "visible_cookiebot_gpc_notification"] : []);
           assert.equal(sample.gppStatus,"unavailable");
         } finally { await context.close(); }

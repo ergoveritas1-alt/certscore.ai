@@ -7,12 +7,13 @@ import {CONTROL_ACCESSIBILITY_SQL,TRACKING_REVIEW_SQL} from './audit-progress-co
 import {auditSqlOverrideFits} from './audit-prod-db-bounded';
 import {CALIFORNIA_REJECT_COVERAGE_SQL} from './audit-california-reject-coverage';
 import {MAX_AUDIT_POLICY_PROVENANCE_BYTES} from '../../packages/certscore-contracts/src/audit-policy-provenance';
+import {MAX_AUDIT_REJECT_ACTIVITY_BYTES} from '../../packages/certscore-contracts/src/audit-reject-activity';
 
 // ECS rejected an 8,174-byte compact override. Leave room for launch
 // serialization before choosing among the existing query variants.
 const DELTA_OVERRIDE_HEADROOM_BYTES = 192;
 /** Pure offline query builder; never starts a task. */
-export function buildAuditDeltaQuery(b:any,includeOperations:boolean,includePrivacyForm=false,includeControlAccessibility=false,includeCaliforniaReject=false,includeTechnicalCounts=false,includeTrackingReviews=false,includePolicyReceipt=false,includeComparison=false):string{
+export function buildAuditDeltaQuery(b:any,includeOperations:boolean,includePrivacyForm=false,includeControlAccessibility=false,includeCaliforniaReject=false,includeTechnicalCounts=false,includeTrackingReviews=false,includePolicyReceipt=false,includeComparison=false,includeNavigationBlock=false):string{
 const origin=botOriginWindowSql(b.overlapStartUtc,b.windowEndUtc);
 const pending:string[]=b.pendingRefreshIds??[];
 // The run freezes this setting after verification of the diagnostic producers.
@@ -41,11 +42,13 @@ select row_to_json(r) from (
  p.report_projection_version projection_version,p.report_projection_status projection_status,
  ${includeComparison?`case when not o."isCanary" and p.report_projection_status='ready' and p.report_projection_payload#>>'{scan,id}'=s.id::text and octet_length((p.report_projection_payload#>'{runtimeArtifacts,auditComparison}')::text)<=512
  then p.report_projection_payload#>'{runtimeArtifacts,auditComparison}' end "auditComparison",`:''}
+ ${includeNavigationBlock?`case when not o."isCanary" and p.report_projection_status='ready' and p.report_projection_payload#>>'{scan,id}'=s.id::text and octet_length((p.report_projection_payload#>'{runtimeArtifacts,auditNavigationBlock}')::text)<=384 then p.report_projection_payload#>'{runtimeArtifacts,auditNavigationBlock}' end "auditNavigationBlock",`: ''}
  ${OPT_OUT_EXTRACT_SQL} control_assessment,
  ${choiceAuditSqlForTransport(includeOperations,includeControlAccessibility||includeOperations,diagnostics)} choice_audit,
  ${includeControlAccessibility?`case when not o."isCanary" and p.report_projection_payload#>>'{scan,id}'=s.id::text then ${CONTROL_ACCESSIBILITY_SQL} end "controlAccessibility",`:''}
  ${includePrivacyForm ? `case when not o."isCanary" then p.report_projection_payload->>'auditPrivacyForm' end "auditPrivacyForm",` : ''}
  ${includeCaliforniaReject ? `${CALIFORNIA_REJECT_COVERAGE_SQL} "caReject",` : ''}
+ ${b.includeRejectActivityReceipt===true ? `${REJECT_ACTIVITY_RECEIPT_SQL} "auditRejectActivity",` : ''}
  ${includeTechnicalCounts ? `${technicalCountsSql(diagnostics)} "technicalCounts",` : ''}
  ${includeTrackingReviews ? `case when not o."isCanary" and p.report_projection_payload#>>'{scan,id}'=s.id::text then ${TRACKING_REVIEW_SQL} end "trackingReviews",` : ''}
  ${includePolicyReceipt ? policyReceiptSql : ''}
@@ -67,6 +70,11 @@ return sql.replace(/'(?:''|[^'])*'|"(?:""|[^"])*"|\s*[(),]\s*|\s+/g,
 // intake. Transport it separately so a full choice summary cannot evict it.
 const policyReceipt="p.report_projection_payload->'auditPolicyProvenance'";
 const policyReceiptSql=`case when not o."isCanary" and p.report_projection_status='ready' and octet_length((${policyReceipt})::text)<=${MAX_AUDIT_POLICY_PROVENANCE_BYTES} then ${policyReceipt} end "policyReceipt",`;
+const rejectActivityReceipt="p.report_projection_payload->'auditRejectActivity'";
+export const REJECT_ACTIVITY_RECEIPT_SQL=`case when not o."isCanary" and p.report_projection_status='ready'
+ and p.report_projection_payload#>>'{scan,id}'=s.id::text
+ and octet_length((${rejectActivityReceipt})::text)<=${MAX_AUDIT_REJECT_ACTIVITY_BYTES}
+ then ${rejectActivityReceipt} end`;
 
 export function technicalCountsSql(diagnostics=false){
  const fields=[
@@ -104,7 +112,7 @@ export function planAuditDeltaQuery(b:any,marker:string){
  const candidates=[
   {controlAccessibility:true},
  ].map(variant=>{
-  const sql=buildAuditDeltaQuery(b,false,privacyForm,variant.controlAccessibility,true,true,true,true,true);
+  const sql=buildAuditDeltaQuery(b,false,privacyForm,variant.controlAccessibility,true,true,true,true,true,true);
   const measured=auditSqlOverrideFits({marker,readOnly:true,sql});
   const planningLimitBytes=measured.limitBytes-DELTA_OVERRIDE_HEADROOM_BYTES;
   return {...variant,operations:false,policyReceipt:true,privacyForm,sql,override:{...measured,planningLimitBytes,fits:measured.bytes<=planningLimitBytes}};
@@ -123,7 +131,9 @@ export function fitAuditDeltaQuery(b:any,marker:string){
  throw Error('Required query exceeds planning cap even with zero pending IDs; no task started');
 }
 /** Current query contract only; historical manifests keep their original readable versions. */
-export function assertCurrentPriorityExtraction(rows:any[],forwardDiagnostics=false){
+export function assertCurrentPriorityExtraction(rows:any[],forwardDiagnostics=false,rejectActivity=false){
+ if(rejectActivity&&rows.some(row=>!Object.hasOwn(row,'auditRejectActivity')))
+  throw Error('Current query omitted the post-Reject activity receipt slot');
  for(const row of rows)if(['completed','completed_limited'].includes(row.status)){
   const summary=row.choice_audit;
   if(summary?.version!==CHOICE_AUDIT_VERSION||summary.availability!=='size_bound'&&!hasPriorityCoverage(summary.priorityEvidence)&&jsonbBytes({...summary,priorityEvidence:'size_bound'})<=8192)throw Error('Current completed-row query omitted v2 priority coverage diagnostics');

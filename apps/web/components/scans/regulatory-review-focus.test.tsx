@@ -16,6 +16,19 @@ test("review selector is compact and exposes both focus choices", () => {
   assert.doesNotMatch(markup, /California visitor behavior|href="#gpc-evidence"|A separate CCPA\/CPRA score|Consent evidence/);
 });
 
+test("only the inactive posture has a compact score, including a verified zero", () => {
+  const scores = { gdpr_eprivacy: 71, ccpa_cpra: 84 };
+  const gdpr = renderToStaticMarkup(<RegulatoryReviewFocus focus="gdpr_eprivacy" scores={scores} />);
+  assert.match(gdpr, /CCPA\/CPRA<span[^>]*title="84\/100"[^>]*data-posture-preview-score/);
+  assert.match(gdpr, /score 84 out of 100/);
+  assert.doesNotMatch(gdpr, /71\/100/);
+  const california = renderToStaticMarkup(<RegulatoryReviewFocus focus="ccpa_cpra" scores={scores} />);
+  assert.match(california, /GDPR\/ePrivacy<span[^>]*title="71\/100"[^>]*data-posture-preview-score/);
+  assert.doesNotMatch(california, /84\/100/);
+  assert.match(renderToStaticMarkup(<RegulatoryReviewFocus focus="gdpr_eprivacy" scores={{ ccpa_cpra: 0 }} />), /score 0 out of 100/);
+  assert.doesNotMatch(renderToStaticMarkup(<RegulatoryReviewFocus focus="gdpr_eprivacy" scores={{ ccpa_cpra: null }} />), /data-posture-preview-score/);
+});
+
 test("California evidence is scoped to CCPA and remains compact when unavailable", () => {
   assert.equal(renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="gdpr_eprivacy" />), "");
   const html = renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="ccpa_cpra" />);

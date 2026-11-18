@@ -65,7 +65,7 @@ const canonicalGpcCmpStateComparisonSchema: z.ZodType<GpcCmpStateComparison> = g
 const canonicalGpcActivityComparisonSchema: z.ZodType<GpcActivityComparison> = gpcActivityComparisonSchema;
 import { gpcOptOutObservationSchema } from "./gpc-opt-out-prototype";
 export { terminalLaneEvidenceSchema, runtimeVisitEligibilityDiagnosticSchema, retainedRuntimeNoGoReasonSchema, type TerminalLaneEvidence, type RuntimeVisitEligibilityDiagnostic } from "./terminal-lane-evidence";
-export { classifyRuntimeErrorPage } from "./runtime-error-page";
+export { classifyRuntimeErrorPage, isAmazonShoppingInterstitial } from "./runtime-error-page";
 export * from "./gpc-impact";
 export * from "./collection-field-review";
 export * from "./collection-field-labels";
@@ -81,7 +81,7 @@ export * from "./accessibility-audit";
 const canonicalAccessibilityAuditSchema: z.ZodType<AccessibilityAuditObservation> = accessibilityAuditObservationSchema;
 export * from "./cms-version-evidence";
 import { z } from "zod";
-export { isBoundRuntimeAuthenticationPage, boundRuntimeDocumentStatus, hasBoundRuntimeVisualContent, hasRepresentativeRuntimeText, getUsableRuntimeVisitSnapshot, assessRuntimeVisitSnapshot, RUNTIME_VISIT_REJECTION_REASONS, type RuntimeVisitRejectionReason } from "./usable-runtime-visit";
+export { runtimeViewportCandidate, reviewedRuntimeViewport, RUNTIME_VIEWPORT_ID, RUNTIME_VIEWPORT_FILENAME, isBoundRuntimeAuthenticationPage, boundRuntimeDocumentStatus, hasBoundRuntimeVisualContent, hasRepresentativeRuntimeText, getUsableRuntimeVisitSnapshot, assessRuntimeVisitSnapshot, RUNTIME_VISIT_REJECTION_REASONS, type RuntimeVisitRejectionReason } from "./usable-runtime-visit";
 import { consentControlLinkDestinationSchema } from "./consent-control-link";
 import { vendorServicePurposeSchema } from "./vendor-service-purpose";
 import { vendorRegistryAttributionSchema } from "./vendor-registry-attribution";
@@ -316,6 +316,88 @@ export const siteFacingNavigationDiagnosticsSchema = z.object({
   }
 });
 
+const securityChallengeRecoveryDecisionSchema = z.enum([
+  "challenge_markers_detected",
+  "inventory_only",
+  "no_navigation_response",
+  "ineligible_status",
+  "insufficient_budget",
+  "body_read_failed",
+  "substantive_body",
+  "challenge_markers_absent",
+]);
+
+const mainDocumentHttpStatusSchema = z.number().int().min(100).max(599);
+const sameSessionReloadSchema = z.discriminatedUnion("outcome", [
+  z.object({ outcome: z.literal("response"), httpStatus: mainDocumentHttpStatusSchema }).strict(),
+  z.object({
+    outcome: z.enum([
+      "body_read_failed",
+      "substantive_body",
+      "challenge_markers_absent",
+      "transient_status_already_retried",
+      "insufficient_budget",
+      "in_progress",
+      "no_response",
+    ]),
+  }).strict(),
+]);
+
+export interface SecurityChallengeRecovery {
+  initialHttpStatus: number | null;
+  decision: z.infer<typeof securityChallengeRecoveryDecisionSchema>;
+  sameSessionReload?: z.infer<typeof sameSessionReloadSchema>;
+}
+
+const securityChallengeRecoverySchema: z.ZodType<SecurityChallengeRecovery> = z.object({
+  initialHttpStatus: mainDocumentHttpStatusSchema.nullable(),
+  decision: securityChallengeRecoveryDecisionSchema,
+  sameSessionReload: sameSessionReloadSchema.optional(),
+}).strict();
+
+// Bounded observations from a failed entry navigation. Historical attempts omit these fields.
+export const navigationFailureCodeSchema = z.enum([
+  "timeout", "download", "page_closed", "other", "ERR_ABORTED", "ERR_BLOCKED_BY_CLIENT",
+  "ERR_CERT_AUTHORITY_INVALID", "ERR_CERT_COMMON_NAME_INVALID", "ERR_CERT_DATE_INVALID",
+  "ERR_CONNECTION_CLOSED", "ERR_CONNECTION_REFUSED", "ERR_CONNECTION_RESET", "ERR_CONNECTION_TIMED_OUT",
+  "ERR_EMPTY_RESPONSE", "ERR_HTTP2_PROTOCOL_ERROR", "ERR_HTTP_RESPONSE_CODE_FAILURE",
+  "ERR_INVALID_AUTH_CREDENTIALS", "ERR_NAME_NOT_RESOLVED", "ERR_NETWORK_CHANGED", "ERR_PROXY_CONNECTION_FAILED",
+  "ERR_SSL_PROTOCOL_ERROR", "ERR_SSL_VERSION_OR_CIPHER_MISMATCH", "ERR_TIMED_OUT",
+  "ERR_TOO_MANY_REDIRECTS", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_ADDRESS_UNREACHABLE",
+]);
+const navigationGuardDecisionSchema = z.object({
+  reason: z.enum(["invalid_url", "unsupported_url", "disallowed_hostname", "non_public_literal",
+    "dns_resolution_failed", "dns_no_answers", "non_public_dns_answer", "redirect_limit", "unspecified",
+    "navigation_host_denied", "navigation_route_denied"]),
+  resolverCode: z.enum(["EAI_AGAIN", "ENOTFOUND", "ETIMEOUT", "ESERVFAIL", "ECONNREFUSED", "ECANCELLED", "other"]).optional(),
+}).strict();
+export type NavigationGuardDecision = z.infer<typeof navigationGuardDecisionSchema>;
+/** Internal audit projection of one runtime lane. Only typed codes leave the bundle. */
+export const auditNavigationBlockSchema = z.object({
+  initial: navigationFailureCodeSchema.nullable(),
+  terminal: z.literal("ERR_BLOCKED_BY_CLIENT"),
+  mode: z.enum(["initial_https_navigation", "https_apex_www_recovery", "http_transport_fallback"]),
+  guard: navigationGuardDecisionSchema.nullable(),
+}).strict().refine(b => (!b.guard?.resolverCode || b.guard.reason === "dns_resolution_failed") &&
+  (b.mode !== "initial_https_navigation" || b.initial === b.terminal));
+export type AuditNavigationBlock = z.infer<typeof auditNavigationBlockSchema>;
+
+export function projectAuditNavigationBlock(lanes: NonNullable<CanonicalEvidenceBundle["scanLaneRuns"]>): AuditNavigationBlock | null {
+  const runtime = lanes.filter(lane => lane.laneId === "runtime_evidence");
+  if (runtime.length !== 1 || runtime[0]!.accessOutcome !== "navigation_failed") return null;
+  const attempts = runtime[0]!.navigationAttempts;
+  const first = attempts[0], last = attempts.at(-1);
+  if (first?.sequence !== 1 || first.mode !== "initial_https_navigation" || first.outcome !== "transport_error" ||
+      last?.outcome !== "transport_error" || last.failureCode !== "ERR_BLOCKED_BY_CLIENT" ||
+      attempts.some((a, i) => a.sequence !== i + 1)) return null;
+  return auditNavigationBlockSchema.safeParse({ initial: first.failureCode ?? null, terminal: last.failureCode,
+    mode: last.mode, guard: last.guardDecision ?? null }).data ?? null;
+}
+const navigationFailureFields = {
+  failureCode: navigationFailureCodeSchema.optional(),
+  guardDecision: navigationGuardDecisionSchema.optional(),
+};
+
 export const scanLaneRunSchema = z.object({
   laneId: z.enum(["consent_proof", "runtime_evidence", "policy_evidence", "gpc_observation"]),
   physicalInvocationId: z.string().min(1).max(160),
@@ -328,6 +410,7 @@ export const scanLaneRunSchema = z.object({
   firstEffectiveUrl: z.string().max(500).nullable(),
   navigationCount: z.number().int().nonnegative(),
   navigationAttempts: z.array(z.object({
+    ...navigationFailureFields,
     sequence: z.number().int().positive(),
     mode: z.string().min(1).max(80),
     outcome: z.enum(["success", "http_error", "transport_error", "committed_timeout"]),
@@ -335,6 +418,7 @@ export const scanLaneRunSchema = z.object({
     durationMs: z.number().int().nonnegative(),
     effectiveUrl: z.string().max(500).nullable(),
   }).strict()).max(8).default([]),
+  securityChallengeRecovery: securityChallengeRecoverySchema.optional(),
   challengeDetected: z.boolean(),
   challengeType: z.string().max(120).nullable(),
   executionOutcome: z.enum(["success", "degraded", "failed"]),
@@ -368,12 +452,14 @@ export const scanModuleRunSchema = z.object({
     modes: z.array(z.string().min(1).max(80)).max(12).default([]),
     durationMs: z.number().int().nonnegative(),
     attempts: z.array(z.object({
+      ...navigationFailureFields,
       url: z.string().max(500),
       mode: z.string().min(1).max(80),
       outcome: z.enum(["success", "http_error", "transport_error", "committed_timeout"]),
       httpStatus: z.number().int().optional(),
       durationMs: z.number().int().nonnegative(),
     })).max(8).optional(),
+    securityChallenge: securityChallengeRecoverySchema.optional(),
   }).optional(),
   siteFacingNavigation: siteFacingNavigationDiagnosticsSchema.optional(),
   evidenceRefs: z.array(evidenceRefSchema).default([]),
@@ -403,6 +489,7 @@ export const safeRequestHeadersSchema = z.object({
 });
 
 export const safeResponseHeadersSchema = z.object({
+  cfMitigated: z.literal("challenge").optional(),
   retryAfter: z.string().max(120).optional(),
   contentType: z.string().optional(),
   cacheControl: z.string().optional(),
@@ -1858,6 +1945,17 @@ export const blockingFrameChallengeSchema = z.object({
 export const domSnapshotArtifactSchema = z.object({
   runtimeDocumentCapture: z.object({
     version: z.literal("runtime_document_capture.v1"),
+    viewportAttempted: z.literal(true).optional(),
+    viewport: z.object({
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      sizeBytes: z.number().int().positive().max(524288),
+    }).strict().optional(),
+    passiveStorefrontNavigation: z.object({
+      version: z.literal("passive_storefront_navigation.v1"),
+      sourceUrl: z.string().url().max(2000),
+      sourceDocumentToken: z.string().min(1).max(160),
+      destinationDocumentToken: z.string().min(1).max(160),
+    }).strict().optional(),
     response: z.object({
       origin: z.string().url().max(300),
       requestUrlSha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -2660,11 +2758,22 @@ export const preConsentRuntimePreviewSchema = z.object({
   observationOnlyDisclaimer: z.string().min(1).max(500),
 }).strict();
 
+export const browserPolicyLinkSchema = z.object({
+  href: z.string().url().max(500),
+  pageUrl: z.string().url().max(500),
+  linkText: z.string().min(1).max(220),
+  domLocation: z.enum(["footer", "header", "nav", "body"]),
+  linkVisibility: z.literal("visible"),
+}).strict();
+export type BrowserPolicyLink = z.infer<typeof browserPolicyLinkSchema>;
+
 export const verifiedPreConsentRuntimePreviewPacketSchema = z.object({
   artifactOnly: z.literal(true),
   contractVersion: z.literal(VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION),
   normalizedUrl: z.string().url().max(500),
   preview: preConsentRuntimePreviewSchema,
+  browserPolicyLinks: z.array(browserPolicyLinkSchema).max(4).optional(),
+  browserPolicyParentDispatchSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   productionFindingIntegration: z.literal(false),
   scanId: z.string().min(1).max(160),
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -3548,6 +3657,7 @@ const canonicalPolicyObservationSchema: z.ZodType<z.output<typeof policySurfaceO
 const canonicalDomSnapshotSchema: z.ZodType<z.output<typeof domSnapshotArtifactSchema>, z.ZodTypeDef, unknown> = domSnapshotArtifactSchema;
 const canonicalRuntimeCmsMetadataSnapshotSchema: z.ZodType<z.output<typeof runtimeCmsMetadataSnapshotSchema>, z.ZodTypeDef, z.input<typeof runtimeCmsMetadataSnapshotSchema>> = runtimeCmsMetadataSnapshotSchema;
 const canonicalConsentUiObservationSchema: z.ZodType<z.output<typeof consentUiObservationSchema>, z.ZodTypeDef, z.input<typeof consentUiObservationSchema>> = consentUiObservationSchema;
+const canonicalConsentInspectionSchema: z.ZodType<z.output<typeof consentSurfaceInspectionOutcomeSchema>, z.ZodTypeDef, z.input<typeof consentSurfaceInspectionOutcomeSchema>> = consentSurfaceInspectionOutcomeSchema;
 const canonicalPolicyInspectionSchema: z.ZodType<z.output<typeof policySurfaceInspectionOutcomeSchema>, z.ZodTypeDef, z.input<typeof policySurfaceInspectionOutcomeSchema>> = policySurfaceInspectionOutcomeSchema;
 const canonicalNetworkEventSchema: z.ZodType<NetworkEvent, z.ZodTypeDef, z.input<typeof networkEventSchema>> = networkEventSchema;
 const canonicalNetworkResponseEventSchema: z.ZodType<NetworkResponseEvent, z.ZodTypeDef, z.input<typeof networkResponseEventSchema>> = networkResponseEventSchema;
@@ -3558,6 +3668,8 @@ const bundleField3: z.ZodType<z.output<typeof consentActionAttemptSchema>, z.Zod
 const bundleField4: z.ZodType<z.output<typeof observedJourneySchema>, z.ZodTypeDef, z.input<typeof observedJourneySchema>> = observedJourneySchema;
 const bundleField5: z.ZodType<z.output<typeof cookieSnapshotSchema>, z.ZodTypeDef, z.input<typeof cookieSnapshotSchema>> = cookieSnapshotSchema;
 const bundleField6: z.ZodType<z.output<typeof normalizedVendorObservationSchema>, z.ZodTypeDef, z.input<typeof normalizedVendorObservationSchema>> = normalizedVendorObservationSchema;
+const canonicalModuleRunSchema: z.ZodType<z.output<typeof scanModuleRunSchema>, z.ZodTypeDef, z.input<typeof scanModuleRunSchema>> = scanModuleRunSchema;
+const canonicalLaneRunSchema: z.ZodType<z.output<typeof scanLaneRunSchema>, z.ZodTypeDef, z.input<typeof scanLaneRunSchema>> = scanLaneRunSchema;
 const canonicalGpcNavigationRecoverySchema: z.ZodType<z.output<typeof gpcNavigationRecoverySchema>, z.ZodTypeDef, z.input<typeof gpcNavigationRecoverySchema>> = gpcNavigationRecoverySchema;
 const canonicalEvidenceBundleObjectSchema = z.object({
   accessibilityAudit: canonicalAccessibilityAuditSchema.optional(),
@@ -3575,8 +3687,8 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   completedAt: z.string(),
   region: z.string().optional(),
   scanProfile: scanProfileSchema,
-  modulesRun: z.array(scanModuleRunSchema),
-  scanLaneRuns: z.array(scanLaneRunSchema).max(8).default([]),
+  modulesRun: z.array(canonicalModuleRunSchema),
+  scanLaneRuns: z.array(canonicalLaneRunSchema).max(8).default([]),
   postAcceptEvidence: canonicalPostAcceptPacketSchema.optional(),
   postAcceptLaneOutcome: canonicalPostAcceptLaneSchema.optional(),
   postRefusalEvidence: canonicalPostRefusalPacketSchema.optional(),
@@ -3624,7 +3736,7 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   observedJourneys: z.array(bundleField4).default([]),
   derivedRuntimeSignals: bundleField1,
   runtimeCoverage: runtimeCoverageSummarySchema.optional(),
-  consentSurfaceInspection: consentSurfaceInspectionOutcomeSchema.optional(),
+  consentSurfaceInspection: canonicalConsentInspectionSchema.optional(),
   policySurfaceInspection: canonicalPolicyInspectionSchema.optional(),
   visualCapture: visualCaptureSummarySchema.optional(),
   scanNoGoAssessment: scanNoGoAssessmentSchema.optional(),

@@ -1,7 +1,7 @@
 import {auditQuantityCsvMetrics,auditStateCsvMetrics} from './lib/audit-measure-catalog';
 import snapshotLimits from './lib/audit-progress-snapshot-limits.json';
 import {verifyMasterValueParity} from './lib/audit-master-parity';
-import {NO_GO_METRICS,readAuditNoGoReasons} from './lib/audit-progress-no-go';
+import {NO_GO_METRICS,readAuditNoGoEvidence} from './lib/audit-progress-no-go';
 import {COVERAGE_MATRIX} from "./lib/audit-progress-coverage-matrix";
 import {choiceMetricRegistry} from './lib/audit-progress-choice';
 import { verifyProgressPins } from './lib/audit-progress-pins';
@@ -131,13 +131,13 @@ export async function buildMonth(input:{runsFile:string;originsFile:string;cache
   }
   const windows=[...recent.windows,{start:manifest.start,end:manifest.end,runId:"mac-mini-local-archive",completeInventory:false}],calendar=summarizeDays(selected,windows,metrics),exclusionCounts:Record<string,number>={};
   const findingIds=[...new Set(selected.flatMap(r=>r.findings.map(f=>f.id)))].sort();
-  const noGoReasons=readAuditNoGoReasons(selected);
+  const {noGoReasons,archivedClientBlocks}=readAuditNoGoEvidence(selected);
   const days=progressEngine().aggregate({days:calendar,metrics,quantities,findingIds,noGoReasons},selected);
   for(const item of accounting)exclusionCounts[item.reason]=(exclusionCounts[item.reason]??0)+1;
   const contracts=makeContracts(metrics,quantities);
   for(const row of selected){delete row.metricLabels;delete row.retainedMetricLabels;}
   if(!Array.isArray(privacyFormReceipts))throw Error('Invalid privacy/form receipt manifest entries');
-  const data={...recent,toolSources,retainedReports,retainedReportCoverage,optOutExtracts,optOutCoverage,...(privacyFormReceipts.length?{privacyFormReceipts}:{}),rows:selected,noGoReasons,metrics,quantities,metricContractVersion:METRIC_CONTRACT_VERSION,contracts,findingIds,coverageMap:COVERAGE_MAP,coverageMatrix:COVERAGE_MATRIX,masterValueParity:null as unknown as ReturnType<typeof verifyMasterValueParity>,days,windows,includedRows:selected.length,inputRows:new Set([...seen,...recent.rows.map(r=>r.scanId),...accounting.map(a=>a.scanId)]).size,errors,exclusionCounts,cohort:"Mac mini retained export archive; recent original-credential-verified bot attempts supplement missing exports. Canary/test targets excluded before denominators.",sources:[...recent.sources,receipt(manifestFile),...[...deferredInventories.values()].filter(ref=>!optOutExtracts.some(extract=>extract.file===ref.file&&extract.sha256===ref.sha256)),...(input.optOutInputsFile?[receipt(input.optOutInputsFile),...optOutExtracts,...retainedReports]:[])],limitations:[
+  const data={...recent,archivedClientBlocks,toolSources,retainedReports,retainedReportCoverage,optOutExtracts,optOutCoverage,...(privacyFormReceipts.length?{privacyFormReceipts}:{}),rows:selected,noGoReasons,metrics,quantities,metricContractVersion:METRIC_CONTRACT_VERSION,contracts,findingIds,coverageMap:COVERAGE_MAP,coverageMatrix:COVERAGE_MATRIX,masterValueParity:null as unknown as ReturnType<typeof verifyMasterValueParity>,days,windows,includedRows:selected.length,inputRows:new Set([...seen,...recent.rows.map(r=>r.scanId),...accounting.map(a=>a.scanId)]).size,errors,exclusionCounts,cohort:"Mac mini retained export archive; recent original-credential-verified bot attempts supplement missing exports. Canary/test targets excluded before denominators.",sources:[...recent.sources,receipt(manifestFile),...[...deferredInventories.values()].filter(ref=>!optOutExtracts.some(extract=>extract.file===ref.file&&extract.sha256===ref.sha256)),...(input.optOutInputsFile?[receipt(input.optOutInputsFile),...optOutExtracts,...retainedReports]:[])],limitations:[
     "Historical dates are retained-export samples, not complete attempt inventories. Missing historical exports and failures cannot be counted as zero.",
     "The archive folder establishes Mac mini provenance. Original creation credentials are independently verified only for the recent sealed audit interval; use the origin-proof filter to inspect that subset.",
     "Partial days and partial samples show descriptive percentage-point changes. Compare sample sizes, inventory hours, site mix and versions before interpreting movement.",

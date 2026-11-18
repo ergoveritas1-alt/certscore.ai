@@ -42,15 +42,15 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/components/scans/regulatory-review-focus.tsx",
-      "sha256": "4b2a89a572514cb77122e7043682ee0449d0b2acc78d75614d5976ebed2c6cf7",
-      "bytes": 29441,
-      "review": "Three-way reconciliation preserves integrated report/form fixes and adds owner-requested canonical output parity. Static source reviewed for generation binding and public evidence safety."
+      "sha256": "35b910936ab2da3998e6509c4b36a66db9a85d38d2d768074ee3c77088cd3e4f",
+      "bytes": 30478,
+      "review": "The inactive posture tab displays the alternate canonical score with its accessible label."
     },
     {
       "file": "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
-      "sha256": "f018a0eb7d5aa7bddcac5eff9682ee5a71224b1fd5e4774bd0fc492d883074f2",
-      "bytes": 113892,
-      "review": "Reviewed the deployed visit inventory, scoped GPC recap and no-go guidance. Share and evidence links keep their original access checks."
+      "sha256": "6e6678f4a2747fcf83985b2b6c0feb9c9a9571be5e494e15382ef89c8b69f421",
+      "bytes": 114340,
+      "review": "Reviewed the canonical GPC comparison, distinct visit counts, posture selector and coverage disclosure in the shared report."
     },
     {
       "file": "apps/web/components/scans/site-integrity-evidence.tsx",
@@ -156,9 +156,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "scripts/lib/audit-progress-contracts.ts",
-      "sha256": "a8dc71c7f675437fadbf11531d5f370aac641db6b4b6c2b135b3898d1991e06e",
-      "bytes": 26513,
-      "review": "Reviewed transfer-framework coverage from the existing bound producer receipt, separate from the historical conditional finding and scoring. Transfer-framework completion reason metadata is bound to the compact policy receipt. Unresolved supplement dispositions are bound to the same compact policy receipt. Reviewed explicit displayed CMP and HubSpot SDK GPC receipt sources alongside GPP."
+      "sha256": "3c80f0f4418fc7c7c7e0c8bcbfd14f041bbe0663c2555862499f20e81a397f43",
+      "bytes": 28016,
+      "review": "Reviewed the after-Reject receipt fields, including cookie snapshot activity and explicit GPC readback source handling."
     },
     {
       "file": "packages/certscore-contracts/src/site-metadata.ts",

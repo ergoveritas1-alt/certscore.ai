@@ -99,7 +99,11 @@ export function auditMeasureLinks(id:string,kind:string):Link[]{
   if(name==='privacy_notice_availability')return [field('policies.discovery.link.'+(type==='verdict'?'verdict':'evidence_state'),'Privacy-notice checklist '+type+'; independent of source fetch.')];
   if(checklistConcepts[name!])return [record(checklistConcepts[name!]!,'Named checklist '+name+' / '+type+'; related assessment, not underlying observation or exact CMP criterion.')];
  }
- if(/^detail\.(accept|reject)\.activity_all$/.test(key))return [record('consent.post_choice_capture','Observed non-essential activity after a completed click, including verified captures with unconfirmed registration.')];
+ if(key==='detail.reject.activity_all')return [
+  record('consent.post_choice_capture','Verified non-essential cookie snapshots, requests and storage writes after a completed Reject click, including unconfirmed registration.'),
+  record('audit.canonical_inventory','Exact returned post_reject_click_tracking finding after a completed click, including classified cookie presence.','inventory_identity'),
+ ];
+ if(key==='detail.accept.activity_all')return [record('consent.post_choice_capture','Observed non-essential activity after a completed click, including verified captures with unconfirmed registration.')];
  const reason=key.match(/^detail\.(accept|reject)\.reason$/);
  if(reason)return [record('consent.choice_execution',reason[1]+' indeterminate reason; separate from execution status and terminal verification.')];
  if(extras[key])return [record(...extras[key]!)];
@@ -162,7 +166,7 @@ const FORWARD_MEASURES:Record<string,string[]>={
  'detail.accept.verdict':['detail.accept.projectable','detail.accept.reason','detail.accept.stop','accept.requests','accept.storage_writes'],
  'click.reject':['execution.reject','sealed.priority_evidence.reject'],
  'registration.reject':['sealed.terminal.audit_reject'],
- 'detail.reject.activity_all':['customer_cmp_check.implementation'],
+ 'detail.reject.activity_all':['customer_cmp_check.implementation','sealed.priority_evidence.reject_activity'],
  'detail.reject.verdict':['sealed.choice_finding.california_post_reject_collection','detail.reject.projectable','detail.reject.reason','detail.reject.stop','reject.requests','reject.storage_writes'],
  gpc_delivery:['gpc_path'],
  'detail.gpc.cmp_receipt':['detail.gpc.cmp_receipt_source','detail.gpc.acknowledgment','detail.gpc.semantic_probe','detail.gpc.semantic_readiness','gpc.session.semantic_read_ms','detail.gpc.assessment_coverage'],
@@ -359,7 +363,8 @@ export function buildAuditMeasureView(data:any){
   if(entry.id==='detail.gpc.session_collection')denominator='Reportable scans; successful collection during the retained GPC visit.';
   if(entry.id==='detail.gpc.california_collection')denominator='Reportable scans; recorded California qualification with verified collection.';
   if(/^detail\.(accept|reject)\.verdict$/.test(entry.id))denominator='All readable reportable scans, including scans with unavailable verdict evidence.';
-  if(/^detail\.(accept|reject)\.activity_all$/.test(entry.id))denominator='All usable scans. Counts observed non-essential activity after a completed click, with or without choice confirmation.';
+  if(entry.id==='detail.reject.activity_all')denominator='All reportable scans. Counts retained non-essential cookies, requests or writes observed after Reject.';
+  if(entry.id==='detail.accept.activity_all')denominator='All usable scans. Counts observed non-essential activity after a completed click, with or without choice confirmation.';
   return {...entry,group,label,denominator,...(trackingPresentation[entry.id]?{scopeNote:trackingPresentation[entry.id]!.scopeNote}:{})};
  });
  const groupOrder=[...new Set(grouped.map(entry=>entry.group))];

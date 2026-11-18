@@ -375,19 +375,25 @@ test("substantial first-party activity and a substantive screenshot contradict s
   }
 });
 
-test("a successful main document followed by a blocked redirect is diagnostic when the retained page is substantive", async () => {
+test("a successful main document followed by a block is diagnostic when the retained page is substantive", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-late-block-"));
   try {
-    const assessment = buildScanNoGoAssessment(scanEvidence({
+    const input = {
       finalMainDocumentStatus: 403,
       firstPartySuccesses: 10,
       priorMainDocumentStatus: 200,
       screenshots: [await retainedScreenshot(directory, { substantive: true })],
       text: "Welcome to Example. This retained page contains normal navigation, product information, customer support, account details, current news, and several useful links for visitors. The complete public website loaded before a later background request returned a blocked response.",
-    }));
+    };
+    const assessment = buildScanNoGoAssessment(scanEvidence(input));
 
     assert.equal(assessment?.scanNoGoAssessment.decision, "continue_with_diagnostics");
     assert.ok(assessment?.scanNoGoAssessment.contradictorCodes.includes("successful_main_document_before_terminal_state"));
+    for (const redirect of [301, 302, 307]) {
+      const blocked = buildScanNoGoAssessment(scanEvidence({ ...input, priorMainDocumentStatus: redirect }));
+      assert.equal(blocked?.scanNoGoAssessment.decision, "no_go", `HTTP ${redirect} followed by 403`);
+      assert.equal(blocked?.scanNoGoAssessment.supportingSignals.successfulMainDocumentBeforeTerminal, false);
+    }
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -1135,4 +1141,42 @@ test("a retained browser-check shell needs the correct loader when a runtime cap
   assert.equal(buildScanNoGoAssessment(evidence)?.primaryReasonCode, "captcha_or_challenge");
   snapshot.runtimeDocumentCapture.response!.status = 403;
   assert.equal(buildScanNoGoAssessment(evidence)?.primaryReasonCode, "access_denied_or_forbidden_page");
+});
+
+test("localized Amazon interstitials stay no-go until the original document proves the storefront", () => {
+  const storefront = "Welcome to the storefront. Browse new books, laptops, toys, kitchen supplies, garden tools, home decor and clothing. Explore featured products and popular brands or search the catalog for today's deals.";
+  const samples = [
+    ["de", "Klicke auf die Schaltfläche unten, um mit dem Einkauf fortzufahren Weiter shoppen Unsere AGB Datenschutzerklärung © 1996-2025, Amazon.com, Inc. oder Tochtergesellschaften"],
+    ["fr", "Cliquez sur le bouton ci-dessous pour continuer vos achats Continuer les achats Conditions générales de vente Vos informations personnelles © 1996-2025, Amazon.com, Inc. ou ses filiales."],
+    ["it", "Fai clic sul pulsante qui sotto per continuare a fare acquisti Continua con gli acquisti Continua con gli acquisti Condizioni generali di uso e vendita Informativa sulla privacy © 1996-2025, Amazon.com, Inc. o società affiliate."],
+  ];
+  for (const [locale, shell] of samples) {
+    const origin = `https://www.amazon.${locale}`;
+    const snapshot = (textExcerpt: string, capturedAtMs: number, token: string, url = origin + "/"): DomSnapshotArtifact => ({
+      artifactId: "dom_text_pre_consent", capturedAtMs, path: "dom.txt", url,
+      pagePhase: "network_idle", consentStateAtTime: "pre_consent", textExcerpt,
+      documentIdentity: { source: "cdp_loader_id", token },
+      runtimeDocumentCapture: { version: "runtime_document_capture.v1", response: {
+        status: 200, documentToken: token, origin, requestUrlSha256: "a".repeat(64), route: "committed",
+      } },
+    });
+    const initial = snapshot(shell!, 100, "original");
+    const evaluate = (...domSnapshots: DomSnapshotArtifact[]) =>
+      buildScanNoGoAssessment({ ...scanEvidence({ screenshots: [] }), normalizedUrl: origin + "/", domSnapshots });
+    assert.equal(evaluate(initial)?.primaryReasonCode, "captcha_or_challenge", locale);
+    assert.equal(evaluate(initial, snapshot(storefront, 300, "replacement"))?.primaryReasonCode, "captcha_or_challenge", locale);
+    const navigated = snapshot(storefront, 300, "replacement");
+    navigated.runtimeDocumentCapture!.passiveStorefrontNavigation = {
+      version: "passive_storefront_navigation.v1",
+      sourceUrl: initial.url, sourceDocumentToken: "original", destinationDocumentToken: "replacement",
+    };
+    assert.notEqual(evaluate(initial, navigated)?.scanNoGoAssessment.decision, "no_go", locale);
+    navigated.runtimeDocumentCapture.passiveStorefrontNavigation.sourceDocumentToken = "different-session";
+    assert.equal(evaluate(initial, navigated)?.primaryReasonCode, "captcha_or_challenge", locale);
+    assert.equal(evaluate(initial, snapshot(storefront, 300, "original", origin + "/help"))?.primaryReasonCode, "captcha_or_challenge", locale);
+    assert.notEqual(evaluate(initial, snapshot(storefront, 300, "original"))?.scanNoGoAssessment.decision, "no_go", locale);
+    if (locale !== "de") {
+      assert.notEqual(evaluate(snapshot("Help article about a message: " + shell, 100, "original"))?.primaryReasonCode, "captcha_or_challenge", locale);
+    }
+  }
 });

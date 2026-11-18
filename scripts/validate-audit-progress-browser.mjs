@@ -176,7 +176,7 @@ try{
      const allUnavailable=reasons.length>0&&reason!=='unavailable'&&reasons.every(value=>value==='unavailable');
      return rows.length?{
       count:count+'/'+noGos.length,
-      rate:noGos.length&&!allUnavailable?percent.format(count/noGos.length):'—',
+      rate:noGos.length&&!allUnavailable?percent.format(count/noGos.length):'—%',
       attempts:(allUnavailable?'—':percent.format(count/rows.length))+' of '+rows.length+' retained attempts',
      }:null;
     });
@@ -261,7 +261,7 @@ try{
  assert.equal(gpcQuestions.length,4);
  assert.deepEqual(tableEntries.filter(e=>e.group==='GPC').map(e=>e.id),gpcQuestions.map(q=>q.primaryMetric));
  assert.ok(tableEntries.find(e=>e.id==='detail.gpc.cmp_receipt').details.some(e=>e.id==='detail.gpc.response'));
- assert.deepEqual(gpcQuestions.map(q=>q.title),['GPC signal delivered','Activity under GPC (all)','GPC acknowledged','California-qualified activity under GPC']);
+ assert.deepEqual(gpcQuestions.map(q=>q.title),['GPC signal delivered','Activity under GPC (all)','GPC acknowledgment coverage','California-qualified activity under GPC']);
  assert.equal(await page.evaluate(ids=>window.__auditDashboard.days.every(day=>ids.every(id=>day.metrics[id].denominator===day.reportable)),gpcQuestions.map(q=>q.primaryMetric)),true);
  const meanings=page.locator('#daily tbody tr[data-table-id] > td:first-child > .metric-meaning');
  assert.equal(await meanings.count(),displayedEntries.length);
@@ -276,12 +276,96 @@ try{
  });
  if(acknowledgmentSample>=0){
   const cell=page.locator('[data-table-id="detail.gpc.cmp_receipt"] > td').nth(acknowledgmentSample+1);
-  assert.equal(await cell.locator(':scope > .value').textContent(),'3.9%');
-  assert.match(await cell.locator(':scope > .states [data-headline]').textContent(),/2\/51/);
+  assert.match(await cell.locator('[data-gpc-acknowledgments-observed]').textContent(),/2\/51 acknowledgments observed \(3.9%\)/);
   assert.match(await cell.locator('.gpc-acknowledged-activity').textContent(),/2 acknowledged visits/);
  }
+ const readbackDays=await page.evaluate(()=>window.__auditDashboard.days.map(({metrics})=>{
+  const v=metrics['detail.gpc.cmp_receipt'];
+  return {denominator:v.denominator,...v.counts};
+ }));
+ for(const [index,{denominator,received=0,not_received=0}] of readbackDays.entries()){
+  if(!denominator)continue;
+  const cell=page.locator('[data-table-id="detail.gpc.cmp_receipt"] > td').nth(index+1);
+  const resolved=received+not_received;
+  const coverageRate=100*resolved/denominator;
+  const observedRate=100*received/denominator;
+  assert.equal(await cell.locator('[data-gpc-acknowledgments-observed]').textContent(),received+'/'+denominator+
+   ' acknowledgments observed ('+(Number.isInteger(observedRate)?observedRate:observedRate.toFixed(1))+'%)'+
+   (not_received?' · '+not_received+' explicitly not received':''));
+  const headline=cell.locator(':scope > .value');
+  assert.equal(await headline.textContent(),(Number.isInteger(coverageRate)?coverageRate:coverageRate.toFixed(1))+'%');
+  assert.equal(await cell.locator(':scope > .state-percentages [data-headline]').textContent(),'CMP readbacks returned: '+resolved+'/'+denominator);
+ }
+ const zeroAcknowledgmentCases=await page.evaluate(()=>{
+  const {days,data}=window.__auditDashboard;
+  const day=days.findLastIndex(value=>value.reportable>0);
+  if(day<0)return [];
+  const date=new Intl.DateTimeFormat('en-CA',{timeZone:data.timezone,year:'numeric',month:'2-digit',day:'2-digit'});
+  const key='detail.gpc.cmp_receipt';
+  const rows=data.rows.filter(row=>row.reportable&&date.format(new Date(row.createdAt))===days[day].date);
+  const originals=rows.map(row=>row.states[key]);
+  const render=()=>document.getElementById('cmp').dispatchEvent(new Event('change'));
+  try{
+   return ['not_received','unknown','unavailable'].map(state=>{
+    for(const row of rows)row.states[key]=state;
+    render();
+    const cell=document.querySelector('[data-table-id="detail.gpc.cmp_receipt"]').cells[day+1];
+    const hero=cell.querySelector(':scope > .value');
+    return {state,headline:hero.textContent,
+     fraction:cell.querySelector('[data-headline] .state-line-value').textContent,denominator:rows.length};
+   });
+  }finally{
+   rows.forEach((row,index)=>{if(originals[index]===undefined)delete row.states[key];else row.states[key]=originals[index];});
+   render();
+  }
+ });
+ for(const {state,headline,fraction,denominator} of zeroAcknowledgmentCases){
+  const allReturned=state==='not_received';
+  assert.equal(headline,allReturned?'100%':'0%');
+  assert.equal(fraction,(allReturned?denominator:0)+'/'+denominator);
+ }
+ checks.gpcReadbackHeadline=true;
  assert.match(await page.locator('[data-table-id="detail.gpc.session_collection"] > td:first-child > .metric-meaning').textContent(),/sale\/sharing role is unresolved.*Script downloads alone do not count/);
+ const collectionDays=await page.evaluate(()=>window.__auditDashboard.days.map(({metrics})=>{
+  const v=metrics['detail.gpc.session_collection'];
+  return {denominator:v.denominator,positive:v.counts.positive_retained??0,sampled:v.counts.no_positive_retained_in_sample??0};
+ }));
+ const collectionCells=await page.locator('[data-table-id="detail.gpc.session_collection"] > td').evaluateAll(items=>items.slice(1).map(cell=>({
+  coverage:cell.querySelector('[data-gpc-collection-coverage]')?.textContent??null,
+  headline:cell.querySelector(':scope > .value')?.textContent,
+  fraction:cell.querySelector('[data-headline] .state-line-value')?.textContent??null,
+ })));
+ for(const [index,{denominator,positive,sampled}] of collectionDays.entries()){
+  const {coverage,headline,fraction}=collectionCells[index];
+  const covered=positive+sampled,unavailable=denominator-covered;
+  assert.equal(coverage,denominator?covered+'/'+denominator+' visits with collection evidence'+(unavailable?' · '+unavailable+' unavailable':''):null);
+  if(!covered)continue;
+  const rate=100*positive/denominator;
+  assert.equal(headline,(Number.isInteger(rate)?String(rate):rate.toFixed(1))+'%');
+  assert.equal(fraction,positive+'/'+denominator);
+ }
+ checks.gpcCollectionCoverage=true;
  assert.match(await page.locator('[data-table-id="detail.gpc.california_collection"] > td:first-child > .metric-meaning').textContent(),/narrower subset.*identifier syncing or audience collection/);
+ const californiaDays=await page.evaluate(()=>window.__auditDashboard.days.map(({metrics})=>{
+  const v=metrics['detail.gpc.california_collection'];
+  return {denominator:v.denominator,recorded:v.counts.recorded??0,notRecorded:v.counts.not_recorded??0};
+ }));
+ const californiaCells=await page.locator('[data-table-id="detail.gpc.california_collection"] > td').evaluateAll(items=>items.slice(1).map(cell=>({
+  headline:cell.querySelector(':scope > .value')?.textContent,
+  fraction:cell.querySelector('[data-headline] .state-line-value')?.textContent??null,
+ })));
+ for(const [index,{denominator,recorded,notRecorded}] of californiaDays.entries()){
+  const {headline,fraction}=californiaCells[index];
+  if(!denominator||recorded+notRecorded===0){
+   assert.equal(headline,'—%');
+   assert.equal(fraction,null);
+   continue;
+  }
+  const rate=100*recorded/denominator;
+  assert.equal(headline,(Number.isInteger(rate)?String(rate):rate.toFixed(1))+'%');
+  assert.equal(fraction,recorded+'/'+denominator);
+ }
+ checks.gpcCaliforniaHeadline=true;
  const prominenceRow='[data-table-id="customer_cmp_check.prominence"]';
  const validComparisonRow=page.locator(prominenceRow+' + [data-table-id="customer_cmp_check.prominence_valid_comparison"]');
  if(tableEntries.some(entry=>entry.id==='customer_cmp_check.prominence')){
@@ -327,7 +411,8 @@ try{
  },controlAccessibility);
  if(controlSample>=0){
   const cell=metricCell(controlAccessibility,controlSample);
-  assert.equal(await cell.locator(':scope > .value').textContent(),'6 of 90 had a test result');
+  assert.equal(await cell.locator(':scope > .value').textContent(),'6.7%');
+  assert.equal(await cell.locator(':scope > .state-percentages [data-headline]').textContent(),'Test result: 6/90');
   assert.equal(await cell.locator(':scope > .checklist-verdicts [data-state="not_observed"]').textContent(),'No issue observed: 6');
   assert.match(await cell.locator('.control-coverage').textContent(),/0\/90 reports with a detailed assessment receipt/);
   const fixtureId=await page.evaluate(()=>{
@@ -356,7 +441,8 @@ try{
     if(['sealed.checklist.accessibility_consent_controls','sealed.checklist.cross_border_endpoint_review',
      'checklist.post_reject_tracking_reduction'].includes(id))continue;
     if(Object.keys(verdict.series).length>1){
-     checks.push({id,date:day.date,actual:headline,expected:'Separate measurement groups'});
+     checks.push({id,date:day.date,actual:headline,expected:'—%'});
+     checks.push({id,date:day.date,actual:cell.querySelector(':scope > [data-headline-status]')?.textContent,expected:'Separate measurement groups'});
      continue;
     }
     const counts=verdict.counts;
@@ -365,10 +451,10 @@ try{
      const rate=100*count/verdict.denominator;
      return (Number.isInteger(rate)?rate:rate.toFixed(1))+'%';
     };
-    const gap=counts.gap_observed??0,partial=counts.review_signal??0;
-    checks.push({id,date:day.date,actual:headline,expected:layout.hero==='observed'?'Observed · '+percent(counts.observed??0):
-     layout.hero==='gap_observed'?(id==='checklist.pre_consent_third_party_tracking'?
-      gap+(gap===1?' gap':' gaps')+' in '+verdict.denominator+' reports':'Gap observed · '+percent(gap)):'Partial concern · '+partial+' ('+percent(partial)+')'});
+    const count=counts[layout.hero]??0;
+    checks.push({id,date:day.date,actual:headline,expected:percent(count)});
+    checks.push({id,date:day.date,actual:cell.querySelector(':scope > .state-percentages > [data-headline] .state-line-value')?.textContent,
+     expected:count+'/'+verdict.denominator});
     const breakdown=[...(layout.hero==='observed'?[['gap_observed','Gap observed']]:[]),
      ...(layout.hero!=='review_signal'?[['review_signal','Partial concern']]:[]),['not_observed','Not observed'],
      ['insufficient_evidence','Insufficient evidence'],['not_confirmed','Not confirmed']];
@@ -470,9 +556,43 @@ try{
   },{action,index:sample.index});
   assert.ok(activity[0].numerator>=activity[1].numerator);
   for(const [i,suffix] of ['activity_all','verdict'].entries()){
-   assert.equal(await metricCell('detail.'+action+'.'+suffix,sample.index).locator(':scope > .value').textContent(),activity[i].unavailable?'Unavailable':percentage(activity[i].numerator,sample.eligible));
+   const {numerator,unavailable}=activity[i];
+   assert.equal(await metricCell('detail.'+action+'.'+suffix,sample.index).locator(':scope > .value').textContent(),unavailable?'—%':percentage(numerator,sample.eligible));
   }
  }
+ const rejectGap=await page.evaluate(()=>{
+  const {days}=window.__auditDashboard;
+  const index=days.findLastIndex(day=>{
+   const metric=day.metrics['detail.reject.activity_all'],coverage=metric.activityCoverage;
+   const finding=day.findings.post_reject_click_tracking;
+   return ((finding?.numerator??0)+(finding?.incompletePositives??0))>0&&coverage?.classifiedCompletedClicks<coverage?.completedClicks;
+  });
+  if(index<0)return null;
+  const day=days[index],finding=day.findings.post_reject_click_tracking;
+  const metric=day.metrics['detail.reject.activity_all'];
+  return {index,numerator:metric.numerator,denominator:metric.denominator,...metric.activityCoverage,
+   presence:(finding?.numerator??0)+(finding?.incompletePositives??0)};
+ });
+ if(rejectGap){
+  const gapCell=metricCell('detail.reject.activity_all',rejectGap.index);
+  const pct=(n,d)=>{const rate=100*n/d;return (Number.isInteger(rate)?String(rate):rate.toFixed(1))+'%';};
+  assert.ok(rejectGap.numerator>0);
+  assert.equal(await gapCell.locator(':scope > .value').textContent(),pct(rejectGap.numerator,rejectGap.denominator));
+  assert.equal(await gapCell.locator(':scope > .state-percentages [data-headline] .state-line-value').textContent(),
+   rejectGap.numerator+'/'+rejectGap.denominator);
+  assert.equal(await gapCell.locator('[data-post-click-coverage]').textContent(),
+   rejectGap.classifiedCompletedClicks+'/'+rejectGap.completedClicks+' completed clicks classified ('+
+   pct(rejectGap.classifiedCompletedClicks,rejectGap.completedClicks)+')');
+  const detail=gapCell.locator('[data-post-click-classified-activity]');
+  assert.equal(await detail.count(),rejectGap.classifiedCompletedClicks?1:0);
+  if(rejectGap.classifiedCompletedClicks)assert.equal(await detail.textContent(),
+   rejectGap.observedCompletedClicks+'/'+rejectGap.classifiedCompletedClicks+' classified clicks with request or write activity ('+
+   pct(rejectGap.observedCompletedClicks,rejectGap.classifiedCompletedClicks)+')');
+  assert.equal(await gapCell.locator('[data-post-reject-presence]').count(),rejectGap.presence?1:0);
+  if(rejectGap.presence)assert.match(await gapCell.locator('[data-post-reject-presence]').textContent(),
+   new RegExp('^'+rejectGap.presence+' reports? with non-essential cookies or services after Reject$'));
+ }
+ assert.equal(await page.locator('[data-table-id="detail.reject.activity_all"] td > .value').filter({hasText:'Limited coverage'}).count(),0);
  checks.choiceStagePresentation=true;
  assert.equal(displayedEntries.length,await page.locator('#daily tbody tr[data-table-id]').count());
  const canonicalReject='sealed.choice_finding.california_post_reject_collection';
@@ -493,22 +613,26 @@ try{
   Array.from(row.cells).slice(1).filter(cell=>cell.querySelectorAll(':scope > .value').length!==1||
    !cell.querySelector(':scope > .value').textContent.trim()).map(cell=>[row.dataset.tableId,cell.cellIndex])));
  assert.deepEqual(await missingHeadlines(),[]);
- const percentHeadlineErrors=()=>page.locator('#daily td > .value, #daily [data-supporting-id] > .value').evaluateAll(values=>
-  values.flatMap(value=>{
+ const percentHeadlineErrors=()=>page.locator('#daily tr[data-table-id] > td:not(:first-child), #daily [data-supporting-id], #daily [data-reject-reduction-coverage]').evaluateAll(cells=>
+  cells.flatMap(cell=>{
+   const values=cell.querySelectorAll(':scope > .value');
+   const value=values[0];
+   const id=cell.getAttribute('data-supporting-id')??cell.closest('tr').dataset.tableId;
+   if(values.length!==1)return [{id,headlines:values.length}];
    const text=value.textContent;
-   if(!text.includes('%')||value.hasAttribute('data-checklist-verdict'))return [];
+   if(text==='—%')return !value.hasAttribute('data-average-value')&&cell.querySelector(':scope > [data-headline-status]')?.textContent.trim()?[]:[{id,text}];
    const line=value.parentElement.querySelector(':scope > .state-percentages > [data-headline]');
    const subvalue=line?.querySelector('.state-line-value')?.textContent;
    const fraction=/^(\d+)\/(\d+)$/.exec(subvalue??'');
    const countRate=fraction?100*Number(fraction[1])/Number(fraction[2]):null;
    const matches=subvalue===text||(countRate!==null&&Math.abs(countRate-parseFloat(text))<=0.051);
    return /^\d+(?:\.\d+)?%$/.test(text)&&matches&&
-    line?.querySelector('.state-line-label')?.textContent.trim().endsWith(':')?[]:[text];
+    line?.querySelector('.state-line-label')?.textContent.trim().endsWith(':')?[]:[{id,text,subvalue}];
   }));
  const wrappingStates=()=>page.locator('#daily .state-line').evaluateAll(lines=>lines.filter(line=>
   line.getClientRects().length>0&&(line.getBoundingClientRect().height>parseFloat(getComputedStyle(line).lineHeight)+1||
    line.querySelector('.state-line-value').getBoundingClientRect().right>line.getBoundingClientRect().right+1)).map(line=>line.textContent));
- assert.deepEqual(await percentHeadlineErrors(),[]);
+ assert.deepEqual((await percentHeadlineErrors()).slice(0,20),[]);
  assert.deepEqual(await wrappingStates(),[]);
  const ambiguousBreakdowns=await page.locator('#daily .state-percentages').evaluateAll(groups=>groups.flatMap(group=>{
   const labels=[...group.querySelectorAll('.state-line-label')].map(label=>label.textContent.toLowerCase());
@@ -543,12 +667,9 @@ try{
    const groups=Object.values(value.series).filter(group=>group.measured>0);
    const source=groups[0];
    const timing=['ms','milliseconds'].includes(entry.unit);
-   let title='Separate measurement groups';
-   if(!value.eligible)title='No eligible data';
-   else if(!value.measured)title='Unavailable';
-   else if(timing&&value.median!==null)title=value.median.toFixed(1)+' '+entry.unit;
-   else if(!timing&&groups.length===1){
-    const percent=100*source.nonzero/source.measured;
+   let title='—%';
+   if(value.eligible&&(timing||value.measured)){
+    const percent=timing||groups.length>1?100*value.measured/value.eligible:100*source.nonzero/source.measured;
     title=(Number.isInteger(percent)?percent:percent.toFixed(1))+'%';
    }
    const estimate=value.eligible>0&&!value.measured&&
@@ -641,10 +762,10 @@ try{
   checkDenominator,unknownChecks,completedChecks,completedSignals,inconclusive,noText} of policyPresentation){
   const cell=metricCell(id,index);
   if(id.startsWith('checklist.')){
-   const headline=unknownChecks===checkDenominator?'Completed checks unknown':
-    completedChecks+' of '+eligible+' checks completed'+
-     (completedChecks?' · '+completedSignals+' '+(completedSignals===1?'signal':'signals')+' found':'');
+   const rate=100*completedChecks/eligible;
+   const headline=unknownChecks===checkDenominator?'—%':(Number.isInteger(rate)?rate:rate.toFixed(1))+'%';
    assert.equal(await cell.locator(':scope > .value').textContent(),headline);
+   if(headline!=='—%')assert.equal(await cell.locator(':scope > .state-percentages [data-headline]').textContent(),'Checks completed: '+completedChecks+'/'+eligible);
    assert.equal(await cell.locator('[data-transfer-signal-coverage]').textContent(),
     signals+' of '+eligible+' reports flagged a reference for review');
    const coverage=await cell.locator('[data-transfer-assessment-coverage]').textContent();
@@ -658,7 +779,7 @@ try{
    for(const [key,value] of Object.entries({eligible,signals,completedChecks,completedSignals,inconclusive,noText,unknownChecks}))
     periodTotals[key]+=value;
   }else{
-   if(missing===eligible)assert.equal(await cell.locator(':scope > .value').textContent(),'Coverage unavailable');
+   if(missing===eligible)assert.equal(await cell.locator(':scope > .value').textContent(),'—%');
    const note=await cell.locator('[data-policy-receipt-coverage]').textContent();
    assert.ok(note.includes((eligible-missing)+'/'+eligible+' reportable scans with a producer receipt result'));
    assert.ok(note.includes(complete+' complete · '+limited+' limited · '+explicitNoReceipt+' explicitly without a verified receipt'));
@@ -691,16 +812,18 @@ try{
     if(!value?.denominator)return [];
     const covered=states.reduce((sum,state)=>sum+(value.counts[state]??0),0);
     const missing=(value.counts.unknown??0)+(value.counts.unavailable??0);
-    return [{id,index,expected:missing===value.denominator?'Coverage unavailable':
-     covered+' of '+value.denominator+' '+suffix,counts:value.counts}];
+    const rate=100*covered/value.denominator;
+    return [{id,index,expected:missing===value.denominator?'—%':(Number.isInteger(rate)?rate:rate.toFixed(1))+'%',
+     fraction:covered+'/'+value.denominator,counts:value.counts}];
    });
   });
  });
- for(const {id,index,expected,counts} of headlineCoverage){
+ for(const {id,index,expected,fraction,counts} of headlineCoverage){
   const reduction=id==='detail.reject.verdict';
   const outer=metricCell(id,index);
   const cell=reduction?outer.locator('[data-reject-reduction-coverage]'):outer;
-  assert.equal(await cell.locator(':scope > .value').textContent(),(reduction?'Tracking reduction after Reject · ':'')+expected,id);
+  assert.equal(await cell.locator(':scope > .value').textContent(),expected,id);
+  if(expected!=='—%')assert.equal(await cell.locator(':scope > .state-percentages [data-headline] .state-line-value').textContent(),fraction,id);
   for(const [state,count] of Object.entries(counts)){
    assert.equal(await cell.locator(':scope > .checklist-verdicts [data-state="'+state+'"] .state-line-value').textContent(),String(count),id);
   }
@@ -936,7 +1059,8 @@ try{
  const funnelDay=await page.evaluate(()=>window.__auditDashboard.days.findIndex(d=>d.date==='2026-11-09'&&d.reportable===90));
  if(funnelDay>=0){
   const cell=funnel.locator('td').nth(funnelDay+1);
-  assert.equal(await cell.locator(':scope > .value').textContent(),'Not tested · 0 dispatched');
+  assert.equal(await cell.locator(':scope > .value').textContent(),'0%');
+  assert.equal(await cell.locator(':scope > .state-percentages [data-headline]').textContent(),'Dispatch recorded: 0/90');
   assert.match(await cell.locator('.opt-out-blockers').textContent(),/No qualifying control recorded in dispatch source: 22/);
   assert.match(await cell.locator('.opt-out-blockers').textContent(),/Control recorded, no supported route: 4/);
   await cell.locator('.opt-out-stages > summary').focus();await page.keyboard.press('Enter');
@@ -945,7 +1069,8 @@ try{
   await cell.locator('.opt-out-stages > summary').click();
  }
  await page.selectOption('#origin','selection');
- assert.ok((await funnel.locator('td > .value').allTextContents()).every(v=>v==='No eligible data'));
+ assert.ok((await funnel.locator('td > .value').allTextContents()).every(v=>v==='—%'));
+ assert.deepEqual((await percentHeadlineErrors()).slice(0,20),[]);
  await page.selectOption('#origin','all');
  await funnel.locator('.chart-button').click();assert.equal(await page.locator('#popoverState').inputValue(),'completed');
  assert.match(await page.locator('#chartPopoverTitle').textContent(),/completed share/);

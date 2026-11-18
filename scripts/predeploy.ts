@@ -168,6 +168,7 @@ const CMP_INITIALIZATION_CAPTURE_CHECK: Check = {
     "packages/certscore-scan-core/src/cmp-initialization-settle.test.ts",
     "packages/certscore-scan-core/src/consent-committed-response.test.ts",
     "packages/certscore-scan-core/src/screenshot-transaction-fallback.test.ts",
+    "packages/certscore-scan-core/src/screenshot-fallback-reserve.test.ts",
     "packages/certscore-scan-core/src/cmp-basic-capture.test.ts",
     "packages/certscore-scan-core/src/cnn-consent-capture.test.ts",
     "packages/certscore-contracts/src/consent-scope-exclusion.test.ts",

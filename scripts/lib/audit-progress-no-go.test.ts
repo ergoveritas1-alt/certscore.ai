@@ -4,7 +4,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { NO_GO_METRICS, NO_GO_TOTAL_METRIC, readAuditNoGoReasons } from './audit-progress-no-go';
+import { NO_GO_METRICS, NO_GO_TOTAL_METRIC, readAuditNoGoEvidence, readAuditNoGoReasons } from './audit-progress-no-go';
+import { projectAuditNavigationBlock, type ScanLaneRun } from '../../packages/certscore-contracts/src';
 import { progressEngine } from './audit-progress-engine';
 
 test('no-go breakdown requires the original export and keeps explicit unknown separate', () => {
@@ -13,7 +14,7 @@ test('no-go breakdown requires the original export and keeps explicit unknown se
     const scanId = '00000000-0000-4000-8000-000000000001';
     const createdAt = '2026-11-16T13:00:00.000Z';
     const file = join(directory, 'export.json');
-    function fixture(noGo?: { reasonCode: string }) {
+    function fixture(noGo?: { reasonCode: string; evidenceExcerpt?: string }) {
       const bytes = JSON.stringify({ scanId, timestamps: { createdAt }, resultDisposition: 'no_go', noGo });
       writeFileSync(file, bytes);
       return { scanId, createdAt, states: { outcome: 'no_go' }, refs: [{
@@ -29,10 +30,33 @@ test('no-go breakdown requires the original export and keeps explicit unknown se
     assert.deepEqual(readAuditNoGoReasons([fixture({ reasonCode: 'unknown' })]), { [scanId]: 'unknown' });
     assert.deepEqual(readAuditNoGoReasons([fixture()]), {});
     assert.deepEqual(readAuditNoGoReasons([fixture({ reasonCode: 'unreviewed_code' })]), {});
+    const archive = (evidenceExcerpt:string) => readAuditNoGoEvidence([fixture({reasonCode:'navigation_transport_failure', evidenceExcerpt})]).archivedClientBlocks;
+    assert.deepEqual(archive('page.goto: net::ERR_BLOCKED_BY_CLIENT at https://example.test/'),{[scanId]:true});
+    assert.deepEqual(archive('page.goto: Timeout 100ms exceeded.\nCall log: net::ERR_BLOCKED_BY_CLIENT'),{});
     assert.throws(() => readAuditNoGoReasons([access]), /hash or size mismatch/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('guard attribution belongs to the terminal failed attempt in one runtime session', () => {
+  const initial:ScanLaneRun['navigationAttempts'][number]={sequence:1,mode:'initial_https_navigation',outcome:'transport_error',
+    failureCode:'timeout',httpStatus:null,durationMs:100,effectiveUrl:'https://example.test/'};
+  const terminal:typeof initial={...initial,sequence:2,mode:'https_apex_www_recovery',failureCode:'ERR_BLOCKED_BY_CLIENT',
+    guardDecision:{reason:'dns_resolution_failed',resolverCode:'ENOTFOUND'},effectiveUrl:'https://www.example.test/?private'};
+  const lane:ScanLaneRun={laneId:'runtime_evidence',accessOutcome:'navigation_failed',navigationAttempts:[initial,terminal],
+    physicalInvocationId:'fixture',region:'local',phaseName:'preConsentRuntimeScanner',navigationCount:2,
+    startedAt:'2026-11-17T00:00:00Z',completedAt:null,durationMs:200,firstResponseAt:null,firstResponseOffsetMs:null,
+    firstHttpStatus:null,firstEffectiveUrl:null,challengeDetected:false,challengeType:null,executionOutcome:'failed'};
+  const result={initial:'timeout',terminal:'ERR_BLOCKED_BY_CLIENT',mode:terminal.mode,guard:terminal.guardDecision};
+  assert.deepEqual(projectAuditNavigationBlock([lane]),result);
+  assert.equal(projectAuditNavigationBlock([lane,lane]),null);
+  assert.equal(projectAuditNavigationBlock([{...lane,laneId:'consent_proof'}]),null);
+  assert.equal(projectAuditNavigationBlock([{...lane,accessOutcome:'representative_page'}]),null);
+  const attempts=lane.navigationAttempts;
+  assert.deepEqual(projectAuditNavigationBlock([{...lane,navigationAttempts:[{...attempts[0]!,failureCode:undefined,guardDecision:terminal.guardDecision},
+    {...attempts[1]!,guardDecision:undefined}]}]),{...result,initial:null,guard:null});
+  assert.equal(projectAuditNavigationBlock([{...lane,navigationAttempts:[attempts[0]!,{...attempts[1]!,failureCode:undefined}]}]),null);
 });
 
 test('daily no-go reason rates use only retained no-gos and preserve missing reason evidence', () => {

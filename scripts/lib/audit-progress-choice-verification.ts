@@ -5,7 +5,7 @@ import {parseCanonicalEvidenceArtifact} from '@certscore/contracts/dist/canonica
 import {extractExportRow} from './audit-progress-export';
 import {applyChoiceSummary,choiceSummaryFromRecord,choiceMetricRegistry} from './audit-progress-choice';
 import {applyRetainedOptOutExtracts} from './audit-progress-opt-out';
-import {ACCEPT_PATH_DIAGNOSTIC_KEY} from './audit-progress-priority-evidence';
+import {ACCEPT_PATH_DIAGNOSTIC_KEY, REJECT_ACTIVITY_KEY} from './audit-progress-priority-evidence';
 import {CONTROL_ACCESSIBILITY_KEYS,isControlAccessibilityExtract,readControlAccessibilityDetail} from './audit-progress-control-accessibility';
 import {checklistEvidence,returnedState} from './audit-progress-contracts';
 import {localDay,type ProgressRow} from './audit-progress';
@@ -16,6 +16,7 @@ export function rebuildChoiceEvidence(data:ChoiceInput){
  const currentDay=data.days?.at(-1)?.date;
  const activityKeys=['accept','reject'].filter(action=>data.metrics?.some(m=>m.id===`detail.${action}.activity_all`))
   .flatMap(action=>[`click.${action}`,`detail.${action}.verdict`]);
+ const rejectFinding=data.metrics?.some(metric=>metric.id==='detail.reject.activity_all');
  const cmpKeys=data.metrics?.filter(m=>m.id.startsWith('customer_cmp_check.')).map(m=>m.id)??[];
  if(cmpKeys.length)cmpKeys.push('checklist.consent_optional_defaults_on');
  const proof=structuredClone(data.rows);let exports=0,summaries=0,comparisons=0;
@@ -40,6 +41,11 @@ export function rebuildChoiceEvidence(data:ChoiceInput){
    }
    for(const key of activityKeys){
     assert.equal(row.states[key],expected.states[key],`Post-click activity source state ${row.scanId}/${key}`);comparisons++;
+   }
+   if(rejectFinding){
+    const returned=(input:ProgressRow)=>input.findings.some(finding=>finding.id==='post_reject_click_tracking');
+    assert.equal(returned(row),returned(expected),`Returned post-Reject finding ${row.scanId}`);
+    comparisons++;
    }
    assert.deepEqual(row.cookieDeclarationCounts,expected.cookieDeclarationCounts,`Cookie comparison source counts ${row.scanId}`);
    comparisons++;
@@ -87,7 +93,7 @@ export function verifyChoiceEvidence(data:ChoiceInput){
  for(let i=0;i<proof.length;i++)for(const key of new Set([...Object.keys(proof[i]!.states),...Object.keys(data.rows[i]!.states)]))if(choiceKey(key)){
   // Missing and explicit unavailable are the same coverage state, never zero or success.
   assert.equal(data.rows[i]!.states[key]??'unavailable',proof[i]!.states[key]??'unavailable',`Choice source state ${proof[i]!.scanId}/${key}`);comparisons++;
-  if((key.startsWith('sealed.operations.')||key==='sealed.priority_evidence.cmp'||key===ACCEPT_PATH_DIAGNOSTIC_KEY)&&proof[i]!.states[key]){
+  if((key.startsWith('sealed.operations.')||key==='sealed.priority_evidence.cmp'||key===ACCEPT_PATH_DIAGNOSTIC_KEY||key===REJECT_ACTIVITY_KEY)&&proof[i]!.states[key]){
    assert.equal(data.rows[i]!.metricSources?.[key],proof[i]!.metricSources?.[key],`Choice evidence source scope ${proof[i]!.scanId}/${key}`);comparisons++;
   }
  }

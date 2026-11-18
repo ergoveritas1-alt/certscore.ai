@@ -105,7 +105,7 @@ export const gpcBoundedObservationSchema = z.object({
   registration: z.object({ basis: z.literal("current_recorded_state"), sale: axis, sharing: axis,
     cmpGpcSignal: z.enum(["received", "not_received", "unknown"]), causedByGpc: z.literal("not_established") }).strict(),
   cmpStatusReadback: z.object({
-    source: z.enum(["visible_cmp_live_status", "visible_hubspot_gpc_notification", "visible_cookiebot_gpc_notification", "visible_trustarc_gpc_notification", "visible_trustarc_gpc_branch", "visible_onetrust_gpc_notification", "hubspot_applied_gpc"]),
+    source: z.enum(["visible_cmp_live_status", "visible_hubspot_gpc_notification", "visible_cookiebot_gpc_notification", "visible_trustarc_gpc_notification", "visible_trustarc_gpc_branch", "visible_onetrust_gpc_notification", "hubspot_applied_gpc", "trustarc_consent_request_gpc"]),
     observedAtMs: count,
   }).strict().optional(),
   acknowledgment: z.object({ observed: z.boolean(), captureComplete: z.boolean() }).strict(),
@@ -147,7 +147,7 @@ export const gpcBoundedObservationSchema = z.object({
 }).strict().superRefine((o, ctx) => {
   const readiness = o.semanticReadiness;
   const statusReadback = o.cmpStatusReadback;
-  if (statusReadback && statusReadback.source !== "hubspot_applied_gpc" && !o.acknowledgment.observed)
+  if (statusReadback && !["hubspot_applied_gpc", "trustarc_consent_request_gpc"].includes(statusReadback.source) && !o.acknowledgment.observed)
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"Displayed GPC readback requires a retained acknowledgment."});
   for (const readback of [o.cmpEventReadback, statusReadback]) if (readback && (!o.scanId || !o.sourceSha256 || !o.sessionSha256 || !o.documentUrlSha256 ||
     !o.positiveEvidence?.representativeDocument || !o.delivery.httpHeaderRetained || !o.delivery.mainNavigatorReadbackRetained ||

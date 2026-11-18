@@ -8,6 +8,7 @@ import {OPT_OUT_DISPATCH_STATES,retainedOptOutDispatch} from '../../packages/cer
 import {conditionalOptOutDecisionSchema,retainedConditionalOptOutDecision} from '../../packages/certscore-contracts/src/conditional-opt-out-decision';
 import {gpcCmpPairBlockerSchema} from '../../packages/certscore-contracts/src/gpc-cmp-pair-coverage';
 import {ACCEPT_PATH_DIAGNOSTIC_KEY,CMP_BLOCKER_NOT_PROJECTED,CMP_DELIVERY_KEY,PRIORITY_EVIDENCE_METRICS, priorityEvidenceSql, priorityEvidenceStates, priorityCoverageStates, withBoundedPriority, jsonbBytes} from './audit-progress-priority-evidence';
+import {REJECT_ACTIVITY_KEY, REJECT_ACTIVITY_METRIC} from './audit-progress-priority-evidence';
 import {OPERATIONS_EVIDENCE_METRICS, operationsEvidenceFromRecord, operationsEvidenceStates} from './audit-progress-operations-evidence';
 import {projectOptOutLaneOutcome} from '../../apps/web/server/scans/opt-out-lane-projection';
 import type {ProgressRow,Metric} from './audit-progress';
@@ -292,5 +293,6 @@ export function choiceMetricRegistry(rows:ProgressRow[]):Metric[]{
  for(const row of rows)if(row.states['sealed.opt_out.findings_coverage']==='available')for(const id of ids.keys()){
   row.states[id]??='not_returned';row.metricSources??={};row.metricSources[id]??=row.metricSources['sealed.opt_out.findings_coverage']!;
  }
- return [...CHOICE_METRICS,...PRIORITY_EVIDENCE_METRICS,...OPERATIONS_EVIDENCE_METRICS,...[...ids].sort(([a],[b])=>a.localeCompare(b)).map(([id,label])=>({id,label:`${id==='sealed.choice_finding.gpc_response'?'GPC response assessment':label} · canonical record`,group:'Canonical GPC & opt-out records',denominator:'Readable reportable scans; exact persisted canonical IDs, not a risk or failure rate',success:[]}))];
+ const rejectActivity=rows.some(row=>row.states[REJECT_ACTIVITY_KEY]!==undefined)?[REJECT_ACTIVITY_METRIC]:[];
+ return [...CHOICE_METRICS,...PRIORITY_EVIDENCE_METRICS,...rejectActivity,...OPERATIONS_EVIDENCE_METRICS,...[...ids].sort(([a],[b])=>a.localeCompare(b)).map(([id,label])=>({id,label:`${id==='sealed.choice_finding.gpc_response'?'GPC response assessment':label} · canonical record`,group:'Canonical GPC & opt-out records',denominator:'Readable reportable scans; exact persisted canonical IDs, not a risk or failure rate',success:[]}))];
 }

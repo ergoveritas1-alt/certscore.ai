@@ -1,8 +1,11 @@
+import { navigationFailureCodeSchema, type NavigationGuardDecision } from "@certscore/contracts";
+import type { Page, Request } from "playwright";
 import { isIP } from "node:net";
 import { getRegistrableDomain } from "./domain-utils.js";
 
 const NAVIGATION_TRANSPORT_ERROR_PATTERNS = [
   /timeout/i,
+  /\bERR_TIMED_OUT\b/i,
   /\bERR_EMPTY_RESPONSE\b/i,
   /ERR_(?:CONNECTION|SSL|TLS|CERT|HTTP2|PROTOCOL|NETWORK|SOCKET|TUNNEL|INVALID_AUTH|HTTP_RESPONSE_CODE)/i,
   /ECONN(?:RESET|REFUSED|ABORTED)/i,
@@ -38,6 +41,45 @@ export type NavigationFailureClassification =
   | "target_unreachable_or_unsuitable"
   | "tls_or_certificate_error";
 
+/** Keep diagnostic codes from Playwright's error prefix only. A URL or call log can contain arbitrary text. */
+export function navigationFailureCode(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const prefix = message.split("\n", 1)[0]!.replace(/^page\.(goto|waitForLoadState):\s*/, "");
+  const code = /^net::(ERR_[A-Z0-9_]+)(?: at |$)/.exec(prefix)?.[1];
+  if (code) return navigationFailureCodeSchema.safeParse(code).data ?? "other";
+  if (/^Timeout \d+ms exceeded/.test(prefix) || (error instanceof Error && error.name === "TimeoutError")) return "timeout";
+  if (/^Download is starting/.test(prefix)) return "download";
+  if (/^Target page, context or browser has been closed/.test(prefix)) return "page_closed";
+  return "other";
+}
+
+/** Associate a guard rejection with the actual goto and its server redirects.
+ * A late rejection, subresource or unrelated top-level navigation cannot supply proof. */
+export function entryNavigationGuardObserver(page: Page) {
+  type Attempt = { url: string; root?: Request; decision?: NavigationGuardDecision };
+  let active: Attempt | undefined;
+  const owners = new WeakMap<Request, Attempt>();
+  function bind(request: Request) {
+    try {
+      if (!active || !request.isNavigationRequest() || request.frame() !== page.mainFrame()) return;
+      const previous = request.redirectedFrom();
+      if (previous ? owners.get(previous) !== active :
+          (request.url().split("#", 1)[0] !== active.url || (active.root && active.root !== request))) return;
+      if (!previous) active.root = request;
+      owners.set(request, active);
+    } catch { /* Requests without an available frame cannot supply attribution. */ }
+  }
+  return {
+    begin(url: string) { active = { url: url.split("#", 1)[0]! }; },
+    bind,
+    deny(request: Request, decision: NavigationGuardDecision) {
+      if (active && owners.get(request) === active) active.decision = decision;
+    },
+    decision() { return active?.decision; },
+    end() { active = undefined; },
+  };
+}
+
 export function httpsTransportUpgradeUrl(value: string): string | null {
   try {
     const url = new URL(value);
@@ -62,7 +104,10 @@ export function httpTransportFallbackUrl(value: string): string | null {
 
 export function isNavigationTransportFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? "");
-  return NAVIGATION_TRANSPORT_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+  // A terminal client block can include "timeout" in its target URL, or a
+  // previous failure in the call log. Neither authorizes an alternate request.
+  const reason = message.split(/[\r\n]|[a-z][a-z\d+.-]*:\/\//i, 1)[0]!;
+  return NAVIGATION_TRANSPORT_ERROR_PATTERNS.some((pattern) => pattern.test(reason));
 }
 
 export function alternateWwwNavigationUrl(value: string): string | null {

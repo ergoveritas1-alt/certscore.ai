@@ -94,12 +94,12 @@ export async function installPublicNetworkGuardRoute(
     env?: Record<string, string | undefined>;
     signal?: AbortSignal;
     /** Internal diagnostics only; observer errors must never alter enforcement. */
-    onRequestPhase?: (request: Request, phase: "validation_pending" | "validated" | "denied") => void;
+    onRequestPhase?: (request: Request, phase: "validation_pending" | "validated" | "denied", diagnostic?: PublicNetworkGuardDiagnostic) => void;
   } = {},
 ) {
   if (!publicNetworkGuardEnabled(options.env)) return;
-  const notify = (route: Route, phase: "validation_pending" | "validated" | "denied") => {
-    try { options.onRequestPhase?.(route.request(), phase); } catch { /* Diagnostics are not policy. */ }
+  const notify = (route: Route, phase: "validation_pending" | "validated" | "denied", diagnostic?: PublicNetworkGuardDiagnostic) => {
+    try { options.onRequestPhase?.(route.request(), phase, diagnostic); } catch { /* Diagnostics are not policy. */ }
   };
   const cache = new Map<string, Promise<void>>();
   await context.route("**/*", async (route: Route) => {
@@ -109,7 +109,7 @@ export async function installPublicNetworkGuardRoute(
     try {
       origin = new URL(url).origin;
     } catch {
-      notify(route, "denied");
+      notify(route, "denied", new PublicNetworkGuardError("invalid_url").diagnostic);
       await route.abort("blockedbyclient");
       return;
     }
@@ -125,8 +125,8 @@ export async function installPublicNetworkGuardRoute(
       validated = true;
       notify(route, "validated");
       await route.fallback();
-    } catch {
-      if (!validated) notify(route, "denied");
+    } catch (error) {
+      if (!validated) notify(route, "denied", error instanceof PublicNetworkGuardError ? error.diagnostic : undefined);
       cache.delete(origin);
       await route.abort("blockedbyclient").catch(() => undefined);
     }

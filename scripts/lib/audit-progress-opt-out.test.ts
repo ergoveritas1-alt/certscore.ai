@@ -5,16 +5,124 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import fixture from '../../apps/web/lib/scans/test-fixtures/dollar-general-consent-assessment.json';
-import {retainedOptOutState,historicalOptOutSql,applyRetainedOptOutExtracts,OPT_OUT_EXTRACT_VERSION} from './audit-progress-opt-out';
+import {retainedOptOutState,historicalOptOutSql,applyRetainedOptOutExtracts,OPT_OUT_EXTRACT_VERSION,REJECT_ACTIVITY_REF} from './audit-progress-opt-out';
 import type {ProgressRow} from './audit-progress';
 import {verifyChoiceEvidence} from './audit-progress-choice-verification';
-import {CHOICE_AUDIT_VERSION,choiceSummaryFromRecord} from './audit-progress-choice';
+import {CHOICE_AUDIT_VERSION,choiceMetricRegistry,choiceSummaryFromRecord} from './audit-progress-choice';
 import {buildAuditDeltaQuery} from './audit-delta-query';
 import {extractExportRow} from './audit-progress-export';
+import {REJECT_ACTIVITY_KEY} from './audit-progress-priority-evidence';
+import {progressEngine} from './audit-progress-engine';
+import {EVIDENCE_METRICS} from './audit-progress-evidence';
 const id=fixture.assessment.scan.scanId;
 const row=():ProgressRow=>({scanId:id,site:'dollargeneral.com',createdAt:'2026-10-29T12:00:00Z',region:'us-west-1',producer:'unknown',profile:'unknown',assessmentVersion:'pulse-public-v10',projectionVersion:'scan-report-projection-v27',publicProjectionSourceHash:'a'.repeat(64),originRequestId:'archive',states:{'control.privacyOptOut':'unavailable'},findings:[],findingInventory:true,reportable:true,refs:[]});
 const extract=()=>({scanId:id,isMacMini:true,isCanary:false,originalRequestId:'original',publicationRequestStatus:'ready',status:'completed',created_at:'2026-10-29T12:00:00.000123Z',projection_source_hash:'a'.repeat(64),projection_payload_sha256:'b'.repeat(64),projection_version:'scan-report-projection-v27',projection_status:'ready',control_assessment:structuredClone(fixture.assessment)});
 function receipt(rows:any[],version=OPT_OUT_EXTRACT_VERSION as string){const file=path.join(mkdtempSync(path.join(tmpdir(),'opt-out-extract-')),'extract.json');writeFileSync(file,JSON.stringify({version,readOnly:true,rows}));const b=readFileSync(file);return {file,sha256:createHash('sha256').update(b).digest('hex'),bytes:b.length};}
+test('bounded Reject activity counts a completed unconfirmed click only with the matching packet and generation',()=>{
+ const root=mkdtempSync(path.join(tmpdir(),'audit-reject-activity-'));
+ const sha=(value:string)=>createHash('sha256').update(value).digest('hex');
+ const packet='c'.repeat(64), base=row(), exportFile=path.join(root,id+'.json');
+ const archive={
+  scanId:id,scanStatus:'completed',domain:base.site,timestamps:{createdAt:base.createdAt},
+  meta:{projectionVersion:'pulse-public-v11',reportProjectionVersion:base.projectionVersion,reportProjectionSourceHash:base.publicProjectionSourceHash},
+  postRefusalObservation:{
+   status:'unconfirmed',verdict:'no_confirmed_post_refusal_verdict',
+   execution:{policyVersion:'choice_path_execution.v1',status:'succeeded',clickCompleted:true,observationCompleted:true,consentConfirmed:false},
+   confirmation:{policyVersion:'choice_confirmation_summary.v2',sourcePacketSha256:packet,initialRegistrationStatus:'unconfirmed'},
+   afterAction:{requestCount:4,storageWriteCount:2},
+  },
+ };
+ const publicRef={file:exportFile,sha256:sha(JSON.stringify(archive)),role:'hash_verified_bot_archive_export'};
+ const daily=():ProgressRow=>({...extractExportRow(archive,publicRef),originProof:'mac_mini_archive'});
+ const sql=buildAuditDeltaQuery({overlapStartUtc:'2026-10-28T00:00:00Z',windowEndUtc:'2026-10-30T00:00:00Z',
+  includeRejectActivityReceipt:true},false);
+ const input=(patch:Record<string,unknown>={})=>{
+  const dir=mkdtempSync(path.join(root,'inventory-'));
+  const file=path.join(dir,'delta-inventory.json');
+  const bytes=JSON.stringify({version:'certscore.mac-mini-direct-id-inventory.v1',readOnly:true,choiceAuditVersion:CHOICE_AUDIT_VERSION,
+   rejectActivityReceiptProjected:true,querySha256:sha(sql),rows:[{...extract(),auditRejectActivity:[1,id,packet,'request'],...patch}]});
+  writeFileSync(file,bytes);writeFileSync(path.join(dir,'delta-inventory.sql'),sql);
+  return {file,sha256:sha(bytes),bytes:Buffer.byteLength(bytes)};
+ };
+ try {
+  writeFileSync(exportFile,JSON.stringify(archive));
+  const matched=daily(),source=input(),legacy=receipt([extract()],'certscore.mac-mini-direct-id-inventory.v1');
+  applyRetainedOptOutExtracts([matched],[legacy,source]);
+  assert.equal(matched.states[REJECT_ACTIVITY_KEY],'request');
+  assert.match(matched.metricSources![REJECT_ACTIVITY_KEY]!,/certscore\.audit-reject-activity\.v1\/bounded_after_action_capture\.v2$/);
+  assert.ok(choiceMetricRegistry([matched]).some(metric=>metric.id===REJECT_ACTIVITY_KEY));
+  assert.equal(matched.states['detail.reject.verdict'],'no_confirmed_post_refusal_verdict');
+  assert.ok(matched.refs.some(ref=>ref.role===REJECT_ACTIVITY_REF&&ref.sha256===source.sha256));
+  const metrics=EVIDENCE_METRICS.filter(m=>m.id==='detail.reject.activity_all'||m.id==='detail.reject.verdict');
+  const days=[{date:'2026-10-29',completeDay:false}];
+  const [day]=progressEngine().aggregate({metrics,days,findingIds:[]},[matched]);
+  assert.equal(day.metrics['detail.reject.activity_all'].numerator,1);
+  assert.equal(day.metrics['detail.reject.verdict'].numerator,0);
+  assert.deepEqual(day.metrics['detail.reject.activity_all'].activityCoverage,{completedClicks:1,classifiedCompletedClicks:1,observedCompletedClicks:1});
+  assert.equal(verifyChoiceEvidence({rows:[matched],optOutExtracts:[legacy,source],metrics,days}).sourceMismatchCount,0);
+  for(const [result,requestOrWrite] of [
+   ['request',1],['storage_write',1],['request_and_storage_write',1],['cookie_snapshot',0],
+   ['request_and_cookie_snapshot',1],['storage_write_and_cookie_snapshot',1],['request_and_storage_write_and_cookie_snapshot',1],
+  ] as const){
+   const scan=daily(),receipt=input({auditRejectActivity:[2,id,packet,result]});
+   applyRetainedOptOutExtracts([scan],[receipt]);
+   assert.equal(scan.states[REJECT_ACTIVITY_KEY],result);
+   assert.match(scan.metricSources![REJECT_ACTIVITY_KEY]!,/certscore\.audit-reject-activity\.v2\/retained_reject_presence$/);
+   const [day]=progressEngine().aggregate({metrics,days,findingIds:[]},[scan]);
+   const observed=day.metrics['detail.reject.activity_all'];
+   assert.equal(observed.numerator,1);
+   assert.deepEqual(observed.activityCoverage,{completedClicks:1,classifiedCompletedClicks:requestOrWrite,observedCompletedClicks:requestOrWrite});
+   assert.equal(verifyChoiceEvidence({rows:[scan],optOutExtracts:[receipt],metrics,days}).sourceMismatchCount,0);
+   scan.findings=[{id:'post_reject_click_tracking',label:'Non-essential cookies or services after Reject',family:'other',top:null}];
+   assert.equal(progressEngine().aggregate({metrics,days},[scan])[0].metrics['detail.reject.activity_all'].numerator,1);
+  }
+  for(const [patch,state] of [
+   [{auditRejectActivity:[1,id,'d'.repeat(64),'request']},'invalid_or_unbound'],
+   [{auditRejectActivity:[2,id,'d'.repeat(64),'cookie_snapshot']},'invalid_or_unbound'],
+   [{auditRejectActivity:[1,id,packet,'cookie_snapshot']},'invalid_or_unbound'],
+   [{auditRejectActivity:[3,id,packet,'cookie_snapshot']},'invalid_or_unbound'],
+   [{auditRejectActivity:[1,id,packet,'classification_unavailable']},'classification_unavailable'],
+   [{auditRejectActivity:null},'receipt_unavailable'],
+   [{projection_source_hash:'f'.repeat(64)},undefined],
+  ] as const){
+   const unbound=daily();applyRetainedOptOutExtracts([unbound],[input(patch)]);
+   assert.equal(unbound.states[REJECT_ACTIVITY_KEY],state);
+   const [day]=progressEngine().aggregate({metrics,days,findingIds:[]},[unbound]);
+   assert.equal(day.metrics['detail.reject.activity_all'].counts.unavailable,1);
+  }
+  const historical=daily();applyRetainedOptOutExtracts([historical],[legacy]);
+  assert.equal(historical.states[REJECT_ACTIVITY_KEY],undefined);
+  assert.ok(!choiceMetricRegistry([historical]).some(metric=>metric.id===REJECT_ACTIVITY_KEY));
+  assert.throws(()=>applyRetainedOptOutExtracts([daily()],[source,input({auditRejectActivity:[1,id,packet,'storage_write']})]),/Conflicting generation-bound post-Reject/);
+  assert.throws(()=>applyRetainedOptOutExtracts([daily()],[source,input({originalRequestId:'other'})]),/Reject activity provenance/);
+  assert.throws(()=>applyRetainedOptOutExtracts([daily()],[input({auditRejectActivity:undefined})]),/Missing frozen daily query or column/);
+  writeFileSync(exportFile,JSON.stringify({...archive,scanStatus:'failed'}));
+  assert.throws(()=>applyRetainedOptOutExtracts([daily()],[source]),/Diagnostic archive source hash mismatch/);
+ } finally {rmSync(root,{recursive:true,force:true});}
+});
+test('a navigation block joins the original no-go export and ready inventory generation',()=>{
+ const directory=mkdtempSync(path.join(tmpdir(),'navigation-audit-'));
+ try{
+  const base=row(), file=path.join(directory,id+'.json');
+  const bytes=JSON.stringify({scanId:id,scanStatus:'completed_limited',resultDisposition:'no_go',timestamps:{createdAt:base.createdAt},
+   meta:{reportProjectionVersion:base.projectionVersion,reportProjectionSourceHash:base.publicProjectionSourceHash}});
+  writeFileSync(file,bytes);
+  const noGo=():ProgressRow=>({...base,reportable:false,originProof:'mac_mini_archive',states:{outcome:'no_go'},
+   refs:[{file,sha256:createHash('sha256').update(bytes).digest('hex'),role:'hash_verified_bot_archive_export'}]});
+  const block={initial:'timeout',terminal:'ERR_BLOCKED_BY_CLIENT',mode:'https_apex_www_recovery',guard:{reason:'dns_resolution_failed',resolverCode:'ENOTFOUND'}};
+  const source=(patch:Record<string,unknown>={})=>receipt([{...extract(),auditNavigationBlock:block,...patch}],'certscore.mac-mini-direct-id-inventory.v1');
+  const good=noGo();
+  applyRetainedOptOutExtracts([good],[source()]);
+  assert.deepEqual(good.navigationBlock,block);
+  assert.deepEqual(good.states,{outcome:'no_go'});
+  assert.ok(good.refs.some(r=>r.role==='runtime_navigation_block'));
+  for(const patch of [{projection_source_hash:'c'.repeat(64)},{isCanary:true},{projection_status:'pending'}]){
+   const scan=noGo();applyRetainedOptOutExtracts([scan],[source(patch)]);assert.equal(scan.navigationBlock,undefined);
+  }
+  assert.throws(()=>applyRetainedOptOutExtracts([noGo()],[source(),source({projection_payload_sha256:'f'.repeat(64)})]),/Conflicting navigation/);
+  assert.throws(()=>applyRetainedOptOutExtracts([noGo()],[source({auditNavigationBlock:{...block,url:'private'}})]));
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
 test('persisted opt-out extraction joins exact original scan, generation and canonical state',()=>{
  for(const state of ['observed','not_observed','unknown'] as const){const e=extract();e.control_assessment.controls.privacyOptOut.state=state;assert.equal(retainedOptOutState(e,row())?.state,state);}
  for(const patch of [{scanId:'other'},{isMacMini:false},{isCanary:true},{originalRequestId:null},{projection_source_hash:'c'.repeat(64)},{projection_payload_sha256:null},{projection_version:'scan-report-projection-v99'},{created_at:'2026-10-29T12:00:01Z'},{projection_status:'pending'},{publicationRequestStatus:'terminal_failure'}])assert.equal(retainedOptOutState({...extract(),...patch},row()),null);

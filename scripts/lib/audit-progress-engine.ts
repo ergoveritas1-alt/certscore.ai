@@ -1,5 +1,6 @@
 /** Pure shared server/browser aggregation and CSV generation. No network or product logic. */
-export function progressEngine() {
+export function progressEngine(verifiedRejectPresenceIds: readonly string[] = []) {
+  const verifiedBrowserRejectPresence = new Set(verifiedRejectPresenceIds);
   const dayOf=(s:string)=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(s));
   const num=(x:any)=>Number.isSafeInteger(x)&&x>=0;
   const source=(r:any,id:string)=>r.metricSources?.[id]??(id.startsWith('sealed.')?'unavailable_sealed_assessment':/^(site|technology|graph|form)\./.test(id)?'unavailable_sealed_projection':r.defaultSource??'unavailable_source');
@@ -26,23 +27,47 @@ export function progressEngine() {
         const action=activity?.[1];
         const verdictKey=`detail.${action}.verdict`;
         const retainedKey=`sealed.detail.${action}.post_click_activity`;
+        const rejectReceiptKey='sealed.priority_evidence.reject_activity';
         const activityVerdict=action==='accept'?'eligible_nonessential_activity_observed_after_confirmed_acceptance':'eligible_nonessential_activity_observed_after_confirmed_refusal';
         const cleanVerdict='no_eligible_nonessential_activity_observed_during_completed_window';
-        const activityState=(r:any)=>{
+        const capturedActivityState=(r:any)=>{
           const verdict=r.states[verdictKey];
           if(verdict===activityVerdict)return {state:'activity_observed',key:verdictKey};
           if(r.states['click.'+action]==='completed'&&r.states[retainedKey]==='activity_observed')return {state:'activity_observed',key:retainedKey};
+          if(action==='reject'&&r.states['click.reject']==='completed'&&
+            ['request','storage_write','request_and_storage_write','request_and_cookie_snapshot',
+              'storage_write_and_cookie_snapshot','request_and_storage_write_and_cookie_snapshot'].includes(r.states[rejectReceiptKey]))
+            return {state:'activity_observed',key:rejectReceiptKey};
           if(verdict===cleanVerdict)return {state:cleanVerdict,key:verdictKey};
           const click=r.states['click.'+action];
           return {state:['not_attempted','incomplete','unsupported'].includes(click)?'no_completed_click':'unavailable',key:'click.'+action};
         };
+        const activityState=(r:any):{state:string;key:string;captureState?:string;scope?:string}=>{
+          const captured=capturedActivityState(r);
+          if(action==='reject'&&captured.state!=='activity_observed'&&r.states['click.reject']==='completed'){
+            if(r.states[rejectReceiptKey]==='cookie_snapshot')
+              return {state:'activity_observed',key:rejectReceiptKey,captureState:captured.state};
+            if((verifiedBrowserRejectPresence.has(r.scanId)||r.refs?.some((ref:any)=>ref.role==='hash_verified_bot_archive_export'))&&
+              r.findings.some((finding:any)=>finding.id==='post_reject_click_tracking')){
+              return {state:'activity_observed',key:'findings',captureState:captured.state,scope:'/returned_reject_presence.v1'};
+            }
+          }
+          return captured;
+        };
         const selected=noGoTotal?chosen:noGoReason?noGos:chosen.filter(r=>funnel?r.reportable:eligible(r,m.id)),groups:any={};
         // The audit mapping uses the same exact public reason field across retained export versions.
-        for(const r of selected){const s=noGoTotal?'retained_attempt_outcome/v1':noGoReason?'retained_public_no_go_reason/v1':source(r,activity?activityState(r).key:m.id);(groups[s]??=[]).push(r);}
+        for(const r of selected){
+          const sample=activity?activityState(r):undefined;
+          const s=noGoTotal?'retained_attempt_outcome/v1':noGoReason?'retained_public_no_go_reason/v1':
+            source(r,sample?.key??m.id)+(sample?.scope??'');
+          (groups[s]??=[]).push(r);
+        }
         const tally=(rs:any[],s:string)=>{
           const counts:any={};
+          let completedClicks=0,classifiedCompletedClicks=0,observedCompletedClicks=0;
           for(const r of rs){
-            let state=activity?activityState(r).state:r.states[m.id]??'unavailable';
+            const sample=activity?activityState(r):undefined;
+            let state=sample?.state??r.states[m.id]??'unavailable';
             if(noGoTotal)state=isRetainedNoGo(r)?'recorded':'other_outcome';
             else if(noGoReason){
               const reason=data.noGoReasons?.[r.scanId]??'unavailable';
@@ -53,9 +78,16 @@ export function progressEngine() {
               if(click!=='completed')state=['not_attempted','incomplete','unsupported'].includes(click)?'no_completed_click':'unavailable';
             }
             counts[state]=(counts[state]??0)+1;
+            if(activity&&r.states['click.'+action]==='completed'){
+              completedClicks++;
+              const captured=sample?.captureState??state;
+              if(captured==='activity_observed'||captured===cleanVerdict)classifiedCompletedClicks++;
+              if(captured==='activity_observed')observedCompletedClicks++;
+            }
           }
           const n=m.success.reduce((n:number,k:string)=>n+(counts[k]??0),0);
-          return {source:s,counts,numerator:n,denominator:rs.length,rate:rs.length&&m.success.length&&s!=='mixed_sources'&&!s.startsWith('unavailable')&&(counts.unavailable??0)!==rs.length?100*n/rs.length:null};
+          return {source:s,counts,numerator:n,denominator:rs.length,
+            ...(activity?{activityCoverage:{completedClicks,classifiedCompletedClicks,observedCompletedClicks}}:{}),rate:rs.length&&m.success.length&&s!=='mixed_sources'&&!s.startsWith('unavailable')&&(counts.unavailable??0)!==rs.length?100*n/rs.length:null};
         };
         const keys=Object.keys(groups),v:any=tally(selected,keys.length===1?keys[0]!:'mixed_sources');v.series={};
         for(const [s,rs]of Object.entries(groups)){const sub=tally(rs as any[],s);compare(sub,previous?.metrics[m.id]?.series[s],!base.completeDay||!previous?.completeDay);v.series[s]=sub;}

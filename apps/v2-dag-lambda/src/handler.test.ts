@@ -38,7 +38,7 @@ import {
 } from "@certscore/contracts";
 import { buildPreConsentRuntimePreview, buildGpcResponseAssessment } from "@certscore/scan-core";
 import { gpcRuntimeFixture } from "../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime";
-import { OriginalRuntimeVisitFailure, PassiveLaneFailure, retainFailedTerminalLaneEvidence, localGpcComparisonMinDurationMs, localGpcAdaptiveEnabled } from "./handler";
+import { readRuntimeBrowserPolicyLinks, OriginalRuntimeVisitFailure, PassiveLaneFailure, retainFailedTerminalLaneEvidence, localGpcComparisonMinDurationMs, localGpcAdaptiveEnabled } from "./handler";
 import { parseLocalV2DagLambdaResultMessage } from "../../web/server/scans/local-v2-dag-lambda-dispatch";
 import {
   LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS,
@@ -1414,6 +1414,71 @@ test("lane instrumentation retains representative navigation when the initial re
   assert.equal(lane?.accessOutcome, "representative_page");
 });
 
+test("lane reporting retains a same-session challenge reload and its response", () => {
+  const initialUrl = "https://example.com/";
+  const reloadUrl = "https://www.example.com/?token=private";
+  const bundle = canonicalBundleFixture("challenge-reload", {
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "completed",
+      startedAt: "2026-06-15T18:00:00.000Z",
+      recoveryDiagnostics: {
+        attempted: true,
+        attemptCount: 2,
+        modes: ["security_challenge_passive_wait", "security_challenge_same_region_retry"],
+        durationMs: 3120,
+        attempts: [
+          { mode: "initial_https_navigation", url: initialUrl, outcome: "http_error", httpStatus: 403, durationMs: 240 },
+          { mode: "security_challenge_same_region_retry", url: reloadUrl, outcome: "success", httpStatus: 200, durationMs: 120 },
+        ],
+        securityChallenge: {
+          decision: "challenge_markers_detected",
+          initialHttpStatus: 403,
+          sameSessionReload: { outcome: "response", httpStatus: 200 },
+        },
+      },
+      evidenceRefs: [],
+      errors: [],
+    }],
+  });
+
+  const lane = buildLocalV2DagLambdaLaneRun({ bundle, workerLane: "consent_proof", region: "us-west-1" });
+  assert.deepEqual(lane?.securityChallengeRecovery, {
+    decision: "challenge_markers_detected",
+    initialHttpStatus: 403,
+    sameSessionReload: { outcome: "response", httpStatus: 200 },
+  });
+  assert.equal(lane?.navigationCount, 2);
+  assert.equal(lane?.firstHttpStatus, 403);
+  assert.deepEqual(lane?.navigationAttempts.map(attempt => [attempt.httpStatus, attempt.effectiveUrl]), [
+    [403, initialUrl],
+    [200, "https://www.example.com/"],
+  ]);
+
+  const recovery = bundle.modulesRun[0]!.recoveryDiagnostics!;
+  recovery.attempts?.pop();
+  recovery.securityChallenge = { decision: "body_read_failed", initialHttpStatus: 403 };
+  const skipped = buildLocalV2DagLambdaLaneRun({ bundle, workerLane: "consent_proof", region: "us-west-1" });
+  assert.equal(skipped?.securityChallengeRecovery?.decision, "body_read_failed");
+  assert.equal(skipped?.securityChallengeRecovery?.sameSessionReload, undefined);
+  assert.equal(skipped?.navigationCount, 1);
+});
+
+test("entry navigation keeps initial and terminal failures and request-local guard reasons", () => {
+  const bundle = canonicalBundleFixture("entry-transport-failure", { modulesRun: [{
+    moduleName: "preConsentRuntimeScanner", status: "failed", startedAt: "2026-06-15T18:00:00.000Z",
+    recoveryDiagnostics: { attempted: true, attemptCount: 2, durationMs: 400, modes: [], attempts: [
+      { mode: "initial_https_navigation", url: "https://example.com/", durationMs: 300, outcome: "transport_error", failureCode: "ERR_TUNNEL_CONNECTION_FAILED" },
+      { mode: "https_apex_www_recovery", url: "https://www.example.com/", durationMs: 100, outcome: "transport_error", failureCode: "ERR_BLOCKED_BY_CLIENT",
+        guardDecision: { reason: "dns_resolution_failed", resolverCode: "ENOTFOUND" } },
+    ] }, evidenceRefs: [], errors: [],
+  }] });
+  const lane = buildLocalV2DagLambdaLaneRun({ bundle, workerLane: "consent_proof", region: "us-west-1" });
+  assert.deepEqual(lane?.navigationAttempts.map(a => [a.failureCode, a.guardDecision]), [
+    ["ERR_TUNNEL_CONNECTION_FAILED", undefined], ["ERR_BLOCKED_BY_CLIENT", { reason: "dns_resolution_failed", resolverCode: "ENOTFOUND" }],
+  ]);
+});
+
 test("policy access uses terminal evidence, never the initial redirect or successful subpages", () => {
   for (const terminalAccess of ["access_denied", "representative_page", "unknown", "bot_challenge", undefined] as const) {
     const bundle = canonicalBundleFixture("policy-terminal", {
@@ -1434,12 +1499,13 @@ test("policy access uses terminal evidence, never the initial redirect or succes
 
 test("incidental challenge traffic does not override this lane's corroborated substantive successful page", async () => {
   const { gpcIncidentalChallengeFixture } = await import("../../../packages/certscore-scan-core/src/test-fixtures/gpc-incidental-challenge.cases");
-  for (const defect of ["none", "real_challenge", "blocking_frame", "blocked_status", "malformed_status", "missing_text", "missing_proof", "empty_capture", "wrong_origin", "unsettled", "failed", "policy_lane", "explicit_navigation_challenge", "terminal_denial"] as const) {
+  for (const defect of ["none", "real_challenge", "blocking_frame", "blocked_status", "redirect_status", "malformed_status", "missing_text", "missing_proof", "empty_capture", "wrong_origin", "unsettled", "failed", "policy_lane", "explicit_navigation_challenge", "terminal_denial"] as const) {
     const bundle = gpcIncidentalChallengeFixture();
     const signals = bundle.scanNoGoAssessment!.supportingSignals;
     if (defect === "real_challenge") bundle.scanNoGoAssessment!.decision = "no_go";
     if (defect === "blocking_frame") signals.blockingFrameChallengeObserved = true;
     if (defect === "blocked_status") signals.mainDocumentStatus = 403;
+    if (defect === "redirect_status") signals.mainDocumentStatus = 307;
     if (defect === "malformed_status") signals.mainDocumentStatus = "200";
     if (defect === "missing_text") signals.substantiveRetainedDomVolumeObserved = false;
     if (defect === "missing_proof") delete signals.visualHardNoGoPageState;
@@ -1817,9 +1883,15 @@ test("early runtime preview publication writes one bounded S3 packet and one non
     const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
       orchestrationMode: "worker",
       workerLane: "runtime_evidence",
+      parentDispatchSha256: "a".repeat(64),
     }));
+    const browserPolicyLinks = [{
+      pageUrl: payload.targetUrl, href: new URL("/privacy-policy", payload.targetUrl).href,
+      linkText: "Privacy Policy", domLocation: "footer" as const, linkVisibility: "visible" as const,
+    }];
     const packet = buildVerifiedPreConsentRuntimePreviewPacket({
       payload,
+      browserPolicyLinks,
       preview: buildPreConsentRuntimePreview(canonicalBundleFixture(payload.scanId)),
     });
     const message = await publishVerifiedPreConsentRuntimePreview({
@@ -1846,6 +1918,23 @@ test("early runtime preview publication writes one bounded S3 packet and one non
     assert.equal(message.productionFindingIntegration, false);
     assert.equal(message.sourceHash, packet.sourceHash);
     assert.deepEqual(JSON.parse(String(sends[0]?.input.MessageBody)), message);
+
+    const put = puts[0]!;
+    const bytes = Buffer.from(put.input.Body as Uint8Array);
+    const s3 = {
+      async send(command: GetObjectCommand) {
+        assert.equal(command.input.Key, put.input.Key);
+        return {
+          $metadata: {}, ContentLength: bytes.length, Metadata: put.input.Metadata,
+          Body: bytes as never,
+        };
+      },
+    };
+    const policyWorker = { ...payload, workerLane: "policy_evidence" as const };
+    const signal = new AbortController().signal;
+    assert.deepEqual(await readRuntimeBrowserPolicyLinks(policyWorker, signal, s3), browserPolicyLinks);
+    assert.deepEqual(await readRuntimeBrowserPolicyLinks({ ...policyWorker, parentDispatchSha256: "b".repeat(64) }, signal, s3), []);
+    assert.deepEqual(await readRuntimeBrowserPolicyLinks({ ...policyWorker, targetUrl: "https://other.example.org/" }, signal, s3), []);
   } finally {
     if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
     else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
@@ -4888,6 +4977,7 @@ test("auxiliary uploader returns durable metadata for bounded internal JSON arti
   await writeFile(path.join(tmp, "screenshot-pre-consent.png"), "not-json", "utf8");
   await writeFile(path.join(tmp, "screenshot-pre-consent-geometry-proof.png"), "not-json", "utf8");
   await writeFile(path.join(tmp, "screenshot-pre-consent-full-page.jpg"), "not-a-real-jpeg", "utf8");
+  await writeFile(path.join(tmp, "worker-runtime_evidence-screenshot-pre-consent-runtime-viewport.jpg"), "orphan");
   const puts: Array<{ bucket: string | undefined; contentType: string | undefined; key: string | undefined }> = [];
   const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   const previousPrefix = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX;
@@ -6041,4 +6131,80 @@ test("optional runtime CMS metadata yields to the existing canonical artifact by
   assert.ok(Buffer.byteLength(JSON.stringify(input)) > CANONICAL_ARTIFACT_MAX_DECODED_BYTES);
   assert.equal(serializeCanonicalEvidenceBundle(input), JSON.stringify(base));
   assert.ok(input.runtimeCmsMetadataSnapshot);
+});
+
+test("a degraded runtime visit resolves a separate blank only with the reviewed original viewport bytes", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "runtime-viewport-merge-"));
+  const id = "fixture-runtime-viewport";
+  const { RUNTIME_VIEWPORT_ID, RUNTIME_VIEWPORT_FILENAME, getUsableRuntimeVisitSnapshot } = await import("@certscore/contracts");
+  const { assertOriginalRuntimeVisitForReport } = await import("./runtime-representative-evidence");
+  const bytes = Buffer.alloc(90_000, 53); // The coordinator verifies the original producer's content digest.
+  const file = path.join(root, "worker-runtime_evidence-" + RUNTIME_VIEWPORT_FILENAME);
+  const snapshot = runtimeSnapshotFixture();
+  snapshot.artifactId = "dom_text_pre_consent";
+  snapshot.runtimeDocumentCapture = { version: "runtime_document_capture.v1", viewportAttempted: true,
+    response: { route: "committed", status: 200, documentToken: snapshot.documentIdentity!.token,
+      origin: new URL(snapshot.url).origin, requestUrlSha256: createHash("sha256").update(snapshot.url).digest("hex") },
+    viewport: { sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") } };
+  const shot = { ...screenshotArtifact(RUNTIME_VIEWPORT_ID, path.join("/worker", RUNTIME_VIEWPORT_FILENAME)),
+    capturedAtMs: 200, captureMethod: "primary_viewport_fallback" as const, displayStatus: "available" as const,
+    retentionStatus: "available" as const, documentIdentity: snapshot.documentIdentity, url: snapshot.url };
+  const lane = laneRunFixture("runtime_evidence", "viewport-worker");
+  lane.executionOutcome = "degraded";
+  lane.navigationAttempts = [{sequence: 1, mode: "initial_https_navigation", outcome: "committed_timeout", httpStatus: 200,
+    durationMs: 50, effectiveUrl: snapshot.url}];
+  const runtime = canonicalBundleFixture(id, { scanLaneRuns: [lane], domSnapshots: [snapshot], screenshots: [shot],
+    runtimeCoverage: { coverageStatus: "limited_partial", silentEmpty: false, fallbackModesUsed: [], limitationKeys: [], notes: [],
+      observationCounts: {cookieEvents: 0, cookiesBeforeConsent: 0, networkEvents: 4, normalizedVendors: 0, observedJourneys: 0, thirdPartyRequests: 0} } });
+  const merge = (runtimeEvidence: CanonicalEvidenceBundle, reason = "blank_or_unusable_page") => mergeLocalV2DagLambdaEvidenceLaneBundles({
+    artifactRoot: root, scanId: id, runtimeEvidence,
+    runtimeEvidenceSource: {sha256: "a".repeat(64), sizeBytes: 12345},
+    consentProof: canonicalBundleFixture(id, { scanLaneRuns: [laneRunFixture("consent_proof", "independent-consent")],
+      scanNoGoAssessment: terminalLaneNoGo(reason), visualAccessReview: terminalLaneVisualNoGo(reason, "blank_or_unusable") }),
+    policyEvidence: canonicalBundleFixture(id),
+  });
+  try {
+    await writeFile(file, bytes);
+    const merged = merge(runtime);
+    assert.equal(merged.scanNoGoAssessment?.decision, "continue_with_diagnostics");
+    assert.equal(merged.scanEvidenceLaneAssessment?.outcome, "partial_with_diagnostics");
+    assert.equal(merged.screenshots[0]?.path, file);
+    const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "local-test";
+    try {
+      const sent: string[] = [];
+      const uploader = { async send(command: PutObjectCommand) { sent.push(command.input.Key!); return { $metadata: {} }; } };
+      const upload = () => uploadAuxiliaryArtifactFiles({ artifactRoot: root, payload: validPayload(), bundle: merged, s3Client: uploader });
+      const receipt = await upload();
+      assert.equal(receipt[0]?.sha256, snapshot.runtimeDocumentCapture!.viewport!.sha256);
+      await writeFile(file, Buffer.alloc(bytes.length));
+      await assert.rejects(upload, /bytes changed before upload/);
+      assert.equal(sent.length, 1);
+      await writeFile(file, bytes);
+    } finally {
+      if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+      else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+    }
+    assert.equal(merged.consentUiObservations.length, 0);
+    assertOriginalRuntimeVisitForReport(runtime, merged);
+    assert.ok(getUsableRuntimeVisitSnapshot(merged, merged.runtimeMetadataSnapshots!));
+    const {projectCaliforniaObservedScoreBasis} = await import("../../web/server/scans/california-observed-score-basis");
+    assert.ok(projectCaliforniaObservedScoreBasis(merged, {verificationStatus: "verified", sha256: "b".repeat(64)}, snapshot.url));
+    assert.throws(() => assertOriginalRuntimeVisitForReport(runtime, {...merged, screenshots: []}), /original_runtime_visit_unavailable/);
+    assert.equal(merge(runtime, "captcha_or_challenge").scanNoGoAssessment?.decision, "no_go");
+    for (const mutate of [
+      (b: CanonicalEvidenceBundle) => { b.screenshots = []; },
+      (b: CanonicalEvidenceBundle) => { b.screenshots[0]!.documentIdentity = { source: "cdp_loader_id", token: "consent-loader" }; },
+      (b: CanonicalEvidenceBundle) => { b.screenshots[0]!.displayStatus = "withheld"; b.screenshots[0]!.displayWithheldReason = "safety_check_unavailable"; },
+      (b: CanonicalEvidenceBundle) => { b.screenshots[0]!.capturedAtMs = 1_001; },
+      (b: CanonicalEvidenceBundle) => { b.scanLaneRuns[0]!.challengeDetected = true; },
+    ]) {
+      const bad = structuredClone(runtime); mutate(bad);
+      assert.equal(merge(bad).scanNoGoAssessment?.decision, "no_go");
+    }
+    await writeFile(file, Buffer.alloc(bytes.length));
+    assert.equal(merge(runtime).scanNoGoAssessment?.decision, "no_go");
+    await rm(file);
+    assert.equal(merge(runtime).scanNoGoAssessment?.decision, "no_go");
+  } finally { await rm(root, {recursive: true, force: true}); }
 });
