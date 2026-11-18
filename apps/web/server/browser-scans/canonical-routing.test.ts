@@ -131,8 +131,11 @@ test("BX01 Neosporin-style capture projects contextual cookies and request inven
   assert.equal(cookieRows[0]?.cookieName, "OptanonConsent");
   assert.equal(cookieRows[0]?.timingEvidence, "before_consent_cookie_write");
   assert.equal(trackerRows.length, 3);
-  assert.equal(groupedRows.length, 3);
-  assert.ok(groupedRows.some((row) => row.vendor === "OneTrust" || row.vendor === "OneTrust CMP"));
+  // A storage record and a service request carry independent purpose evidence.
+  assert.equal(groupedRows.length, 4);
+  const oneTrust = groupedRows.filter(row => row.vendor === "OneTrust");
+  assert.ok(oneTrust.some(row => row.type === "cookie" && row.cookieNames.includes("OptanonConsent")));
+  assert.ok(oneTrust.some(row => row.type === "tracker" && row.domains.includes("cdn.cookielaw.org")));
   assert.ok(groupedRows.some((row) => row.domains.includes("cdn.pricespider.com")));
   assert.equal(materialized.preconsentTrackingDetected, false);
   assert.equal(materialized.preconsentViolationCount, 0);

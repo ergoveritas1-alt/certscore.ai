@@ -29,6 +29,7 @@ export async function POST(request: Request, context: RouteContext) {
   const { browserScanId } = await context.params;
   const [user, payload] = await Promise.all([getBetterAuthSessionUser(), request.json()]);
   const authorization = await authorizeBrowserScanWrite({
+    allowCompleted: true,
     browserScanId,
     requestToken: getBrowserScanTokenFromRequest(request),
     user
@@ -62,8 +63,10 @@ export async function POST(request: Request, context: RouteContext) {
         browserScanId,
         canonicalScanId: completed.canonicalScanId
       }),
-      status: "complete"
+      status: completed.noGoReason ? "no_go" : "complete",
+      startingPageVerified: completed.startingPageVerified,
+      noGoReason: completed.noGoReason
     },
-    { headers: { "Cache-Control": "no-store" } }
+    { status: completed.noGoReason ? 422 : 200, headers: { "Cache-Control": "no-store" } }
   );
 }

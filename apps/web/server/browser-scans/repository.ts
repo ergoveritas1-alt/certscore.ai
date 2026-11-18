@@ -2,7 +2,8 @@ import "server-only";
 
 import { createHash, randomBytes } from "node:crypto";
 import { MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS } from "@certscore/contracts";
-import { query, queryOne } from "@website-signal-risk-scanner/db";
+import type { PoolClient } from "pg";
+import { query, queryOne, withWriteTransaction } from "@website-signal-risk-scanner/db";
 import { normalizeUrl } from "@website-signal-risk-scanner/shared";
 import type { AuthenticatedAppUser } from "../auth-flows/types";
 import { bootstrapAppUserSession } from "../bootstrap-user";
@@ -10,6 +11,7 @@ import { createOrganizationDomain, findOrganizationDomainByNormalizedUrl } from 
 import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan-repository";
 import { CURRENT_GDPR_EPRIVACY_SCORE_VERSION } from "../scans/score-assessment-projection";
 import { deriveBrowserScanCanonicalMaterializationFromObservedSignals } from "./canonical-materialization";
+import { assessBrowserStartingPage } from "./starting-page";
 import { summarizeBrowserEvidence, type BrowserScanArtifactRow, type BrowserScanEventRow } from "./evidence-summary";
 import { buildBrowserObservedSignalPackageFromEvidence } from "./observed-signal-package";
 import {
@@ -89,6 +91,7 @@ export async function getBrowserScanSessionForUser(input: {
 
 export async function getBrowserScanSessionById(input: {
   browserScanId: string;
+  readFromPrimary?: boolean;
 }) {
   return queryOne<BrowserScanSessionRow>(
     `select b.id, b.user_id, b.source_type, b.source_id, b.target_url, b.target_hostname, b.status,
@@ -110,7 +113,7 @@ export async function getBrowserScanSessionById(input: {
        from browser_scan_sessions b
       where b.id = $1`,
     [input.browserScanId, BROWSER_SCAN_SIGNAL_POPULATION_SOURCE],
-    { readOnly: true }
+    { readOnly: !input.readFromPrimary }
   );
 }
 
@@ -272,6 +275,7 @@ export async function createBrowserScanSession(input: {
 export async function authorizeBrowserScanWrite(input: {
   browserScanId: string;
   requestToken: string | null;
+  allowCompleted?: boolean;
   user: AuthenticatedAppUser | null;
 }) {
   const row = await queryOne<BrowserScanSessionRow>(
@@ -295,7 +299,7 @@ export async function authorizeBrowserScanWrite(input: {
     return { ok: false as const, status: 401, error: "Browser scan session is not authorized." };
   }
 
-  if (row.status === "complete") {
+  if (row.status === "complete" && !input.allowCompleted) {
     return { ok: false as const, status: 409, error: "Browser scan session is already complete." };
   }
 
@@ -303,27 +307,18 @@ export async function authorizeBrowserScanWrite(input: {
 }
 
 export async function insertBrowserScanEvents(browserScanId: string, events: BrowserScanEventInput[]) {
-  const values: unknown[] = [browserScanId];
-  const rows = events.map((event, index) => {
-    const offset = index * 3;
-    values.push(event.eventType, event.observedAtMs, JSON.stringify(redactBrowserScanEvent(event)));
-    return `($1, $${offset + 2}, $${offset + 3}, $${offset + 4}::jsonb)`;
-  });
-
-  await query(
-    `insert into browser_scan_events (browser_scan_id, event_type, observed_at_ms, event_json)
-     values ${rows.join(", ")}
-     on conflict do nothing`,
-    values
+  const result = await query(
+    `with open_session as (
+       update browser_scan_sessions set event_count = event_count + $3,
+              status = case when status = 'started' then 'observing' else status end
+        where id = $1 and status <> 'complete' returning id
+     )
+     insert into browser_scan_events (browser_scan_id, event_type, observed_at_ms, event_json)
+     select s.id, e->>'eventType', (e->>'observedAtMs')::int, e
+       from open_session s cross join jsonb_array_elements($2::jsonb) e`,
+    [browserScanId, JSON.stringify(events.map(redactBrowserScanEvent)), events.length]
   );
-
-  await query(
-    `update browser_scan_sessions
-        set event_count = event_count + $2,
-            status = case when status = 'started' then 'observing' else status end
-      where id = $1`,
-    [browserScanId, events.length]
-  );
+  return Boolean(result.rowCount);
 }
 
 export async function insertBrowserScanArtifact(input: {
@@ -332,18 +327,16 @@ export async function insertBrowserScanArtifact(input: {
   browserScanId: string;
   contentType: string;
 }) {
-  await query(
-    `insert into browser_scan_artifacts (browser_scan_id, artifact_type, content_type, artifact_json)
-     values ($1, $2, $3, $4::jsonb)`,
+  const result = await query(
+    `with open_session as (
+       update browser_scan_sessions set artifact_count = artifact_count + 1
+        where id = $1 and status <> 'complete' returning id
+     )
+     insert into browser_scan_artifacts (browser_scan_id, artifact_type, content_type, artifact_json)
+     select id, $2, $3, $4::jsonb from open_session`,
     [input.browserScanId, input.artifactType, input.contentType, JSON.stringify(input.artifactJson)]
   );
-
-  await query(
-    `update browser_scan_sessions
-        set artifact_count = artifact_count + 1
-      where id = $1`,
-    [input.browserScanId]
-  );
+  return Boolean(result.rowCount);
 }
 
 function getObservedSignalIngestToken() {
@@ -401,7 +394,7 @@ export async function ingestBrowserScanObservedSignals(input: {
   browserScanId: string;
   signalPackage: BrowserScanObservedSignalPackageInput;
 }) {
-  const session = await getBrowserScanSessionById({ browserScanId: input.browserScanId });
+  const session = await getBrowserScanSessionById({ browserScanId: input.browserScanId, readFromPrimary: true });
   if (!session) {
     return { ok: false as const, status: 404, error: "Browser scan session not found." };
   }
@@ -412,7 +405,7 @@ export async function ingestBrowserScanObservedSignals(input: {
   const canonicalScan = await queryOne<BrowserScanCanonicalScanRow>(
     `select id, organization_id, domain_id, started_at::text
        from scans
-      where id = $1`,
+      where id = $1 and status = 'completed'`,
     [session.canonical_scan_id]
   );
   if (!canonicalScan) {
@@ -657,69 +650,8 @@ export async function completeBrowserScanSession(input: {
     user: input.user
   });
   const canonicalScanId = materializedScan.canonicalScanId;
-  const summary = {
-    ...input.summary,
-    canonicalScanId,
-    evidenceNotice:
-      "Browser-observed evidence captured from the reviewer's Chrome browser. Results may reflect the user's browser profile, location, cache, extensions, prior consent state, login state, and network path. Automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.",
-    sourceId: BROWSER_SCAN_SOURCE_ID,
-    sourceType: BROWSER_SCAN_SOURCE_TYPE
-  };
-
-  await query(
-    `update browser_scan_sessions
-        set status = 'complete',
-            scan_completed_at = timezone('utc', now()),
-            duration_ms = $2,
-            summary_json = $3::jsonb,
-            canonical_scan_id = coalesce($4::uuid, canonical_scan_id)
-      where id = $1`,
-    [input.browserScanId, input.durationMs, JSON.stringify(summary), canonicalScanId]
-  );
-
-  const canonicalScan = await queryOne<BrowserScanCanonicalScanRow>(
-    `select id, organization_id, domain_id, started_at::text
-       from scans
-      where id = $1`,
-    [canonicalScanId]
-  );
-
-  if (canonicalScan) {
-    await query(
-      `insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
-       select $1, $2, $3, 'browser_extension.normalization_requested', $4, $5::jsonb
-       where not exists (
-         select 1
-           from scan_events
-          where scan_id = $1
-            and event_type = 'browser_extension.normalization_requested'
-       )`,
-      [
-        canonicalScan.id,
-        canonicalScan.domain_id,
-        canonicalScan.organization_id,
-        "BX01 browser-extension evidence is ready for WS01 observed-signal normalization.",
-        JSON.stringify({
-          browserScanId: input.browserScanId,
-          canonicalScanId: canonicalScan.id,
-          requestedAt: new Date().toISOString(),
-          sourceId: BROWSER_SCAN_SOURCE_ID,
-          sourceType: BROWSER_SCAN_SOURCE_TYPE,
-          status: "pending"
-        })
-      ]
-    );
-
-    await query(
-      `update browser_scan_sessions
-          set summary_json = coalesce(summary_json, '{}'::jsonb)
-            || jsonb_build_object(
-              'observedSignalPackageStatus', 'requested',
-              'observedSignalNormalizationRequestedAt', timezone('utc', now())
-            )
-        where id = $1`,
-      [input.browserScanId]
-    );
+  if (materializedScan.noGoReason || materializedScan.alreadyComplete) {
+    return { canonicalScanId, noGoReason: materializedScan.noGoReason, startingPageVerified: materializedScan.startingPageVerified };
   }
 
   if (materializedScan.observedSignalPackage) {
@@ -732,7 +664,7 @@ export async function completeBrowserScanSession(input: {
   try {
     const { persistCompletedLegacyGdprEprivacyAssessment } = await import("../scans/score-assessment-lifecycle");
     await persistCompletedLegacyGdprEprivacyAssessment({
-      organizationId: canonicalScan?.organization_id ?? null,
+      organizationId: materializedScan.organizationId ?? null,
       scanId: canonicalScanId
     });
   } catch (error) {
@@ -744,7 +676,7 @@ export async function completeBrowserScanSession(input: {
     });
   }
 
-  return { canonicalScanId };
+  return { canonicalScanId, noGoReason: null, startingPageVerified: true };
 }
 
 function redactBrowserScanEvent(event: BrowserScanEventInput) {
@@ -798,81 +730,114 @@ async function materializeBrowserScanAsCanonicalScan(input: {
   summary: Record<string, unknown>;
   user: AuthenticatedAppUser | null;
 }) {
-  const session = await getBrowserScanSessionById({ browserScanId: input.browserScanId });
+  const session = await getBrowserScanSessionById({ browserScanId: input.browserScanId, readFromPrimary: true });
   if (!session) {
     throw new Error("Browser scan session not found.");
   }
-  if (session.canonical_scan_id) {
-    return {
-      canonicalScanId: session.canonical_scan_id,
-      observedSignalPackage: null
-    };
-  }
-
-  const [events, artifacts] = await Promise.all([
-    query<BrowserScanEventRow>(
-      `select event_type, observed_at_ms, event_json
-         from browser_scan_events
-        where browser_scan_id = $1
-        order by observed_at_ms asc, created_at asc`,
-      [input.browserScanId],
-      { readOnly: true }
-    ).then((result) => result.rows),
-    query<BrowserScanArtifactRow>(
-      `select artifact_type, content_type, artifact_json
-         from browser_scan_artifacts
-        where browser_scan_id = $1
-        order by created_at asc`,
-      [input.browserScanId],
-      { readOnly: true }
-    ).then((result) => result.rows)
-  ]);
-
   const resolved = await resolveBrowserScanDomain({
-    normalizedUrl: session.target_url,
-    targetHostname: session.target_hostname,
-    user: input.user
+    normalizedUrl: session.target_url, targetHostname: session.target_hostname, user: input.user
   });
+  return withWriteTransaction(async client => {
+    const { rows: [locked] } = await client.query<BrowserScanSessionRow>(
+      "select canonical_scan_id from browser_scan_sessions where id = $1 for update", [session.id]
+    );
+    if (!locked) throw new Error("Browser scan session no longer exists.");
+    if (locked.canonical_scan_id) {
+      const { rows: [prior] } = await client.query<{ reason: string | null; verified: boolean }>(
+        `select ss.scan_no_go_assessment #>> '{reasonCodes,0}' as reason,
+                coalesce(s.scan_config_json->>'startingPageVerified' = 'true' and s.status = 'completed', false) as verified
+           from scans s left join scan_snapshots ss on ss.scan_id = s.id where s.id = $1`,
+        [locked.canonical_scan_id]
+      );
+      return {
+        canonicalScanId: locked.canonical_scan_id, alreadyComplete: true,
+        startingPageVerified: prior?.verified ?? false, noGoReason: prior?.reason ?? null, observedSignalPackage: null,
+      };
+    }
+    const { rows: events } = await client.query<BrowserScanEventRow>(
+      "select event_type, observed_at_ms, event_json from browser_scan_events where browser_scan_id = $1 order by observed_at_ms, created_at, id",
+      [session.id]
+    );
+    const { rows: artifacts } = await client.query<BrowserScanArtifactRow>(
+      "select artifact_type, content_type, artifact_json from browser_scan_artifacts where browser_scan_id = $1 order by created_at, id",
+      [session.id]
+    );
+    const limitation = assessBrowserStartingPage(session.target_url, events, artifacts);
+    const completedAt = new Date().toISOString();
+    const { rows: [scan] } = await client.query<{id: string}>(
+      `insert into scans (organization_id, domain_id, submitted_by_user_id, scan_type, status,
+          pages_requested, pages_scanned, started_at, completed_at, duration_ms, scan_config_json, queue_origin)
+       values ($1, $2, $3, 'browser_extension', $4, 1, $5, coalesce($6::timestamptz, now()), $7, $8, $9::jsonb, 'browser_extension')
+       returning id`,
+      [resolved.organizationId, resolved.domain.id, resolved.submittedByUserId, limitation ? "failed" : "completed",
+        limitation ? 0 : 1, session.scan_started_at ?? null, completedAt, input.durationMs,
+        JSON.stringify({browserScanId: session.id, captureMode: BROWSER_SCAN_CAPTURE_MODE, hostname: session.target_hostname,
+          normalizedUrl: session.target_url, processor: "browser-extension-bx01", sourceId: BROWSER_SCAN_SOURCE_ID,
+          sourceType: BROWSER_SCAN_SOURCE_TYPE, scanFrom: "local_extension", startingPageVerified: !limitation})]
+    );
+    if (!scan) throw new Error("Could not create canonical browser-extension scan.");
+    let observedSignalPackage = null;
+    const noGoReason = limitation?.presentation.code ?? null;
+    if (limitation) {
+      const { assessment, presentation } = limitation;
+      await client.query(
+        `insert into scan_snapshots (scan_id, organization_id, domain_id, pages_requested, pages_scanned,
+            coverage_level, certscore_overall, homepage_fetch_status, homepage_fetch_http_status, scan_outcome, stop_reason_code,
+            stop_reason_label, stop_reason_detail, scan_no_go_assessment)
+         values ($1, $2, $3, 1, 0, 'limited_none', null, $4, $5, $6, $7, $8, $9, $10::jsonb)`,
+        [scan.id, resolved.organizationId, resolved.domain.id, presentation.snapshotHomepageFetchStatus,
+          assessment.supportingSignals.mainDocumentStatus, presentation.snapshotScanOutcome, presentation.snapshotStopReasonCode,
+          presentation.snapshotStopReasonLabel, presentation.snapshotStopReasonDetail, JSON.stringify(assessment)]
+      );
+    } else {
+      observedSignalPackage = await writeUsableBrowserEvidence(client, {scan, session, resolved, completedAt, events, artifacts, summary: input.summary});
+    }
+    await client.query(
+      "update domains set latest_scan_id = $2, last_scanned_at = $3::timestamptz where id = $1",
+      [resolved.domain.id, scan.id, completedAt]
+    );
+    await client.query(
+      `update browser_scan_sessions set status = 'complete', scan_completed_at = $2, duration_ms = $3,
+          canonical_scan_id = $4, summary_json = $5::jsonb where id = $1`,
+      [session.id, completedAt, input.durationMs, scan.id, JSON.stringify({
+        ...input.summary,
+        canonicalScanId: scan.id,
+        startingPageNoGoReason: noGoReason,
+        startingPageVerified: !limitation,
+        observedSignalPackageStatus: limitation ? "not_applicable" : "requested",
+        ...(limitation ? {} : { observedSignalNormalizationRequestedAt: completedAt }),
+        evidenceNotice:
+          "Browser-observed evidence captured from the reviewer's Chrome browser. Results may reflect the user's browser profile, location, cache, extensions, prior consent state, login state, and network path. Automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.",
+        sourceId: BROWSER_SCAN_SOURCE_ID, sourceType: BROWSER_SCAN_SOURCE_TYPE
+      })]
+    );
+    return {
+      canonicalScanId: scan.id,
+      organizationId: resolved.organizationId,
+      alreadyComplete: false,
+      startingPageVerified: !limitation,
+      noGoReason,
+      observedSignalPackage,
+    };
+  });
+}
+
+async function writeUsableBrowserEvidence(client: PoolClient, input: {
+  scan: {id: string};
+  session: BrowserScanSessionRow;
+  resolved: Awaited<ReturnType<typeof resolveBrowserScanDomain>>;
+  completedAt: string;
+  events: BrowserScanEventRow[];
+  artifacts: BrowserScanArtifactRow[];
+  summary: Record<string, unknown>;
+}) {
+  const { scan, session, resolved, completedAt, events, artifacts } = input;
   const evidence = summarizeBrowserEvidence({
     artifacts,
     events,
     targetHostname: session.target_hostname
   });
   const observedSignalPackage = buildBrowserObservedSignalPackageFromEvidence({ evidence });
-  const completedAt = new Date().toISOString();
-
-  const scan = await queryOne<{ id: string }>(
-    `insert into scans (
-       organization_id, domain_id, submitted_by_user_id, scan_type, status,
-       pages_requested, pages_scanned, started_at, completed_at, duration_ms,
-       scan_config_json, queue_origin
-     )
-     values ($1, $2, $3, 'browser_extension', 'completed', 1, 1,
-       coalesce($4::timestamptz, timezone('utc', now())), $5::timestamptz, $6, $7::jsonb, 'browser_extension')
-     returning id`,
-    [
-      resolved.organizationId,
-      resolved.domain.id,
-      resolved.submittedByUserId,
-      session.scan_started_at ?? null,
-      completedAt,
-      input.durationMs,
-      JSON.stringify({
-        browserScanId: input.browserScanId,
-        captureMode: BROWSER_SCAN_CAPTURE_MODE,
-        hostname: session.target_hostname,
-        normalizedUrl: session.target_url,
-        processor: "browser-extension-bx01",
-        sourceId: BROWSER_SCAN_SOURCE_ID,
-        sourceType: BROWSER_SCAN_SOURCE_TYPE
-      })
-    ]
-  );
-
-  if (!scan) {
-    throw new Error("Could not create canonical browser-extension scan.");
-  }
-
   for (const artifact of artifacts.filter((candidate) => candidate.artifact_type === "policy_surface")) {
     const pageType = typeof artifact.artifact_json.pageType === "string" ? artifact.artifact_json.pageType : null;
     const documentType = pageType === "privacy_policy"
@@ -892,7 +857,7 @@ async function materializeBrowserScanAsCanonicalScan(input: {
     const title = typeof artifact.artifact_json.title === "string" ? artifact.artifact_json.title.slice(0, 300) : null;
     if (!documentType || !canonicalUrl || documentText.length === 0) continue;
 
-    await query(
+    await client.query(
       `insert into scan_document_sources (
          scan_id, source, source_status, document_type, source_url, canonical_url, title,
          document_text, extraction_status, semantic_confidence, evidence_refs, metadata_json
@@ -907,12 +872,12 @@ async function materializeBrowserScanAsCanonicalScan(input: {
         documentText.length >= MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS ? "ready" : "insufficient",
         documentText.length >= MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS ? 0.88 : 0.62,
         [`browser_extension.policy_surface:${documentType}:${canonicalUrl}`],
-        JSON.stringify({ browserScanId: input.browserScanId, captureMode: BROWSER_SCAN_CAPTURE_MODE, pageType })
+        JSON.stringify({ browserScanId: session.id, captureMode: BROWSER_SCAN_CAPTURE_MODE, pageType })
       ]
     );
   }
 
-  await query(
+  await client.query(
     `insert into scan_snapshots (
        scan_id, organization_id, domain_id, pages_requested, pages_scanned,
        total_signals, privacy_signal_count, tracker_vendor_count,
@@ -978,7 +943,7 @@ async function materializeBrowserScanAsCanonicalScan(input: {
     ]
   );
 
-  await query(
+  await client.query(
      `insert into scan_runtime_artifacts (
        scan_id, organization_id, domain_id, third_party_request_domains, third_party_request_count,
        initial_cookie_names, initial_cookie_domains, initial_cookie_count,
@@ -1030,7 +995,7 @@ async function materializeBrowserScanAsCanonicalScan(input: {
           artifactCounts: {
             screenshots: evidence.screenshotArtifactCount
           },
-          browserScanId: input.browserScanId,
+          browserScanId: session.id,
           captureMode: BROWSER_SCAN_CAPTURE_MODE,
           consentSummary: evidence.consentSummary,
           evidenceNotice:
@@ -1055,7 +1020,7 @@ async function materializeBrowserScanAsCanonicalScan(input: {
     ]
   );
 
-  await query(
+  await client.query(
     `insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
      values ($1, $2, $3, 'browser_extension.evidence_materialized', $4, $5::jsonb)`,
     [
@@ -1064,7 +1029,7 @@ async function materializeBrowserScanAsCanonicalScan(input: {
       resolved.organizationId,
       "BX01 browser-extension evidence was materialized into canonical scan runtime artifacts.",
       JSON.stringify({
-        browserScanId: input.browserScanId,
+        browserScanId: session.id,
         captureMode: BROWSER_SCAN_CAPTURE_MODE,
         cookieEventCount: evidence.cookies.length,
         networkRequestCount: evidence.networkEvidence.length,
@@ -1075,16 +1040,30 @@ async function materializeBrowserScanAsCanonicalScan(input: {
     ]
   );
 
-  await query(
-    `update domains
-        set latest_scan_id = $2,
-            last_scanned_at = $3::timestamptz
-      where id = $1`,
-    [resolved.domain.id, scan.id, completedAt]
+  await client.query(
+    `insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+     select $1, $2, $3, 'browser_extension.normalization_requested', $4, $5::jsonb
+     where not exists (
+       select 1
+         from scan_events
+        where scan_id = $1
+          and event_type = 'browser_extension.normalization_requested'
+     )`,
+    [
+      scan.id,
+      resolved.domain.id,
+      resolved.organizationId,
+      "BX01 browser-extension evidence is ready for WS01 observed-signal normalization.",
+      JSON.stringify({
+        browserScanId: session.id,
+        canonicalScanId: scan.id,
+        requestedAt: new Date().toISOString(),
+        sourceId: BROWSER_SCAN_SOURCE_ID,
+        sourceType: BROWSER_SCAN_SOURCE_TYPE,
+        status: "pending"
+      })
+    ]
   );
 
-  return {
-    canonicalScanId: scan.id,
-    observedSignalPackage
-  };
+  return observedSignalPackage;
 }

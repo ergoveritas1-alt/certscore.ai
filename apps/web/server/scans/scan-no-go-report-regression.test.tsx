@@ -190,3 +190,29 @@ test("the production projection writer withholds score and top findings before d
   assert.equal(canonicalReportProjection.legacyScoreAssessmentInput.scoreValue, null);
   assert.deepEqual(canonicalReportProjection.topFindingIds, []);
 });
+
+test("a blocked extension reload renders the terminal report with its HTTP status and no recovery loop", async () => {
+  const { buildTerminalRuntimeVisitReport } = await import("./verified-timeline-report-model");
+  const { ShadowScanReport } = await import("../../components/scans/report-lab/shadow-scan-report");
+  const report = buildTerminalRuntimeVisitReport({
+    id: "blocked-browser", status: "failed", domainHostname: "example.com", pageUrl: "https://example.com/",
+    createdAt: "2026-11-17T00:00:00Z", startedAt: null, completedAt: null, scanFrom: "local_extension",
+    scanNoGoAssessment: {
+      status: "available", version: "scan-no-go-assessment-v1", decision: "no_go", scanNoGoConfidence: 1,
+      reasonCodes: ["access_denied_or_forbidden_page"], corroboratorCodes: [], contradictorCodes: [],
+      supportingSignals: {assessmentPolicy: "browser_extension_starting_page.v1", mainDocumentStatus: 403}, evidenceRefs: [],
+    },
+  });
+  assert.ok(report);
+  const router = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {} };
+  for (const mode of ["public", "authenticated"] as const) {
+    const html = renderToStaticMarkup(
+      <AppRouterContext.Provider value={router}><PathnameContext.Provider value="/scan/blocked-browser">
+        <ShadowScanReport mode={mode} variant="timeline" report={report} />
+      </PathnameContext.Provider></AppRouterContext.Provider>);
+    assert.match(html, /The site blocked the browser scan/);
+    assert.match(html, /HTTP 403/);
+    assert.match(html, /Not scored/);
+    assert.doesNotMatch(html, /View Chrome extension instructions|Overall score|Top issues needing attention/);
+  }
+});

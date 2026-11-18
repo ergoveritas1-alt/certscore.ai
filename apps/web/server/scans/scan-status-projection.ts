@@ -2,7 +2,8 @@ import "server-only";
 
 import { apiV2PreConsentRuntimePreviewSchema, type ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
 import { queryOne } from "@website-signal-risk-scanner/db";
-import { isRuntimeVisitCaptureAssessment, projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
+import { isTerminalPageCaptureAssessment } from "../../lib/scans/scan-report-disposition";
+import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 import { terminalReportPublicationError } from "./report-publication-read-state";
 import { readableReportProjectionSql, requiresPersistedReportPublicationSql } from "./scan-report-publication-sql";
 import {
@@ -355,7 +356,7 @@ export function buildLightweightScanStatusResponse(projection: ScanStatusProject
 function apiV2ProjectionStatus(projection: ScanStatusProjection, noGo: ReturnType<typeof projectExternalScanNoGo>) {
   if (projection.publicationRequestStatus === "terminal_failure") return "failed" as const;
   if (projection.status === "failed" && noGo && (noGo.noGo.reasonCode === "runtime_capture_unverified" ||
-      isRuntimeVisitCaptureAssessment(projection.scanNoGoAssessment))) return "completed_limited" as const;
+      isTerminalPageCaptureAssessment(projection.scanNoGoAssessment))) return "completed_limited" as const;
   const hasNoGo = Boolean(noGo);
   if ((hasNoGo || projection.accessibilityAuditStatus === "limited" && projection.reportReady) && (projection.status === "completed" || projection.status === "completed_limited")) {
     return "completed_limited" as const;

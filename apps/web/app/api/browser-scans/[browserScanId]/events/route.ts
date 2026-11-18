@@ -38,6 +38,7 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  await insertBrowserScanEvents(browserScanId, parsed.data.events);
+  const inserted = await insertBrowserScanEvents(browserScanId, parsed.data.events);
+  if (!inserted) return NextResponse.json({ error: "Browser scan session is already complete." }, { status: 409 });
   return NextResponse.json({ accepted: parsed.data.events.length }, { headers: { "Cache-Control": "no-store" } });
 }

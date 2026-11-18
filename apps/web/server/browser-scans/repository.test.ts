@@ -194,7 +194,8 @@ test("browser signal package uses the canonical resolver for multiple pre-consen
   const vendors = signalPackage.observedSignals.find((signal) => signal.key === "privacy.preconsent_tracker_vendors");
   const violationCount = signalPackage.observedSignals.find((signal) => signal.key === "privacy.preconsent_violation_count");
 
-  assert.deepEqual(vendors?.value, ["Google Publisher Tag", "Google Ads / DoubleClick", "ScorecardResearch"]);
+  // The exact GPT script identifies one product. Its parent hostname adds no independent observation.
+  assert.deepEqual(vendors?.value, ["Google Publisher Tag", "ScorecardResearch"]);
   assert.equal(violationCount?.value, 2);
   assert.ok(signalPackage.evidenceInventory?.thirdPartyRequests.some((row) =>
     row.hostname === "securepubads.g.doubleclick.net" && row.attributionStatus === "resolved" && row.purpose === "advertising"

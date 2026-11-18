@@ -34,12 +34,13 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  await insertBrowserScanArtifact({
+  const inserted = await insertBrowserScanArtifact({
     artifactJson: parsed.data.artifactJson,
     artifactType: parsed.data.artifactType,
     browserScanId,
     contentType: parsed.data.contentType
   });
 
+  if (!inserted) return NextResponse.json({ error: "Browser scan session is already complete." }, { status: 409 });
   return NextResponse.json({ accepted: true }, { headers: { "Cache-Control": "no-store" } });
 }

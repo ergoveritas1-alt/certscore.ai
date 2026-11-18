@@ -1,3 +1,4 @@
+import { scanNoGoAssessmentSchema } from "@certscore/contracts";
 import { isRuntimeVisitCaptureAssessment, projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 
 export type ScanReportAccessContext = {
@@ -20,8 +21,15 @@ export function projectScanReportNoGo(input: ScanReportAccessContext) {
   });
 }
 
+export function isTerminalPageCaptureAssessment(value: unknown) {
+  if (isRuntimeVisitCaptureAssessment(value)) return true;
+  const assessment = scanNoGoAssessmentSchema.safeParse(value);
+  return assessment.success && assessment.data.decision === "no_go" &&
+    assessment.data.supportingSignals.assessmentPolicy === "browser_extension_starting_page.v1";
+}
+
 export function hasTerminalRuntimeVisitAssessment(input: ScanReportAccessContext) {
-  return input.scan?.status === "failed" && isRuntimeVisitCaptureAssessment(input.snapshot?.scan_no_go_assessment);
+  return input.scan?.status === "failed" && isTerminalPageCaptureAssessment(input.snapshot?.scan_no_go_assessment);
 }
 
 export function hasTerminalScanReportFailure(input: ScanReportAccessContext) {
