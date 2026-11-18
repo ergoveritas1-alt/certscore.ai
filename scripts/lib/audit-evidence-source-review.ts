@@ -6,9 +6,9 @@ export const MASTER_SOURCE_REVIEW={
   "sources": [
     {
       "file": "apps/web/app/(marketing)/scan/[scanId]/page.tsx",
-      "sha256": "fa6f93e44c528f0382c869f30f7623ad3c73eeae4202cb0dfa7b340d04fdb9a5",
-      "bytes": 11354,
-      "review": "A scan claim limits signed-out viewing to the initiating browser. This route shows progress and the completed result, preserves the Share sign-in requirement, and checks authorization before offering PDF export."
+      "sha256": "29b1021e021ffd256b4490d6ea2aa44706c9715a14d200ffb6cfcb982741ad64",
+      "bytes": 11547,
+      "review": "Verified the already-deployed no-go browser guidance follows the scan status projection."
     },
     {
       "file": "apps/web/app/app/scans/[scanId]/page.tsx",
@@ -48,9 +48,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
-      "sha256": "0dbb903c6e01c47c64850b74963873c0d716448e3aabf7620e77ed5ed22550f8",
-      "bytes": 114155,
-      "review": "The Share menu receives the existing PDF capability. Unscored results hide Share and keep the standard next-scan control in the report header."
+      "sha256": "f018a0eb7d5aa7bddcac5eff9682ee5a71224b1fd5e4774bd0fc492d883074f2",
+      "bytes": 113892,
+      "review": "Reviewed the deployed visit inventory, scoped GPC recap and no-go guidance. Share and evidence links keep their original access checks."
     },
     {
       "file": "apps/web/components/scans/site-integrity-evidence.tsx",
@@ -150,9 +150,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/components/scans/report-lab/shadow-report-data.ts",
-      "sha256": "d868e896386d2c9cdca5ed7b06d405408d119b327b5be9ac67ab0a5ad01cb47b",
-      "bytes": 39155,
-      "review": "Three-way reconciliation preserves integrated report/form fixes and adds owner-requested canonical output parity. Static source reviewed for generation binding and public evidence safety."
+      "sha256": "0c7a70c63f96406cb3e8c0d6658759f392348ae578b6faf5656b2c540c68df9a",
+      "bytes": 39250,
+      "review": "Verified the optional browser guidance type from the deployed no-go model."
     },
     {
       "file": "scripts/lib/audit-progress-contracts.ts",
@@ -246,9 +246,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/components/scans/report-lab/timeline-report-model.ts",
-      "sha256": "708d9df13203521a04e512d470605d72e460e83cf20c0696dff64e24c2f4c0b1",
-      "bytes": 40724,
-      "review": "Three-way reconciliation preserves integrated report/form fixes and adds owner-requested canonical output parity. Static source reviewed for generation binding and public evidence safety."
+      "sha256": "e3b85ac776a40e65fdc02ba1fb1017a83aa736cabc50ca63268665e05d5aa200",
+      "bytes": 40961,
+      "review": "Reviewed the deployed no-go guidance and scan-bound GPC projection from retained runtime activity."
     }
   ]
 } as const;
